@@ -1,0 +1,33 @@
+{
+  "name": "tableapp",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "vitest run",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "db:generate": "pnpm --filter @tableapp/db generate",
+    "db:migrate": "pnpm --filter @tableapp/db migrate",
+    "db:studio": "pnpm --filter @tableapp/db studio",
+    "test:watch": "vitest",
+    "db:seed": "pnpm --filter @tableapp/db seed",
+    "db:seed:relations": "pnpm --filter @tableapp/db seed:relations",
+    "db:seed:owner": "pnpm --filter @tableapp/db seed:owner",
+    "db:seed:photo": "pnpm --filter @tableapp/db seed:photo",
+    "db:backup": "tsx scripts/backup.mts"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.2",
+    "@vitejs/plugin-react": "^6.1.1",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.1"
+  },
+  "dependencies": {
+    "@types/qrcode": "^1.5.6",
+    "qrcode": "^1.5.4"
+  }
+}

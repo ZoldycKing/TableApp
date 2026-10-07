@@ -1,0 +1,52 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: tableapp-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tableapp
+      POSTGRES_PASSWORD: tableapp
+      POSTGRES_DB: tableapp
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tableapp"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: quay.io/minio/minio:latest
+    container_name: tableapp-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: tableapp
+      MINIO_ROOT_PASSWORD: tableapp123
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - miniodata:/data
+
+  # Почтовый приёмник для разработки.
+  #
+  # Ловит письма и показывает их в браузере на localhost:8025, наружу
+  # не отправляя ничего. Нужен, чтобы проверять сами письма — вёрстку,
+  # тему, читаемость кода — не трогая настоящий ящик и не рассылая
+  # тестовые письма живым людям.
+  #
+  # В рабочем виде его нет: там SMTP_URL указывает на настоящего провайдера.
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: tableapp-mailpit
+    restart: unless-stopped
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
+volumes:
+  pgdata:
+  miniodata:

@@ -1,0 +1,73 @@
+import { inDays, type TemplateDef } from '../types'
+
+export const service: TemplateDef = {
+  id: 'service',
+  name: 'Сервисный центр',
+  tagline: 'Приняли технику в ремонт, видите, что с ней и когда отдавать',
+  audience: 'Ремонт техники, мастерские, гарантийные центры',
+  emoji: '🔧',
+  kin: ['zayavki', 'salon'],
+  limits: [
+    'Сообщений о готовности клиенту не отправляем: он звонит или приходит',
+    'Печати квитанции из приложения нет',
+    'Запчасти и их остатки шаблон не считает — для этого есть шаблон «Склад и остатки»',
+  ],
+  gives: [
+    'Приёмка с фотографией и описанием неисправности',
+    'Доска: Принято → Диагностика → Ждём запчасть → Готово → Выдано',
+    'Видно, что лежит дольше недели и по какой причине',
+    'Приложение: мастер меняет статус прямо у верстака',
+  ],
+  appTable: 'repairs',
+  appName: 'Ремонты',
+  tables: [
+    {
+      key: 'repairs',
+      name: 'Ремонты',
+      icon: 'wrench',
+      primary: 'device',
+      fields: [
+        { key: 'device', name: 'Что принесли', type: 'text', help: 'Устройство и модель: «Холодильник Atlant XM-4021». Это заголовок карточки — по нему технику и находят.' },
+        { key: 'ticket', name: 'Номер квитанции', type: 'text', help: 'Номер, который вы даёте клиенту на руки. По нему он спрашивает о готовности.' },
+        { key: 'client', name: 'Клиент', type: 'text', help: 'Чья техника. Имени и телефона обычно достаточно.' },
+        { key: 'phone', name: 'Телефон', type: 'phone', help: 'Куда звонить, когда будет готово.' },
+        { key: 'problem', name: 'Неисправность со слов клиента', type: 'long_text', help: 'Записывайте словами клиента, не своими. «Гудит и не морозит» потом сильно помогает.' },
+        {
+          key: 'status',
+          name: 'Статус',
+          type: 'single_select',
+          choices: [
+            { name: 'Принято', color: 'blue' },
+            { name: 'Диагностика', color: 'cyan' },
+            { name: 'Ждём запчасть', color: 'amber' },
+            { name: 'В ремонте', color: 'violet' },
+            { name: 'Готово', color: 'green' },
+            { name: 'Выдано', color: 'gray' },
+          ],
+          help: 'Где сейчас техника. По этому полю строится доска. «Ждём запчасть» вынесено отдельно намеренно: это самая частая причина, по которой ремонт стоит неделями.',
+        },
+        { key: 'master', name: 'Мастер', type: 'text', help: 'Кто делает. Отберите по себе, чтобы видеть только свои ремонты.' },
+        { key: 'accepted', name: 'Принято', type: 'date', help: 'День приёмки. По нему видно, что лежит дольше всех.' },
+        { key: 'ready', name: 'Обещали к', type: 'date', help: 'Дата, которую назвали клиенту. По ней строится календарь — и по ней же видно, что вы не успеваете.' },
+        { key: 'price', name: 'Стоимость ремонта', type: 'number', options: { format: 'currency', precision: 2, currency: 'RUB' }, help: 'Итоговая сумма с работой и запчастями.' },
+        { key: 'prepay', name: 'Предоплата', type: 'number', options: { format: 'currency', precision: 2, currency: 'RUB' }, help: 'Сколько внесли при приёмке. Остаток считается сам.' },
+        { key: 'rest', name: 'Осталось доплатить', type: 'formula', expression: '{Стоимость ремонта} - {Предоплата}', help: 'Считается само: стоимость минус предоплата. Это число называют клиенту при выдаче.' },
+        { key: 'photo', name: 'Фото при приёмке', type: 'attachment', help: 'Снимок техники в момент приёмки: сколы, царапины, комплектность. Снимает спор при выдаче.' },
+        { key: 'note', name: 'Что сделали', type: 'long_text', help: 'Какие детали меняли, что проверяли. Пригодится, если вернутся с той же неисправностью.' },
+      ],
+      views: [
+        { name: 'Все ремонты', type: 'grid' },
+        { name: 'Доска', type: 'kanban', stackBy: 'status' },
+        { name: 'Когда обещали', type: 'calendar', dateBy: 'ready' },
+      ],
+      rows: [
+        { key: 'r1', values: { device: 'Холодильник Atlant ХМ-4021', ticket: 'К-1041', client: 'Петров А.', phone: '+7 916 555-11-22', problem: 'Гудит и не морозит нижнюю камеру.', status: 'Ждём запчасть', master: 'Сергей', accepted: inDays(-6), ready: inDays(2), price: 8400, prepay: 2000, note: 'Нужен термостат, заказан у поставщика.' } },
+        { key: 'r2', values: { device: 'Стиральная машина Bosch WLG', ticket: 'К-1042', client: 'Сидорова М.', phone: '+7 921 444-66-77', problem: 'Не отжимает, течёт снизу.', status: 'В ремонте', master: 'Андрей', accepted: inDays(-2), ready: inDays(1), price: 6200, prepay: 0 } },
+        { key: 'r3', values: { device: 'Ноутбук Lenovo IdeaPad', ticket: 'К-1043', client: 'ООО «Вектор»', phone: '+7 495 120-44-00', problem: 'Не включается после скачка напряжения.', status: 'Диагностика', master: 'Игорь', accepted: inDays(-1), ready: inDays(3), price: 0, prepay: 0 } },
+        { key: 'r4', values: { device: 'Кофемашина Delonghi', ticket: 'К-1039', client: 'Кафе «Огонёк»', phone: '+7 916 700-18-25', problem: 'Слабое давление, не взбивает молоко.', status: 'Готово', master: 'Сергей', accepted: inDays(-9), ready: inDays(-1), price: 11500, prepay: 5000, note: 'Промыли контур, заменили уплотнители.' } },
+        { key: 'r5', values: { device: 'Микроволновка Samsung', ticket: 'К-1035', client: 'Гусев А.', phone: '+7 903 555-00-11', problem: 'Искрит внутри.', status: 'Выдано', master: 'Андрей', accepted: inDays(-18), ready: inDays(-12), price: 3200, prepay: 3200, note: 'Заменили слюдяную пластину.' } },
+        { key: 'r6', values: { device: 'Посудомоечная машина Electrolux', ticket: 'К-1044', client: 'Ким М.', phone: '+7 916 700-18-25', problem: 'Не сливает воду.', status: 'Принято', master: 'Игорь', accepted: inDays(0), ready: inDays(4), price: 0, prepay: 0 } },
+      ],
+    },
+  ],
+}

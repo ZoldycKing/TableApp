@@ -1,0 +1,1 @@
+ALTER TABLE "row_changes" ADD COLUMN "actor_ip" text;

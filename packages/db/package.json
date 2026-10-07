@@ -1,0 +1,30 @@
+{
+  "name": "@tableapp/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "generate": "drizzle-kit generate",
+    "migrate": "drizzle-kit migrate",
+    "studio": "drizzle-kit studio",
+    "seed": "tsx src/seed.ts",
+    "seed:relations": "tsx src/seed-relations.ts",
+    "seed:owner": "tsx src/seed-owner.ts",
+    "seed:photo": "tsx src/seed-photo.ts"
+  },
+  "devDependencies": {
+    "drizzle-kit": "^0.31.10"
+  },
+  "dependencies": {
+    "@tableapp/import": "workspace:*",
+    "@tableapp/schema": "workspace:*",
+    "drizzle-orm": "^0.45.2",
+    "postgres": "^3.4.9"
+  }
+}

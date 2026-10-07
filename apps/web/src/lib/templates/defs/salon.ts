@@ -1,0 +1,86 @@
+import { inDays, type TemplateDef } from '../types'
+
+export const salon: TemplateDef = {
+  id: 'salon',
+  name: 'Салон красоты',
+  tagline: 'Кто, к кому и на когда записан, и сколько это стоит',
+  audience: 'Салоны, студии, частные мастера с записью по времени',
+  emoji: '💇',
+  kin: ['service', 'zayavki'],
+  limits: [
+    'Клиент не записывается сам: запись заводит администратор',
+    'Напоминаний клиенту о визите приложение не отправляет',
+    'Накладки в расписании не проверяются автоматически — длительность услуги видна, но занятость мастера смотрит человек',
+  ],
+  gives: [
+    'Прайс услуг отдельно — цена подставляется в запись сама',
+    'Календарь записей по дням',
+    'Видно, кто не пришёл и сколько таких за месяц',
+    'Приложение: мастер смотрит свой день с телефона',
+  ],
+  appTable: 'visits',
+  appName: 'Записи',
+  tables: [
+    {
+      key: 'services',
+      name: 'Услуги',
+      icon: 'tag',
+      primary: 'name',
+      fields: [
+        { key: 'name', name: 'Услуга', type: 'text', help: 'Название так, как его произносит клиент при записи.' },
+        { key: 'price', name: 'Цена', type: 'number', options: { format: 'currency', precision: 0, currency: 'RUB' }, help: 'Цена услуги. Поменяете здесь — подставится во все новые записи.' },
+        { key: 'minutes', name: 'Длительность, мин', type: 'number', options: { format: 'plain', precision: 0 }, help: 'Сколько занимает. Нужно, чтобы не поставить две записи внахлёст.' },
+      ],
+      views: [{ name: 'Прайс', type: 'grid' }],
+      rows: [
+        { key: 's1', values: { name: 'Женская стрижка', price: 2500, minutes: 60 } },
+        { key: 's2', values: { name: 'Мужская стрижка', price: 1500, minutes: 40 } },
+        { key: 's3', values: { name: 'Окрашивание в один тон', price: 5500, minutes: 120 } },
+        { key: 's4', values: { name: 'Маникюр с покрытием', price: 2800, minutes: 90 } },
+        { key: 's5', values: { name: 'Укладка', price: 1800, minutes: 45 } },
+      ],
+    },
+    {
+      key: 'visits',
+      name: 'Записи',
+      icon: 'calendar',
+      primary: 'client',
+      fields: [
+        { key: 'client', name: 'Клиент', type: 'text', help: 'Имя клиента. Это заголовок записи — мастер видит его первым.' },
+        { key: 'phone', name: 'Телефон', type: 'phone', help: 'Позвонить, если опаздывает или нужно перенести.' },
+        { key: 'service', name: 'Услуга', type: 'relation', relationTable: 'services', allowMultiple: false, help: 'Выберите из прайса — цена и длительность подставятся сами. Новую услугу заведите в таблице «Услуги».' },
+        { key: 'price', name: 'Цена', type: 'lookup', through: 'service', target: 'price', help: 'Берётся из прайса. Здесь не правят: поменяйте цену в «Услугах» — изменится везде.' },
+        { key: 'minutes', name: 'Длительность', type: 'lookup', through: 'service', target: 'minutes', help: 'Тоже из прайса. По ней видно, поместится ли следующий клиент.' },
+        { key: 'master', name: 'Мастер', type: 'text', help: 'Кто принимает. Отберите по себе, чтобы видеть только свой день.' },
+        { key: 'when', name: 'Когда', type: 'datetime', help: 'Дата и время записи по московскому времени. По этому полю строится календарь.' },
+        {
+          key: 'status',
+          name: 'Статус',
+          type: 'single_select',
+          choices: [
+            { name: 'Записан', color: 'blue' },
+            { name: 'Пришёл', color: 'green' },
+            { name: 'Не пришёл', color: 'red' },
+            { name: 'Отменил', color: 'gray' },
+          ],
+          help: 'Что вышло из записи. Отберите «Не пришёл» за месяц — станет видно, кому больше не давать вечерние окна.',
+        },
+        { key: 'note', name: 'Заметки', type: 'long_text', help: 'Что делали в прошлый раз, какой оттенок, на что аллергия. Клиенту приятно, что помнят.' },
+      ],
+      views: [
+        { name: 'Все записи', type: 'grid' },
+        { name: 'Календарь', type: 'calendar', dateBy: 'when' },
+        { name: 'Доска дня', type: 'kanban', stackBy: 'status' },
+      ],
+      rows: [
+        { key: 'v1', values: { client: 'Ирина П.', phone: '+7 916 555-11-22', service: { rowKey: 's3' }, master: 'Оля', when: inDays(0, 11, 0), status: 'Записан', note: 'В прошлый раз брали тон 7.1, просила чуть теплее.' } },
+        { key: 'v2', values: { client: 'Мария К.', phone: '+7 916 700-18-25', service: { rowKey: 's1' }, master: 'Оля', when: inDays(0, 14, 0), status: 'Пришёл' } },
+        { key: 'v3', values: { client: 'Алексей Г.', phone: '+7 903 555-00-11', service: { rowKey: 's2' }, master: 'Женя', when: inDays(0, 16, 30), status: 'Записан' } },
+        { key: 'v4', values: { client: 'Светлана М.', phone: '+7 921 444-66-77', service: { rowKey: 's4' }, master: 'Наташа', when: inDays(1, 10, 0), status: 'Записан', note: 'Аллергия на базу прошлого производителя.' } },
+        { key: 'v5', values: { client: 'Борис С.', phone: '+7 903 222-11-44', service: { rowKey: 's2' }, master: 'Женя', when: inDays(-1, 18, 0), status: 'Не пришёл', note: 'Не предупредил. Второй раз за месяц.' } },
+        { key: 'v6', values: { client: 'Анна В.', phone: '+7 900 000-00-00', service: { rowKey: 's5' }, master: 'Оля', when: inDays(2, 12, 30), status: 'Записан' } },
+        { key: 'v7', values: { client: 'Ольга Д.', phone: '+7 495 120-44-00', service: { rowKey: 's1' }, master: 'Наташа', when: inDays(-2, 15, 0), status: 'Отменил', note: 'Перенесла на следующую неделю.' } },
+      ],
+    },
+  ],
+}

@@ -39,8 +39,9 @@ import {
   type PendingRejection,
 } from '@/lib/pending-submission'
 import { explainToCustomer } from '@tableapp/schema'
-import { isPlanLimitError, mayIncrease } from '@/lib/limits'
+import { isPlanLimitError } from '@/lib/limits'
 import { insertRow, loadTableFields } from '@/lib/row-write'
+import { RowWriteError } from '@/lib/row-mutations'
 
 /**
  * Заявка с витрины, подтверждённая почтой.
@@ -254,50 +255,20 @@ export async function confirmIntakeAction(slug: string, rawCode: string): Promis
   // а владелец, поправив форму, не заставит его набирать всё заново.
   if (!fresh.ok) return { ok: false, error: WHY[fresh.reason] }
 
-  /*
-   * Место проверяем до того, как заявка погашена. Иначе отказ по месту
-   * сжёг бы её: человек ввёл код, заявка отмечена использованной, а строки
-   * нет — и набирать всё заново.
-   */
-  const allowed = await mayIncrease({
-    workspaceId: app.workspaceId,
-    resource: 'rows',
-    origin: 'runtime',
-  })
-  if (!allowed.ok) return { ok: false, error: explainToCustomer() }
-
-  /*
-   * Только теперь заявка забирается — условием `used_at is null`, чтобы два
-   * одновременных подтверждения не дали двух строк. Проигравший не получит
-   * ничего, а не вторую копию.
-   */
-  const claimed = await db
-    .update(pendingSubmissions)
-    .set({ usedAt: new Date() })
-    .where(and(eq(pendingSubmissions.id, pendingId), isNull(pendingSubmissions.usedAt)))
-    .returning({ id: pendingSubmissions.id })
-  if (claimed.length === 0) return { ok: false, error: WHY.already_used }
-  store.delete(INTAKE_COOKIE)
-
-  // Владельца проставляет сервер по правилам таблицы: заявка с витрины
-  // попадает в кабинет к тому, кто её оставил, а не к первому попавшемуся.
+  // Claiming the pending submission and creating its row commit together.
   try {
-    await insertRow(app, pending.record.tableId, fresh.values, { viewer, visitor, ip: null }, fields)
+    await insertRow(app, pending.record.tableId, fresh.values, { viewer, visitor, ip: null }, fields, async (tx) => {
+      const claimed = await tx.update(pendingSubmissions).set({ usedAt: new Date() })
+        .where(and(eq(pendingSubmissions.id, pendingId), isNull(pendingSubmissions.usedAt)))
+        .returning({ id: pendingSubmissions.id })
+      if (!claimed.length) throw new RowWriteError('conflict', WHY.already_used)
+    })
   } catch (error) {
-    if (isPlanLimitError(error)) {
-      /*
-       * Место кончилось между проверкой и записью — гонка редкая, но заявку
-       * возвращаем: она стоила человеку письма и кода, и сжигать её из-за
-       * промежутка в доли секунды нельзя.
-       */
-      await db
-        .update(pendingSubmissions)
-        .set({ usedAt: null })
-        .where(eq(pendingSubmissions.id, pendingId))
-      return { ok: false, error: explainToCustomer() }
-    }
+    if (isPlanLimitError(error)) return { ok: false, error: explainToCustomer() }
+    if (error instanceof RowWriteError) return { ok: false, error: error.message }
     throw error
   }
+  store.delete(INTAKE_COOKIE)
 
   revalidatePath(`/a/${slug}`)
   return { ok: true }

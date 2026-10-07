@@ -2,13 +2,14 @@
 
 import type { Attachment } from '@tableapp/schema'
 import { useRef, useState } from 'react'
+import { isInlineImage } from '@/lib/file-policy'
 
 export function fileUrl(key: string): string {
-  return `/api/files/${key}`
+  return `/api/files/${key}?v=2`
 }
 
 export function isImage(mime: string): boolean {
-  return mime.startsWith('image/')
+  return isInlineImage(mime)
 }
 
 async function upload(file: File, appId?: string): Promise<{ ok: true; attachment: Attachment } | { ok: false; error: string }> {

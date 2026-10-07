@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import type { NextConfig } from 'next'
-import { LEGACY_REDIRECTS } from './src/lib/site'
+import LEGACY_REDIRECTS from './src/lib/legacy-redirects.json'
 
 // Переменные окружения живут в одном .env в корне монорепозитория,
 // чтобы скрипты и приложение не расходились в настройках подключения.

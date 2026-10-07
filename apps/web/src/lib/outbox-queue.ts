@@ -11,35 +11,29 @@ import type { Mutation } from './sync-merge'
  *
  * Функция чистая: очередь на входе, очередь на выходе.
  */
-export function squash(queue: readonly Mutation[]): Mutation[] {
-  const result: Mutation[] = []
+export function squashGroups(queue: readonly Mutation[]): { mutation: Mutation; ids: string[] }[] {
+  const result: { mutation: Mutation; ids: string[] }[] = []
   const seen = new Map<string, number>()
-
   for (const mutation of queue) {
-    // Схлопываются только правки ячеек. Создание и удаление — события строки,
-    // их порядок несёт смысл, и склеивать их нельзя.
     if (mutation.op !== 'update' || !mutation.fieldId) {
-      result.push(mutation)
-      // После операции над строкой прежние правки её ячеек больше не склеиваем:
-      // иначе правка «до удаления» смешается с правкой «после создания».
-      for (const key of [...seen.keys()]) {
-        if (key.startsWith(`${mutation.rowId}::`)) seen.delete(key)
-      }
+      result.push({ mutation, ids: [mutation.id] })
+      for (const key of [...seen.keys()]) if (key.startsWith(`${mutation.rowId}::`)) seen.delete(key)
       continue
     }
-
     const key = `${mutation.rowId}::${mutation.fieldId}`
     const index = seen.get(key)
-
     if (index === undefined) {
       seen.set(key, result.length)
-      result.push({ ...mutation })
-      continue
+      result.push({ mutation: { ...mutation }, ids: [mutation.id] })
+    } else {
+      const earlier = result[index]!
+      result[index] = { mutation: { ...earlier.mutation, id: mutation.id, next: mutation.next, clientAt: mutation.clientAt },
+        ids: [...earlier.ids, mutation.id] }
     }
-
-    const earlier = result[index]!
-    result[index] = { ...earlier, id: mutation.id, next: mutation.next, clientAt: mutation.clientAt }
   }
-
   return result
+}
+
+export function squash(queue: readonly Mutation[]): Mutation[] {
+  return squashGroups(queue).map((group) => group.mutation)
 }

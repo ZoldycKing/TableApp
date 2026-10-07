@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import type { Field, FieldType } from './fields'
+import { dateInstant, fieldTimeZone } from './time'
 
 export const attachmentSchema = z.object({
   id: z.string(),
@@ -73,7 +74,13 @@ export function emptyValue(type: FieldType): unknown {
 
 /** Приводит записываемое значение к схеме своего типа; бросает при несовпадении. */
 export function parseCellValue(field: Field, value: unknown): unknown {
-  return CELL_VALUE[field.type].parse(value ?? undefined)
+  const parsed = CELL_VALUE[field.type].parse(value ?? undefined)
+  if ((field.type === 'date' || field.type === 'datetime') && parsed !== null) {
+    const instant = dateInstant(parsed, fieldTimeZone(field))
+    if (instant === null) throw new Error('Некорректная дата или время')
+    return new Date(instant).toISOString()
+  }
+  return parsed
 }
 
 export function isBlank(value: unknown): boolean {
@@ -130,8 +137,8 @@ export function coerceCellValue(from: Field, to: Field, value: unknown): unknown
 
     case 'date':
     case 'datetime': {
-      const date = new Date(textOf(from, value))
-      return Number.isNaN(date.getTime()) ? null : date.toISOString()
+      const instant = dateInstant(textOf(from, value), fieldTimeZone(to))
+      return instant === null ? null : new Date(instant).toISOString()
     }
 
     case 'single_select':

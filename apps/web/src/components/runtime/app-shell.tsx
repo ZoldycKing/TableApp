@@ -386,12 +386,12 @@ export function AppShell({
             resolveBindingValue(binding, row, viewer),
           ]),
         )
-        return runMutation(() => appUpdateRowAction(app.slug, tableId, row.id, values))
+        return runMutation(() => appUpdateRowAction(app.slug, tableId, row.id, values, row.version))
       }
       case 'delete_row': {
         if (!row || !tableId) return
         if (action.confirm && !window.confirm('Удалить запись?')) return
-        return runMutation(() => appDeleteRowAction(app.slug, tableId, row.id), goBack)
+        return runMutation(() => appDeleteRowAction(app.slug, tableId, row.id, row.version), goBack)
       }
     }
   }
@@ -736,7 +736,7 @@ export function AppShell({
               formSlot={
                 isRunForm ? <ConsumptionPanel preview={preview} loading={previewing} /> : null
               }
-              onSubmit={(values, mode) => {
+              onSubmit={(values, mode, baseVersion) => {
                 // Выпуск и движение склада пишутся своими действиями: одной
                 // транзакцией на несколько таблиц, чего общий путь не умеет.
                 if (mode === 'create' && isRunForm) return saveProduction(values)
@@ -768,7 +768,7 @@ export function AppShell({
                     }
                   })
                 } else if (row) {
-                  runMutation(() => appUpdateRowAction(app.slug, tableId, row.id, values), goBack)
+                  runMutation(() => appUpdateRowAction(app.slug, tableId, row.id, values, baseVersion), goBack)
                 }
               }}
             />

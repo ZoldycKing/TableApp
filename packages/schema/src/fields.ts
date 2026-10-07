@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { APP_TIME_ZONE } from './time'
+import { APP_TIME_ZONE, validTimeZone } from './time'
 import { COLORS } from './colors'
 
 /**
@@ -64,7 +64,9 @@ export const choiceSchema = z.object({
 })
 export type Choice = z.infer<typeof choiceSchema>
 
-export const dateFormatSchema = z.enum(['ru', 'iso', 'us', 'friendly']).default('ru')
+export const dateFormatSchema = z.preprocess((value) =>
+  value === 'dd.MM.yyyy' || value === 'dd.MM.yyyy HH:mm' ? 'ru' : value,
+  z.enum(['ru', 'iso', 'us', 'friendly']).default('ru'))
 export const rollupFnSchema = z.enum(['sum', 'count', 'min', 'max', 'avg', 'and', 'or', 'concat'])
 export type RollupFn = z.infer<typeof rollupFnSchema>
 
@@ -86,7 +88,7 @@ export const FIELD_OPTIONS = {
     .object({
       dateFormat: dateFormatSchema,
       timeFormat: z.enum(['12', '24']).default('24'),
-      timeZone: z.string().default(APP_TIME_ZONE),
+      timeZone: z.string().refine(validTimeZone, 'Неизвестный часовой пояс').default(APP_TIME_ZONE),
     })
     .prefault({}),
   checkbox: empty,
@@ -200,7 +202,11 @@ export function canBePrimary(type: FieldType): boolean {
  * не должно помнить, что у числа есть precision, а у даты — формат.
  */
 export function normalizeFieldOptions(type: FieldType, options: unknown = {}): Record<string, unknown> {
-  const parsed = FIELD_OPTIONS[type].safeParse(options ?? {})
+  const safeOptions = type === 'datetime' && options && typeof options === 'object'
+    ? { ...options, timeZone: typeof (options as { timeZone?: unknown }).timeZone === 'string' &&
+      validTimeZone((options as { timeZone: string }).timeZone) ? (options as { timeZone: string }).timeZone : APP_TIME_ZONE }
+    : options ?? {}
+  const parsed = FIELD_OPTIONS[type].safeParse(safeOptions)
   if (parsed.success) return parsed.data as Record<string, unknown>
   // Ссылочные типы требуют обязательных настроек — их дополнить нечем.
   return (options ?? {}) as Record<string, unknown>

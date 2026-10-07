@@ -3,20 +3,21 @@
 import {
   db,
   fields as fieldsTable,
-  rowChanges,
   rows as rowsTable,
+  tables,
 } from '@tableapp/db'
-import { compileTableFormulas, computeDerivedRow, stripDerived } from '@tableapp/formula'
+import { compileTableFormulas, computeDerivedRow } from '@tableapp/formula'
 import type { App, Field, ProductionConfig } from '@tableapp/schema'
-import { explainToCustomer, newId, normalizeFieldOptions, parseCellValue, positionBetween } from '@tableapp/schema'
+import { explainToCustomer, newId, normalizeFieldOptions } from '@tableapp/schema'
 import { and, asc, eq, isNull } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { permits } from '@/lib/app-roles'
 import { currentAppAccess, type AppViewer } from '@/lib/app-session'
 import { loadApp } from '@/lib/app-write-access'
-import { assertCanIncreaseUsage, isPlanLimitError } from '@/lib/limits'
-import { needFor, rowsToCreate, shortagesOf, type Need, type Norm } from '@/lib/production'
-import { rulesFor, stampOwner } from '@/lib/row-access'
+import { isPlanLimitError } from '@/lib/limits'
+import { needFor, shortagesOf, type Need, type Norm } from '@/lib/production'
+import { canAccessRow, rulesFor, stampOwner } from '@/lib/row-access'
+import { createRow, updateRow, writeRows, RowWriteError } from '@/lib/row-mutations'
 
 /**
  * Сохранение выпуска.
@@ -272,7 +273,7 @@ export async function saveMovementAction(
 ): Promise<SavedMovement | { ok: false; error: string }> {
   const ready = await open(slug, 'movements')
   if (!ready.ok) return ready
-  const { config, viewer, visitor } = ready
+  const { app, config, viewer, visitor } = ready
 
   if (!Number.isFinite(input.amount) || input.amount === 0) {
     return { ok: false, error: 'Укажите количество: приход со знаком плюс, списание со знаком минус' }
@@ -302,83 +303,40 @@ export async function saveMovementAction(
   const material = materials.get(input.materialId)
   if (!material) return { ok: false, error: 'Выберите материал' }
 
-  const materialFields = await loadFields(config.tables.materials)
   const when = input.date ?? new Date().toISOString()
-  const workspaceId = await workspaceOf(config.tables.movements)
 
   try {
-    const repeated = await db.transaction(async (tx) => {
-      if (workspaceId) {
-        await assertCanIncreaseUsage({
-          workspaceId,
-          resource: 'rows',
-          amount: 1,
-          origin: 'runtime',
-          tx,
-        })
-      }
-
-      const values = clean(
-        {
-          [config.movement.date]: when,
-          [config.movement.material]: [material.id],
-          [config.movement.kind]: input.kindId,
-          [config.movement.qty]: input.amount,
-          [config.movement.reason]: input.reason,
-        },
-        movementFields,
-      )
-      const data = computeDerivedRow(
-        values,
-        movementFields,
-        new Map(),
-        compileTableFormulas(movementFields),
-      )
-
-      const inserted = await tx
-        .insert(rowsTable)
-        .values({
-          id: input.movementId,
-          tableId: config.tables.movements,
-          data: stripDerived(data, movementFields),
-          position: await nextPosition(tx, config.tables.movements),
-        })
-        .onConflictDoNothing()
-        .returning({ id: rowsTable.id })
-
-      // Тот же идентификатор — та же строка: второе нажатие ничего не пишет.
-      if (inserted.length === 0) return true
-
-      await tx.insert(rowChanges).values({
-        id: newId('change'),
-        tableId: config.tables.movements,
-        rowId: input.movementId,
-        op: 'create',
-        after: data,
-        actorId: viewer?.id ?? null,
-        actorKind: 'app_user',
-      })
-
-      // Связь материала — то, ради чего это действие и существует.
-      material.links = [...material.links, input.movementId]
-      await tx
-        .update(rowsTable)
-        .set({ data: withLinks(material, config, materialFields), updatedAt: new Date() })
-        .where(eq(rowsTable.id, material.id))
-
+    const repeated = await writeRows(app.workspaceId, async (context) => {
+      const actor = { id: viewer?.id ?? null, kind: 'app_user' }
+      const result = await createRow(context, config.tables.movements, {
+        [config.movement.date]: when,
+        [config.movement.material]: [material.id],
+        [config.movement.kind]: input.kindId,
+        [config.movement.qty]: input.amount,
+        [config.movement.reason]: input.reason,
+      }, actor, { id: input.movementId, origin: 'runtime' })
+      if (result.duplicate) return true
+      const rules = rulesFor(app, config.tables.materials, visitor)
+      await updateRow(context, config.tables.materials, material.id, (_fields, current) => {
+        const data = current.data as Record<string, unknown>
+        const links = Array.isArray(data[config.material.movements]) ? data[config.material.movements] as string[] : []
+        return { [config.material.movements]: [...new Set([...links, input.movementId])] }
+      }, actor, { guard: (data) => canAccessRow(rules, viewer, data) })
       return false
     })
 
+    const currentMaterial = (await materialsOf(config)).get(material.id) ?? material
     revalidatePath(`/a/${slug}`)
     return {
       ok: true,
       repeated,
-      material: material.name,
-      unit: material.unit,
+      material: currentMaterial.name,
+      unit: currentMaterial.unit,
       amount: input.amount,
-      stock: repeated ? material.stock : material.stock + input.amount,
+      stock: currentMaterial.stock,
     }
   } catch (error) {
+    if (error instanceof RowWriteError) return { ok: false, error: error.message }
     if (isPlanLimitError(error)) {
       return { ok: false, error: visitor.enrolled ? explainToCustomer() : error.message }
     }
@@ -407,11 +365,7 @@ export async function saveProductionAction(
   const materials = await materialsOf(config)
   const needs = needFor(input.quantity, await normsFor(config, input.productId))
 
-  const runFields = await loadFields(config.tables.production)
-  const movementFields = await loadFields(config.tables.movements)
-  const materialFields = await loadFields(config.tables.materials)
-
-  const productName = await titleOf(config, input.productId)
+  const productName = await titleOf(app, input.productId)
   const when = input.date ?? new Date().toISOString()
   const reason = `Выпуск: ${productName}, ${input.quantity.toLocaleString('ru-RU')}`
 
@@ -425,9 +379,6 @@ export async function saveProductionAction(
       reason,
       needs,
       materials,
-      runFields,
-      movementFields,
-      materialFields,
       viewer,
       visitor,
     })
@@ -445,6 +396,7 @@ export async function saveProductionAction(
       })),
     }
   } catch (error) {
+    if (error instanceof RowWriteError) return { ok: false, error: error.message }
     if (isPlanLimitError(error)) {
       return { ok: false, error: visitor.enrolled ? explainToCustomer() : error.message }
     }
@@ -469,218 +421,54 @@ async function write(args: {
   reason: string
   needs: Need[]
   materials: Map<string, MaterialRow>
-  runFields: Field[]
-  movementFields: Field[]
-  materialFields: Field[]
   viewer: AppViewer | null
   visitor: Ready['visitor']
 }): Promise<boolean> {
-  const { app, config, input, needs, materials } = args
-  const workspaceId = await workspaceOf(config.tables.production)
-
-  return db.transaction(async (tx) => {
-    /*
-     * Место проверяем на **всю** операцию: выпуск плюс по строке на материал.
-     * Проверить только выпуск значило бы пропустить его при полном складе
-     * и получить списания, которым не хватило места.
-     */
-    if (workspaceId) {
-      await assertCanIncreaseUsage({
-        workspaceId,
-        resource: 'rows',
-        amount: rowsToCreate(needs),
-        origin: 'runtime',
-        tx,
-      })
-    }
-
+  const { app, config, input, needs } = args
+  return writeRows(app.workspaceId, async (context) => {
+    const actor = { id: args.viewer?.id ?? null, kind: 'app_user' }
     const runRules = rulesFor(app, config.tables.production, args.visitor)
-    const runValues = clean(
-      {
-        [config.run.date]: args.when,
-        [config.run.product]: [input.productId],
-        [config.run.qty]: input.quantity,
-        [config.run.defects]: args.defects,
-        ...(input.shiftId ? { [config.run.shift]: input.shiftId } : {}),
-        ...(input.note ? { [config.run.note]: input.note } : {}),
-      },
-      args.runFields,
-    )
-
-    const runData = computeDerivedRow(
-      stampOwner(runRules, args.viewer, runValues),
-      args.runFields,
-      new Map(),
-      compileTableFormulas(args.runFields),
-    )
-
-    /*
-     * Тот же идентификатор — та же строка. Второе нажатие «Сохранить»
-     * не создаёт ничего: `do nothing` возвращает пусто, и мы уходим,
-     * не тронув ни журнал склада, ни остатки.
-     */
-    const inserted = await tx
-      .insert(rowsTable)
-      .values({
-        id: input.runId,
-        tableId: config.tables.production,
-        data: stripDerived(runData, args.runFields),
-        position: await nextPosition(tx, config.tables.production),
-      })
-      .onConflictDoNothing()
-      .returning({ id: rowsTable.id })
-
-    if (inserted.length === 0) return true
-
-    await tx.insert(rowChanges).values({
-      id: newId('change'),
-      tableId: config.tables.production,
-      rowId: input.runId,
-      op: 'create',
-      after: runData,
-      actorId: args.viewer?.id ?? null,
-      actorKind: 'app_user',
-    })
-
-    if (needs.length === 0) return false
-
-    const movementRows = []
-    const changes = []
-    const positions = await positionsFor(tx, config.tables.movements, needs.length)
-    const formulas = compileTableFormulas(args.movementFields)
-
-    for (const [index, need] of needs.entries()) {
+    const run = await createRow(context, config.tables.production, stampOwner(runRules, args.viewer, {
+      [config.run.date]: args.when,
+      [config.run.product]: [input.productId],
+      [config.run.qty]: input.quantity,
+      [config.run.defects]: args.defects,
+      ...(input.shiftId ? { [config.run.shift]: input.shiftId } : {}),
+      ...(input.note ? { [config.run.note]: input.note } : {}),
+    }), actor, { id: input.runId, origin: 'runtime' })
+    if (run.duplicate) return true
+    // A failure in any following write rolls back the run and all reservations.
+    // Material patches read their links under lock, preserving concurrent edits.
+    for (const need of [...needs].sort((a, b) => a.materialId.localeCompare(b.materialId))) {
       const id = newId('row')
-      const values = clean(
-        {
-          [config.movement.date]: args.when,
-          [config.movement.material]: [need.materialId],
-          [config.movement.kind]: config.movementKindId,
-          // Со знаком минус: остаток — это сумма движений, и списание
-          // обязано уменьшать её само, без разбора типа.
-          [config.movement.qty]: -need.amount,
-          [config.movement.run]: [input.runId],
-          [config.movement.reason]: args.reason,
-        },
-        args.movementFields,
-      )
-      const data = computeDerivedRow(values, args.movementFields, new Map(), formulas)
-
-      movementRows.push({
-        id,
-        tableId: config.tables.movements,
-        data: stripDerived(data, args.movementFields),
-        position: positions[index]!,
-      })
-      changes.push({
-        id: newId('change'),
-        tableId: config.tables.movements,
-        rowId: id,
-        op: 'create' as const,
-        after: data,
-        actorId: args.viewer?.id ?? null,
-        actorKind: 'app_user' as const,
-      })
-
-      // Обратная сторона связи в TableApp не ведётся сама — ведём здесь.
-      // Без неё свёртка считает по старому списку, и остаток не сдвинется.
-      const material = materials.get(need.materialId)
-      if (material) material.links = [...material.links, id]
+      await createRow(context, config.tables.movements, {
+        [config.movement.date]: args.when,
+        [config.movement.material]: [need.materialId],
+        [config.movement.kind]: config.movementKindId,
+        [config.movement.qty]: -need.amount,
+        [config.movement.run]: [input.runId],
+        [config.movement.reason]: args.reason,
+      }, actor, { id, origin: 'runtime' })
+      const rules = rulesFor(app, config.tables.materials, args.visitor)
+      await updateRow(context, config.tables.materials, need.materialId, (_fields, current) => {
+        const data = current.data as Record<string, unknown>
+        const links = Array.isArray(data[config.material.movements]) ? data[config.material.movements] as string[] : []
+        return { [config.material.movements]: [...new Set([...links, id])] }
+      }, actor, { guard: (data) => canAccessRow(rules, args.viewer, data) })
     }
-
-    await tx.insert(rowsTable).values(movementRows)
-    await tx.insert(rowChanges).values(changes)
-
-    for (const need of needs) {
-      const material = materials.get(need.materialId)
-      if (!material) continue
-      await tx
-        .update(rowsTable)
-        .set({
-          data: withLinks(material, config, args.materialFields),
-          updatedAt: new Date(),
-        })
-        .where(eq(rowsTable.id, material.id))
-    }
-
     return false
   })
 }
 
-/** Значения по типам колонок: присланное мимо типа отбрасывается, а не пишется как есть. */
-function clean(values: Record<string, unknown>, fields: Field[]): Record<string, unknown> {
-  const byId = new Map(fields.map((field) => [field.id, field]))
-  const out: Record<string, unknown> = {}
-  for (const [fieldId, value] of Object.entries(values)) {
-    const field = byId.get(fieldId)
-    if (!field) continue
-    try {
-      out[fieldId] = parseCellValue(field, value)
-    } catch {
-      // Значение, не подходящее типу, не пишется.
-    }
-  }
-  return out
-}
-
-/**
- * Строка материала с дописанной связью.
- *
- * Остальные значения переносятся как были: пишем одно поле, а не всю строку
- * заново, иначе правка склада затирала бы то, что человек изменил параллельно.
- */
-function withLinks(
-  material: MaterialRow,
-  config: ProductionConfig,
-  fields: Field[],
-): Record<string, unknown> {
-  const field = fields.find((item) => item.id === config.material.movements)
-  const value = field ? parseCellValue(field, material.links) : material.links
-  return { ...material.data, [config.material.movements]: value }
-}
-
-async function nextPosition(tx: { select: typeof db.select }, tableId: string): Promise<string> {
-  const rows = await tx
-    .select({ position: rowsTable.position })
-    .from(rowsTable)
-    .where(and(eq(rowsTable.tableId, tableId), isNull(rowsTable.deletedAt)))
-    .orderBy(asc(rowsTable.position))
-  return positionBetween(rows[rows.length - 1]?.position ?? null, null)
-}
-
-async function positionsFor(
-  tx: { select: typeof db.select },
-  tableId: string,
-  count: number,
-): Promise<string[]> {
-  let last = await nextPosition(tx, tableId)
-  const out = [last]
-  for (let i = 1; i < count; i += 1) {
-    last = positionBetween(last, null)
-    out.push(last)
-  }
-  return out
-}
-
-async function titleOf(config: ProductionConfig, productId: string): Promise<string> {
+async function titleOf(app: App, productId: string): Promise<string> {
   const [row] = await db
     .select({ data: rowsTable.data })
     .from(rowsTable)
-    .where(eq(rowsTable.id, productId))
+    .innerJoin(tables, eq(rowsTable.tableId, tables.id))
+    .where(and(eq(rowsTable.id, productId), eq(tables.workspaceId, app.workspaceId), isNull(rowsTable.deletedAt)))
     .limit(1)
   if (!row) return 'Изделие'
   const data = row.data as Record<string, unknown>
   const first = Object.values(data).find((value) => typeof value === 'string' && value.trim() !== '')
-  void config
   return typeof first === 'string' ? first : 'Изделие'
-}
-
-async function workspaceOf(tableId: string): Promise<string | null> {
-  const { tables } = await import('@tableapp/db')
-  const [row] = await db
-    .select({ workspaceId: tables.workspaceId })
-    .from(tables)
-    .where(eq(tables.id, tableId))
-    .limit(1)
-  return row?.workspaceId ?? null
 }

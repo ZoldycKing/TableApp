@@ -1,5 +1,5 @@
 import { authorizeTable } from '@/lib/authorize'
-import { subscribeTable, type LiveEvent } from '@/lib/live'
+import { tableLiveStream } from '@/lib/table-live-stream'
 
 /**
  * Поток изменений таблицы.
@@ -30,57 +30,7 @@ export async function GET(
   const auth = await authorizeTable(tableId, false)
   if (!auth.ok) return new Response(auth.error, { status: 403 })
 
-  const encoder = new TextEncoder()
-
-  const stream = new ReadableStream<Uint8Array>({
-    start(controller) {
-      let alive = true
-
-      const send = (payload: string) => {
-        if (!alive) return
-        try {
-          controller.enqueue(encoder.encode(payload))
-        } catch {
-          alive = false
-        }
-      }
-
-      const push = (event: LiveEvent) => send(`data: ${JSON.stringify(event)}\n\n`)
-
-      // Первое сообщение сразу: браузер считает соединение установленным
-      // и не держит «подключаемся» до первого изменения.
-      send(`: подключено\n\n`)
-
-      const unsubscribe = subscribeTable(tableId, push)
-
-      const beat = setInterval(() => {
-        void (async () => {
-          const still = await authorizeTable(tableId, false)
-          if (!still.ok) {
-            // Доступ отозвали: закрываем поток. Браузер попробует переподключиться
-            // и получит отказ — на экране это станет видно обычным путём.
-            stop()
-            return
-          }
-          send(`: жив\n\n`)
-        })()
-      }, HEARTBEAT_MS)
-
-      const stop = () => {
-        if (!alive) return
-        alive = false
-        clearInterval(beat)
-        unsubscribe()
-        try {
-          controller.close()
-        } catch {
-          // Уже закрыт браузером — это обычный конец, а не ошибка.
-        }
-      }
-
-      _request.signal.addEventListener('abort', stop)
-    },
-  })
+  const stream = tableLiveStream(tableId, _request.signal, async () => (await authorizeTable(tableId, false)).ok, HEARTBEAT_MS)
 
   return new Response(stream, {
     headers: {

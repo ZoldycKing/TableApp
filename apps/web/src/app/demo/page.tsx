@@ -8,7 +8,7 @@ import { SiteHeader } from '@/components/marketing/site-header'
 import { ANONYMOUS, ANONYMOUS_NAME, asRole, companyOf, roleName } from '@/lib/app-roles'
 import { EmptyState } from '@/components/runtime/ui'
 import { ANONYMOUS_ID, resolveDemoView } from '@/lib/demo-view'
-import { loadDemoApp, loadDemoRuntime } from '@/lib/app-runtime'
+import { DEMO_CLIENT_EMAIL, loadDemoApp, loadDemoRuntime } from '@/lib/demo-runtime'
 import { currentMember } from '@/lib/session'
 import { pageMetadata } from '@/lib/seo'
 
@@ -33,11 +33,8 @@ export const metadata: Metadata = pageMetadata({
  * Размер экрана — наоборот, чистый показ, и меняется в браузере.
  */
 
-/** Приложение для показа. Читается черновик — публиковать его не нужно. */
-const DEMO_SLUG = process.env.DEMO_APP_SLUG ?? 'kabinet-klienta'
-
 /** Клиент из примеров: его глазами показываем кабинет. */
-const DEMO_CLIENT = process.env.DEMO_CLIENT_EMAIL ?? 'irina@vektor.ru'
+const DEMO_CLIENT = DEMO_CLIENT_EMAIL
 
 type RoleCopy = {
   lead: string
@@ -70,8 +67,8 @@ const ABOUT: Record<string, RoleCopy> = {
     hidden: ['кабинет клиента', 'чужие заказы', 'себестоимость и внутренние данные'],
   },
   client: {
-    lead: `Вошёл по коду из письма — здесь это ${DEMO_CLIENT} из ООО «Вектор».`,
-    sees: ['ту же витрину, что и все', 'свои заказы и заказы своей организации', 'статус, срок, сумму и оплату'],
+    lead: `Клиент вошёл по коду из письма — здесь его роль показана на примере ${DEMO_CLIENT}.`,
+    sees: ['ту же витрину, что и все', 'свои заказы', 'статус, срок, сумму и оплату'],
     can: ['следить за ходом работы по каждому заказу'],
     hidden: ['заказы других организаций', 'заметки для своих', 'настройки приложения'],
   },
@@ -103,7 +100,7 @@ export default async function DemoPage({
   const params = await searchParams
   const member = await currentMember()
 
-  const definition = await loadDemoApp(DEMO_SLUG)
+  const definition = loadDemoApp()
   if (!definition) notFound()
 
   const { role, device, deviceChosen, viewerEmail } = resolveDemoView(definition, params, DEMO_CLIENT)
@@ -154,7 +151,7 @@ export default async function DemoPage({
 
   // Размер экрана сюда не попадает и попасть не может: строки отбираются
   // по роли и почте, а рамка на странице к этому отношения не имеет.
-  const runtime = await loadDemoRuntime(DEMO_SLUG, visitor)
+  const runtime = loadDemoRuntime(visitor)
   if (!runtime) notFound()
 
   const empty = runtime.app.screens.length === 0
@@ -282,8 +279,8 @@ export default async function DemoPage({
         <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
           <div className="max-w-2xl space-y-2 text-sm leading-relaxed text-ink-muted">
             <p>
-              Это не картинка и не отдельная демоверсия: страница показывает то же приложение
-              и те же данные, что увидит человек. Витрина «Услуги и цены» открыта всем по ссылке —
+              Здесь приложение работает на вымышленных примерах из шаблона «Клиентский портал».
+              Можно переключить роль и увидеть разницу в доступе. Витрина «Услуги и цены» открыта всем по ссылке —
               владелец сам решил, какой раздел показывать без входа и какие колонки в нём
               публиковать. Себестоимость лежит в той же таблице и наружу не уходит.
             </p>

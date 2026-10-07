@@ -371,10 +371,9 @@ describe('права на поля выводятся из того, что по
 
   it('поле, не показанное роли, ей не читается', () => {
     expect([...readableFields(withFieldRoles, 'tbl_1', asRole('client'), views)]).toEqual(['fld_what'])
-    // Статус мастер заполняет в форме — значит и читает его.
+    // Форма создания принимает статус новой записи, но не открывает статус существующих.
     expect([...readableFields(withFieldRoles, 'tbl_1', asRole('staff'), views)].sort()).toEqual([
       'fld_cost',
-      'fld_status',
       'fld_what',
     ])
   })

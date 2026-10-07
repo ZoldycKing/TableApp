@@ -1,13 +1,16 @@
-import { apps, db, views as viewsTable } from '@tableapp/db'
+import { apps, db, tables, views as viewsTable } from '@tableapp/db'
 import { appSchema, type App } from '@tableapp/schema'
-import { eq, inArray } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
+import { validateAppReferences } from './app-references'
 
 /** Опубликованная версия приложения: черновик правами не распоряжается. */
 export async function loadApp(slug: string): Promise<App | null> {
   const [record] = await db.select().from(apps).where(eq(apps.slug, slug)).limit(1)
   if (!record?.published) return null
   const parsed = appSchema.safeParse(record.published)
-  return parsed.success ? parsed.data : null
+  if (!parsed.success) return null
+  const app = { ...parsed.data, id: record.id, workspaceId: record.workspaceId }
+  return await validateAppReferences(app) ? null : app
 }
 
 /**
@@ -16,6 +19,9 @@ export async function loadApp(slug: string): Promise<App | null> {
  * до любой таблицы пространства — в том числе той, которую никому не давали.
  */
 export async function assertTableAllowed(app: App, tableId: string): Promise<string | null> {
+  const [owned] = await db.select({ id: tables.id }).from(tables)
+    .where(and(eq(tables.id, tableId), eq(tables.workspaceId, app.workspaceId))).limit(1)
+  if (!owned) return 'Таблица недоступна этому приложению'
   const direct = app.screens.some(
     (screen) => (screen.type === 'detail' || screen.type === 'form') && screen.tableId === tableId,
   )

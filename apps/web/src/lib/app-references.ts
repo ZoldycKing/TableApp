@@ -1,0 +1,123 @@
+import type { App, Field } from '@tableapp/schema'
+import { normalizeFieldOptions } from '@tableapp/schema'
+import { eq, inArray } from 'drizzle-orm'
+
+export type AppReferenceCatalog = {
+  tableIds: Set<string>
+  views: Map<string, { tableId: string }>
+  fields: Map<string, Field>
+}
+
+const INVALID_REFERENCE = 'Приложение ссылается на недоступную таблицу, представление или поле'
+
+/** Check references in their table context; literal cell values are not definitions. */
+export function checkAppReferences(app: App, catalog: AppReferenceCatalog): string | null {
+  const screenIds = new Set(app.screens.map((screen) => screen.id))
+  let error: string | null = screenIds.size !== app.screens.length ? 'Идентификаторы экранов повторяются' : null
+  const invalid = (kind: string, id: string) => { error ??= `${INVALID_REFERENCE} (${kind}: ${id})` }
+  const table = (id: string | null | undefined) => {
+    if (id && !catalog.tableIds.has(id)) invalid('таблица', id)
+    return id || undefined
+  }
+  const field = (id: string, tableId?: string) => {
+    if (id && (!tableId || catalog.fields.get(id)?.tableId !== tableId)) invalid('поле', id)
+  }
+  const screenLink = (id: unknown) => {
+    if (typeof id === 'string' && id && !screenIds.has(id)) invalid('экран', id)
+  }
+  const sourceTable = (value: { viewId: string }) => {
+    const view = catalog.views.get(value.viewId)
+    if (value.viewId && !view) invalid('представление', value.viewId)
+    return view?.tableId
+  }
+
+  function walk(value: unknown, tableId?: string): void {
+    if (!value || typeof value !== 'object') return
+    if (Array.isArray(value)) {
+      for (const item of value) walk(item, tableId)
+      return
+    }
+    const object = value as Record<string, unknown>
+    if (object.kind === 'literal') return
+
+    // Bindings read from the current row, even when the action creates another row.
+    if (object.type === 'create_row' || object.type === 'update_row') {
+      const target = object.type === 'create_row' ? table(object.tableId as string) : tableId
+      for (const [id, binding] of Object.entries((object.values ?? {}) as Record<string, unknown>)) {
+        field(id, target)
+        walk(binding, tableId)
+      }
+      return
+    }
+    let relatedTable: string | undefined
+    if (object.type === 'related_list') {
+      const id = object.relationFieldId as string
+      field(id, tableId)
+      const relation = catalog.fields.get(id)
+      if (id && relation?.type !== 'relation') invalid('поле связи', id)
+      if (relation?.type === 'relation') relatedTable = table(relation.options.tableId)
+    }
+    for (const [key, item] of Object.entries(object)) {
+      // Filters contain arbitrary user data in value, not more references.
+      if (key === 'value' || key === 'values') continue
+      if (key.endsWith('ScreenId') || key === 'screenId') screenLink(item)
+      else if (key.endsWith('FieldId') || key === 'fieldId') {
+        if (typeof item === 'string') {
+          const context = object.type === 'related_list' && key !== 'relationFieldId' ? relatedTable : tableId
+          field(item, context)
+        }
+      } else if (key.endsWith('FieldIds') || key === 'publicFields') {
+        if (Array.isArray(item)) for (const id of item) if (typeof id === 'string') field(id, tableId)
+      } else walk(item, tableId)
+    }
+  }
+
+  screenLink(app.homeScreenId)
+  for (const screen of app.screens) {
+    if (screen.type === 'dashboard') {
+      const blockTables = new Set(screen.blocks.flatMap((block) => 'source' in block ? [sourceTable(block.source)] : []))
+      for (const id of screen.access.publicFields) {
+        const own = catalog.fields.get(id)
+        if (id && (!own || !blockTables.has(own.tableId))) invalid('публичное поле', id)
+      }
+      for (const block of screen.blocks) {
+        walk(block, 'source' in block ? sourceTable(block.source) : undefined)
+      }
+    } else {
+      const tableId = 'source' in screen ? sourceTable(screen.source) : table(screen.tableId)
+      walk(screen, tableId)
+    }
+  }
+  for (const rule of app.rowAccessRules) {
+    field(rule.fieldId, table(rule.tableId))
+  }
+  if (app.production) {
+    const config = app.production
+    for (const id of Object.values(config.tables)) table(id)
+    for (const [group, tableId] of [
+      [config.run, config.tables.production], [config.norm, config.tables.norms],
+      [config.movement, config.tables.movements], [config.material, config.tables.materials],
+    ] as const) for (const id of Object.values(group)) field(id, tableId)
+    screenLink(config.formScreenId)
+    screenLink(config.movementScreenId)
+  }
+  return error
+}
+
+/** The catalog contains only objects owned by the authoritative workspace. */
+export async function validateAppReferences(app: App): Promise<string | null> {
+  const { db, fields, tables, views } = await import('@tableapp/db')
+  const scopedTables = db.select({ id: tables.id }).from(tables).where(eq(tables.workspaceId, app.workspaceId))
+  const [tableRows, viewRows, fieldRows] = await Promise.all([
+    scopedTables,
+    db.select({ id: views.id, tableId: views.tableId }).from(views).where(inArray(views.tableId, scopedTables)),
+    db.select().from(fields).where(inArray(fields.tableId, scopedTables)),
+  ])
+  return checkAppReferences(app, {
+    tableIds: new Set(tableRows.map((row) => row.id)),
+    views: new Map(viewRows.map((row) => [row.id, row])),
+    fields: new Map(fieldRows.map((row) => [row.id, {
+      ...row, options: normalizeFieldOptions(row.type as Field['type'], row.options),
+    } as unknown as Field])),
+  })
+}

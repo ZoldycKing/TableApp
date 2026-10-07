@@ -1,0 +1,406 @@
+import { existsSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { and, asc, eq, isNull, sql as query } from 'drizzle-orm'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { defaultViewConfig, graceReserve, newId, planOf, viewSchema, type App, type Field } from '@tableapp/schema'
+
+const envFile = resolve(import.meta.dirname, '../../../../.env')
+if (!process.env.DATABASE_URL && existsSync(envFile)) process.loadEnvFile(envFile)
+const identity = vi.hoisted(() => ({ member: null as import('./session').Member | null, roleId: 'manager' }))
+vi.mock('@/lib/session', async (original) => ({ ...await original<typeof import('./session')>(), currentMember: async () => identity.member }))
+vi.mock('@/lib/app-session', async (original) => ({ ...await original<typeof import('./app-session')>(),
+  currentAppAccess: async () => ({ visitor: { authenticated: true, roleId: identity.roleId, email: identity.member!.email, company: '', enrolled: false },
+    viewer: { id: identity.member!.userId, email: identity.member!.email, company: '', enrolled: false } }),
+}))
+vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
+
+function gate() {
+  let release!: () => void
+  const promise = new Promise<void>((resolve) => { release = resolve })
+  return { promise, release }
+}
+
+describe.skipIf(!process.env.DATABASE_URL)('row writes against Postgres', () => {
+  let database: typeof import('@tableapp/db')
+  let core: typeof import('./row-mutations')
+  let actions: typeof import('@/app/actions')
+  let runtime: typeof import('@/app/runtime-actions')
+  let sync: typeof import('./sync-write')
+  let usage: typeof import('./usage')
+  const ids = { user: newId('user'), workspace: newId('workspace'), table: newId('table'), peer: newId('table'),
+    row: newId('row'), peerRow: newId('row'), a: newId('field'), b: newId('field'), peerField: newId('field'), app: newId('app') }
+  const slug = `row-writes-${Date.now()}-${ids.app.slice(-6).toLowerCase()}`
+  const actor = { id: ids.user, kind: 'member', deviceId: 'test-device' }
+  const access = { guard: () => true, may: () => true, mayField: () => true,
+    stamp: (data: Record<string, unknown>) => data, locked: () => false }
+  let app: App
+  const columns: Field[] = [
+    { id: ids.a, tableId: ids.table, name: 'A', type: 'text', options: {}, description: null, position: 'a0' },
+    { id: ids.b, tableId: ids.table, name: 'B', type: 'text', options: {}, description: null, position: 'a1' },
+  ]
+
+  beforeAll(async () => {
+    database = await import('@tableapp/db')
+    core = await import('./row-mutations')
+    actions = await import('@/app/actions')
+    runtime = await import('@/app/runtime-actions')
+    sync = await import('./sync-write')
+    usage = await import('./usage')
+    const { db, users, workspaces, workspaceMembers } = database
+    await db.insert(users).values({ id: ids.user, email: `${slug}@example.invalid` })
+    await db.insert(workspaces).values({ id: ids.workspace, ownerId: ids.user, name: 'Row tests', slug })
+    await db.insert(workspaceMembers).values({ workspaceId: ids.workspace, userId: ids.user, role: 'owner' })
+    identity.member = { userId: ids.user, workspaceId: ids.workspace, workspaceName: 'Row tests', role: 'owner', name: 'Test', email: `${slug}@example.invalid` }
+  })
+  beforeEach(async () => {
+    identity.roleId = 'manager'
+    const { db, tables, fields, rows, views, apps, workspaceUsage } = database
+    await db.delete(apps).where(eq(apps.workspaceId, ids.workspace))
+    await db.delete(tables).where(eq(tables.workspaceId, ids.workspace))
+    await db.delete(workspaceUsage).where(eq(workspaceUsage.workspaceId, ids.workspace))
+    await db.insert(tables).values([
+      { id: ids.table, workspaceId: ids.workspace, name: 'A', position: 'a0', primaryFieldId: ids.a },
+      { id: ids.peer, workspaceId: ids.workspace, name: 'Peer', position: 'a1', primaryFieldId: ids.peerField },
+    ])
+    await db.insert(fields).values([...columns, { id: ids.peerField, tableId: ids.peer, name: 'Link', type: 'relation', options: { tableId: ids.table, allowMultiple: false }, position: 'a0' }])
+    await db.insert(rows).values([
+      { id: ids.row, tableId: ids.table, position: 'a1', data: { [ids.a]: 'old A', [ids.b]: 'old B' }, sample: true },
+      { id: ids.peerRow, tableId: ids.peer, position: 'a1', data: { [ids.peerField]: [ids.row] } },
+    ])
+    const view = { id: newId('view'), tableId: ids.table, name: 'All', type: 'grid' as const, config: defaultViewConfig('grid', newId('filter')), position: 'a0' }
+    await db.insert(views).values(view)
+    const { generateApp } = await import('./app-builder')
+    app = generateApp({ appId: ids.app, workspaceId: ids.workspace, name: 'Tests', slug,
+      table: { id: ids.table, name: 'A', primaryFieldId: ids.a }, fields: columns, view: viewSchema.parse(view) })
+    await db.insert(apps).values({ id: app.id, workspaceId: ids.workspace, name: app.name, slug, draft: app, published: app })
+  })
+  afterAll(async () => {
+    if (!database) return
+    await database.db.delete(database.workspaces).where(eq(database.workspaces.id, ids.workspace))
+    await database.db.delete(database.users).where(eq(database.users.id, ids.user))
+    await database.sql.end()
+  })
+  const read = async (id: string = ids.row) => (await database.db.select().from(database.rows).where(eq(database.rows.id, id)))[0]!
+  const counter = async () => (await database.db.select().from(database.workspaceUsage).where(eq(database.workspaceUsage.workspaceId, ids.workspace)))[0]!
+  const changes = async (id: string = ids.row) => database.db.select().from(database.rowChanges).where(eq(database.rowChanges.rowId, id)).orderBy(asc(database.rowChanges.createdAt))
+  const update = (patch: Record<string, unknown>, options = {}) => core.writeRows(ids.workspace,
+    (context) => core.updateRow(context, ids.table, ids.row, patch, actor, options))
+  async function production() {
+    const { applyTemplateAction } = await import('@/app/template-actions')
+    const applied = await applyTemplateAction('proizvodstvo')
+    expect(applied.ok).toBe(true)
+    if (!applied.ok) throw new Error(applied.error)
+    const { db, apps, rows, fields } = database
+    const [record] = await db.select().from(apps).where(eq(apps.id, applied.appId))
+    const definition = record!.draft as App
+    await db.update(apps).set({ published: definition }).where(eq(apps.id, applied.appId))
+    const config = definition.production!
+    identity.roleId = definition.roles.find((role) => role.name === 'Директор')?.id ?? definition.roles[definition.roles.length - 1]!.id
+    const [material] = await db.select().from(rows).where(eq(rows.tableId, config.tables.materials))
+    const [kind] = await db.select().from(fields).where(eq(fields.id, config.movement.kind))
+    const choices = (kind!.options as { choices: { id: string }[] }).choices
+    const [norm] = await db.select().from(rows).where(eq(rows.tableId, config.tables.norms))
+    const product = (norm!.data as Record<string, string[]>)[config.norm.product]![0]!
+    const module = await import('@/app/production-actions')
+    return { module, config, slug: applied.appSlug, material: material!,
+      kind: choices.find((choice) => choice.id !== config.movementKindId)!.id, product }
+  }
+  async function waitForLock() {
+    const deadline = Date.now() + 5000
+    while (Date.now() < deadline) {
+      const result = await database.db.execute(query`select count(*)::int as waiting from pg_stat_activity
+        where datname = current_database() and wait_event_type = 'Lock' and query like '%workspace_usage%'`)
+      if (Number(result[0]?.waiting) > 0) return
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    }
+    throw new Error('Expected a concurrent query waiting on the usage lock')
+  }
+
+  it('merges simultaneous edits of distinct cells and records both versions', async () => {
+    const results = await Promise.all([
+      actions.setCellAction(ids.table, ids.row, ids.a, 'new A', 'old A'),
+      actions.setCellAction(ids.table, ids.row, ids.b, 'new B', 'old B'),
+    ])
+    expect(results.every((result) => result.ok), JSON.stringify(results)).toBe(true)
+    const row = await read()
+    expect(row.data).toEqual({ [ids.a]: 'new A', [ids.b]: 'new B' })
+    expect(row.version).toBe(2)
+    expect(row.sample).toBe(false)
+    const history = await changes()
+    expect(history).toHaveLength(2)
+    expect(history[0]!.before).toEqual({ [ids.a]: 'old A', [ids.b]: 'old B' })
+    expect(history[1]!.before).toEqual(history[0]!.after)
+    expect(history[1]!.after).toEqual(row.data)
+  })
+  it('allows exactly one simultaneous edit using the same cell base', async () => {
+    const results = await Promise.all(['one', 'two'].map((value) => actions.setCellAction(ids.table, ids.row, ids.a, value, 'old A')))
+    expect(results.filter((result) => result.ok)).toHaveLength(1)
+    expect((await read()).version).toBe(1)
+    expect(await changes()).toHaveLength(1)
+  })
+  it('checks form versions and publishes app updates', async () => {
+    const { subscribeTable } = await import('./live')
+    const events: unknown[] = []
+    const unsubscribe = subscribeTable(ids.table, (event) => events.push(event))
+    try {
+      expect((await runtime.appUpdateRowAction(slug, ids.table, ids.row, { [ids.a]: 'form' }, 0)).ok).toBe(true)
+      expect((await runtime.appUpdateRowAction(slug, ids.table, ids.row, { [ids.b]: 'stale' }, 0)).ok).toBe(false)
+      expect((await read()).data).toEqual({ [ids.a]: 'form', [ids.b]: 'old B' })
+      expect(events).toHaveLength(1)
+    } finally { unsubscribe() }
+  })
+  it('rechecks owner access after locking the row', async () => {
+    await expect(update({ [ids.a]: 'denied' }, { guard: () => false })).rejects.toMatchObject({ code: 'denied' })
+    expect(await changes()).toHaveLength(0)
+  })
+  it('rejects editing a deleted row', async () => {
+    expect((await actions.deleteRowAction(ids.table, ids.row, 0)).ok).toBe(true)
+    expect((await actions.setCellAction(ids.table, ids.row, ids.a, 'resurrect')).ok).toBe(false)
+    expect((await runtime.appUpdateRowAction(slug, ids.table, ids.row, { [ids.b]: 'resurrect' })).ok).toBe(false)
+    expect((await read()).version).toBe(1)
+  })
+  it('rejects writing a computed system field without incrementing its version', async () => {
+    const id = newId('field')
+    await database.db.insert(database.fields).values({ id, tableId: ids.table, name: 'Updated', type: 'updated_time', options: {}, position: 'a2' })
+    expect((await actions.setCellAction(ids.table, ids.row, id, '2026-01-01')).ok).toBe(false)
+    expect((await read()).version).toBe(0)
+    expect(await changes()).toHaveLength(0)
+  })
+  it('rejects deleting a stale form snapshot', async () => {
+    await update({ [ids.a]: 'new' })
+    expect((await runtime.appDeleteRowAction(slug, ids.table, ids.row, 0)).ok).toBe(false)
+    expect((await read()).deletedAt).toBeNull()
+  })
+  it('counts a double deletion exactly once and updates its timestamp', async () => {
+    await usage.recountWorkspace(ids.workspace)
+    const results = await Promise.all([actions.deleteRowAction(ids.table, ids.row), actions.deleteRowAction(ids.table, ids.row)])
+    expect(results.filter((result) => result.ok)).toHaveLength(1)
+    expect((await counter()).rows).toBe(1)
+    const row = await read()
+    expect(row.deletedAt).not.toBeNull()
+    expect(row.updatedAt).toEqual(row.deletedAt)
+    expect(row.version).toBe(1)
+    expect(await changes()).toHaveLength(1)
+  })
+  it('does not reserve quota or emit another event for a repeated create ID', async () => {
+    const id = newId('row')
+    const { subscribeTable } = await import('./live')
+    const events: unknown[] = []
+    const unsubscribe = subscribeTable(ids.table, (event) => events.push(event))
+    try {
+      expect((await actions.addRowAction(ids.table, undefined, id)).ok).toBe(true)
+      expect((await actions.addRowAction(ids.table, undefined, id)).ok).toBe(true)
+      expect((await counter()).rows).toBe(3)
+      expect(await changes(id)).toHaveLength(1)
+      expect(events).toHaveLength(1)
+    } finally { unsubscribe() }
+  })
+  it('rolls back quota, history and notifications when a write fails', async () => {
+    await usage.recountWorkspace(ids.workspace)
+    const id = newId('row')
+    const { subscribeTable } = await import('./live')
+    const events: unknown[] = []
+    const unsubscribe = subscribeTable(ids.table, (event) => events.push(event))
+    try {
+      await expect(core.writeRows(ids.workspace, async (context) => {
+        await core.createRow(context, ids.table, { [ids.a]: 'rollback' }, actor, { id })
+        throw new Error('synthetic failure')
+      })).rejects.toThrow('synthetic failure')
+      expect((await counter()).rows).toBe(2)
+      expect(await changes(id)).toHaveLength(0)
+      expect(await database.db.select().from(database.rows).where(eq(database.rows.id, id))).toHaveLength(0)
+      expect(events).toHaveLength(0)
+    } finally { unsubscribe() }
+  })
+  it('does not consume a pending claim when row insertion fails', async () => {
+    const { db, pendingSubmissions } = database
+    const id = newId('event')
+    await db.insert(pendingSubmissions).values({ id, appId: app.id, screenId: app.homeScreenId!,
+      tableId: ids.table, values: {}, email: `${slug}@example.invalid`, expiresAt: new Date(Date.now() + 60000) })
+    await usage.recountWorkspace(ids.workspace)
+    await expect(core.writeRows(ids.workspace, async (context) => {
+      await core.createRow(context, ids.table, {}, actor, { beforeInsert: async (tx) => {
+        await tx.update(pendingSubmissions).set({ usedAt: new Date() }).where(eq(pendingSubmissions.id, id))
+        throw new Error('synthetic failure after claim')
+      } })
+    })).rejects.toThrow('synthetic failure after claim')
+    expect((await db.select().from(pendingSubmissions).where(eq(pendingSubmissions.id, id)))[0]!.usedAt).toBeNull()
+    expect((await counter()).rows).toBe(2)
+  })
+  it('recounts after waiting for an in-flight row reservation', async () => {
+    await usage.recountWorkspace(ids.workspace)
+    const ready = gate(), finish = gate()
+    const writer = core.writeRows(ids.workspace, async (context) => {
+      await core.createRow(context, ids.table, {}, actor)
+      ready.release()
+      await finish.promise
+    })
+    await Promise.race([ready.promise, writer])
+    const recount = usage.recountWorkspace(ids.workspace)
+    try { await waitForLock() } finally { finish.release() }
+    const [, result] = await Promise.all([writer, recount])
+    expect(result.rows).toBe(3)
+    expect((await counter()).rows).toBe(3)
+  })
+  it('admits only one concurrent create at the actual free-plan limit', async () => {
+    const { db, rows } = database
+    await db.insert(rows).values(Array.from({ length: 1997 }, (_, index) => ({ id: newId('row'), tableId: ids.table, position: `bulk${index}`, data: {} })))
+    await usage.recountWorkspace(ids.workspace)
+    const results = await Promise.all([actions.addRowAction(ids.table), actions.addRowAction(ids.table)])
+    expect(results.filter((result) => result.ok)).toHaveLength(1)
+    expect((await counter()).rows).toBe(2000)
+    const counted = await db.select({ total: query<number>`count(*)::int` }).from(rows)
+      .where(and(eq(rows.tableId, ids.table), isNull(rows.deletedAt)))
+    expect(counted[0]!.total).toBe(1999)
+  })
+  it('merges concurrent offline edits into the current row', async () => {
+    const results = await Promise.all([
+      sync.applySyncMutation({ id: newId('change'), rowId: ids.row, op: 'update', fieldId: ids.a, base: 'old A', next: 'offline A' }, ids.table, actor, access),
+      sync.applySyncMutation({ id: newId('change'), rowId: ids.row, op: 'update', fieldId: ids.b, base: 'old B', next: 'offline B' }, ids.table, actor, access),
+    ])
+    expect(results.map((result) => result.status)).toEqual(['applied', 'applied'])
+    expect((await read()).data).toEqual({ [ids.a]: 'offline A', [ids.b]: 'offline B' })
+    expect((await read()).version).toBe(2)
+    expect(await changes()).toHaveLength(2)
+  })
+  it('applies simultaneous retries of one offline mutation exactly once', async () => {
+    const mutation = { id: newId('change'), rowId: ids.row, op: 'update' as const, fieldId: ids.a, base: 'old A', next: 'offline' }
+    const results = await Promise.all([sync.applySyncMutation(mutation, ids.table, actor, access), sync.applySyncMutation(mutation, ids.table, actor, access)])
+    expect(results.every((result) => result.status === 'applied')).toBe(true)
+    expect((await read()).version).toBe(1)
+    expect(await changes()).toHaveLength(1)
+  })
+  it('does not accept another actor or device receipt as its own mutation', async () => {
+    const mutation = { id: newId('change'), rowId: ids.row, op: 'update' as const, fieldId: ids.a, base: 'old A', next: 'offline' }
+    await sync.applySyncMutation(mutation, ids.table, actor, access)
+    const result = await sync.applySyncMutation(mutation, ids.table, { ...actor, deviceId: 'another-device' }, access)
+    expect(result.status).toBe('dropped')
+    expect((await read()).version).toBe(1)
+  })
+  it('does not overwrite a newer online value with an offline edit', async () => {
+    await update({ [ids.a]: 'online' })
+    const result = await sync.applySyncMutation({ id: newId('change'), rowId: ids.row, op: 'update', fieldId: ids.a, base: 'old A', next: 'offline' }, ids.table, actor, access)
+    expect(result.status).toBe('conflict')
+    expect(result.current).toBe('online')
+    expect((await read()).version).toBe(1)
+  })
+  it('logs the actual row snapshot when deleting through sync', async () => {
+    const result = await sync.applySyncMutation({ id: newId('change'), rowId: ids.row, op: 'delete', base: 'untrusted base', baseVersion: 0 }, ids.table, actor, access)
+    expect(result.status).toBe('applied')
+    expect((await changes())[0]!.before).toEqual({ [ids.a]: 'old A', [ids.b]: 'old B' })
+    expect((await read()).version).toBe(1)
+    expect((await read()).updatedAt).toEqual((await read()).deletedAt)
+  })
+  it('cascades sync deletion and publishes both affected tables', async () => {
+    const { db, apps } = database
+    // Cascade deliberately reads only the production table/run identifiers.
+    await db.update(apps).set({ published: { production: { tables: { production: ids.table, movements: ids.peer }, movement: { run: ids.peerField } } } })
+      .where(eq(apps.id, app.id))
+    const { subscribeTable } = await import('./live')
+    const events: string[] = []
+    const unsubscribeA = subscribeTable(ids.table, () => events.push(ids.table))
+    const unsubscribeB = subscribeTable(ids.peer, () => events.push(ids.peer))
+    try {
+      await sync.applySyncMutation({ id: newId('change'), rowId: ids.row, op: 'delete', baseVersion: 0 }, ids.table, actor, access)
+      expect((await read(ids.peerRow)).deletedAt).not.toBeNull()
+      expect((await read(ids.peerRow)).version).toBe(1)
+      expect((await counter()).rows).toBe(0)
+      expect(await changes(ids.peerRow)).toHaveLength(1)
+      expect(events.sort()).toEqual([ids.table, ids.peer].sort())
+    } finally { unsubscribeA(); unsubscribeB() }
+  })
+  it('retains edited sample rows and releases quota only for removed samples', async () => {
+    const { deleteSampleRowsAction } = await import('@/app/template-actions')
+    const id = newId('row')
+    await database.db.insert(database.rows).values({ id, tableId: ids.table, data: {}, position: 'a1', sample: true })
+    await actions.setCellAction(ids.table, ids.row, ids.a, 'user data', 'old A')
+    await usage.recountWorkspace(ids.workspace)
+    expect((await deleteSampleRowsAction(ids.table)).ok).toBe(true)
+    expect((await read()).deletedAt).toBeNull()
+    expect((await read(id)).deletedAt).not.toBeNull()
+    expect((await counter()).rows).toBe(2)
+    expect((await read(id)).version).toBe(1)
+  })
+  it('increments versions and history when changing field types', async () => {
+    const { updateFieldAction } = await import('@/app/field-actions')
+    expect((await updateFieldAction(ids.table, ids.a, { type: 'long_text' })).ok).toBe(true)
+    expect((await read()).version).toBe(1)
+    expect(await changes()).toHaveLength(1)
+  })
+  it('preserves both movement links and a parallel material edit', async () => {
+    const test = await production()
+    const first = newId('row'), second = newId('row')
+    const input = { materialId: test.material.id, kindId: test.kind, amount: 1, date: null, reason: 'Test' }
+    const before = (await counter()).rows
+    const results = await Promise.all([
+      test.module.saveMovementAction(test.slug, { ...input, movementId: first }),
+      test.module.saveMovementAction(test.slug, { ...input, movementId: second }),
+      actions.setCellAction(test.config.tables.materials, test.material.id, test.config.material.name, 'Edited material'),
+    ])
+    expect(results.every((result) => result.ok), JSON.stringify(results)).toBe(true)
+    const current = await read(test.material.id)
+    const data = current.data as Record<string, unknown>
+    expect(data[test.config.material.movements]).toEqual(expect.arrayContaining([first, second]))
+    expect(data[test.config.material.name]).toBe('Edited material')
+    const movements = await database.db.select().from(database.rows)
+      .where(and(eq(database.rows.tableId, test.config.tables.movements), isNull(database.rows.deletedAt)))
+    const links = data[test.config.material.movements] as string[]
+    const actualStock = Number(data[test.config.material.opening] ?? 0) + movements
+      .filter((row) => links.includes(row.id))
+      .reduce((total, row) => total + Number((row.data as Record<string, unknown>)[test.config.movement.qty] ?? 0), 0)
+    const stocks = results.filter((result) => result.ok && 'stock' in result).map((result) => result.ok && 'stock' in result ? result.stock : 0)
+    expect(Math.max(...stocks)).toBe(actualStock)
+    expect(current.version).toBe(test.material.version + 3)
+    expect((await counter()).rows).toBe(before + 2)
+    expect(await changes(test.material.id)).toHaveLength(3)
+  })
+  it('does not reserve quota again for a repeated warehouse movement', async () => {
+    const test = await production()
+    const input = { movementId: newId('row'), materialId: test.material.id, kindId: test.kind, amount: 1, date: null, reason: 'Test' }
+    const before = (await counter()).rows
+    const results = await Promise.all([test.module.saveMovementAction(test.slug, input), test.module.saveMovementAction(test.slug, input)])
+    expect(results.every((result) => result.ok), JSON.stringify(results)).toBe(true)
+    expect(results.filter((result) => result.ok && result.repeated)).toHaveLength(1)
+    expect((await counter()).rows).toBe(before + 1)
+    expect(await changes(input.movementId)).toHaveLength(1)
+    expect((await read(test.material.id)).version).toBe(test.material.version + 1)
+  })
+  it('makes a production retry idempotent across its run, movements and quota', async () => {
+    const test = await production()
+    const input = { runId: newId('row'), productId: test.product, quantity: 1, defects: 0, date: null, shiftId: null, note: '' }
+    const before = (await counter()).rows
+    const results = await Promise.all([test.module.saveProductionAction(test.slug, input), test.module.saveProductionAction(test.slug, input)])
+    expect(results.every((result) => result.ok), JSON.stringify(results)).toBe(true)
+    expect(results.filter((result) => result.ok && result.repeated)).toHaveLength(1)
+    const successful = results.find((result) => result.ok)!
+    if (!successful.ok) return
+    expect((await counter()).rows).toBe(before + 1 + successful.wrote.length)
+    expect(await changes(input.runId)).toHaveLength(1)
+  })
+  it('rolls back an entire production run when its movements exceed quota', async () => {
+    const test = await production()
+    const input = { runId: newId('row'), productId: test.product, quantity: 1, defects: 0, date: null, shiftId: null, note: '' }
+    const ceiling = planOf('free').limits.rows + graceReserve(planOf('free').limits.rows)
+    const before = (await counter()).rows
+    await database.db.insert(database.rows).values(Array.from({ length: ceiling - 1 - before }, (_, index) => ({
+      id: newId('row'), tableId: ids.table, position: `bulk${index}x`, data: {},
+    })))
+    await usage.recountWorkspace(ids.workspace)
+    const result = await test.module.saveProductionAction(test.slug, input)
+    expect(result.ok).toBe(false)
+    expect((await counter()).rows).toBe(ceiling - 1)
+    expect(await changes(input.runId)).toHaveLength(0)
+    expect(await database.db.select().from(database.rows).where(eq(database.rows.id, input.runId))).toHaveLength(0)
+    expect((await read(test.material.id)).version).toBe(test.material.version)
+  })
+  it('enforces table quota when installing a template without partial inserts', async () => {
+    await database.db.insert(database.tables).values(Array.from({ length: 8 }, (_, index) => ({
+      id: newId('table'), workspaceId: ids.workspace, name: `Existing ${index}`, position: `b${index}x`,
+    })))
+    const { applyTemplateAction } = await import('@/app/template-actions')
+    const result = await applyTemplateAction('proizvodstvo')
+    expect(result.ok).toBe(false)
+    expect(await database.db.select().from(database.tables).where(eq(database.tables.workspaceId, ids.workspace))).toHaveLength(10)
+    expect(await database.db.select().from(database.apps).where(eq(database.apps.workspaceId, ids.workspace))).toHaveLength(1)
+  })
+})

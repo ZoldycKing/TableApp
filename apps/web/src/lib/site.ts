@@ -13,6 +13,8 @@
  * всех публичных страниц. Подробности — в том файле.
  */
 
+import legacyRedirects from './legacy-redirects.json'
+
 export type SiteLink = { href: string; label: string; hint?: string }
 
 /**
@@ -106,15 +108,7 @@ export const FOOTER_LEGAL: SiteLink[] = [
  * текстом; убрать молча — потерять тех, у кого ссылка в закладках.
  * Поэтому постоянный переезд, и список лежит здесь, рядом с картой сайта.
  */
-export const LEGACY_REDIRECTS: { from: string; to: string }[] = [
-  { from: '/shablony', to: PUBLIC_ROUTES.templates },
-  { from: '/dlya', to: PUBLIC_ROUTES.solutions },
-  { from: '/dlya/zayavki', to: '/solutions/order-management' },
-  { from: '/dlya/kabinet-klienta', to: '/solutions/client-portal' },
-  { from: '/dlya/sklad', to: '/solutions/warehouse' },
-  { from: '/dlya/katalog', to: '/solutions/catalog' },
-  { from: '/legal/oferta', to: PUBLIC_ROUTES.offer },
-]
+export const LEGACY_REDIRECTS: { from: string; to: string }[] = legacyRedirects
 
 /**
  * Разделы рабочего пространства: в поиске им делать нечего.

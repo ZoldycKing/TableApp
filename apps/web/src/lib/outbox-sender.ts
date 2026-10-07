@@ -1,6 +1,6 @@
 'use client'
 
-import { squash } from './outbox-queue'
+import { squashGroups } from './outbox-queue'
 import {
   deviceId,
   forget,
@@ -36,6 +36,8 @@ export type SyncOutcome = {
   rejected: RejectedMutation[]
   pending: number
   cursor: string
+  reset: boolean
+  accessRevoked?: boolean
 }
 
 type Listener = (outcome: SyncOutcome) => void
@@ -49,6 +51,7 @@ export class OutboxSender {
   constructor(
     private readonly tableId: string,
     private cursor: string | null = null,
+    private readonly appSlug?: string,
   ) {}
 
   onResult(listener: Listener): () => void {
@@ -89,49 +92,59 @@ export class OutboxSender {
     this.sending = true
     try {
       const queued = await listQueue(this.tableId)
-      const batch = squash(queued).slice(0, MAX_BATCH)
-
-      const response = await fetch('/api/sync', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          tableId: this.tableId,
-          deviceId: deviceId(),
-          since: this.cursor,
-          mutations: batch,
-        }),
-      })
-
-      if (!response.ok) throw new Error(`Сервер ответил ${response.status}`)
-
-      const result = (await response.json()) as {
-        applied: string[]
-        rejected: { id: string; reason?: string; current?: unknown }[]
-        rows: SyncRow[]
-        cursor: string
-      }
-
-      /*
-       * Из очереди убираем всё, что уехало: и применённое, и отклонённое.
-       * Отклонённое не пропадает — оно переезжает в список на разбор,
-       * иначе очередь будет вечно возить правку, которую сервер не примет.
-       */
+      const groups = squashGroups(queued).slice(0, MAX_BATCH)
+      const batch = groups.map((group) => group.mutation)
       const byId = new Map(queued.map((item) => [item.id, item]))
-      const rejected: RejectedMutation[] = result.rejected.map((item) => ({
-        ...(byId.get(item.id) ?? ({ id: item.id, tableId: this.tableId, queuedAt: Date.now() } as QueuedMutation)),
-        reason: item.reason ?? 'Правка не применена',
-        current: item.current,
-        rejectedAt: Date.now(),
-      }))
+      const received = new Map<string, SyncRow>()
+      const rejected: RejectedMutation[] = []
+      let cursor = this.cursor
+      let reset = false
+      let page = 0
+      do {
+        const response = await fetch('/api/sync', {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ tableId: this.tableId, deviceId: deviceId(), appSlug: this.appSlug,
+            since: cursor, mutations: page === 0 ? batch : [] }),
+        })
+        if (response.status === 401 || response.status === 403) {
+          this.cursor = null
+          for (const listener of this.listeners) listener({ rows: [], rejected: [], pending: queued.length,
+            cursor: '', reset: true, accessRevoked: true })
+          return
+        }
+        if (!response.ok) {
+          if (response.status === 400 && cursor) this.cursor = null
+          throw new Error(`Сервер ответил ${response.status}`)
+        }
+        const result = await response.json() as { applied: string[]; rejected: { id: string; reason?: string; current?: unknown }[];
+          rows: SyncRow[]; cursor: string; reset: boolean; hasMore: boolean }
+        if (result.reset) {
+          received.clear()
+          reset = true
+          for (const listener of this.listeners) listener({ rows: [], rejected: [], pending: queued.length,
+            cursor: '', reset: true })
+        }
+        const refused = result.rejected.map((item) => ({
+          ...(byId.get(item.id) ?? { id: item.id, tableId: this.tableId, queuedAt: Date.now() } as QueuedMutation),
+          reason: item.reason ?? 'Правка не применена', current: item.current, rejectedAt: Date.now(),
+        }))
+        rejected.push(...refused)
+        await remember(refused)
+        const acknowledged = new Set([...result.applied, ...result.rejected.map((item) => item.id)])
+        await forget(groups.filter((group) => acknowledged.has(group.mutation.id)).flatMap((group) => group.ids))
+        for (const row of result.rows) received.set(row.id, row)
+        if (result.hasMore && result.cursor === cursor) throw new Error('Курсор не продвинулся')
+        cursor = result.cursor
+        page += 1
+        if (!result.hasMore) break
+        if (page > 2000) throw new Error('Слишком много страниц синхронизации')
+      } while (true)
+      this.cursor = cursor
 
-      await remember(rejected)
-      await forget([...result.applied, ...result.rejected.map((item) => item.id)])
-
-      this.cursor = result.cursor
       this.failures = 0
 
       const pending = (await listQueue(this.tableId)).length
-      const outcome: SyncOutcome = { rows: result.rows, rejected, pending, cursor: result.cursor }
+      const outcome: SyncOutcome = { rows: [...received.values()], rejected, pending, cursor: cursor!, reset }
       for (const listener of this.listeners) listener(outcome)
 
       // Очередь была длиннее одной пачки — продолжаем, не дожидаясь правок.

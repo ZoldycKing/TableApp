@@ -5,11 +5,13 @@ import {
   integer,
   jsonb,
   pgTable,
+  pgSequence,
   primaryKey,
   text,
   timestamp,
   uniqueIndex,
 } from 'drizzle-orm/pg-core'
+import { sql } from 'drizzle-orm'
 
 
 // --- Пользователи и воркспейсы ----------------------------------------------
@@ -155,6 +157,7 @@ export const fields = pgTable('fields', {
   uniqueIndex('fields_table_name_key').on(t.tableId, t.name),
 ])
 
+export const rowSyncRevision = pgSequence('row_sync_revision_seq')
 export const rows = pgTable('rows', {
   id: text('id').primaryKey(),
   tableId: text('table_id').notNull().references(() => tables.id, { onDelete: 'cascade' }),
@@ -163,6 +166,8 @@ export const rows = pgTable('rows', {
   position: text('position').notNull(),
   /** Оптимистическая блокировка: клиент присылает версию, сервер её проверяет. */
   version: integer('version').notNull().default(0),
+  /** Assigned while holding the workspace usage lock; ordered by commit. */
+  syncRevision: bigint('sync_revision', { mode: 'number' }).notNull().default(sql`nextval('row_sync_revision_seq')`),
   /**
    * Строка-пример из шаблона. Отмечаем явно: «удалить примеры» обязано
    * удалять ровно то, что положил шаблон, и ничего из внесённого человеком.
@@ -177,6 +182,7 @@ export const rows = pgTable('rows', {
 }, (t) => [
   index('rows_table_position_idx').on(t.tableId, t.position),
   index('rows_table_updated_idx').on(t.tableId, t.updatedAt),
+  index('rows_table_sync_idx').on(t.tableId, t.syncRevision),
 ])
 
 export const views = pgTable('views', {
@@ -320,6 +326,8 @@ export const attachments = pgTable('attachments', {
   width: integer('width'),
   height: integer('height'),
   uploadedBy: text('uploaded_by'),
+  /** Pending/deleting objects remain tracked and charged until removed. */
+  state: text('state').notNull().default('ready'),
   /**
    * Где файл используется. Заполняется при сохранении ячейки и нужно не для
    * учёта, а для прав: по ссылке из файла находится строка, и доступ к файлу

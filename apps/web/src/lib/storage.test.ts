@@ -1,6 +1,7 @@
-import { test } from 'vitest'
+import { expect, test, vi } from 'vitest'
+import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import assert from 'node:assert/strict'
-import { fileKey, isAllowed } from './storage'
+import { fileKey, isAllowed, putFile } from './storage'
 
 test('разрешены картинки и документы, исполняемое — нет', () => {
   assert.equal(isAllowed('image/png'), true)
@@ -44,4 +45,30 @@ test('расширение чистится от всего, кроме букв
   // Расширение из одних небезопасных символов отбрасывается целиком.
   assert.match(fileKey('wsp_abc', 'файл.'), /^wsp_abc\/[0-9a-f]{32}$/)
   assert.match(fileKey('wsp_abc', 'файл.«»'), /^wsp_abc\/[0-9a-f]{32}$/)
+})
+
+test('хранилище отказывает SVG и подменённой картинке до обращения к S3', async () => {
+  const send = vi.spyOn(S3Client.prototype, 'send')
+  try {
+    const bytes = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>')
+    expect((await putFile('wsp_test', { name: 'image.svg', type: 'image/svg+xml', bytes })).ok).toBe(false)
+    expect((await putFile('wsp_test', { name: 'image.png', type: 'image/png', bytes })).ok).toBe(false)
+    expect(send).not.toHaveBeenCalled()
+  } finally {
+    send.mockRestore()
+  }
+})
+
+test('документ кладётся в S3 с заголовком скачивания', async () => {
+  const send = vi.spyOn(S3Client.prototype, 'send').mockResolvedValue({} as never)
+  try {
+    const result = await putFile('wsp_test', { name: 'document.txt', type: 'text/plain', bytes: Buffer.from('Synthetic document') })
+    expect(result.ok).toBe(true)
+    const call = send.mock.calls.find(([command]) => command instanceof PutObjectCommand)
+    const command = call?.[0] as PutObjectCommand | undefined
+    expect(command?.input.ContentDisposition).toMatch(/^attachment;/)
+    expect(command?.input.ContentType).toBe('text/plain')
+  } finally {
+    send.mockRestore()
+  }
 })

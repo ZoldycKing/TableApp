@@ -11,6 +11,7 @@ import {
 import { eq } from 'drizzle-orm'
 import { activePlan as planFor } from './plan'
 import { recountWorkspace, release, reserve, type Runner } from './usage'
+import type { Transaction } from './db-transaction'
 
 /**
  * Можно ли увеличить расход.
@@ -76,7 +77,7 @@ export type IncreaseRequest = {
    * — место не занято. Без неё бронь остаётся за вызывающим, и расхождение
    * при сбое лечится ближайшим пересчётом.
    */
-  tx?: Runner
+  tx?: Transaction
 }
 
 /**
@@ -90,7 +91,7 @@ export async function assertCanIncreaseUsage(request: IncreaseRequest): Promise<
   const { workspaceId, resource, amount = 1, origin = 'manual', tx } = request
   if (amount <= 0) return
 
-  const plan = await planFor(workspaceId)
+  const plan = await planFor(workspaceId, tx)
   const limit = plan.limits[resource]
 
   /*
@@ -110,7 +111,7 @@ export async function assertCanIncreaseUsage(request: IncreaseRequest): Promise<
    * Пересчитываем начисто и пробуем ещё раз: цена лишнего пересчёта —
    * один запрос на отказ, цена ложного запрета — остановленная работа.
    */
-  const fresh = await recountWorkspace(workspaceId)
+  const fresh = await recountWorkspace(workspaceId, tx)
   used = await reserve(runner, workspaceId, resource, amount, ceiling)
   if (used !== null) return
 
@@ -132,32 +133,22 @@ export async function assertCanIncreaseUsage(request: IncreaseRequest): Promise<
 }
 
 /**
- * Занять место внутри транзакции вызывающего — без пересчёта под замком.
- *
- * Нужно там, где за одну операцию пишется много строк: импорт книги.
- * Разница с `assertCanIncreaseUsage` в том, кто держит занятое место.
- * Там оно занимается отдельным запросом и живёт само по себе: пока идёт
- * запись, второй такой же запрос видит уже занятое место — но если первый
- * запрос ещё не дописал, пересчёт у второго насчитает старое число и затрёт
- * чужую бронь. На границе тарифа это давало перебор: два одновременных
- * импорта по две строки проходили при одном свободном месте.
- *
- * Здесь место занято строкой счётчика внутри транзакции: второй запрос
- * ждёт на замке и видит правду. Пересчёт сюда не заходит намеренно —
- * он идёт отдельным соединением и, позванный под замком, дождался бы
- * нашей же незакрытой транзакции. Поэтому пересчитывает и повторяет
- * вызывающий, между транзакциями.
+ * Резервирование пачки без пересчёта между отдельными ресурсами.
+ * Импорт резервирует таблицы и строки до массовой вставки: промежуточный
+ * пересчёт мог бы забыть ещё не использованную бронь первого ресурса.
+ * При отказе вызывающий откатывает всю транзакцию, пересчитывает и повторяет.
+ * Обычная запись строки использует assertCanIncreaseUsage с той же tx.
  */
-export async function reserveInTx(tx: Runner, request: Omit<IncreaseRequest, 'tx'>): Promise<boolean> {
+export async function reserveInTx(tx: Transaction, request: Omit<IncreaseRequest, 'tx'>): Promise<boolean> {
   const { workspaceId, resource, amount = 1, origin = 'manual' } = request
   if (amount <= 0) return true
-  const ceiling = await ceilingFor(workspaceId, resource, origin)
+  const ceiling = await ceilingFor(workspaceId, resource, origin, tx)
   return (await reserve(tx, workspaceId, resource, amount, ceiling)) !== null
 }
 
 /** Потолок с учётом аварийного резерва: он есть только у строк из приложения. */
-async function ceilingFor(workspaceId: string, resource: UsageKind, origin: Origin): Promise<number> {
-  const limit = (await planFor(workspaceId)).limits[resource]
+async function ceilingFor(workspaceId: string, resource: UsageKind, origin: Origin, tx?: Transaction): Promise<number> {
+  const limit = (await planFor(workspaceId, tx)).limits[resource]
   return limit + (resource === 'rows' && origin === 'runtime' ? graceReserve(limit) : 0)
 }
 
@@ -226,9 +217,9 @@ export async function assertCanAddRowTo(
   tableId: string,
   origin: Origin,
   amount = 1,
-  tx?: Runner,
+  tx?: Transaction,
 ): Promise<void> {
-  const workspaceId = await workspaceOfTable(tableId)
+  const workspaceId = await workspaceOfTable(tableId, tx)
   // Таблицы нет — отказывать не за что: разберётся тот, кто её искал.
   if (!workspaceId) return
   await assertCanIncreaseUsage({ workspaceId, resource: 'rows', amount, origin, tx })
@@ -241,8 +232,8 @@ export async function mayAddRowTo(tableId: string, origin: Origin, amount = 1): 
   return mayIncrease({ workspaceId, resource: 'rows', amount, origin })
 }
 
-export async function workspaceOfTable(tableId: string): Promise<string | null> {
-  const [owner] = await db
+export async function workspaceOfTable(tableId: string, runner: Pick<typeof db, 'select'> = db): Promise<string | null> {
+  const [owner] = await runner
     .select({ workspaceId: tables.workspaceId })
     .from(tables)
     .where(eq(tables.id, tableId))

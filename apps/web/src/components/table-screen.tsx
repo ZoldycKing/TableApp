@@ -44,7 +44,7 @@ export function TableScreen({ table, member }: { table: LoadedTable; member: { r
     id: table.id,
     name: table.name,
     fields: table.fields,
-    rows: table.rows.map((row) => ({ id: row.id, position: row.position, data: row.data })),
+    rows: table.rows.map((row) => ({ id: row.id, position: row.position, data: row.data, version: row.version })),
   })
 
   const [views, setViews] = useState<View[]>(table.views)
@@ -73,7 +73,7 @@ export function TableScreen({ table, member }: { table: LoadedTable; member: { r
       id: table.id,
       name: table.name,
       fields: table.fields,
-      rows: table.rows.map((row) => ({ id: row.id, position: row.position, data: row.data })),
+      rows: table.rows.map((row) => ({ id: row.id, position: row.position, data: row.data, version: row.version })),
     })
     setViews(table.views)
   }, [table, reset])
@@ -179,8 +179,9 @@ export function TableScreen({ table, member }: { table: LoadedTable; member: { r
   }
 
   const deleteRow = (rowId: string) => {
+    const version = store.table.rows.find((row) => row.id === rowId)?.version
     store.deleteRow(rowId)
-    run(() => deleteRowAction(table.id, rowId))
+    run(() => deleteRowAction(table.id, rowId, version))
   }
 
   const renameField = (fieldId: string, name: string) => {

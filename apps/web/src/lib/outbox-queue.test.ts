@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { squash } from './outbox-queue'
+import { squash, squashGroups } from './outbox-queue'
 import type { Mutation } from './sync-merge'
 
 const edit = (id: string, next: unknown, base: unknown, fieldId = 'fld_a', rowId = 'row_1'): Mutation =>
   ({ id, op: 'update', rowId, fieldId, base, next })
 
 describe('схлопывание очереди', () => {
+  it('keeps every source id for acknowledgement of a collapsed edit', () => {
+    expect(squashGroups([edit('m1', 1, 0), edit('m2', 2, 1), edit('m3', 3, 2)]))
+      .toEqual([{ mutation: expect.objectContaining({ id: 'm3', base: 0, next: 3 }), ids: ['m1', 'm2', 'm3'] }])
+  })
   it('серия правок одной ячейки сжимается в одну', () => {
     const result = squash([edit('m1', 1, 0), edit('m2', 2, 1), edit('m3', 3, 2)])
     expect(result).toHaveLength(1)

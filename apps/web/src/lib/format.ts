@@ -1,11 +1,29 @@
-import { APP_TIME_ZONE, type Field } from '@tableapp/schema'
+import { APP_TIME_ZONE, calendarDay, dateInstant, fieldTimeZone, instantToWallClock, type Field } from '@tableapp/schema'
 
 const dateFormatter = new Intl.DateTimeFormat('ru-RU', { timeZone: APP_TIME_ZONE })
-const dateTimeFormatter = new Intl.DateTimeFormat('ru-RU', {
-  timeZone: APP_TIME_ZONE,
-  dateStyle: 'short',
-  timeStyle: 'short',
-})
+const temporalFormatters = new Map<string, Intl.DateTimeFormat>()
+function temporalFormat(field: Field, value: unknown): string {
+  const zone = fieldTimeZone(field), instant = dateInstant(value, zone)
+  if (instant === null) return ''
+  const options = field.options as { dateFormat?: string; timeFormat?: string }
+  const format = options.dateFormat ?? 'ru'
+  const withTime = field.type !== 'date'
+  const date = new Date(instant)
+  if (format === 'iso') {
+    return calendarDay(date, zone)! + (withTime ? `, ${instantToWallClock(date, zone)!.time}` : '')
+  }
+  const locale = format === 'us' ? 'en-US' : 'ru-RU'
+  const key = JSON.stringify([zone, locale, format, withTime, options.timeFormat])
+  let formatter = temporalFormatters.get(key)
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat(locale, {
+      timeZone: zone, year: 'numeric', month: format === 'friendly' ? 'long' : '2-digit', day: '2-digit',
+      ...(withTime ? { hour: '2-digit', minute: '2-digit', hour12: options.timeFormat === '12' } : {}),
+    })
+    temporalFormatters.set(key, formatter)
+  }
+  return formatter.format(date)
+}
 
 /** Отображение значения ячейки. Форматирование живёт отдельно от хранения. */
 export function formatCell(field: Field, value: unknown): string {
@@ -44,9 +62,7 @@ export function formatCell(field: Field, value: unknown): string {
     case 'datetime':
     case 'created_time':
     case 'updated_time': {
-      const date = new Date(String(value))
-      if (Number.isNaN(date.getTime())) return ''
-      return field.type === 'datetime' ? dateTimeFormatter.format(date) : dateFormatter.format(date)
+      return temporalFormat(field, value)
     }
 
     case 'checkbox':

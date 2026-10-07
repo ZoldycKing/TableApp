@@ -125,6 +125,7 @@ describe.skipIf(!CONNECTED)('импорт листа под нагрузкой',
         .from(rows)
         .where(and(eq(rows.tableId, made[0]!.id), isNull(rows.deletedAt)))
       expect(written, 'строк ровно столько, сколько в листе').toHaveLength(3)
+      expect(written.every((row) => row.createdBy === userId && row.updatedBy === userId)).toBe(true)
     },
     60_000,
   )

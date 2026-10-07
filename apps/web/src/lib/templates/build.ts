@@ -7,6 +7,7 @@ import {
   positionBetween,
   VIEW_CONFIG_SCHEMA,
   wallClockToInstant,
+  instantToWallClock,
 } from '@tableapp/schema'
 import { isRelativeDay, type TemplateDef, type TemplateValue } from './types'
 
@@ -115,10 +116,9 @@ export type BuiltTemplate = {
 /** Дата примера считается от текущего дня по московскому времени. */
 function relativeInstant(days: number, hour: number, minute: number, now: Date): string {
   const shifted = new Date(now.getTime() + days * 24 * 60 * 60 * 1000)
+  const [year, month, day] = instantToWallClock(shifted)!.date.split('-').map(Number) as [number, number, number]
   return wallClockToInstant({
-    year: shifted.getUTCFullYear(),
-    month: shifted.getUTCMonth() + 1,
-    day: shifted.getUTCDate(),
+    year, month, day,
     hour,
     minute,
   }).toISOString()

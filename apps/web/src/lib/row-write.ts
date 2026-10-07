@@ -1,14 +1,12 @@
-import { db, fields as fieldsTable, rowChanges, rows as rowsTable } from '@tableapp/db'
-import { compileTableFormulas, computeDerivedRow, stripDerived } from '@tableapp/formula'
+import { db, fields as fieldsTable } from '@tableapp/db'
 import type { App, Field } from '@tableapp/schema'
-import { newId, normalizeFieldOptions, positionBetween } from '@tableapp/schema'
-import { and, asc, eq, isNull } from 'drizzle-orm'
-import { linkRowAttachments } from './attachments'
+import { normalizeFieldOptions } from '@tableapp/schema'
+import { asc, eq } from 'drizzle-orm'
 import type { AppViewer } from './app-session'
 import type { Visitor } from './app-roles'
-import { assertCanAddRowTo } from './limits'
+import { createRow, writeRows } from './row-mutations'
+import type { Transaction } from './db-transaction'
 import { rulesFor, stampOwner } from './row-access'
-import { publishTable } from './live'
 
 /**
  * Создание строки от имени посетителя приложения.
@@ -49,51 +47,12 @@ export async function insertRow(
   tableId: string,
   values: Record<string, unknown>,
   author: RowAuthor,
-  fields?: Field[],
+  _fields?: Field[],
+  beforeInsert?: (tx: Transaction) => Promise<void>,
 ): Promise<{ id: string }> {
-  /*
-   * Сюда приходит запись из опубликованного приложения: заказ клиента или
-   * подтверждённая заявка с витрины. Ей доступен аварийный резерв — владельцу
-   * его не потратить ни руками, ни импортом. Отказ приходит исключением:
-   * забытая проверка возвращённого значения — это тихо пропущенный потолок.
-   */
-  await assertCanAddRowTo(tableId, 'runtime')
-
-  const columns = fields ?? (await loadTableFields(tableId))
   const rules = rulesFor(app, tableId, author.visitor)
-
-  const existing = await db
-    .select({ position: rowsTable.position })
-    .from(rowsTable)
-    .where(and(eq(rowsTable.tableId, tableId), isNull(rowsTable.deletedAt)))
-    .orderBy(asc(rowsTable.position))
-
-  const own = stampOwner(rules, author.viewer, values)
-  const data = computeDerivedRow(own, columns, new Map(), compileTableFormulas(columns))
-  const id = newId('row')
-
-  await db.transaction(async (tx) => {
-    await tx.insert(rowsTable).values({
-      id,
-      tableId,
-      data: stripDerived(data, columns),
-      position: positionBetween(existing[existing.length - 1]?.position ?? null, null),
-    })
-    await tx.insert(rowChanges).values({
-      id: newId('change'),
-      tableId,
-      rowId: id,
-      op: 'create',
-      after: data,
-      actorId: author.viewer?.id ?? null,
-      actorKind: 'app_user',
-      actorIp: author.ip,
-    })
-  })
-
-  await linkRowAttachments(tableId, id, columns, data)
-  // Заказ клиента — такое же изменение таблицы, как правка владельца: вкладка
-  // с открытой таблицей должна увидеть новую строку, а не узнать о ней завтра.
-  publishTable(tableId, 'rows')
-  return { id }
+  return writeRows(app.workspaceId, (context) => createRow(context, tableId,
+    stampOwner(rules, author.viewer, values),
+    { id: author.viewer?.id ?? null, kind: 'app_user', ip: author.ip },
+    { origin: 'runtime', beforeInsert }))
 }

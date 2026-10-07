@@ -4,11 +4,26 @@ dist/
 out/
 build/
 *.tsbuildinfo
-.env
-.env.local
-.env*.local
+.env*
+!.env.example
 .DS_Store
 coverage/
 .turbo/
 pgdata/
 backups/
+
+# Local tooling and generated diagnostics
+.claude/
+.codex/
+.idea/
+.vscode/
+*.log
+*.dump
+*.sql.gz
+Thumbs.db
+Desktop.ini
+
+# Local review evidence may contain application data and login links.
+# Keep it on disk and publish curated documentation instead.
+/docs/audit/
+/docs/remediation/

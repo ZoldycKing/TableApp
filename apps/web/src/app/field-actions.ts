@@ -1,6 +1,6 @@
 'use server'
 
-import { db, fields as fieldsTable, rows as rowsTable, tables } from '@tableapp/db'
+import { db, fields as fieldsTable, rows as rowsTable, tables, rowChanges } from '@tableapp/db'
 import { compile, compileTableFormulas, topologicalOrder } from '@tableapp/formula'
 import type { Field, FieldType } from '@tableapp/schema'
 import {
@@ -11,11 +11,12 @@ import {
   normalizeFieldOptions,
   positionBetween,
 } from '@tableapp/schema'
-import { and, asc, eq } from 'drizzle-orm'
+import { and, asc, eq, sql } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { publishTable } from '@/lib/live'
 import { authorizeTable } from '@/lib/authorize'
 import { renameInFormulas } from '@/lib/formula-rename'
+import { lockRowUsage } from '@/lib/row-mutations'
 import type { ActionResult } from './actions'
 
 async function loadFields(tableId: string): Promise<Field[]> {
@@ -35,7 +36,7 @@ async function loadFields(tableId: string): Promise<Field[]> {
  * должны отсекаться здесь, а не всплывать ошибкой на каждой строке при чтении.
  */
 async function validateField(
-  tableId: string,
+  workspaceId: string,
   candidate: Field,
   siblings: Field[],
 ): Promise<string | null> {
@@ -50,7 +51,7 @@ async function validateField(
     const [target] = await db
       .select({ id: tables.id })
       .from(tables)
-      .where(eq(tables.id, candidate.options.tableId))
+      .where(and(eq(tables.id, candidate.options.tableId), eq(tables.workspaceId, workspaceId)))
       .limit(1)
     if (!target) return 'Выбранная таблица для связи не найдена'
   }
@@ -58,6 +59,10 @@ async function validateField(
   if (candidate.type === 'lookup' || candidate.type === 'rollup' || candidate.type === 'count') {
     const relation = others.find((field) => field.id === candidate.options.relationFieldId)
     if (!relation || relation.type !== 'relation') return 'Не выбрано поле связи'
+
+    const [target] = await db.select({ id: tables.id }).from(tables)
+      .where(and(eq(tables.id, relation.options.tableId), eq(tables.workspaceId, workspaceId))).limit(1)
+    if (!target) return 'Выбранная таблица для связи не найдена'
 
     if (candidate.type !== 'count') {
       const targetFields = await loadFields(relation.options.tableId)
@@ -130,7 +135,7 @@ export async function createFieldAction(
     options: parsed.data,
   } as Field
 
-  const error = await validateField(tableId, candidate, siblings)
+  const error = await validateField(auth.member.workspaceId, candidate, siblings)
   if (error) return { ok: false, error }
 
   const enriched = withInferredResultType(candidate, siblings)
@@ -174,13 +179,14 @@ export async function updateFieldAction(
     options: parsed.data,
   } as Field
 
-  const error = await validateField(tableId, candidate, siblings)
+  const error = await validateField(auth.member.workspaceId, candidate, siblings)
   if (error) return { ok: false, error }
 
   const enriched = withInferredResultType(candidate, siblings)
   const typeChanged = nextType !== current.type
 
   await db.transaction(async (tx) => {
+    await lockRowUsage({ tx, workspaceId: auth.member.workspaceId, changed: new Set() })
     await tx
       .update(fieldsTable)
       .set({
@@ -197,13 +203,15 @@ export async function updateFieldAction(
 
     // Смена типа переписывает значения: что не переводится, обнуляется.
     // Вычисляемые поля значений не хранят, поэтому их просто чистим.
-    const rows = await tx.select().from(rowsTable).where(eq(rowsTable.tableId, tableId))
+    const rows = await tx.select().from(rowsTable).where(eq(rowsTable.tableId, tableId)).orderBy(asc(rowsTable.id)).for('update')
     for (const row of rows) {
       const data = row.data as Record<string, unknown>
       const next = { ...data }
       if (isComputed(candidate.type)) delete next[fieldId]
       else next[fieldId] = coerceCellValue(current, candidate, data[fieldId])
-      await tx.update(rowsTable).set({ data: next, updatedAt: new Date() }).where(eq(rowsTable.id, row.id))
+      await tx.update(rowsTable).set({ data: next, updatedBy: auth.member.userId, updatedAt: new Date(), version: sql`${rowsTable.version} + 1`, syncRevision: sql`nextval('row_sync_revision_seq')` }).where(eq(rowsTable.id, row.id))
+      await tx.insert(rowChanges).values({ id: newId('change'), tableId, rowId: row.id, op: 'update',
+        actorId: auth.member.userId, actorKind: 'member', before: data, after: next })
     }
   })
 
@@ -249,14 +257,18 @@ export async function deleteFieldAction(tableId: string, fieldId: string): Promi
   }
 
   await db.transaction(async (tx) => {
+    await lockRowUsage({ tx, workspaceId: auth.member.workspaceId, changed: new Set() })
     await tx.delete(fieldsTable).where(and(eq(fieldsTable.id, fieldId), eq(fieldsTable.tableId, tableId)))
 
-    const rows = await tx.select().from(rowsTable).where(eq(rowsTable.tableId, tableId))
+    const rows = await tx.select().from(rowsTable).where(eq(rowsTable.tableId, tableId)).orderBy(asc(rowsTable.id)).for('update')
     for (const row of rows) {
-      const data = { ...(row.data as Record<string, unknown>) }
+      const before = row.data as Record<string, unknown>
+      const data = { ...before }
       if (!(fieldId in data)) continue
       delete data[fieldId]
-      await tx.update(rowsTable).set({ data }).where(eq(rowsTable.id, row.id))
+      await tx.update(rowsTable).set({ data, updatedBy: auth.member.userId, updatedAt: new Date(), version: sql`${rowsTable.version} + 1`, syncRevision: sql`nextval('row_sync_revision_seq')` }).where(eq(rowsTable.id, row.id))
+      await tx.insert(rowChanges).values({ id: newId('change'), tableId, rowId: row.id, op: 'update',
+        actorId: auth.member.userId, actorKind: 'member', before, after: data })
     }
   })
 

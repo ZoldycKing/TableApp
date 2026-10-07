@@ -1,5 +1,6 @@
 import { isComputed, type Field } from './fields'
 import { isBlank } from './values'
+import { dateInstant, fieldTimeZone } from './time'
 
 /**
  * Сравнение значений ячеек для слияния правок.
@@ -50,8 +51,8 @@ function canonical(field: Field, value: unknown): unknown {
     case 'created_time':
     case 'updated_time': {
       if (isBlank(value)) return null
-      const time = new Date(String(value)).getTime()
-      return Number.isNaN(time) ? String(value) : time
+      const time = dateInstant(value, fieldTimeZone(field))
+      return time === null ? String(value) : time
     }
 
     case 'attachment':

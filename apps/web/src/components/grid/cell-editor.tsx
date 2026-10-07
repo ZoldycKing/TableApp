@@ -1,6 +1,6 @@
 'use client'
 
-import { instantToWallClock, wallClockToInstant, type Attachment, type Field } from '@tableapp/schema'
+import { dateInstant, fieldTimeZone, instantToWallClock, type Attachment, type Field } from '@tableapp/schema'
 import type { KeyboardEvent, Ref } from 'react'
 import { useEffect, useRef, useState } from 'react'
 import { FileUpload } from '@/components/file-upload'
@@ -20,21 +20,18 @@ type EditorProps = {
  * продукта. Раньше поле ввода показывало срез UTC, а сохраняло время браузера:
  * дата менялась сама, если открыть ячейку и нажать «Готово».
  */
-function toDateInput(value: unknown, withTime: boolean): string {
+function toDateInput(value: unknown, withTime: boolean, zone: string): string {
   if (!value) return ''
-  const wall = instantToWallClock(String(value))
+  const instant = dateInstant(value, zone)
+  const wall = instant === null ? null : instantToWallClock(new Date(instant), zone)
   if (!wall) return ''
   return withTime ? `${wall.date}T${wall.time}` : wall.date
 }
 
 /** Обратное преобразование: «2026-03-16T09:30» из поля ввода → мгновение. */
-function fromDateInput(draft: string): string | null {
-  const [datePart, timePart = ''] = draft.split('T')
-  const [year, month, day] = (datePart ?? '').split('-').map(Number)
-  if (!year || !month || !day) return null
-
-  const [hour = 0, minute = 0] = timePart ? timePart.split(':').map(Number) : []
-  return wallClockToInstant({ year, month, day, hour, minute }).toISOString()
+function fromDateInput(draft: string, zone: string): string | null {
+  const instant = dateInstant(draft, zone)
+  return instant === null ? null : new Date(instant).toISOString()
 }
 
 const SHARED =
@@ -42,8 +39,8 @@ const SHARED =
 
 export function CellEditor({ field, value, relatedOptions, onCommit, onCancel }: EditorProps) {
   const [draft, setDraft] = useState(() => {
-    if (field.type === 'date') return toDateInput(value, false)
-    if (field.type === 'datetime') return toDateInput(value, true)
+    if (field.type === 'date') return toDateInput(value, false, fieldTimeZone(field))
+    if (field.type === 'datetime') return toDateInput(value, true, fieldTimeZone(field))
     return value === null || value === undefined ? '' : String(value)
   })
 
@@ -74,7 +71,9 @@ export function CellEditor({ field, value, relatedOptions, onCommit, onCancel }:
     }
     if (field.type === 'date' || field.type === 'datetime') {
       if (draft === '') return onCommit(null)
-      return onCommit(fromDateInput(draft))
+      const parsed = fromDateInput(draft, fieldTimeZone(field))
+      if (parsed !== null) onCommit(parsed)
+      return
     }
     return onCommit(draft === '' ? null : draft)
   }

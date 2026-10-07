@@ -17,8 +17,8 @@ import { eq } from 'drizzle-orm'
  * Данные при окончании срока не трогаются: бесплатный тариф ограничивает
  * рост, а не доступ к тому, что уже есть.
  */
-export async function activePlan(workspaceId: string): Promise<Plan> {
-  const [row] = await db
+export async function activePlan(workspaceId: string, runner: Pick<typeof db, 'select'> = db): Promise<Plan> {
+  const [row] = await runner
     .select({
       plan: workspaces.plan,
       paid: subscriptions.plan,

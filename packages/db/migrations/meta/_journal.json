@@ -71,6 +71,20 @@
       "when": 1791222212763,
       "tag": "0009_awesome_shadowcat",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791354887644,
+      "tag": "0010_sync_revision",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1791355297579,
+      "tag": "0011_attachment_lifecycle",
+      "breakpoints": true
     }
   ]
 }

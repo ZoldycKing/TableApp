@@ -35,6 +35,7 @@ const EVENT_LABELS: Record<string, string> = {
   totp_on: 'Включён второй фактор',
   totp_off: 'Выключен второй фактор',
   totp_failed: 'Неверный код второго фактора',
+  totp_settings_failed: 'Неверный код при настройке второго фактора',
   recovery_used: 'Использован резервный код',
 }
 

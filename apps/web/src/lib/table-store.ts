@@ -6,6 +6,8 @@ import { newId, parseCellValue, positionBetween } from '@tableapp/schema'
 import { useCallback, useMemo, useReducer } from 'react'
 
 export type TableRow = {
+  /** Present on server snapshots; optimistic rows have no acknowledged version yet. */
+  version?: number
   id: string
   position: string
   data: Record<string, unknown>

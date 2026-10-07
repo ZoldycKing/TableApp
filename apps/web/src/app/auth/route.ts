@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers'
-import { NextResponse } from 'next/server'
+import { localRedirect } from '@/lib/local-redirect'
 import { consumeMemberToken } from '@/app/auth-actions'
 import { switchWorkspaceAction } from '@/app/team-actions'
 import { ACTIVE_WORKSPACE_COOKIE } from '@/lib/auth'
@@ -14,27 +14,27 @@ export async function GET(request: Request) {
   if (!token) {
     target.pathname = '/login'
     target.searchParams.set('error', 'Ссылка неполная')
-    return NextResponse.redirect(target)
+    return localRedirect(target)
   }
 
   const result = await consumeMemberToken(token)
   if (!result.ok) {
     target.pathname = '/login'
     target.searchParams.set('error', result.error)
-    return NextResponse.redirect(target)
+    return localRedirect(target)
   }
 
   // Ссылка ведёт туда же, куда и код: сотрудника — к его приложениям,
   // а подтверждённую, но никуда не добавленную почту — обратно с объяснением.
   if (result.go === 'apps') {
     target.pathname = '/my'
-    return NextResponse.redirect(target)
+    return localRedirect(target)
   }
 
   if (result.go === 'nowhere') {
     target.pathname = '/login'
     target.searchParams.set('notice', 'nowhere')
-    return NextResponse.redirect(target)
+    return localRedirect(target)
   }
 
   // Пришедший по приглашению должен попасть именно в тот воркспейс, куда звали,
@@ -47,5 +47,5 @@ export async function GET(request: Request) {
     }
   }
 
-  return NextResponse.redirect(target)
+  return localRedirect(target)
 }

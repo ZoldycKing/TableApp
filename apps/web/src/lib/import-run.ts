@@ -239,7 +239,7 @@ async function createTable(
         mapped[newFieldId] = null
       }
     }
-    return { id: newId('row'), tableId, data: mapped, position: rowPositions[index]! }
+    return { id: newId('row'), tableId, data: mapped, position: rowPositions[index]!, createdBy: by.userId, updatedBy: by.userId }
   })
 
   /*
@@ -345,7 +345,7 @@ async function appendRows(
   let position: string | null = last?.position ?? null
   const prepared = input.rows.map((source) => {
     position = positionBetween(position, null)
-    return { id: newId('row'), tableId: input.tableId, data: mapRow(source, pairs), position }
+    return { id: newId('row'), tableId: input.tableId, data: mapRow(source, pairs), position, createdBy: by.userId, updatedBy: by.userId }
   })
 
   const wanted: Reservation[] = [{ resource: 'rows', amount: prepared.length }]

@@ -1,0 +1,9 @@
+[
+  { "from": "/shablony", "to": "/templates" },
+  { "from": "/dlya", "to": "/solutions" },
+  { "from": "/dlya/zayavki", "to": "/solutions/order-management" },
+  { "from": "/dlya/kabinet-klienta", "to": "/solutions/client-portal" },
+  { "from": "/dlya/sklad", "to": "/solutions/warehouse" },
+  { "from": "/dlya/katalog", "to": "/solutions/catalog" },
+  { "from": "/legal/oferta", "to": "/legal/offer" }
+]

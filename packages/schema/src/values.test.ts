@@ -51,7 +51,7 @@ test('текст в поле выбора сопоставляет по имен
 })
 
 test('текст в дату разбирает ISO, иначе пусто', () => {
-  assert.equal(coerceCellValue(text, date, '2026-03-14'), '2026-03-14T00:00:00.000Z')
+  assert.equal(coerceCellValue(text, date, '2026-03-14'), '2026-03-13T21:00:00.000Z')
   assert.equal(coerceCellValue(text, date, 'вчера'), null)
 })
 

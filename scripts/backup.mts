@@ -31,9 +31,11 @@
  */
 
 import { spawn } from 'node:child_process'
-import { createReadStream, createWriteStream, existsSync, mkdirSync, readdirSync, statSync } from 'node:fs'
+import { createReadStream, createWriteStream, existsSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { pipeline } from 'node:stream/promises'
+import type { Writable } from 'node:stream'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const envFile = join(root, '.env')
@@ -46,7 +48,7 @@ if (!RAW_URL) {
 }
 
 const SOURCE = new URL(RAW_URL)
-const SOURCE_DB = SOURCE.pathname.replace(/^\//, '')
+const SOURCE_DB = decodeURIComponent(SOURCE.pathname.replace(/^\//, ''))
 const BACKUP_DIR = join(root, 'backups')
 const CONTAINER = process.env.BACKUP_CONTAINER ?? 'tableapp-postgres'
 
@@ -60,9 +62,14 @@ const CONTAINER = process.env.BACKUP_CONTAINER ?? 'tableapp-postgres'
 type Runner = { kind: 'local' | 'docker'; url: URL }
 
 async function chooseRunner(): Promise<Runner> {
-  if (await works('pg_dump', ['--version'])) return { kind: 'local', url: SOURCE }
+  const requested = process.env.BACKUP_RUNNER
+  if (requested && requested !== 'local' && requested !== 'docker') throw new Error('BACKUP_RUNNER: local или docker')
+  if (requested !== 'docker' && await works('pg_dump', ['--version'])) return { kind: 'local', url: SOURCE }
 
-  if (await works('docker', ['exec', CONTAINER, 'pg_dump', '--version'])) {
+  if (requested !== 'local' && await works('docker', ['exec', CONTAINER, 'pg_dump', '--version'])) {
+    if (!['localhost', '127.0.0.1', '[::1]'].includes(SOURCE.hostname)) {
+      throw new Error('Для удалённой БД нужны локальные pg_dump/pg_restore; адрес нельзя заменять контейнером.')
+    }
     const inside = new URL(SOURCE.toString())
     inside.hostname = '127.0.0.1'
     inside.port = '5432'
@@ -95,23 +102,29 @@ async function works(bin: string, args: string[]): Promise<boolean> {
  * Аргументы передаются списком, без оболочки: в них ходит адрес базы вместе
  * с паролем, а оболочка его и склеит, и запишет в историю команд.
  */
-function run(bin: string, args: string[], options: { stdout?: NodeJS.WritableStream } = {}): Promise<void> {
-  return new Promise((done, fail) => {
-    const child = spawn(bin, args, {
-      stdio: [options.stdout ? 'ignore' : 'inherit', options.stdout ? 'pipe' : 'inherit', 'inherit'],
-    })
-    if (options.stdout && child.stdout) child.stdout.pipe(options.stdout)
+async function run(bin: string, args: string[], options: { stdout?: Writable } = {}): Promise<void> {
+  const child = spawn(bin, args, {
+    stdio: [options.stdout ? 'ignore' : 'inherit', options.stdout ? 'pipe' : 'inherit', 'inherit'],
+  })
+  const completed = new Promise<void>((done, fail) => {
     child.on('error', fail)
     child.on('close', (code) => (code === 0 ? done() : fail(new Error(`${bin} завершился с кодом ${code}`))))
   })
+  const copied = options.stdout ? pipeline(child.stdout!, options.stdout) : Promise.resolve()
+  try { await Promise.all([completed, copied]) } catch (error) {
+    child.kill()
+    options.stdout?.destroy()
+    await Promise.allSettled([completed, copied])
+    throw error
+  }
 }
 
 /** Копия целиком, в собственном формате Postgres: из него можно достать часть. */
-async function create(): Promise<void> {
+export async function create(snapshot?: string): Promise<string> {
   const runner = await chooseRunner()
   mkdirSync(BACKUP_DIR, { recursive: true })
 
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 16)
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-')
   const file = join(BACKUP_DIR, `${SOURCE_DB}-${stamp}.dump`)
 
   /*
@@ -125,19 +138,27 @@ async function create(): Promise<void> {
     '--no-privileges',
     '--dbname',
     runner.url.toString(),
+    ...(snapshot ? ['--snapshot', snapshot] : []),
   ])
 
   console.log(`Снимаю копию базы «${SOURCE_DB}» (${runner.kind === 'docker' ? 'через контейнер' : 'локально'})…`)
-  await run(bin, args, { stdout: createWriteStream(file) })
+  let opened = false
+  const output = createWriteStream(file, { flags: 'wx' })
+  output.once('open', () => { opened = true })
+  try { await run(bin, args, { stdout: output }) } catch (error) {
+    if (opened) unlinkSync(file)
+    throw error
+  }
 
   const size = statSync(file).size
   if (size === 0) {
-    console.error('Копия вышла пустой — это отказ, а не копия.')
-    process.exit(1)
+    unlinkSync(file)
+    throw new Error('Копия вышла пустой — это отказ, а не копия.')
   }
   console.log(`Готово: ${file} (${mb(size)})`)
   console.log('Копия не проверена, пока её не развернули. Как это сделать — ниже.')
   console.log(`  pnpm db:backup restore "${file}" ${SOURCE_DB}_check`)
+  return file
 }
 
 function mb(bytes: number): string {
@@ -167,29 +188,25 @@ function list(): void {
 /**
  * Развернуть копию в отдельную базу.
  *
- * Имя цели обязательно и не может совпасть с рабочей базой. Это единственная
- * защита, которая здесь нужна: всё остальное — чужие данные, которые скрипт
- * не трогает.
+ * Имя цели обязательно и не может совпасть с рабочей базой. Существующая
+ * целевая база не удаляется: CREATE отказывает до восстановления.
+ * Восстановление выполняется одной транзакцией.
  */
-async function restore(file: string, target: string): Promise<void> {
+export async function restore(file: string, target: string, onCreated?: () => void): Promise<void> {
   if (!existsSync(file)) {
-    console.error(`Файла нет: ${file}`)
-    process.exit(1)
+    throw new Error(`Файла нет: ${file}`)
   }
   if (!target) {
-    console.error('Не указано имя базы, в которую разворачивать.')
-    process.exit(1)
+    throw new Error('Не указано имя базы, в которую разворачивать.')
   }
   if (target === SOURCE_DB) {
-    console.error(
+    throw new Error(
       `«${target}» — это рабочая база. Разворачивать поверх неё этим скриптом нельзя:\n` +
         'возьмите другое имя, проверьте копию и переключайте приложение осознанно.',
     )
-    process.exit(1)
   }
   if (!/^[a-z_][a-z0-9_]*$/i.test(target)) {
-    console.error('Имя базы: латиница, цифры и подчёркивание, начиная с буквы.')
-    process.exit(1)
+    throw new Error('Имя базы: латиница, цифры и подчёркивание, начиная с буквы.')
   }
 
   const runner = await chooseRunner()
@@ -199,16 +216,8 @@ async function restore(file: string, target: string): Promise<void> {
   into.pathname = `/${target}`
 
   console.log(`Создаю базу «${target}»…`)
-  const [psql, dropArgs] = command(runner, 'psql', [
-    '--dbname',
-    admin.toString(),
-    '--quiet',
-    '--command',
-    `drop database if exists "${target}"`,
-  ])
-  await run(psql, dropArgs)
-
-  const [, createArgs] = command(runner, 'psql', [
+  // CREATE refuses an existing target. Never delete an unknown database.
+  const [psql, createArgs] = command(runner, 'psql', [
     '--dbname',
     admin.toString(),
     '--quiet',
@@ -216,6 +225,7 @@ async function restore(file: string, target: string): Promise<void> {
     `create database "${target}"`,
   ])
   await run(psql, createArgs)
+  onCreated?.()
 
   console.log('Разворачиваю копию…')
   const [restoreBin, restoreArgs] = command(runner, 'pg_restore', [
@@ -224,6 +234,7 @@ async function restore(file: string, target: string): Promise<void> {
     '--no-owner',
     '--no-privileges',
     '--exit-on-error',
+    '--single-transaction',
   ])
 
   // Файл лежит на машине, а инструмент может работать в контейнере: отдаём
@@ -235,21 +246,28 @@ async function restore(file: string, target: string): Promise<void> {
   console.log(`  psql -c 'drop database "${target}"'`)
 }
 
-function pipeInto(bin: string, args: string[], file: string): Promise<void> {
-  return new Promise((done, fail) => {
-    const child = spawn(bin, args, { stdio: ['pipe', 'inherit', 'inherit'] })
+async function pipeInto(bin: string, args: string[], file: string): Promise<void> {
+  const child = spawn(bin, args, { stdio: ['pipe', 'inherit', 'inherit'] })
+  const completed = new Promise<void>((done, fail) => {
     child.on('error', fail)
     child.on('close', (code) => (code === 0 ? done() : fail(new Error(`${bin} завершился с кодом ${code}`))))
-    createReadStream(file).pipe(child.stdin!)
   })
+  const copied = pipeline(createReadStream(file), child.stdin!)
+  try { await Promise.all([completed, copied]) } catch (error) {
+    child.kill()
+    child.stdin?.destroy()
+    await Promise.allSettled([completed, copied])
+    throw error
+  }
 }
 
-const [action = 'create', ...rest] = process.argv.slice(2)
-
-if (action === 'create') await create()
-else if (action === 'list') list()
-else if (action === 'restore') await restore(rest[0] ?? '', rest[1] ?? '')
-else {
-  console.error(`Не знаю действия «${action}». Есть: create, list, restore.`)
-  process.exit(1)
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const [action = 'create', ...rest] = process.argv.slice(2)
+  if (action === 'create') await create()
+  else if (action === 'list') list()
+  else if (action === 'restore') await restore(rest[0] ?? '', rest[1] ?? '')
+  else {
+    console.error(`Не знаю действия «${action}». Есть: create, list, restore.`)
+    process.exitCode = 1
+  }
 }

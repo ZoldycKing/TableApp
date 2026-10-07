@@ -1,5 +1,6 @@
-import { apps, db, rows as rowsTable } from '@tableapp/db'
-import { and, eq, isNull, sql } from 'drizzle-orm'
+import { apps, db, fields, rows as rowsTable, tables } from '@tableapp/db'
+import { and, asc, eq, isNull, sql } from 'drizzle-orm'
+import type { Transaction } from './db-transaction'
 import { workspaceOfTable } from './limits'
 
 /**
@@ -53,11 +54,12 @@ export type DependentRows = {
  * настройка производства лежит рядом с приложением, а не в коде, потому что
  * таблицы и колонки у каждого свои.
  */
-export async function dependentRows(tableId: string, rowId: string): Promise<DependentRows | null> {
-  const workspaceId = await workspaceOfTable(tableId)
+export async function dependentRows(tableId: string, rowId: string, tx?: Transaction): Promise<DependentRows | null> {
+  const runner = tx ?? db
+  const workspaceId = await workspaceOfTable(tableId, runner)
   if (!workspaceId) return null
 
-  const found = await db
+  const found = await runner
     .select({ draft: apps.draft, published: apps.published })
     .from(apps)
     .where(eq(apps.workspaceId, workspaceId))
@@ -71,6 +73,10 @@ export async function dependentRows(tableId: string, rowId: string): Promise<Dep
      */
     const candidate = configOf(record.published) ?? configOf(record.draft)
     if (candidate && candidate.production === tableId) {
+      const [owned] = await runner.select({ id: fields.id }).from(fields)
+        .innerJoin(tables, eq(fields.tableId, tables.id))
+        .where(and(eq(tables.workspaceId, workspaceId), eq(tables.id, candidate.movements), eq(fields.id, candidate.run))).limit(1)
+      if (!owned) continue
       config = candidate
       break
     }
@@ -83,7 +89,7 @@ export async function dependentRows(tableId: string, rowId: string): Promise<Dep
    * и отфильтровать его в памяти было бы верно ровно до первого склада,
    * где движений десятки тысяч.
    */
-  const movements = await db
+  const query = runner
     .select({ id: rowsTable.id, data: rowsTable.data })
     .from(rowsTable)
     .where(
@@ -92,7 +98,8 @@ export async function dependentRows(tableId: string, rowId: string): Promise<Dep
         isNull(rowsTable.deletedAt),
         sql`${rowsTable.data} -> ${config.run} @> ${JSON.stringify([rowId])}::jsonb`,
       ),
-    )
+    ).orderBy(asc(rowsTable.id))
+  const movements = tx ? await query.for('update') : await query
 
   if (movements.length === 0) return null
   return {

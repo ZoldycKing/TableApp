@@ -1,6 +1,6 @@
 'use client'
 
-import { instantToWallClock, isComputed, wallClockToInstant, type Attachment, type Field } from '@tableapp/schema'
+import { dateInstant, fieldTimeZone, instantToWallClock, isComputed, type Attachment, type Field } from '@tableapp/schema'
 import { useLayoutEffect, useRef, useState } from 'react'
 import { useUnsaved } from '@/lib/unsaved'
 import { FileUpload } from '@/components/file-upload'
@@ -230,7 +230,7 @@ function Control({
 
     case 'date':
     case 'datetime':
-      return <DateInput value={value} withTime={field.type === 'datetime'} onChange={onChange} />
+      return <DateInput value={value} withTime={field.type === 'datetime'} zone={fieldTimeZone(field)} onChange={onChange} />
 
     case 'single_select':
       return (
@@ -387,13 +387,16 @@ function NumberInput({ value, onChange }: { value: unknown; onChange: (value: un
 function DateInput({
   value,
   withTime,
+  zone,
   onChange,
 }: {
   value: unknown
   withTime: boolean
+  zone: string
   onChange: (value: unknown) => void
 }) {
-  const wall = value ? instantToWallClock(String(value)) : null
+  const instant = dateInstant(value, zone)
+  const wall = instant === null ? null : instantToWallClock(new Date(instant), zone)
   const current = wall ? (withTime ? `${wall.date}T${wall.time}` : wall.date) : ''
 
   return (
@@ -404,11 +407,8 @@ function DateInput({
         onChange={(event) => {
           const next = event.target.value
           if (!next) return onChange(null)
-          const [datePart, timePart = ''] = next.split('T')
-          const [year, month, day] = (datePart ?? '').split('-').map(Number)
-          if (!year || !month || !day) return
-          const [hour = 0, minute = 0] = timePart ? timePart.split(':').map(Number) : []
-          onChange(wallClockToInstant({ year, month, day, hour, minute }).toISOString())
+          const parsed = dateInstant(next, zone)
+          if (parsed !== null) onChange(new Date(parsed).toISOString())
         }}
         className={BOX}
       />

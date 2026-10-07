@@ -77,11 +77,19 @@ export function totpAt(secret: string, counter: number, algorithm = 'sha1'): str
  * ломать вход на ровном месте.
  */
 export function verifyTotp(secret: string, input: string, now = Date.now()): boolean {
+  if (typeof secret !== 'string' || typeof input !== 'string' || secret.length > 128 || input.length > 64 || !Number.isFinite(now)) return false
   const code = input.replace(/\D+/g, '')
   if (code.length !== TOTP_DIGITS) return false
 
+  try {
+    if (base32Decode(secret).length === 0) return false
+  } catch {
+    return false
+  }
   const counter = Math.floor(now / 1000 / TOTP_STEP_SECONDS)
+  if (!Number.isSafeInteger(counter) || counter < 0) return false
   for (const shift of [-1, 0, 1]) {
+    if (counter + shift < 0) continue
     const expected = totpAt(secret, counter + shift)
     const a = Buffer.from(expected)
     const b = Buffer.from(code)
@@ -89,6 +97,11 @@ export function verifyTotp(secret: string, input: string, now = Date.now()): boo
   }
 
   return false
+}
+
+/** Setup uses the canonical 160-bit secret issued by createTotpSecret(). */
+export function isTotpSetupSecret(secret: string): boolean {
+  return typeof secret === 'string' && /^[A-Z2-7]{32}$/.test(secret)
 }
 
 /** Ссылка для приложения-аутентификатора: из неё же рисуется QR-код. */

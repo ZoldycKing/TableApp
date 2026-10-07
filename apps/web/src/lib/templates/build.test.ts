@@ -1,6 +1,6 @@
 import { computeDerivedRow, compileTableFormulas, type RelatedIndex } from '@tableapp/formula'
 import type { Field } from '@tableapp/schema'
-import { evalFilter, indexFields, type FilterGroup } from '@tableapp/schema'
+import { calendarDay, evalFilter, indexFields, type FilterGroup } from '@tableapp/schema'
 import { describe, expect, it } from 'vitest'
 import { buildTemplate } from './build'
 import { findTemplate, TEMPLATES } from './catalog'
@@ -12,6 +12,16 @@ function build(id: string) {
 }
 
 describe('шаблоны разворачиваются в рабочие таблицы', () => {
+  it('uses the Moscow date for relative examples near the UTC day boundary', () => {
+    const built = buildTemplate({ template: findTemplate('portal')!, workspaceId, now: new Date('2026-03-14T22:30:00Z') })
+    const date = built.fields.find((field) => field.tableId === built.appTableId && field.type === 'date' && field.name === 'Обратились')
+    // The first order is three days before March 15 in Moscow.
+    const first = built.rows.find((row) => row.tableId === built.appTableId)!
+    const dates = built.fields.filter((field) => field.tableId === built.appTableId && field.type === 'date')
+    expect(dates.length).toBeGreaterThan(0)
+    const created = date ?? dates[0]!
+    expect(calendarDay(first.data[created.id])).toBe('2026-03-12')
+  })
   it('каждый шаблон собирается и не ссылается на чужие идентификаторы', () => {
     for (const template of TEMPLATES) {
       const built = build(template.id)

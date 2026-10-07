@@ -2,13 +2,14 @@
 
 import { apps, db, fields as fieldsTable, tables, views as viewsTable } from '@tableapp/db'
 import type { App, Field, View } from '@tableapp/schema'
-import { appSchema, byPosition, newId, normalizeFieldOptions } from '@tableapp/schema'
+import { appSchema, byPosition, newId, normalizeFieldOptions, normalizeView } from '@tableapp/schema'
 import { and, asc, eq, ne } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { mayIncrease, noteRemoved } from '@/lib/limits'
 import { authorizeApp, authorizeTable, authorizeWorkspace } from '@/lib/authorize'
 import { generateApp, slugify } from '@/lib/app-builder'
 import { uniqueSlug } from '@/lib/app-slug'
+import { validateAppReferences } from '@/lib/app-references'
 import type { ActionResult } from './actions'
 
 export async function createAppAction(
@@ -42,7 +43,7 @@ export async function createAppAction(
     slug: await uniqueSlug(slugify(appName)),
     table: { id: table.id, name: table.name, primaryFieldId: table.primaryFieldId },
     fields,
-    view: view as unknown as View,
+    view: normalizeView(view),
   })
 
   await db.insert(apps).values({
@@ -73,6 +74,8 @@ export async function updateAppDraftAction(appId: string, draft: unknown): Promi
 
   const slug = await uniqueSlug(slugify(parsed.data.slug || parsed.data.name), appId)
   const safeDraft = { ...parsed.data, id: appId, workspaceId: auth.member.workspaceId, slug }
+  const referenceError = await validateAppReferences(safeDraft)
+  if (referenceError) return { ok: false, error: referenceError }
 
   await db
     .update(apps)
@@ -108,6 +111,9 @@ export async function publishAppAction(appId: string): Promise<ActionResult> {
   const parsed = appSchema.safeParse(app.draft)
   if (!parsed.success) return { ok: false, error: 'Черновик содержит ошибки и не может быть опубликован' }
   if (parsed.data.screens.length === 0) return { ok: false, error: 'В приложении нет ни одного экрана' }
+  const safeApp = { ...parsed.data, id: app.id, workspaceId: app.workspaceId }
+  const referenceError = await validateAppReferences(safeApp)
+  if (referenceError) return { ok: false, error: referenceError }
 
   /*
    * Потолок считаем только для того, что ещё не опубликовано. Повторная
@@ -125,7 +131,7 @@ export async function publishAppAction(appId: string): Promise<ActionResult> {
 
   await db
     .update(apps)
-    .set({ published: parsed.data as unknown as Record<string, unknown>, publishedAt: new Date() })
+    .set({ published: safeApp as unknown as Record<string, unknown>, publishedAt: new Date() })
     .where(eq(apps.id, appId))
 
   revalidatePath('/apps')

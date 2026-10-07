@@ -4,6 +4,7 @@ import {
   base32Encode,
   createRecoveryCodes,
   hashRecoveryCode,
+  isTotpSetupSecret,
   normalizeRecoveryCode,
   totpAt,
   totpUri,
@@ -38,6 +39,29 @@ describe('TOTP по RFC 6238', () => {
 
   it('терпит пробелы в введённом коде', () => {
     expect(verifyTotp(RFC_SECRET, '005 924', 1234567890 * 1000)).toBe(true)
+  })
+
+  it('отказывает некорректным секретам и нетипизированным аргументам без исключения', () => {
+    for (const secret of ['', '!', 'A'.repeat(129), null, {}, 1]) {
+      expect(verifyTotp(secret as string, '123456')).toBe(false)
+    }
+    for (const input of [null, {}, 123456, '1'.repeat(65)]) {
+      expect(verifyTotp(RFC_SECRET, input as string)).toBe(false)
+    }
+    expect(verifyTotp(RFC_SECRET, '005924', Infinity)).toBe(false)
+    expect(verifyTotp(RFC_SECRET, '005924', 1e100)).toBe(false)
+  })
+
+  it('проверяет начало эпохи без отрицательного счётчика', () => {
+    expect(verifyTotp(RFC_SECRET, totpAt(RFC_SECRET, 0), 0)).toBe(true)
+    expect(verifyTotp(RFC_SECRET, totpAt(RFC_SECRET, 0), -1000)).toBe(false)
+  })
+
+  it('настройка принимает только полный секрет формата, выдаваемого сервером', () => {
+    expect(isTotpSetupSecret(RFC_SECRET)).toBe(true)
+    for (const secret of ['', 'A', 'A'.repeat(33), RFC_SECRET.toLowerCase(), null, {}]) {
+      expect(isTotpSetupSecret(secret as string)).toBe(false)
+    }
   })
 })
 

@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { localRedirect } from '@/lib/local-redirect'
 import { consumeAppToken } from '@/app/auth-actions'
 
 /** Переход по ссылке из письма: токен обменивается на сессию. */
@@ -9,11 +9,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
 
   if (!token) {
     target.searchParams.set('error', 'Ссылка неполная')
-    return NextResponse.redirect(target)
+    return localRedirect(target)
   }
 
   const result = await consumeAppToken(slug, token)
   if (!result.ok) target.searchParams.set('error', result.error ?? 'Не удалось войти')
 
-  return NextResponse.redirect(target)
+  return localRedirect(target)
 }

@@ -1,7 +1,7 @@
 import { db, fields as fieldsTable, rows as rowsTable, tables, views as viewsTable } from '@tableapp/db'
 import { compileTableFormulas, computeDerivedRow, relatedIndexFrom, type RelatedIndex } from '@tableapp/formula'
 import type { Field, View } from '@tableapp/schema'
-import { byPosition, normalizeFieldOptions } from '@tableapp/schema'
+import { byPosition, normalizeFieldOptions, normalizeView, systemRowData } from '@tableapp/schema'
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
 import { formatCell } from './format'
 
@@ -52,7 +52,7 @@ export async function loadTable(tableId: string, workspaceId: string): Promise<L
     .map((field) => ({ ...field, options: normalizeFieldOptions(field.type as Field['type'], field.options) }) as unknown as Field)
     .sort(byPosition)
 
-  const related = await loadRelatedRows(fields)
+  const related = await loadRelatedRows(fields, workspaceId)
   const formulas = compileTableFormulas(fields)
   const workspaceTables = await loadWorkspaceTables(table.workspaceId)
   const relatedTitles = buildRelatedTitles(fields, related, workspaceTables)
@@ -66,12 +66,12 @@ export async function loadTable(tableId: string, workspaceId: string): Promise<L
     templateId: table.templateId,
     sampleCount: dataRows.filter((row) => row.sample).length,
     fields,
-    views: (viewRows as unknown as View[]).sort(byPosition),
+    views: viewRows.map(normalizeView).sort(byPosition),
     rows: dataRows.map((row) => ({
       id: row.id,
       position: row.position,
       // Lookup, Rollup, количество связей и формулы считаются на чтении и не хранятся.
-      data: computeDerivedRow(row.data as Record<string, unknown>, fields, related, formulas),
+      data: computeDerivedRow(systemRowData(row as typeof row & { data: Record<string, unknown> }, fields), fields, related, formulas),
       version: row.version,
     })),
     workspaceTables,
@@ -140,7 +140,7 @@ function buildRelatedTitles(
  * формулы связанной таблицы. Rollup по формульной колонке иначе суммирует
  * пустоту — «Итого» по позициям заказа показывало ноль при непустых позициях.
  */
-async function loadRelatedRows(fields: readonly Field[]): Promise<RelatedIndex> {
+export async function loadRelatedRows(fields: readonly Field[], workspaceId: string): Promise<RelatedIndex> {
   const targetIds = [
     ...new Set(
       fields
@@ -150,12 +150,15 @@ async function loadRelatedRows(fields: readonly Field[]): Promise<RelatedIndex> 
   ]
   if (targetIds.length === 0) return new Map()
 
+  const allowedTargets = db.select({ id: tables.id }).from(tables)
+    .where(and(eq(tables.workspaceId, workspaceId), inArray(tables.id, targetIds)))
+
   const [rows, fieldRows] = await Promise.all([
     db
-      .select({ id: rowsTable.id, tableId: rowsTable.tableId, data: rowsTable.data })
+      .select()
       .from(rowsTable)
-      .where(and(inArray(rowsTable.tableId, targetIds), isNull(rowsTable.deletedAt))),
-    db.select().from(fieldsTable).where(inArray(fieldsTable.tableId, targetIds)),
+      .where(and(inArray(rowsTable.tableId, allowedTargets), isNull(rowsTable.deletedAt))),
+    db.select().from(fieldsTable).where(inArray(fieldsTable.tableId, allowedTargets)),
   ])
 
   const rowsByTable = new Map<string, Map<string, Record<string, unknown>>>()
@@ -176,6 +179,9 @@ async function loadRelatedRows(fields: readonly Field[]): Promise<RelatedIndex> 
     else fieldsByTable.set(row.tableId, [field])
   }
   for (const list of fieldsByTable.values()) list.sort(byPosition)
+
+  for (const row of rows) rowsByTable.get(row.tableId)!.set(row.id,
+    systemRowData(row as typeof row & { data: Record<string, unknown> }, fieldsByTable.get(row.tableId) ?? []))
 
   return relatedIndexFrom(rowsByTable, fieldsByTable)
 }

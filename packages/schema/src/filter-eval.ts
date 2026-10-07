@@ -2,6 +2,7 @@ import type { Field } from './fields'
 import type { FilterCondition, FilterGroup } from './filters'
 import { isGroup, isUnary } from './filters'
 import { isBlank } from './values'
+import { calendarDay, dateInstant, fieldTimeZone } from './time'
 
 /**
  * Вычисление фильтра в памяти. Один и тот же код исполняется в редакторе базы,
@@ -36,26 +37,10 @@ function num(value: unknown): number | null {
   return null
 }
 
-function time(value: unknown): number | null {
-  if (value === null || value === undefined || value === '') return null
-  const t = new Date(String(value)).getTime()
-  return Number.isNaN(t) ? null : t
-}
-
 function asArray(value: unknown): unknown[] {
   if (Array.isArray(value)) return value
   if (isBlank(value)) return []
   return [value]
-}
-
-function sameDay(a: number, b: number): boolean {
-  const da = new Date(a)
-  const db = new Date(b)
-  return (
-    da.getUTCFullYear() === db.getUTCFullYear() &&
-    da.getUTCMonth() === db.getUTCMonth() &&
-    da.getUTCDate() === db.getUTCDate()
-  )
 }
 
 const DATE_OPS = new Set(['is_before', 'is_after', 'is_on_or_before', 'is_on_or_after', 'is_within'])
@@ -77,22 +62,36 @@ function evalCondition(condition: FilterCondition, row: Record<string, unknown>,
   const isDateField = field.type === 'date' || field.type === 'datetime' || field.type === 'created_time' || field.type === 'updated_time'
 
   if (isDateField || DATE_OPS.has(op)) {
-    const a = time(cell)
-    const b = time(operand)
-    if (a === null || b === null) return false
-    switch (op) {
-      case 'is': return sameDay(a, b)
-      case 'is_not': return !sameDay(a, b)
-      case 'is_before': return a < b
-      case 'is_after': return a > b
-      case 'is_on_or_before': return a <= b || sameDay(a, b)
-      case 'is_on_or_after': return a >= b || sameDay(a, b)
-      case 'is_within': {
-        const range = operand as { from?: unknown; to?: unknown }
-        const from = time(range?.from)
-        const to = time(range?.to)
-        return (from === null || a >= from) && (to === null || a <= to)
+    const zone = fieldTimeZone(field)
+    const a = dateInstant(cell, zone)
+    if (a === null) return false
+    const day = calendarDay(cell, zone)!
+    if (op === 'is_within') {
+      if (!operand || typeof operand !== 'object' || Array.isArray(operand)) return false
+      const range = operand as { from?: unknown; to?: unknown }
+      const bound = (value: unknown, end: boolean) => {
+        if (isBlank(value)) return true
+        if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+          const other = calendarDay(value, zone)
+          return other !== null && (end ? day <= other : day >= other)
+        }
+        const instant = dateInstant(value, zone)
+        return instant !== null && (end ? a <= instant : a >= instant)
       }
+      return bound(range.from, false) && bound(range.to, true)
+    }
+    const b = dateInstant(operand, zone)
+    const otherDay = calendarDay(operand, zone)
+    if (b === null || otherDay === null) return false
+    const before = field.type === 'date' || (typeof operand === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(operand)) ? day < otherDay : a < b
+    const after = field.type === 'date' || (typeof operand === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(operand)) ? day > otherDay : a > b
+    switch (op) {
+      case 'is': return day === otherDay
+      case 'is_not': return day !== otherDay
+      case 'is_before': return before
+      case 'is_after': return after
+      case 'is_on_or_before': return before || day === otherDay
+      case 'is_on_or_after': return after || day === otherDay
       default: return false
     }
   }

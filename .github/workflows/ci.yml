@@ -1,0 +1,74 @@
+name: Verify TableApp
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      DATABASE_URL: postgres://tableapp:tableapp@localhost:5433/tableapp
+      S3_ENDPOINT: http://127.0.0.1:9000
+      S3_ACCESS_KEY: tableapp
+      S3_SECRET_KEY: tableapp123
+      S3_BUCKET: tableapp
+      SITE_URL: https://tableapp.example
+      SMOKE_BASE_URL: http://127.0.0.1:3101
+      BACKUP_RUNNER: docker
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24.14.1'
+          package-manager-cache: false
+      - uses: pnpm/action-setup@v6
+        with:
+          version: '10.33.0'
+          run_install: false
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Prepare disposable services
+        run: |
+          cp .env.example .env
+          docker compose up -d --wait postgres minio
+          node node_modules/tsx/dist/cli.mjs apps/web/scripts/ci-storage.mts
+          pnpm db:migrate
+          pnpm db:migrate:verify
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Unit, component and PostgreSQL tests
+        run: node node_modules/vitest/vitest.mjs run
+      - name: Production build
+        run: pnpm build
+      - name: HTTP checks with real PostgreSQL and MinIO
+        run: |
+          pnpm --filter @tableapp/web start --hostname 127.0.0.1 --port 3101 > server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          node node_modules/tsx/dist/cli.mjs scripts/http-ready.mts
+          pnpm --filter @tableapp/web test:sync-files
+          pnpm --filter @tableapp/web test:auth
+          pnpm --filter @tableapp/web test:readiness
+      - name: Verify backup restoration and content
+        run: node node_modules/tsx/dist/cli.mjs packages/db/scripts/backup-verify.mts
+      - name: Diagnostics
+        if: failure()
+        run: |
+          docker compose logs --tail=100 postgres minio
+          if [ -f server.log ]; then tail -n 100 server.log; fi
+      - name: Stop disposable services
+        if: always()
+        run: docker compose down --volumes

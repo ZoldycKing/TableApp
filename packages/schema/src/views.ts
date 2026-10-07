@@ -66,6 +66,15 @@ export type View = z.infer<typeof viewSchema>
 export type ViewOf<T extends ViewType> = Extract<View, { type: T }>
 export type ViewConfig = View['config']
 
+/** Null was the legacy representation of no filter; malformed groups still fail validation. */
+export function normalizeView(value: { id: string; tableId: string; name: string; position: string; type: string; config: unknown }): View {
+  if (!value.config || typeof value.config !== 'object' || Array.isArray(value.config)) return viewSchema.parse(value)
+  const config = value.config as Record<string, unknown>
+  return viewSchema.parse({ ...value, config: { ...config,
+    ...(value.type === 'grid' && config.fieldWidths === undefined && config.columnWidths !== undefined ? { fieldWidths: config.columnWidths } : {}),
+    filter: config.filter == null ? { id: `default:${value.id}`, conjunction: 'and', conditions: [] } : config.filter } })
+}
+
 export const VIEW_CONFIG_SCHEMA = {
   grid: gridConfigSchema,
   kanban: kanbanConfigSchema,

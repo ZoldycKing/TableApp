@@ -11,6 +11,7 @@ import {
 import type { Plan, UsageKind } from '@tableapp/schema'
 import { activePlan } from './plan'
 import { and, eq, isNotNull, isNull, sql } from 'drizzle-orm'
+import type { Transaction } from './db-transaction'
 
 /**
  * Сколько пространство расходует.
@@ -70,42 +71,44 @@ function count(value: unknown): number {
  * идёт по своему индексу, и план запроса читается глазами. Их немного,
  * и выполняются они не на каждое действие человека.
  */
-export async function recountWorkspace(workspaceId: string): Promise<Usage> {
+export async function recountWorkspace(workspaceId: string, tx?: Transaction): Promise<Usage> {
+  if (!tx) return db.transaction((transaction) => recountWorkspace(workspaceId, transaction))
+  // Lock BEFORE counting: a reservation and its rows must commit together,
+  // and a recount must not overwrite the counter with a pre-lock snapshot.
+  await tx.insert(workspaceUsage).values({ workspaceId, ...EMPTY, countedAt: new Date() }).onConflictDoNothing()
+  await tx.select({ id: workspaceUsage.workspaceId }).from(workspaceUsage)
+    .where(eq(workspaceUsage.workspaceId, workspaceId)).for('update')
   const [rowCount, tableCount, appCount, fileSize, userCount] = await Promise.all([
     /*
      * Удалённые в корзину не считаем: строка, которую человек убрал, место
      * ещё занимает, но продавать ему это место значит брать деньги за то,
      * от чего он уже отказался.
      */
-    db
+    tx
       .select({ value: sql<number>`count(*)::int` })
       .from(rowsTable)
       .innerJoin(tables, eq(tables.id, rowsTable.tableId))
       .where(and(eq(tables.workspaceId, workspaceId), isNull(rowsTable.deletedAt))),
 
-    db
+    tx
       .select({ value: sql<number>`count(*)::int` })
       .from(tables)
       .where(eq(tables.workspaceId, workspaceId)),
 
     // Черновик потолок не расходует: пока приложение не опубликовано,
     // им никто не пользуется, и платить за него не за что.
-    db
+    tx
       .select({ value: sql<number>`count(*)::int` })
       .from(apps)
       .where(and(eq(apps.workspaceId, workspaceId), isNotNull(apps.published))),
 
-    /*
-     * Только те файлы, на которые ссылается ячейка. «Осиротевшие» ждут
-     * уборщика, и брать за них деньги значит выставлять счёт за то,
-     * что человек уже убрал.
-     */
-    db
+    // Pending and unbound objects consume storage until cleanup removes them.
+    tx
       .select({ value: sql<number>`coalesce(sum(${attachments.size}), 0)::bigint` })
       .from(attachments)
-      .where(and(eq(attachments.workspaceId, workspaceId), eq(attachments.referenced, true))),
+      .where(eq(attachments.workspaceId, workspaceId)),
 
-    db
+    tx
       .select({ value: sql<number>`count(*)::int` })
       .from(appUsers)
       .innerJoin(apps, eq(apps.id, appUsers.appId))
@@ -121,12 +124,20 @@ export async function recountWorkspace(workspaceId: string): Promise<Usage> {
     countedAt: new Date(),
   }
 
-  await db
+  await tx
     .insert(workspaceUsage)
     .values({ workspaceId, ...usage })
     .onConflictDoUpdate({ target: workspaceUsage.workspaceId, set: usage })
 
   return usage
+}
+
+/** Caller holds the workspace usage lock; repair legacy counters before an upload. */
+export async function recountFileBytes(workspaceId: string, tx: Transaction): Promise<void> {
+  const [size] = await tx.select({ value: sql<number>`coalesce(sum(${attachments.size}), 0)::bigint` })
+    .from(attachments).where(eq(attachments.workspaceId, workspaceId))
+  await tx.update(workspaceUsage).set({ fileBytes: count(size?.value) })
+    .where(eq(workspaceUsage.workspaceId, workspaceId))
 }
 
 /**

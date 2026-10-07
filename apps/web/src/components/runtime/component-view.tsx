@@ -6,7 +6,7 @@ import { formatCell } from '@/lib/format'
 import type { RelatedTitles } from '@/lib/queries'
 import type { TableRow } from '@/lib/table-store'
 import { CardValue } from '@/components/views/card'
-import { fileUrl } from '@/components/file-upload'
+import { fileUrl, isImage } from '@/components/file-upload'
 import { accentClasses, resolveBinding, type Viewer } from './bindings'
 import { CheckMark, StatusPill } from './ui'
 
@@ -53,7 +53,7 @@ export function ComponentView({ component, ctx }: { component: Component; ctx: C
       const field = ctx.fields.find((candidate) => candidate.id === component.fieldId)
       const value = field && ctx.row ? ctx.row.data[field.id] : null
       const items = (Array.isArray(value) ? value : []) as Attachment[]
-      const first = items.find((item) => item.mime.startsWith('image/'))
+      const first = items.find((item) => isImage(item.mime))
       if (!first) return null
       const aspect =
         component.aspect === 'square' ? 'aspect-square'
@@ -133,7 +133,7 @@ export function ComponentView({ component, ctx }: { component: Component; ctx: C
       const field = ctx.fields.find((candidate) => candidate.id === component.fieldId)
       const value = field && ctx.row ? ctx.row.data[field.id] : null
       const items = ((Array.isArray(value) ? value : []) as Attachment[]).filter((item) =>
-        item.mime.startsWith('image/'),
+        isImage(item.mime),
       )
       if (items.length === 0) return null
       return (

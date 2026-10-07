@@ -54,7 +54,8 @@ test('числовые сравнения работают и на строко�
 
 test('даты сравниваются по календарному дню, а не по метке времени', () => {
   const row = { fld_due: '2026-03-14T23:30:00.000Z' }
-  assert.equal(evalFilter(group([cond('fld_due', 'is', '2026-03-14T08:00:00.000Z')]), row, fields), true)
+  assert.equal(evalFilter(group([cond('fld_due', 'is', '2026-03-14T08:00:00.000Z')]), row, fields), false)
+  assert.equal(evalFilter(group([cond('fld_due', 'is', '2026-03-15')]), row, fields), true)
   assert.equal(evalFilter(group([cond('fld_due', 'is_after', '2026-03-13T00:00:00.000Z')]), row, fields), true)
   assert.equal(evalFilter(group([cond('fld_due', 'is_before', '2026-03-13T00:00:00.000Z')]), row, fields), false)
 })

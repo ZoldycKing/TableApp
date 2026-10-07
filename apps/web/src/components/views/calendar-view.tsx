@@ -1,6 +1,7 @@
 'use client'
 
 import type { Field, ViewOf } from '@tableapp/schema'
+import { calendarDay, fieldTimeZone } from '@tableapp/schema'
 import { useMemo, useState } from 'react'
 import { formatCell } from '@/lib/format'
 import type { TableRow } from '@/lib/table-store'
@@ -18,10 +19,10 @@ const DATE_TYPES = new Set(['date', 'datetime', 'created_time', 'updated_time'])
 // Неделя начинается с понедельника — русский календарь, а не американский.
 const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
 
-const monthFormatter = new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric' })
+const monthFormatter = new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric', timeZone: 'UTC' })
 
 function dayKey(date: Date): string {
-  return `${date.getUTCFullYear()}-${date.getUTCMonth()}-${date.getUTCDate()}`
+  return date.toISOString().slice(0, 10)
 }
 
 /** Сетка месяца: полные недели, включая хвосты соседних месяцев. */
@@ -35,11 +36,13 @@ function monthGrid(anchor: Date): Date[] {
 
 export function CalendarView({ view, fields, rows, titleField, onConfigChange }: CalendarProps) {
   const candidates = fields.filter((field) => DATE_TYPES.has(field.type))
-  const dateField = fields.find((field) => field.id === view.config.dateFieldId) ?? candidates[0]
+  const dateField = candidates.find((field) => field.id === view.config.dateFieldId) ?? candidates[0]
+  const zone = dateField ? fieldTimeZone(dateField) : undefined
 
   const [anchor, setAnchor] = useState(() => {
     const now = new Date()
-    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
+    const today = calendarDay(now, zone)!
+    return new Date(`${today.slice(0, 7)}-01T00:00:00Z`)
   })
 
   const byDay = useMemo(() => {
@@ -48,15 +51,14 @@ export function CalendarView({ view, fields, rows, titleField, onConfigChange }:
     for (const row of rows) {
       const raw = row.data[dateField.id]
       if (!raw) continue
-      const date = new Date(String(raw))
-      if (Number.isNaN(date.getTime())) continue
-      const key = dayKey(date)
+      const key = calendarDay(raw, zone)
+      if (!key) continue
       const bucket = map.get(key)
       if (bucket) bucket.push(row)
       else map.set(key, [row])
     }
     return map
-  }, [rows, dateField])
+  }, [rows, dateField, zone])
 
   if (!dateField) {
     return (
@@ -67,8 +69,8 @@ export function CalendarView({ view, fields, rows, titleField, onConfigChange }:
   }
 
   const days = monthGrid(anchor)
-  const todayKey = dayKey(new Date())
-  const undated = rows.filter((row) => !row.data[dateField.id]).length
+  const todayKey = calendarDay(new Date(), zone)
+  const undated = rows.filter((row) => !calendarDay(row.data[dateField.id], zone)).length
 
   const shift = (months: number) =>
     setAnchor((current) => new Date(Date.UTC(current.getUTCFullYear(), current.getUTCMonth() + months, 1)))
@@ -123,6 +125,7 @@ export function CalendarView({ view, fields, rows, titleField, onConfigChange }:
             return (
               <div
                 key={key}
+                data-date={key}
                 className={`min-h-24 border-b border-r border-[var(--color-border-subtle)] p-1.5 ${
                   outside ? 'bg-[var(--color-surface-muted)]/40' : ''
                 }`}

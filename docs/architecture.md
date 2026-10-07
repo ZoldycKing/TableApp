@@ -1,7 +1,8 @@
 # Как устроен TableApp
 
-Снимок на 24 сентября 2026. Описывает то, что работает, а не то, что задумано;
-раздел «Чего нет» в конце — такая же часть документа, как и остальные.
+Описание архитектуры проекта. Текущее состояние исправлений и следующие задачи
+собраны в [плане развития](roadmap.md); раздел «Чего нет» в конце описывает
+ограничения реализации.
 
 ## Каркас
 
@@ -25,7 +26,7 @@ apps/web           Next.js 16, App Router. Весь интерфейс и вес
 
 ## База
 
-Шестнадцать таблиц, три группы.
+Двадцать одна таблица приложения, четыре группы (без служебного журнала миграций).
 
 **Люди и вход**
 `users`, `workspaces`, `workspace_members`, `sessions`, `auth_tokens`,
@@ -37,6 +38,9 @@ apps/web           Next.js 16, App Router. Весь интерфейс и вес
 **Приложения**
 `apps` — определение приложения хранится JSON-документом в двух колонках:
 `draft` (что правит владелец) и `published` (что видят люди).
+
+**Учёт и служебные процессы**
+`workspace_usage`, `pending_submissions`, `import_runs`, `subscriptions`, `payments`.
 
 ### Ключевое решение: данные в JSONB
 
@@ -53,7 +57,7 @@ apps/web           Next.js 16, App Router. Весь интерфейс и вес
 ### Производные поля считаются на чтении
 
 Формула, Lookup, Rollup и количество связей **не хранятся**. Они вычисляются
-каждый раз в `computeDerivedRow` ([derived.ts](packages/formula/src/derived.ts)).
+каждый раз в `computeDerivedRow` ([derived.ts](../packages/formula/src/derived.ts)).
 Иначе правка строки в одной таблице требовала бы каскадного пересчёта всех
 строк, которые на неё ссылаются, — самый надёжный способ получить расходящиеся
 данные.
@@ -71,7 +75,7 @@ apps/web           Next.js 16, App Router. Весь интерфейс и вес
 | Кто | владелец, редактор, зритель | роли приложения: клиент, сотрудник, ведущий |
 | Таблица сессий | `sessions` | `staff_sessions` |
 | Что может | менять структуру: таблицы, поля, приложения | работать с данными внутри опубликованного приложения |
-| Проверка | `currentMember()` → [authorize.ts](apps/web/src/lib/authorize.ts) | `currentAppAccess()` → [app-session.ts](apps/web/src/lib/app-session.ts) |
+| Проверка | `currentMember()` → [authorize.ts](../apps/web/src/lib/authorize.ts) | `currentAppAccess()` → [app-session.ts](../apps/web/src/lib/app-session.ts) |
 
 **«Изменить данные» не даёт «изменить приложение»** — и не флагом, а устройством:
 конструктор проверяет членство в пространстве, а у клиента его нет вовсе.
@@ -96,8 +100,8 @@ role_id
   ↓  rulesFor()        — какие строки ей принадлежат
 ```
 
-Всё это — [app-roles.ts](apps/web/src/lib/app-roles.ts) и
-[row-access.ts](apps/web/src/lib/row-access.ts), оба модуля чистые.
+Всё это — [app-roles.ts](../apps/web/src/lib/app-roles.ts) и
+[row-access.ts](../apps/web/src/lib/row-access.ts), оба модуля чистые.
 
 ### Роли задаёт владелец
 
@@ -219,19 +223,19 @@ access: {
 
 ### 1. Редактор базы — `/t/[tableId]`
 
-[table-screen.tsx](apps/web/src/components/table-screen.tsx) и
-[grid/](apps/web/src/components/grid): таблица с закреплённой первой колонкой,
+[table-screen.tsx](../apps/web/src/components/table-screen.tsx) и
+[grid/](../apps/web/src/components/grid): таблица с закреплённой первой колонкой,
 редактор строки карточкой, подсказки (i) у каждого поля
-([field-help.ts](apps/web/src/lib/field-help.ts) — выводятся из реальных
+([field-help.ts](../apps/web/src/lib/field-help.ts) — выводятся из реальных
 зависимостей, а не из документации).
 
 Представления: таблица, канбан, календарь, галерея
-([views/](apps/web/src/components/views)). Фильтр, сортировка, группировка —
-один и тот же движок, что и на сервере ([filter-eval.ts](packages/schema/src/filter-eval.ts)).
+([views/](../apps/web/src/components/views)). Фильтр, сортировка, группировка —
+один и тот же движок, что и на сервере ([filter-eval.ts](../packages/schema/src/filter-eval.ts)).
 
 ### 2. Конструктор приложений — `/apps/[appId]`
 
-[app-editor.tsx](apps/web/src/components/builder/app-editor.tsx): слева экраны,
+[app-editor.tsx](../apps/web/src/components/builder/app-editor.tsx): слева экраны,
 посередине настройки, справа живой предпросмотр **с переключателем ролей** —
 отбор идёт той же функцией, что на сервере, поэтому предпросмотр не может
 показать больше, чем покажет продукт.
@@ -247,13 +251,13 @@ access: {
 
 ### 3. Рантайм приложения — `/a/[slug]`
 
-[app-shell.tsx](apps/web/src/components/runtime/app-shell.tsx) — оболочка,
-[screen-view.tsx](apps/web/src/components/runtime/screen-view.tsx) — экраны,
-[dashboard-view.tsx](apps/web/src/components/runtime/dashboard-view.tsx) — сводка.
+[app-shell.tsx](../apps/web/src/components/runtime/app-shell.tsx) — оболочка,
+[screen-view.tsx](../apps/web/src/components/runtime/screen-view.tsx) — экраны,
+[dashboard-view.tsx](../apps/web/src/components/runtime/dashboard-view.tsx) — сводка.
 
 Пять типов экрана: сводка, список, плитки, карточка, форма.
 Пять видов блоков сводки: число, список, доска, кнопки, заметка —
-они перечислены одним реестром ([blocks.ts](packages/schema/src/blocks.ts)),
+они перечислены одним реестром ([blocks.ts](../packages/schema/src/blocks.ts)),
 там же заготовки настроек и проверка на сломанные ссылки.
 
 Сводка **ничего не считает в браузере**: итоги приходят готовыми из
@@ -284,11 +288,11 @@ access: {
 
 Страницы **показывают**, а не перечисляют. Общие части экранов продукта —
 список, карточка, форма, доска, таблица — собраны в
-[screens.tsx](apps/web/src/components/marketing/screens.tsx); переключаемые
+[screens.tsx](../apps/web/src/components/marketing/screens.tsx); переключаемые
 примеры (одни данные в четырёх представлениях, заказ с пересчётом итога,
 одни данные глазами трёх ролей) — в
-[demos.tsx](apps/web/src/components/marketing/demos.tsx); у каждого решения
-свой экран — [solution-demo.tsx](apps/web/src/components/marketing/solution-demo.tsx),
+[demos.tsx](../apps/web/src/components/marketing/demos.tsx); у каждого решения
+свой экран — [solution-demo.tsx](../apps/web/src/components/marketing/solution-demo.tsx),
 и тест не даёт добавить решение без него. Данные в примерах помечены как пример
 и взяты из строк-примеров соответствующих шаблонов.
 
@@ -298,12 +302,12 @@ access: {
 
 Про деньги на сайте написано ровно то, что делает продукт: пробного периода
 в коде нет, у всех бесплатный тариф, платные нельзя оплатить. Цены и потолки
-берутся из [plans.ts](packages/schema/src/plans.ts) — второй список с ценами
+берутся из [plans.ts](../packages/schema/src/plans.ts) — второй список с ценами
 однажды уже разошёлся с правдой.
 
 Содержимое страниц лежит данными, а не разметкой:
-[solutions.ts](apps/web/src/lib/solutions.ts) для решений, каталог шаблонов —
-для шаблонов, [plans.ts](packages/schema/src/plans.ts) — для тарифов. Есть тесты,
+[solutions.ts](../apps/web/src/lib/solutions.ts) для решений, каталог шаблонов —
+для шаблонов, [plans.ts](../packages/schema/src/plans.ts) — для тарифов. Есть тесты,
 которые не дают сайту обещать шаблон, которого нет, и ссылаться на страницу,
 которой нет.
 
@@ -317,11 +321,11 @@ access: {
 экрана: рамка становится шириной 1280 или 390 точек, и **тот же** рантайм сам
 разворачивает боковое меню или нижние вкладки. Второго приложения для компьютера
 нет; роль уходит на сервер и отбирает данные, размер экрана не уходит никуда
-([demo-view.ts](apps/web/src/lib/demo-view.ts)).
+([demo-view.ts](../apps/web/src/lib/demo-view.ts)).
 
 ### Поиск
 
-Метаданные собирает один помощник — [seo.ts](apps/web/src/lib/seo.ts): заголовок,
+Метаданные собирает один помощник — [seo.ts](../apps/web/src/lib/seo.ts): заголовок,
 описание, канонический адрес и поля для соцсетей. Списывать это на каждой
 странице значит однажды забыть половину и узнать об этом из отчёта поиска.
 
@@ -336,10 +340,10 @@ access: {
   (`/a/[slug]`) стоит `noindex` в самой странице, а `/a/` в `robots.txt`
   намеренно **не** закрыт — иначе поисковик не прочитал бы этот отказ.
 - **Карта сайта собирается из тех же списков, что и страницы**
-  ([sitemap.ts](apps/web/src/app/sitemap.ts)). Новый шаблон попадает в неё сам.
+  ([sitemap.ts](../apps/web/src/app/sitemap.ts)). Новый шаблон попадает в неё сам.
 
 Старые адреса переехали постоянным редиректом (308), список —
-в [site.ts](apps/web/src/lib/site.ts): `/dlya/*` → `/solutions/*`,
+в [site.ts](../apps/web/src/lib/site.ts): `/dlya/*` → `/solutions/*`,
 `/shablony` → `/templates`, `/legal/oferta` → `/legal/offer`. Тест следит,
 чтобы старого адреса не осталось живой страницей, а новый существовал.
 
@@ -381,14 +385,14 @@ loadRuntimeForApp(app, email, role)
 
 Два пути, оба с одинаковыми проверками:
 
-- **Серверные действия** — [runtime-actions.ts](apps/web/src/app/runtime-actions.ts):
+- **Серверные действия** — [runtime-actions.ts](../apps/web/src/app/runtime-actions.ts):
   `allow()` → `permits` → `writableFields` → `stampOwner` → транзакция + запись
   в журнал.
-- **Очередь правок** — [api/sync](apps/web/src/app/api/sync/route.ts): отдельный
+- **Очередь правок** — [api/sync](../apps/web/src/app/api/sync/route.ts): отдельный
   адрес, а не действие, потому что у действия идентификатор привязан к сборке,
   и очередь, пролежавшая офлайн через выкатку, стала бы недействительной.
   Права проверяются **на каждую правку и на каждое поле**, слияние — по значениям,
-  а не по часам ([sync-merge.ts](apps/web/src/lib/sync-merge.ts)).
+  а не по часам ([sync-merge.ts](../apps/web/src/lib/sync-merge.ts)).
 
 Каждая запись оставляет след в `row_changes`: автор, что было, что стало.
 
@@ -399,7 +403,7 @@ loadRuntimeForApp(app, email, role)
 пространства обрезалось, почта и кнопка выхода отнимали место у навигации.
 
 Список разделов один на все три вида —
-[platform-nav.ts](apps/web/src/lib/platform-nav.ts). Развёрнутая панель,
+[platform-nav.ts](../apps/web/src/lib/platform-nav.ts). Развёрнутая панель,
 свёрнутая и выдвижная на телефоне читают оттуда. Три копии означали бы три
 расходящиеся навигации: пункт добавили в одну, забыли в двух, и человек
 находит раздел только с компьютера.
@@ -436,7 +440,7 @@ loadRuntimeForApp(app, email, role)
 человек, — это решала ширина окна.
 
 Куку читает серверная обёртка
-[app-chrome.tsx](apps/web/src/components/app-chrome.tsx) — **до первого кадра**.
+[app-chrome.tsx](../apps/web/src/components/app-chrome.tsx) — **до первого кадра**.
 Иначе человек увидел бы, как панель схлопывается уже после появления
 страницы. Имя куки живёт там же, где разбор, а не рядом с самой панелью:
 панель — клиентский модуль, и Next подменяет **все** его экспорты клиентскими
@@ -540,7 +544,7 @@ loadRuntimeForApp(app, email, role)
 | Открыли присланную ссылку на карточку | под ней в историю кладётся домашний экран: человеку есть куда вернуться |
 | «Назад» с первого экрана | уход с приложения, как и должно быть |
 
-Разбор адреса и `history.state` — в [nav-history.ts](apps/web/src/components/runtime/nav-history.ts),
+Разбор адреса и `history.state` — в [nav-history.ts](../apps/web/src/components/runtime/nav-history.ts),
 и он намеренно недоверчивый. В `history.state` пишет и Next, и страница до нас,
 и там лежит то, что осталось от прошлой версии приложения в открытой неделю
 вкладке. Всё, что оттуда приходит, разбирается с проверкой: не наше или
@@ -705,7 +709,7 @@ Excel иначе не сделать: библиотека тянет узлов
 Держать инкремент в каждом значит иметь десять шансов забыть, а разошедшийся
 счётчик хуже пересчитанного: он показывает неправду и не жалуется.
 
-Поэтому в [usage.ts](apps/web/src/lib/usage.ts) одно место знает, **как**
+Поэтому в [usage.ts](../apps/web/src/lib/usage.ts) одно место знает, **как**
 считать, а `workspace_usage` хранит результат. Пересчёт запускается при
 открытии страницы расхода, после импорта, после разворачивания шаблона
 и кнопкой владельца.
@@ -718,7 +722,7 @@ Excel иначе не сделать: библиотека тянет узлов
 ### Отказ при превышении
 
 Не единый запрет, а градация. Решение принимается в одном месте —
-[limits.ts](apps/web/src/lib/limits.ts), `assertCanIncreaseUsage`, — а по коду
+[limits.ts](../apps/web/src/lib/limits.ts), `assertCanIncreaseUsage`, — а по коду
 разбросаны только вызовы.
 
 **Блокируется только рост.** Читать, править, удалять и выгружать существующее
@@ -790,7 +794,7 @@ returning rows
 
 ### Тарифы
 
-Лежат в [plans.ts](packages/schema/src/plans.ts) как **конфигурация**. Цены
+Лежат в [plans.ts](../packages/schema/src/plans.ts) как **конфигурация**. Цены
 ориентировочные и меняются одним списком, не трогая ни учёт, ни проверки.
 
 В потолках намеренно нет числа людей: платить за каждого сотрудника — ровно
@@ -813,7 +817,7 @@ TOTP, написан руками и проверен по контрольны�
 
 ## Шаблоны
 
-Шаблон — декларация без кода ([templates/defs/](apps/web/src/lib/templates/defs)):
+Шаблон — декларация без кода ([templates/defs/](../apps/web/src/lib/templates/defs)):
 таблицы, поля с подсказками, представления, строки-примеры. Одиннадцать штук.
 
 `buildTemplate` разворачивает её в записи базы, выпуская новые идентификаторы, —
@@ -871,7 +875,7 @@ TOTP, написан руками и проверен по контрольны�
 
 ### Сохранение выпуска
 
-[production-actions.ts](apps/web/src/app/production-actions.ts), одна транзакция:
+[production-actions.ts](../apps/web/src/app/production-actions.ts), одна транзакция:
 
 ```
 место под все строки сразу (1 + число материалов)
@@ -881,7 +885,7 @@ TOTP, написан руками и проверен по контрольны�
   → row_changes на каждую строку
 ```
 
-Расход считается [одним модулем](apps/web/src/lib/production.ts) — тем же,
+Расход считается [одним модулем](../apps/web/src/lib/production.ts) — тем же,
 что показывает предпросмотр до сохранения. Формул две быть не может: разойдись
 они однажды, человек увидел бы на экране одно, а в журнале другое.
 
@@ -899,7 +903,7 @@ TOTP, написан руками и проверен по контрольны�
 
 Выпуск и его списания — одна запись учёта, разложенная по двум таблицам.
 Поэтому движения уходят вместе с выпуском, и делает это
-[общий путь удаления строки](apps/web/src/lib/production-cascade.ts), а не
+[общий путь удаления строки](../apps/web/src/lib/production-cascade.ts), а не
 приложение: строку удаляют и из таблицы, и из приложения, и обе двери ведут
 к одному результату. Остаток возвращается к прежнему сам — он посчитан
 по движениям, которых больше нет.
@@ -947,12 +951,12 @@ TOTP, написан руками и проверен по контрольны�
 
 | Что | Где |
 | --- | --- |
-| Приём и отсев значений | `draftFromAnonymous` в [pending-submission.ts](apps/web/src/lib/pending-submission.ts) |
+| Приём и отсев значений | `draftFromAnonymous` в [pending-submission.ts](../apps/web/src/lib/pending-submission.ts) |
 | Хранение до подтверждения | таблица `pending_submissions`, срок 45 минут, ключ — 32 случайных байта |
-| Код, срок, счёт попыток, сессия | [auth-challenge.ts](apps/web/src/lib/auth-challenge.ts) — тот же модуль, что и обычный вход |
+| Код, срок, счёт попыток, сессия | [auth-challenge.ts](../apps/web/src/lib/auth-challenge.ts) — тот же модуль, что и обычный вход |
 | Пересчёт прав после кода | `revalidatePending` |
-| Запись строки | `insertRow` в [row-write.ts](apps/web/src/lib/row-write.ts) — тот же, что у обычной формы |
-| Оба шага целиком | [intake-actions.ts](apps/web/src/app/intake-actions.ts) |
+| Запись строки | `insertRow` в [row-write.ts](../apps/web/src/lib/row-write.ts) — тот же, что у обычной формы |
+| Оба шага целиком | [intake-actions.ts](../apps/web/src/app/intake-actions.ts) |
 
 Второго входа здесь нет намеренно: код, его срок, число попыток, привязка
 к браузеру и выдача сессии — общие с обычным входом. Разница ровно одна:

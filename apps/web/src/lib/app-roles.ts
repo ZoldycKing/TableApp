@@ -304,6 +304,7 @@ export function fieldPolicy(
   for (const screen of app.screens) {
     if (!canOpenScreen(screen, visitor)) continue
     if (screenTable(screen, views) !== tableId) continue
+    if (screen.type === 'form' && screen.mode === 'create') continue
 
     if (anonymous) {
       // Никаких выводов из того, что стоит на экране: только названный список.
@@ -345,7 +346,7 @@ export function fieldPolicy(
    */
   if (!anonymous) {
     for (const rule of app.rowAccessRules) {
-      if (rule.tableId === tableId) out.add(rule.fieldId)
+      if (rule.tableId === tableId && rule.appliesTo.includes(visitor.roleId!)) out.add(rule.fieldId)
     }
   }
 
@@ -429,6 +430,8 @@ export function rowReach(
   for (const screen of app.screens) {
     if (!canOpenScreen(screen, visitor)) continue
     if (screenTable(screen, views) !== tableId) continue
+
+    if (screen.type === 'form' && screen.mode === 'create') continue
 
     if (screen.type === 'list' || screen.type === 'tiles') {
       const view = views[screen.source.viewId]

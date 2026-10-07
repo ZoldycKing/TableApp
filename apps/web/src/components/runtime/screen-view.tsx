@@ -15,6 +15,7 @@ import { accentClasses, type Viewer } from './bindings'
 import { Icon } from './icons'
 import { EmptyState } from './ui'
 import { FormFieldInput } from './form-field'
+import { useUnsaved } from '@/lib/unsaved'
 
 type Props = {
   screen: Screen
@@ -35,7 +36,7 @@ type Props = {
   onOpenRow: (screenId: string, rowId: string) => void
   onOpenScreen: (screenId: string, filter?: Partial<ListState>) => void
   onAction: (action: Action) => void
-  onSubmit: (values: Record<string, unknown>, mode: 'create' | 'edit') => void
+  onSubmit: (values: Record<string, unknown>, mode: 'create' | 'edit', baseVersion?: number) => void
   /**
    * Что сейчас введено в форме. Нужно там, где ответ на введённое считает
    * сервер: расход материалов по количеству выпуска показывается до
@@ -185,12 +186,23 @@ function FormScreen({
   formNotice,
 }: Props & { fields: Field[] }) {
   const mode = screen.type === 'form' ? screen.mode : 'create'
-  const [values, setValues] = useState<Record<string, unknown>>({})
+  const [values, setValues] = useState<Record<string, unknown>>(mode === 'edit' && row ? { ...row.data } : {})
+  const [dirty, setDirty] = useState(false)
+  const sourceKey = `${screen.id}:${mode}:${row?.id ?? 'new'}`
+  const source = useRef(sourceKey)
+  const edited = useRef(false)
+  const baseVersion = useRef(row?.version)
+  useUnsaved(`runtime-form:${sourceKey}`, dirty)
 
   // При открытии формы редактирования поля заполняются текущими значениями строки.
   useEffect(() => {
+    if (source.current === sourceKey && edited.current) return
+    source.current = sourceKey
+    edited.current = false
+    setDirty(false)
+    baseVersion.current = row?.version
     setValues(mode === 'edit' && row ? { ...row.data } : {})
-  }, [mode, row])
+  }, [sourceKey, mode, row])
 
   /*
    * О введённом сообщаем наружу через ссылку на обработчик, а не зависимостью
@@ -215,7 +227,7 @@ function FormScreen({
       className="space-y-5 rounded-2xl border border-sand-200 bg-white p-5 shadow-soft sm:p-6"
       onSubmit={(event) => {
         event.preventDefault()
-        onSubmit(values, mode)
+        onSubmit(values, mode, baseVersion.current)
       }}
     >
       {formNotice}
@@ -244,7 +256,11 @@ function FormScreen({
               placeholder={component.placeholder}
               relatedOptions={options}
               appId={runtime.app.id}
-              onChange={(value) => setValues((current) => ({ ...current, [field.id]: value }))}
+              onChange={(value) => {
+                edited.current = true
+                setDirty(true)
+                setValues((current) => ({ ...current, [field.id]: value }))
+              }}
             />
           </label>
         )

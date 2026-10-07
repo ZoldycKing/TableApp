@@ -1,31 +1,32 @@
 import type { Metadata } from 'next'
 import { Metrika } from '@/components/marketing/metrika'
-import { Inter, Literata, Unbounded } from 'next/font/google'
+import localFont from 'next/font/local'
 import type { ReactNode } from 'react'
 import './globals.css'
 import { SITE_URL } from '@/lib/site-url'
 
-// Три гарнитуры с полной кириллицей, все со своего домена через next/font.
-const inter = Inter({
-  subsets: ['cyrillic', 'latin'],
-  weight: ['400', '500', '600'],
+// Файлы и лицензии включены в репозиторий: сборка не обращается к Google Fonts.
+const inter = localFont({
+  src: './fonts/inter.woff2',
+  weight: '400 600',
   variable: '--font-inter',
   display: 'swap',
 })
 
 // Геометрический гротеск с характером — заголовки не выглядят шаблонными.
-const unbounded = Unbounded({
-  subsets: ['cyrillic', 'latin'],
-  weight: ['500', '600', '700', '800'],
+const unbounded = localFont({
+  src: './fonts/unbounded.woff2',
+  weight: '500 800',
   variable: '--font-unbounded',
   display: 'swap',
 })
 
 // Книжная антиква для выделенных слов на сайте: тёплая и очень читаемая.
-const literata = Literata({
-  subsets: ['cyrillic', 'latin'],
-  weight: ['500', '600'],
-  style: ['italic'],
+const literata = localFont({
+  src: './fonts/literata-italic.woff2',
+  weight: '500 600',
+  style: 'italic',
+  adjustFontFallback: 'Times New Roman',
   variable: '--font-literata',
   display: 'swap',
 })

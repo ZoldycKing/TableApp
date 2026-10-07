@@ -310,8 +310,11 @@ export function HeroFlight() {
 
 /** Открытая карточка: та же строка, но целиком и по-человечески. */
 function DetailScreen({ item, shared }: { item: Product; shared: (part: string) => CSSProperties }) {
+  // Disabling an entrance only during a shared transition restarts it afterward.
+  // Choose the fallback once at render so the settled screen stays visible.
+  const animateEntrance = typeof document !== 'undefined' && !document.startViewTransition
   return (
-    <div style={shared('screen')} className="hero-detail animate-screen-in flex-1 space-y-2.5 overflow-hidden p-2.5">
+    <div style={shared('screen')} className={`hero-detail ${animateEntrance ? 'animate-screen-in ' : ''}flex-1 space-y-2.5 overflow-hidden p-2.5`}>
       <span style={shared('image')} className={`flex h-[116px] items-center justify-center rounded-xl ${item.tint}`}>
         <ProductGlyph kind={item.glyph} className={`h-16 w-16 ${item.ink}`} />
       </span>

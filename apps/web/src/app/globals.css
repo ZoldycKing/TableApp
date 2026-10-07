@@ -279,7 +279,6 @@ h1, h2, h3 {
 ::view-transition-old(root) { animation: none; opacity: 0; }
 ::view-transition-new(root) { animation: none; }
 ::view-transition { pointer-events: none; }
-html:active-view-transition .hero-detail { animation: none; }
 
 .hero-demo .animate-fly,
 .hero-demo .animate-card-in,

@@ -281,6 +281,11 @@ h1, h2, h3 {
 ::view-transition { pointer-events: none; }
 html:active-view-transition .hero-detail { animation: none; }
 
+.hero-demo .animate-fly,
+.hero-demo .animate-card-in,
+.hero-demo .animate-tap,
+.hero-demo .animate-press { animation-play-state: var(--hero-play-state, running); }
+
 .demo-motion-frame {
   transition: width 680ms cubic-bezier(0.22, 1, 0.36, 1), height 680ms cubic-bezier(0.22, 1, 0.36, 1);
 }

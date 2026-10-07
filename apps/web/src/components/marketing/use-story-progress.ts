@@ -17,6 +17,7 @@ export const CHAPTER_MS = 7000
 export function useStoryProgress(count: number) {
   const [index, setIndex] = useState(0)
   const [paused, setPaused] = useState(false)
+  const [manual, setManual] = useState(false)
 
   const bars = useRef<Array<HTMLSpanElement | null>>([])
   const pausedRef = useRef(false)
@@ -61,7 +62,7 @@ export function useStoryProgress(count: number) {
   useEffect(paint, [index])
 
   useEffect(() => {
-    if (!playing || paused || count < 1) return
+    if (!playing || paused || manual || count < 1) return
 
     let frame = 0
     let last = performance.now()
@@ -94,7 +95,7 @@ export function useStoryProgress(count: number) {
 
     frame = window.requestAnimationFrame(tick)
     return () => window.cancelAnimationFrame(frame)
-  }, [count, playing, paused])
+  }, [count, playing, paused, manual])
 
   useEffect(() => () => window.clearTimeout(resetTimer.current), [])
 
@@ -104,6 +105,7 @@ export function useStoryProgress(count: number) {
     bars,
     root,
     show: (position: number) => {
+      setManual(true)
       spent.current = 0
       indexRef.current = position
       setIndex(position)

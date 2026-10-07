@@ -15,6 +15,11 @@ export function useViewTransition() {
     active.current = null
   }, [])
 
+  const settle = useCallback(() => {
+    active.current?.commit()
+    skip()
+  }, [skip])
+
   useEffect(() => {
     mounted.current = true
     return () => {
@@ -55,5 +60,5 @@ export function useViewTransition() {
     }
   }, [skip])
 
-  return { change, skip }
+  return { change, skip, settle }
 }

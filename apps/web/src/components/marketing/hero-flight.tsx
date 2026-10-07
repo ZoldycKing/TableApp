@@ -3,16 +3,7 @@
 import { useEffect, useId, useRef, useState, type CSSProperties } from 'react'
 import { PRODUCTS, type Product } from './catalog-data'
 import { ProductGlyph } from './product-glyph'
-import { useMotionPlayback } from '@/components/motion/use-motion-playback'
-import { useViewTransition } from '@/components/motion/use-view-transition'
-
-const BEAT_MS = 900 // шаг между вылетами строк
-const LAND_MS = 620 // столько копия строки летит до своей ячейки
-const READY_MS = 900 // пауза на собранной витрине
-const TAP_MS = 560 // нажатие на карточку
-const DETAIL_MS = 3000 // сколько держим открытую карточку
-
-const FILLED_MS = (PRODUCTS.length - 1) * BEAT_MS + LAND_MS
+import { useHeroDemo } from './use-hero-demo'
 
 /*
  * Колонки появляются по мере места, и меру берём у контейнера, а не у экрана:
@@ -23,7 +14,6 @@ const FILLED_MS = (PRODUCTS.length - 1) * BEAT_MS + LAND_MS
 const COLS =
   'grid grid-cols-[1.9fr_0.7fr_0.5fr] @min-[620px]:grid-cols-[1.7fr_0.9fr_0.7fr_0.5fr] @min-[780px]:grid-cols-[1.5fr_0.8fr_0.6fr_0.4fr_1.4fr]'
 
-type Phase = 'filling' | 'tap' | 'detail'
 type Geom = { left: number; top: number; x: number; y: number }
 
 /**
@@ -33,21 +23,24 @@ type Geom = { left: number; top: number; x: number; y: number }
  * не видно. Один круг показывает весь смысл: данные те же, вид другой.
  */
 export function HeroFlight() {
-  const [phase, setPhase] = useState<Phase>('filling')
-  const [flying, setFlying] = useState<number | null>(null)
-  const [landed, setLanded] = useState(0)
-  const [pick, setPick] = useState(0)
   const [geom, setGeom] = useState<Geom[]>([])
 
   const hostRef = useRef<HTMLDivElement>(null)
   const rowRefs = useRef<Array<HTMLDivElement | null>>([])
   const slotRefs = useRef<Array<HTMLDivElement | null>>([])
-  // Круги считаем в ref: интервалы видят своё замыкание, а не свежий стейт.
-  const roundRef = useRef(0)
-  const { playing, reduced } = useMotionPlayback(hostRef)
-  const { change, skip } = useViewTransition()
+  const cards = useRef<Array<HTMLButtonElement | null>>([])
+  const backButton = useRef<HTMLButtonElement>(null)
+  const focusTarget = useRef<'detail' | 'catalog' | null>(null)
+  const { phase, flying, landed, pick, automatic, paused, running, reduced, open, back, replay, togglePause } = useHeroDemo(hostRef, PRODUCTS.length)
   const prefix = `tableapp-hero-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`
-  const shared = (part: string): CSSProperties => ({ viewTransitionName: `${prefix}-${part}` })
+  const shared = (part: string, position?: number): CSSProperties => ({ viewTransitionName: `${prefix}-${part}${position === undefined ? '' : `-${position}`}` })
+
+  useEffect(() => {
+    if (focusTarget.current !== phase) return
+    if (phase === 'detail') backButton.current?.focus({ preventScroll: true })
+    else if (phase === 'catalog') cards.current[pick]?.focus({ preventScroll: true })
+    focusTarget.current = null
+  }, [phase, pick])
 
   /*
    * Траектории считаем заранее и по фактическим позициям: вёрстка резиновая,
@@ -92,56 +85,6 @@ export function HeroFlight() {
     }
   }, [phase])
 
-  useEffect(() => {
-    // Без анимации показываем итог: собранную витрину с открытой карточкой.
-    if (reduced) {
-      setLanded(PRODUCTS.length)
-      setFlying(null)
-      setPhase('detail')
-      return
-    }
-    if (!playing) {
-      skip()
-      setFlying(null)
-      return
-    }
-
-    let cancelled = false
-    let timers: number[] = []
-    const at = (ms: number, fn: () => void) => {
-      timers.push(window.setTimeout(fn, ms))
-    }
-
-    const loop = () => {
-      if (cancelled) return
-      timers = []
-      setPhase('filling')
-      setLanded(0)
-      // Каждый круг открываем другую карточку — иначе выглядит как запись.
-      setPick(roundRef.current % PRODUCTS.length)
-      roundRef.current += 1
-
-      PRODUCTS.forEach((_, index) => {
-        at(index * BEAT_MS, () => setFlying(index))
-        at(index * BEAT_MS + LAND_MS, () => {
-          setFlying(null)
-          setLanded(index + 1)
-        })
-      })
-
-      at(FILLED_MS + READY_MS, () => setPhase('tap'))
-      at(FILLED_MS + READY_MS + TAP_MS, () => change(() => setPhase('detail')))
-      at(FILLED_MS + READY_MS + TAP_MS + DETAIL_MS, loop)
-    }
-
-    loop()
-    return () => {
-      cancelled = true
-      timers.forEach((id) => window.clearTimeout(id))
-      skip()
-    }
-  }, [playing, reduced, change, skip])
-
   const ghost = flying === null ? null : geom[flying]
   const ghostItem = flying === null ? null : PRODUCTS[flying]
   const opened = PRODUCTS[pick]!
@@ -149,14 +92,15 @@ export function HeroFlight() {
   const caption =
     phase === 'filling'
       ? 'Строки уходят в приложение как есть — без выгрузок и переноса вручную'
-      : phase === 'tap'
+      : phase === 'tap' || phase === 'catalog'
         ? 'Витрина собрана: весь склад на экране'
         : 'Нажатие открывает строку целиком — с фото, ценой, остатком и адресом склада'
 
   return (
     <div
       ref={hostRef}
-      className="@container relative rounded-[26px] border border-sand-200 bg-sand-100/60 p-3 shadow-soft sm:p-4"
+      style={{ '--hero-play-state': running ? 'running' : 'paused' } as CSSProperties}
+      className="hero-demo @container relative rounded-[26px] border border-sand-200 bg-sand-100/60 p-3 shadow-soft sm:p-4"
     >
       <div className="flex flex-col gap-5 @min-[520px]:flex-row @min-[520px]:items-start">
         <div className="min-w-0 flex-1">
@@ -229,6 +173,20 @@ export function HeroFlight() {
           <p className="mb-2 flex items-center gap-1.5 text-[11px] font-medium text-sage-700">
             <span className="h-1.5 w-1.5 rounded-full bg-sage-500" />
             Приложение «Склад»
+            <span className="ml-auto flex items-center gap-4">
+              {automatic && !reduced ? (
+                <button type="button" onClick={togglePause} aria-label={paused ? 'Продолжить показ' : 'Приостановить показ'} title={paused ? 'Продолжить показ' : 'Приостановить показ'} className="relative rounded text-ink-muted transition-colors hover:text-sage-700 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-sage-500 before:absolute before:-inset-2">
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
+                    {paused ? <path d="m5 3 7 5-7 5V3Z" fill="currentColor" /> : <path d="M5 3v10M11 3v10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />}
+                  </svg>
+                </button>
+              ) : null}
+              <button type="button" onClick={() => { focusTarget.current = null; replay() }} aria-label="Повторить показ" title="Повторить показ" className="relative rounded text-ink-muted transition-colors hover:text-sage-700 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-sage-500 before:absolute before:-inset-2">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
+                  <path d="M3 6a5 5 0 1 1 0 4M3 2v4h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+            </span>
           </p>
 
           <div className="rounded-[26px] border border-sand-300 bg-white p-2 shadow-lift">
@@ -236,9 +194,11 @@ export function HeroFlight() {
               <div className="flex items-center gap-2 border-b border-sand-200 bg-white px-3 py-2.5">
                 {phase === 'detail' ? (
                   <>
-                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden className="shrink-0 text-ink-muted">
-                      <path d="M10 3 5 8l5 5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
+                    <button ref={backButton} type="button" aria-label="Вернуться в витрину" onClick={() => { focusTarget.current = 'catalog'; back() }} className="relative shrink-0 rounded text-ink-muted focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-sage-500 before:absolute before:-inset-3">
+                      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
+                        <path d="M10 3 5 8l5 5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </button>
                     <span className="truncate text-[13px] font-semibold">{opened.short}</span>
                   </>
                 ) : (
@@ -252,7 +212,7 @@ export function HeroFlight() {
               </div>
 
               {phase === 'detail' ? (
-                <DetailScreen item={opened} shared={shared} />
+                <DetailScreen item={opened} shared={(part) => shared(part, part === 'screen' ? undefined : pick)} />
               ) : (
                 <div style={shared('screen')} className="grid flex-1 grid-cols-2 content-start gap-2 p-2.5">
                   {PRODUCTS.map((item, position) => {
@@ -266,29 +226,33 @@ export function HeroFlight() {
                         className="relative h-[140px]"
                       >
                         {position < landed ? (
-                          <div
-                            className={`animate-card-in flex h-full flex-col rounded-xl border bg-white p-2 ${
+                          <button
+                            type="button"
+                            ref={(node) => { cards.current[position] = node }}
+                            aria-label={`Открыть ${item.short}`}
+                            onClick={() => { focusTarget.current = 'detail'; open(position) }}
+                            className={`${phase === 'filling' && automatic ? 'animate-card-in ' : ''}flex h-full w-full flex-col rounded-xl border bg-white p-2 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage-500 ${
                               tapped ? 'animate-press border-sage-400 shadow-lift' : 'border-sand-200'
                             }`}
                           >
-                            <span style={position === pick ? shared('image') : undefined} className={`flex h-[52px] items-center justify-center rounded-lg ${item.tint}`}>
+                            <span style={shared('image', position)} className={`flex h-[52px] w-full shrink-0 items-center justify-center rounded-lg ${item.tint}`}>
                               <ProductGlyph kind={item.glyph} className={`h-8 w-8 ${item.ink}`} />
                             </span>
-                            <p style={position === pick ? shared('name') : undefined} className="mt-1.5 truncate text-[10px] leading-none">{item.short}</p>
-                            <p className="mt-1 truncate text-[9px] leading-none text-ink-muted">
+                            <span style={shared('name', position)} className="mt-1.5 max-w-full truncate text-[10px] leading-none">{item.short}</span>
+                            <span className="mt-1 max-w-full truncate text-[9px] leading-none text-ink-muted">
                               {item.warehouse.split(',')[0]}
-                            </p>
-                            <p style={position === pick ? shared('price') : undefined} className="mt-auto text-[12px] font-semibold leading-none tabular-nums">
+                            </span>
+                            <span style={shared('price', position)} className="mt-auto text-[12px] font-semibold leading-none tabular-nums">
                               {item.price} ₽
-                            </p>
-                            <p
+                            </span>
+                            <span
                               className={`mt-1 truncate text-[9px] leading-none ${
                                 item.stock > 0 ? 'text-sage-700' : 'text-clay-500'
                               }`}
                             >
                               {item.stock > 0 ? `${item.stock} шт` : 'нет в наличии'}
-                            </p>
-                          </div>
+                            </span>
+                          </button>
                         ) : (
                           <span className="block h-full rounded-xl border border-dashed border-sand-300/80" />
                         )}

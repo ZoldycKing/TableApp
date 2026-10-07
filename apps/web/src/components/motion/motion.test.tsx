@@ -4,6 +4,9 @@ import { useRef } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Reveal } from '@/components/marketing/reveal'
 import { SceneFill } from '@/components/marketing/scene-fill'
+import { HeroFlight } from '@/components/marketing/hero-flight'
+import { PRODUCTS } from '@/components/marketing/catalog-data'
+import { useStoryProgress } from '@/components/marketing/use-story-progress'
 import { useEnterMotion } from './enter-motion'
 import { useMotionPlayback } from './use-motion-playback'
 import { useViewTransition } from './use-view-transition'
@@ -188,6 +191,131 @@ describe('scroll reveals', () => {
   })
 })
 
+describe('one-time hero demonstration', () => {
+  function start() {
+    vi.useFakeTimers()
+    const page = render(<HeroFlight />)
+    act(() => observers[0]!.notify(true))
+    return page
+  }
+
+  function finish() {
+    for (let step = 0; step < PRODUCTS.length * 2 + 3; step += 1) {
+      act(() => vi.advanceTimersToNextTimer())
+    }
+  }
+
+  it('shows the completed catalog after one pass and never resets it automatically', () => {
+    const page = start()
+    finish()
+    expect(page.getAllByRole('button', { name: /^Открыть / })).toHaveLength(PRODUCTS.length)
+    expect(page.queryByRole('button', { name: 'Вернуться в витрину' })).toBeNull()
+    expect(page.queryByRole('button', { name: 'Приостановить показ' })).toBeNull()
+    act(() => vi.advanceTimersByTime(60000))
+    expect(page.getAllByRole('button', { name: /^Открыть / })).toHaveLength(PRODUCTS.length)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('opens the chosen product, returns focus to that card, and replays only on request', () => {
+    const page = start()
+    finish()
+    fireEvent.click(page.getByRole('button', { name: `Открыть ${PRODUCTS[2]!.short}` }))
+    expect(page.getByText(PRODUCTS[2]!.name)).toBeTruthy()
+    expect(document.activeElement).toBe(page.getByRole('button', { name: 'Вернуться в витрину' }))
+    fireEvent.click(page.getByRole('button', { name: 'Вернуться в витрину' }))
+    expect(document.activeElement).toBe(page.getByRole('button', { name: `Открыть ${PRODUCTS[2]!.short}` }))
+    expect(page.getAllByRole('button', { name: /^Открыть / })).toHaveLength(PRODUCTS.length)
+    fireEvent.click(page.getByRole('button', { name: 'Повторить показ' }))
+    expect(page.queryAllByRole('button', { name: /^Открыть / })).toHaveLength(0)
+    finish()
+    expect(page.getAllByRole('button', { name: /^Открыть / })).toHaveLength(PRODUCTS.length)
+  })
+
+  it('resumes the remaining flight time after a manual pause or leaving the viewport', () => {
+    const page = start()
+    act(() => vi.advanceTimersToNextTimer())
+    act(() => vi.advanceTimersByTime(250))
+    fireEvent.click(page.getByRole('button', { name: 'Приостановить показ' }))
+    act(() => vi.advanceTimersByTime(20000))
+    expect(page.queryAllByRole('button', { name: /^Открыть / })).toHaveLength(0)
+    fireEvent.click(page.getByRole('button', { name: 'Продолжить показ' }))
+    act(() => vi.advanceTimersByTime(369))
+    expect(page.queryAllByRole('button', { name: /^Открыть / })).toHaveLength(0)
+    act(() => vi.advanceTimersByTime(1))
+    expect(page.getAllByRole('button', { name: /^Открыть / })).toHaveLength(1)
+    act(() => observers[0]!.notify(false))
+    act(() => vi.advanceTimersByTime(20000))
+    expect(page.getAllByRole('button', { name: /^Открыть / })).toHaveLength(1)
+    act(() => observers[0]!.notify(true))
+    act(() => vi.advanceTimersToNextTimer())
+    act(() => vi.advanceTimersToNextTimer())
+    expect(page.getAllByRole('button', { name: /^Открыть / })).toHaveLength(2)
+  })
+
+  it('stops the automatic sequence as soon as someone opens a landed card', () => {
+    const page = start()
+    act(() => vi.advanceTimersToNextTimer())
+    act(() => vi.advanceTimersToNextTimer())
+    fireEvent.click(page.getByRole('button', { name: `Открыть ${PRODUCTS[0]!.short}` }))
+    act(() => vi.advanceTimersByTime(60000))
+    expect(page.getByText(PRODUCTS[0]!.name)).toBeTruthy()
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('settles an earlier card transition and preserves a pause immediately after replay', () => {
+    const page = start()
+    act(() => vi.advanceTimersToNextTimer())
+    act(() => vi.advanceTimersToNextTimer())
+    const native = nativeTransition()
+    fireEvent.click(page.getByRole('button', { name: `Открыть ${PRODUCTS[0]!.short}` }))
+    fireEvent.click(page.getByRole('button', { name: 'Повторить показ' }))
+    fireEvent.click(page.getByRole('button', { name: 'Приостановить показ' }))
+    act(() => native.commit())
+    expect(page.getByRole('button', { name: 'Продолжить показ' })).toBeTruthy()
+    act(() => vi.advanceTimersByTime(60000))
+    expect(page.queryAllByRole('button', { name: /^Открыть / })).toHaveLength(0)
+    expect(native.transition.skipTransition).toHaveBeenCalled()
+  })
+
+  it('keeps the catalog interactive with reduced motion and clears timers on unmount', () => {
+    reduced = true
+    const page = start()
+    expect(page.getAllByRole('button', { name: /^Открыть / })).toHaveLength(PRODUCTS.length)
+    fireEvent.click(page.getByRole('button', { name: `Открыть ${PRODUCTS[1]!.short}` }))
+    expect(page.getByText(PRODUCTS[1]!.name)).toBeTruthy()
+    fireEvent.click(page.getByRole('button', { name: 'Вернуться в витрину' }))
+    fireEvent.click(page.getByRole('button', { name: 'Повторить показ' }))
+    expect(page.getAllByRole('button', { name: /^Открыть / })).toHaveLength(PRODUCTS.length)
+    act(() => vi.advanceTimersByTime(60000))
+    expect(page.getAllByRole('button', { name: /^Открыть / })).toHaveLength(PRODUCTS.length)
+    expect(vi.getTimerCount()).toBe(0)
+    page.unmount()
+    reduced = false
+    const running = start()
+    act(() => vi.advanceTimersToNextTimer())
+    running.unmount()
+    expect(vi.getTimerCount()).toBe(0)
+  })
+})
+
+describe('manual story chapters', () => {
+  function Story() {
+    const { index, root, show, hover } = useStoryProgress(3)
+    return <div ref={root} {...hover}><output>{index}</output><button onClick={() => show(1)}>Select chapter</button></div>
+  }
+  it('does not override a selected chapter after hover ends or the visitor returns', () => {
+    vi.useFakeTimers()
+    const page = render(<Story />)
+    act(() => observers[0]!.notify(true))
+    fireEvent.click(page.getByRole('button', { name: 'Select chapter' }))
+    fireEvent.mouseEnter(page.container.firstElementChild!)
+    fireEvent.mouseLeave(page.container.firstElementChild!)
+    act(() => { observers[0]!.notify(false); observers[0]!.notify(true) })
+    act(() => vi.advanceTimersByTime(30000))
+    expect(page.getByRole('status').textContent).toBe('1')
+  })
+})
+
 describe('screen entrances', () => {
   function Form({ screen }: { screen: string }) {
     const ref = useEnterMotion(screen)
@@ -203,6 +331,10 @@ describe('screen entrances', () => {
       fireEvent.change(page.getByLabelText('Draft'), { target: { value: 'Unsaved draft' } })
       page.rerender(<Form screen="first" />)
       expect(animate).toHaveBeenCalledTimes(1)
+      expect(animate).toHaveBeenCalledWith([
+        { opacity: 0, transform: 'translate3d(0, 5px, 0)' },
+        { opacity: 1, transform: 'none' },
+      ], { duration: 220, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' })
       page.rerender(<Form screen="second" />)
       expect(animate).toHaveBeenCalledTimes(2)
       expect((page.getByLabelText('Draft') as HTMLInputElement).value).toBe('Unsaved draft')

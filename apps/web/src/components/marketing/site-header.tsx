@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import { isCurrent, NAV_MAIN, NAV_PRODUCT, NAV_SOLUTIONS, PUBLIC_ROUTES, type SiteLink } from '@/lib/site'
 import { Logo } from './logo'
+import { enterMotion } from '@/components/motion/enter-motion'
 
 /**
  * Шапка сайта.
@@ -27,6 +28,8 @@ export function SiteHeader({ signedIn }: { signedIn: boolean }) {
   const [menu, setMenu] = useState<string | null>(null)
   const bar = useRef<HTMLDivElement>(null)
   const pathname = usePathname() ?? '/'
+
+  useEffect(() => enterMotion(document.getElementById('main')), [pathname])
 
   /**
    * Есть ли у устройства настоящее наведение.

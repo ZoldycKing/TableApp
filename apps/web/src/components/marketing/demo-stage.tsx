@@ -2,9 +2,10 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { Icon } from '@/components/runtime/icons'
 import { DEVICES, type Device } from '@/lib/demo-view'
+import { useViewTransition } from '@/components/motion/use-view-transition'
 
 /**
  * Витрина демонстрации: панель управления и рамка, в которой живёт приложение.
@@ -63,6 +64,8 @@ export function DemoStage({
   children: ReactNode
 }) {
   const [device, setDevice] = useState<Device>(initialDevice)
+  const { change } = useViewTransition()
+  const frameName = `tableapp-demo-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`
   /*
    * Компьютерный вид на телефоне.
    *
@@ -119,7 +122,8 @@ export function DemoStage({
    * на «кабинет клиента с телефона» можно было поделиться.
    */
   const pick = (next: Device) => {
-    setDevice(next)
+    if (next === device) return
+    change(() => setDevice(next))
     const url = new URL(window.location.href)
     url.searchParams.set('device', next)
     window.history.replaceState(null, '', url)
@@ -337,8 +341,8 @@ export function DemoStage({
              */}
             <div className={expanded ? 'flex justify-start' : 'flex justify-center'}>
               <div
-                className="relative shrink-0 transition-[width,height] duration-200 ease-out"
-                style={{ width: outerWidth * scale, height: outerHeight * scale }}
+                className="demo-motion-frame relative shrink-0"
+                style={{ width: outerWidth * scale, height: outerHeight * scale, viewTransitionName: frameName }}
               >
                 <div
                   className="absolute left-0 top-0 origin-top-left"

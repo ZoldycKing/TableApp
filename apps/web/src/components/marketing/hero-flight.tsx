@@ -1,8 +1,10 @@
 'use client'
 
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useId, useRef, useState, type CSSProperties } from 'react'
 import { PRODUCTS, type Product } from './catalog-data'
 import { ProductGlyph } from './product-glyph'
+import { useMotionPlayback } from '@/components/motion/use-motion-playback'
+import { useViewTransition } from '@/components/motion/use-view-transition'
 
 const BEAT_MS = 900 // шаг между вылетами строк
 const LAND_MS = 620 // столько копия строки летит до своей ячейки
@@ -42,6 +44,10 @@ export function HeroFlight() {
   const slotRefs = useRef<Array<HTMLDivElement | null>>([])
   // Круги считаем в ref: интервалы видят своё замыкание, а не свежий стейт.
   const roundRef = useRef(0)
+  const { playing, reduced } = useMotionPlayback(hostRef)
+  const { change, skip } = useViewTransition()
+  const prefix = `tableapp-hero-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`
+  const shared = (part: string): CSSProperties => ({ viewTransitionName: `${prefix}-${part}` })
 
   /*
    * Траектории считаем заранее и по фактическим позициям: вёрстка резиновая,
@@ -77,15 +83,26 @@ export function HeroFlight() {
     }
 
     measure()
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure)
+    if (hostRef.current) observer?.observe(hostRef.current)
     window.addEventListener('resize', measure)
-    return () => window.removeEventListener('resize', measure)
-  }, [])
+    return () => {
+      observer?.disconnect()
+      window.removeEventListener('resize', measure)
+    }
+  }, [phase])
 
   useEffect(() => {
     // Без анимации показываем итог: собранную витрину с открытой карточкой.
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    if (reduced) {
       setLanded(PRODUCTS.length)
+      setFlying(null)
       setPhase('detail')
+      return
+    }
+    if (!playing) {
+      skip()
+      setFlying(null)
       return
     }
 
@@ -113,7 +130,7 @@ export function HeroFlight() {
       })
 
       at(FILLED_MS + READY_MS, () => setPhase('tap'))
-      at(FILLED_MS + READY_MS + TAP_MS, () => setPhase('detail'))
+      at(FILLED_MS + READY_MS + TAP_MS, () => change(() => setPhase('detail')))
       at(FILLED_MS + READY_MS + TAP_MS + DETAIL_MS, loop)
     }
 
@@ -121,8 +138,9 @@ export function HeroFlight() {
     return () => {
       cancelled = true
       timers.forEach((id) => window.clearTimeout(id))
+      skip()
     }
-  }, [])
+  }, [playing, reduced, change, skip])
 
   const ghost = flying === null ? null : geom[flying]
   const ghostItem = flying === null ? null : PRODUCTS[flying]
@@ -234,9 +252,9 @@ export function HeroFlight() {
               </div>
 
               {phase === 'detail' ? (
-                <DetailScreen item={opened} />
+                <DetailScreen item={opened} shared={shared} />
               ) : (
-                <div className="grid flex-1 grid-cols-2 content-start gap-2 p-2.5">
+                <div style={shared('screen')} className="grid flex-1 grid-cols-2 content-start gap-2 p-2.5">
                   {PRODUCTS.map((item, position) => {
                     const tapped = phase === 'tap' && position === pick
                     return (
@@ -253,14 +271,14 @@ export function HeroFlight() {
                               tapped ? 'animate-press border-sage-400 shadow-lift' : 'border-sand-200'
                             }`}
                           >
-                            <span className={`flex h-[52px] items-center justify-center rounded-lg ${item.tint}`}>
+                            <span style={position === pick ? shared('image') : undefined} className={`flex h-[52px] items-center justify-center rounded-lg ${item.tint}`}>
                               <ProductGlyph kind={item.glyph} className={`h-8 w-8 ${item.ink}`} />
                             </span>
-                            <p className="mt-1.5 truncate text-[10px] leading-none">{item.short}</p>
+                            <p style={position === pick ? shared('name') : undefined} className="mt-1.5 truncate text-[10px] leading-none">{item.short}</p>
                             <p className="mt-1 truncate text-[9px] leading-none text-ink-muted">
                               {item.warehouse.split(',')[0]}
                             </p>
-                            <p className="mt-auto text-[12px] font-semibold leading-none tabular-nums">
+                            <p style={position === pick ? shared('price') : undefined} className="mt-auto text-[12px] font-semibold leading-none tabular-nums">
                               {item.price} ₽
                             </p>
                             <p
@@ -327,17 +345,17 @@ export function HeroFlight() {
 }
 
 /** Открытая карточка: та же строка, но целиком и по-человечески. */
-function DetailScreen({ item }: { item: Product }) {
+function DetailScreen({ item, shared }: { item: Product; shared: (part: string) => CSSProperties }) {
   return (
-    <div className="animate-screen-in flex-1 space-y-2.5 overflow-hidden p-2.5">
-      <span className={`flex h-[116px] items-center justify-center rounded-xl ${item.tint}`}>
+    <div style={shared('screen')} className="hero-detail animate-screen-in flex-1 space-y-2.5 overflow-hidden p-2.5">
+      <span style={shared('image')} className={`flex h-[116px] items-center justify-center rounded-xl ${item.tint}`}>
         <ProductGlyph kind={item.glyph} className={`h-16 w-16 ${item.ink}`} />
       </span>
 
-      <p className="text-[13px] font-semibold leading-tight">{item.name}</p>
+      <p style={shared('name')} className="text-[13px] font-semibold leading-tight">{item.name}</p>
 
       <div className="flex items-baseline justify-between gap-2">
-        <span className="text-[19px] font-bold tabular-nums">{item.price} ₽</span>
+        <span style={shared('price')} className="text-[19px] font-bold tabular-nums">{item.price} ₽</span>
         <span className="shrink-0 text-[11px] tabular-nums text-ink-muted">{item.code}</span>
       </div>
 

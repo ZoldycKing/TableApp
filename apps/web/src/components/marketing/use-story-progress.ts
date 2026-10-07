@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { useMotionPlayback } from '@/components/motion/use-motion-playback'
 
 export const CHAPTER_MS = 7000
 
@@ -21,6 +22,9 @@ export function useStoryProgress(count: number) {
   const pausedRef = useRef(false)
   const indexRef = useRef(0)
   const spent = useRef(0)
+  const root = useRef<HTMLDivElement>(null)
+  const resetTimer = useRef<number | undefined>(undefined)
+  const { playing } = useMotionPlayback(root)
 
   const paint = () => {
     bars.current.forEach((bar, position) => {
@@ -40,7 +44,8 @@ export function useStoryProgress(count: number) {
     bars.current.forEach((bar) => {
       if (bar) bar.style.transition = 'transform 420ms cubic-bezier(0.22, 1, 0.36, 1)'
     })
-    window.setTimeout(() => {
+    window.clearTimeout(resetTimer.current)
+    resetTimer.current = window.setTimeout(() => {
       bars.current.forEach((bar) => {
         if (bar) bar.style.transition = ''
       })
@@ -56,7 +61,7 @@ export function useStoryProgress(count: number) {
   useEffect(paint, [index])
 
   useEffect(() => {
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    if (!playing || paused || count < 1) return
 
     let frame = 0
     let last = performance.now()
@@ -89,12 +94,15 @@ export function useStoryProgress(count: number) {
 
     frame = window.requestAnimationFrame(tick)
     return () => window.cancelAnimationFrame(frame)
-  }, [count])
+  }, [count, playing, paused])
+
+  useEffect(() => () => window.clearTimeout(resetTimer.current), [])
 
   return {
     index,
     paused,
     bars,
+    root,
     show: (position: number) => {
       spent.current = 0
       indexRef.current = position

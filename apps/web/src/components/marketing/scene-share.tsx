@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useMotionPlayback } from '@/components/motion/use-motion-playback'
 
 const ROLE_MS = 2400
 
@@ -23,16 +24,18 @@ const REQUESTS = [
  */
 export function SceneShare() {
   const [role, setRole] = useState(0)
+  const root = useRef<HTMLDivElement>(null)
+  const { playing } = useMotionPlayback(root)
 
   useEffect(() => {
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    if (!playing) return
 
     const timer = window.setInterval(() => {
       setRole((value) => (value + 1) % ROLES.length)
     }, ROLE_MS)
 
     return () => window.clearInterval(timer)
-  }, [])
+  }, [playing])
 
   const active = ROLES[role]!
   const visible =
@@ -43,7 +46,7 @@ export function SceneShare() {
         : REQUESTS.slice(0, 1)
 
   return (
-    <div className="flex flex-col gap-5 @min-[560px]:flex-row @min-[560px]:items-start">
+    <div ref={root} className="flex flex-col gap-5 @min-[560px]:flex-row @min-[560px]:items-start">
       <div className="min-w-0 flex-1">
         <p className="mb-2 flex items-center gap-1.5 text-[11px] font-medium text-ink-muted">
           <span className="h-1.5 w-1.5 rounded-full bg-ink-muted/60" />

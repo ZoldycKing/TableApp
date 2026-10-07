@@ -13,12 +13,12 @@ import { useStoryProgress } from './use-story-progress'
  * движение замирает, а не сбрасывается.
  */
 export function StoryChapters() {
-  const { index, bars, show, hover } = useStoryProgress(STORY.length)
+  const { index, bars, show, hover, root } = useStoryProgress(STORY.length)
   const active = STORY[index]!
   const Scene = active.Scene
 
   return (
-    <div {...hover} className="@container">
+    <div ref={root} {...hover} className="@container">
       <div className="flex items-end justify-between gap-6">
         <div key={active.id} className="animate-screen-in min-w-0">
           <span className="text-[11px] font-medium uppercase tracking-[0.16em] text-sage-700">

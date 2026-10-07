@@ -102,7 +102,7 @@ h1, h2, h3 {
  * анимацию некому, и страница должна остаться читаемой, а не пустой.
  */
 @media (prefers-reduced-motion: no-preference) and (scripting: enabled) {
-  [data-reveal] {
+  [data-reveal="pending"] {
     opacity: 0;
     transform: translateY(18px);
     transition: opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1), transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
@@ -111,6 +111,7 @@ h1, h2, h3 {
   [data-reveal="shown"] {
     opacity: 1;
     transform: none;
+    transition: opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1), transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
   }
 }
 
@@ -205,7 +206,7 @@ h1, h2, h3 {
   .animate-border-spin,
   .animate-marquee { animation: none; }
   .word-stagger > span { animation: none; opacity: 1; transform: none; }
-  .underline-draw path { transition: none; stroke-dashoffset: 0; }
+  .underline-draw path { animation: none; transition: none; stroke-dashoffset: 0; }
 }
 
 /* Световое пятно за курсором. Выключено, пока указатель не в блоке. */
@@ -261,8 +262,36 @@ h1, h2, h3 {
   animation: screen-in 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+/* Shared elements move between the catalog and its detail screen. */
+::view-transition-group(*) {
+  animation-duration: 680ms;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+::view-transition-old(*),
+::view-transition-new(*) {
+  animation-duration: 180ms;
+  height: 100%;
+  mix-blend-mode: normal;
+}
+
+/* Keep the surrounding page still and available to the pointer. */
+::view-transition-old(root) { animation: none; opacity: 0; }
+::view-transition-new(root) { animation: none; }
+::view-transition { pointer-events: none; }
+html:active-view-transition .hero-detail { animation: none; }
+
+.demo-motion-frame {
+  transition: width 680ms cubic-bezier(0.22, 1, 0.36, 1), height 680ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+html:active-view-transition .demo-motion-frame { transition: none; }
+
 @media (prefers-reduced-motion: reduce) {
   .animate-screen-in { animation: none; }
+  .demo-motion-frame { transition: none; }
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) { animation: none !important; }
 }
 
 /* Импульс, уходящий от телефона к таблице. */

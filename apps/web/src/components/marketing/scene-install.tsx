@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useMotionPlayback } from '@/components/motion/use-motion-playback'
 
 const STEP_MS = 1500
 const LAST = 2
@@ -18,22 +19,25 @@ const POINTS = [
  */
 export function SceneInstall() {
   const [step, setStep] = useState(0)
+  const root = useRef<HTMLDivElement>(null)
+  const { playing, reduced } = useMotionPlayback(root)
 
   useEffect(() => {
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    if (reduced) {
       setStep(LAST)
       return
     }
 
-    const timer = window.setInterval(() => {
+    if (!playing || step >= LAST) return
+    const timer = window.setTimeout(() => {
       setStep((value) => (value >= LAST ? LAST : value + 1))
     }, STEP_MS)
 
-    return () => window.clearInterval(timer)
-  }, [])
+    return () => window.clearTimeout(timer)
+  }, [playing, reduced, step])
 
   return (
-    <div className="flex flex-col gap-5 @min-[560px]:flex-row @min-[560px]:items-start">
+    <div ref={root} className="flex flex-col gap-5 @min-[560px]:flex-row @min-[560px]:items-start">
       <div className="min-w-0 flex-1">
         <p className="mb-2 flex items-center gap-1.5 text-[11px] font-medium text-ink-muted">
           <span className="h-1.5 w-1.5 rounded-full bg-ink-muted/60" />

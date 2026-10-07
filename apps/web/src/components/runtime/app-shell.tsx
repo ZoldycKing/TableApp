@@ -15,6 +15,7 @@ import { Icon, hasIcon } from './icons'
 import { EmptyState } from './ui'
 import { accentTones, Avatar, greeting, viewerName } from './ui'
 import { ScreenView } from './screen-view'
+import { useEnterMotion } from '@/components/motion/enter-motion'
 import {
   EMPTY_LIST_STATE as EMPTY_LIST,
   navFromHistory,
@@ -192,6 +193,7 @@ export function AppShell({
   const router = useRouter()
 
   const current = stack[stack.length - 1]!
+  const contentRef = useEnterMotion(`${current.screenId}:${current.rowId ?? ''}:${sent === null ? 'screen' : 'sent'}:${intake === null ? 'form' : 'verify'}`)
   const screen = screens.get(current.screenId)
   const accent = accentTones(app.theme.accent)
 
@@ -661,7 +663,7 @@ export function AppShell({
          * полоса внизу означала бы, что вылезла карточка, а не что так задумано.
          */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden">
-          <div className="mx-auto w-full max-w-5xl px-4 py-5 sm:px-6 sm:py-6">
+          <div ref={contentRef} className="mx-auto w-full max-w-5xl px-4 py-5 sm:px-6 sm:py-6">
             {sent !== null ? (
               <Sent
                 text={sent}

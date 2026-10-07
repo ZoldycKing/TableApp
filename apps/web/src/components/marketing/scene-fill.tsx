@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ProductGlyph } from './product-glyph'
+import { useMotionPlayback } from '@/components/motion/use-motion-playback'
 
 const STEP_MS = 850
 const LAST = 5
@@ -19,23 +20,26 @@ const ROWS = [
  */
 export function SceneFill() {
   const [step, setStep] = useState(0)
+  const root = useRef<HTMLDivElement>(null)
+  const { playing, reduced } = useMotionPlayback(root)
 
   useEffect(() => {
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    if (reduced) {
       setStep(LAST)
       return
     }
 
-    const timer = window.setInterval(() => {
+    if (!playing || step >= LAST) return
+    const timer = window.setTimeout(() => {
       // На последнем шаге держим результат, а не дёргаем сцену по кругу.
       setStep((value) => (value >= LAST ? LAST : value + 1))
     }, STEP_MS)
 
-    return () => window.clearInterval(timer)
-  }, [])
+    return () => window.clearTimeout(timer)
+  }, [playing, reduced, step])
 
   return (
-    <div className="flex flex-col gap-5 @min-[560px]:flex-row @min-[560px]:items-start">
+    <div ref={root} className="flex flex-col gap-5 @min-[560px]:flex-row @min-[560px]:items-start">
       <div className="w-full shrink-0 @min-[560px]:w-[248px]">
         <p className="mb-2 flex items-center gap-1.5 text-[11px] font-medium text-sage-700">
           <span className="h-1.5 w-1.5 rounded-full bg-sage-500" />

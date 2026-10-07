@@ -23,19 +23,26 @@ export function Reveal({
     const node = ref.current
     if (!node) return
 
-    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    if (reduced) {
+    const media = window.matchMedia('(prefers-reduced-motion: reduce)')
+    if (media.matches || typeof IntersectionObserver === 'undefined') {
       node.dataset.reveal = 'shown'
       return
     }
 
-    const show = () => { node.dataset.reveal = 'shown' }
+    let timer: number | undefined
+    const show = () => {
+      window.clearTimeout(timer)
+      node.dataset.reveal = 'shown'
+    }
+
+    // Arm only after hydration: the server content remains readable if JS fails.
+    if (node.dataset.reveal !== 'shown') node.dataset.reveal = 'pending'
 
     const observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
           if (!entry.isIntersecting) continue
-          window.setTimeout(show, delay)
+          timer = window.setTimeout(show, delay)
           observer.unobserve(entry.target)
         }
       },
@@ -44,19 +51,17 @@ export function Reveal({
 
     observer.observe(node)
 
-    /*
-     * Страховка. Наблюдатель молчит, пока страница не отрисовывается — например,
-     * во вкладке на фоне или в окне без композитинга. Пропустить анимацию
-     * не страшно, а оставить текст невидимым — недопустимо.
-     */
-    const fallback = window.setTimeout(() => {
-      if (node.dataset.reveal !== 'shown') show()
+    const onMotionChange = () => {
+      if (!media.matches) return
+      show()
       observer.disconnect()
-    }, 2500 + delay)
+    }
+    media.addEventListener('change', onMotionChange)
 
     return () => {
       observer.disconnect()
-      window.clearTimeout(fallback)
+      window.clearTimeout(timer)
+      media.removeEventListener('change', onMotionChange)
     }
   }, [delay])
 

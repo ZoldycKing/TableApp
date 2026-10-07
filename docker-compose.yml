@@ -18,7 +18,8 @@ services:
       retries: 10
 
   minio:
-    image: quay.io/minio/minio:latest
+    build:
+      context: ./infra/minio
     container_name: tableapp-minio
     restart: unless-stopped
     command: server /data --console-address ":9001"

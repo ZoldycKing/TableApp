@@ -11,6 +11,8 @@ const inter = localFont({
   weight: '400 600',
   variable: '--font-inter',
   display: 'swap',
+  // OpenType-наборы относятся к конкретному шрифту: у Unbounded ss01 — цифры в кружках.
+  declarations: [{ prop: 'font-feature-settings', value: "'cv05', 'ss01'" }],
 })
 
 // Геометрический гротеск с характером — заголовки не выглядят шаблонными.

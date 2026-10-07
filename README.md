@@ -120,6 +120,7 @@ docs/              архитектура, эксплуатация и план 
 - [Архитектура](docs/architecture.md) и [границы MVP](docs/mvp-scope.md).
 - [Работа с кодом и проверки](CONTRIBUTING.md).
 - [План развития и ограничения](docs/roadmap.md).
+- [Оптимизация синхронизации и замеры](docs/performance.md).
 - [Развёртывание](docs/deploy.md) и [резервные копии](docs/backups.md).
 - [Почта](docs/mail-setup.md), [платежи](docs/payments.md) и
   [задачи по правовым документам](docs/legal-todo.md).

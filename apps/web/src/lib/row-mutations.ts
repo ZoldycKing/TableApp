@@ -18,7 +18,8 @@ export class RowWriteError extends Error {
 }
 
 export type RowActor = { id: string | null; kind: string; ip?: string | null }
-export type RowTransaction = { tx: Transaction; workspaceId: string; changed: Set<string> }
+export type RowTransaction = { tx: Transaction; workspaceId: string; changed: Set<string>;
+  usageLocked?: boolean; fieldCache?: Map<string, Field[]> }
 export type StoredRow = typeof rows.$inferSelect
 export const ROW_CONFLICT = 'Запись изменилась после открытия формы. Обновите её и повторите действие.'
 
@@ -26,7 +27,7 @@ export const ROW_CONFLICT = 'Запись изменилась после отк
 export async function writeRows<T>(workspaceId: string, write: (context: RowTransaction) => Promise<T>): Promise<T> {
   const changed = new Set<string>()
   const result = await db.transaction(async (tx) => {
-    const context = { tx, workspaceId, changed }
+    const context: RowTransaction = { tx, workspaceId, changed, fieldCache: new Map() }
     // Revisions must be assigned in commit order, including ordinary edits.
     await lockRowUsage(context)
     return write(context)
@@ -36,22 +37,31 @@ export async function writeRows<T>(workspaceId: string, write: (context: RowTran
 }
 
 /** Acquire this before row locks in any transaction which changes the count. */
-export async function lockRowUsage({ tx, workspaceId }: RowTransaction): Promise<void> {
+export async function lockRowUsage(context: RowTransaction): Promise<void> {
+  if (context.usageLocked) return
+  const { tx, workspaceId } = context
   const inserted = await tx.insert(workspaceUsage).values({ workspaceId }).onConflictDoNothing().returning()
   await tx.select({ id: workspaceUsage.workspaceId }).from(workspaceUsage)
     .where(eq(workspaceUsage.workspaceId, workspaceId)).for('update')
   if (inserted.length) await recountWorkspace(workspaceId, tx)
+  context.usageLocked = true
 }
 
 export async function mutationFields(context: RowTransaction, tableId: string): Promise<Field[]> {
+  const cached = context.fieldCache?.get(tableId)
+  if (cached) return cached
   const [table] = await context.tx.select({ id: tables.id }).from(tables)
     .where(and(eq(tables.id, tableId), eq(tables.workspaceId, context.workspaceId)))
   if (!table) throw new RowWriteError('missing', 'Таблица не найдена')
   const found = await context.tx.select().from(fieldsTable).where(eq(fieldsTable.tableId, tableId))
     .orderBy(asc(fieldsTable.id)).for('share')
-  return found.map((field) => ({ ...field,
+  const fields = found.map((field) => ({ ...field,
     options: normalizeFieldOptions(field.type as Field['type'], field.options),
   }) as unknown as Field)
+  // These metadata rows remain share-locked until this transaction ends.
+  // Cache only within the write context, never across requests.
+  context.fieldCache?.set(tableId, fields)
+  return fields
 }
 
 export async function lockedRow(context: RowTransaction, tableId: string, rowId: string): Promise<StoredRow | undefined> {

@@ -54,7 +54,9 @@ export async function applySyncMutation(mutation: Mutation, tableId: string, act
       try {
         // A rejected quota/attachment check rolls back its reservation as well.
         await tx.transaction(async (nested) => {
-          const inner = { ...context, tx: nested, changed }
+          // Inherited entries were locked by the outer transaction. Keep new
+          // savepoint entries separate so rollback cannot leak released locks.
+          const inner = { ...context, tx: nested, changed, fieldCache: new Map(context.fieldCache) }
           if (mutation.op === 'create') {
             const clean: Record<string, unknown> = {}
             for (const field of fields) {

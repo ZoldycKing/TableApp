@@ -9,7 +9,7 @@ import { authorizeTable } from '@/lib/authorize'
 import { canEdit } from '@/lib/session'
 import { isOwnerField, rulesFor, stampOwner } from '@/lib/row-access'
 import { MAX_SYNC_BODY_BYTES, syncPayloadSchema } from '@/lib/sync-protocol'
-import { readSyncPage } from '@/lib/sync-read'
+import { readSyncPage, validateSyncCursor } from '@/lib/sync-read'
 import { applySyncMutation } from '@/lib/sync-write'
 import { compileTableFormulas, computeDerivedRow } from '@tableapp/formula'
 import { normalizeFieldOptions, systemRowData, type Field } from '@tableapp/schema'
@@ -80,15 +80,19 @@ export async function POST(request: Request) {
   }
   const scope = policyDigest([workspaceId, tableId, appSlug ?? null, actor])
   // Validate the cursor before applying any writes from a malformed request.
-  let page: Awaited<ReturnType<typeof readSyncPage>>
-  try { page = await readSyncPage(workspaceId, tableId, scope, policy, since) }
-  catch { return NextResponse.json({ error: 'Курсор синхронизации недействителен. Начните заново' }, { status: 400 }) }
+  if (mutations.length) {
+    try { await validateSyncCursor(workspaceId, tableId, scope, since) }
+    catch { return NextResponse.json({ error: 'Курсор синхронизации недействителен. Начните заново' }, { status: 400 }) }
+  }
   const results = []
   for (const mutation of mutations) results.push(await applySyncMutation(mutation, tableId, actor, access))
-  if (mutations.length) {
-    // A continuation keeps its original upper bound. New writes arrive in the
-    // following cycle; an initial request includes the writes just committed.
-    page = await readSyncPage(workspaceId, tableId, scope, policy, since)
+  // A continuation keeps its original upper bound. New writes arrive in the
+  // following cycle; an initial request includes the writes just committed.
+  let page: Awaited<ReturnType<typeof readSyncPage>>
+  try { page = await readSyncPage(workspaceId, tableId, scope, policy, since) }
+  catch (error) {
+    if (mutations.length) throw error // A failed response after committed writes is retryable, not a bad request.
+    return NextResponse.json({ error: 'Курсор синхронизации недействителен. Начните заново' }, { status: 400 })
   }
   return NextResponse.json({ ...page,
     applied: results.filter((result) => result.status === 'applied' || result.status === 'duplicate').map((result) => result.id),

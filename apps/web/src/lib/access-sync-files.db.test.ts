@@ -225,10 +225,71 @@ describe.skipIf(!process.env.DATABASE_URL)('sync access, cursors and file lifecy
     const next = await (await request({ appSlug: undefined, since: result.cursor })).json()
     expect(next.rows).toHaveLength(0)
   })
+  it('reads alongside another reader holding the workspace boundary', async () => {
+    identity.member = member
+    await usage.recountWorkspace(ids.workspace)
+    let release!: () => void, signal!: () => void
+    const finish = new Promise<void>((resolve) => { release = resolve })
+    const ready = new Promise<void>((resolve) => { signal = resolve })
+    const reader = database.db.transaction(async (tx) => {
+      await tx.select({ id: database.workspaceUsage.workspaceId }).from(database.workspaceUsage)
+        .where(eq(database.workspaceUsage.workspaceId, ids.workspace)).for('share')
+      signal(); await finish
+    })
+    await Promise.race([ready, reader])
+    const response = request({ appSlug: undefined })
+    let timer: ReturnType<typeof setTimeout> | undefined
+    try {
+      const result = await Promise.race([
+        response,
+        new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('Sync read waited for another reader')), 3000) }),
+      ])
+      expect(result.status).toBe(200)
+      expect((await result.json()).rows).toHaveLength(3)
+    } finally {
+      clearTimeout(timer); release(); await reader; await response
+    }
+  })
+  it('returns committed edits in an initial snapshot without exposing restricted fields', async () => {
+    const mutationId = newId('change')
+    const result = await (await request({ mutations: [{ id: mutationId, op: 'update', rowId: ids.row,
+      fieldId: ids.name, base: 'Visible', next: 'Just committed' }] })).json()
+    expect(result.applied).toEqual([mutationId])
+    expect(result.rows).toHaveLength(1)
+    expect(result.rows[0].data[ids.name]).toBe('Just committed')
+    expect(JSON.stringify(result)).not.toMatch(/PRIVATE_VALUE|FILTERED_VALUE|OTHER_OWNER_VALUE/)
+    expect((await row()).version).toBe(1)
+  })
+  it('rejects a future revision before writing even if the policy has changed', async () => {
+    const { decodeCursor, encodeCursor } = await import('./sync-protocol')
+    const first = await (await request()).json()
+    const cursor = decodeCursor(first.cursor)!
+    const since = encodeCursor({ ...cursor, policy: 'outdated-policy', seen: cursor.seen + 1, after: cursor.after + 1 })
+    const mutationId = newId('change')
+    const response = await request({ since, mutations: [{ id: mutationId, op: 'update', rowId: ids.row,
+      fieldId: ids.name, base: 'Visible', next: 'must not write' }] })
+    expect(response.status).toBe(400)
+    expect((await row()).version).toBe(0)
+    expect(await database.db.select().from(database.mutations).where(eq(database.mutations.id, mutationId))).toHaveLength(0)
+  })
   it('rejects malformed cursors before applying mutations', async () => {
     const response = await request({ since: 'v2.invalid', mutations: [{ id: newId('change'), op: 'update', rowId: ids.row, fieldId: ids.name, base: 'Visible', next: 'tampered' }] })
     expect(response.status).toBe(400)
     expect((await row()).version).toBe(0)
+  })
+  it('reloads field types between write transactions', async () => {
+    identity.member = member
+    const firstId = newId('change')
+    const first = await (await request({ appSlug: undefined, mutations: [{ id: firstId, op: 'update', rowId: ids.row,
+      fieldId: ids.name, base: 'Visible', next: 'Before type change' }] })).json()
+    expect(first.applied).toEqual([firstId])
+    await database.db.update(database.fields).set({ type: 'number' }).where(eq(database.fields.id, ids.name))
+    const result = await (await request({ appSlug: undefined, mutations: [{ id: newId('change'), op: 'update', rowId: ids.row,
+      fieldId: ids.name, base: 'Before type change', next: 'Not a number' }] })).json()
+    expect(result.applied).toHaveLength(0)
+    expect(result.rejected).toHaveLength(1)
+    expect((await row()).version).toBe(1)
+    expect((await row()).data).toHaveProperty(ids.name, 'Before type change')
   })
   it('rejects a cursor from another device before writing', async () => {
     const first = await (await request()).json()

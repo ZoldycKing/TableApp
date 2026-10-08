@@ -88,7 +88,7 @@ export const FOOTER_COLUMNS: { title: string; links: SiteLink[] }[] = [
     links: [
       { href: PUBLIC_ROUTES.templates, label: 'Шаблоны' },
       { href: '/login', label: 'Войти' },
-      { href: '/login', label: 'Загрузить свою таблицу' },
+      { href: '/login?next=%2Fimport', label: 'Загрузить свою таблицу' },
     ],
   },
 ]

@@ -121,7 +121,7 @@ describe('склад выводится из движений', () => {
   it('ниже нормы отмечаются те и только те, у кого остаток меньше минимума', () => {
     const { byName, rows } = computed(build(), 'Материалы')
     const low = rows
-      .filter((row) => row[byName('Ниже нормы').id] === true)
+      .filter((row) => row[byName('Ниже минимального остатка').id] === true)
       .map((row) => row[byName('Название').id])
 
     expect(low.sort()).toEqual(['Клей', 'Краситель'])

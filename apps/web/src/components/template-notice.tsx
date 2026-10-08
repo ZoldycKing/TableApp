@@ -29,7 +29,7 @@ export function TemplateNotice({ tableId, sampleCount }: { tableId: string; samp
     <div className="mb-4 rounded-xl border border-sage-200 bg-sage-50/70 px-4 py-3">
       <p className="text-sm text-ink">
         <span className="font-medium">Это заготовка из шаблона.</span> Строк-примеров здесь: {sampleCount}. Они
-        показывают, как всё работает. Переименовывайте колонки, добавляйте свои, удаляйте лишние — таблица ваша.
+        показывают, как всё работает. Удаление примеров относится только к этой таблице; ваши записи и отредактированные примеры сохранятся.
       </p>
       <div className="mt-2.5 flex flex-wrap items-center gap-2">
         <Link

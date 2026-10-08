@@ -81,6 +81,8 @@ export const FIELD_OPTIONS = {
       precision: z.number().int().min(0).max(8).default(0),
       currency: z.string().default('RUB'),
       showThousandsSeparator: z.boolean().default(true),
+      /** Copy a related numeric value once when this cell is empty. Stored prices stay independent of the price list. */
+      initialFrom: z.object({ relationFieldId: z.string(), targetFieldId: z.string() }).optional(),
     })
     .prefault({}),
   date: z.object({ dateFormat: dateFormatSchema }).prefault({}),

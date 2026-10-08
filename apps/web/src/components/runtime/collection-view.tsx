@@ -146,6 +146,7 @@ export function CollectionView({
     if (screen.type === 'tiles') return null
     if (!metaField || metaField.type !== 'number') return null
     if (metaField.options.format !== 'currency') return null
+    if (!/^(сумма|итого|стоимость заказа|стоимость ремонта|осталось доплатить)$/i.test(metaField.name.trim())) return null
 
     const sum = shown.reduce((acc, row) => {
       const value = row.data[metaField.id]

@@ -55,6 +55,16 @@ async function validateField(
       .limit(1)
     if (!target) return 'Выбранная таблица для связи не найдена'
   }
+  if (candidate.type === 'number' && candidate.options.initialFrom) {
+    const initial = candidate.options.initialFrom
+    const relation = others.find(field => field.id === initial.relationFieldId)
+    if (relation?.type !== 'relation' || relation.options.allowMultiple) return 'Для начальной цены выберите связь с одной строкой'
+    const [target] = await db.select({ id: tables.id }).from(tables)
+      .where(and(eq(tables.id, relation.options.tableId), eq(tables.workspaceId, workspaceId))).limit(1)
+    if (!target) return 'Таблица начальной цены не найдена'
+    const targetFields = await loadFields(target.id)
+    if (!targetFields.some(field => field.id === initial.targetFieldId && field.type === 'number')) return 'Начальная цена должна ссылаться на числовое поле'
+  }
 
   if (candidate.type === 'lookup' || candidate.type === 'rollup' || candidate.type === 'count') {
     const relation = others.find((field) => field.id === candidate.options.relationFieldId)
@@ -241,6 +251,7 @@ export async function deleteFieldAction(tableId: string, fieldId: string): Promi
       return field.options.relationFieldId === fieldId || field.options.targetFieldId === fieldId
     }
     if (field.type === 'count') return field.options.relationFieldId === fieldId
+    if (field.type === 'number' && field.options.initialFrom) return field.options.initialFrom.relationFieldId === fieldId
     if (field.type === 'formula') {
       try {
         return compile(field.options.expression, siblings).dependencies.includes(fieldId)

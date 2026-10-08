@@ -83,7 +83,7 @@ function formFields(ctx: Ctx, tableId: string, only?: string[]): Component[] {
     roles: null,
     type: 'form_field' as const,
     fieldId: field.id,
-    label: null,
+    label: field.name === 'Произведено' ? 'Годных изделий' : null,
     required: false,
     placeholder: null,
   }))
@@ -271,7 +271,7 @@ function dashboardBlocks(ctx: Ctx): Block[] {
      * значит однажды поправить одно и забыть другое.
      */
     block('metric', production.views.low, {
-      title: 'Материалов ниже нормы',
+      title: 'Ниже минимального остатка',
       description: 'Остаток меньше минимального',
       kind: 'count',
       range: 'all',

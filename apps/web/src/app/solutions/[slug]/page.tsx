@@ -90,7 +90,7 @@ export default async function SolutionPage({ params }: { params: Promise<{ slug:
         }
       />
 
-      <Section id="primer" title={solution.example.title} tone="white">
+      <Section id="primer" title={solution.example.title} lead="Статичные примеры на учебных данных. Подписи различают рабочее пространство владельца и приложение по ссылке." tone="white">
         <SolutionDemo slug={solution.slug} />
       </Section>
 

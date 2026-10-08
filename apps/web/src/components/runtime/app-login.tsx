@@ -5,6 +5,7 @@ import { useState, useTransition } from 'react'
 import { consumeAppCodeAction, requestAppLoginAction } from '@/app/auth-actions'
 import { ResendCode } from '@/components/resend-code'
 import { accentClasses } from './bindings'
+import { LOGIN_CODE_TTL_MINUTES } from '@/lib/auth-constants'
 
 export function AppLogin({
   slug,
@@ -41,8 +42,8 @@ export function AppLogin({
       >
         <h1 className="text-lg font-semibold">Введите код</h1>
         <p className="text-sm text-[var(--color-ink-muted)]">
-          Если адрес {email} есть в списке доступа, код уже отправлен. Он действует
-          15 минут; в письме есть и ссылка.
+          Если для адреса {email} разрешён вход, код отправлен на почту. Он действует
+          {LOGIN_CODE_TTL_MINUTES} минут; в письме есть и ссылка.
         </p>
 
         {sent.hint ? (
@@ -85,7 +86,7 @@ export function AppLogin({
             }
             setError(null)
             setCode('')
-            return 'Отправили новый код, если адрес есть в списке доступа'
+            return 'Если для этого адреса разрешён вход, новый код отправлен'
           }}
         />
 

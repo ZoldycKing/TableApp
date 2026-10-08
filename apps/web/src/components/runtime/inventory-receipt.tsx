@@ -75,7 +75,7 @@ export function InventoryReceipt({ runtime, itemId, config, demo, onBack }: {
   return <form className="space-y-5 rounded-2xl border border-sand-200 bg-white p-5 shadow-soft sm:p-6" onSubmit={event => { event.preventDefault(); void submit() }}>
     <div><h2 className="text-base font-semibold">{title}</h2><p className="mt-1 text-xs text-ink-muted">Сейчас на складе: <strong className="font-medium tabular-nums text-ink">{stock} шт</strong></p></div>
     {demo && <p className="rounded-lg bg-sand-100 px-3 py-2 text-xs text-ink-soft">Предпросмотр: данные не сохраняются.</p>}
-    <label className="block space-y-1.5"><span className="text-[13px] font-medium text-ink-soft">Принято, шт</span>
+    <label className="block space-y-1.5"><span className="text-[13px] font-medium text-ink-soft">Сколько поступило, шт.</span>
       <input type="number" inputMode="numeric" required min="1" max="1000000" step="1" value={quantity} disabled={busy}
         onChange={event => { setQuantity(event.target.value); setError('') }} className="w-full rounded-xl border border-sand-200 px-3 py-2.5 text-sm outline-none focus:border-sage-500" /></label>
     {noteAllowed && <label className="block space-y-1.5"><span className="text-[13px] font-medium text-ink-soft">Комментарий <small className="font-normal text-ink-muted">необязательно</small></span>

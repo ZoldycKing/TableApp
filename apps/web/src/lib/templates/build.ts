@@ -206,6 +206,14 @@ export function buildTemplate(input: {
         }
       }
       if (field.expression) options = { ...options, expression: field.expression }
+      if (field.initialFrom) {
+        const relation = table.fields.find(candidate => candidate.key === field.initialFrom!.through)
+        if (!relation?.relationTable) throw new Error(`Шаблон ${template.id}: начальное значение без связи`)
+        options.initialFrom = {
+          relationFieldId: fieldIds.get(key(table.key, relation.key))!,
+          targetFieldId: fieldIds.get(key(relation.relationTable, field.initialFrom.target))!,
+        }
+      }
 
       const built: BuiltField = {
         id: fieldId,
@@ -265,7 +273,15 @@ export function buildTemplate(input: {
 
       for (const field of table.fields) {
         const built = builtFields.find((candidate) => candidate.id === fieldIds.get(key(table.key, field.key)))!
-        const raw = row.values[field.key]
+        let raw = row.values[field.key]
+        if (raw === undefined && field.initialFrom) {
+          const relation = table.fields.find(candidate => candidate.key === field.initialFrom!.through)
+          const selected = row.values[field.initialFrom.through]
+          if (selected && typeof selected === 'object' && 'rowKey' in selected) {
+            raw = template.tables.find(candidate => candidate.key === relation?.relationTable)
+              ?.rows.find(candidate => candidate.key === selected.rowKey)?.values[field.initialFrom.target]
+          }
+        }
         const value = resolveValue(raw, {
           choices: choiceIds.get(key(table.key, field.key)),
           relationTable: field.relationTable,
@@ -367,7 +383,7 @@ export function buildTemplate(input: {
             movements: viewId(map.tables.movements, 'Все движения'),
             norms: viewId(map.tables.norms, 'Все нормы'),
             materials: viewId(map.tables.materials, 'Все материалы'),
-            low: viewId(map.tables.materials, 'Ниже нормы'),
+            low: viewId(map.tables.materials, 'Ниже минимального остатка'),
           },
           run: of(map.tables.production, map.run),
           norm: of(map.tables.norms, map.norm),

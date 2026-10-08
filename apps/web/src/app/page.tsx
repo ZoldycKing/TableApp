@@ -139,10 +139,10 @@ const STEPS = [
 const FEATURES = [
   { icon: IconFieldTypes, title: 'Таблицы с характером', text: 'Два десятка типов полей: числа с рублями, даты, списки, файлы, связи между таблицами.' },
   { icon: IconFormulaFlow, title: 'Формулы без Excel', text: 'Двадцать пять функций на русских именах полей. Ошибка видна сразу, а не после сохранения.' },
-  { icon: IconRelations, title: 'Связи, Lookup и Rollup', text: 'Заявка тянет позиции, сумма считается сама. Поправили цену — пересчиталось везде.' },
+  { icon: IconRelations, title: 'Связи, подстановки и итоги', text: 'Заявка тянет позиции, сумма считается сама. Поправили цену — пересчиталось везде.' },
   { icon: IconViews, title: 'Четыре представления', text: 'Таблица, доска, календарь и галерея. Одни данные — разные взгляды на них.' },
   { icon: IconBuilder, title: 'Конструктор приложений', text: 'Экраны собираются по таблице сами, дальше настраиваются мышкой. Справа живой предпросмотр.' },
-  { icon: IconRowAccess, title: 'Права до строки', text: 'Сотрудник видит только свои заявки. Проверка на сервере: чужое не доходит до браузера.' },
+  { icon: IconRowAccess, title: 'Права до строки', text: 'Настройте отбор заявок по почте сотрудника. Проверка на сервере: недоступные записи не приходят в браузер.' },
 ]
 
 
@@ -153,7 +153,7 @@ const startPrice = money.format(PLANS.start.monthlyPrice)
 
 export default async function LandingPage() {
   const member = await currentMember()
-  const entry = member ? '/app' : '/login'
+  const entry = member ? '/import' : '/login?next=%2Fimport'
 
   return (
     <div className="min-h-dvh bg-sand-50 text-ink">
@@ -225,7 +225,7 @@ export default async function LandingPage() {
                   href={entry}
                   className="rounded-xl bg-ink px-6 py-3.5 text-sm font-medium text-sand-50 shadow-soft transition-all hover:-translate-y-0.5 hover:bg-ink/90 hover:shadow-lift"
                 >
-                  {member ? 'В рабочее пространство' : 'Загрузить свою таблицу'}
+                  {member ? 'Импортировать таблицу' : 'Загрузить свою таблицу'}
                 </Link>
                 <Link
                   href="/demo"
@@ -257,7 +257,7 @@ export default async function LandingPage() {
               Знакомо?
             </h2>
             <p className="mt-4 max-w-2xl text-ink-soft">
-              Шесть признаков того, что таблица переросла себя и пора отдавать
+              Признаки того, что таблица переросла себя и пора отдавать
               людям приложение, а не файл.
             </p>
           </Reveal>
@@ -495,7 +495,7 @@ export default async function LandingPage() {
                 href={entry}
                 className="mt-9 inline-block rounded-xl bg-ink px-8 py-3.5 text-sm font-medium text-sand-50 shadow-soft transition-all hover:-translate-y-0.5 hover:bg-ink/90 hover:shadow-lift"
               >
-                {member ? 'В рабочее пространство' : 'Загрузить свою таблицу'}
+                {member ? 'Импортировать таблицу' : 'Загрузить свою таблицу'}
               </Link>
             </div>
           </Reveal>

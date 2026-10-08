@@ -11,7 +11,8 @@ import type { ReactNode } from 'react'
  * в приложении нет, его нет и здесь — нарисованная возможность хуже
  * ненарисованной, потому что за ней приходят.
  *
- * Данные всюду помечены как пример: `ScreenFrame` подписывает рамку.
+ * Учебные записи обозначает вводный текст блока или явный флаг `sample`.
+ * Состав шаблона и реально создаваемые экраны не помечаем как примеры данных.
  */
 
 /** Телефон или окно: рамка, подпись и содержимое. */
@@ -19,6 +20,7 @@ export function ScreenFrame({
   title,
   device = 'phone',
   note,
+  sample = false,
   children,
 }: {
   /** Что за экран: подпись над рамкой, а не заголовок внутри приложения. */
@@ -26,6 +28,8 @@ export function ScreenFrame({
   device?: 'phone' | 'desktop'
   /** Короткое пояснение под рамкой. */
   note?: string
+  /** Only tag synthetic records, never the real composition of a template. */
+  sample?: boolean
   children: ReactNode
 }) {
   return (
@@ -38,7 +42,7 @@ export function ScreenFrame({
     <figure className="m-0 min-w-0 max-w-full">
       <figcaption className="mb-2 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
         <span className="text-[13px] font-medium text-ink">{title}</span>
-        <span className="text-[11px] uppercase tracking-wide text-ink-muted">данные примера</span>
+        {sample ? <span className="text-[11px] uppercase tracking-wide text-ink-muted">учебные записи</span> : null}
       </figcaption>
 
       <div

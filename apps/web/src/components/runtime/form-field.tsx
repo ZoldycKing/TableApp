@@ -1,6 +1,6 @@
 'use client'
 
-import type { Attachment, Field } from '@tableapp/schema'
+import { dateInstant, fieldTimeZone, instantToWallClock, type Attachment, type Field } from '@tableapp/schema'
 import { FileUpload } from '@/components/file-upload'
 
 /*
@@ -10,11 +10,11 @@ import { FileUpload } from '@/components/file-upload'
 const INPUT =
   'w-full rounded-xl border border-sand-300 bg-white px-3.5 py-2.5 text-[15px] outline-none transition-colors placeholder:text-ink-muted/70 focus:border-sage-400 focus:ring-4 focus:ring-sage-400/15'
 
-function toDateInput(value: unknown, withTime: boolean): string {
+function toDateInput(value: unknown, withTime: boolean, zone: string): string {
   if (!value) return ''
-  const date = new Date(String(value))
-  if (Number.isNaN(date.getTime())) return ''
-  return withTime ? date.toISOString().slice(0, 16) : date.toISOString().slice(0, 10)
+  const instant = dateInstant(value, zone)
+  const wall = instant === null ? null : instantToWallClock(new Date(instant), zone)
+  return wall ? withTime ? `${wall.date}T${wall.time}` : wall.date : ''
 }
 
 /** Поле формы в приложении. Значения хранятся в том же виде, что и в таблице. */
@@ -75,6 +75,7 @@ export function FormFieldInput({
 
     case 'number':
       return (
+        <div className="space-y-1">
         <input
           type="text"
           inputMode="decimal"
@@ -89,21 +90,27 @@ export function FormFieldInput({
           }}
           className={INPUT}
         />
+        {field.options.initialFrom ? <p className="text-xs text-ink-muted">Оставьте пустым — при сохранении подставится цена выбранной услуги. Сохранённая цена не зависит от изменений прайса.</p> : null}
+        </div>
       )
 
     case 'date':
     case 'datetime': {
       const withTime = field.type === 'datetime'
       return (
+        <div className="space-y-1">
         <input
           type={withTime ? 'datetime-local' : 'date'}
           required={required}
-          value={toDateInput(value, withTime)}
-          onChange={(event) =>
-            onChange(event.target.value ? new Date(event.target.value).toISOString() : null)
-          }
+          value={toDateInput(value, withTime, fieldTimeZone(field))}
+          onChange={(event) => {
+            const instant = dateInstant(event.target.value, fieldTimeZone(field))
+            onChange(instant === null ? null : new Date(instant).toISOString())
+          }}
           className={INPUT}
         />
+        {withTime ? <p className="text-xs text-ink-muted">Часовой пояс: {fieldTimeZone(field)}</p> : null}
+        </div>
       )
     }
 

@@ -32,7 +32,7 @@ const APP_DIR = join(process.cwd(), 'apps', 'web', 'src', 'app')
  * адреса («/solutions/production») засчитывается по папке `[slug]`.
  */
 function routeExists(path: string): boolean {
-  const parts = path.split('/').filter(Boolean)
+  const parts = path.split('?')[0]!.split('/').filter(Boolean)
   let dir = APP_DIR
 
   for (const part of parts) {

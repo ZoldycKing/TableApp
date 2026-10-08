@@ -9,6 +9,7 @@ import { assertCanIncreaseUsage, noteRemoved, type Origin } from './limits'
 import { publishTable } from './live'
 import { dependentRows } from './production-cascade'
 import { recountWorkspace } from './usage'
+import { withInitialValues } from './initial-values'
 
 export class RowWriteError extends Error {
   constructor(readonly code: 'missing' | 'conflict' | 'denied' | 'invalid', message: string) {
@@ -100,6 +101,17 @@ function parsePatch(fields: Field[], values: Record<string, unknown>) {
   return clean
 }
 
+async function initialValues(context: RowTransaction, fields: Field[], data: Record<string, unknown>) {
+  return withInitialValues(fields, data, async (tableId, rowId, fieldId) => {
+    // Verify tenant and field configuration before reading the linked price.
+    const targetFields = await mutationFields(context, tableId)
+    if (!targetFields.some(field => field.id === fieldId && field.type === 'number')) return undefined
+    const [source] = await context.tx.select({ data: rows.data }).from(rows)
+      .where(and(eq(rows.tableId, tableId), eq(rows.id, rowId), isNull(rows.deletedAt))).for('share')
+    return (source?.data as Record<string, unknown> | undefined)?.[fieldId]
+  })
+}
+
 export async function createRow(context: RowTransaction, tableId: string, data: Record<string, unknown>, actor: RowActor,
   options: { id?: string; afterRowId?: string; origin?: Origin; beforeInsert?: (tx: Transaction) => Promise<void> } = {}) {
   await lockRowUsage(context)
@@ -110,7 +122,7 @@ export async function createRow(context: RowTransaction, tableId: string, data: 
     checkRow(existing)
     return { id, duplicate: true }
   }
-  let clean = parsePatch(fields, data)
+  let clean = await initialValues(context, fields, parsePatch(fields, data))
   const error = await validateRowAttachments(tableId, fields, clean, context.tx, actor, id)
   if (error) throw new RowWriteError('invalid', error)
   clean = await canonicalAttachments(fields, clean, context.tx)
@@ -158,7 +170,7 @@ export async function updateRow(context: RowTransaction, tableId: string, rowId:
   const error = await validateRowAttachments(tableId, fields, changed, context.tx, actor, rowId)
   if (error) throw new RowWriteError('invalid', error)
   changed = await canonicalAttachments(fields, changed, context.tx)
-  const after = stripDerived(computeRow({ ...before, ...changed }, compileTableFormulas(fields)), fields)
+  const after = stripDerived(computeRow(await initialValues(context, fields, { ...before, ...changed }), compileTableFormulas(fields)), fields)
   await context.tx.update(rows).set({ data: after, updatedBy: actor.id, version: sql`${rows.version} + 1`, syncRevision: sql`nextval('row_sync_revision_seq')`, updatedAt: new Date(), sample: false })
     .where(and(eq(rows.id, rowId), eq(rows.tableId, tableId), isNull(rows.deletedAt)))
   await linkRowAttachments(tableId, rowId, fields, changed, context.tx, actor)

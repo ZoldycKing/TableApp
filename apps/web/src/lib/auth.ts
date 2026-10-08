@@ -1,4 +1,5 @@
 import { createHash, randomBytes, randomInt, timingSafeEqual } from 'node:crypto'
+import { LOGIN_CODE_TTL_MINUTES } from './auth-constants'
 
 /**
  * Одноразовые ссылки для входа.
@@ -6,7 +7,7 @@ import { createHash, randomBytes, randomInt, timingSafeEqual } from 'node:crypto
  * войти за кого-то, а сам токен живёт лишь в письме и в адресной строке.
  */
 
-export const TOKEN_TTL_MS = 15 * 60 * 1000
+export const TOKEN_TTL_MS = LOGIN_CODE_TTL_MINUTES * 60 * 1000
 export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000
 
 /** Кука сотрудника: одна на все его приложения, права считаются по базе. */

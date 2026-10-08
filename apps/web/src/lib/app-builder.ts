@@ -29,7 +29,8 @@ function pickSubtitleField(fields: readonly Field[], titleId: string | null): Fi
  * не видно этапа, либо не видно заказчика.
  */
 function pickStatusField(fields: readonly Field[]): Field | undefined {
-  return fields.find((field) => field.type === 'single_select' && field.options.choices.length > 1)
+  const candidates = fields.filter(field => field.type === 'single_select' && field.options.choices.length > 1)
+  return candidates.find(field => /^(статус|этап|состояние)$/i.test(field.name.trim())) ?? candidates[0]
 }
 
 /**

@@ -1,4 +1,4 @@
-import { appSchema, newId, positionSequence, type App, type Component, type Screen } from '@tableapp/schema'
+import { appSchema, newBlock, newId, positionSequence, type App, type BlockOf, type Component, type Screen } from '@tableapp/schema'
 import type { BuiltTemplate } from './build'
 
 /** A usable warehouse preset, with prices confined to the owner screens. */
@@ -36,8 +36,21 @@ export function asInventory(app: App, built: BuiltTemplate): App {
     titleFieldId: config.movement.name, subtitleFieldId: config.movement.date, metaFieldId: config.movement.qty,
     imageFieldId: null, statusFieldId: null, onTapScreenId: null, components: [],
   }
+  const itemFields = built.fields.filter(field => field.tableId === config.tables.items)
+  const total = itemFields.find(field => field.name === 'Стоимость остатка')
+  const low = itemFields.find(field => field.name === 'Пора докупать')
+  const metric = () => newBlock('metric', { id: newId('component'), position: 'a', viewId: config.views.items }) as BlockOf<'metric'>
+  const stockMetric = total ? { ...metric(),
+    type: 'metric' as const, title: 'Стоимость запасов', description: 'по текущим закупочным ценам', kind: 'sum' as const,
+    fieldId: total.id, format: 'currency' as const } : null
+  const lowMetric = low ? { ...metric(),
+    type: 'metric' as const, title: 'Пора заказать', description: 'остаток не больше порога', kind: 'count' as const,
+    where: { fieldId: low.id, value: true } } : null
   const screens: Screen[] = [
-    ...app.screens.filter(s => s.type === 'dashboard').map(s => ({ ...s, access: access([owner]) })),
+    ...app.screens.filter(s => s.type === 'dashboard').map(s => ({ ...s, access: access([owner]),
+      blocks: s.type === 'dashboard' ? [s.blocks.find(block => block.type === 'metric' && block.kind === 'count' && !block.where), stockMetric, lowMetric,
+        ...s.blocks.filter(block => block.type !== 'metric')].filter((block): block is NonNullable<typeof block> => Boolean(block))
+        .map((block, index) => ({ ...block, position: positionSequence(s.blocks.length + 3)[index]! })) : [] })),
     { ...list, access: access(both), name: 'Товары', tab: { icon: 'box', label: 'Товары' },
       ...(list.type === 'list' ? { titleFieldId: config.item.name, subtitleFieldId: config.item.sku, metaFieldId: config.item.stock, imageFieldId: config.item.image } : {}) },
     { ...detail, access: access(both), ...(detail.type === 'detail' ? { components: [...components, receive] } : {}) },

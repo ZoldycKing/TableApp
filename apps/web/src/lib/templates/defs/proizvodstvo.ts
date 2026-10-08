@@ -173,7 +173,7 @@ export const proizvodstvo: TemplateDef = {
         },
         {
           key: 'low',
-          name: 'Ниже нормы',
+          name: 'Ниже минимального остатка',
           type: 'formula',
           expression: '{Текущий остаток} < {Минимальный остаток}',
           help: 'Отметка появляется сама, когда остаток опустился ниже минимума. Эти материалы директор видит на главном экране.',
@@ -181,7 +181,7 @@ export const proizvodstvo: TemplateDef = {
       ],
       views: [
         { name: 'Все материалы', type: 'grid' },
-        { name: 'Ниже нормы', type: 'grid', filter: { field: 'low', op: 'is', value: true } },
+        { name: 'Ниже минимального остатка', type: 'grid', filter: { field: 'low', op: 'is', value: true } },
       ],
       rows: [
         { key: 'm1', values: { name: 'Пластик', unit: 'кг', opening: 1500, min: 300, movements: { rowKeys: ['mv0', 'mv1', 'mv5'] } } },

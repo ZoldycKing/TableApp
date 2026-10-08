@@ -56,6 +56,8 @@ export type TemplateField = {
   fn?: RollupFn
   /** Формула: имена полей в фигурных скобках, как их видит человек. */
   expression?: string
+  /** Начальное значение числа из связанной строки; после сохранения не пересчитывается. */
+  initialFrom?: { through: string; target: string }
 }
 
 export type TemplateView = {

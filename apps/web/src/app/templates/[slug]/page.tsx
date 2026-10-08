@@ -19,6 +19,7 @@ import { templateStart } from '@/lib/site'
 import { SOLUTIONS } from '@/lib/solutions'
 import { findTemplate, TEMPLATES } from '@/lib/templates/catalog'
 import type { TemplateDef } from '@/lib/templates/types'
+import { templateAccessNote } from '@/lib/templates/presentation'
 
 export const dynamic = 'force-dynamic'
 
@@ -124,6 +125,7 @@ export default async function TemplatePage({ params }: { params: Promise<{ slug:
   const relations = template.tables.flatMap((table) =>
     table.fields.filter((field) => field.type === 'relation'),
   ).length
+  const computed = template.tables.flatMap(table => table.fields).filter(field => ['formula', 'lookup', 'rollup', 'count'].includes(field.type)).length
   const views = template.tables
     .flatMap((table) => table.views.map((view) => view.name.toLowerCase()))
     .slice(0, 4)
@@ -166,14 +168,14 @@ export default async function TemplatePage({ params }: { params: Promise<{ slug:
       {/* --- Как выглядит --------------------------------------------- */}
       <Section
         id="primer"
-        title="Главное действие этого шаблона"
-        lead={`Так выглядит работа в приложении «${template.appName}» на строках-примерах, которые появятся у вас.`}
+        title={template.inventory ? 'Что видят кладовщик и владелец' : 'Как устроена работа с шаблоном'}
+        lead="Статичные примеры таблицы и приложения на учебных записях шаблона. После установки вы сможете заменить их своими."
       >
         <TemplateDemo id={template.id} />
 
         <div className="mt-8 grid gap-4 text-sm leading-relaxed text-ink-soft sm:grid-cols-2">
           <p>
-            {template.inventory ? 'Кладовщик видит товары и принимает поступления из карточки. Владелец видит цены, сводку и журнал приёмок. Текущий остаток считается из начального количества и приёмок.' : <>Приложение собирается по таблице «{appTable.name}»: список, карточка записи, формы
+            {template.inventory ? 'Шаблон для штучных товаров учитывает начальный запас и поступления. Кладовщик записывает приёмки с телефона. Расход, списание и инвентаризация пока не подключены.' : template.portal ? 'Клиентский кабинет показывает заказы по почте клиента и публичные услуги. Таблица «Обращения» пока не подключена к экранам кабинета.' : template.production ? 'Начальник смены вводит выпуск, директор проверяет материалы, движения и сводку. Расход материалов считается по нормам годного выпуска; брак учитывается отдельно.' : <>Приложение собирается по таблице «{appTable.name}»: список, карточка записи, формы
             добавления и правки, сводка с числами. Дальше всё правится мышкой — что показать,
             что спросить, что скрыть.</>}
           </p>
@@ -199,7 +201,7 @@ export default async function TemplatePage({ params }: { params: Promise<{ slug:
       {/* --- Состав --------------------------------------------------- */}
       <Section
         title="Что создаётся в вашем пространстве"
-        lead={`${template.tables.length} ${plural(template.tables.length, ['таблица', 'таблицы', 'таблиц'])}, внутри ${rows} ${plural(rows, ['строка-пример', 'строки-примера', 'строк-примеров'])} — их можно удалить одной кнопкой.`}
+        lead={`${template.tables.length} ${plural(template.tables.length, ['таблица', 'таблицы', 'таблиц'])} и ${rows} учебных записей. В каждой таблице можно удалить неизменённые примеры; ваши записи и отредактированные примеры сохранятся.`}
         tone="white"
       >
         <ScreenFrame device="desktop" title="Состав шаблона">
@@ -219,17 +221,18 @@ export default async function TemplatePage({ params }: { params: Promise<{ slug:
       <Section title="Что уже настроено, а что готовите вы" width="narrow">
         <div className="grid gap-6 sm:grid-cols-2">
           <div>
-            <h3 className="font-display text-base font-bold">Готово сразу</h3>
+            <h3 className="font-display text-base font-bold">Создаётся при установке</h3>
             <ul className="mt-3 space-y-2 text-sm leading-relaxed text-ink-soft">
               {[
                 `Таблицы с колонками и подсказками — ${template.tables.length}`,
                 relations > 0
-                  ? `Связи между таблицами — ${relations}: значения подставляются, итоги считаются`
-                  : 'Вычисляемые колонки внутри таблиц',
-                `Представления: ${views}`,
-                `Приложение «${template.appName}» с экранами и ролями`,
-                'Строки-примеры, чтобы было видно, как всё считается',
-              ].map((line) => (
+                  ? `Связи между таблицами — ${relations}`
+                  : null,
+                computed > 0 ? `Вычисляемые колонки — ${computed}` : null,
+                `Сохранённые виды таблиц: ${views}`,
+                `Черновик приложения «${template.appName}» с экранами и ролями`,
+                'Учебные записи для знакомства с шаблоном',
+              ].filter(Boolean).map((line) => (
                 <li key={line} className="flex gap-3">
                   <span aria-hidden className="mt-1.5 size-1.5 shrink-0 rounded-full bg-sage-400" />
                   <span>{line}</span>
@@ -242,10 +245,11 @@ export default async function TemplatePage({ params }: { params: Promise<{ slug:
             <h3 className="font-display text-base font-bold">Что подготовить вам</h3>
             <ul className="mt-3 space-y-2 text-sm leading-relaxed text-ink-soft">
               {[
-                'Свои данные — файлом из Excel или CSV, колонки сопоставятся по названиям',
+                template.inventory ? 'При первом импорте сопоставьте количество с «Начальным остатком». Следующие поступления записывайте приёмками' : 'Свои данные — файлом из Excel или CSV. Проверьте типы и сопоставление колонок перед импортом',
                 'Адреса сотрудников и клиентов, которым нужен доступ, и роль для каждого',
                 'Свои названия колонок и статусов, если наши не подходят',
                 'Решение, какие строки видит каждая роль: все или только свои',
+                'Проверка доступа, затем публикация приложения и отправка ссылки',
               ].map((line) => (
                 <li key={line} className="flex gap-3">
                   <span aria-hidden className="mt-1.5 size-1.5 shrink-0 rounded-full bg-ink-muted/50" />
@@ -269,8 +273,7 @@ export default async function TemplatePage({ params }: { params: Promise<{ slug:
             ))}
           </ul>
           <p className="mt-3 max-w-2xl text-sm leading-relaxed text-ink-muted">
-            Названия ролей меняются под ваши слова. От роли зависит, какие экраны человек откроет
-            и что сможет изменить; строки можно ограничить правилом «видит только свои».
+            {templateAccessNote(template)} Названия ролей можно изменить в конструкторе.
           </p>
         </div>
       </Section>

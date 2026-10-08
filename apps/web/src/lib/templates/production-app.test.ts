@@ -275,7 +275,7 @@ describe('сводка', () => {
     expect(dashboard.blocks.filter((block) => block.type === 'metric').map((block) => block.title)).toEqual([
       'Произведено сегодня',
       'Брак сегодня',
-      'Материалов ниже нормы',
+      'Ниже минимального остатка',
     ])
     expect(dashboard.blocks.filter((block) => block.type === 'list').map((block) => block.title)).toEqual([
       'Пора закупать',

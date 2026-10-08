@@ -10,17 +10,12 @@ import {
   ANONYMOUS,
   ANONYMOUS_NAME,
   asRole,
-  canOpenScreen,
-  fieldPolicy,
-  onlyReadable,
   roleName,
-  rowReach,
   visibleScreensFor,
   type Visitor,
 } from '@/lib/app-roles'
-import type { RuntimeTable, ScreenRows } from '@/lib/app-runtime'
-import { applyView } from '@/lib/apply-view'
-import { computeDashboards } from '@/lib/dashboard-data'
+import type { RuntimeTable } from '@/lib/app-runtime'
+import { previewRuntime } from '@/lib/preview-runtime'
 import type { RelatedTitles, TableSummary } from '@/lib/queries'
 import { AppShell } from '@/components/runtime/app-shell'
 import { COMPONENT_LABELS, ComponentSettings, describeComponent, makeComponent } from './component-settings'
@@ -298,9 +293,11 @@ export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTit
    * и поставить её ему в списке доступа нельзя.
    */
   const [previewAs, setPreviewAs] = useState<'editor' | 'anonymous' | RoleId>('editor')
+  const [previewEmail, setPreviewEmail] = useState('')
+  const [previewCompany, setPreviewCompany] = useState('')
 
   const previewVisitor: Visitor | null =
-    previewAs === 'editor' ? null : previewAs === 'anonymous' ? ANONYMOUS : asRole(previewAs)
+    previewAs === 'editor' ? null : previewAs === 'anonymous' ? ANONYMOUS : asRole(previewAs, previewEmail.trim() || null, previewCompany.trim())
 
   /*
    * Размер места отдельно от роли: «как это увидит клиент с телефона» —
@@ -338,83 +335,8 @@ export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTit
    * по полям тоже настоящие: владелец сразу узнает, что клиенту не посчитается
    * сумма по колонке, которой он не видит.
    */
-  const preview = useMemo(() => {
-    const viewsById = Object.fromEntries(views.map((view) => [view.id, view]))
-    const definition = { ...app, screens: shown }
-
-    /*
-     * Предпросмотр обязан отбирать так же, как сервер, — иначе он не
-     * предпросмотр, а второе мнение. Поэтому строки здесь проходят тот же
-     * путь: публичная выборка, затем отсечение полей. Ничего «упрощённого
-     * для конструктора» тут быть не должно: владелец по этой картинке решает,
-     * что можно выкладывать в интернет.
-     */
-    const readable: Record<string, ReadonlySet<string>> = {}
-    const tables: Record<string, RuntimeTable> = {}
-    const screens: Record<string, ScreenRows> = {}
-
-    for (const [tableId, table] of Object.entries(runtimeTables)) {
-      /*
-       * Отбор списков считаем и для взгляда автора: сервер его тоже считает,
-       * и без этого предпросмотр показал бы пустые списки — строки-то есть,
-       * а перечня идентификаторов для экрана нет.
-       */
-      const visitor = previewVisitor ?? asRole(definition.roles[0]?.id ?? 'client')
-      const reach = rowReach(definition, tableId, viewsById, table.fields, visitor)
-      const reachable =
-        previewVisitor === null || reach.kind !== 'gated'
-          ? table.rows
-          : table.rows.filter((row) => reach.allows(row.data))
-
-      const onScreens = new Set<string>()
-      for (const screen of definition.screens) {
-        if (screen.type !== 'list' && screen.type !== 'tiles') continue
-        if (previewVisitor !== null && !canOpenScreen(screen, previewVisitor)) continue
-        const view = viewsById[screen.source.viewId]
-        if (!view || view.tableId !== tableId) continue
-
-        const ids = applyView(reachable, table.fields, view.config).rows.map((row: { id: string }) => row.id)
-        screens[screen.id] = { rowIds: ids }
-        for (const id of ids) onScreens.add(id)
-      }
-
-      if (previewVisitor === null) {
-        tables[tableId] = table
-        continue
-      }
-
-      const policy = fieldPolicy(definition, tableId, previewVisitor, viewsById)
-      if (policy.restricted) readable[tableId] = policy.fields
-
-      const shipped =
-        reach.kind === 'none'
-          ? []
-          : reach.kind === 'gated'
-            ? reachable.filter((row) => onScreens.has(row.id))
-            : reachable
-
-      tables[tableId] = {
-        ...table,
-        rows: shipped.map((row) => ({ ...row, data: onlyReadable(row.data, policy) })),
-      }
-    }
-
-    return {
-      app: definition,
-      views: viewsById,
-      tables,
-      screens,
-      relatedTitles,
-      blocks: computeDashboards(definition, {
-        views: viewsById,
-        // Числа считаются по неурезанным строкам: отбор полей ограничивает
-        // то, что уходит наружу, а не то, что сервер вправе посчитать.
-        tables: runtimeTables,
-        readable,
-        role: previewVisitor?.roleId ?? undefined,
-      }),
-    }
-  }, [app, shown, views, runtimeTables, relatedTitles, previewVisitor])
+  const preview = useMemo(() => previewRuntime({ ...app, screens: shown }, views, runtimeTables, relatedTitles, previewVisitor),
+    [app, shown, views, runtimeTables, relatedTitles, previewVisitor])
 
   // Открытый в редакторе экран может быть закрыт выбранной роли: тогда
   // предпросмотр начинается с того, что ей доступно, а не с ошибки.
@@ -645,10 +567,17 @@ export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTit
             с пометкой «Видно без входа» и только выбранные в них поля.
           </p>
         ) : previewAs !== 'editor' ? (
-          <p className="text-xs text-[var(--color-ink-muted)]">
-            Показано то, что открыто роли «{roleName(app, previewAs)}». Правило «только свои строки»
-            здесь не применяется: оно зависит от конкретного человека и его почты.
-          </p>
+          <div className="space-y-2">
+            <p className="text-xs text-[var(--color-ink-muted)]">Экраны роли «{roleName(app, previewAs)}». Для проверки своих записей укажите почту и, если правило использует её, организацию. Без почты ограниченные записи не показываются.</p>
+            <label className="block text-xs text-[var(--color-ink-muted)]">Почта для проверки
+              <input type="email" value={previewEmail} onChange={event => setPreviewEmail(event.target.value)} list="preview-people"
+                className="mt-1 w-full rounded-lg border border-[var(--color-border-subtle)] px-2 py-1.5 text-sm" placeholder="client@example.ru" />
+            </label>
+            <datalist id="preview-people">{app.allowlist.filter(entry => entry.roleId === previewAs).map(entry => <option key={entry.email} value={entry.email} />)}</datalist>
+            <label className="block text-xs text-[var(--color-ink-muted)]">Организация для проверки
+              <input value={previewCompany} onChange={event => setPreviewCompany(event.target.value)} className="mt-1 w-full rounded-lg border border-[var(--color-border-subtle)] px-2 py-1.5 text-sm" />
+            </label>
+          </div>
         ) : null}
 
         <div className="flex flex-wrap gap-1">

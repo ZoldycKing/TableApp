@@ -420,6 +420,7 @@ export function ImportScreen({ tables = [], target }: { tables?: ImportTarget[];
             : 'Книга Excel (.xlsx) или CSV. В книге можно выбрать один лист или несколько — каждый станет своей таблицей. У CSV кодировка windows-1251 и точка с запятой определяются сами.'}
         </p>
       </header>
+      {(target?.fields ?? targetFields).some(field => field.name === 'Начальный остаток') ? <p className="mb-4 text-sm text-ink-soft">При первом импорте перенесите количество на складе в «Начальный остаток». Вычисляемый «Остаток» напрямую не заполняется. Следующие поступления записывайте приёмками.</p> : null}
 
       {stage === 'file' ? (
         <button

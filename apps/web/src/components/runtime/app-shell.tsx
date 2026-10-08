@@ -748,7 +748,7 @@ export function AppShell({
                 ) : null
               }
               formSlot={
-                isRunForm ? <ConsumptionPanel preview={preview} loading={previewing} /> : null
+                isRunForm ? <><p className="text-xs leading-relaxed text-ink-muted">В «Произведено» укажите только годные изделия. Брак записывается отдельно и не входит в это количество.</p><ConsumptionPanel preview={preview} loading={previewing} /></> : null
               }
               onSubmit={(values, mode, baseVersion) => {
                 // Выпуск и движение склада пишутся своими действиями: одной

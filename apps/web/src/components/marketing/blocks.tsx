@@ -140,14 +140,15 @@ export function PrimaryLink({ href, children }: { href: string; children: ReactN
 
 /** Второе действие: посмотреть, прежде чем начинать. */
 export function SecondaryLink({ href, children }: { href: string; children: ReactNode }) {
+  const Element = href.startsWith('#') ? 'a' : Link
   return (
-    <Link
+    <Element
       href={href}
       className="group rounded-xl border border-sand-300 bg-white/60 px-6 py-3.5 text-sm font-medium transition-all hover:-translate-y-0.5 hover:border-ink/25 hover:bg-white"
     >
       {children}
       <span className="ml-1.5 inline-block transition-transform group-hover:translate-x-1">→</span>
-    </Link>
+    </Element>
   )
 }
 

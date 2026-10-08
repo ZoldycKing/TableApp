@@ -1,5 +1,5 @@
 import type { ImportPreview, SheetBlocker, SheetInfo, SheetNote } from '@tableapp/import'
-import type { Field, FieldType } from '@tableapp/schema'
+import { isComputed, type Field, type FieldType } from '@tableapp/schema'
 
 /**
  * Правила импорта книги: что выбрано, куда ложится и что этому мешает.
@@ -85,12 +85,19 @@ export function guessMapping(preview: ImportPreview, targetFields: readonly Fiel
   const guess: Record<number, string> = {}
   for (const [index, field] of preview.fields.entries()) {
     const match = targetFields.find(
-      (candidate) => !taken.has(candidate.id) && normalizeName(candidate.name) === normalizeName(field.name),
+      (candidate) => !isComputed(candidate.type) && !taken.has(candidate.id) && normalizeName(candidate.name) === normalizeName(field.name),
     )
     if (match) {
       taken.add(match.id)
       guess[index] = match.id
     }
+  }
+  // Opening balances accept a common spreadsheet heading; computed stock is never an import destination.
+  const opening = targetFields.find(field => field.type === 'number' && normalizeName(field.name) === 'начальный остаток')
+  const stock = targetFields.some(field => field.type === 'formula' && normalizeName(field.name) === 'остаток')
+  if (opening && stock && !taken.has(opening.id)) {
+    const index = preview.fields.findIndex((field, index) => guess[index] === undefined && normalizeName(field.name) === 'остаток')
+    if (index !== -1) guess[index] = opening.id
   }
   return guess
 }

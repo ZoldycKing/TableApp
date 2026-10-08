@@ -47,8 +47,8 @@ export default async function FeaturesPage() {
         lead="Таблица остаётся таблицей — и становится приложением, у которого есть экраны, роли и права. Ниже примеры на данных, которые можно переключать и считать прямо здесь."
         actions={
           <>
-            <PrimaryLink href={member ? '/app' : '/login'}>
-              {member ? 'В рабочее пространство' : 'Загрузить свою таблицу'}
+            <PrimaryLink href={member ? '/import' : '/login?next=%2Fimport'}>
+              {member ? 'Импортировать таблицу' : 'Загрузить свою таблицу'}
             </PrimaryLink>
             <SecondaryLink href="/demo">Открыть живое демо</SecondaryLink>
           </>
@@ -197,7 +197,7 @@ export default async function FeaturesPage() {
               fields={[
                 { label: 'Почта', value: 'master@vektor.ru' },
                 { label: 'Код из письма', value: '· · · · · ·', strong: true },
-                { label: 'Действует', value: '10 минут' },
+                { label: 'Действует', value: `${LOGIN_CODE_TTL_MINUTES} минут` },
               ]}
               actions={['Войти']}
             />
@@ -267,10 +267,11 @@ export default async function FeaturesPage() {
         title="Посмотрите на"
         accent="своей таблице"
         text="Загрузите файл — увидите, какие колонки получились и что из них соберётся. Бесплатный тариф без ограничения по времени, карта не нужна."
-        href={member ? '/app' : '/login'}
-        label={member ? 'В рабочее пространство' : 'Загрузить свою таблицу'}
+        href={member ? '/import' : '/login?next=%2Fimport'}
+        label={member ? 'Импортировать таблицу' : 'Загрузить свою таблицу'}
         secondary={{ href: '/how-it-works', label: 'Как это работает' }}
       />
     </MarketingShell>
   )
 }
+import { LOGIN_CODE_TTL_MINUTES } from '@/lib/auth-constants'

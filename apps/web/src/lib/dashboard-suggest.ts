@@ -42,8 +42,6 @@ type Context = {
   primaryFieldId?: string | null
 }
 
-const MONEY = new Set(['currency'])
-
 /** Заготовка нужного вида с поправками: поля блока перечислены в реестре. */
 function make<T extends Block['type']>(
   type: T,
@@ -55,17 +53,20 @@ function make<T extends Block['type']>(
 }
 
 function firstStatus(fields: readonly Field[]): Field | undefined {
-  return fields.find((field) => field.type === 'single_select' && field.options.choices.length > 1)
+  const candidates = fields.filter(field => field.type === 'single_select' && field.options.choices.length > 1)
+  return candidates.find(field => /^(статус|этап|состояние)$/i.test(field.name.trim())) ?? candidates[0]
 }
 
 /** Деньги предпочтительнее любого другого числа: их и просят посчитать. */
 function firstNumber(fields: readonly Field[]): Field | undefined {
-  const money = fields.find((field) => field.type === 'number' && MONEY.has(field.options.format))
-  return money ?? fields.find((field) => field.type === 'number')
+  // A price per item, area or callback amount is not an additive business total.
+  return fields.find(field => (field.type === 'number' || field.type === 'rollup' || field.type === 'formula')
+    && /^(сумма|итого|стоимость заказа|стоимость остатка|произведено|годных изделий)$/i.test(field.name.trim()))
 }
 
 function firstDate(fields: readonly Field[]): Field | undefined {
-  return fields.find((field) => field.type === 'date' || field.type === 'datetime')
+  return fields.find(field => (field.type === 'date' || field.type === 'datetime')
+    && /^(дата заказа|дата создания|создано|принято|дата выпуска)$/i.test(field.name.trim()))
 }
 
 function firstCheckbox(fields: readonly Field[]): Field | undefined {
@@ -101,7 +102,7 @@ export function suggestMetrics(ctx: Context): Suggestion[] {
   // Счётчики по первым двум статусам: именно их и спрашивают утром.
   for (const choice of status?.type === 'single_select' ? status.options.choices.slice(0, 2) : []) {
     out.push({
-      why: `Записи со статусом «${choice.name}»`,
+      why: `Записи: «${status!.name}» — «${choice.name}»`,
       block: make('metric', ctx, {
         title: choice.name,
         kind: 'count',
@@ -122,10 +123,10 @@ export function suggestMetrics(ctx: Context): Suggestion[] {
     out.push({
       why: date ? `Сумма по колонке «${number.name}» за месяц` : `Сумма по колонке «${number.name}»`,
       block: make('metric', ctx, {
-        title: date ? `${number.name} за месяц` : number.name,
+        title: date ? `${number.name} за месяц` : ctx.tableName === 'Сделки' ? 'Сумма сделок' : `Всего: ${number.name.toLowerCase()}`,
         // Подписываем, по какой дате считается срок: иначе сумма выглядит
         // как выручка, хотя это сумма заказов, а не поступлений.
-        description: date ? `по колонке «${date.name.toLowerCase()}»` : '',
+        description: date ? `по колонке «${date.name.toLowerCase()}»` : ctx.tableName === 'Сделки' ? 'все этапы; это не полученные деньги' : `сумма по колонке «${number.name}»`,
         kind: 'sum',
         fieldId: number.id,
         dateFieldId: date?.id ?? null,
@@ -177,10 +178,10 @@ export function suggestBlocks(ctx: Context): Suggestion[] {
 
   if (status) {
     out.push({
-      why: `Сколько записей в каждом статусе колонки «${status.name}»`,
+      why: `Количество записей по колонке «${status.name}»`,
       block: make('pipeline', ctx, {
         // Название предметное: человек смотрит на заказы, а не на колонку.
-        title: `${ctx.tableName} по статусам`,
+        title: `${ctx.tableName}: ${status.name.toLowerCase()}`,
         stackFieldId: status.id,
         onTapScreenId: ctx.listScreenId ?? null,
       }),

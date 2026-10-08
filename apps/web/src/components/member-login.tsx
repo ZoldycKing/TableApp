@@ -1,4 +1,5 @@
 'use client'
+import { LOGIN_CODE_TTL_MINUTES } from '@/lib/auth-constants'
 
 import { useRouter } from 'next/navigation'
 import { useState, useTransition } from 'react'
@@ -126,7 +127,7 @@ export function MemberLogin({
       >
         <h1 className="text-2xl font-semibold tracking-tight">Введите код</h1>
         <p className="text-sm text-[var(--color-ink-muted)]">
-          Отправили код на {email}. Он действует 15 минут. В письме есть и ссылка —
+          Отправили код на {email}. Он действует {LOGIN_CODE_TTL_MINUTES} минут. В письме есть и ссылка —
           если открыли его здесь же, достаточно нажать на неё.
         </p>
 

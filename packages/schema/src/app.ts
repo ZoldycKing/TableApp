@@ -215,7 +215,7 @@ export type AppRole = z.infer<typeof appRoleSchema>
 export const DEFAULT_APP_ROLES: AppRole[] = [
   { id: 'client', name: 'Клиент', isDefault: true },
   { id: 'staff', name: 'Сотрудник', isDefault: false },
-  { id: 'manager', name: 'Ведущий', isDefault: false },
+  { id: 'manager', name: 'Руководитель', isDefault: false },
 ]
 
 /** Роли, которые получают доступ, если владелец ничего не настраивал. */

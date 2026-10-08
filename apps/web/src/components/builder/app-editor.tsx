@@ -4,6 +4,8 @@ import type { App, Device, RoleId, Component, Screen, ScreenType, View } from '@
 import { byPosition, DEVICES, newId, positionBetween, positionSequence } from '@tableapp/schema'
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { publishAppAction, updateAppDraftAction } from '@/app/app-actions'
+import { enableInventoryAction } from '@/app/inventory-setup-actions'
+import { useRouter } from 'next/navigation'
 import {
   ANONYMOUS,
   ANONYMOUS_NAME,
@@ -95,6 +97,7 @@ const ADDABLE: Component['type'][] = [
 ]
 
 type Props = {
+  inventoryUpgradeTableId?: string | null
   initialApp: App
   tables: TableSummary[]
   views: View[]
@@ -128,7 +131,8 @@ function PreviewChip({
   )
 }
 
-export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTitles, publishedAt }: Props) {
+export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTitles, publishedAt, inventoryUpgradeTableId }: Props) {
+  const router = useRouter()
   const [app, setApp] = useState<App>(initialApp)
   const [screenId, setScreenId] = useState(initialApp.screens[0]?.id ?? '')
   const [componentId, setComponentId] = useState<string | null>(null)
@@ -696,6 +700,16 @@ export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTit
           {scale < 1 ? `, уменьшено до ${Math.round(scale * 100)}%` : ''}.
         </p>
 
+        {inventoryUpgradeTableId && !app.inventory && <div className="space-y-2 rounded-xl border border-sand-200 p-3">
+          <p className="text-xs leading-relaxed text-ink-soft">Подключите журнал приёмок и роли «Кладовщик» и «Владелец». Текущие остатки сохранятся как начальные. После настройки опубликуйте черновик.</p>
+          <button type="button" disabled={pending || save.kind === 'dirty' || save.kind === 'saving' || save.kind === 'error'}
+            onClick={() => startTransition(async () => {
+              const result = await enableInventoryAction(app.id, inventoryUpgradeTableId)
+              if (!result.ok) { setSave({ kind: 'error', text: result.error }); return }
+              setApp(result.app); setSave({ kind: 'note', text: 'Приёмка настроена. Опубликуйте черновик.' }); router.refresh()
+            })}
+            className="w-full rounded-lg border border-sand-200 px-3 py-2 text-sm font-medium hover:bg-sand-100 disabled:opacity-40">Подключить приёмку</button>
+        </div>}
         <button
           type="button"
           disabled={pending}

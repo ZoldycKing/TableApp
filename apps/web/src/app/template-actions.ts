@@ -22,6 +22,7 @@ import { buildTemplate } from '@/lib/templates/build'
 import { findTemplate } from '@/lib/templates/catalog'
 import { asProduction } from '@/lib/templates/production-app'
 import { asPortal } from '@/lib/templates/portal-app'
+import { asInventory } from '@/lib/templates/inventory-app'
 import type { ActionResult } from './actions'
 
 export type AppliedTemplate = {
@@ -77,15 +78,14 @@ export async function applyTemplateAction(
   })
 
   /*
-   * Надстройки поверх собранного приложения. Их две, и они не смешиваются:
-   * кабинет клиента — про приём заявок снаружи, производственный учёт —
-   * про две внутренние роли и операцию, которой нет в общем движке.
+   * Готовые сценарии поверх общего конструктора: кабинет клиента,
+   * производственный учёт и склад с журналом приёмок.
    */
   const draft = built.portal
     ? asPortal(generated, built.portal)
     : built.production
       ? asProduction(generated, built)
-      : generated
+      : built.inventory ? asInventory(generated, built) : generated
 
   try {
     await writeRows(workspaceId, async (context) => {

@@ -17,7 +17,9 @@
  * с проверкой, а не приводится к типу.
  */
 
-export type NavEntry = { screenId: string; rowId: string | null }
+import type { SavedReceipt } from '@/app/inventory-actions'
+
+export type NavEntry = { screenId: string; rowId: string | null; receipt?: { operationId: string; result: SavedReceipt } }
 
 /** Отбор одного списка: выбранный статус и строка поиска. */
 export type ListState = { choiceId: string | null; query: string }
@@ -69,9 +71,20 @@ export function navFromSearch(search: string, known: (screenId: string) => boole
 
 function isEntry(value: unknown, known: (screenId: string) => boolean): value is NavEntry {
   if (!value || typeof value !== 'object') return false
-  const entry = value as { screenId?: unknown; rowId?: unknown }
+  const entry = value as { screenId?: unknown; rowId?: unknown; receipt?: unknown }
   if (typeof entry.screenId !== 'string' || !known(entry.screenId)) return false
+  if (entry.receipt !== undefined && !isReceipt(entry.receipt)) return false
   return entry.rowId === null || typeof entry.rowId === 'string'
+}
+
+function isReceipt(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false
+  const receipt = value as { operationId?: unknown; result?: unknown }
+  if (typeof receipt.operationId !== 'string' || !/^row_[a-zA-Z0-9_-]{8,64}$/.test(receipt.operationId) || !receipt.result || typeof receipt.result !== 'object') return false
+  const result = receipt.result as Record<string, unknown>
+  return result.ok === true && typeof result.name === 'string' && typeof result.repeated === 'boolean' &&
+    typeof result.before === 'number' && Number.isFinite(result.before) && typeof result.after === 'number' && Number.isFinite(result.after) &&
+    typeof result.quantity === 'number' && Number.isSafeInteger(result.quantity) && result.quantity >= 1 && result.quantity <= 1_000_000
 }
 
 function readLists(value: unknown): Record<string, ListState> {

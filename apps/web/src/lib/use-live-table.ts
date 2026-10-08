@@ -24,12 +24,17 @@ import { hasUnsaved } from './unsaved'
 const SETTLE_MS = 700
 
 export function useLiveTable(tableId: string, enabled = true): void {
+  useLiveRefresh(enabled ? `/api/live/${encodeURIComponent(tableId)}` : null)
+}
+
+/** Both editor and published app preserve unsaved forms while refreshing. */
+export function useLiveRefresh(url: string | null): void {
   const router = useRouter()
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const waiting = useRef(false)
 
   useEffect(() => {
-    if (!enabled || typeof window === 'undefined' || !('EventSource' in window)) return
+    if (!url || typeof window === 'undefined' || !('EventSource' in window)) return
 
     /*
      * «Сейчас не трогать» — это два разных вопроса, и фокуса для них мало.
@@ -60,7 +65,7 @@ export function useLiveTable(tableId: string, enabled = true): void {
       timer.current = setTimeout(refresh, SETTLE_MS)
     }
 
-    const source = new EventSource(`/api/live/${tableId}`)
+    const source = new EventSource(url)
     source.onmessage = schedule
 
     /*
@@ -111,5 +116,5 @@ export function useLiveTable(tableId: string, enabled = true): void {
       clearInterval(waitingTick)
       if (timer.current) clearTimeout(timer.current)
     }
-  }, [tableId, enabled, router])
+  }, [url, router])
 }

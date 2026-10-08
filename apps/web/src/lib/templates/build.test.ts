@@ -52,8 +52,10 @@ describe('шаблоны разворачиваются в рабочие таб
     const built = build('sklad')
     const positions = built.rows.map((row) => row.position)
     expect([...positions].sort()).toEqual(positions)
-    const fieldPositions = built.fields.map((field) => field.position)
-    expect([...fieldPositions].sort()).toEqual(fieldPositions)
+    for (const table of built.tables) {
+      const fieldPositions = built.fields.filter(field => field.tableId === table.id).map(field => field.position)
+      expect([...fieldPositions].sort()).toEqual(fieldPositions)
+    }
   })
 
   it('новые таблицы встают после уже существующих', () => {
@@ -130,7 +132,7 @@ describe('заявки: связь и подстановка из справоч
 describe('склад: вычисляемые колонки и отбор', () => {
   it('«Пора докупать» считается по остатку и порогу', () => {
     const built = build('sklad')
-    const fields = built.fields.map((field) => field as unknown as Field)
+    const fields = built.fields.filter(field => field.tableId === built.appTableId).map((field) => field as unknown as Field)
     const formulas = compileTableFormulas(fields)
     const low = built.fields.find((field) => field.name === 'Пора докупать')!
     const qty = built.fields.find((field) => field.name === 'Остаток')!
@@ -138,13 +140,13 @@ describe('склад: вычисляемые колонки и отбор', () =
 
     for (const row of built.rows) {
       const computed = computeDerivedRow(row.data, fields, new Map(), formulas)
-      expect(computed[low.id]).toBe((row.data[qty.id] as number) <= (row.data[min.id] as number))
+      expect(computed[low.id]).toBe((computed[qty.id] as number) <= (row.data[min.id] as number))
     }
   })
 
   it('представление «Заканчивается» показывает только то, что кончается', () => {
     const built = build('sklad')
-    const fields = built.fields.map((field) => field as unknown as Field)
+    const fields = built.fields.filter(field => field.tableId === built.appTableId).map((field) => field as unknown as Field)
     const formulas = compileTableFormulas(fields)
     const view = built.views.find((item) => item.name === 'Заканчивается')!
     const filter = (view.config as { filter: FilterGroup }).filter
@@ -161,14 +163,14 @@ describe('склад: вычисляемые колонки и отбор', () =
 
   it('стоимость остатка — остаток на цену', () => {
     const built = build('sklad')
-    const fields = built.fields.map((field) => field as unknown as Field)
+    const fields = built.fields.filter(field => field.tableId === built.appTableId).map((field) => field as unknown as Field)
     const formulas = compileTableFormulas(fields)
     const total = built.fields.find((field) => field.name === 'Стоимость остатка')!
     const qty = built.fields.find((field) => field.name === 'Остаток')!
     const price = built.fields.find((field) => field.name === 'Цена')!
 
     const row = computeDerivedRow(built.rows[0]!.data, fields, new Map(), formulas)
-    expect(row[total.id]).toBe((built.rows[0]!.data[qty.id] as number) * (built.rows[0]!.data[price.id] as number))
+    expect(row[total.id]).toBe((row[qty.id] as number) * (built.rows[0]!.data[price.id] as number))
   })
 })
 

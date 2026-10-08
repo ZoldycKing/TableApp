@@ -225,4 +225,9 @@ export type TemplateDef = {
   appName: string
   portal?: TemplatePortal
   production?: TemplateProduction
+  inventory?: {
+    tables: { items: string; movements: string }
+    item: { name: string; opening: string; movements: string; stock: string; image: string; sku: string }
+    movement: { name: string; item: string; qty: string; date: string; note: string; author: string }
+  }
 }

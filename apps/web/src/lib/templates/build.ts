@@ -66,6 +66,7 @@ export type BuiltTemplate = {
   appTableId: string
   appViewId: string
   appName: string
+  inventory?: (Omit<import('@tableapp/schema').InventoryConfig, 'receiptScreenId'> & { views: { items: string; movements: string } }) | null
   /** Готовый кабинет клиента: таблица, поле с почтой, поля формы и название. */
   portal: {
     tableId: string
@@ -392,6 +393,18 @@ export function buildTemplate(input: {
     appName: template.appName,
     portal,
     production,
+    inventory: template.inventory ? (() => {
+      const map = template.inventory!
+      const tableId = (key: string) => tableIds.get(key)!
+      const of = <T extends Record<string, string>>(tableKey: string, keys: T): T => Object.fromEntries(
+        Object.entries(keys).map(([name, fieldKey]) => [name, fieldIds.get(key(tableKey, fieldKey))!]),
+      ) as T
+      return {
+        tables: { items: tableId(map.tables.items), movements: tableId(map.tables.movements) },
+        views: { items: appView.id, movements: views.find(view => view.tableId === tableId(map.tables.movements))!.id },
+        item: of(map.tables.items, map.item), movement: of(map.tables.movements, map.movement),
+      }
+    })() : null,
   }
 }
 

@@ -11,10 +11,15 @@ export const sklad: TemplateDef = {
     'Остатки с фотографиями и артикулами',
     'Колонка «Пора докупать» считается сама по минимальному остатку',
     'Отдельный список того, что заканчивается',
-    'Приложение: кладовщик правит остаток с телефона, не подходя к компьютеру',
+    'Кладовщик принимает товар с телефона — приёмка записывается в журнал и меняет остаток',
   ],
   appTable: 'items',
   appName: 'Склад',
+  inventory: {
+    tables: { items: 'items', movements: 'receipts' },
+    item: { name: 'name', opening: 'opening', movements: 'receipts', stock: 'qty', image: 'photo', sku: 'sku' },
+    movement: { name: 'name', item: 'item', qty: 'qty', date: 'date', note: 'note', author: 'author' },
+  },
   tables: [
     {
       key: 'items',
@@ -41,12 +46,15 @@ export const sklad: TemplateDef = {
           help: 'Снимок с телефона. На складе по фото находят быстрее, чем по названию.',
         },
         {
-          key: 'qty',
-          name: 'Остаток',
+          key: 'opening',
+          name: 'Начальный остаток',
           type: 'number',
           options: { format: 'plain', precision: 0 },
-          help: 'Сколько сейчас лежит. Это единственное число, которое меняется каждый день, — его и правят с телефона.',
+          help: 'Сколько было до начала учёта. Новые поступления записывайте приёмкой: текущий остаток считается из журнала.',
         },
+        { key: 'receipts', name: 'Приёмки', type: 'relation', relationTable: 'receipts', allowMultiple: true, help: 'Связь с журналом заполняется при приёмке автоматически.' },
+        { key: 'received', name: 'Принято, шт', type: 'rollup', through: 'receipts', target: 'qty', fn: 'sum', help: 'Сумма количества всех записанных приёмок.' },
+        { key: 'qty', name: 'Остаток', type: 'formula', expression: '{Начальный остаток} + {Принято, шт}', help: 'Начальный остаток плюс все приёмки. Считается из журнала и не редактируется напрямую.' },
         {
           key: 'min',
           name: 'Минимальный остаток',
@@ -84,7 +92,7 @@ export const sklad: TemplateDef = {
           name: 'Пора докупать',
           type: 'formula',
           expression: '{Остаток} <= {Минимальный остаток}',
-          help: 'Считается само: отметка появляется, когда остаток опустился до порога. Вручную не заполняется — правьте «Остаток» или «Минимальный остаток».',
+          help: 'Считается само: отметка появляется, когда остаток опустился до порога. Вручную не заполняется — поступления записывайте приёмкой, а порог меняйте в «Минимальном остатке».',
         },
         {
           key: 'total',
@@ -108,7 +116,19 @@ export const sklad: TemplateDef = {
         { key: 's6', values: { name: 'Насос циркуляционный 25/60', sku: 'PMP-2560', qty: 1, min: 2, price: 11900, category: 'Запчасти', place: 'Стеллаж Б, полка 3' } },
         { key: 's7', values: { name: 'Коробка гофрокартон 400×300×200', sku: 'BOX-403020', qty: 140, min: 50, price: 42, category: 'Упаковка', place: 'Антресоль' } },
         { key: 's8', values: { name: 'Перчатки рабочие, пара', sku: 'GLV-10', qty: 25, min: 30, price: 95, category: 'Расходники', place: 'Стеллаж А, полка 1' } },
+      ].map(({ key, values: { qty, ...values } }) => ({ key, values: { ...values, opening: qty } })),
+    },
+    {
+      key: 'receipts', name: 'Приёмки', icon: 'truck', primary: 'name',
+      fields: [
+        { key: 'name', name: 'Приёмка', type: 'text', help: 'Название товара, принятое вместе с записью.' },
+        { key: 'item', name: 'Товар', type: 'relation', relationTable: 'items', allowMultiple: false, help: 'Товар, выбранный в карточке перед приёмкой.' },
+        { key: 'qty', name: 'Принято, шт', type: 'number', options: { format: 'plain', precision: 0 }, help: 'Сколько поступило. Это количество прибавляется к начальному остатку.' },
+        { key: 'date', name: 'Когда', type: 'datetime', help: 'Время сохранения приёмки ставится сервером.' },
+        { key: 'note', name: 'Комментарий', type: 'text', help: 'Номер накладной или пояснение сотрудника.' },
+        { key: 'author', name: 'Кто принял', type: 'email', help: 'Почта вошедшего сотрудника ставится сервером.' },
       ],
+      views: [{ name: 'Все приёмки', type: 'grid' }], rows: [],
     },
   ],
 }

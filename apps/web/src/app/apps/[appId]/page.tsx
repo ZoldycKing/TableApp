@@ -1,4 +1,4 @@
-import { apps, db } from '@tableapp/db'
+import { apps, db, tables as dbTables } from '@tableapp/db'
 import { appSchema } from '@tableapp/schema'
 import { eq } from 'drizzle-orm'
 import Link from 'next/link'
@@ -31,6 +31,11 @@ export default async function AppEditorPage({ params }: { params: Promise<{ appI
   if (!parsed.success) notFound()
 
   const runtime = await loadWorkspaceRuntime(member.workspaceId)
+  const list = parsed.data.screens.find(screen => screen.type === 'list')
+  const itemTableId = list?.type === 'list' ? runtime.views.find(view => view.id === list.source.viewId)?.tableId : null
+  const [itemTable] = itemTableId ? await db.select({ templateId: dbTables.templateId }).from(dbTables).where(eq(dbTables.id, itemTableId)).limit(1) : []
+  const inventoryUpgradeTableId = !parsed.data.inventory && itemTable?.templateId === 'sklad' &&
+    runtime.tables[itemTableId!]?.fields.some(field => field.name === 'Остаток' && field.type === 'number') ? itemTableId : null
   const tables: TableSummary[] = Object.values(runtime.tables).map((table) => ({
     id: table.id,
     name: table.name,
@@ -91,6 +96,7 @@ export default async function AppEditorPage({ params }: { params: Promise<{ appI
       )}
 
       <AppEditor
+        inventoryUpgradeTableId={inventoryUpgradeTableId}
         initialApp={parsed.data}
         tables={tables}
         views={runtime.views}

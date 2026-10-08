@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState, useTransition } from 'react'
 import { signOutAppAction } from '@/app/auth-actions'
 import { saveMovementAction, saveProductionAction } from '@/app/production-actions'
+import { InventoryReceipt } from './inventory-receipt'
+import { useLiveApp } from '@/lib/use-live-app'
 import { appCreateRowAction, appDeleteRowAction, appUpdateRowAction } from '@/app/runtime-actions'
 import type { RuntimeApp } from '@/lib/app-runtime'
 import type { TableRow } from '@/lib/table-store'
@@ -147,6 +149,7 @@ export function AppShell({
   browserHistory?: boolean
 }) {
   const { app } = runtime
+  useLiveApp(app.slug, !demo && !editing)
   const screens = useMemo(() => new Map(app.screens.map((screen) => [screen.id, screen])), [app.screens])
   const tabs = app.screens.filter((screen) => screen.tab !== null)
 
@@ -227,7 +230,9 @@ export function AppShell({
 
     const entry = next.stack[next.stack.length - 1]!
     const url = `${window.location.pathname}${navSearch(entry, home)}`
-    const state = withNav(window.history.state, next)
+    // Pass our own state: Next copies its metadata and synchronizes the canonical URL.
+    // Reusing Next's marked state bypasses that synchronization and refresh resets navigation.
+    const state = withNav(null, next)
     if (mode === 'push') window.history.pushState(state, '', url)
     else window.history.replaceState(state, '', url)
   }
@@ -300,8 +305,15 @@ export function AppShell({
     // Адрес читаем до первой записи в историю: она его же и перепишет.
     const search = window.location.search
     const start = { screenId: home, rowId: null }
+    const prior = navFromHistory(window.history.state, (id) => screens.has(id))
+    const entry = navFromSearch(search, (id) => screens.has(id))
+    const last = prior?.stack.at(-1)
+    if (prior && last?.screenId === (entry?.screenId ?? home) && last.rowId === (entry?.rowId ?? null)) {
+      setStack(prior.stack); setListStates(prior.lists)
+      return
+    }
     const write = (entries: NavEntryType[], mode: 'push' | 'replace') => {
-      const state = withNav(window.history.state, { stack: entries, lists: {} })
+      const state = withNav(null, { stack: entries, lists: {} })
       const url = `${path}${navSearch(entries[entries.length - 1]!, home)}`
       if (mode === 'push') window.history.pushState(state, '', url)
       else window.history.replaceState(state, '', url)
@@ -309,7 +321,6 @@ export function AppShell({
 
     write([start], 'replace')
 
-    const entry = navFromSearch(search, (id) => screens.has(id))
     if (!entry || (entry.screenId === home && entry.rowId === null)) return
 
     const deep = [start, entry]
@@ -693,7 +704,8 @@ export function AppShell({
                 }}
               />
             ) : (
-            <ScreenView
+            app.inventory && screen.id === app.inventory.receiptScreenId ? <InventoryReceipt key={current.rowId} runtime={runtime}
+              itemId={current.rowId} config={app.inventory} demo={demo || editing} onBack={() => openTab(app.homeScreenId ?? home)} /> : <ScreenView
               screen={screen}
               table={table}
               row={row}

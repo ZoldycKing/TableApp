@@ -123,7 +123,7 @@ export default async function TemplatesPage({
             const rows = template.tables.reduce((total, table) => total + table.rows.length, 0)
             const roles = template.production
               ? [template.production.copy.director, template.production.copy.operator]
-              : DEFAULT_APP_ROLES.map((role) => role.name)
+              : template.inventory ? ['Кладовщик', 'Владелец'] : DEFAULT_APP_ROLES.map((role) => role.name)
 
             return (
               <Reveal key={template.id} delay={(index % 3) * 90}>

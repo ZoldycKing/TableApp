@@ -18,6 +18,15 @@ import {
  */
 
 const known = (id: string) => id.startsWith('scr_')
+
+it('validates receipt confirmations restored from browser history', () => {
+  const result = { ok: true, name: 'Товар', before: 3, quantity: 4, after: 7, repeated: false }
+  const state = (receipt: unknown) => withNav(null, { stack: [{ screenId: 'scr_receipt', rowId: 'row_item', receipt }], lists: {} } as NavState)
+  expect(navFromHistory(state({ operationId: 'row_12345678', result }), known)?.stack[0]!.receipt?.result.after).toBe(7)
+  for (const receipt of [null, { operationId: 'bad', result }, { operationId: 'row_12345678', result: { ...result, after: Infinity } }, { operationId: 'row_12345678', result: { ...result, quantity: -1 } }]) {
+    expect(navFromHistory(state(receipt), known)).toBeNull()
+  }
+})
 const state = (stack: { screenId: string; rowId: string | null }[]): NavState => ({
   stack,
   lists: {},

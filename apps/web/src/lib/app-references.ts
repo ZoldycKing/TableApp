@@ -101,6 +101,28 @@ export function checkAppReferences(app: App, catalog: AppReferenceCatalog): stri
     screenLink(config.formScreenId)
     screenLink(config.movementScreenId)
   }
+  if (app.inventory) {
+    const config = app.inventory
+    table(config.tables.items); table(config.tables.movements)
+    for (const id of Object.values(config.item)) if (id) field(id, config.tables.items)
+    for (const id of Object.values(config.movement)) field(id, config.tables.movements)
+    screenLink(config.receiptScreenId)
+    const receipt = app.screens.find(s => s.id === config.receiptScreenId)
+    if (!receipt || receipt.type !== 'form' || receipt.mode !== 'create' || receipt.tableId !== config.tables.movements) invalid('экран приёмки', config.receiptScreenId ?? '')
+    const relation = catalog.fields.get(config.item.movements)
+    if (relation?.type !== 'relation' || relation.options.tableId !== config.tables.movements) invalid('связь приёмок', config.item.movements)
+    const item = catalog.fields.get(config.movement.item)
+    if (item?.type !== 'relation' || item.options.tableId !== config.tables.items) invalid('связь товара', config.movement.item)
+    for (const [id, type] of [[config.item.opening, 'number'], [config.item.stock, 'formula'],
+      [config.movement.qty, 'number'], [config.movement.date, 'datetime'], [config.movement.author, 'email'],
+      [config.movement.note, 'text'], [config.movement.name, 'text']] as const) {
+      if (catalog.fields.get(id)?.type !== type) invalid('поле складского учёта', id)
+    }
+    const rollup = [...catalog.fields.values()].find(field => field.tableId === config.tables.items && field.type === 'rollup' &&
+      field.options.relationFieldId === config.item.movements && field.options.targetFieldId === config.movement.qty && field.options.fn === 'sum')
+    const opening = catalog.fields.get(config.item.opening), stock = catalog.fields.get(config.item.stock)
+    if (!rollup || stock?.type !== 'formula' || stock.options.expression !== `{${opening?.name}} + {${rollup.name}}`) invalid('формула остатка', config.item.stock)
+  }
   return error
 }
 

@@ -105,6 +105,27 @@ describe.skipIf(!process.env.DATABASE_URL)('row writes against Postgres', () => 
     return { module, config, slug: applied.appSlug, material: material!,
       kind: choices.find((choice) => choice.id !== config.movementKindId)!.id, product }
   }
+  async function inventory() {
+    const { applyTemplateAction } = await import('@/app/template-actions')
+    const applied = await applyTemplateAction('sklad')
+    if (!applied.ok) throw new Error(applied.error)
+    const [record] = await database.db.select().from(database.apps).where(eq(database.apps.id, applied.appId))
+    const definition = record!.draft as App
+    await database.db.update(database.apps).set({ published: definition }).where(eq(database.apps.id, applied.appId))
+    identity.roleId = 'staff'
+    const config = definition.inventory!
+    const [item] = await database.db.select().from(database.rows).where(eq(database.rows.tableId, config.tables.items)).orderBy(asc(database.rows.position))
+    const module = await import('@/app/inventory-actions')
+    const input = { id: newId('row'), itemId: item!.id, quantity: 4, note: 'Тестовая накладная' }
+    const projectedStock = async () => {
+      const { loadPublishedApp } = await import('./app-runtime')
+      const { asRole } = await import('./app-roles')
+      const loaded = await loadPublishedApp(applied.appSlug, asRole('staff', identity.member!.email))
+      return loaded!.tables[config.tables.items]!.rows.find(row => row.id === item!.id)!.data[config.item.stock]
+    }
+    const journal = () => database.db.select().from(database.rows).where(and(eq(database.rows.tableId, config.tables.movements), isNull(database.rows.deletedAt)))
+    return { ...applied, definition, config, item: item!, input, module, projectedStock, journal }
+  }
   async function waitForLock() {
     const deadline = Date.now() + 5000
     while (Date.now() < deadline) {
@@ -114,6 +135,24 @@ describe.skipIf(!process.env.DATABASE_URL)('row writes against Postgres', () => 
       await new Promise((resolve) => setTimeout(resolve, 10))
     }
     throw new Error('Expected a concurrent query waiting on the usage lock')
+  }
+  async function legacyInventory() {
+    const test = await inventory(), { db, tables, fields, views, apps } = database
+    const related = await db.select().from(fields).where(eq(fields.tableId, test.config.tables.items))
+    const removed = [test.config.item.stock, test.config.item.movements, ...related.filter(field => field.type === 'rollup').map(field => field.id)]
+    for (const id of removed) await db.delete(fields).where(eq(fields.id, id))
+    await db.delete(tables).where(eq(tables.id, test.config.tables.movements))
+    await db.update(fields).set({ name: 'Остаток' }).where(eq(fields.id, test.config.item.opening))
+    const [table] = await db.select().from(tables).where(eq(tables.id, test.config.tables.items))
+    const columns = await db.select().from(fields).where(eq(fields.tableId, table!.id))
+    const [view] = await db.select().from(views).where(eq(views.tableId, table!.id)).orderBy(asc(views.position))
+    const { generateApp } = await import('./app-builder')
+    const definition = generateApp({ appId: test.appId, workspaceId: ids.workspace, name: test.definition.name,
+      slug: test.appSlug, table: table!, fields: columns as unknown as Field[], view: viewSchema.parse(view) })
+    await db.update(apps).set({ draft: definition, published: definition }).where(eq(apps.id, test.appId))
+    await usage.recountWorkspace(ids.workspace)
+    const module = await import('@/app/inventory-setup-actions')
+    return { ...test, module }
   }
 
   it('merges simultaneous edits of distinct cells and records both versions', async () => {
@@ -392,6 +431,88 @@ describe.skipIf(!process.env.DATABASE_URL)('row writes against Postgres', () => 
     expect(await changes(input.runId)).toHaveLength(0)
     expect(await database.db.select().from(database.rows).where(eq(database.rows.id, input.runId))).toHaveLength(0)
     expect((await read(test.material.id)).version).toBe(test.material.version)
+  })
+  it('adds simultaneous receipts to the journal and stock without losing either update', async () => {
+    const test = await inventory(), opening = Number((test.item.data as Record<string, unknown>)[test.config.item.opening])
+    const results = await Promise.all([3, 4].map(quantity => test.module.receiveStockAction(test.appSlug, { ...test.input, id: newId('row'), quantity })))
+    expect(results.every(result => result.ok), JSON.stringify(results)).toBe(true)
+    expect(await test.projectedStock()).toBe(opening + 7)
+    expect(await test.journal()).toHaveLength(2)
+    expect(((await read(test.item.id)).data as Record<string, unknown>)[test.config.item.movements]).toHaveLength(2)
+    expect(await changes(test.item.id)).toHaveLength(2)
+  })
+  it('recognizes a simultaneous retry without duplicating stock, history or quota', async () => {
+    const test = await inventory(), count = (await counter()).rows
+    const results = await Promise.all([test.module.receiveStockAction(test.appSlug, test.input), test.module.receiveStockAction(test.appSlug, test.input)])
+    expect(results.every(result => result.ok), JSON.stringify(results)).toBe(true)
+    expect(results.filter(result => result.ok && result.repeated)).toHaveLength(1)
+    expect(await test.journal()).toHaveLength(1)
+    expect((await counter()).rows).toBe(count + 1)
+    expect(await changes(test.input.id)).toHaveLength(1)
+    expect(await test.projectedStock()).toBe(Number((test.item.data as Record<string, unknown>)[test.config.item.opening]) + 4)
+    expect((await test.module.receiveStockAction(test.appSlug, { ...test.input, quantity: 5 })).ok).toBe(false)
+  })
+  it('denies invalid quantities, foreign items, missing roles and generic journal writes', async () => {
+    const test = await inventory()
+    for (const quantity of [0, -1, 1.5, Infinity, 1_000_001]) expect((await test.module.receiveStockAction(test.appSlug, { ...test.input, quantity })).ok).toBe(false)
+    expect((await test.module.receiveStockAction(test.appSlug, { ...test.input, itemId: ids.row })).ok).toBe(false)
+    identity.roleId = 'nonexistent'
+    expect((await test.module.receiveStockAction(test.appSlug, test.input)).ok).toBe(false)
+    identity.roleId = 'manager'
+    expect((await runtime.appCreateRowAction(test.appSlug, test.config.tables.movements, { [test.config.movement.qty]: 10 })).ok).toBe(false)
+    expect(await test.journal()).toHaveLength(0)
+    expect((await read(test.item.id)).version).toBe(0)
+  })
+  it('rolls back both journal and stock when receipt quota is exhausted', async () => {
+    const test = await inventory()
+    const ceiling = planOf('free').limits.rows + graceReserve(planOf('free').limits.rows)
+    const before = (await counter()).rows
+    await database.db.insert(database.rows).values(Array.from({ length: ceiling - before }, (_, index) => ({ id: newId('row'), tableId: ids.table, position: `bulk${index}x`, data: {} })))
+    await usage.recountWorkspace(ids.workspace)
+    expect((await test.module.receiveStockAction(test.appSlug, test.input)).ok).toBe(false)
+    expect(await test.journal()).toHaveLength(0)
+    expect((await read(test.item.id)).version).toBe(0)
+    expect((await counter()).rows).toBe(ceiling)
+  })
+  it('applies row ownership and receipt field permissions before creating movements', async () => {
+    const test = await inventory(), { db, apps } = database
+    await db.update(apps).set({ published: { ...test.definition, rowAccessRules: [{ tableId: test.config.tables.items, fieldId: test.config.item.sku!, match: 'email', appliesTo: ['staff'] }] } }).where(eq(apps.id, test.appId))
+    expect((await test.module.receiveStockAction(test.appSlug, test.input)).ok).toBe(false)
+    const restricted = { ...test.definition, screens: test.definition.screens.map(screen => screen.id === test.config.receiptScreenId && screen.type === 'form' ? {
+      ...screen, components: screen.components.map(component => component.type === 'form_field' && component.fieldId === test.config.movement.qty ? { ...component, roles: ['manager'] } : component),
+    } : screen) }
+    await db.update(apps).set({ published: restricted }).where(eq(apps.id, test.appId))
+    expect((await test.module.receiveStockAction(test.appSlug, test.input)).ok).toBe(false)
+    expect(await test.journal()).toHaveLength(0)
+  })
+  it('upgrades a legacy warehouse once while preserving data and the published definition', async () => {
+    const test = await legacyInventory(), { db, apps, tables, fields } = database
+    const before = (await read(test.item.id)).data
+    const tableCount = (await db.select().from(tables).where(eq(tables.workspaceId, ids.workspace))).length
+    const results = await Promise.all([test.module.enableInventoryAction(test.appId, test.config.tables.items), test.module.enableInventoryAction(test.appId, test.config.tables.items)])
+    expect(results.every(result => result.ok), JSON.stringify(results)).toBe(true)
+    const [record] = await db.select().from(apps).where(eq(apps.id, test.appId))
+    const draft = record!.draft as App
+    expect(draft.inventory!.item.opening).toBe(test.config.item.opening)
+    expect((record!.published as App).inventory).toBeNull()
+    expect((await read(test.item.id)).data).toEqual(before)
+    expect((await read(test.item.id)).version).toBe(0)
+    expect((await db.select().from(tables).where(eq(tables.workspaceId, ids.workspace))).length).toBe(tableCount + 1)
+    expect((await db.select().from(fields).where(eq(fields.id, test.config.item.opening)))[0]!.name).toBe('Начальный остаток')
+    const { publishAppAction } = await import('@/app/app-actions')
+    expect((await publishAppAction(test.appId)).ok).toBe(true)
+    const receipt = await import('@/app/inventory-actions')
+    expect((await receipt.receiveStockAction(test.appSlug, test.input)).ok).toBe(true)
+  })
+  it('leaves legacy schema and balances intact if adding a journal exceeds table quota', async () => {
+    const test = await legacyInventory(), { db, tables, fields, apps } = database
+    await db.insert(tables).values(Array.from({ length: 8 }, (_, index) => ({ id: newId('table'), workspaceId: ids.workspace, name: `Existing ${index}`, position: `b${index}x` })))
+    await usage.recountWorkspace(ids.workspace)
+    const result = await test.module.enableInventoryAction(test.appId, test.config.tables.items)
+    expect(result.ok).toBe(false)
+    expect((await db.select().from(fields).where(eq(fields.id, test.config.item.opening)))[0]!.name).toBe('Остаток')
+    expect(((await db.select().from(apps).where(eq(apps.id, test.appId)))[0]!.draft as App).inventory).toBeNull()
+    expect((await read(test.item.id)).version).toBe(0)
   })
   it('enforces table quota when installing a template without partial inserts', async () => {
     await database.db.insert(database.tables).values(Array.from({ length: 8 }, (_, index) => ({

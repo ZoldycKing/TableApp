@@ -217,15 +217,15 @@ export function SolutionDemo({ slug }: { slug: string }) {
   if (slug === 'warehouse') {
     return (
       <div className="grid gap-5 sm:grid-cols-2">
-        <ScreenFrame title="Остатки на телефоне" note="Нашли позицию, поменяли число — всё, что нужно у стеллажа.">
+        <ScreenFrame title="Остатки на телефоне" note="Из карточки — «Принять товар». Количество поступления запишется в журнал и прибавится к остатку.">
           <ScreenList
-            title="Позиции"
+            title="Товары"
             right="8"
             rows={[
-              { title: 'Фильтр воздушный FA-120', subtitle: 'Стеллаж А, полка 2', meta: '4 шт.', status: { label: 'Заканчивается', tone: 'amber' } },
-              { title: 'Термостат KTS-011', subtitle: 'Стеллаж Б, ящик 1', meta: '12 шт.' },
-              { title: 'Хладагент R-410A', subtitle: 'Склад ГСМ', meta: '2 шт.', status: { label: 'Заканчивается', tone: 'amber' } },
-              { title: 'Гофра алюминиевая 125 мм', subtitle: 'Стеллаж В', meta: '18 шт.' },
+              { title: 'Фильтр воздушный FA-120', subtitle: 'FA-120', meta: '4 шт.' },
+              { title: 'Термостат KTS-011', subtitle: 'KTS-011', meta: '12 шт.' },
+              { title: 'Хладагент R-410A', subtitle: 'R410-11', meta: '2 шт.' },
+              { title: 'Гофра алюминиевая 125 мм', subtitle: 'GOF-125', meta: '18 шт.' },
             ]}
           />
         </ScreenFrame>

@@ -52,6 +52,32 @@ describe('table live stream lifecycle', () => {
     expect(listenerCount(table)).toBe(0)
     expect(vi.getTimerCount()).toBe(0)
   })
+  it('subscribes to all app tables without sending table IDs or row data', async () => {
+    const controller = new AbortController(); controllers.push(controller)
+    const ids = [crypto.randomUUID(), crypto.randomUUID()]
+    const authorize = vi.fn(async () => true)
+    const reader = tableLiveStream([...ids, ids[0]!], controller.signal, authorize, 100, true).getReader()
+    await reader.read()
+    for (const id of ids) {
+      expect(listenerCount(id)).toBe(1)
+      publishTable(id, 'rows')
+      expect(new TextDecoder().decode((await reader.read()).value)).toBe('data: {"changed":true}\n\n')
+    }
+    expect(authorize).toHaveBeenCalledTimes(2)
+    await reader.cancel()
+    expect(ids.every(id => listenerCount(id) === 0)).toBe(true)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+  it('requests a fresh app projection and disconnects when permissions are revoked', async () => {
+    const controller = new AbortController(); controllers.push(controller)
+    const table = crypto.randomUUID()
+    const reader = tableLiveStream([table], controller.signal, async () => false, 100, true).getReader()
+    await reader.read()
+    await vi.advanceTimersByTimeAsync(100)
+    expect(new TextDecoder().decode((await reader.read()).value)).toContain('"changed":true')
+    expect((await reader.read()).done).toBe(true)
+    expect(listenerCount(table)).toBe(0)
+  })
   it('does not overlap slow authorization checks or write after cancellation', async () => {
     let finish!: (allowed: boolean) => void
     const authorize = vi.fn(() => new Promise<boolean>((resolve) => { finish = resolve }))

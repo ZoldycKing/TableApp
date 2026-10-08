@@ -47,8 +47,9 @@ function plural(count: number, forms: [string, string, string]): string {
   return forms[2]
 }
 
-/** Роли будущего приложения: у производства свои, у остальных общие. */
+/** Роли готового приложения, включая специальные сценарии. */
 function rolesOf(template: TemplateDef): string[] {
+  if (template.inventory) return ['Кладовщик', 'Владелец']
   if (template.production) return [template.production.copy.director, template.production.copy.operator]
   return DEFAULT_APP_ROLES.map((role) => role.name)
 }
@@ -172,9 +173,9 @@ export default async function TemplatePage({ params }: { params: Promise<{ slug:
 
         <div className="mt-8 grid gap-4 text-sm leading-relaxed text-ink-soft sm:grid-cols-2">
           <p>
-            Приложение собирается по таблице «{appTable.name}»: список, карточка записи, формы
+            {template.inventory ? 'Кладовщик видит товары и принимает поступления из карточки. Владелец видит цены, сводку и журнал приёмок. Текущий остаток считается из начального количества и приёмок.' : <>Приложение собирается по таблице «{appTable.name}»: список, карточка записи, формы
             добавления и правки, сводка с числами. Дальше всё правится мышкой — что показать,
-            что спросить, что скрыть.
+            что спросить, что скрыть.</>}
           </p>
           <p>
             Открывается в браузере на компьютере и на телефоне, ставится на домашний экран.

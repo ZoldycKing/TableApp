@@ -704,6 +704,15 @@ export const productionConfigSchema = z.object({
 
 export type ProductionConfig = z.infer<typeof productionConfigSchema>
 
+/** Stock is opening balance plus the receipt journal; IDs survive field renames. */
+export const inventoryConfigSchema = z.object({
+  tables: z.object({ items: z.string(), movements: z.string() }),
+  item: z.object({ name: z.string(), opening: z.string(), movements: z.string(), stock: z.string(), image: z.string().nullable(), sku: z.string().nullable() }),
+  movement: z.object({ name: z.string(), item: z.string(), qty: z.string(), date: z.string(), note: z.string(), author: z.string() }),
+  receiptScreenId: z.string().nullable().default(null),
+})
+export type InventoryConfig = z.infer<typeof inventoryConfigSchema>
+
 export const appSchema = z.object({
   id: z.string(),
   workspaceId: z.string(),
@@ -732,6 +741,7 @@ export const appSchema = z.object({
    * и знать не должен.
    */
   production: productionConfigSchema.nullable().default(null),
+  inventory: inventoryConfigSchema.nullable().default(null),
 })
 export type App = z.infer<typeof appSchema>
 

@@ -5,17 +5,18 @@ import { useMotionPlayback } from '@/components/motion/use-motion-playback'
 import { useViewTransition } from '@/components/motion/use-view-transition'
 
 /** One visible preview owns the clock; pauses preserve the remaining scene time. */
-export function usePreviewPlayback(durations: readonly number[]) {
+export function usePreviewPlayback(durations: readonly number[], { loop = true } = {}) {
   const root = useRef<HTMLDivElement>(null)
   const [step, setStep] = useState(0)
   const currentStep = useRef(0)
   const [paused, setPaused] = useState(false)
+  const [complete, setComplete] = useState(false)
   const [clockRevision, setClockRevision] = useState(0)
   const clockVersion = useRef(0)
   const remaining = useRef(durations[0] ?? 4000)
   const { playing, reduced } = useMotionPlayback(root)
   const { change, skip, settle } = useViewTransition()
-  const running = playing && !paused && !reduced
+  const running = playing && !paused && !reduced && !complete
   const apply = useCallback((next: number) => {
     currentStep.current = next
     setStep(next)
@@ -32,6 +33,10 @@ export function usePreviewPlayback(durations: readonly number[]) {
     const started = performance.now()
     const timer = window.setTimeout(() => {
       fired = true
+      if (!loop && step === durations.length - 1) {
+        setComplete(true)
+        return
+      }
       const next = (step + 1) % durations.length
       remaining.current = durations[next]!
       change(() => apply(next))
@@ -42,7 +47,7 @@ export function usePreviewPlayback(durations: readonly number[]) {
         remaining.current = Math.max(0, remaining.current - (performance.now() - started))
       }
     }
-  }, [running, step, durations, change, apply, clockRevision])
+  }, [running, step, durations, change, apply, clockRevision, loop])
 
   const resetClock = (next: number) => {
     clockVersion.current += 1
@@ -54,6 +59,7 @@ export function usePreviewPlayback(durations: readonly number[]) {
     if (next < 0 || next >= durations.length) return
     settle()
     resetClock(next)
+    setComplete(false)
     setPaused(true)
     if (currentStep.current !== next) change(() => apply(next))
   }
@@ -66,9 +72,10 @@ export function usePreviewPlayback(durations: readonly number[]) {
   const replay = () => {
     settle()
     resetClock(0)
+    setComplete(false)
     apply(0)
     setPaused(false)
   }
 
-  return { root, step, paused, reduced, running, select, toggle, replay }
+  return { root, step, paused, reduced, running, complete, select, toggle, replay }
 }

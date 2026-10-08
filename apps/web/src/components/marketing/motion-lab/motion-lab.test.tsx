@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { MotionLab } from './motion-lab'
+import { MotionLab, MotionStory } from './motion-lab'
 import { usePreviewPlayback } from './use-preview-playback'
 import { PRODUCTS } from '../catalog-data'
 
@@ -205,5 +205,34 @@ describe('five product stories', () => {
     fireEvent.click(page.getByRole('button', { name: 'Повторить' }))
     expect(page.getByText('2 записи')).toBeTruthy()
     expect(page.getByText('До приёмки: 3 шт')).toBeTruthy()
+  })
+})
+
+
+describe('embedded product stories', () => {
+  it('plays the shared-price story once and leaves the updated result visible', () => {
+    const page = render(<MotionStory variantId="sync" />)
+    act(() => notify(true))
+    for (let index = 0; index < 4; index += 1) act(() => vi.advanceTimersToNextTimer())
+    expect(page.getByText('Показ завершён')).toBeTruthy()
+    expect(page.getByText('176 640 ₽')).toBeTruthy()
+    expect(page.queryByRole('button', { name: 'Пауза' })).toBeNull()
+    act(() => vi.advanceTimersByTime(60000))
+    expect(page.getByText('176 640 ₽')).toBeTruthy()
+    expect(vi.getTimerCount()).toBe(0)
+    fireEvent.click(page.getByRole('button', { name: 'Повторить' }))
+    expect(page.getByText('175 140 ₽')).toBeTruthy()
+    act(() => vi.advanceTimersByTime(3200))
+    expect(page.getByText('Меняем 7 990 → 8 490')).toBeTruthy()
+  })
+
+  it('keeps a manually chosen board scene without restarting on intersection', () => {
+    const page = render(<MotionStory variantId="workflow" />)
+    act(() => notify(true))
+    fireEvent.click(page.getByRole('button', { name: 'Мастер взял в работу' }))
+    act(() => { notify(false); notify(true); vi.advanceTimersByTime(60000) })
+    expect(page.getByText('1043: мастер выполняет работу')).toBeTruthy()
+    expect(page.container.querySelectorAll('[data-order-id]')).toHaveLength(5)
+    expect(vi.getTimerCount()).toBe(0)
   })
 })

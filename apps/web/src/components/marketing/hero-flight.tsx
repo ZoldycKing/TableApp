@@ -1,39 +1,25 @@
 'use client'
 
-import { useEffect, useId, useRef, useState, type CSSProperties } from 'react'
-import { PRODUCTS, type Product } from './catalog-data'
-import { ProductGlyph } from './product-glyph'
+import { useEffect, useId, useRef } from 'react'
+import { Icon } from '@/components/runtime/icons'
+import { PRODUCTS } from './catalog-data'
+import { DetailScreen } from './product-detail'
+import { ProductView, type Shared } from './motion-lab/product-view'
+import styles from './motion-lab/motion-lab.module.css'
 import { useHeroDemo } from './use-hero-demo'
 
-/*
- * Колонки появляются по мере места, и меру берём у контейнера, а не у экрана:
- * один и тот же блок стоит и на широкой странице, и в узкой правой половине
- * первого экрана. Медиазапрос там врал бы — окно большое, а места нет.
- * Обрезанный текст хуже отсутствующей колонки, поэтому лишнее просто уходит.
- */
-const COLS =
-  'grid grid-cols-[1.9fr_0.7fr_0.5fr] @min-[620px]:grid-cols-[1.7fr_0.9fr_0.7fr_0.5fr] @min-[780px]:grid-cols-[1.5fr_0.8fr_0.6fr_0.4fr_1.4fr]'
-
-type Geom = { left: number; top: number; x: number; y: number }
-
-/**
- * Вариант 2. Строки таблицы по очереди улетают в приложение и собираются там
- * витриной, а затем витрина отвечает на нажатие: карточка открывается целиком
- * — с фото, ценой, остатком и адресом склада, которых в тесной таблице
- * не видно. Один круг показывает весь смысл: данные те же, вид другой.
- */
+/** The same products morph once, then remain an interactive catalog. */
 export function HeroFlight() {
-  const [geom, setGeom] = useState<Geom[]>([])
-
-  const hostRef = useRef<HTMLDivElement>(null)
-  const rowRefs = useRef<Array<HTMLDivElement | null>>([])
-  const slotRefs = useRef<Array<HTMLDivElement | null>>([])
-  const cards = useRef<Array<HTMLButtonElement | null>>([])
+  const root = useRef<HTMLDivElement>(null)
+  const cards = useRef<Array<HTMLElement | null>>([])
   const backButton = useRef<HTMLButtonElement>(null)
   const focusTarget = useRef<'detail' | 'catalog' | null>(null)
-  const { phase, flying, landed, pick, automatic, paused, running, reduced, open, back, replay, togglePause } = useHeroDemo(hostRef, PRODUCTS.length)
+  const { phase, pick, automatic, paused, running, reduced, open, back, replay, togglePause } = useHeroDemo(root)
   const prefix = `tableapp-hero-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`
-  const shared = (part: string, position?: number): CSSProperties => ({ viewTransitionName: `${prefix}-${part}${position === undefined ? '' : `-${position}`}` })
+  const shared: Shared = (key) => ({ viewTransitionName: `${prefix}-${key}` })
+  const product = PRODUCTS[pick]!
+  const scene = phase === 'table' ? 0 : phase === 'mobile' ? 2 : 1
+  const labels = ['Таблица', 'Каталог', 'Телефон']
 
   useEffect(() => {
     if (focusTarget.current !== phase) return
@@ -42,311 +28,36 @@ export function HeroFlight() {
     focusTarget.current = null
   }, [phase, pick])
 
-  /*
-   * Траектории считаем заранее и по фактическим позициям: вёрстка резиновая,
-   * зашитые пиксели разъехались бы на первой правке ширины. Считать в момент
-   * вылета тоже нельзя — анимация успеет начаться до того, как приедут числа.
-   */
-  useEffect(() => {
-    const measure = () => {
-      const host = hostRef.current
-      if (!host) return
-
-      const hostBox = host.getBoundingClientRect()
-      const next: Geom[] = []
-
-      PRODUCTS.forEach((_, index) => {
-        const row = rowRefs.current[index]
-        const slot = slotRefs.current[index]
-        if (!row || !slot) return
-
-        const from = row.getBoundingClientRect()
-        const to = slot.getBoundingClientRect()
-        next.push({
-          left: Math.round(from.left - hostBox.left),
-          top: Math.round(from.top - hostBox.top),
-          x: Math.round(to.left - from.left),
-          y: Math.round(to.top - from.top),
-        })
-      })
-
-      // Пока открыта карточка, ячеек в разметке нет — старые замеры лучше
-      // неполных: иначе после ресайза в этот момент строки летели бы в ноль.
-      if (next.length === PRODUCTS.length) setGeom(next)
-    }
-
-    measure()
-    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure)
-    if (hostRef.current) observer?.observe(hostRef.current)
-    window.addEventListener('resize', measure)
-    return () => {
-      observer?.disconnect()
-      window.removeEventListener('resize', measure)
-    }
-  }, [phase])
-
-  const ghost = flying === null ? null : geom[flying]
-  const ghostItem = flying === null ? null : PRODUCTS[flying]
-  const opened = PRODUCTS[pick]!
-
-  const caption =
-    phase === 'filling'
-      ? 'Строки уходят в приложение как есть — без выгрузок и переноса вручную'
-      : phase === 'tap' || phase === 'catalog'
-        ? 'Витрина собрана: весь склад на экране'
-        : 'Нажатие открывает строку целиком — с фото, ценой, остатком и адресом склада'
-
-  return (
-    <div
-      ref={hostRef}
-      style={{ '--hero-play-state': running ? 'running' : 'paused' } as CSSProperties}
-      className="hero-demo @container relative rounded-[26px] border border-sand-200 bg-sand-100/60 p-3 shadow-soft sm:p-4"
-    >
-      <div className="flex flex-col gap-5 @min-[520px]:flex-row @min-[520px]:items-start">
-        <div className="min-w-0 flex-1">
-          <p className="mb-2 flex items-center gap-1.5 text-[11px] font-medium text-ink-muted">
-            <span className="h-1.5 w-1.5 rounded-full bg-ink-muted/60" />
-            Таблица «Склад»
-          </p>
-
-          <div className="rounded-2xl border border-sand-200 bg-white p-3 shadow-soft">
-            <div className="mb-3 flex items-center gap-2">
-              <span className="h-2.5 w-2.5 rounded-full bg-sand-300" />
-              <span className="h-2.5 w-2.5 rounded-full bg-sand-300" />
-              <span className="h-2.5 w-2.5 rounded-full bg-sand-300" />
-              <span className="ml-2 truncate text-xs text-ink-muted">Склад · 412 позиций</span>
-            </div>
-
-            <div className="overflow-hidden rounded-xl border border-sand-200">
-              <div className={`${COLS} bg-sand-100 text-[11px] font-medium text-ink-muted`}>
-                <span className="border-r border-sand-200 px-2 py-2">Наименование</span>
-                <span className="hidden border-r border-sand-200 px-2 py-2 @min-[620px]:block">Артикул</span>
-                <span className="border-r border-sand-200 px-2 py-2">Цена</span>
-                <span className="px-2 py-2 @min-[780px]:border-r @min-[780px]:border-sand-200">Ост.</span>
-                <span className="hidden px-2 py-2 @min-[780px]:block">Адрес склада</span>
-              </div>
-
-              {PRODUCTS.map((item, position) => (
-                <div
-                  key={item.code}
-                  ref={(node) => {
-                    rowRefs.current[position] = node
-                  }}
-                  className={`${COLS} border-t border-sand-200 text-[11px] transition-colors duration-300 @min-[620px]:text-[12px] ${
-                    position === flying ? 'bg-sage-50' : position % 2 === 1 ? 'bg-sand-50/60' : 'bg-white'
-                  }`}
-                >
-                  <span className="flex min-w-0 items-center gap-2 border-r border-sand-200 px-2 py-1.5">
-                    <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded @min-[620px]:h-7 @min-[620px]:w-7 ${item.tint}`}>
-                      <ProductGlyph kind={item.glyph} className={`h-4 w-4 @min-[620px]:h-5 @min-[620px]:w-5 ${item.ink}`} />
-                    </span>
-                    <span className="truncate">{item.short}</span>
-                  </span>
-                  <span className="hidden truncate border-r border-sand-200 px-2 py-2 tabular-nums text-ink-muted @min-[620px]:block">
-                    {item.code}
-                  </span>
-                  <span className="whitespace-nowrap border-r border-sand-200 px-2 py-2 text-right tabular-nums">
-                    {item.price}
-                  </span>
-                  <span className="px-2 py-2 text-right tabular-nums @min-[780px]:border-r @min-[780px]:border-sand-200">
-                    {item.stock}
-                  </span>
-                  <span className="hidden truncate px-2 py-2 text-[11px] text-ink-muted @min-[780px]:block">
-                    {item.warehouse}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <p className="mt-3 flex items-start gap-2.5 text-[12px] leading-relaxed text-ink-soft">
-            <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sage-500 text-sand-50">
-              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden>
-                <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </span>
-            {caption}
-          </p>
-        </div>
-
-        <div className="w-full shrink-0 @min-[520px]:w-[276px]">
-          <p className="mb-2 flex items-center gap-1.5 text-[11px] font-medium text-sage-700">
-            <span className="h-1.5 w-1.5 rounded-full bg-sage-500" />
-            Приложение «Склад»
-            <span className="ml-auto flex items-center gap-4">
-              {automatic && !reduced ? (
-                <button type="button" onClick={togglePause} aria-label={paused ? 'Продолжить показ' : 'Приостановить показ'} title={paused ? 'Продолжить показ' : 'Приостановить показ'} className="relative rounded text-ink-muted transition-colors hover:text-sage-700 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-sage-500 before:absolute before:-inset-2">
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
-                    {paused ? <path d="m5 3 7 5-7 5V3Z" fill="currentColor" /> : <path d="M5 3v10M11 3v10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />}
-                  </svg>
-                </button>
-              ) : null}
-              <button type="button" onClick={() => { focusTarget.current = null; replay() }} aria-label="Повторить показ" title="Повторить показ" className="relative rounded text-ink-muted transition-colors hover:text-sage-700 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-sage-500 before:absolute before:-inset-2">
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
-                  <path d="M3 6a5 5 0 1 1 0 4M3 2v4h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </button>
-            </span>
-          </p>
-
-          <div className="rounded-[26px] border border-sand-300 bg-white p-2 shadow-lift">
-            <div className="flex h-[404px] flex-col overflow-hidden rounded-[19px] bg-sand-50">
-              <div className="flex items-center gap-2 border-b border-sand-200 bg-white px-3 py-2.5">
-                {phase === 'detail' ? (
-                  <>
-                    <button ref={backButton} type="button" aria-label="Вернуться в витрину" onClick={() => { focusTarget.current = 'catalog'; back() }} className="relative shrink-0 rounded text-ink-muted focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-sage-500 before:absolute before:-inset-3">
-                      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
-                        <path d="M10 3 5 8l5 5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    </button>
-                    <span className="truncate text-[13px] font-semibold">{opened.short}</span>
-                  </>
-                ) : (
-                  <>
-                    <span className="truncate text-[14px] font-semibold">Склад</span>
-                    <span className="ml-auto shrink-0 rounded-full bg-sage-100 px-2 py-0.5 text-[10px] tabular-nums text-sage-700">
-                      {landed} из {PRODUCTS.length}
-                    </span>
-                  </>
-                )}
-              </div>
-
-              {phase === 'detail' ? (
-                <DetailScreen item={opened} shared={(part) => shared(part, part === 'screen' ? undefined : pick)} />
-              ) : (
-                <div style={shared('screen')} className="grid flex-1 grid-cols-2 content-start gap-2 p-2.5">
-                  {PRODUCTS.map((item, position) => {
-                    const tapped = phase === 'tap' && position === pick
-                    return (
-                      <div
-                        key={item.code}
-                        ref={(node) => {
-                          slotRefs.current[position] = node
-                        }}
-                        className="relative h-[140px]"
-                      >
-                        {position < landed ? (
-                          <button
-                            type="button"
-                            ref={(node) => { cards.current[position] = node }}
-                            aria-label={`Открыть ${item.short}`}
-                            onClick={() => { focusTarget.current = 'detail'; open(position) }}
-                            className={`${phase === 'filling' && automatic ? 'animate-card-in ' : ''}flex h-full w-full flex-col rounded-xl border bg-white p-2 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage-500 ${
-                              tapped ? 'animate-press border-sage-400 shadow-lift' : 'border-sand-200'
-                            }`}
-                          >
-                            <span style={shared('image', position)} className={`flex h-[52px] w-full shrink-0 items-center justify-center rounded-lg ${item.tint}`}>
-                              <ProductGlyph kind={item.glyph} className={`h-8 w-8 ${item.ink}`} />
-                            </span>
-                            <span style={shared('name', position)} className="mt-1.5 max-w-full truncate text-[10px] leading-none">{item.short}</span>
-                            <span className="mt-1 max-w-full truncate text-[9px] leading-none text-ink-muted">
-                              {item.warehouse.split(',')[0]}
-                            </span>
-                            <span style={shared('price', position)} className="mt-auto text-[12px] font-semibold leading-none tabular-nums">
-                              {item.price} ₽
-                            </span>
-                            <span
-                              className={`mt-1 truncate text-[9px] leading-none ${
-                                item.stock > 0 ? 'text-sage-700' : 'text-clay-500'
-                              }`}
-                            >
-                              {item.stock > 0 ? `${item.stock} шт` : 'нет в наличии'}
-                            </span>
-                          </button>
-                        ) : (
-                          <span className="block h-full rounded-xl border border-dashed border-sand-300/80" />
-                        )}
-
-                        {/* Палец: круг расходится там, где произошло нажатие. */}
-                        {tapped ? (
-                          <span
-                            aria-hidden
-                            className="animate-tap pointer-events-none absolute left-1/2 top-1/2 h-14 w-14 -translate-x-1/2 -translate-y-1/2 rounded-full bg-sage-500/25"
-                          />
-                        ) : null}
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-
-              <div className="flex border-t border-sand-200 bg-white">
-                <span className="flex-1 py-2 text-center text-[11px] font-semibold text-sage-700">
-                  Склад
-                </span>
-                <span className="flex-1 py-2 text-center text-[11px] text-ink-muted">Заявки</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Копия строки: летит от своей строки к своей ячейке в витрине. */}
-      {ghost && ghostItem ? (
-        <div
-          key={flying}
-          aria-hidden
-          style={
-            {
-              left: `${ghost.left}px`,
-              top: `${ghost.top}px`,
-              '--fly-x': `${ghost.x}px`,
-              '--fly-y': `${ghost.y}px`,
-            } as CSSProperties
-          }
-          className="animate-fly pointer-events-none absolute z-10 w-[216px] rounded-lg border border-sage-300 bg-white px-2 py-1.5 shadow-lift"
-        >
-          <span className="flex min-w-0 items-center gap-2">
-            <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded ${ghostItem.tint}`}>
-              <ProductGlyph kind={ghostItem.glyph} className={`h-5 w-5 ${ghostItem.ink}`} />
-            </span>
-            <span className="truncate text-[12px]">{ghostItem.short}</span>
-          </span>
-        </div>
-      ) : null}
-    </div>
-  )
-}
-
-/** Открытая карточка: та же строка, но целиком и по-человечески. */
-function DetailScreen({ item, shared }: { item: Product; shared: (part: string) => CSSProperties }) {
-  // Disabling an entrance only during a shared transition restarts it afterward.
-  // Choose the fallback once at render so the settled screen stays visible.
-  const animateEntrance = typeof document !== 'undefined' && !document.startViewTransition
-  return (
-    <div style={shared('screen')} className={`hero-detail ${animateEntrance ? 'animate-screen-in ' : ''}flex-1 space-y-2.5 overflow-hidden p-2.5`}>
-      <span style={shared('image')} className={`flex h-[116px] items-center justify-center rounded-xl ${item.tint}`}>
-        <ProductGlyph kind={item.glyph} className={`h-16 w-16 ${item.ink}`} />
+  return <div ref={root} className={styles.heroDemo} data-hero-phase={phase}>
+    <div className={styles.heroTop}>
+      <span className={styles.heroTitle}><Icon name={phase === 'table' ? 'list' : 'smartphone'} className="size-4" />
+        {phase === 'table' ? 'Таблица «Склад»' : 'Приложение «Склад»'}
       </span>
-
-      <p style={shared('name')} className="text-[13px] font-semibold leading-tight">{item.name}</p>
-
-      <div className="flex items-baseline justify-between gap-2">
-        <span style={shared('price')} className="text-[19px] font-bold tabular-nums">{item.price} ₽</span>
-        <span className="shrink-0 text-[11px] tabular-nums text-ink-muted">{item.code}</span>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span
-          className={`rounded-full px-2.5 py-1 text-[11px] ${
-            item.stock > 0 ? 'bg-sage-100 text-sage-700' : 'bg-clay-400/20 text-clay-500'
-          }`}
-        >
-          {item.stock > 0 ? `В наличии: ${item.stock} шт` : 'Нет в наличии'}
-        </span>
-      </div>
-
-      <p className="flex items-start gap-1.5 text-[11px] leading-snug text-ink-soft">
-        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden className="mt-0.5 shrink-0 text-ink-muted">
-          <path d="M8 14s4.5-4.2 4.5-7.4A4.5 4.5 0 0 0 3.5 6.6C3.5 9.8 8 14 8 14Z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
-          <circle cx="8" cy="6.5" r="1.6" stroke="currentColor" strokeWidth="1.4" />
-        </svg>
-        {item.warehouse}
-      </p>
-
-      <div className="rounded-lg bg-sage-500 py-2.5 text-center text-[12px] font-medium text-white">
-        Запросить счёт
+      <div className={styles.transport}>
+        {automatic && !reduced && <button className={styles.control} type="button" onClick={togglePause}
+          aria-label={paused ? 'Продолжить показ' : 'Приостановить показ'}>{paused ? 'Продолжить' : 'Пауза'}</button>}
+        <button className={styles.control} type="button" aria-label="Повторить показ" onClick={() => { focusTarget.current = null; replay() }}>Повторить</button>
       </div>
     </div>
-  )
+    <div className={styles.heroProgress} aria-label="Представление данных">
+      {labels.map((label, index) => <span key={label} aria-current={scene === index ? 'step' : undefined}>
+        <i data-active={scene === index} data-running={running} />{label}
+      </span>)}
+      <small>Данные примера</small>
+    </div>
+    <div className={`${styles.canvas} ${styles.heroCanvas}`}>
+      {phase === 'detail' ? <div className={`${styles.productFrame} ${styles.mobile} ${styles.detailFrame}`} style={shared('products-frame')}>
+        <div className={styles.chrome}>
+          <button ref={backButton} type="button" className={styles.back} aria-label="Вернуться в витрину"
+            onClick={() => { focusTarget.current = 'catalog'; back() }}><Icon name="back" className="size-4" /></button>
+          <span>{product.short}</span>
+        </div>
+        <DetailScreen item={product} shared={(part) => shared(part === 'screen' ? `products-record-${pick}` : `products-${part === 'image' ? 'photo' : part}-${pick}`)} />
+      </div> : <ProductView mode={phase} shared={shared} cardRef={(index, node) => { cards.current[index] = node }}
+        onOpen={(index) => { focusTarget.current = 'detail'; open(index) }} />}
+    </div>
+    <p className={styles.heroCaption}>
+      {phase === 'table' ? 'Одни данные — разные представления.' : phase === 'mobile' ? 'Те же товары — в приложении на телефоне.' : phase === 'detail' ? 'Нажатие открывает строку целиком — с фото, ценой, остатком и адресом склада' : 'Витрина собрана: весь склад на экране'}
+    </p>
+  </div>
 }

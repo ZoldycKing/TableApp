@@ -10,6 +10,7 @@ import {
   Section,
 } from '@/components/marketing/blocks'
 import { ComputedOrderDemo, RolesDemo, ViewsDemo } from '@/components/marketing/demos'
+import { MotionStory } from '@/components/marketing/motion-lab/motion-lab'
 import { ScreenCard, ScreenForm, ScreenFrame, ScreenList, ScreenTable } from '@/components/marketing/screens'
 import { pageMetadata } from '@/lib/seo'
 import { currentMember } from '@/lib/session'
@@ -85,6 +86,10 @@ export default async function FeaturesPage() {
         tone="white"
       >
         <ComputedOrderDemo />
+
+        <div className="mt-8">
+          <MotionStory variantId="sync" />
+        </div>
 
         <p className="mt-8 max-w-2xl text-sm leading-relaxed text-ink-soft">
           В формулах {Object.keys(FUNCTIONS).length} функций, имена колонок пишутся по-русски

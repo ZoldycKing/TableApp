@@ -200,7 +200,7 @@ describe('one-time hero demonstration', () => {
   }
 
   function finish() {
-    for (let step = 0; step < PRODUCTS.length * 2 + 3; step += 1) {
+    for (let step = 0; step < 3; step += 1) {
       act(() => vi.advanceTimersToNextTimer())
     }
   }
@@ -226,33 +226,56 @@ describe('one-time hero demonstration', () => {
     expect(document.activeElement).toBe(page.getByRole('button', { name: `Открыть ${PRODUCTS[2]!.short}` }))
     expect(page.getAllByRole('button', { name: /^Открыть / })).toHaveLength(PRODUCTS.length)
     fireEvent.click(page.getByRole('button', { name: 'Повторить показ' }))
-    expect(page.queryAllByRole('button', { name: /^Открыть / })).toHaveLength(0)
+    expect(page.container.querySelector('[data-hero-phase]')?.getAttribute('data-hero-phase')).toBe('table')
     finish()
     expect(page.getAllByRole('button', { name: /^Открыть / })).toHaveLength(PRODUCTS.length)
   })
 
-  it('resumes the remaining flight time after a manual pause or leaving the viewport', () => {
+  it('resumes remaining scene time after a pause or leaving the viewport', () => {
     const page = start()
-    act(() => vi.advanceTimersToNextTimer())
-    act(() => vi.advanceTimersByTime(250))
+    const phase = () => page.container.querySelector('[data-hero-phase]')?.getAttribute('data-hero-phase')
+    act(() => vi.advanceTimersByTime(1000))
     fireEvent.click(page.getByRole('button', { name: 'Приостановить показ' }))
     act(() => vi.advanceTimersByTime(20000))
-    expect(page.queryAllByRole('button', { name: /^Открыть / })).toHaveLength(0)
+    expect(phase()).toBe('table')
     fireEvent.click(page.getByRole('button', { name: 'Продолжить показ' }))
-    act(() => vi.advanceTimersByTime(369))
-    expect(page.queryAllByRole('button', { name: /^Открыть / })).toHaveLength(0)
+    act(() => vi.advanceTimersByTime(2799))
+    expect(phase()).toBe('table')
     act(() => vi.advanceTimersByTime(1))
-    expect(page.getAllByRole('button', { name: /^Открыть / })).toHaveLength(1)
+    expect(phase()).toBe('catalog')
     act(() => observers[0]!.notify(false))
     act(() => vi.advanceTimersByTime(20000))
-    expect(page.getAllByRole('button', { name: /^Открыть / })).toHaveLength(1)
+    expect(phase()).toBe('catalog')
     act(() => observers[0]!.notify(true))
-    act(() => vi.advanceTimersToNextTimer())
-    act(() => vi.advanceTimersToNextTimer())
-    expect(page.getAllByRole('button', { name: /^Открыть / })).toHaveLength(2)
+    act(() => vi.advanceTimersByTime(3399))
+    expect(phase()).toBe('catalog')
+    act(() => vi.advanceTimersByTime(1))
+    expect(phase()).toBe('mobile')
   })
 
-  it('stops the automatic sequence as soon as someone opens a landed card', () => {
+  it('shows table, catalog, and phone once, with the same four products', () => {
+    const page = start()
+    const phase = () => page.container.querySelector('[data-hero-phase]')?.getAttribute('data-hero-phase')
+    expect(phase()).toBe('table')
+    for (const expected of ['catalog', 'mobile', 'catalog']) {
+      act(() => vi.advanceTimersToNextTimer())
+      expect(phase()).toBe(expected)
+      expect(Array.from(page.container.querySelectorAll('[data-product-code]')).map(node => node.getAttribute('data-product-code'))).toEqual(PRODUCTS.map(product => product.code))
+    }
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('restarts the full first-scene duration when replaying during that same scene', () => {
+    const page = start()
+    act(() => vi.advanceTimersByTime(3000))
+    fireEvent.click(page.getByRole('button', { name: 'Повторить показ' }))
+    act(() => vi.advanceTimersByTime(3799))
+    expect(page.container.querySelector('[data-hero-phase]')?.getAttribute('data-hero-phase')).toBe('table')
+    act(() => vi.advanceTimersByTime(1))
+    expect(page.container.querySelector('[data-hero-phase]')?.getAttribute('data-hero-phase')).toBe('catalog')
+  })
+
+  it('stops the automatic sequence as soon as someone opens a product', () => {
     const page = start()
     act(() => vi.advanceTimersToNextTimer())
     act(() => vi.advanceTimersToNextTimer())
@@ -273,7 +296,7 @@ describe('one-time hero demonstration', () => {
     act(() => native.commit())
     expect(page.getByRole('button', { name: 'Продолжить показ' })).toBeTruthy()
     act(() => vi.advanceTimersByTime(60000))
-    expect(page.queryAllByRole('button', { name: /^Открыть / })).toHaveLength(0)
+    expect(page.container.querySelector('[data-hero-phase]')?.getAttribute('data-hero-phase')).toBe('table')
     expect(native.transition.skipTransition).toHaveBeenCalled()
   })
 

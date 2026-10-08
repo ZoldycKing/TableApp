@@ -6,6 +6,7 @@
 .intro h2 { font-size: 22px; font-weight: 600; }
 .intro p { max-width: 740px; margin-top: 8px; color: var(--color-ink-soft); font-size: 14px; line-height: 1.6; min-height: 40px; }
 .player { margin-top: 14px; border: 1px solid var(--color-sand-200); border-radius: 22px; overflow: hidden; background: var(--color-sand-100); }
+.embedded { margin-top: 0; }
 .playerTop { display: flex; justify-content: space-between; gap: 12px; padding: 14px 22px; font-size: 11px; color: var(--color-ink-soft); }
 .playerTop > span:first-child { display: flex; align-items: center; gap: 7px; }
 .dot { width: 6px; height: 6px; background: var(--color-sand-400); border-radius: 100%; }
@@ -15,6 +16,7 @@
 .canvas[data-variant="roles"] { height: 490px; }
 .canvas[data-variant="sync"] { height: 440px; }
 .canvas[data-variant="intake"] { height: 430px; }
+.canvas[data-service="true"] { height: 600px; }
 .controls { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 18px; border-bottom: 1px solid var(--color-sand-200); background: white; }
 .scenes { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
 .scene { min-height: 38px; padding: 8px 10px; border-radius: 8px; font-size: 12px; color: var(--color-ink-soft); }
@@ -35,6 +37,26 @@
 .tableHead { display: grid; grid-template-columns: minmax(0,1fr) 110px 80px; padding: 10px 22px 10px 68px; font-size: 11px; color: var(--color-ink-soft); background: var(--color-sand-50); }
 .tableHead span:not(:first-child) { text-align: right; }
 .product { min-width: 0; }
+.product:is(button) { width: 100%; text-align: left; color: inherit; cursor: pointer; }
+.product:is(button):hover { border-color: var(--color-sage-400); }
+.product:is(button):focus-visible { outline: 2px solid var(--color-sage-600); outline-offset: -3px; }
+.heroDemo { min-width: 0; border: 1px solid var(--color-sand-200); border-radius: 26px; background: var(--color-sand-100); box-shadow: var(--shadow-soft); overflow: hidden; }
+.heroTop { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 14px 14px 10px; }
+.heroTitle { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--color-sage-700); }
+.heroTop .control { padding: 6px 9px; font-size: 11px; background: white; }
+.heroProgress { display: flex; flex-wrap: wrap; gap: 13px; align-items: center; padding: 0 16px 9px; font-size: 10px; color: var(--color-ink-soft); }
+.heroProgress > span { display: flex; align-items: center; gap: 5px; }
+.heroProgress [aria-current] { color: var(--color-sage-700); font-weight: 600; }
+.heroProgress i { height: 5px; width: 5px; border-radius: 100%; background: var(--color-sand-300); }
+.heroProgress i[data-active="true"] { background: var(--color-sage-600); }
+.heroProgress small { margin-left: auto; font-size: 9px; }
+.heroCanvas { height: 432px; padding: 12px; }
+.heroCaption { padding: 0 16px 14px; min-height: 49px; font-size: 12px; line-height: 1.6; color: var(--color-ink-soft); }
+.detailFrame { display: flex; flex-direction: column; height: 400px; }
+.detailFrame .chrome { flex-shrink: 0; justify-content: flex-start; padding: 0 12px; gap: 8px; }
+.detailFrame .chrome > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+.back { display: flex; align-items: center; justify-content: center; width: 30px; height: 36px; flex-shrink: 0; border-radius: 6px; color: var(--color-ink-soft); }
+.back:focus-visible { outline: 2px solid var(--color-sage-600); }
 .table .product { display: grid; grid-template-columns: 38px minmax(0,1fr) 110px 80px; align-items: center; gap: 0; min-height: 62px; padding: 8px 22px; border-top: 1px solid var(--color-sand-200); }
 .table[data-owner="true"] .product { grid-template-columns: 38px minmax(0,1fr) 110px 110px 80px; }
 .table[data-owner="true"] .tableHead { grid-template-columns: minmax(0,1fr) 110px 110px 80px; }
@@ -156,8 +178,14 @@
   .intro p { font-size: 13px; min-height: 64px; }
   .playerTop { padding: 12px; font-size: 10px; flex-wrap: wrap; }
   .canvas { padding: 18px 12px; height: 454px; }
+  .heroCanvas { height: 432px; padding: 12px; }
+  .heroTop { padding: 12px 10px 9px; }
+  .heroTitle { font-size: 10px; }
+  .heroProgress { padding-inline: 12px; gap: 10px; font-size: 9px; }
+  .heroProgress small { font-size: 8px; }
   .canvas[data-variant="sync"] { height: 500px; }
   .canvas[data-variant="intake"] { height: 520px; }
+  .canvas[data-service="true"] { height: 560px; }
   .controls { padding: 12px; align-items: flex-start; flex-direction: column; gap: 10px; }
   .scene { padding: 7px 8px; font-size: 10px; min-height: 36px; }
   .transport { align-self: flex-end; }

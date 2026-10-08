@@ -1,12 +1,14 @@
 'use client'
 
-import { useId, useState, type CSSProperties, type ReactNode } from 'react'
+import { useId, useState, type CSSProperties } from 'react'
 import { Icon } from '@/components/runtime/icons'
 import { PRODUCTS, type Product } from '../catalog-data'
 import { ProductGlyph } from '../product-glyph'
+import { REQUESTS } from '../demos'
 import { usePreviewPlayback } from './use-preview-playback'
 import { VARIANTS, type Variant } from './variants'
 import styles from './motion-lab.module.css'
+import { Chrome, ProductView } from './product-view'
 
 type Shared = (key: string) => CSSProperties
 type SceneProps = { step: number; shared: Shared }
@@ -31,20 +33,25 @@ export function MotionLab() {
   )
 }
 
-function Preview({ variant }: { variant: Variant }) {
-  const { root, step, paused, running, reduced, select, toggle, replay } = usePreviewPlayback(variant.durations)
+/** A single story for its product page, stopping on the completed result. */
+export function MotionStory({ variantId }: { variantId: 'sync' | 'workflow' }) {
+  return <Preview variant={VARIANTS.find((variant) => variant.id === variantId)!} embedded />
+}
+
+function Preview({ variant, embedded = false }: { variant: Variant; embedded?: boolean }) {
+  const { root, step, paused, running, reduced, complete, select, toggle, replay } = usePreviewPlayback(variant.durations, { loop: !embedded })
   const prefix = `tableapp-lab-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`
   const shared: Shared = (key) => ({ viewTransitionName: `${prefix}-${key}` })
   const headingId = `${prefix}-title`
   return (
-    <section ref={root} aria-labelledby={headingId}>
-      <div className={styles.intro}>
+    <section ref={root} aria-labelledby={embedded ? undefined : headingId} aria-label={embedded ? variant.title : undefined}>
+      {!embedded && <div className={styles.intro}>
         <h2 id={headingId}>{variant.title}</h2>
         <p>{variant.description}</p>
-      </div>
-      <div className={styles.player}>
+      </div>}
+      <div className={`${styles.player} ${embedded ? styles.embedded : ''}`}>
         <div className={styles.playerTop}>
-          <span><i className={styles.dot} data-running={running} />{reduced ? 'Без автоматического движения' : paused ? 'Показ на паузе' : 'Автопоказ'}</span>
+          <span><i className={styles.dot} data-running={running} />{reduced ? 'Без автоматического движения' : complete ? 'Показ завершён' : paused ? 'Показ на паузе' : 'Автопоказ'}</span>
           <span>Пример на тестовых данных</span>
         </div>
         <div className={styles.controls}>
@@ -55,56 +62,24 @@ function Preview({ variant }: { variant: Variant }) {
             ))}
           </div>
           <div className={styles.transport}>
-            {!reduced && <button type="button" className={styles.control} onClick={toggle}>{paused ? 'Продолжить' : 'Пауза'}</button>}
+            {!reduced && !complete && <button type="button" className={styles.control} onClick={toggle}>{paused ? 'Продолжить' : 'Пауза'}</button>}
             <button type="button" className={styles.control} onClick={replay}>Повторить</button>
           </div>
         </div>
-        <div className={styles.canvas} data-variant={variant.id} data-scene={step}>
+        <div className={styles.canvas} data-variant={variant.id} data-scene={step} data-service={embedded && variant.id === 'workflow'}>
           {variant.id === 'views' && <ViewsScene step={step} shared={shared} />}
           {variant.id === 'sync' && <SyncScene step={step} shared={shared} />}
-          {variant.id === 'workflow' && <WorkflowScene step={step} shared={shared} />}
+          {variant.id === 'workflow' && <WorkflowScene step={step} shared={shared} service={embedded} />}
           {variant.id === 'roles' && <RolesScene step={step} shared={shared} />}
           {variant.id === 'intake' && <IntakeScene step={step} shared={shared} />}
         </div>
       </div>
-      <div className={styles.placement}>
+      {!embedded && <div className={styles.placement}>
         <p className={styles.placementTitle}>Где использовать: {variant.placement.toLowerCase()}</p>
         <p>{variant.reason}</p>
         {reduced && <p>Уменьшение движения включено. Выберите сцену, чтобы рассмотреть её без анимации.</p>}
-      </div>
+      </div>}
     </section>
-  )
-}
-
-function Chrome({ title, icon = 'grid', children }: { title: string; icon?: string; children?: ReactNode }) {
-  return <div className={styles.chrome}><span><Icon name={icon} className="size-4" />{title}</span>{children ?? <small>4 товара</small>}</div>
-}
-
-function ProductView({ mode, shared, scope = 'products', products = PRODUCTS, owner = false, client = false, highlight = false }: {
-  mode: 'table' | 'catalog' | 'mobile'; shared: Shared; scope?: string; products?: Product[]; owner?: boolean; client?: boolean; highlight?: boolean
-}) {
-  return (
-    <div className={`${styles.productFrame} ${styles[mode]}`} data-owner={owner} style={shared(`${scope}-frame`)}>
-      <Chrome title={mode === 'table' ? 'Таблица «Склад»' : 'Каталог инструментов'} icon={mode === 'table' ? 'list' : mode === 'mobile' ? 'smartphone' : 'grid'} />
-      {mode === 'table' && <div className={styles.tableHead}><span>Товар</span><span>Цена, ₽</span>{owner && <span>Закупка, ₽</span>}<span>Остаток</span></div>}
-      <div className={styles.productRecords}>
-        {products.map((product, index) => (
-          <article key={product.code} data-product-code={product.code} data-highlight={highlight && index === 1}
-            className={styles.product} style={shared(`${scope}-record-${index}`)}>
-            <span className={`${styles.photo} ${product.tint} ${product.ink}`} style={shared(`${scope}-photo-${index}`)}>
-              <ProductGlyph kind={product.glyph} className={styles.glyph} />
-            </span>
-            <span className={styles.productName} style={shared(`${scope}-name-${index}`)} title={product.name}>{product.short}<small>{product.code}</small></span>
-            <strong className={styles.price} style={shared(`${scope}-price-${index}`)}>{product.price}<small> ₽</small></strong>
-            {owner && <span className={styles.cost}>{money(Math.round(numericPrice(product) * 0.6))}</span>}
-            <span className={styles.stock} data-empty={product.stock === 0} style={shared(`${scope}-stock-${index}`)}>
-              {client ? product.stock > 0 ? 'В наличии' : 'Под заказ' : `${product.stock} шт`}
-            </span>
-          </article>
-        ))}
-      </div>
-      <div className={styles.frameFoot}><Icon name="check" className="size-3.5" />{client ? 'Доступность и цены для клиента' : 'Одна таблица · те же четыре товара'}</div>
-    </div>
   )
 }
 
@@ -150,30 +125,39 @@ const ORDERS = [
   { id: 'З-106', title: 'Замена смесителя', client: 'Игорь Лебедев', price: '3 200 ₽', stage: 2 },
 ]
 const STATUSES = ['Приняты', 'В работе', 'Завершены']
+const SERVICE_STATUSES = ['Новая', 'В работе', 'Готово']
+const SERVICE_ORDERS = REQUESTS.map((item) => ({
+  id: item.id, title: `Заявка ${item.id}`,
+  client: item.master ? `${item.master} · ${item.client}` : `${item.client} · ${item.date}`,
+  price: item.sum, stage: SERVICE_STATUSES.indexOf(item.status),
+}))
 
-function WorkflowScene({ step, shared }: SceneProps) {
-  const orders = ORDERS.map((order, index) => index === 0 ? { ...order, stage: Math.max(0, step - 1) } : order)
+function WorkflowScene({ step, shared, service = false }: SceneProps & { service?: boolean }) {
+  const source = service ? SERVICE_ORDERS : ORDERS
+  const statuses = service ? SERVICE_STATUSES : STATUSES
+  const moving = service ? 1 : 0
+  const orders = source.map((order, index) => index === moving ? { ...order, stage: Math.max(0, step - 1) } : order)
   const record = (order: (typeof ORDERS)[number]) => (
     <article key={order.id} className={styles.order} data-order-id={order.id} style={shared(`order-${order.id}`)}>
       <span className={styles.orderId}>{order.id}</span>
       <strong style={shared(`order-name-${order.id}`)}>{order.title}</strong>
-      <small>{order.client}</small><span className={styles.orderStatus}>{STATUSES[order.stage]}</span>
+      <small>{order.client}</small><span className={styles.orderStatus}>{statuses[order.stage]}</span>
       <span className={styles.orderPrice} style={shared(`order-price-${order.id}`)}>{order.price}</span>
     </article>
   )
   return (
     <div className={styles.workflowFrame} style={shared('workflow-frame')}>
-      <Chrome title="Заявки сервисной службы" icon="clipboard"><small>3 заявки</small></Chrome>
+      <Chrome title="Заявки сервисной службы" icon="clipboard"><small>{service ? '5 заявок' : '3 заявки'}</small></Chrome>
       {step === 0 ? <div className={`${styles.orders} ${styles.orderTable}`}>
         <div className={styles.orderHead}><span>Заявка</span><span>Клиент</span><span>Статус</span><span>Сумма</span></div>
         {orders.map(record)}
       </div> : <div className={`${styles.orders} ${styles.orderBoard}`}>
-        {STATUSES.map((status, column) => <div key={status} className={styles.column}>
+        {statuses.map((status, column) => <div key={status} className={styles.column}>
           <div className={styles.columnTitle}><span>{status}</span><small>{orders.filter(order => order.stage === column).length}</small></div>
           <div className={styles.columnRecords}>{orders.filter(order => order.stage === column).map(record)}</div>
         </div>)}
       </div>}
-      <div className={styles.frameFoot}><Icon name="check" className="size-3.5" />{step >= 2 ? `${ORDERS[0]!.id}: ${step === 2 ? 'мастер выполняет работу' : 'работа завершена'}` : 'Те же заявки, другое представление'}</div>
+      <div className={styles.frameFoot}><Icon name="check" className="size-3.5" />{step >= 2 ? `${source[moving]!.id}: ${step === 2 ? 'мастер выполняет работу' : 'работа завершена'}` : 'Те же заявки, другое представление'}</div>
     </div>
   )
 }

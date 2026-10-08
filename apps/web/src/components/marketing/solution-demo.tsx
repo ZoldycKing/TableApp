@@ -1,7 +1,7 @@
+import { MotionStory } from './motion-lab/motion-lab'
 import { CoverArt, type CoverKind } from './cover-art'
 import { ProductGlyph } from './product-glyph'
 import {
-  ScreenBoard,
   ScreenCard,
   ScreenForm,
   ScreenFrame,
@@ -72,33 +72,11 @@ export function SolutionDemo({ slug }: { slug: string }) {
   if (slug === 'order-management') {
     return (
       <div className="space-y-5">
-        <ScreenFrame device="desktop" title="Доска диспетчера" note="Колонки — из колонки статуса. Перетащили карточку — статус изменился.">
-          <ScreenBoard
-            columns={[
-              {
-                title: 'Новая',
-                count: 2,
-                cards: [
-                  { title: 'Заявка 1043', meta: 'Кафе «Пион» · 27 сентября' },
-                  { title: 'Заявка 1046', meta: 'Салон «Бриз» · 29 сентября' },
-                ],
-              },
-              {
-                title: 'В работе',
-                count: 2,
-                cards: [
-                  { title: 'Заявка 1042', meta: 'Сергей · ООО «Вектор»' },
-                  { title: 'Заявка 1045', meta: 'Андрей · ООО «Вектор»' },
-                ],
-              },
-              {
-                title: 'Готово',
-                count: 1,
-                cards: [{ title: 'Заявка 1044', meta: 'Андрей · ИП Соколов' }],
-              },
-            ]}
-          />
-        </ScreenFrame>
+        <div>
+          <p className="mb-2 text-[13px] font-medium text-ink">Доска диспетчера</p>
+          <MotionStory variantId="workflow" />
+          <p className="mt-2 text-xs leading-relaxed text-ink-muted">Колонки — из колонки статуса. Перетащили карточку — статус изменился.</p>
+        </div>
 
         <div className="grid gap-5 sm:grid-cols-2">
           <ScreenFrame title="Телефон мастера" note="Его заявки и больше ничего — правило «видит только свои».">

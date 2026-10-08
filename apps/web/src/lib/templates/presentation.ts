@@ -4,9 +4,7 @@ import { generateApp } from '../app-builder'
 import { formatCell } from '../format'
 import { buildTemplate } from './build'
 import { findTemplate } from './catalog'
-import { asInventory } from './inventory-app'
-import { asPortal } from './portal-app'
-import { asProduction } from './production-app'
+import { templatePreset } from './presets'
 
 /** Synthetic examples use the same definitions, formulas and presets as installation. No database access. */
 export function templateExample(id: string, now = new Date()) {
@@ -22,8 +20,7 @@ export function templateExample(id: string, now = new Date()) {
   const main = built.tables.find(table => table.id === built.appTableId)!
   const generated = generateApp({ appId: newId('app'), workspaceId: main.workspaceId, name: built.appName,
     slug: `example-${id}`, table: main, fields: byTable.get(main.id)!, view: views.find(view => view.id === built.appViewId)! })
-  const app = built.portal ? asPortal(generated, built.portal) : built.production ? asProduction(generated, built)
-    : built.inventory ? asInventory(generated, built) : generated
+  const app = templatePreset(generated, built)
   const table = (key: string) => built.tables[template.tables.findIndex(item => item.key === key)]!
   const field = (tableKey: string, fieldKey: string) => {
     const definition = template.tables.find(item => item.key === tableKey)!
@@ -47,6 +44,7 @@ export function templateExample(id: string, now = new Date()) {
 
 /** Access explanation is shared by template cards and detail pages. */
 export function templateAccessNote(template: ReturnType<typeof findTemplate> & {}) {
+  if (template.id === 'zayavki') return 'Диспетчер видит все заявки, назначает мастеров и ведёт оплату. Мастер видит только заявки со своей почтой и меняет статус, фото и комментарий. Добавьте сотрудников в список доступа; адреса мастеров в примерах нужно заменить настоящими.'
   if (template.portal) return 'Клиент видит заказы, где указана его почта. Сотрудники видят все заказы. Обращения пока доступны только в таблице владельца.'
   if (template.inventory) return 'Кладовщик видит товары и принимает поступления. Цены, сводка и журнал приёмок доступны владельцу. Список закупки находится в таблице владельца.'
   if (template.production) return 'Начальник смены вводит выпуск. Директор видит сводку, материалы и движения. Права этих ролей уже разделены.'

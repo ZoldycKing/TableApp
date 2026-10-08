@@ -1,14 +1,16 @@
 import { ANONYMOUS, asRole, visibleScreensFor } from '@/lib/app-roles'
 import { templateExample } from '@/lib/templates/presentation'
+import { canAccessRow, rulesFor } from '@/lib/row-access'
 import { ScreenCard, ScreenFrame, ScreenList, ScreenTable } from './screens'
 
 type Example = ReturnType<typeof templateExample>
 
 function card(example: Example, role: string, email?: string) {
-  const screen = visibleScreensFor(example.app, asRole(role, email ?? null)).find(item => item.type === 'detail' && item.tableId === example.built.appTableId)
+  const visitor = asRole(role, email ?? null)
+  const screen = visibleScreensFor(example.app, visitor).find(item => item.type === 'detail' && item.tableId === example.built.appTableId)
   if (!screen || screen.type !== 'detail') return null
-  const emailId = example.built.portal?.emailFieldId
-  const row = example.rows.find(item => item.tableId === screen.tableId && (!email || !emailId || item.data[emailId] === email))!
+  const row = example.rows.find(item => item.tableId === screen.tableId && canAccessRow(rulesFor(example.app, screen.tableId, visitor), email ? { email } : null, item.data))
+  if (!row) return null
   const fields = screen.components.flatMap(component => component.type === 'field'
     ? example.fields.filter(field => field.id === component.fieldId && example.text(row, field)) : [])
   const primary = example.fields.find(field => field.id === example.built.tables.find(table => table.id === screen.tableId)!.primaryFieldId)!
@@ -45,6 +47,18 @@ export function TemplateExample({ id }: { id: string }) {
       </ScreenFrame>
       <ScreenFrame title="После входа: карточка заказа клиента" note="Клиент видит заказы, в которых указана его почта. Показан фрагмент карточки; доступ всей организации отдельно не настроен.">
         {visible && card(example, 'client', 'petrov@example.ru')}
+      </ScreenFrame>
+    </div>
+  }
+  if (template.id === 'zayavki') {
+    const items = rows.filter(row => row.tableId === built.appTableId)
+    const columns = ['what', 'master', 'status', 'paid'].map(key => field('zayavki', key))
+    return <div className="grid gap-5 sm:grid-cols-2">
+      <ScreenFrame device="desktop" title="В таблице диспетчера: все заявки" note={`Показаны 4 из ${items.length} заявок. Диспетчер выбирает клиента, дату и почту мастера, ведёт стоимость и оплату. Доска и календарь доступны в рабочем пространстве.`}>
+        <ScreenTable caption="Заявки" columns={columns.map(column => column.name)} rows={items.slice(0, 4).map(row => columns.map(column => text(row, column) || '—'))} />
+      </ScreenFrame>
+      <ScreenFrame title="В приложении мастера: его заявка" note="Сергей видит 2 назначенные ему заявки из 6. Через «Изменить» он меняет только статус, фото и комментарий. Стоимость и оплату мастер не видит. Почта в учебных записях вымышленная.">
+        {card(example, 'staff', 'sergey@example.invalid')}
       </ScreenFrame>
     </div>
   }

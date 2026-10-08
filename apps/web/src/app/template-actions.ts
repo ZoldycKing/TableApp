@@ -20,9 +20,7 @@ import { uniqueSlug } from '@/lib/app-slug'
 import { authorizeTable, authorizeWorkspace } from '@/lib/authorize'
 import { buildTemplate } from '@/lib/templates/build'
 import { findTemplate } from '@/lib/templates/catalog'
-import { asProduction } from '@/lib/templates/production-app'
-import { asPortal } from '@/lib/templates/portal-app'
-import { asInventory } from '@/lib/templates/inventory-app'
+import { templatePreset } from '@/lib/templates/presets'
 import type { ActionResult } from './actions'
 
 export type AppliedTemplate = {
@@ -79,13 +77,9 @@ export async function applyTemplateAction(
 
   /*
    * Готовые сценарии поверх общего конструктора: кабинет клиента,
-   * производственный учёт и склад с журналом приёмок.
+   * производственный учёт, склад с приёмками и заявки с ролями мастера и диспетчера.
    */
-  const draft = built.portal
-    ? asPortal(generated, built.portal)
-    : built.production
-      ? asProduction(generated, built)
-      : built.inventory ? asInventory(generated, built) : generated
+  const draft = templatePreset(generated, built)
 
   try {
     await writeRows(workspaceId, async (context) => {

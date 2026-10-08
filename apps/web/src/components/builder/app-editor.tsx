@@ -5,6 +5,8 @@ import { byPosition, DEVICES, newId, positionBetween, positionSequence } from '@
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { publishAppAction, updateAppDraftAction } from '@/app/app-actions'
 import { enableInventoryAction } from '@/app/inventory-setup-actions'
+import { enableDispatchAction } from '@/app/dispatch-setup-actions'
+import { hasDispatchPreset } from '@/lib/templates/dispatch-app'
 import { useRouter } from 'next/navigation'
 import {
   ANONYMOUS,
@@ -93,6 +95,7 @@ const ADDABLE: Component['type'][] = [
 
 type Props = {
   inventoryUpgradeTableId?: string | null
+  dispatchUpgradeTableId?: string | null
   initialApp: App
   tables: TableSummary[]
   views: View[]
@@ -126,7 +129,7 @@ function PreviewChip({
   )
 }
 
-export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTitles, publishedAt, inventoryUpgradeTableId }: Props) {
+export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTitles, publishedAt, inventoryUpgradeTableId, dispatchUpgradeTableId }: Props) {
   const router = useRouter()
   const [app, setApp] = useState<App>(initialApp)
   const [screenId, setScreenId] = useState(initialApp.screens[0]?.id ?? '')
@@ -629,6 +632,18 @@ export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTit
           {scale < 1 ? `, уменьшено до ${Math.round(scale * 100)}%` : ''}.
         </p>
 
+        {dispatchUpgradeTableId && <div className="space-y-2 rounded-xl border border-sand-200 p-3">
+          {hasDispatchPreset(app, dispatchUpgradeTableId) ? <p className="text-xs leading-relaxed text-ink-soft">Мастер видит заявки, где «Почта мастера» совпадает с почтой входа. Добавьте мастеров и диспетчеров в список доступа. В старых заявках заполните почту вручную; в примерах замените адреса настоящими. Проверьте роли в предпросмотре перед публикацией.</p> : <>
+            <p className="text-xs leading-relaxed text-ink-soft">Диспетчер увидит все заявки, мастер — только назначенные ему по почте. Мастер сможет менять статус, фото и комментарий. Настройка добавит два поля и разделит права в черновике. Старые заявки нужно назначить вручную; опубликованная версия продолжит работать до публикации.</p>
+            <button type="button" disabled={pending || save.kind === 'dirty' || save.kind === 'saving' || save.kind === 'error'}
+              onClick={() => startTransition(async () => {
+                const result = await enableDispatchAction(app.id, dispatchUpgradeTableId, app)
+                if (!result.ok) { setSave({ kind: 'error', text: result.error }); return }
+                setApp(result.app); setSave({ kind: 'note', text: 'Роли настроены в черновике. Заполните почту мастеров и проверьте предпросмотр перед публикацией.' }); router.refresh()
+              })}
+              className="w-full rounded-lg border border-sand-200 px-3 py-2 text-sm font-medium hover:bg-sand-100 disabled:opacity-40">Настроить роли заявок</button>
+          </>}
+        </div>}
         {inventoryUpgradeTableId && !app.inventory && <div className="space-y-2 rounded-xl border border-sand-200 p-3">
           <p className="text-xs leading-relaxed text-ink-soft">Подключите журнал приёмок и роли «Кладовщик» и «Владелец». Текущие остатки сохранятся как начальные. После настройки опубликуйте черновик.</p>
           <button type="button" disabled={pending || save.kind === 'dirty' || save.kind === 'saving' || save.kind === 'error'}

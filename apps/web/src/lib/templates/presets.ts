@@ -1,0 +1,23 @@
+import type { App, Field } from '@tableapp/schema'
+import type { BuiltTemplate } from './build'
+import { asDispatch } from './dispatch-app'
+import { asInventory } from './inventory-app'
+import { asPortal } from './portal-app'
+import { asProduction } from './production-app'
+
+/** Installation and public examples must build the same application. */
+export function templatePreset(app: App, built: BuiltTemplate): App {
+  if (built.portal) return asPortal(app, built.portal)
+  if (built.production) return asProduction(app, built)
+  if (built.inventory) return asInventory(app, built)
+  if (built.tables.find(table => table.id === built.appTableId)?.templateId === 'zayavki') {
+    const relation = built.fields.find(field => field.tableId === built.appTableId && field.name === 'Клиент')!
+    const clientTable = built.tables.find(table => table.id === relation.options.tableId)!
+    const clientFields = built.fields.filter(field => field.tableId === clientTable.id)
+    return asDispatch(app, built.appTableId, built.fields.filter(field => field.tableId === built.appTableId) as Field[], false, {
+      viewId: built.views.find(view => view.tableId === clientTable.id)!.id, primaryFieldId: clientTable.primaryFieldId!,
+      phoneFieldId: clientFields.find(field => field.name === 'Телефон')!.id, addressFieldId: clientFields.find(field => field.name === 'Адрес')!.id,
+    })
+  }
+  return app
+}

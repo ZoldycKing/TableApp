@@ -398,7 +398,7 @@ describe('права на поля выводятся из того, что по
     expect(permits(empty, 'tbl_1', 'create', asRole('client'))).toBe(false)
   })
 
-  it('поле владельца строки читается всегда: по нему решается, чья запись', () => {
+  it('правило владельца не раскрывает скрытое поле: принадлежность проверяется до отправки данных', () => {
     const portal = app({
       rowAccessRules: [{ tableId: 'tbl_1', emailFieldId: 'fld_email', appliesTo: ['client'] }],
       screens: [
@@ -411,7 +411,7 @@ describe('права на поля выводятся из того, что по
         },
       ],
     })
-    expect([...readableFields(portal, 'tbl_1', asRole('client'), views)].sort()).toEqual(['fld_email', 'fld_what'])
+    expect([...readableFields(portal, 'tbl_1', asRole('client'), views)].sort()).toEqual(['fld_what'])
   })
 })
 

@@ -96,6 +96,7 @@ export default async function AppEditorPage({ params }: { params: Promise<{ appI
       )}
 
       <AppEditor
+        dispatchUpgradeTableId={itemTable?.templateId === 'zayavki' ? itemTableId : null}
         inventoryUpgradeTableId={inventoryUpgradeTableId}
         initialApp={parsed.data}
         tables={tables}

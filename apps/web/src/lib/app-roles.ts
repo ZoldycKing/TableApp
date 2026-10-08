@@ -339,16 +339,8 @@ export function fieldPolicy(
     for (const component of components) addComponentFields(component, out)
   }
 
-  /*
-   * Поле владельца строки нужно вошедшему: по нему решается, чья это запись.
-   * Не вошедшему — нет: своих строк у него не бывает, а поле владельца
-   * почти всегда чужая почта.
-   */
-  if (!anonymous) {
-    for (const rule of app.rowAccessRules) {
-      if (rule.tableId === tableId && rule.appliesTo.includes(visitor.roleId!)) out.add(rule.fieldId)
-    }
-  }
+  // Ownership is checked on the server before projection. A row rule alone
+  // does not make its email/company field readable in the browser.
 
   return { restricted, fields: out }
 }

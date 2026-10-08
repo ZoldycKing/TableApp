@@ -14,9 +14,10 @@ export function Chrome({ title, icon = 'grid', children }: { title: string; icon
   return <div className={styles.chrome}><span><Icon name={icon} className="size-4" />{title}</span>{children ?? <small>4 товара</small>}</div>
 }
 
-export function ProductView({ mode, shared, scope = 'products', products = PRODUCTS, owner = false, client = false, highlight = false, onOpen, cardRef }: {
+export function ProductView({ mode, shared, scope = 'products', products = PRODUCTS, owner = false, client = false, highlight = false, highlightIndex = 1, onOpen, cardRef }: {
   mode: 'table' | 'catalog' | 'mobile'; shared: Shared; scope?: string; products?: Product[]; owner?: boolean; client?: boolean; highlight?: boolean
   onOpen?: (index: number) => void; cardRef?: (index: number, node: HTMLElement | null) => void
+  highlightIndex?: number
 }) {
   return (
     <div className={`${styles.productFrame} ${styles[mode]}`} data-owner={owner} style={shared(`${scope}-frame`)}>
@@ -25,7 +26,7 @@ export function ProductView({ mode, shared, scope = 'products', products = PRODU
       <div className={styles.productRecords}>
         {products.map((product, index) => {
           const Record = onOpen ? 'button' : 'article'
-          return <Record key={product.code} data-product-code={product.code} data-highlight={highlight && index === 1}
+          return <Record key={product.code} data-product-code={product.code} data-highlight={highlight && index === highlightIndex}
             type={onOpen ? 'button' : undefined} aria-label={onOpen ? `Открыть ${product.short}` : undefined}
             onClick={onOpen ? () => onOpen(index) : undefined} ref={(node) => cardRef?.(index, node)}
             className={styles.product} style={shared(`${scope}-record-${index}`)}>

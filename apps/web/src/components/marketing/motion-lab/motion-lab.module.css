@@ -52,11 +52,6 @@
 .heroProgress small { margin-left: auto; font-size: 9px; }
 .heroCanvas { height: 432px; padding: 12px; }
 .heroCaption { padding: 0 16px 14px; min-height: 49px; font-size: 12px; line-height: 1.6; color: var(--color-ink-soft); }
-.detailFrame { display: flex; flex-direction: column; height: 400px; }
-.detailFrame .chrome { flex-shrink: 0; justify-content: flex-start; padding: 0 12px; gap: 8px; }
-.detailFrame .chrome > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
-.back { display: flex; align-items: center; justify-content: center; width: 30px; height: 36px; flex-shrink: 0; border-radius: 6px; color: var(--color-ink-soft); }
-.back:focus-visible { outline: 2px solid var(--color-sage-600); }
 .table .product { display: grid; grid-template-columns: 38px minmax(0,1fr) 110px 80px; align-items: center; gap: 0; min-height: 62px; padding: 8px 22px; border-top: 1px solid var(--color-sand-200); }
 .table[data-owner="true"] .product { grid-template-columns: 38px minmax(0,1fr) 110px 110px 80px; }
 .table[data-owner="true"] .tableHead { grid-template-columns: minmax(0,1fr) 110px 110px 80px; }
@@ -68,6 +63,7 @@
 .price { font-size: 14px; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .price small { font-size: 11px; font-weight: 400; }
 .table .price, .table .stock, .table .cost { text-align: right; }
+.table .product[data-highlight="true"] { background: var(--color-sage-50); }
 .stock { font-size: 11px; color: var(--color-sage-700); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .stock[data-empty="true"] { color: var(--color-ink-soft); }
 .cost { font-size: 12px; color: var(--color-ink-soft); font-variant-numeric: tabular-nums; }

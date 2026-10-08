@@ -200,16 +200,20 @@ describe('one-time hero demonstration', () => {
   }
 
   function finish() {
-    for (let step = 0; step < 3; step += 1) {
+    // Focus restoration in jsdom may schedule its own zero-duration task.
+    for (let step = 0; step < 10 && document.querySelector('[aria-label="Приостановить показ"]'); step += 1) {
       act(() => vi.advanceTimersToNextTimer())
     }
   }
 
-  it('shows the completed catalog after one pass and never resets it automatically', () => {
+  it('leaves the employee app interactive with updated stock after one pass', () => {
     const page = start()
     finish()
     expect(page.getAllByRole('button', { name: /^Открыть / })).toHaveLength(PRODUCTS.length)
-    expect(page.queryByRole('button', { name: 'Вернуться в витрину' })).toBeNull()
+    expect(page.queryByRole('button', { name: 'Вернуться к товарам' })).toBeNull()
+    expect(page.getByRole('button', { name: `Открыть ${PRODUCTS[1]!.short}` }).textContent).toContain('7 шт')
+    expect(page.container.querySelector('[data-source-stock="7"]')).not.toBeNull()
+    expect(PRODUCTS[1]!.stock).toBe(3)
     expect(page.queryByRole('button', { name: 'Приостановить показ' })).toBeNull()
     act(() => vi.advanceTimersByTime(60000))
     expect(page.getAllByRole('button', { name: /^Открыть / })).toHaveLength(PRODUCTS.length)
@@ -221,8 +225,8 @@ describe('one-time hero demonstration', () => {
     finish()
     fireEvent.click(page.getByRole('button', { name: `Открыть ${PRODUCTS[2]!.short}` }))
     expect(page.getByText(PRODUCTS[2]!.name)).toBeTruthy()
-    expect(document.activeElement).toBe(page.getByRole('button', { name: 'Вернуться в витрину' }))
-    fireEvent.click(page.getByRole('button', { name: 'Вернуться в витрину' }))
+    expect(document.activeElement).toBe(page.getByRole('button', { name: 'Вернуться к товарам' }))
+    fireEvent.click(page.getByRole('button', { name: 'Вернуться к товарам' }))
     expect(document.activeElement).toBe(page.getByRole('button', { name: `Открыть ${PRODUCTS[2]!.short}` }))
     expect(page.getAllByRole('button', { name: /^Открыть / })).toHaveLength(PRODUCTS.length)
     fireEvent.click(page.getByRole('button', { name: 'Повторить показ' }))
@@ -242,25 +246,35 @@ describe('one-time hero demonstration', () => {
     act(() => vi.advanceTimersByTime(2799))
     expect(phase()).toBe('table')
     act(() => vi.advanceTimersByTime(1))
-    expect(phase()).toBe('catalog')
+    expect(phase()).toBe('builder')
     act(() => observers[0]!.notify(false))
     act(() => vi.advanceTimersByTime(20000))
-    expect(phase()).toBe('catalog')
+    expect(phase()).toBe('builder')
     act(() => observers[0]!.notify(true))
-    act(() => vi.advanceTimersByTime(3399))
-    expect(phase()).toBe('catalog')
+    act(() => vi.advanceTimersByTime(4599))
+    expect(phase()).toBe('builder')
     act(() => vi.advanceTimersByTime(1))
     expect(phase()).toBe('mobile')
   })
 
-  it('shows table, catalog, and phone once, with the same four products', () => {
+  it('builds a role-specific app and writes a phone receipt back into the source table', () => {
     const page = start()
     const phase = () => page.container.querySelector('[data-hero-phase]')?.getAttribute('data-hero-phase')
     expect(phase()).toBe('table')
-    for (const expected of ['catalog', 'mobile', 'catalog']) {
+    for (const expected of ['builder', 'mobile', 'receipt', 'result', 'mobile']) {
       act(() => vi.advanceTimersToNextTimer())
       expect(phase()).toBe(expected)
-      expect(Array.from(page.container.querySelectorAll('[data-product-code]')).map(node => node.getAttribute('data-product-code'))).toEqual(PRODUCTS.map(product => product.code))
+      if (expected !== 'receipt') expect(Array.from(page.container.querySelectorAll('[data-product-code]')).map(node => node.getAttribute('data-product-code'))).toEqual(PRODUCTS.map(product => product.code))
+      if (expected === 'builder') expect(page.getByText('Поля в списке')).toBeTruthy()
+      if (expected === 'mobile') expect(page.queryByText('7 990')).toBeNull()
+      if (expected === 'receipt') {
+        expect((page.getByLabelText('Принято, шт') as HTMLInputElement).value).toBe('4')
+        expect(page.container.querySelector('[data-source-stock="3"]')).not.toBeNull()
+      }
+      if (expected === 'result') {
+        expect(page.getByRole('status').textContent).toContain('остаток 3 → 7')
+        expect(page.container.querySelector(`[data-product-code="${PRODUCTS[1]!.code}"]`)?.textContent).toContain('7 шт')
+      }
     }
     expect(vi.getTimerCount()).toBe(0)
   })
@@ -272,7 +286,63 @@ describe('one-time hero demonstration', () => {
     act(() => vi.advanceTimersByTime(3799))
     expect(page.container.querySelector('[data-hero-phase]')?.getAttribute('data-hero-phase')).toBe('table')
     act(() => vi.advanceTimersByTime(1))
-    expect(page.container.querySelector('[data-hero-phase]')?.getAttribute('data-hero-phase')).toBe('catalog')
+    expect(page.container.querySelector('[data-hero-phase]')?.getAttribute('data-hero-phase')).toBe('builder')
+  })
+
+  it('saves a custom quantity to both views, accepts another receipt, and resets sample data on replay', () => {
+    const page = start()
+    finish()
+    fireEvent.click(page.getByRole('button', { name: `Открыть ${PRODUCTS[3]!.short}` }))
+    fireEvent.change(page.getByLabelText('Принято, шт'), { target: { value: '6' } })
+    fireEvent.click(page.getByRole('button', { name: 'Сохранить приёмку' }))
+    expect(page.getByRole('status').textContent).toContain('остаток 0 → 6')
+    expect(document.activeElement).toBe(page.getByRole('button', { name: 'Открыть приложение' }))
+    expect(page.container.querySelector(`[data-product-code="${PRODUCTS[3]!.code}"]`)?.textContent).toContain('6 шт')
+    fireEvent.click(page.getByRole('button', { name: 'Открыть приложение' }))
+    expect(page.getByRole('button', { name: `Открыть ${PRODUCTS[3]!.short}` }).textContent).toContain('6 шт')
+    expect(page.container.querySelector('[data-source-stock="6"]')).not.toBeNull()
+    fireEvent.click(page.getByRole('button', { name: `Открыть ${PRODUCTS[3]!.short}` }))
+    fireEvent.click(page.getByRole('button', { name: 'Сохранить приёмку' }))
+    expect(page.getByRole('status').textContent).toContain('остаток 6 → 10')
+    fireEvent.click(page.getByRole('button', { name: 'Повторить показ' }))
+    expect(page.container.querySelector(`[data-product-code="${PRODUCTS[3]!.code}"]`)?.textContent).toContain('0 шт')
+    expect(PRODUCTS[3]!.stock).toBe(0)
+  })
+
+  it('stops autoplay when editing a receipt and rejects empty, fractional, and out-of-range quantities', () => {
+    const page = start()
+    for (let step = 0; step < 3; step++) act(() => vi.advanceTimersToNextTimer())
+    fireEvent.focus(page.getByLabelText('Принято, шт'))
+    act(() => vi.advanceTimersByTime(60000))
+    expect(page.container.querySelector('[data-hero-phase]')?.getAttribute('data-hero-phase')).toBe('receipt')
+    const form = page.getByRole('button', { name: 'Сохранить приёмку' }).closest('form')!
+    for (const value of ['', '0', '-1', '1.5', '1000']) {
+      fireEvent.change(page.getByLabelText('Принято, шт'), { target: { value } })
+      fireEvent.submit(form)
+      expect(page.getByRole('alert').textContent).toContain('от 1 до 999')
+      expect(page.container.querySelector('[data-source-stock="3"]')).not.toBeNull()
+    }
+    fireEvent.change(page.getByLabelText('Принято, шт'), { target: { value: '2' } })
+    fireEvent.submit(form)
+    expect(page.getByRole('status').textContent).toContain('остаток 3 → 5')
+    act(() => vi.advanceTimersByTime(60000))
+    expect(page.getByRole('status').textContent).toContain('остаток 3 → 5')
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('claims a receipt once before a delayed native snapshot and keeps its update when returning', () => {
+    const page = start()
+    finish()
+    fireEvent.click(page.getByRole('button', { name: `Открыть ${PRODUCTS[1]!.short}` }))
+    const native = nativeTransition()
+    fireEvent.click(page.getByRole('button', { name: 'Сохранить приёмку' }))
+    fireEvent.click(page.getByRole('button', { name: 'Сохранить приёмку' }))
+    act(native.commit)
+    expect(page.getByRole('status').textContent).toContain('остаток 7 → 11')
+    expect(document.startViewTransition).toHaveBeenCalledTimes(1)
+    fireEvent.click(page.getByRole('button', { name: 'Открыть приложение' }))
+    act(native.commit)
+    expect(page.getByRole('button', { name: `Открыть ${PRODUCTS[1]!.short}` }).textContent).toContain('11 шт')
   })
 
   it('stops the automatic sequence as soon as someone opens a product', () => {
@@ -300,13 +370,13 @@ describe('one-time hero demonstration', () => {
     expect(native.transition.skipTransition).toHaveBeenCalled()
   })
 
-  it('keeps the catalog interactive with reduced motion and clears timers on unmount', () => {
+  it('keeps the employee screen interactive with reduced motion and clears timers on unmount', () => {
     reduced = true
     const page = start()
     expect(page.getAllByRole('button', { name: /^Открыть / })).toHaveLength(PRODUCTS.length)
     fireEvent.click(page.getByRole('button', { name: `Открыть ${PRODUCTS[1]!.short}` }))
     expect(page.getByText(PRODUCTS[1]!.name)).toBeTruthy()
-    fireEvent.click(page.getByRole('button', { name: 'Вернуться в витрину' }))
+    fireEvent.click(page.getByRole('button', { name: 'Вернуться к товарам' }))
     fireEvent.click(page.getByRole('button', { name: 'Повторить показ' }))
     expect(page.getAllByRole('button', { name: /^Открыть / })).toHaveLength(PRODUCTS.length)
     act(() => vi.advanceTimersByTime(60000))

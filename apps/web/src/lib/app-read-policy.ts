@@ -6,6 +6,7 @@ import { and, asc, eq, inArray } from 'drizzle-orm'
 import { createHash } from 'node:crypto'
 import { fieldPolicy, onlyReadable, rowReach, type Visitor } from './app-roles'
 import { canAccessRow, rulesFor, type AccessViewer } from './row-access'
+import { readingVisitor } from './customer-read-access'
 
 export function policyDigest(value: unknown): string {
   return createHash('sha256').update(JSON.stringify(value)).digest('hex')
@@ -33,15 +34,16 @@ export async function appReadPolicy(app: App, tableId: string, visitor: Visitor,
       if (row.deletedAt !== null) continue
     }
   }
-  const reach = rowReach(app, tableId, viewMap, columns, visitor)
-  const readable = { ...fieldPolicy(app, tableId, visitor, viewMap), restricted: true }
+  const reading = readingVisitor(app, tableId, visitor)
+  const reach = rowReach(app, tableId, viewMap, columns, reading)
+  const readable = { ...fieldPolicy(app, tableId, reading, viewMap), restricted: true }
   const rules = rulesFor(app, tableId, visitor)
   const formulas = compileTableFormulas(columns)
   const derive = (data: Record<string, unknown>, row?: RowMetadata) => computeDerivedRow(
     systemRowData({ ...(row ?? { id: '' }), data }, columns), columns, related, formulas)
   return {
     fields: columns, views: viewMap, readable,
-    canRead: (data: Record<string, unknown>, row?: RowMetadata) => canAccessRow(rules, viewer, data) &&
+    canRead: (data: Record<string, unknown>, row?: RowMetadata) => (reading !== visitor || canAccessRow(rules, viewer, data)) &&
       reach.kind !== 'none' && (reach.kind === 'ungated' || reach.allows(derive(data, row))),
     project: (data: Record<string, unknown>, row?: RowMetadata) => onlyReadable(derive(data, row), readable),
     fingerprint: policyDigest([app, visitor, found, viewRows, dependencyRevisions,

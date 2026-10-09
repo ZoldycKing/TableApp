@@ -70,7 +70,7 @@ export async function appAccessFor(
     const viewer = await ensureAppUser(app.id, normalizeEmail(email))
     // Организацию берём из списка доступа: по ней работает правило
     // «видит строки своей фирмы».
-    return { visitor: declared, viewer: { ...viewer, company: companyOf(app, email), enrolled: false } }
+    return { visitor: declared, viewer: { ...viewer, company: companyOf(app, email), enrolled: declared.enrolled } }
   }
 
   return enrolledAccess(app, normalizeEmail(email))

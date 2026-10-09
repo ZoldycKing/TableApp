@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { publishAppAction, updateAppDraftAction } from '@/app/app-actions'
 import { enableInventoryAction, enableStockOperationsAction } from '@/app/inventory-setup-actions'
 import { enableDispatchAction } from '@/app/dispatch-setup-actions'
+import { enableRepeatRequestsAction } from '@/app/portal-setup-actions'
 import { hasDispatchPreset } from '@/lib/templates/dispatch-app'
 import { useRouter } from 'next/navigation'
 import {
@@ -94,6 +95,7 @@ const ADDABLE: Component['type'][] = [
 ]
 
 type Props = {
+  portalUpgradeTableId?: string | null
   inventoryUpgradeTableId?: string | null
   dispatchUpgradeTableId?: string | null
   initialApp: App
@@ -129,7 +131,7 @@ function PreviewChip({
   )
 }
 
-export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTitles, publishedAt, inventoryUpgradeTableId, dispatchUpgradeTableId }: Props) {
+export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTitles, publishedAt, inventoryUpgradeTableId, dispatchUpgradeTableId, portalUpgradeTableId }: Props) {
   const router = useRouter()
   const [app, setApp] = useState<App>(initialApp)
   const [screenId, setScreenId] = useState(initialApp.screens[0]?.id ?? '')
@@ -632,6 +634,15 @@ export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTit
           {scale < 1 ? `, уменьшено до ${Math.round(scale * 100)}%` : ''}.
         </p>
 
+        {portalUpgradeTableId && app.screens.some(screen => screen.type === 'form' && screen.mode === 'create' && screen.tableId === portalUpgradeTableId && screen.access.public && screen.access.roles.length === 0) && <div className="space-y-2 rounded-xl border border-sand-200 p-3">
+          <p className="text-xs leading-relaxed text-ink-soft">Клиент сможет оставлять повторные заявки после входа. Почта подтверждается один раз, новые заявки получают статус «Принят». Изменения появятся после публикации черновика.</p>
+          <button type="button" disabled={pending || save.kind === 'dirty' || save.kind === 'saving' || save.kind === 'error'}
+            onClick={() => startTransition(async () => {
+              const result = await enableRepeatRequestsAction(app.id, portalUpgradeTableId, app)
+              if (!result.ok) { setSave({ kind: 'error', text: result.error }); return }
+              setApp(result.app); setSave({ kind: 'note', text: 'Форма клиента обновлена. Проверьте предпросмотр и опубликуйте черновик.' }); router.refresh()
+            })} className="w-full rounded-lg border border-sand-200 px-3 py-2 text-sm font-medium hover:bg-sand-100 disabled:opacity-40">Обновить форму клиента</button>
+        </div>}
         {dispatchUpgradeTableId && <div className="space-y-2 rounded-xl border border-sand-200 p-3">
           {hasDispatchPreset(app, dispatchUpgradeTableId) ? <p className="text-xs leading-relaxed text-ink-soft">Мастер видит заявки, где «Почта мастера» совпадает с почтой входа. Добавьте мастеров и диспетчеров в список доступа. В старых заявках заполните почту вручную; в примерах замените адреса настоящими. Проверьте роли в предпросмотре перед публикацией.</p> : <>
             <p className="text-xs leading-relaxed text-ink-soft">Диспетчер увидит все заявки, мастер — только назначенные ему по почте. Мастер сможет менять статус, фото и комментарий. Настройка добавит два поля и разделит права в черновике. Старые заявки нужно назначить вручную; опубликованная версия продолжит работать до публикации.</p>

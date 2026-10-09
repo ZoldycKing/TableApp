@@ -18,12 +18,15 @@ export function prepareDispatchUpgrade(app: App,
   const detail = app.screens.find(screen => screen.type === 'detail')
   const edit = app.screens.find(screen => screen.type === 'form' && screen.mode === 'edit')
   const create = app.screens.find(screen => screen.type === 'form' && screen.mode === 'create')
+  const standardRoles = app.screens[0]?.access.roles ?? []
   const standard = app.screens.length === 5 && app.screens.filter(screen => screen.type === 'dashboard').length === 1 &&
     list?.type === 'list' && views.some(view => view.id === list.source.viewId && view.tableId === table.id) &&
     !list.source.extraFilter && !list.components.length && detail?.type === 'detail' && detail.tableId === table.id &&
     edit?.type === 'form' && edit.tableId === table.id && create?.type === 'form' && create.tableId === table.id &&
     app.screens.every(screen => !screen.access.public && !screen.access.allowDelete && !screen.access.publicFields.length &&
-      screen.access.roles.length === 3 && ['client', 'staff', 'manager'].every(role => screen.access.roles.includes(role)))
+      [2, 3].includes(standardRoles.length) && ['staff', 'manager'].every(role => standardRoles.includes(role)) &&
+      standardRoles.every(role => ['client', 'staff', 'manager'].includes(role)) &&
+      screen.access.roles.length === standardRoles.length && standardRoles.every(role => screen.access.roles.includes(role)))
   if (!standard || app.screens.some(screen => screen.type !== 'dashboard' && screen.components.some(component =>
     component.roles !== null || component.visibleWhen !== null ||
     (screen.type === 'form' ? component.type !== 'form_field' :

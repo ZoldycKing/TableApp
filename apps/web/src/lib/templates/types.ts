@@ -45,6 +45,8 @@ export type TemplateField = {
   help?: string
   /** Варианты для полей выбора — задаются именами, идентификаторы выпускаются при установке. */
   choices?: TemplateChoice[]
+  /** Initial choice for new rows only; resolved to its installed identifier. */
+  defaultChoice?: string
   /** Настройки числа, даты и прочего — как в FIELD_OPTIONS соответствующего типа. */
   options?: Record<string, unknown>
   /** Связь: ключ таблицы шаблона. */

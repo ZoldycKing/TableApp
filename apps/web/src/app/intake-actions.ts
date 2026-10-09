@@ -79,6 +79,7 @@ const WHY: Record<PendingRejection, string> = {
   not_allowed: 'Форма сейчас не принимает заявки.',
   nothing_to_write: 'Заполните хотя бы одно поле.',
   too_large: 'Заявка слишком большая.',
+  required_field: 'Заполните обязательные поля заявки.',
 }
 
 /**

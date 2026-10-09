@@ -52,3 +52,20 @@ describe('visit price snapshots', () => {
     expect(() => planSalonPriceUpgrade(legacy, [], visits)).toThrow('Цена услуги отсутствует')
   })
 })
+
+describe('initial request status and date', () => {
+  it('initializes new rows only and preserves explicit choices and historical dates', async () => {
+    const example = templateExample('portal'), fields = example.byTable.get(example.table('orders').id)!
+    const status = example.field('orders', 'status'), date = example.field('orders', 'created')
+    if (status.type !== 'single_select') throw new Error('wrong fixture')
+    const options = { creating: true, now: new Date('2026-10-09T22:00:00Z') }
+    const saved = await withInitialValues(fields, {}, async () => undefined, options)
+    expect(saved[status.id]).toBe(status.options.choices.find(choice => choice.name === 'Принят')!.id)
+    expect(saved[date.id]).toBe('2026-10-09T21:00:00.000Z')
+    const cancelled = status.options.choices.find(choice => choice.name === 'Отменён')!.id
+    expect(await withInitialValues(fields, { [status.id]: cancelled, [date.id]: '2020-01-01T00:00:00Z' }, async () => undefined, options))
+      .toEqual({ [status.id]: cancelled, [date.id]: '2020-01-01T00:00:00Z' })
+    expect(await withInitialValues(fields, { [status.id]: null, [date.id]: null }, async () => undefined))
+      .toEqual({ [status.id]: null, [date.id]: null })
+  })
+})

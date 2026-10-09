@@ -12,8 +12,9 @@ import { explainToCustomer } from '@tableapp/schema'
 import { isPlanLimitError } from '@/lib/limits'
 import { deleteRow, updateRow, writeRows, RowWriteError } from '@/lib/row-mutations'
 import { insertRow, loadTableFields } from '@/lib/row-write'
-import { canAccessRow, dropOwnerChange, rulesFor } from '@/lib/row-access'
+import { canAccessRow, dropOwnerChange, ownRowsDeclared, rulesFor } from '@/lib/row-access'
 import type { ActionResult } from './actions'
+import { canCreateWithValues } from '@/lib/form-required'
 
 /**
  * Одна дверь для всех трёх действий: приложение опубликовано, роль посетителя
@@ -33,6 +34,9 @@ async function allow(
   if (tableError) return { ok: false, error: tableError }
 
   const { visitor, viewer } = await currentAppAccess(app)
+  if (visitor.enrolled && !ownRowsDeclared(app, tableId, visitor.roleId)) {
+    return { ok: false, error: 'Приём заявок сейчас недоступен. Свяжитесь с организацией.' }
+  }
   if (!permits(app, tableId, action, visitor)) {
     return {
       ok: false,
@@ -87,6 +91,7 @@ export async function appCreateRowAction(
    */
   const fields = await loadTableFields(tableId)
   const clean = sanitize(values, fields, writableFields(app, tableId, visitor, 'create'))
+  if (!canCreateWithValues(app, tableId, visitor, clean)) return { ok: false, error: 'Заполните обязательные поля заявки.' }
   const attachmentError = await validateRowAttachments(tableId, fields, clean)
   if (attachmentError) return { ok: false, error: attachmentError }
 

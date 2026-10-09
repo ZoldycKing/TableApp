@@ -148,11 +148,15 @@ export function visitorFor(
   const entry = app.allowlist.find((item) => sameEmail(item.email, email))
   if (entry) {
     const exists = app.roles.some((role) => role.id === entry.roleId)
-    if (exists) return known(entry.roleId)
-    return known(defaultRole(app))
+    const roleId = exists ? entry.roleId : defaultRole(app)
+    return roleId === null ? ANONYMOUS : asRole(roleId, email, company,
+      app.accessMode === 'public' && roleId === defaultRole(app))
   }
 
-  return known(app.accessMode === 'public' ? defaultRole(app) : null)
+  const roleId = app.accessMode === 'public' ? defaultRole(app) : null
+  // A shared login proves an email, never an invitation to this business.
+  // Unknown customers must fail closed if their ownership rule disappears.
+  return roleId === null ? ANONYMOUS : asRole(roleId, email, '', true)
 }
 
 /**
@@ -583,6 +587,7 @@ export function permits(app: App, tableId: string, action: AppAction, visitor: V
   // Не вошедший не пишет ни при каких настройках экрана: заказ с витрины
   // проходит через подтверждение почты, а не через это право.
   if (!visitor.authenticated || visitor.roleId === null) return false
+  if (visitor.enrolled && !app.rowAccessRules.some(rule => rule.tableId === tableId && rule.appliesTo.includes(visitor.roleId!))) return false
 
   if (action === 'delete') {
     return app.screens.some(

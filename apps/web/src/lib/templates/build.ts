@@ -186,6 +186,11 @@ export function buildTemplate(input: {
           name: choice.name,
           color: choice.color,
         }))
+        if (field.defaultChoice) {
+          const defaultChoiceId = ids.get(field.defaultChoice)
+          if (!defaultChoiceId) throw new Error(`Шаблон ${template.id}: начальный статус не найден`)
+          options.defaultChoiceId = defaultChoiceId
+        }
       }
       if (field.relationTable) {
         options = {

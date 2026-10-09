@@ -85,7 +85,7 @@ export const FIELD_OPTIONS = {
       initialFrom: z.object({ relationFieldId: z.string(), targetFieldId: z.string() }).optional(),
     })
     .prefault({}),
-  date: z.object({ dateFormat: dateFormatSchema }).prefault({}),
+  date: z.object({ dateFormat: dateFormatSchema, defaultToday: z.boolean().optional() }).prefault({}),
   datetime: z
     .object({
       dateFormat: dateFormatSchema,
@@ -94,7 +94,7 @@ export const FIELD_OPTIONS = {
     })
     .prefault({}),
   checkbox: empty,
-  single_select: z.object({ choices: z.array(choiceSchema).default([]) }).prefault({}),
+  single_select: z.object({ choices: z.array(choiceSchema).default([]), defaultChoiceId: z.string().optional() }).prefault({}),
   multi_select: z.object({ choices: z.array(choiceSchema).default([]) }).prefault({}),
   attachment: z.object({ maxCount: z.number().int().min(1).max(20).default(10) }).prefault({}),
   image: z.object({ maxCount: z.number().int().min(1).max(20).default(1) }).prefault({}),

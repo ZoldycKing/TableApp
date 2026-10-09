@@ -101,7 +101,7 @@ function parsePatch(fields: Field[], values: Record<string, unknown>) {
   return clean
 }
 
-async function initialValues(context: RowTransaction, fields: Field[], data: Record<string, unknown>) {
+async function initialValues(context: RowTransaction, fields: Field[], data: Record<string, unknown>, creating = false) {
   return withInitialValues(fields, data, async (tableId, rowId, fieldId) => {
     // Verify tenant and field configuration before reading the linked price.
     const targetFields = await mutationFields(context, tableId)
@@ -109,7 +109,7 @@ async function initialValues(context: RowTransaction, fields: Field[], data: Rec
     const [source] = await context.tx.select({ data: rows.data }).from(rows)
       .where(and(eq(rows.tableId, tableId), eq(rows.id, rowId), isNull(rows.deletedAt))).for('share')
     return (source?.data as Record<string, unknown> | undefined)?.[fieldId]
-  })
+  }, { creating })
 }
 
 export async function createRow(context: RowTransaction, tableId: string, data: Record<string, unknown>, actor: RowActor,
@@ -122,7 +122,7 @@ export async function createRow(context: RowTransaction, tableId: string, data: 
     checkRow(existing)
     return { id, duplicate: true }
   }
-  let clean = await initialValues(context, fields, parsePatch(fields, data))
+  let clean = await initialValues(context, fields, parsePatch(fields, data), true)
   const error = await validateRowAttachments(tableId, fields, clean, context.tx, actor, id)
   if (error) throw new RowWriteError('invalid', error)
   clean = await canonicalAttachments(fields, clean, context.tx)

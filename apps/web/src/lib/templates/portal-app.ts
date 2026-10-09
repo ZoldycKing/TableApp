@@ -169,14 +169,7 @@ export function asPortal(
     // Открытое приложение: адреса клиентов заранее не известны, вносить
     // их в список некому. Что человек увидит, решает правило на строки.
     accessMode: 'public',
-    /*
-     * ВРЕМЕННО, ДО ПОДКЛЮЧЕНИЯ ПОЧТЫ.
-     *
-     * Заказ от постороннего принимается через подтверждение почты: человек
-     * вводит адрес, получает код, и только после этого появляется строка —
-     * уже от проверенного человека и в его собственном кабинете. Поэтому
-     * правило ниже обязательно: без него приём не работает вовсе.
-     */
+    // Ownership is stamped from the verified identity, including shared logins.
     rowAccessRules: [
       {
         tableId: portal.tableId,
@@ -217,10 +210,10 @@ export function asPortal(
          * Человеку снаружи это ничего не говорит — и он закрывает вкладку.
          */
         const fields = screen.components
-          .filter((component) => component.type !== 'form_field' || forClient.has(component.fieldId))
+          .filter((component) => component.type !== 'form_field' || forClient.has(component.fieldId) && component.fieldId !== portal.emailFieldId)
           .map((component) =>
             component.type === 'form_field' && portal.guest.labels[component.fieldId]
-              ? { ...component, label: portal.guest.labels[component.fieldId]! }
+              ? { ...component, label: portal.guest.labels[component.fieldId]!, required: component.fieldId === portal.clientFieldIds[0] }
               : component,
           )
 
@@ -235,15 +228,8 @@ export function asPortal(
           style: 'body',
         }
 
-        /*
-         * Форма одна, и она для тех, кто ещё не вошёл.
-         *
-         * Вошедшему в этом шаблоне создавать нечего: заявки приходят снаружи,
-         * а дальше их ведут сотрудники — меняют статус, срок и сумму на
-         * карточке. Вторая форма «Новая заявка» была лишним входом в тот же
-         * экран и путала: человек уже в кабинете, а ему предлагают
-         * зарегистрировать обращение заново.
-         */
+        // The same safe form handles first and repeat requests. Email is
+        // collected once during verification and stamped by the server.
         const anonymousForm: Screen = {
           ...screen,
           name: portal.guest.screenName,
@@ -254,14 +240,8 @@ export function asPortal(
           // Гостю возвращаться некуда: список ему не открыт, и рантайм
           // покажет подтверждение вместо той же пустой формы.
           components: [intro, ...fields],
-          /*
-           * Форму приёма заявок пока видно без входа: почта у нас ещё
-           * не подключена, и требовать код от постороннего человека значило бы
-           * закрыть приём заявок вовсе. Как только письма пойдут, `public`
-           * здесь станет `false`, а отправка будет просить подтвердить почту —
-           * тогда владелец строки перестанет набираться с клавиатуры.
-           */
-          access: { public: true, publicFields: [], roles: [], allowDelete: false },
+          // Guests verify before saving; signed-in customers use their session.
+          access: { public: true, publicFields: [], roles: ['client'], allowDelete: false },
         }
 
         return anonymousForm

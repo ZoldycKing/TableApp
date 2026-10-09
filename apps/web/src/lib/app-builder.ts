@@ -143,7 +143,7 @@ export function generateApp(input: {
     {
       id: homeId, appId, name: 'Сводка', position: homePos,
       tab: { icon: 'home', label: 'Главная' },
-      access: { public: false, publicFields: [], roles: ['client', 'staff', 'manager'], allowDelete: false },
+      access: { public: false, publicFields: [], roles: ['staff', 'manager'], allowDelete: false },
       type: 'dashboard',
       blocks: defaultDashboard({
         fields,
@@ -159,7 +159,7 @@ export function generateApp(input: {
       id: listId, appId, name: table.name, position: listPos,
       tab: { icon: 'list', label: table.name.slice(0, 30) },
       // Умолчание закрытое: гостю экраны открывает владелец осознанно.
-      access: { public: false, publicFields: [], roles: ['client', 'staff', 'manager'], allowDelete: false },
+      access: { public: false, publicFields: [], roles: ['staff', 'manager'], allowDelete: false },
       type: 'list',
       /*
        * Искать есть смысл по тому, что человек помнит: названию и подписи.
@@ -181,19 +181,19 @@ export function generateApp(input: {
     },
     {
       id: detailId, appId, name: 'Карточка', position: detailPos, tab: null,
-      access: { public: false, publicFields: [], roles: ['client', 'staff', 'manager'], allowDelete: false },
+      access: { public: false, publicFields: [], roles: ['staff', 'manager'], allowDelete: false },
       type: 'detail', tableId: table.id, components: detailComponents,
     },
     {
       id: createId, appId, name: 'Новая запись', position: createPos,
       tab: { icon: 'plus', label: 'Добавить' },
-      access: { public: false, publicFields: [], roles: ['client', 'staff', 'manager'], allowDelete: false },
+      access: { public: false, publicFields: [], roles: ['staff', 'manager'], allowDelete: false },
       type: 'form', tableId: table.id, mode: 'create',
       submitLabel: 'Создать', successScreenId: listId, successText: '', components: formComponents(),
     },
     {
       id: editId, appId, name: 'Редактирование', position: editPos, tab: null,
-      access: { public: false, publicFields: [], roles: ['client', 'staff', 'manager'], allowDelete: false },
+      access: { public: false, publicFields: [], roles: ['staff', 'manager'], allowDelete: false },
       type: 'form', tableId: table.id, mode: 'edit',
       submitLabel: 'Сохранить', successScreenId: detailId, successText: '', components: formComponents(),
     },

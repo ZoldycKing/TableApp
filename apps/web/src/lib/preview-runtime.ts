@@ -6,6 +6,7 @@ import { computeDashboards } from './dashboard-data'
 import { canAccessRow, rulesFor } from './row-access'
 import { buildTitles } from './runtime-project'
 import type { RelatedTitles } from './queries'
+import { readingVisitor } from './customer-read-access'
 
 /** The editor uses the same row rules and identity as the real application. Null means the author. */
 export function previewRuntime(app: App, views: View[], runtimeTables: Record<string, RuntimeTable>,
@@ -32,10 +33,12 @@ export function previewRuntime(app: App, views: View[], runtimeTables: Record<st
      * а перечня идентификаторов для экрана нет.
      */
     const visitor = previewVisitor ?? asRole(definition.roles[0]?.id ?? 'client')
-    const allowed = previewVisitor === null ? table.rows : table.rows.filter(row => canAccessRow(
-      rulesFor(definition, tableId, visitor), visitor.email ? { email: visitor.email, company: visitor.company } : null, row.data))
+    const reading = readingVisitor(definition, tableId, visitor)
+    const reach = rowReach(definition, tableId, viewsById, table.fields, reading)
+    const allowed = previewVisitor === null ? table.rows : table.rows.filter(row => reading !== visitor
+      ? reach.kind === 'gated' && reach.allows(row.data)
+      : canAccessRow(rulesFor(definition, tableId, visitor), visitor.email ? { email: visitor.email, company: visitor.company, enrolled: visitor.enrolled } : null, row.data))
     forBlocks[tableId] = { ...table, rows: allowed }
-    const reach = rowReach(definition, tableId, viewsById, table.fields, visitor)
     const reachable =
       previewVisitor === null || reach.kind !== 'gated'
         ? allowed
@@ -58,7 +61,7 @@ export function previewRuntime(app: App, views: View[], runtimeTables: Record<st
       continue
     }
 
-    const policy = fieldPolicy(definition, tableId, previewVisitor, viewsById)
+    const policy = fieldPolicy(definition, tableId, reading, viewsById)
     if (policy.restricted) readable[tableId] = policy.fields
 
     const shipped =

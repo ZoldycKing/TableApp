@@ -68,6 +68,12 @@ describe('dispatcher and master preset', () => {
 })
 
 describe('safe opt-in dispatch upgrade', () => {
+  it('also upgrades the original three-role defaults without changing assigned role IDs', () => {
+    const f = fixture()
+    const legacy = { ...f.legacy, screens: f.legacy.screens.map(screen => ({ ...screen, access: { ...screen.access, roles: ['client', 'staff', 'manager'] } })) }
+    expect(f.upgrade(legacy).app.allowlist).toEqual(legacy.allowlist)
+    expect(hasDispatchPreset(f.upgrade(legacy).app, f.main.id)).toBe(true)
+  })
   it('preserves old IDs, allowlist and source definition without assigning names to emails', () => {
     const f = fixture()
     f.legacy.allowlist = [{ email: 'legacy@example.invalid', roleId: 'client', company: '' }]

@@ -48,7 +48,7 @@ export const portal: TemplateDef = {
     clientTitle: 'Мои заказы',
     guest: {
       screenName: 'Оставить заявку',
-      intro: 'Опишите задачу и укажите почту. Подтвердите её кодом, чтобы сохранить заявку и открыть кабинет.',
+      intro: 'Опишите задачу. Заявка появится в вашем кабинете; при первом обращении подтвердите почту кодом.',
       submitLabel: 'Отправить заявку',
       successText: 'Заявка принята. Её статус доступен в вашем кабинете.',
       labels: {
@@ -139,6 +139,7 @@ export const portal: TemplateDef = {
           key: 'status',
           name: 'Статус',
           type: 'single_select',
+          defaultChoice: 'Принят',
           choices: [
             { name: 'Принят', color: 'blue' },
             { name: 'В работе', color: 'amber' },
@@ -165,6 +166,7 @@ export const portal: TemplateDef = {
           key: 'created',
           name: 'Дата заказа',
           type: 'date',
+          options: { defaultToday: true },
           help: 'День приёма заказа. По этой дате считается сумма заказов за месяц, включая неоплаченные. Это не выручка и не поступления денег.',
         },
         {

@@ -1,10 +1,11 @@
 import { compileTableFormulas, computeDerivedRow, relatedIndexFrom } from '@tableapp/formula'
 import { byPosition, systemRowData, type App, type Field, type View, type RowMetadata } from '@tableapp/schema'
-import { canOpenScreen, fieldPolicy, formFields, onlyReadable, rowReach, type Visitor } from './app-roles'
+import { ANONYMOUS, canOpenScreen, fieldPolicy, formFields, onlyReadable, rowReach, type Visitor } from './app-roles'
 import { applyView } from './apply-view'
 import { computeDashboards } from './dashboard-data'
 import { formatCell } from './format'
 import { canAccessRow, rulesFor } from './row-access'
+import { readingVisitor as visitorForReading } from './customer-read-access'
 import type { RelatedTitles } from './queries'
 import type { RuntimeApp, RuntimeTable, ScreenRows } from './app-runtime'
 import type { TableRow } from './table-store'
@@ -53,7 +54,13 @@ export function projectRuntime(app: App, visitor: Visitor, views: Record<string,
      * в интерфейсе» — это не право: значение всё равно уехало бы в браузер
      * и читалось бы в исходном коде страницы.
      */
-    const policy = fieldPolicy(app, table.id, visitor, views)
+    // External customers may read a public catalog without owning its rows.
+    // Without a personal rule they receive exactly the anonymous projection:
+    // public rows and public fields, never private dashboards or contacts.
+    const publicOnly = visitor.enrolled && rules.length === 0
+    const readingVisitor = visitorForReading(app, table.id, visitor)
+    const publicReach = publicOnly ? rowReach(app, table.id, views, fields, ANONYMOUS) : null
+    const policy = fieldPolicy(app, table.id, readingVisitor, views)
     if (policy.restricted) readableByTable[table.id] = policy.fields
 
     /*
@@ -67,13 +74,14 @@ export function projectRuntime(app: App, visitor: Visitor, views: Record<string,
      */
     const allowed = dataRows
       .filter((row) => row.tableId === table.id)
-      .filter((row) => canAccessRow(rules, viewer, row.data as Record<string, unknown>))
+      .filter((row) => publicOnly ? publicReach?.kind === 'gated' : canAccessRow(rules, viewer, row.data as Record<string, unknown>))
       .map((row) => ({
         id: row.id,
         version: row.version,
         position: row.position,
         data: computeDerivedRow(systemRowData(row, fields), fields, related, formulas),
       }))
+      .filter(row => !publicOnly || publicReach?.kind === 'gated' && publicReach.allows(row.data))
 
     // Блоки сводки считают по полным строкам и отдают наружу только готовые
     // числа и подписи; какие поля можно назвать, они проверяют сами.
@@ -114,7 +122,7 @@ export function projectRuntime(app: App, visitor: Visitor, views: Record<string,
      * больше нечего решать, и значения колонок, по которым шёл отбор,
      * ему теперь не нужны.
      */
-    const reach = rowReach(app, table.id, views, fields, visitor)
+    const reach = rowReach(app, table.id, views, fields, readingVisitor)
     const reachable = reach.kind === 'gated' ? allowed.filter((row) => reach.allows(row.data)) : allowed
 
     const onScreens = new Set<string>()
@@ -233,10 +241,13 @@ export function buildTitles(
         ? () => true
         : (() => {
             const rules = rulesFor(access.app, targetId, access.visitor)
-            const reach = rowReach(access.app, targetId, access.views, targetFields, access.visitor)
+            const publicOnly = access.visitor.enrolled && rules.length === 0
+            const readingVisitor = visitorForReading(access.app, targetId, access.visitor)
+            const reach = rowReach(access.app, targetId, access.views, targetFields, readingVisitor)
+            if (titleField && !fieldPolicy(access.app, targetId, readingVisitor, access.views).fields.has(titleField.id)) return () => false
             if (reach.kind === 'none') return () => false
             return (data: Record<string, unknown>) =>
-              canAccessRow(rules, viewer, data) &&
+              (publicOnly || canAccessRow(rules, viewer, data)) &&
               (reach.kind === 'gated' ? reach.allows(data) : true)
           })()
 

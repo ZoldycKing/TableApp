@@ -3,6 +3,7 @@ import type { App, Field, Screen } from '@tableapp/schema'
 import { parseCellValue } from '@tableapp/schema'
 import { stripDerived } from '@tableapp/formula'
 import { ANONYMOUS, canOpenScreen, formFields, writableFields, type Visitor } from './app-roles'
+import { hasRequiredValues } from './form-required'
 
 /**
  * Заявка, ожидающая подтверждения почты.
@@ -55,6 +56,7 @@ export type PendingRejection =
   | 'not_allowed'
   | 'nothing_to_write'
   | 'too_large'
+  | 'required_field'
 
 /**
  * Годна ли заявка к завершению.
@@ -117,6 +119,7 @@ export function revalidatePending(
   }
 
   if (Object.keys(clean).length === 0) return { ok: false, reason: 'nothing_to_write' }
+  if (!hasRequiredValues(screen, visitor, clean)) return { ok: false, reason: 'required_field' }
   return { ok: true, values: clean }
 }
 
@@ -168,6 +171,7 @@ export function draftFromAnonymous(
   }
 
   if (Object.keys(kept).length === 0) return { ok: false, reason: 'nothing_to_write' }
+  if (!hasRequiredValues(screen, ANONYMOUS, kept)) return { ok: false, reason: 'required_field' }
   if (JSON.stringify(kept).length > limitBytes) return { ok: false, reason: 'too_large' }
   return { ok: true, values: kept }
 }

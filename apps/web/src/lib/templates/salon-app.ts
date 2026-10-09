@@ -16,7 +16,7 @@ export function asSalon(app: App, built: BuiltTemplate): App {
     master: group('masters', { name: 'name', email: 'email', services: 'services', active: 'active' }),
     schedule: group('schedule', { name: 'name', master: 'master', weekday: 'weekday', start: 'start', end: 'end', date: 'date', closed: 'closed' }),
     visit: group('visits', { client: 'client', phone: 'phone', email: 'email', service: 'service', master: 'master', masterEmail: 'masterEmail', price: 'price', minutes: 'minutes', start: 'when', status: 'status', note: 'note' }),
-    statuses: Object.fromEntries(Object.entries({ booked: 'Записан', arrived: 'Пришёл', noShow: 'Не пришёл', cancelled: 'Отменил' }).map(([name, title]) => [name,
+    statuses: Object.fromEntries(Object.entries({ booked: 'Записан', arrived: 'Пришёл', noShow: 'Не пришёл', cancelled: 'Отменил', completed: 'Завершено' }).map(([name, title]) => [name,
       (built.fields.find(item => item.id === field('visits', 'status'))!.options.choices as { id: string; name: string }[]).find(choice => choice.name === title)!.id])) as BookingConfig['statuses'],
     weekdays: (built.fields.find(item => item.id === field('schedule', 'weekday'))!.options.choices as { id: string }[]).map(choice => choice.id),
     formScreenId: formId, rescheduleScreenId: rescheduleId, setupScreenId: setupId, stepMinutes: 15, leadMinutes: 60, horizonDays: 60,

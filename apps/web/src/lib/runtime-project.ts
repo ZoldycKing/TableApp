@@ -165,6 +165,7 @@ export function projectRuntime(app: App, visitor: Visitor, views: Record<string,
   }
 
   return {
+    ...(app.booking ? { loadedAt: Date.now() } : {}),
     app,
     views,
     tables: result,

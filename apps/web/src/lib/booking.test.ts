@@ -10,7 +10,7 @@ describe('complete salon preset and availability', () => {
   const data: BookingData = { services: example.rows.filter(row => row.tableId === config.tables.services),
     masters: example.rows.filter(row => row.tableId === config.tables.masters), schedule: example.rows.filter(row => row.tableId === config.tables.schedule),
     visits: example.rows.filter(row => row.tableId === config.tables.visits), timeZone: 'Europe/Moscow' }
-  const serviceId = data.services[0]!.id, masterId = data.masters[0]!.id, day = '2026-10-10'
+  const serviceId = data.services[0]!.id, masterId = data.masters[0]!.id, day = '2026-10-12'
   it('has valid tenant references and exposes prices and durations without employee emails or private notes', () => {
     expect(checkAppReferences(example.app, { tableIds: new Set(example.built.tables.map(row => row.id)),
       fields: new Map(example.fields.map(field => [field.id, field])), views: new Map(example.views.map(view => [view.id, view])) })).toBeNull()
@@ -19,7 +19,7 @@ describe('complete salon preset and availability', () => {
       Object.fromEntries(example.views.map(view => [view.id, view])), example.built.tables, example.byTable,
       example.built.rows.map(row => ({ ...row, version: 0, createdAt: now, updatedAt: now, createdBy: null, updatedBy: null })), new Map(example.built.tables.map(table => [table.id, table.primaryFieldId])))
     const runtime = project(visitor)
-    expect(runtime.tables[config.tables.visits]!.rows).toHaveLength(1)
+    expect(runtime.tables[config.tables.visits]!.rows).toHaveLength(2)
     expect(runtime.tables[config.tables.services]!.rows).toHaveLength(5)
     expect(JSON.stringify(runtime)).not.toContain('просила чуть теплее')
     expect(JSON.stringify(runtime)).not.toContain('olga@example.com')

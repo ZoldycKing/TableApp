@@ -21,6 +21,49 @@ vi.mock('./intake-verify', () => ({ IntakeVerify: () => null }))
 afterEach(() => { cleanup(); vi.restoreAllMocks(); window.history.replaceState(null, '', '/') })
 
 describe('runtime navigation during live refresh', () => {
+  it('separates upcoming salon visits from history and restores the selected section after a card and a refresh', () => {
+    const { runtime, viewer, bookingData } = templateAppPreview(templateExample('salon'), 'client', 'irina@example.com', 'Ирина')
+    const ui = render(<AppShell runtime={runtime} viewer={viewer} demo demoBookingData={bookingData} />)
+    expect(ui.getByRole('button', { name: 'Предстоящие 1' }).getAttribute('aria-pressed')).toBe('true')
+    expect(ui.queryByRole('button', { name: /Женская стрижка.*Завершено/ })).toBeNull()
+    fireEvent.click(ui.getByRole('button', { name: 'История 2' }))
+    expect(ui.getByRole('button', { name: /Женская стрижка.*Отменил/ })).toBeTruthy()
+    expect(ui.queryByRole('button', { name: /Окрашивание в один тон.*Записан/ })).toBeNull()
+    fireEvent.click(ui.getByRole('button', { name: /Женская стрижка.*Завершено/ }))
+    expect(ui.queryByRole('button', { name: 'Услуга оказана' })).toBeNull()
+    expect(ui.queryByRole('button', { name: 'Перенести запись' })).toBeNull()
+    expect(ui.queryByRole('button', { name: 'Отменить запись' })).toBeNull()
+    fireEvent.click(ui.getByRole('button', { name: 'Назад' }))
+    ui.rerender(<AppShell runtime={structuredClone(runtime)} viewer={viewer} demo demoBookingData={bookingData} />)
+    expect(ui.getByRole('button', { name: 'История 2' }).getAttribute('aria-pressed')).toBe('true')
+  })
+  it('labels an elapsed appointment as unconfirmed without granting customers a completion action', () => {
+    const example = templateExample('salon'), config = example.app.booking!
+    const { runtime, viewer } = templateAppPreview(example, 'client', 'irina@example.com', 'Ирина')
+    const elapsed = runtime.tables[config.tables.visits]!.rows.find(row => row.data[config.visit.status] === config.statuses.booked)!
+    elapsed.data[config.visit.start] = new Date(Date.now() - 3 * 60 * 60_000).toISOString()
+    const ui = render(<AppShell runtime={runtime} viewer={viewer} demo />)
+    expect(ui.getByText('Предстоящих записей нет')).toBeTruthy()
+    fireEvent.click(ui.getByRole('button', { name: 'История 3' }))
+    fireEvent.click(ui.getByRole('button', { name: /Окрашивание в один тон.*Результат не отмечен/ }))
+    expect(ui.queryByRole('button', { name: 'Услуга оказана' })).toBeNull()
+    expect(elapsed.data[config.visit.status]).toBe(config.statuses.booked)
+  })
+  it('lets an assigned employee complete a begun visit but hides completion for future visits', async () => {
+    const example = templateExample('salon'), config = example.app.booking!
+    const { runtime, viewer } = templateAppPreview(example, 'staff', 'olga@example.com', 'Оля')
+    const arrived = runtime.tables[config.tables.visits]!.rows.find(row => row.data[config.visit.status] === config.statuses.arrived)!
+    arrived.data[config.visit.start] = new Date(Date.now() - 2 * 60 * 60_000).toISOString()
+    vi.mocked(appUpdateRowAction).mockResolvedValue({ ok: true })
+    const ui = render(<AppShell runtime={runtime} viewer={viewer} browserHistory={false} />)
+    fireEvent.click(ui.getByRole('button', { name: /Ирина П\..*Записан/ }))
+    expect(ui.queryByRole('button', { name: 'Услуга оказана' })).toBeNull()
+    fireEvent.click(ui.getByRole('button', { name: 'Назад' }))
+    fireEvent.click(ui.getByRole('button', { name: /Мария К\./ }))
+    fireEvent.click(ui.getByRole('button', { name: 'Услуга оказана' }))
+    await waitFor(() => expect(appUpdateRowAction).toHaveBeenCalledWith(runtime.app.slug, config.tables.visits, arrived.id,
+      { [config.visit.status]: config.statuses.completed }, arrived.version))
+  })
   it('starts guests in the service catalog and carries the chosen salon service into booking', async () => {
     const example = templateExample('salon'), config = example.app.booking!
     const { runtime, viewer, bookingData } = templateAppPreview(example, 'guest')

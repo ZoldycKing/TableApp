@@ -105,6 +105,49 @@ describe.skipIf(!process.env.DATABASE_URL)('salon scenarios with atomic PostgreS
     const free = await actions.bookingAvailabilityAction(example.app.slug, serviceId, day, masterId)
     expect(free.ok && free.slots.some(slot => slot.start === row.data[config.visit.start])).toBe(true)
   })
+  it('lets only the assigned employee or administrator confirm an actual visit, preserves history and rejects future completion', async () => {
+    const before = await stored(ownId), pastId = newId('row'), futureId = newId('row'), foreignId = newId('row')
+    const otherMaster = example.rows.find(row => row.tableId === config.tables.masters && row.id !== masterId)!
+    const pastData = { ...before.data, [config.visit.status]: config.statuses.arrived,
+      [config.visit.start]: new Date(Date.now() - 2 * 60 * 60_000).toISOString() }
+    await database.db.insert(database.rows).values([
+      { id: pastId, tableId: config.tables.visits, position: 'zz-completion-1', data: pastData },
+      { id: futureId, tableId: config.tables.visits, position: 'zz-completion-2', data: { ...pastData, [config.visit.status]: config.statuses.booked, [config.visit.start]: chosen.start } },
+      { id: foreignId, tableId: config.tables.visits, position: 'zz-completion-3', data: { ...pastData,
+        [config.visit.master]: [otherMaster.id], [config.visit.masterEmail]: otherMaster.data[config.master.email] } },
+    ])
+    const past = await stored(pastId), complete = { [config.visit.status]: config.statuses.completed }
+    expect((await rowActions.appUpdateRowAction(example.app.slug, config.tables.visits, pastId, complete, past.version)).ok).toBe(false)
+    expect((await stored(pastId)).data[config.visit.status]).toBe(config.statuses.arrived)
+    const staffSessionId = newId('session'), adminSessionId = newId('session')
+    await database.db.insert(database.staffSessions).values([
+      { id: staffSessionId, email: 'olga@example.com', expiresAt: new Date(Date.now() + 60_000) },
+      { id: adminSessionId, email: admin, expiresAt: new Date(Date.now() + 60_000) },
+    ])
+    state.jar.set('tableapp_staff', staffSessionId)
+    try {
+      const future = await stored(futureId), foreign = await stored(foreignId)
+      expect(await rowActions.appUpdateRowAction(example.app.slug, config.tables.visits, futureId, complete, future.version))
+        .toMatchObject({ ok: false, error: expect.stringContaining('начавшееся') })
+      expect((await stored(futureId)).data[config.visit.status]).toBe(config.statuses.booked)
+      expect((await rowActions.appUpdateRowAction(example.app.slug, config.tables.visits, foreignId, complete, foreign.version)).ok).toBe(false)
+      expect(await rowActions.appUpdateRowAction(example.app.slug, config.tables.visits, pastId, complete, past.version)).toEqual({ ok: true })
+      expect((await stored(pastId)).data).toMatchObject({ [config.visit.status]: config.statuses.completed, [config.visit.price]: 2500, [config.visit.minutes]: 60 })
+      expect((await rowActions.appUpdateRowAction(example.app.slug, config.tables.visits, pastId, complete, past.version)).ok).toBe(false)
+      expect(await database.db.select().from(database.rowChanges).where(eq(database.rowChanges.rowId, pastId))).toHaveLength(1)
+      await expect(mutation.writeRows(workspaceId, context => mutation.updateRow(context, config.tables.visits, pastId,
+        { [config.visit.start]: chosen.start }, { id: userId, kind: 'member' }))).rejects.toThrow('начавшееся')
+      state.jar.set('tableapp_staff', adminSessionId)
+      expect(await rowActions.appUpdateRowAction(example.app.slug, config.tables.visits, foreignId, complete, foreign.version)).toEqual({ ok: true })
+      state.jar.set('tableapp_staff', loginCookie)
+      const access = await session.currentAppAccess(example.app), loaded = await runtime.loadPublishedApp(example.app.slug, access.visitor)
+      expect(loaded!.tables[config.tables.visits]!.rows.find(row => row.id === pastId)?.data[config.visit.status]).toBe(config.statuses.completed)
+      expect((await actions.cancelBookingAction(example.app.slug, pastId, (await stored(pastId)).version)).ok).toBe(false)
+    } finally {
+      state.jar.set('tableapp_staff', loginCookie)
+      await database.db.delete(database.staffSessions).where(inArray(database.staffSessions.id, [staffSessionId, adminSessionId]))
+    }
+  })
   it('configures a master with working days, break and local employee access in one transaction', async () => {
     const sessionId = newId('session')
     await database.db.insert(database.staffSessions).values({ id: sessionId, email: admin, expiresAt: new Date(Date.now() + 60_000) })

@@ -1,8 +1,9 @@
 import { apps, fields, rows, tables, db } from '@tableapp/db'
-import { bookingConfigSchema, calendarDay, fieldTimeZone, type BookingConfig, type Field } from '@tableapp/schema'
+import { bookingConfigSchema, calendarDay, dateInstant, fieldTimeZone, type BookingConfig, type Field } from '@tableapp/schema'
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm'
 import type { Transaction } from './db-transaction'
 import { bookingService, oneRelation, slotError, type BookingData } from './booking'
+import { canCompleteBooking } from './booking-lifecycle'
 
 export async function loadBookingData(config: BookingConfig, workspaceId: string, query: Transaction | typeof db = db): Promise<BookingData | null> {
   const ids = Object.values(config.tables)
@@ -39,6 +40,13 @@ export async function prepareBookingWrite(tx: Transaction, workspaceId: string, 
   if (!data) return { data: clean, error: 'Настройки записи ссылаются на недоступные поля.' }
   const result = { ...clean }, visit = config.visit
   if (!Object.values(config.statuses).includes(String(result[visit.status]))) return { data: clean, error: 'Выберите допустимый статус записи.' }
+  if (config.statuses.completed && result[visit.status] === config.statuses.completed) {
+    const start = dateInstant(result[visit.start], data.timeZone)
+    if (start === null || start > Date.now() || before?.[visit.status] !== config.statuses.completed &&
+      (!before || !canCompleteBooking(config, { id: rowId ?? '', data: before }, data.timeZone, Date.now()))) {
+      return { data: clean, error: 'Завершить можно только начавшееся посещение со статусом «Записан» или «Пришёл».' }
+    }
+  }
   const serviceId = oneRelation(result[visit.service]), masterId = oneRelation(result[visit.master])
   if (!serviceId || !masterId || typeof result[visit.client] !== 'string' || !String(result[visit.client]).trim()) return { data: clean, error: 'Укажите имя клиента, услугу и мастера.' }
   const master = data.masters.find(row => row.id === masterId)

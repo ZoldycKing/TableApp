@@ -65,6 +65,7 @@ export function CollectionView({
   onState,
   onOpenRow,
   exportHref,
+  showStatusFilters = true,
 }: {
   screen: Collection
   rows: TableRow[]
@@ -84,6 +85,7 @@ export function CollectionView({
    * ненастоящие или чужие, и файл с ними был бы обманом.
    */
   exportHref: string | null
+  showStatusFilters?: boolean
 }) {
   const { query, choiceId } = state
   const setQuery = (next: string) => onState({ ...state, query: next })
@@ -102,14 +104,14 @@ export function CollectionView({
    * что отменённых нет, а не что раздела не существует.
    */
   const tabs = useMemo(() => {
-    if (!statusField || (statusField.type !== 'single_select' && statusField.type !== 'multi_select')) {
+    if (!showStatusFilters || !statusField || (statusField.type !== 'single_select' && statusField.type !== 'multi_select')) {
       return []
     }
     return statusField.options.choices.map((choice) => ({
       ...choice,
       count: rows.filter((row) => hasChoice(row.data[statusField.id], choice.id)).length,
     }))
-  }, [statusField, rows])
+  }, [showStatusFilters, statusField, rows])
 
   const searchFields = useMemo(
     () => screen.source.searchFieldIds.map((id) => byId(id)).filter((item): item is Field => Boolean(item)),
@@ -247,7 +249,7 @@ export function CollectionView({
             action={
               <button
                 type="button"
-                onClick={() => onState({ choiceId: null, query: '' })}
+                onClick={() => onState({ ...state, choiceId: null, query: '' })}
                 className="rounded-xl border border-sand-300 px-4 py-2 text-sm font-medium transition-colors hover:bg-sand-50"
               >
                 Показать все

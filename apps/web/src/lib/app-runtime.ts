@@ -22,6 +22,8 @@ export type RuntimeTable = {
 export type ScreenRows = { rowIds: string[] }
 
 export type RuntimeApp = {
+  /** Shared server clock for initial rendering of time-sensitive client screens. */
+  loadedAt?: number
   app: App
   views: Record<string, View>
   tables: Record<string, RuntimeTable>

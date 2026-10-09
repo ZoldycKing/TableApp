@@ -1,13 +1,14 @@
 'use client'
 
 import type { Action, Field, Screen } from '@tableapp/schema'
-import { byPosition, isComputed } from '@tableapp/schema'
+import { byPosition, fieldTimeZone, isComputed } from '@tableapp/schema'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { formatCell } from '@/lib/format'
 import type { RuntimeApp, RuntimeTable } from '@/lib/app-runtime'
 import type { RelatedTitles } from '@/lib/queries'
 import type { TableRow } from '@/lib/table-store'
 import { CollectionView } from './collection-view'
+import { BookingVisits } from './booking-visits'
 import { EMPTY_LIST_STATE, type ListState } from './app-shell'
 import { ComponentView, type ComponentContext } from './component-view'
 import { DashboardView } from './dashboard-view'
@@ -16,6 +17,7 @@ import { Icon } from './icons'
 import { EmptyState } from './ui'
 import { FormFieldInput } from './form-field'
 import { useUnsaved } from '@/lib/unsaved'
+import { bookingVisitSection } from '@/lib/booking-lifecycle'
 
 type Props = {
   screen: Screen
@@ -30,6 +32,7 @@ type Props = {
   editing?: boolean
   /** Editable create-form values supplied by an action on another card. */
   initialValues?: Record<string, unknown>
+  now?: number
   /** Отбор списка: хранится в оболочке, чтобы пережить открытие карточки. */
   listState?: ListState
   onListState?: (next: ListState) => void
@@ -100,6 +103,16 @@ export function ScreenView(props: Props) {
   }
 
   if (screen.type === 'list' || screen.type === 'tiles') {
+    const booking = runtime.app.booking
+    if (booking && screen.id === runtime.app.homeScreenId && table?.id === booking.tables.visits) {
+      const services = runtime.app.screens.find(candidate => (candidate.type === 'list' || candidate.type === 'tiles') && runtime.views[candidate.source.viewId]?.tableId === booking.tables.services)
+      const dateField = fields.find(field => field.id === booking.visit.start)
+      return <BookingVisits screen={screen} rows={collection?.rows ?? []} fields={fields} relatedTitles={relatedTitles} config={booking}
+        timeZone={dateField ? fieldTimeZone(dateField) : 'UTC'} now={props.now ?? runtime.loadedAt ?? Date.now()}
+        state={props.listState ?? EMPTY_LIST_STATE} onState={props.onListState ?? (() => {})} accent={accent}
+        onChooseService={services ? () => props.onOpenScreen(services.id) : null}
+        onOpenRow={screen.onTapScreenId ? id => props.onOpenRow(screen.onTapScreenId!, id) : null} />
+    }
     return (
       <CollectionView
         screen={screen}
@@ -117,6 +130,11 @@ export function ScreenView(props: Props) {
   }
 
   if (screen.type === 'detail') {
+    const booking = runtime.app.booking
+    const bookingDate = booking ? fields.find(field => field.id === booking.visit.start) : undefined
+    const outcomePending = booking && screen.tableId === booking.tables.visits && row &&
+      [booking.statuses.booked, booking.statuses.arrived].includes(String(row.data[booking.visit.status])) &&
+      bookingVisitSection(booking, row, bookingDate ? fieldTimeZone(bookingDate) : 'UTC', props.now ?? runtime.loadedAt ?? Date.now()) === 'history'
     const inventory = runtime.app.inventory
     const extraTargets = inventory && screen.tableId === inventory.tables.items && inventory.operations
       ? new Set([inventory.operations.screens.writeOff, inventory.operations.screens.returnIn, inventory.operations.screens.returnOut,
@@ -164,6 +182,7 @@ export function ScreenView(props: Props) {
 
     return (
       <div className="space-y-4 rounded-2xl border border-sand-200 bg-white p-5 shadow-soft sm:p-6">
+        {outcomePending && <p className="text-xs leading-relaxed text-ink-muted">Результат посещения ещё не отмечен. Статус обновит мастер или администратор после оказания услуги.</p>}
         {blocks.map((block, index) =>
           block.other ? (
             <ComponentView key={block.other.id} component={block.other} ctx={ctx} />

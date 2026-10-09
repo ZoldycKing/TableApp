@@ -23,7 +23,7 @@ import { INVENTORY_OPERATIONS } from '@tableapp/schema'
 export type NavEntry = { screenId: string; rowId: string | null; receipt?: { operationId: string; result: SavedReceipt } }
 
 /** Отбор одного списка: выбранный статус и строка поиска. */
-export type ListState = { choiceId: string | null; query: string }
+export type ListState = { choiceId: string | null; query: string; bookingSection?: 'upcoming' | 'history' }
 
 export const EMPTY_LIST_STATE: ListState = { choiceId: null, query: '' }
 
@@ -95,10 +95,11 @@ function readLists(value: unknown): Record<string, ListState> {
   const out: Record<string, ListState> = {}
   for (const [screenId, state] of Object.entries(value as Record<string, unknown>)) {
     if (!state || typeof state !== 'object') continue
-    const list = state as { choiceId?: unknown; query?: unknown }
+    const list = state as { choiceId?: unknown; query?: unknown; bookingSection?: unknown }
     out[screenId] = {
       choiceId: typeof list.choiceId === 'string' ? list.choiceId : null,
       query: typeof list.query === 'string' ? list.query : '',
+      ...(list.bookingSection === 'upcoming' || list.bookingSection === 'history' ? { bookingSection: list.bookingSection } : {}),
     }
   }
   return out

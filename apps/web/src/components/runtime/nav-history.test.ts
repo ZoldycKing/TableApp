@@ -19,6 +19,14 @@ import {
 
 const known = (id: string) => id.startsWith('scr_')
 
+it('restores the salon history section and ignores invalid section values', () => {
+  const state = (bookingSection: unknown) => ({ [NAV_KEY]: { stack: [{ screenId: 'scr_list', rowId: null }],
+    lists: { scr_list: { query: '', choiceId: null, bookingSection } } } })
+  expect(navFromHistory(state('history'), known)?.lists.scr_list?.bookingSection).toBe('history')
+  expect(navFromHistory(state('upcoming'), known)?.lists.scr_list?.bookingSection).toBe('upcoming')
+  expect(navFromHistory(state('foreign'), known)?.lists.scr_list?.bookingSection).toBeUndefined()
+})
+
 it('validates receipt confirmations restored from browser history', () => {
   const result = { ok: true, name: 'Товар', before: 3, quantity: 4, after: 7, repeated: false }
   const state = (receipt: unknown) => withNav(null, { stack: [{ screenId: 'scr_receipt', rowId: 'row_item', receipt }], lists: {} } as NavState)

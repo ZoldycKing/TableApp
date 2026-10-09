@@ -8,8 +8,9 @@ describe('template phone previews', () => {
     const example = templateExample('salon'), config = example.app.booking!
     const preview = templateAppPreview(example, 'client', 'irina@example.com', 'Ирина')
     const own = preview.runtime.tables[config.tables.visits]!.rows
-    expect(own).toHaveLength(2)
+    expect(own).toHaveLength(3)
     expect(own.some(row => row.data[config.visit.status] === config.statuses.cancelled)).toBe(true)
+    expect(own.some(row => row.data[config.visit.status] === config.statuses.completed)).toBe(true)
     expect(JSON.stringify(preview.runtime)).not.toContain('Мария К.')
     expect(JSON.stringify(preview.runtime)).not.toContain('olga@example.com')
     expect(JSON.stringify(preview.bookingData)).not.toContain('irina@example.com')

@@ -10,8 +10,9 @@ import { InventoryReceipt } from './inventory-receipt'
 import { BookingForm } from './booking-form'
 import { BookingSetup } from './booking-setup'
 import { cancelBookingAction } from '@/app/booking-actions'
-import { dateInstant } from '@tableapp/schema'
+import { dateInstant, fieldTimeZone } from '@tableapp/schema'
 import type { BookingData } from '@/lib/booking'
+import { canCompleteBooking } from '@/lib/booking-lifecycle'
 import { inventoryOperation } from '@/lib/inventory'
 import { useLiveApp } from '@/lib/use-live-app'
 import { appCreateRowAction, appDeleteRowAction, appUpdateRowAction } from '@/app/runtime-actions'
@@ -206,6 +207,14 @@ export function AppShell({
   const [confirmCancellation, setConfirmCancellation] = useState(false)
   const [bookingDraft, setBookingDraft] = useState<Record<string, unknown> | null>(null)
   const [formDraft, setFormDraft] = useState<{ screenId: string; values: Record<string, unknown> } | null>(null)
+  const [now, setNow] = useState(() => runtime.loadedAt ?? Date.now())
+  const hasBooking = Boolean(app.booking)
+  useEffect(() => {
+    if (!hasBooking) return
+    setNow(Date.now())
+    const timer = window.setInterval(() => setNow(Date.now()), 30_000)
+    return () => window.clearInterval(timer)
+  }, [hasBooking])
   const router = useRouter()
 
   const current = stack[stack.length - 1]!
@@ -228,6 +237,7 @@ export function AppShell({
   const tableId = tableOf(screen)
   const table = tableId ? runtime.tables[tableId] : undefined
   const row = current.rowId ? (table?.rows.find((item) => item.id === current.rowId) ?? null) : null
+  const bookingDateField = app.booking ? table?.fields.find(field => field.id === app.booking!.visit.start) : undefined
 
   /**
    * Переход: меняем состояние и тем же движением записываем его в историю.
@@ -772,6 +782,7 @@ export function AppShell({
               runtime={runtime}
               editing={editing}
               initialValues={formDraft?.screenId === screen.id ? formDraft.values : undefined}
+              now={now}
               listState={listStates[screen.id] ?? EMPTY_LIST}
               onListState={(next) => setListState(screen.id, next)}
               /*
@@ -845,7 +856,17 @@ export function AppShell({
             />
             )}
             {sent === null && intake === null && app.booking && screen.type === 'detail' && screen.tableId === app.booking.tables.visits && row &&
-              row.data[app.booking.visit.status] === app.booking.statuses.booked && (dateInstant(row.data[app.booking.visit.start]) ?? 0) > Date.now() ?
+              app.screens.some(candidate => candidate.type === 'form' && candidate.mode === 'edit' && candidate.tableId === app.booking!.tables.visits &&
+                candidate.components.some(component => component.type === 'form_field' && component.fieldId === app.booking!.visit.status)) &&
+              bookingDateField && canCompleteBooking(app.booking, row, fieldTimeZone(bookingDateField), now) ?
+              <div className="mx-auto mt-5 max-w-xl rounded-2xl border border-sand-200 bg-white p-4">
+                <button type="button" disabled={pending} onClick={() => runMutation(() => appUpdateRowAction(app.slug, app.booking!.tables.visits, row.id,
+                  { [app.booking!.visit.status]: app.booking!.statuses.completed }, row.version), goBack)}
+                  className={`rounded-xl px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40 ${accent.solid}`}>Услуга оказана</button>
+                <p className="mt-2 text-xs leading-relaxed text-ink-muted">Посещение получит статус «Завершено» в истории клиента.</p>
+              </div> : null}
+            {sent === null && intake === null && app.booking && screen.type === 'detail' && screen.tableId === app.booking.tables.visits && row &&
+              row.data[app.booking.visit.status] === app.booking.statuses.booked && (dateInstant(row.data[app.booking.visit.start]) ?? 0) > now ?
               <div className="mx-auto mt-5 flex max-w-xl flex-wrap items-center gap-3 rounded-2xl border border-sand-200 bg-white p-4">
                 {app.screens.some(s => s.id === app.booking!.rescheduleScreenId) ? <button type="button" disabled={pending} onClick={() => navigate(app.booking!.rescheduleScreenId, row.id)} className="rounded-xl border border-sand-200 px-4 py-2.5 text-sm font-medium">Перенести запись</button> : null}
                 {confirmCancellation ? <><p className="w-full text-sm text-ink-muted">Отменить запись? Это время станет доступно другим клиентам.</p>

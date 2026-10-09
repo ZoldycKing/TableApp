@@ -373,7 +373,7 @@ export function DemoStage({
  * Поэтому меняются только классы вокруг, а само приложение остаётся на своём
  * месте в дереве.
  */
-function DeviceFrame({
+export function DeviceFrame({
   device,
   height,
   bezel,

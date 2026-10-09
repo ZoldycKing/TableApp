@@ -3,13 +3,13 @@
 import { fieldTimeZone, instantToWallClock } from '@tableapp/schema'
 import { useEffect, useRef, useState } from 'react'
 import { bookingAvailabilityAction } from '@/app/booking-actions'
-import { freeBookingSlots, oneRelation, type BookingData, type BookingSlot } from '@/lib/booking'
+import { eligibleMasters, freeBookingSlots, oneRelation, type BookingData, type BookingSlot } from '@/lib/booking'
 import type { RuntimeApp } from '@/lib/app-runtime'
 import type { TableRow } from '@/lib/table-store'
 import { accentTones } from './ui'
 
-export function BookingForm({ runtime, row, demo, pending, initialValues, onSubmit }: {
-  runtime: RuntimeApp; row: TableRow | null; demo: boolean; pending: boolean; initialValues?: Record<string, unknown> | null; onSubmit: (values: Record<string, unknown>) => void
+export function BookingForm({ runtime, row, demo, demoData, pending, initialValues, onSubmit }: {
+  runtime: RuntimeApp; row: TableRow | null; demo: boolean; demoData?: BookingData; pending: boolean; initialValues?: Record<string, unknown> | null; onSubmit: (values: Record<string, unknown>) => void
 }) {
   const config = runtime.app.booking!, visit = config.visit, accent = accentTones(runtime.app.theme.accent)
   const fields = runtime.tables[config.tables.visits]?.fields ?? []
@@ -34,10 +34,10 @@ export function BookingForm({ runtime, row, demo, pending, initialValues, onSubm
     setLoading(true)
     const load = async () => {
       if (demo) {
-        const data: BookingData = { services, masters: runtime.tables[config.tables.masters]?.rows ?? [], schedule: runtime.tables[config.tables.schedule]?.rows ?? [],
+        const data: BookingData = demoData ?? { services, masters: runtime.tables[config.tables.masters]?.rows ?? [], schedule: runtime.tables[config.tables.schedule]?.rows ?? [],
           visits: runtime.tables[config.tables.visits]?.rows ?? [], timeZone }
         const available = freeBookingSlots(config, data, { serviceId, day, masterId: masterId || undefined, excludeId: row?.id, minutes: row ? Number(row.data[visit.minutes]) : undefined })
-        return { ok: true as const, slots: available, masters: data.masters.map(master => ({ id: master.id, name: String(master.data[config.master.name]) })), timeZone }
+        return { ok: true as const, slots: available, masters: eligibleMasters(config, data, serviceId).map(master => ({ id: master.id, name: String(master.data[config.master.name]) })), timeZone }
       }
       return bookingAvailabilityAction(runtime.app.slug, serviceId, day, masterId, row?.id)
     }
@@ -50,7 +50,7 @@ export function BookingForm({ runtime, row, demo, pending, initialValues, onSubm
     }).catch(() => { if (!stopped) setError('Не удалось загрузить свободное время. Выберите дату ещё раз.') })
       .finally(() => { if (!stopped) setLoading(false) })
     return () => { stopped = true }
-  }, [serviceId, day, masterId, runtime.app.slug, row?.id, demo, timeZone])
+  }, [serviceId, day, masterId, runtime.app.slug, row?.id, demo, demoData, timeZone])
   const service = services.find(row => row.id === serviceId)
   const inputClass = 'w-full rounded-xl border border-sand-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-400'
   return <form className="mx-auto max-w-xl space-y-5 rounded-2xl border border-sand-200 bg-white p-5 shadow-soft" onSubmit={event => {

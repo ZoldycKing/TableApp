@@ -1,22 +1,6 @@
-import { ANONYMOUS, asRole, visibleScreensFor } from '@/lib/app-roles'
 import { templateExample } from '@/lib/templates/presentation'
-import { canAccessRow, rulesFor } from '@/lib/row-access'
-import { ScreenCard, ScreenFrame, ScreenList, ScreenTable } from './screens'
-
-type Example = ReturnType<typeof templateExample>
-
-function card(example: Example, role: string, email?: string) {
-  const visitor = asRole(role, email ?? null)
-  const screen = visibleScreensFor(example.app, visitor).find(item => item.type === 'detail' && item.tableId === example.built.appTableId)
-  if (!screen || screen.type !== 'detail') return null
-  const row = example.rows.find(item => item.tableId === screen.tableId && canAccessRow(rulesFor(example.app, screen.tableId, visitor), email ? { email } : null, item.data))
-  if (!row) return null
-  const fields = screen.components.flatMap(component => component.type === 'field'
-    ? example.fields.filter(field => field.id === component.fieldId && example.text(row, field)) : [])
-  const primary = example.fields.find(field => field.id === example.built.tables.find(table => table.id === screen.tableId)!.primaryFieldId)!
-  return <ScreenCard title={example.text(row, primary)} fields={fields.slice(0, 6).map(field => ({ label: field.name, value: example.text(row, field) }))}
-    actions={screen.components.flatMap(component => component.type === 'button' ? [component.label] : [])} />
-}
+import { ScreenFrame, ScreenTable } from './screens'
+import { TemplateAppPreview } from './template-app-preview'
 
 export function TemplateExample({ id }: { id: string }) {
   const example = templateExample(id)
@@ -25,9 +9,8 @@ export function TemplateExample({ id }: { id: string }) {
     const items = rows.filter(row => row.tableId === table('items').id)
     const low = items.filter(row => row.data[field('items', 'low').id] === true)
     return <div className="grid gap-5 sm:grid-cols-2">
-      <ScreenFrame title="В приложении кладовщика: товары и остатки" note={`Показаны 4 из ${items.length} товаров. В карточке — «Принять товар» и «Выдать товар»; списания и возвраты находятся в «Ещё действия».`}>
-        <ScreenList title="Товары" right={String(items.length)} rows={items.slice(0, 4).map(row => ({ title: text(row, field('items', 'name')), subtitle: text(row, field('items', 'sku')), meta: `${text(row, field('items', 'qty'))} шт.` }))} />
-      </ScreenFrame>
+      <TemplateAppPreview example={example} role="staff" title="В приложении кладовщика: товары и остатки"
+        note="Откройте товар: в карточке есть «Принять товар» и «Выдать товар». Списания и возвраты находятся в «Ещё действия»." />
       <ScreenFrame device="desktop" title="В таблице владельца: товары, которые пора заказать" note="Товар попадает сюда, когда остаток равен порогу или меньше него. Например: осталось 4 фильтра, порог — 6. Стоимость запаса считается по текущей закупочной цене.">
         <ScreenTable caption="Все товары на пороге закупки" columns={['Товар', 'Осталось, шт.', 'Порог закупки, шт.', 'Стоимость запаса']}
           rows={low.map(row => [text(row, field('items', 'name')), text(row, field('items', 'qty')), text(row, field('items', 'min')), `${text(row, field('items', 'total'))} ₽`])} />
@@ -35,19 +18,11 @@ export function TemplateExample({ id }: { id: string }) {
     </div>
   }
   if (template.portal) {
-    const visible = visibleScreensFor(example.app, ANONYMOUS).find(screen => screen.type === 'tiles')!
-    const services = rows.filter(row => row.tableId === table('services').id && row.data[field('services', 'published').id] === true)
     return <div className="grid gap-5 sm:grid-cols-2">
-      <ScreenFrame title="Без входа: опубликованные услуги" note={`Показаны 4 из ${services.length} услуг. Неопубликованные услуги и себестоимость сюда не попадают.`}>
-        <div className="grid grid-cols-2 gap-3 p-3">{services.slice(0, 4).map(row => <div key={row.id} className="rounded-xl border border-sand-200 p-3">
-          <p className="text-sm font-medium">{text(row, field('services', 'name'))}</p>
-          <p className="mt-2 text-sm tabular-nums">{text(row, field('services', 'price'))}</p>
-          <p className="mt-1 text-xs text-ink-muted">{text(row, field('services', 'term'))}</p>
-        </div>)}</div>
-      </ScreenFrame>
-      <ScreenFrame title="После входа: карточка заказа клиента" note="Клиент видит заказы, в которых указана его почта. Показан фрагмент карточки; доступ всей организации отдельно не настроен.">
-        {visible && card(example, 'client', 'petrov@example.ru')}
-      </ScreenFrame>
+      <TemplateAppPreview example={example} role="guest" tableId={table('services').id} title="Без входа: опубликованные услуги"
+        note="Неопубликованные услуги и себестоимость сюда не попадают. Откройте услугу, чтобы посмотреть её описание." />
+      <TemplateAppPreview example={example} role="client" email="petrov@example.ru" name="Алексей" title="После входа: личный кабинет клиента"
+        note="Клиент видит только свои заказы, их статусы и историю. Откройте заказ, чтобы посмотреть подробности; данные других клиентов скрыты." />
     </div>
   }
   if (template.id === 'zayavki') {
@@ -57,24 +32,19 @@ export function TemplateExample({ id }: { id: string }) {
       <ScreenFrame device="desktop" title="В таблице диспетчера: все заявки" note={`Показаны 4 из ${items.length} заявок. Диспетчер выбирает клиента, дату и почту мастера, ведёт стоимость и оплату. Доска и календарь доступны в рабочем пространстве.`}>
         <ScreenTable caption="Заявки" columns={columns.map(column => column.name)} rows={items.slice(0, 4).map(row => columns.map(column => text(row, column) || '—'))} />
       </ScreenFrame>
-      <ScreenFrame title="В приложении мастера: его заявка" note="Сергей видит 2 назначенные ему заявки из 6. Через «Изменить» он меняет только статус, фото и комментарий. Стоимость и оплату мастер не видит. Почта в учебных записях вымышленная.">
-        {card(example, 'staff', 'sergey@example.invalid')}
-      </ScreenFrame>
+      <TemplateAppPreview example={example} role="staff" email="sergey@example.invalid" name="Сергей" title="В приложении мастера: его заявки"
+        note="Сергей видит 2 назначенные ему заявки из 6. Через «Изменить» доступны статус, фото и комментарий. Стоимость и оплату мастер не видит." />
     </div>
   }
   if (template.id === 'salon') {
-    const own = rows.filter(row => row.tableId === table('visits').id && row.data[field('visits', 'email').id] === 'irina@example.com')
     return <div className="grid gap-5 sm:grid-cols-2">
-      <ScreenFrame title="Услуги, цена и длительность" note="Клиент выбирает услугу, мастера и свободное время. Сервер проверяет, что вся процедура помещается в смену и не пересекается с другими записями. При первом оформлении подтверждается почта.">
-        <ScreenList title="Услуги" rows={rows.filter(row => row.tableId === table('services').id && row.data[field('services', 'active').id] === true).map(row => ({ title: text(row, field('services', 'name')), subtitle: `${text(row, field('services', 'minutes'))} минут`, meta: text(row, field('services', 'price')) }))} />
-      </ScreenFrame>
-      <ScreenFrame title="В кабинете клиента: его запись" note="Ирина видит только своё посещение. Предстоящую запись можно перенести или отменить; отмена освобождает время. Цена и длительность принятых записей сохраняются при изменении прайса.">
-        <ScreenList title="Мои записи" rows={own.map(row => ({ title: text(row, field('visits', 'service')), subtitle: `${text(row, field('visits', 'when'))} · ${text(row, field('visits', 'master'))}`, meta: text(row, field('visits', 'price')) }))} />
-      </ScreenFrame>
+      <TemplateAppPreview example={example} role="guest" tableId={table('services').id} title="Услуги, цена и длительность"
+        note="Клиент выбирает услугу, мастера и свободное время. Вся процедура должна помещаться в смену без пересечений с другими записями. При первом оформлении подтверждается почта." />
+      <TemplateAppPreview example={example} role="client" email="irina@example.com" name="Ирина" title="Личный кабинет клиента: записи и история"
+        note="В примере у Ирины есть предстоящая запись и предыдущая отменённая. Откройте запись: её можно перенести или отменить. Цена и длительность сохраняются при изменении прайса." />
     </div>
   }
   const main = built.tables.find(item => item.id === built.appTableId)!
-  const primary = example.fields.find(item => item.id === main.primaryFieldId)!
   const items = rows.filter(row => row.tableId === main.id)
   const columns = example.byTable.get(main.id)!.filter(item => item.type !== 'image' && item.type !== 'attachment' && item.type !== 'long_text').slice(0, 4)
   const role = template.production ? 'director' : 'manager'
@@ -82,8 +52,7 @@ export function TemplateExample({ id }: { id: string }) {
     <ScreenFrame device="desktop" title={`В рабочем пространстве: ${main.name.toLowerCase()}`} note={`Показаны ${Math.min(4, items.length)} из ${items.length} записей и ${columns.length} колонок. Доску и календарь, если они есть в шаблоне, открывают в рабочем пространстве.`}>
       <ScreenTable caption={main.name} columns={columns.map(column => column.name)} rows={items.slice(0, 4).map(row => columns.map(column => text(row, column) || '—'))} />
     </ScreenFrame>
-    <ScreenFrame title="В приложении: карточка записи" note={template.production ? 'Фрагмент карточки выпуска директора. Начальник смены вводит годный выпуск отдельной формой; брак учитывается отдельно и материалы не расходует.' : 'Фрагмент карточки. Статус, дату и другие вводимые поля меняют через «Изменить». Права сотрудников и отбор их записей нужно настроить перед публикацией.'}>
-      {items.length > 0 && primary ? card(example, role) : null}
-    </ScreenFrame>
+    <TemplateAppPreview example={example} role={role} title={template.production ? 'В приложении директора: выпуски и сводка' : 'В приложении руководителя: список и карточки'}
+      note={template.production ? 'Начальник смены вводит годный выпуск отдельной формой. Брак учитывается отдельно и материалы не расходует.' : 'Показан рабочий интерфейс руководителя. Откройте запись, чтобы посмотреть карточку. Готовый клиентский кабинет к этому шаблону пока не подключён.'} />
   </div>
 }

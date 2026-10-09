@@ -11,6 +11,7 @@ import { BookingForm } from './booking-form'
 import { BookingSetup } from './booking-setup'
 import { cancelBookingAction } from '@/app/booking-actions'
 import { dateInstant } from '@tableapp/schema'
+import type { BookingData } from '@/lib/booking'
 import { inventoryOperation } from '@/lib/inventory'
 import { useLiveApp } from '@/lib/use-live-app'
 import { appCreateRowAction, appDeleteRowAction, appUpdateRowAction } from '@/app/runtime-actions'
@@ -127,6 +128,7 @@ export function AppShell({
   initialScreenId,
   editing = false,
   browserHistory = false,
+  demoBookingData,
 }: {
   runtime: RuntimeApp
   viewer: Viewer
@@ -152,6 +154,8 @@ export function AppShell({
    * витрину продукта, нажал бы его и остался на месте.
    */
   browserHistory?: boolean
+  /** Sanitized availability metadata for synthetic template previews only. */
+  demoBookingData?: BookingData
 }) {
   const { app } = runtime
   useLiveApp(app.slug, !demo && !editing)
@@ -735,7 +739,7 @@ export function AppShell({
             app.booking && screen.id === app.booking.rescheduleScreenId && !row ? <EmptyState title="Запись недоступна" hint="Откройте предстоящую запись из своего списка и выберите «Перенести запись»." /> :
             app.booking && screen.id === app.booking.setupScreenId ? <BookingSetup runtime={runtime} demo={demo || editing} onSaved={() => router.refresh()} /> :
             app.booking && [app.booking.formScreenId, app.booking.rescheduleScreenId].includes(screen.id) ? <BookingForm key={`${screen.id}:${row?.id ?? ''}`} runtime={runtime}
-              row={screen.id === app.booking.rescheduleScreenId ? row : null} demo={demo || editing} pending={pending} initialValues={bookingDraft} onSubmit={values => {
+              row={screen.id === app.booking.rescheduleScreenId ? row : null} demo={demo || editing} demoData={demo ? demoBookingData : undefined} pending={pending} initialValues={bookingDraft} onSubmit={values => {
                 if (screen.id === app.booking!.rescheduleScreenId && row) {
                   runMutation(() => appUpdateRowAction(app.slug, app.booking!.tables.visits, row.id, values, row.version), goBack)
                 } else if (viewer === null && !demo && !editing) { setBookingDraft(values); setError(null); setIntake({ screenId: screen.id, values }) }

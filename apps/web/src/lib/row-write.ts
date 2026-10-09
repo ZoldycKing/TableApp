@@ -1,12 +1,13 @@
 import { db, fields as fieldsTable } from '@tableapp/db'
 import type { App, Field } from '@tableapp/schema'
-import { normalizeFieldOptions } from '@tableapp/schema'
+import { customerWorkflows, normalizeFieldOptions } from '@tableapp/schema'
 import { asc, eq } from 'drizzle-orm'
 import type { AppViewer } from './app-session'
 import type { Visitor } from './app-roles'
 import { createRow, writeRows } from './row-mutations'
 import type { Transaction } from './db-transaction'
 import { rulesFor, stampOwner } from './row-access'
+import { createCustomerRecord } from './customer-create'
 
 /**
  * Создание строки от имени посетителя приложения.
@@ -53,6 +54,10 @@ export async function insertRow(
   const rules = rulesFor(app, tableId, author.visitor)
   const owned = stampOwner(rules, author.viewer, values)
   if (app.booking?.tables.visits === tableId) owned[app.booking.visit.status] = app.booking.statuses.booked
+  const customer = customerWorkflows(app).find(config => config.tableId === tableId)
+  if (customer && author.visitor.roleId === 'client') {
+    return writeRows(app.workspaceId, context => createCustomerRecord(context, app, customer, owned, author, beforeInsert))
+  }
   return writeRows(app.workspaceId, (context) => createRow(context, tableId,
     owned,
     { id: author.viewer?.id ?? null, kind: 'app_user', ip: author.ip },

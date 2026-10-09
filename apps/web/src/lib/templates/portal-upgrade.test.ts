@@ -4,7 +4,7 @@ import { templateExample } from './presentation'
 import { preparePortalUpgrade } from './portal-upgrade'
 
 const fixture = () => {
-  const example = templateExample('portal'), table = example.table('orders')
+  const example = templateExample('portal', undefined, true), table = example.table('orders')
   const form = example.app.screens.find(screen => screen.type === 'form' && screen.mode === 'create')!
   if (form.type !== 'form') throw new Error('wrong fixture')
   const oldForm = { ...form, access: { ...form.access, roles: [] }, components: [...form.components,

@@ -5,7 +5,7 @@ import { templateExample } from './templates/presentation'
 import type { RuntimeTable } from './app-runtime'
 
 describe('preview identity selects both records and dashboard totals', () => {
-  const example = templateExample('portal')
+  const example = templateExample('portal', undefined, true)
   const tables: Record<string, RuntimeTable> = Object.fromEntries(example.built.tables.map(table => [table.id, { ...table,
     fields: example.byTable.get(table.id)!, rows: example.rows.filter(row => row.tableId === table.id).map(row => ({ ...row, version: 0 })) }]))
   it('shows each customer their records and excludes other amounts before aggregation', () => {

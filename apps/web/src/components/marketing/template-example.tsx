@@ -5,6 +5,14 @@ import { TemplateAppPreview } from './template-app-preview'
 export function TemplateExample({ id }: { id: string }) {
   const example = templateExample(id)
   const { template, built, rows, field, table, text } = example
+  if (template.customer) {
+    return <div className="grid gap-5 sm:grid-cols-2">
+      <TemplateAppPreview example={example} role="guest" title="Без входа: каталог и описание"
+        note="Откройте карточку: оформление начинается внутри неё. При первом обращении подтвердите почту; при действующем входе код повторно не нужен. Онлайн-оплаты нет." />
+      <TemplateAppPreview example={example} role="client" email="irina@example.com" name="Ирина" title="Личный кабинет клиента: активные обращения и история"
+        note="В шапке видно название бизнеса. Клиент видит свои записи и статусы; отменённые и завершённые обращения сохраняются в истории. Чужие обращения и внутренние заметки сюда не попадают." />
+    </div>
+  }
   if (template.inventory) {
     const items = rows.filter(row => row.tableId === table('items').id)
     const low = items.filter(row => row.data[field('items', 'low').id] === true)

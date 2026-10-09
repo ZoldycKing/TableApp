@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { inventoryFixture } from '@/lib/templates/inventory-fixture.test-utils'
 import { AppShell } from './app-shell'
 import { navFromHistory } from './nav-history'
-import { appUpdateRowAction } from '@/app/runtime-actions'
+import { appCreateRowAction, appUpdateRowAction } from '@/app/runtime-actions'
 import { templateExample } from '@/lib/templates/presentation'
 import { templateAppPreview } from '@/lib/templates/app-preview'
 
@@ -13,14 +13,63 @@ vi.mock('@/app/auth-actions', () => ({ signOutAppAction: vi.fn() }))
 vi.mock('@/app/production-actions', () => ({ saveMovementAction: vi.fn(), saveProductionAction: vi.fn() }))
 vi.mock('@/app/runtime-actions', () => ({ appCreateRowAction: vi.fn(), appDeleteRowAction: vi.fn(), appUpdateRowAction: vi.fn() }))
 vi.mock('@/app/booking-actions', () => ({ bookingAvailabilityAction: vi.fn(), cancelBookingAction: vi.fn(), setupBookingMasterAction: vi.fn(), setBookingDayOffAction: vi.fn() }))
+vi.mock('@/app/customer-actions', () => ({ customerDecisionAction: vi.fn() }))
 const inventoryMocks = vi.hoisted(() => ({ receive: vi.fn(), operation: vi.fn() }))
 vi.mock('@/app/inventory-actions', () => ({ receiveStockAction: inventoryMocks.receive, saveStockOperationAction: inventoryMocks.operation }))
 vi.mock('@/lib/use-live-app', () => ({ useLiveApp: vi.fn() }))
 vi.mock('@/components/motion/enter-motion', () => ({ useEnterMotion: () => ({ current: null }) }))
-vi.mock('./intake-verify', () => ({ IntakeVerify: () => null }))
+vi.mock('./intake-verify', () => ({ IntakeVerify: ({ onDone }: { onDone: () => void }) => <button onClick={onDone}>Подтверждение тестовой почты</button> }))
 afterEach(() => { cleanup(); vi.restoreAllMocks(); window.history.replaceState(null, '', '/') })
 
 describe('runtime navigation during live refresh', () => {
+  it('keeps the business visible and opens a support form from the customer’s own order', () => {
+    const example = templateExample('portal'), { runtime, viewer } = templateAppPreview(example, 'client', 'irina@example.com', 'Ирина')
+    const ui = render(<AppShell runtime={runtime} viewer={viewer} demo />)
+    expect(ui.getAllByText('Сервис «Мастерская»').length).toBeGreaterThan(0)
+    fireEvent.click(ui.getByRole('button', { name: /Ремонт ноутбука Lenovo/ }))
+    fireEvent.click(ui.getByRole('button', { name: 'Задать вопрос по заказу' }))
+    const support = example.app.customerSections![0]!, parent = support.parent!
+    const own = runtime.tables[parent.tableId]!.rows.find(row => String(row.data[example.field('orders', 'title').id]).includes('Lenovo'))!
+    expect((ui.getByLabelText(/^Заказ/) as HTMLSelectElement).value).toBe(own.id)
+    expect(ui.getByLabelText(/^Тема/)).toBeTruthy()
+    expect(ui.queryByLabelText('Ключ оформления')).toBeNull()
+    expect(ui.queryByLabelText('Статус')).toBeNull()
+  })
+  it('opens the real cabinet after the first request is confirmed and its signed-in runtime arrives', async () => {
+    const example = templateExample('portal'), guest = templateAppPreview(example, 'guest')
+    const ui = render(<AppShell runtime={guest.runtime} viewer={null} />)
+    fireEvent.click(ui.getByRole('button', { name: /Диагностика техники/ }))
+    fireEvent.click(ui.getByRole('button', { name: 'Оставить заявку' }))
+    fireEvent.change(ui.getByLabelText(/^Ваше имя/), { target: { value: 'Ирина' } })
+    fireEvent.change(ui.getByLabelText(/^Ваш телефон/), { target: { value: '+7 900 000-00-00' } })
+    fireEvent.click(ui.getByRole('button', { name: 'Отправить заявку' }))
+    fireEvent.click(await ui.findByRole('button', { name: 'Подтверждение тестовой почты' }))
+    const customer = templateAppPreview(example, 'client', 'irina@example.com', 'Ирина')
+    ui.rerender(<AppShell runtime={customer.runtime} viewer={customer.viewer} />)
+    await waitFor(() => expect(ui.getByRole('heading', { name: 'Мои заказы' })).toBeTruthy())
+    expect(ui.getByRole('button', { name: 'История 1' })).toBeTruthy()
+  })
+  it('submits the selected products and quantities while hiding technical cart fields', async () => {
+    const example = templateExample('zakazy'), { runtime, viewer } = templateAppPreview(example, 'client', 'irina@example.com', 'Ирина'), config = example.app.customer!
+    vi.mocked(appCreateRowAction).mockResolvedValue({ ok: true })
+    const ui = render(<AppShell runtime={runtime} viewer={viewer} />)
+    fireEvent.click(ui.getAllByRole('button', { name: 'Каталог' })[0]!)
+    const product = runtime.tables[config.catalog!.tableId]!.rows[0]!, name = String(product.data[config.catalog!.titleFieldId])
+    fireEvent.click(ui.getByRole('button', { name: text => text.includes(name) }))
+    fireEvent.click(ui.getByRole('button', { name: 'Добавить в заказ' }))
+    fireEvent.click(ui.getByRole('button', { name: /Оформить заказ.*1/ }))
+    fireEvent.change(ui.getByLabelText(`Количество: ${name}`), { target: { value: '3' } })
+    fireEvent.change(ui.getByLabelText(/^Ваше имя/), { target: { value: 'Ирина' } })
+    fireEvent.change(ui.getByLabelText(/^Ваш телефон/), { target: { value: '+7 900 000-00-00' } })
+    expect(ui.queryByLabelText('Состав нового заказа')).toBeNull()
+    expect(ui.queryByLabelText('Ключ оформления')).toBeNull()
+    fireEvent.click(ui.getByRole('button', { name: 'Оформить заказ' }))
+    await waitFor(() => expect(appCreateRowAction).toHaveBeenCalled())
+    const submitted = vi.mocked(appCreateRowAction).mock.calls.at(-1)!
+    expect(submitted.slice(0, 2)).toEqual([runtime.app.slug, config.tableId])
+    expect(JSON.parse(String(submitted[2][config.cart!.fieldId])).items).toEqual([{ id: product.id, qty: 3 }])
+    expect(submitted[2][config.submissionFieldId!]).toBeTruthy()
+  })
   it('separates upcoming salon visits from history and restores the selected section after a card and a refresh', () => {
     const { runtime, viewer, bookingData } = templateAppPreview(templateExample('salon'), 'client', 'irina@example.com', 'Ирина')
     const ui = render(<AppShell runtime={runtime} viewer={viewer} demo demoBookingData={bookingData} />)
@@ -96,7 +145,7 @@ describe('runtime navigation during live refresh', () => {
   it('opens a portal request from a service card with its name filled and preserves the customer draft', () => {
     const { runtime, viewer } = templateAppPreview(templateExample('portal'), 'guest')
     const ui = render(<AppShell runtime={runtime} viewer={viewer} demo />)
-    expect(ui.getByRole('heading', { name: 'Услуги и цены' })).toBeTruthy()
+    expect(ui.getByRole('heading', { name: 'Услуги' })).toBeTruthy()
     expect(ui.queryByRole('button', { name: 'Заявка' })).toBeNull()
     fireEvent.click(ui.getByRole('button', { name: /Диагностика техники/ }))
     fireEvent.click(ui.getByRole('button', { name: 'Оставить заявку' }))

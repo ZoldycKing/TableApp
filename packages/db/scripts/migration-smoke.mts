@@ -33,11 +33,12 @@ try {
   assert.equal(applied.length, journal.entries.length)
   assert.ok(await target`select sync_revision from public.rows limit 0`)
   assert.ok(await target`select state from public.attachments limit 0`)
+  assert.ok(await target`select business_profile from public.workspaces limit 0`)
   const tableCount = await target`select count(*)::int as value from pg_tables where schemaname = 'public'`
   await migrate()
   assert.deepEqual([...(await target`select hash, created_at from drizzle.__drizzle_migrations order by created_at`)], [...applied])
   console.log(JSON.stringify({ status: 'passed', migrations: applied.length, tables: tableCount[0]!.value,
-    checked: ['empty database', 'sync revision', 'attachment state', 'second run unchanged'] }))
+    checked: ['empty database', 'sync revision', 'attachment state', 'business profile', 'second run unchanged'] }))
 } finally {
   await target.end()
   if (created) await admin.unsafe(`drop database "${name}"`)

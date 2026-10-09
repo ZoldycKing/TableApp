@@ -10,6 +10,7 @@ import { service } from './defs/service'
 import { sklad } from './defs/sklad'
 import { zakazy } from './defs/zakazy'
 import { zayavki } from './defs/zayavki'
+import { withCustomerScenario } from './customer-definitions'
 
 /**
  * Готовые шаблоны.
@@ -23,7 +24,7 @@ import { zayavki } from './defs/zayavki'
  * пока этого нет, — поэтому в описаниях сказано ровно то, что заработает
  * сразу после установки.
  */
-export const TEMPLATES: readonly TemplateDef[] = [
+const LEGACY_TEMPLATES: readonly TemplateDef[] = [
   zayavki,
   zakazy,
   crm,
@@ -36,7 +37,8 @@ export const TEMPLATES: readonly TemplateDef[] = [
   dostavka,
   katalog,
 ]
+export const TEMPLATES: readonly TemplateDef[] = LEGACY_TEMPLATES.map(withCustomerScenario)
 
-export function findTemplate(id: string): TemplateDef | undefined {
-  return TEMPLATES.find((template) => template.id === id)
+export function findTemplate(id: string, legacy = false): TemplateDef | undefined {
+  return (legacy ? LEGACY_TEMPLATES : TEMPLATES).find((template) => template.id === id)
 }

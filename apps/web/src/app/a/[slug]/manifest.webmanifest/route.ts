@@ -13,8 +13,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ slu
   if (!meta) return new NextResponse('Not found', { status: 404 })
 
   return NextResponse.json({
-    name: meta.name,
-    short_name: meta.name.slice(0, 12),
+    name: meta.business ? `${meta.business.name} · ${meta.name}` : meta.name,
+    short_name: (meta.business?.name ?? meta.name).slice(0, 24),
     start_url: `/a/${slug}`,
     scope: `/a/${slug}`,
     display: 'standalone',

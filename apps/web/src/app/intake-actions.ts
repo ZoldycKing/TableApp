@@ -171,7 +171,7 @@ export async function requestIntakeAction(
     subject: '',
     link: '',
     code,
-    appName: app.name,
+    appName: (await (await import('@/lib/business-profile')).loadBusinessProfile(app.workspaceId))?.name ?? app.name,
     kind: 'verify_intake',
   })
   await logAuth(email, 'code_sent', 'staff')

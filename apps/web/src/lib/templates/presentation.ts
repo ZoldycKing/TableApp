@@ -1,14 +1,24 @@
 import { compileTableFormulas, computeDerivedRow, relatedIndexFrom } from '@tableapp/formula'
-import { newId, type Field, type View } from '@tableapp/schema'
+import { DEFAULT_APP_ROLES, newId, type Field, type View } from '@tableapp/schema'
 import { generateApp } from '../app-builder'
 import { formatCell } from '../format'
 import { buildTemplate } from './build'
 import { findTemplate } from './catalog'
 import { templatePreset } from './presets'
+import type { TemplateDef } from './types'
+
+export function templateRoleNames(template: TemplateDef): string[] {
+  if (template.customer) return ['Клиент', template.customer.workerName, template.customer.managerName]
+  if (template.id === 'salon') return ['Клиент', 'Мастер', 'Администратор']
+  if (template.id === 'zayavki') return ['Мастер', 'Диспетчер']
+  if (template.inventory) return ['Кладовщик', 'Владелец']
+  if (template.production) return [template.production.copy.director, template.production.copy.operator]
+  return DEFAULT_APP_ROLES.map(role => role.name)
+}
 
 /** Synthetic examples use the same definitions, formulas and presets as installation. No database access. */
-export function templateExample(id: string, now = new Date()) {
-  const template = findTemplate(id)
+export function templateExample(id: string, now = new Date(), legacy = false) {
+  const template = findTemplate(id, legacy)
   if (!template) throw new Error(`Нет шаблона ${id}`)
   const built = buildTemplate({ template, workspaceId: 'marketing-example', now })
   const fields = built.fields as Field[], views = built.views as unknown as View[]
@@ -44,6 +54,7 @@ export function templateExample(id: string, now = new Date()) {
 
 /** Access explanation is shared by template cards and detail pages. */
 export function templateAccessNote(template: ReturnType<typeof findTemplate> & {}) {
+  if (template.customer) return 'Гость открывает каталог и оформляет обращение из карточки. После подтверждения почты клиент видит только свои активные обращения и историю. Исполнитель видит назначенные ему записи по почте; администратор управляет назначением и условиями.'
   if (template.id === 'salon') return 'Клиент видит услуги и свободное время, подтверждает почту при первой записи, затем отменяет и переносит свои посещения из кабинета. Мастер видит только назначенные ему записи. Администратор настраивает услуги, мастеров и рабочие часы.'
   if (template.id === 'zayavki') return 'Диспетчер видит все заявки, назначает мастеров и ведёт оплату. Мастер видит только заявки со своей почтой и меняет статус, фото и комментарий. Добавьте сотрудников в список доступа; адреса мастеров в примерах нужно заменить настоящими.'
   if (template.portal) return 'Клиент видит заказы, где указана его почта. Сотрудники видят все заказы. Обращения пока доступны только в таблице владельца.'

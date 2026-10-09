@@ -58,6 +58,8 @@ export type BuiltRow = {
 }
 
 export type BuiltTemplate = {
+  customerSections?: import('./types').TemplateCustomer[]
+  customer?: { definition: import('./types').TemplateCustomer; tableId: string; fieldIds: Record<string, Record<string, string>>; viewIds: Record<string, Record<string, string>> }
   tables: BuiltTable[]
   fields: BuiltField[]
   views: BuiltView[]
@@ -409,6 +411,10 @@ export function buildTemplate(input: {
 
   return {
     tables,
+    customerSections: template.customerSections,
+    customer: template.customer ? { definition: template.customer, tableId: tableIds.get(template.customer.table)!,
+      fieldIds: Object.fromEntries(template.tables.map(table => [table.key, Object.fromEntries(table.fields.map(field => [field.key, fieldIds.get(key(table.key, field.key))!]))])),
+      viewIds: Object.fromEntries(template.tables.map(table => [table.key, Object.fromEntries(views.filter(view => view.tableId === tableIds.get(table.key)).map(view => [view.name, view.id]))])) } : undefined,
     fields,
     views,
     rows,

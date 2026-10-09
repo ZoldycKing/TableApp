@@ -9,6 +9,8 @@ import { AppChrome } from '@/components/app-chrome'
 import type { TableSummary } from '@/lib/queries'
 import { listMemberships, requireMember } from '@/lib/session'
 import { PRIVATE_PAGE } from '@/lib/seo'
+import { BusinessSettings } from '@/components/business-settings'
+import { loadBusinessProfile } from '@/lib/business-profile'
 
 /*
  * В поиске этой странице делать нечего: за ней рабочее пространство.
@@ -85,6 +87,7 @@ export default async function AppsPage() {
         </Link>
       </header>
 
+      <BusinessSettings profile={await loadBusinessProfile(member.workspaceId)} canEdit={member.role !== 'viewer'} />
       <AppsManager apps={list} tables={tables} />
     </main>
     </AppChrome>

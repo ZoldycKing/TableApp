@@ -1,6 +1,6 @@
 import { db, fields as fieldsTable, rows, rowChanges, tables, workspaceUsage } from '@tableapp/db'
 import { compileTableFormulas, computeRow, stripDerived } from '@tableapp/formula'
-import { newId, normalizeFieldOptions, parseCellValue, positionBetween, type Field } from '@tableapp/schema'
+import { newId, normalizeFieldOptions, parseCellValue, positionBetween, type CustomerWorkflow, type Field } from '@tableapp/schema'
 import { and, asc, desc, eq, gt, isNull, sql } from 'drizzle-orm'
 import { canonicalAttachments, linkRowAttachments, validateRowAttachments } from './attachments'
 import { CELL_CONFLICT, sameCellValue } from './cell-conflict'
@@ -11,6 +11,7 @@ import { dependentRows } from './production-cascade'
 import { recountWorkspace } from './usage'
 import { withInitialValues } from './initial-values'
 import { prepareBookingWrite } from './booking-store'
+import { prepareCustomerWrite } from './customer-store'
 
 export class RowWriteError extends Error {
   constructor(readonly code: 'missing' | 'conflict' | 'denied' | 'invalid', message: string) {
@@ -21,7 +22,7 @@ export class RowWriteError extends Error {
 
 export type RowActor = { id: string | null; kind: string; ip?: string | null }
 export type RowTransaction = { tx: Transaction; workspaceId: string; changed: Set<string>;
-  usageLocked?: boolean; fieldCache?: Map<string, Field[]> }
+  usageLocked?: boolean; fieldCache?: Map<string, Field[]>; customerConfigCache?: CustomerWorkflow[] }
 export type StoredRow = typeof rows.$inferSelect
 export const ROW_CONFLICT = 'Запись изменилась после открытия формы. Обновите её и повторите действие.'
 
@@ -127,6 +128,7 @@ export async function createRow(context: RowTransaction, tableId: string, data: 
   const booking = await prepareBookingWrite(context.tx, context.workspaceId, tableId, clean)
   if (booking.error) throw new RowWriteError('invalid', booking.error)
   clean = booking.data
+  clean = await prepareCustomerWrite(context, tableId, clean, null, actor, id)
   const error = await validateRowAttachments(tableId, fields, clean, context.tx, actor, id)
   if (error) throw new RowWriteError('invalid', error)
   clean = await canonicalAttachments(fields, clean, context.tx)
@@ -177,7 +179,8 @@ export async function updateRow(context: RowTransaction, tableId: string, rowId:
   const booking = await prepareBookingWrite(context.tx, context.workspaceId, tableId,
     await initialValues(context, fields, { ...before, ...changed }), before, rowId)
   if (booking.error) throw new RowWriteError('invalid', booking.error)
-  const after = stripDerived(computeRow(booking.data, compileTableFormulas(fields)), fields)
+  const customerData = await prepareCustomerWrite(context, tableId, booking.data, before, actor, rowId)
+  const after = stripDerived(computeRow(customerData, compileTableFormulas(fields)), fields)
   await context.tx.update(rows).set({ data: after, updatedBy: actor.id, version: sql`${rows.version} + 1`, syncRevision: sql`nextval('row_sync_revision_seq')`, updatedAt: new Date(), sample: false })
     .where(and(eq(rows.id, rowId), eq(rows.tableId, tableId), isNull(rows.deletedAt)))
   await linkRowAttachments(tableId, rowId, fields, changed, context.tx, actor)

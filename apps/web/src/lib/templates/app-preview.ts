@@ -22,6 +22,8 @@ export function templateAppPreview(example: Example, role: string, email: string
   const runtime = projectRuntime(app, visitor, Object.fromEntries(example.views.map(view => [view.id, view])), example.built.tables, example.byTable,
     sourceRows.map(row => ({ ...row, version: 0, createdAt: now, updatedAt: now, createdBy: null, updatedBy: null })),
     new Map(example.built.tables.map(table => [table.id, table.primaryFieldId])))
+  const names: Record<string, string> = { salon: 'Салон «Лилия»', zakazy: 'Магазин «Климат»', katalog: 'Магазин «Климат»', service: 'Сервис «Мастерская»', zayavki: 'Сервис «Мастерская»', portal: 'Сервис «Мастерская»', dostavka: 'Доставка «Маршрут»', nedvizhimost: 'Агентство «Ключ»', crm: 'Компания «Вектор»', sklad: 'Склад «Климат»', proizvodstvo: 'Производство «Фабрика»' }
+  runtime.business = { name: names[example.template.id] ?? example.template.name, location: '', phone: '' }
   let bookingData: BookingData | undefined
   if (booking) {
     const of = (tableId: string, keys: string[]) => sourceRows.filter(row => row.tableId === tableId).map(row => ({ id: row.id,

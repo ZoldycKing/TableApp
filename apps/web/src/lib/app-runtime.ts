@@ -9,6 +9,9 @@ import type { DashboardResults } from './dashboard-data'
 import type { RelatedTitles } from './queries'
 import type { TableRow } from './table-store'
 import { validateAppReferences } from './app-references'
+import { loadBusinessProfile } from './business-profile'
+import type { BusinessProfile } from '@tableapp/schema'
+import { listAccessibleApps } from './customer-apps'
 
 export type RuntimeTable = {
   id: string
@@ -22,6 +25,8 @@ export type RuntimeTable = {
 export type ScreenRows = { rowIds: string[] }
 
 export type RuntimeApp = {
+  business?: BusinessProfile | null
+  businessApps?: { slug: string; name: string }[]
   /** Shared server clock for initial rendering of time-sensitive client screens. */
   loadedAt?: number
   app: App
@@ -98,6 +103,7 @@ function referencedTables(app: App, views: Record<string, View>): string[] {
 
 
 export type AppMeta = {
+  business?: BusinessProfile | null
   id: string
   name: string
   slug: string
@@ -123,6 +129,7 @@ export async function loadAppMeta(slug: string): Promise<AppMeta | null> {
   return {
     id: record.id,
     name: app.name,
+    business: await loadBusinessProfile(app.workspaceId),
     slug: app.slug,
     accent: app.theme.accent,
     accessMode: app.accessMode,
@@ -225,7 +232,8 @@ export async function loadRuntimeForApp(
     .where(and(inArray(rowsTable.tableId, allTableIds), inArray(rowsTable.tableId, scopedTables), isNull(rowsTable.deletedAt)))
     .orderBy(asc(rowsTable.position))
 
-  return projectRuntime(app, visitor, views, tableRows, fieldsByTable, dataRows as RuntimeSourceRow[], primaryByTable)
+  return { ...projectRuntime(app, visitor, views, tableRows, fieldsByTable, dataRows as RuntimeSourceRow[], primaryByTable), business: await loadBusinessProfile(app.workspaceId),
+    businessApps: visitor.email ? (await listAccessibleApps(visitor.email, app.workspaceId)).map(item => ({ slug: item.slug, name: item.name })) : [] }
 }
 
 /**

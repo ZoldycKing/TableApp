@@ -9,6 +9,7 @@ import { loadWorkspaceRuntime } from '@/lib/app-runtime'
 import type { TableSummary } from '@/lib/queries'
 import { listMemberships, requireMember } from '@/lib/session'
 import { PRIVATE_PAGE } from '@/lib/seo'
+import { loadBusinessProfile } from '@/lib/business-profile'
 
 /*
  * В поиске этой странице делать нечего: за ней рабочее пространство.
@@ -88,14 +89,15 @@ export default async function AppEditorPage({ params }: { params: Promise<{ appI
       */}
       {record.publishedAt ? null : (
         <p className="mb-4 rounded-xl border border-sand-200 bg-sand-100/60 px-4 py-3 text-sm leading-relaxed text-ink-soft">
-          Экраны собраны по вашей таблице: список записей, карточка одной записи
+          {parsed.data.customer || parsed.data.booking ? <>Клиентский кабинет и рабочие экраны уже настроены. Укажите <Link href="/apps" className="underline underline-offset-2">название бизнеса</Link>, замените примеры своими товарами или услугами и пригласите сотрудников в разделе «Доступ». Назначайте работу по почте приглашённого сотрудника. Затем опубликуйте приложение и отправьте клиентам ссылку. Общий вход используется повторно, а обращения и права остаются у этого бизнеса.</> : <>Экраны собраны по вашей таблице: список записей, карточка одной записи
           и форма для новой. Слева — экраны, посередине — настройки выбранного,
           справа — как он выглядит на телефоне. Когда всё устроит, нажмите
-          «Опубликовать» — появится ссылка, которую можно дать сотрудникам.
+          «Опубликовать» — появится ссылка, которую можно дать сотрудникам.</>}
         </p>
       )}
 
       <AppEditor
+        business={await loadBusinessProfile(member.workspaceId)}
         portalUpgradeTableId={itemTable?.templateId === 'portal' ? itemTableId : null}
         dispatchUpgradeTableId={itemTable?.templateId === 'zayavki' ? itemTableId : null}
         inventoryUpgradeTableId={inventoryUpgradeTableId}

@@ -8,7 +8,7 @@ import { prepareDispatchUpgrade } from './dispatch-upgrade'
 import { templateExample } from './presentation'
 
 function fixture() {
-  const example = templateExample('zayavki')
+  const example = templateExample('zayavki', undefined, true)
   const main = example.table('zayavki'), clients = example.table('clients')
   const ownFields = example.byTable.get(main.id)!, clientFields = example.byTable.get(clients.id)!
   const oldFields = ownFields.filter(field => !['Почта мастера', 'Клиент для выезда'].includes(field.name))

@@ -114,6 +114,7 @@ export async function publishAppAction(appId: string): Promise<ActionResult> {
   const safeApp = { ...parsed.data, id: app.id, workspaceId: app.workspaceId }
   const referenceError = await validateAppReferences(safeApp)
   if (referenceError) return { ok: false, error: referenceError }
+  if ((safeApp.customer || safeApp.booking) && !(await (await import('@/lib/business-profile')).loadBusinessProfile(app.workspaceId))) return { ok: false, error: 'Укажите название бизнеса на странице «Приложения», чтобы клиент понимал, чей кабинет открывает.' }
 
   /*
    * Потолок считаем только для того, что ещё не опубликовано. Повторная

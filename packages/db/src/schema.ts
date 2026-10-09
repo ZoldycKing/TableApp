@@ -36,6 +36,7 @@ export const workspaces = pgTable('workspaces', {
   name: text('name').notNull(),
   slug: text('slug').notNull(),
   ownerId: text('owner_id').notNull().references(() => users.id, { onDelete: 'restrict' }),
+  businessProfile: jsonb('business_profile').$type<import('@tableapp/schema').BusinessProfile>(),
   plan: text('plan').notNull().default('free'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [uniqueIndex('workspaces_slug_key').on(t.slug)])

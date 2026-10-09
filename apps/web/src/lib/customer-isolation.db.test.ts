@@ -21,7 +21,7 @@ const envFile = resolve(import.meta.dirname, '../../../../.env')
 if (!process.env.DATABASE_URL && existsSync(envFile)) process.loadEnvFile(envFile)
 
 describe.skipIf(!process.env.DATABASE_URL)('shared customer login with separate businesses in PostgreSQL', () => {
-  const email = `${newId('appUser')}@example.invalid`, first = templateExample('portal'), second = templateExample('portal')
+  const email = `${newId('appUser')}@example.invalid`, first = templateExample('portal', undefined, true), second = templateExample('portal', undefined, true)
   const fixtures = [first, second].map((example, index) => ({ example,
     userId: newId('user'), workspaceId: newId('workspace'), slug: `customer-isolation-${index}-${newId('app').toLowerCase()}` }))
   let database: typeof import('@tableapp/db'), sessions: typeof import('./app-session'), runtime: typeof import('./app-runtime')

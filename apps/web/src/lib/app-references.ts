@@ -1,5 +1,5 @@
 import type { App, Field } from '@tableapp/schema'
-import { normalizeFieldOptions } from '@tableapp/schema'
+import { customerWorkflows, normalizeFieldOptions } from '@tableapp/schema'
 import { eq, inArray } from 'drizzle-orm'
 
 export type AppReferenceCatalog = {
@@ -138,6 +138,60 @@ export function checkAppReferences(app: App, catalog: AppReferenceCatalog): stri
     if (status?.type !== 'single_select' || Object.values(config.statuses).some(id => !status.options.choices.some(choice => choice.id === id))) invalid('статус записи', config.visit.status)
     const weekday = catalog.fields.get(config.schedule.weekday)
     if (weekday?.type !== 'single_select' || new Set(config.weekdays).size !== 7 || config.weekdays.some(id => !weekday.options.choices.some(choice => choice.id === id))) invalid('дни недели', config.schedule.weekday)
+  }
+  const customerConfigs = customerWorkflows(app)
+  if (new Set(customerConfigs.map(config => config.tableId)).size !== customerConfigs.length) invalid('повторяющийся клиентский раздел', app.id)
+  for (const c of customerConfigs) {
+    table(c.tableId)
+    for (const id of [c.emailFieldId, c.statusFieldId, c.assignmentFieldId, c.createdFieldId, c.submissionFieldId]) if (id) field(id, c.tableId)
+    for (const [id, type] of [[c.emailFieldId, 'email'], [c.statusFieldId, 'single_select'], ...(c.assignmentFieldId ? [[c.assignmentFieldId, 'email']] : []), ...(c.createdFieldId ? [[c.createdFieldId, 'datetime']] : []), ...(c.submissionFieldId ? [[c.submissionFieldId, 'text']] : [])]) if (catalog.fields.get(id!)?.type !== type) invalid('поле клиентского сценария', id!)
+    for (const id of [c.listScreenId, c.detailScreenId, c.formScreenId]) screenLink(id)
+    const form = app.screens.find(screen => screen.id === c.formScreenId)
+    const detail = app.screens.find(screen => screen.id === c.detailScreenId)
+    const list = app.screens.find(screen => screen.id === c.listScreenId)
+    if (!form || form.type !== 'form' || form.mode !== 'create' || form.tableId !== c.tableId) invalid('клиентская форма', c.formScreenId)
+    if (!detail || detail.type !== 'detail' || detail.tableId !== c.tableId) invalid('клиентская карточка', c.detailScreenId)
+    if (!list || !('source' in list) || sourceTable(list.source) !== c.tableId) invalid('клиентский список', c.listScreenId)
+    if (!app.rowAccessRules.some(rule => rule.tableId === c.tableId && rule.fieldId === c.emailFieldId && rule.match === 'email' && rule.appliesTo.includes('client'))) invalid('принадлежность клиентской записи', c.emailFieldId)
+    const status = catalog.fields.get(c.statusFieldId)
+    const statuses = [c.initialStatus, c.cancelStatus, ...c.terminalStatuses, ...c.cancellableStatuses, ...(c.approval ? [c.approval.waitingStatus, c.approval.approvedStatus, c.approval.declinedStatus, ...(c.approval.consentRequiredStatuses ?? [])] : []), ...(c.appointment ? [c.appointment.confirmedStatus] : [])]
+    if (status?.type !== 'single_select' || statuses.some(id => !status.options.choices.some(choice => choice.id === id))) invalid('статус клиентского сценария', c.statusFieldId)
+    if (c.catalog) {
+      const cat = c.catalog
+      table(cat.tableId); sourceTable({ viewId: cat.viewId }); screenLink(cat.detailScreenId)
+      if (catalog.views.get(cat.viewId)?.tableId !== cat.tableId) invalid('витрина', cat.viewId)
+      field(cat.titleFieldId, cat.tableId); field(cat.activeFieldId, cat.tableId)
+      if (catalog.fields.get(cat.activeFieldId)?.type !== 'checkbox') invalid('публикация витрины', cat.activeFieldId)
+      if (cat.selectionFieldId) {
+        field(cat.selectionFieldId, c.tableId)
+        const relation = catalog.fields.get(cat.selectionFieldId)
+        if (relation?.type !== 'relation' || relation.options.tableId !== cat.tableId) invalid('выбранная услуга', cat.selectionFieldId)
+      }
+    }
+    if (c.cart) {
+      const cart = c.cart
+      table(cart.itemsTableId)
+      field(cart.fieldId, c.tableId); field(cart.positionsFieldId, c.tableId); field(cart.priceFieldId, c.catalog?.tableId)
+      for (const id of [cart.nameFieldId, cart.quantityFieldId, cart.itemPriceFieldId, cart.itemEmailFieldId, cart.itemAssignmentFieldId]) field(id, cart.itemsTableId)
+      const relation = catalog.fields.get(cart.positionsFieldId)
+      if (!c.catalog || c.tableId === cart.itemsTableId || cart.itemsTableId === c.catalog.tableId || relation?.type !== 'relation' || relation.options.tableId !== cart.itemsTableId) invalid('состав заказа', cart.positionsFieldId)
+      for (const [id, type] of [[cart.fieldId, 'long_text'], [cart.priceFieldId, 'number'], [cart.quantityFieldId, 'number'], [cart.itemPriceFieldId, 'number'], [cart.itemEmailFieldId, 'email'], [cart.itemAssignmentFieldId, 'email']]) if (catalog.fields.get(id!)?.type !== type) invalid('поле корзины', id!)
+      if (!app.rowAccessRules.some(rule => rule.tableId === cart.itemsTableId && rule.fieldId === cart.itemEmailFieldId && rule.match === 'email' && rule.appliesTo.includes('client'))) invalid('принадлежность позиции', cart.itemEmailFieldId)
+    }
+    if (c.approval) for (const id of [c.approval.priceFieldId, c.approval.approvedPriceFieldId]) {
+      field(id, c.tableId)
+      if (catalog.fields.get(id)?.type !== 'number') invalid('стоимость ремонта', id)
+    }
+    if (c.appointment) {
+      field(c.appointment.fieldId, c.tableId)
+      if (!c.assignmentFieldId || catalog.fields.get(c.appointment.fieldId)?.type !== 'datetime') invalid('время просмотра', c.appointment.fieldId)
+    }
+    if (c.parent) {
+      table(c.parent.tableId); field(c.parent.relationFieldId, c.tableId); field(c.parent.emailFieldId, c.parent.tableId)
+      const relation = catalog.fields.get(c.parent.relationFieldId)
+      if (relation?.type !== 'relation' || relation.options.tableId !== c.parent.tableId || catalog.fields.get(c.parent.emailFieldId)?.type !== 'email') invalid('заказ обращения', c.parent.relationFieldId)
+      if (!app.rowAccessRules.some(rule => rule.tableId === c.parent!.tableId && rule.fieldId === c.parent!.emailFieldId && rule.match === 'email' && rule.appliesTo.includes('client'))) invalid('принадлежность заказа', c.parent.emailFieldId)
+    }
   }
   if (app.inventory) {
     const config = app.inventory

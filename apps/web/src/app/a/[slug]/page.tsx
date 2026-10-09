@@ -19,9 +19,9 @@ export async function generateMetadata({
   const meta = await loadAppMeta(slug)
   if (!meta) return { title: 'Приложение не найдено', ...CUSTOMER_APP_PAGE }
   return {
-    title: meta.name,
+    title: meta.business ? `${meta.business.name} · ${meta.name}` : meta.name,
     manifest: `/a/${slug}/manifest.webmanifest`,
-    appleWebApp: { capable: true, title: meta.name, statusBarStyle: 'default' },
+    appleWebApp: { capable: true, title: meta.business?.name ?? meta.name, statusBarStyle: 'default' },
     /*
      * Приложения клиентов не индексируются по умолчанию: за адресом стоит
      * либо внутреннее приложение сотрудников, либо кабинет с чужими заказами.
@@ -68,7 +68,7 @@ export default async function AppRuntimePage({
     return (
       <div className={backdrop}>
         <main className={`${shell} flex items-center lg:mx-auto lg:max-w-md`}>
-          <AppLogin slug={slug} appName={meta.name} accent={meta.accent} initialError={error ?? null} />
+          <AppLogin slug={slug} appName={meta.business ? `${meta.business.name} · ${meta.name}` : meta.name} accent={meta.accent} initialError={error ?? null} />
         </main>
       </div>
     )

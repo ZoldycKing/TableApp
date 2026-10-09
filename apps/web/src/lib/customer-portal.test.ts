@@ -23,10 +23,11 @@ describe('one customer identity, isolated business portals', () => {
     const example = templateExample('portal'), table = example.table('orders')
     const form = example.app.screens.find(screen => screen.type === 'form' && screen.mode === 'create')!
     const visitor = visitorFor(example.app, 'person@example.invalid')
-    const values = { [example.field('orders', 'title').id]: 'Request', [example.field('orders', 'sum').id]: 0,
+    const contact = { [example.field('orders', 'requestName').id]: 'Ирина', [example.field('orders', 'requestPhone').id]: '+7 900 000-00-00', [example.field('orders', 'selectedService').id]: [example.rows.find(row => row.tableId === example.table('services').id)!.id] }
+    const values = { ...contact, [example.field('orders', 'title').id]: 'Request', [example.field('orders', 'sum').id]: 0,
       [example.field('orders', 'status').id]: 'fake-status' }
     const checked = revalidatePending(example.app, { screenId: form.id, tableId: table.id, values }, example.fields, visitor)
-    expect(checked).toEqual({ ok: true, values: { [example.field('orders', 'title').id]: 'Request' } })
+    expect(checked).toEqual({ ok: true, values: { ...contact, [example.field('orders', 'title').id]: 'Request' } })
     expect(writableFields(example.app, table.id, visitor, 'create').size).toBeGreaterThan(0)
     expect(writableFields(example.app, table.id, visitor, 'update').size).toBe(0)
   })
@@ -60,12 +61,22 @@ describe('one customer identity, isolated business portals', () => {
   })
 
   it('internal template defaults do not invite customers into employee screens', () => {
-    for (const template of TEMPLATES) {
-      if (['portal', 'zayavki', 'sklad', 'proizvodstvo', 'salon'].includes(template.id)) continue
+    for (const template of TEMPLATES.filter(template => ['sklad', 'proizvodstvo'].includes(template.id))) {
       const { app } = templateExample(template.id)
       expect(canEnter(app, asRole('client', 'person@example.invalid')), template.id).toBe(false)
       expect(canEnter(app, ANONYMOUS), template.id).toBe(false)
-      expect(canEnter(app, asRole('manager')), template.id).toBe(true)
+      expect(canEnter(app, asRole(template.id === 'proizvodstvo' ? 'director' : 'manager')), template.id).toBe(true)
+    }
+  })
+
+  it('public customer templates never expose the employee screens to customers or guests', () => {
+    for (const template of TEMPLATES.filter(template => template.customer || template.id === 'salon')) {
+      const { app } = templateExample(template.id)
+      const visitor = visitorFor(app, 'person@example.invalid')
+      const employeeScreens = app.screens.filter(screen => screen.access.roles.some(role => ['manager', 'staff'].includes(role)) && !screen.access.roles.includes('client'))
+      expect(employeeScreens.length, template.id).toBeGreaterThan(0)
+      expect(visibleScreensFor(app, visitor).some(screen => employeeScreens.includes(screen)), template.id).toBe(false)
+      expect(visibleScreensFor(app, ANONYMOUS).some(screen => employeeScreens.includes(screen)), template.id).toBe(false)
     }
   })
 })

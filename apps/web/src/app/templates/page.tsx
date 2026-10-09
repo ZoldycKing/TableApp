@@ -14,7 +14,7 @@ import { pageMetadata } from '@/lib/seo'
 import { currentMember, listMemberships } from '@/lib/session'
 import { SOLUTIONS } from '@/lib/solutions'
 import { TEMPLATES } from '@/lib/templates/catalog'
-import { DEFAULT_APP_ROLES } from '@tableapp/schema'
+import { templateRoleNames } from '@/lib/templates/presentation'
 
 export const dynamic = 'force-dynamic'
 
@@ -120,9 +120,7 @@ export default async function TemplatesPage({
           {TEMPLATES.map((template, index) => {
             const solution = SOLUTIONS.find((item) => item.templateId === template.id)
             const rows = template.tables.reduce((total, table) => total + table.rows.length, 0)
-            const roles = template.production
-              ? [template.production.copy.director, template.production.copy.operator]
-              : template.inventory ? ['Кладовщик', 'Владелец'] : DEFAULT_APP_ROLES.map((role) => role.name)
+            const roles = templateRoleNames(template)
 
             return (
               <Reveal key={template.id} delay={(index % 3) * 90}>

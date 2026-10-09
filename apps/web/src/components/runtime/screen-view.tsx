@@ -1,7 +1,7 @@
 'use client'
 
 import type { Action, Field, Screen } from '@tableapp/schema'
-import { byPosition, fieldTimeZone, isComputed } from '@tableapp/schema'
+import { byPosition, customerWorkflows, fieldTimeZone, isComputed } from '@tableapp/schema'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { formatCell } from '@/lib/format'
 import type { RuntimeApp, RuntimeTable } from '@/lib/app-runtime'
@@ -9,6 +9,7 @@ import type { RelatedTitles } from '@/lib/queries'
 import type { TableRow } from '@/lib/table-store'
 import { CollectionView } from './collection-view'
 import { BookingVisits } from './booking-visits'
+import { CustomerRecords } from './customer-records'
 import { EMPTY_LIST_STATE, type ListState } from './app-shell'
 import { ComponentView, type ComponentContext } from './component-view'
 import { DashboardView } from './dashboard-view'
@@ -30,6 +31,7 @@ type Props = {
   runtime: RuntimeApp
   /** Экран открыт владельцем в конструкторе: ему видно то, что нужно поправить. */
   editing?: boolean
+  pending?: boolean
   /** Editable create-form values supplied by an action on another card. */
   initialValues?: Record<string, unknown>
   now?: number
@@ -103,6 +105,13 @@ export function ScreenView(props: Props) {
   }
 
   if (screen.type === 'list' || screen.type === 'tiles') {
+    const customer = customerWorkflows(runtime.app).find(config => screen.id === config.listScreenId)
+    if (customer && screen.id === customer.listScreenId) {
+      const catalog = runtime.app.screens.find(candidate => 'source' in candidate && runtime.views[candidate.source.viewId]?.tableId === customer.catalog?.tableId)
+      return <div className="space-y-4">{customer.parent ? <button type="button" onClick={() => props.onOpenScreen(customer.formScreenId)} className="rounded-xl border border-sand-200 bg-white px-4 py-2.5 text-sm font-medium">Задать вопрос по заказу</button> : null}<CustomerRecords config={customer} screen={screen} rows={collection?.rows ?? []} fields={fields} relatedTitles={relatedTitles} state={props.listState ?? EMPTY_LIST_STATE}
+        onState={props.onListState ?? (() => {})} accent={accent} onCatalog={catalog ? () => props.onOpenScreen(catalog.id) : null}
+        onOpenRow={screen.onTapScreenId ? id => props.onOpenRow(screen.onTapScreenId!, id) : null} /></div>
+    }
     const booking = runtime.app.booking
     if (booking && screen.id === runtime.app.homeScreenId && table?.id === booking.tables.visits) {
       const services = runtime.app.screens.find(candidate => (candidate.type === 'list' || candidate.type === 'tiles') && runtime.views[candidate.source.viewId]?.tableId === booking.tables.services)
@@ -217,6 +226,7 @@ function FormScreen({
   formSlot,
   formNotice,
   initialValues,
+  pending,
 }: Props & { fields: Field[] }) {
   const mode = screen.type === 'form' ? screen.mode : 'create'
   const [values, setValues] = useState<Record<string, unknown>>(mode === 'edit' && row ? { ...row.data } : { ...initialValues })
@@ -270,6 +280,8 @@ function FormScreen({
           return <ComponentViewInForm key={component.id} component={component} fields={fields} row={row} accent={accent} />
         }
         const field = fields.find((candidate) => candidate.id === component.fieldId)
+        const customer = customerWorkflows(runtime.app).find(config => config.formScreenId === screen.id)
+        if (customer?.cart?.fieldId === component.fieldId || customer?.submissionFieldId === component.fieldId) return null
         // Вычисляемые поля в форме не редактируются — их значения выводятся.
         if (!field || isComputed(field.type)) return null
 
@@ -303,7 +315,8 @@ function FormScreen({
 
       <button
         type="submit"
-        className={`w-full rounded-xl px-4 py-3 text-sm font-semibold text-white shadow-soft transition-all hover:-translate-y-px hover:shadow-lift ${accentStyle.bg}`}
+        disabled={pending}
+        className={`w-full rounded-xl px-4 py-3 text-sm font-semibold text-white shadow-soft transition-all hover:-translate-y-px hover:shadow-lift disabled:opacity-40 ${accentStyle.bg}`}
       >
         {screen.submitLabel}
       </button>

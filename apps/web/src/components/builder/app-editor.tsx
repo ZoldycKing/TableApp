@@ -95,6 +95,7 @@ const ADDABLE: Component['type'][] = [
 ]
 
 type Props = {
+  business?: import('@tableapp/schema').BusinessProfile | null
   portalUpgradeTableId?: string | null
   inventoryUpgradeTableId?: string | null
   dispatchUpgradeTableId?: string | null
@@ -131,7 +132,7 @@ function PreviewChip({
   )
 }
 
-export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTitles, publishedAt, inventoryUpgradeTableId, dispatchUpgradeTableId, portalUpgradeTableId }: Props) {
+export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTitles, publishedAt, inventoryUpgradeTableId, dispatchUpgradeTableId, portalUpgradeTableId, business }: Props) {
   const router = useRouter()
   const [app, setApp] = useState<App>(initialApp)
   const [screenId, setScreenId] = useState(initialApp.screens[0]?.id ?? '')
@@ -340,8 +341,8 @@ export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTit
    * по полям тоже настоящие: владелец сразу узнает, что клиенту не посчитается
    * сумма по колонке, которой он не видит.
    */
-  const preview = useMemo(() => previewRuntime({ ...app, screens: shown }, views, runtimeTables, relatedTitles, previewVisitor),
-    [app, shown, views, runtimeTables, relatedTitles, previewVisitor])
+  const preview = useMemo(() => ({ ...previewRuntime({ ...app, screens: shown }, views, runtimeTables, relatedTitles, previewVisitor), business: business ?? null }),
+    [app, shown, views, runtimeTables, relatedTitles, previewVisitor, business])
 
   // Открытый в редакторе экран может быть закрыт выбранной роли: тогда
   // предпросмотр начинается с того, что ей доступно, а не с ошибки.

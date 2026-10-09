@@ -35,8 +35,8 @@ export default async function MyAppsPage() {
 
       {mine.length === 0 ? (
         <p className="mt-8 rounded-xl border border-sand-200 bg-sand-100/60 px-4 py-3 text-sm text-ink-soft">
-          Сейчас вам не открыт доступ ни к одному приложению. Попросите добавить
-          этот адрес — приложение появится здесь само.
+          Пока здесь нет приложений. Откройте ссылку бизнеса и оформите обращение —
+          его кабинет появится здесь. Рабочий доступ сотруднику выдаёт бизнес.
         </p>
       ) : (
         <ul className="mt-8 space-y-2">
@@ -46,7 +46,7 @@ export default async function MyAppsPage() {
                 href={`/a/${app.slug}`}
                 className="flex items-center justify-between gap-3 rounded-xl border border-sand-200 bg-white px-4 py-3 text-sm shadow-soft transition-all hover:-translate-y-0.5 hover:border-sage-300 hover:shadow-lift"
               >
-                <span className="font-medium">{app.name}</span>
+                <span className="min-w-0"><span className="block font-medium">{app.businessName}</span><span className="block text-xs text-ink-muted">{app.name}</span></span>
                 <span className="text-ink-muted">→</span>
               </Link>
             </li>

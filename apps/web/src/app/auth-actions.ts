@@ -190,12 +190,13 @@ export async function requestAppLoginAction(slug: string, rawEmail: string): Pro
   })
 
   const link = `${await originUrl()}/a/${slug}/auth?token=${token}`
+  const businessName = (await (await import('@/lib/business-profile')).loadBusinessProfile(app.workspaceId))?.name ?? app.name
   const result = await sendMagicLink({
     to: email,
-    subject: `Вход в «${app.name}»`,
+    subject: `Вход в «${businessName}»`,
     link,
     code,
-    appName: app.name,
+    appName: businessName,
   })
   await logAuth(email, 'code_sent', 'staff')
 
@@ -349,7 +350,7 @@ async function routeAfterVerification(token: AuthToken): Promise<LoginOutcome> {
   }
 
   if (intent === 'staff') {
-    const mine = await appsForStaff(token.email)
+    const mine = await (await import('@/lib/customer-apps')).listAccessibleApps(token.email)
     if (mine.length > 0) {
       const done = await completeStaffLogin(token)
       return done.ok ? { ok: true, go: 'apps' } : { ok: false, error: done.error ?? 'Не удалось войти' }
@@ -373,23 +374,10 @@ async function routeAfterVerification(token: AuthToken): Promise<LoginOutcome> {
  * заведённых пользователей приложения: человек мог входить до того, как список
  * поправили, и наоборот.
  */
-export async function appsForStaff(email: string): Promise<{ slug: string; name: string }[]> {
-  const rows = await db
-    .select({ slug: apps.slug, published: apps.published })
-    .from(apps)
-    .where(sql`${apps.published} is not null`)
-
-  const mine: { slug: string; name: string }[] = []
-  for (const row of rows) {
-    const parsed = appSchema.safeParse(row.published)
-    if (!parsed.success) continue
-    const app = parsed.data
-    if (app.accessMode !== 'allowlist') continue
-    if (!app.allowlist.map((entry) => normalizeEmail(entry.email)).includes(email)) continue
-    mine.push({ slug: row.slug, name: app.name })
-  }
-
-  return mine
+export async function appsForStaff(email: string) {
+  const current = await (await import('@/lib/app-session')).currentStaffEmail()
+  if (!current || normalizeEmail(current) !== normalizeEmail(email)) return []
+  return (await import('@/lib/customer-apps')).listAccessibleApps(current)
 }
 
 /**

@@ -27,7 +27,7 @@ describe('examples and dashboards match installed presets', () => {
   })
   it('does not sum price lists or use next-callback dates as sales months', () => {
     for (const id of ['katalog', 'nedvizhimost', 'crm']) {
-      const example = templateExample(id)
+      const example = templateExample(id, undefined, true)
       for (const screen of example.app.screens) {
         if (screen.type !== 'dashboard') continue
         const metrics = screen.blocks.filter(block => block.type === 'metric' && block.kind === 'sum')
@@ -38,7 +38,7 @@ describe('examples and dashboards match installed presets', () => {
   })
   it('labels categories and unit groupings by their field and picks the actual real estate state', () => {
     for (const id of ['sklad', 'katalog', 'nedvizhimost']) {
-      const example = templateExample(id)
+      const example = templateExample(id, undefined, true)
       const pipelines = example.app.screens.flatMap(screen => screen.type === 'dashboard' ? screen.blocks.filter(block => block.type === 'pipeline') : [])
       for (const pipeline of pipelines) expect(pipeline.title).not.toContain('по статусам')
       if (id === 'nedvizhimost') expect(pipelines.some(block => block.type === 'pipeline' && block.stackFieldId === example.field('objects', 'status').id)).toBe(true)

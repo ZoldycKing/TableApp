@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { customerWorkflowSchema } from './customer'
 import { COLORS } from './colors'
 import { filterGroupSchema, sortSchema } from './filters'
 
@@ -772,6 +773,8 @@ export const appSchema = z.object({
   production: productionConfigSchema.nullable().default(null),
   inventory: inventoryConfigSchema.nullable().default(null),
   booking: bookingConfigSchema.nullable().optional(),
+  customer: customerWorkflowSchema.nullable().optional(),
+  customerSections: z.array(customerWorkflowSchema).max(10).optional(),
 })
 export type App = z.infer<typeof appSchema>
 

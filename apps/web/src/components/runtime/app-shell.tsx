@@ -10,7 +10,11 @@ import { InventoryReceipt } from './inventory-receipt'
 import { BookingForm } from './booking-form'
 import { BookingSetup } from './booking-setup'
 import { cancelBookingAction } from '@/app/booking-actions'
-import { dateInstant, fieldTimeZone } from '@tableapp/schema'
+import { customerDecisionAction } from '@/app/customer-actions'
+import { CustomerCartButton, CustomerCartEditor } from './customer-cart'
+import type { CustomerCart } from '@/lib/customer-cart'
+import { parseCustomerCart } from '@/lib/customer-cart'
+import { customerWorkflows, dateInstant, fieldTimeZone } from '@tableapp/schema'
 import type { BookingData } from '@/lib/booking'
 import { canCompleteBooking } from '@/lib/booking-lifecycle'
 import { inventoryOperation } from '@/lib/inventory'
@@ -158,6 +162,25 @@ export function AppShell({
   /** Sanitized availability metadata for synthetic template previews only. */
   demoBookingData?: BookingData
 }) {
+  const [cart, setCart] = useState<CustomerCart>({ requestId: '', items: [] })
+  const cartApp = useRef('')
+  useEffect(() => {
+    let initial: CustomerCart = { requestId: crypto.randomUUID(), items: [] }
+    if (!demo && runtime.app.customer?.cart) {
+      try { const saved = sessionStorage.getItem(`tableapp:cart:${runtime.app.id}`); if (saved) initial = parseCustomerCart(saved) } catch { /* Expired or invalid browser draft starts empty. */ }
+    }
+    cartApp.current = runtime.app.id
+    setCart(initial)
+  }, [runtime.app.id, demo])
+  useEffect(() => {
+    if (!demo && runtime.app.customer?.cart && cart.requestId && cartApp.current === runtime.app.id) {
+      try {
+        const key = `tableapp:cart:${runtime.app.id}`
+        if (cart.items.length) sessionStorage.setItem(key, JSON.stringify(cart)); else sessionStorage.removeItem(key)
+      } catch { /* Storage is optional; the in-memory cart still works. */ }
+    }
+  }, [cart, demo, runtime.app.id, runtime.app.customer?.cart])
+  const [pendingCabinet, setPendingCabinet] = useState(false)
   const { app } = runtime
   useLiveApp(app.slug, !demo && !editing)
   const screens = useMemo(() => new Map(app.screens.map((screen) => [screen.id, screen])), [app.screens])
@@ -221,6 +244,7 @@ export function AppShell({
   useEffect(() => { setMoreTabs(false); setConfirmCancellation(false) }, [current.screenId, current.rowId])
   const contentRef = useEnterMotion(`${current.screenId}:${current.rowId ?? ''}:${sent === null ? 'screen' : 'sent'}:${intake === null ? 'form' : 'verify'}`)
   const screen = screens.get(current.screenId)
+  const customer = customerWorkflows(app).find(config => [config.formScreenId, config.detailScreenId, config.listScreenId].includes(current.screenId))
   const accent = accentTones(app.theme.accent)
 
   /** Таблица экрана: у списка она берётся из представления, у остальных задана прямо. */
@@ -373,6 +397,11 @@ export function AppShell({
 
   const previousRuntime = useRef(runtime)
   useEffect(() => {
+    if (pendingCabinet && viewer && app.homeScreenId && screens.has(app.homeScreenId)) {
+      setPendingCabinet(false); setSent(null); openTab(app.homeScreenId)
+    }
+  }, [pendingCabinet, viewer, app.homeScreenId, screens])
+  useEffect(() => {
     if (previousRuntime.current === runtime) return
     previousRuntime.current = runtime
     if (!browserHistory) return
@@ -403,13 +432,21 @@ export function AppShell({
         const target = screens.get(action.screenId)
         if (target?.type === 'form' && target.mode === 'create') {
           const editable = new Set(target.components.flatMap(component => component.type === 'form_field' ? [component.fieldId] : []))
-          setFormDraft({ screenId: target.id, values: Object.fromEntries(Object.entries(action.initialValues ?? {})
-            .filter(([fieldId]) => editable.has(fieldId)).map(([fieldId, binding]) => [fieldId, resolveBindingValue(binding, row, viewer)])) })
+          const initial = Object.fromEntries(Object.entries(action.initialValues ?? {})
+            .filter(([fieldId]) => editable.has(fieldId)).map(([fieldId, binding]) => [fieldId, resolveBindingValue(binding, row, viewer)]))
+          if (target.id === app.customer?.formScreenId && app.customer.catalog?.selectionFieldId && screen?.id === app.customer.catalog.detailScreenId && row) {
+            initial[app.customer.catalog.selectionFieldId] = [row.id]
+            const primary = runtime.tables[app.customer.tableId]?.primaryFieldId
+            if (primary && editable.has(primary)) initial[primary] = row.data[app.customer.catalog.titleFieldId]
+          }
+          const child = customerWorkflows(app).find(config => config.formScreenId === target.id && config.parent?.tableId === tableId)
+          if (child?.parent && row) initial[child.parent.relationFieldId] = [row.id]
+          setFormDraft({ screenId: target.id, values: initial })
           if (target.id === app.booking?.formScreenId) {
             setBookingDraft(screen?.type === 'detail' && screen.tableId === app.booking.tables.services && row
               ? { [app.booking.visit.service]: [row.id] } : null)
           }
-          return navigate(action.screenId, action.initialValues || target.id === app.booking?.formScreenId ? null : current.rowId)
+          return navigate(action.screenId, action.initialValues || target.id === app.booking?.formScreenId || customerWorkflows(app).some(config => target.id === config.formScreenId) ? null : current.rowId)
         }
         return navigate(action.screenId)
       }
@@ -620,10 +657,10 @@ export function AppShell({
             <span
               className={`flex size-9 shrink-0 items-center justify-center rounded-xl text-sm font-bold text-white ${accent.solid}`}
             >
-              {app.name.trim().charAt(0).toUpperCase() || 'A'}
+              {(runtime.business?.name ?? app.name).trim().charAt(0).toUpperCase() || 'A'}
             </span>
             <span className="min-w-0">
-              <span className="block truncate font-display text-sm font-bold tracking-tight">{app.name}</span>
+              <span className="block font-display text-sm font-bold tracking-tight">{runtime.business?.name ?? app.name}</span>
               {viewer ? (
                 <span className="block truncate text-[11px] text-ink-muted">{viewer.email}</span>
               ) : null}
@@ -682,6 +719,8 @@ export function AppShell({
             ) : null}
 
             <div className="min-w-0 flex-1">
+              <p className="break-words text-xs font-semibold text-ink-soft">{runtime.business?.name ?? app.name}</p>
+              {runtime.business?.location ? <p className="truncate text-[11px] text-ink-muted" title={runtime.business.location}>{runtime.business.location}</p> : null}
               {/*
                * На домашнем экране здороваемся по имени: приложение открывают
                * каждый день, и первая строка не должна быть безличной.
@@ -716,6 +755,10 @@ export function AppShell({
           </div>
         </header>
 
+        {runtime.businessApps && runtime.businessApps.length > 1 ? <details className="relative z-10 border-b border-sand-200 bg-white px-4 py-2 text-xs text-ink-soft">
+          <summary className="cursor-pointer">Разделы этого бизнеса</summary>
+          <nav className="flex flex-wrap gap-2 py-3">{runtime.businessApps.map(item => <a key={item.slug} href={`/a/${item.slug}`} aria-current={item.slug === app.slug ? 'page' : undefined} className="rounded-lg border border-sand-200 px-3 py-2 font-medium hover:bg-sand-50">{item.name}</a>)}</nav>
+        </details> : null}
         {error ? (
           <p className="border-b border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-900 sm:px-6">
             {error}
@@ -749,6 +792,8 @@ export function AppShell({
                 onDone={() => {
                   setIntake(null)
                   setBookingDraft(null)
+                  setCart({ requestId: crypto.randomUUID(), items: [] })
+                  setPendingCabinet(true)
                   // Кабинет только что появился: приложение надо перечитать,
                   // иначе человек останется на витрине без своих заявок.
                   router.refresh()
@@ -780,6 +825,7 @@ export function AppShell({
               accent={app.theme.accent}
               relatedTitles={runtime.relatedTitles}
               runtime={runtime}
+              pending={pending}
               editing={editing}
               initialValues={formDraft?.screenId === screen.id ? formDraft.values : undefined}
               now={now}
@@ -816,15 +862,21 @@ export function AppShell({
                 ) : null
               }
               formSlot={
-                isRunForm ? <><p className="text-xs leading-relaxed text-ink-muted">В «Произведено» укажите только годные изделия. Брак записывается отдельно и не входит в это количество.</p><ConsumptionPanel preview={preview} loading={previewing} /></> : null
+                app.customer?.cart && screen.id === app.customer.formScreenId ? <CustomerCartEditor runtime={runtime} cart={cart} onChange={setCart} /> : isRunForm ? <><p className="text-xs leading-relaxed text-ink-muted">В «Произведено» укажите только годные изделия. Брак записывается отдельно и не входит в это количество.</p><ConsumptionPanel preview={preview} loading={previewing} /></> : null
               }
               onSubmit={(values, mode, baseVersion) => {
+                if (pending) return
                 // Выпуск и движение склада пишутся своими действиями: одной
                 // транзакцией на несколько таблиц, чего общий путь не умеет.
                 if (mode === 'create' && isRunForm) return saveProduction(values)
                 if (mode === 'create' && isMovementForm) return saveMovement(values)
                 if (!tableId) return
                 if (mode === 'create') {
+                  if (customer?.submissionFieldId && screen.id === customer.formScreenId) values = { ...values, [customer.submissionFieldId]: cart.requestId }
+                  if (app.customer?.cart && screen.id === app.customer.formScreenId) {
+                    if (!cart.items.length) return setError('Добавьте хотя бы один товар в корзину')
+                    values = { ...values, [app.customer.cart.fieldId]: JSON.stringify(cart) }
+                  }
                   /*
                    * Не вошедший не пишет напрямую: сначала он подтверждает
                    * почту, и только после этого заявка ложится строкой — уже
@@ -837,6 +889,7 @@ export function AppShell({
                     return
                   }
                   runMutation(() => appCreateRowAction(app.slug, tableId, values), () => {
+                    if (app.customer) setCart({ requestId: crypto.randomUUID(), items: [] })
                     if (screen.type === 'form' && screen.successScreenId) {
                       openTab(screen.successScreenId)
                     } else if (stack.length > 1) {
@@ -855,6 +908,23 @@ export function AppShell({
               }}
             />
             )}
+            {sent === null && intake === null && app.customer?.cart && app.customer.catalog && screen.type === 'detail' && screen.id === app.customer.catalog.detailScreenId && row ?
+              <button type="button" onClick={() => setCart(current => ({ ...current, items: current.items.some(item => item.id === row.id) ? current.items.map(item => item.id === row.id ? { ...item, qty: Math.min(1000, item.qty + 1) } : item) : [...current.items, { id: row.id, qty: 1 }].slice(0, 100) }))}
+                className={`mt-4 w-full rounded-xl px-4 py-3 text-sm font-semibold text-white ${accent.solid}`}>Добавить в заказ</button> : null}
+            {sent === null && intake === null && app.customer?.cart && cart.items.length > 0 && screen.id !== app.customer.formScreenId && screen.type !== 'form' ?
+              <CustomerCartButton count={cart.items.length} accent={app.theme.accent} onClick={() => handleAction({ id: 'cart-checkout', type: 'open_screen', screenId: app.customer!.formScreenId })} /> : null}
+            {sent === null && intake === null && customer && screen.id === customer.detailScreenId && row ? <div className="mt-4 space-y-3 rounded-2xl border border-sand-200 bg-white p-4">
+              {customer.approval && row.data[customer.statusFieldId] === customer.approval.waitingStatus ? <>
+                <p className="text-sm text-ink-soft">Мастер предложил стоимость ремонта. Согласуйте её перед началом работ.</p>
+                <button type="button" disabled={pending} onClick={() => runMutation(() => customerDecisionAction(app.slug, row.id, row.version ?? 0, 'approve', customer.tableId), () => openTab(customer.listScreenId))} className={`rounded-xl px-4 py-2.5 text-sm font-medium text-white ${accent.solid}`}>Согласовать стоимость</button>
+                <button type="button" disabled={pending} onClick={() => runMutation(() => customerDecisionAction(app.slug, row.id, row.version ?? 0, 'decline', customer.tableId), () => openTab(customer.listScreenId))} className="ml-2 rounded-xl px-3 py-2.5 text-sm text-red-700">Отказаться от ремонта</button>
+              </> : null}
+              {customer.cancellableStatuses.includes(String(row.data[customer.statusFieldId])) ? confirmCancellation ? <>
+                <p className="text-sm text-ink-soft">Отменить обращение? Оно сохранится в истории.</p>
+                <button type="button" disabled={pending} onClick={() => runMutation(() => customerDecisionAction(app.slug, row.id, row.version ?? 0, 'cancel', customer.tableId), () => { setConfirmCancellation(false); openTab(customer.listScreenId) })} className="rounded-xl bg-red-50 px-3 py-2.5 text-sm text-red-700">Да, отменить</button>
+                <button type="button" onClick={() => setConfirmCancellation(false)} className="ml-2 text-sm">Оставить обращение</button>
+              </> : <button type="button" onClick={() => setConfirmCancellation(true)} className="text-sm text-red-700">Отменить обращение</button> : <p className="text-xs text-ink-muted">Если нужно уточнить или изменить условия, свяжитесь с бизнесом{runtime.business?.phone ? `: ${runtime.business.phone}` : '.'}</p>}
+            </div> : null}
             {sent === null && intake === null && app.booking && screen.type === 'detail' && screen.tableId === app.booking.tables.visits && row &&
               app.screens.some(candidate => candidate.type === 'form' && candidate.mode === 'edit' && candidate.tableId === app.booking!.tables.visits &&
                 candidate.components.some(component => component.type === 'form_field' && component.fieldId === app.booking!.visit.status)) &&

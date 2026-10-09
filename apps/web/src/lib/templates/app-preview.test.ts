@@ -17,13 +17,13 @@ describe('template phone previews', () => {
     expect(JSON.stringify(preview.bookingData)).not.toContain('просила чуть теплее')
     expect(preview.bookingData!.schedule).toHaveLength(42)
   })
-  it('uses each installed template’s existing screens and keeps unfinished customer scenarios closed', () => {
+  it('uses each installed template’s real screens and keeps internal-only templates closed to customers', () => {
     for (const template of TEMPLATES) {
       const example = templateExample(template.id)
       const role = template.production ? 'director' : template.inventory ? 'staff' : 'manager'
       const preview = templateAppPreview(example, role)
       expect(preview.runtime.app.screens.length, template.id).toBeGreaterThan(0)
-      if (!template.portal && template.id !== 'salon') {
+      if (!template.customer && !template.portal && template.id !== 'salon') {
         const customer = templateAppPreview(example, 'client', 'preview@example.invalid')
         expect(customer.runtime.app.screens.length, template.id).toBe(0)
       }

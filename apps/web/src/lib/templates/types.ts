@@ -198,6 +198,8 @@ export type TemplateProduction = {
 }
 
 export type TemplateDef = {
+  customer?: TemplateCustomer
+  customerSections?: TemplateCustomer[]
   id: string
   name: string
   /** Одна строка о том, для чего это. */
@@ -235,4 +237,15 @@ export type TemplateDef = {
     movement: { name: string; item: string; qty: string; date: string; note: string; author: string }
     operations?: { fields: { kind: string; before: string; after: string }; kinds: Record<import('@tableapp/schema').InventoryOperation, string> }
   }
+}
+
+export type TemplateCustomer = {
+  table: string; title: string; submitLabel: string; intro: string
+  formFields: string[]; requiredFields: string[]; customerFields: string[]; workerFields: string[]
+  status: string; initial: string; terminal: string[]; cancel: string; cancellable: string[]
+  email: string; assignment: string | null; workerName: string; managerName: string
+  catalog: { table: string; view: string; fields: string[]; active: string; selection: string | null; title: string } | null
+  cart?: { field: string; price: string; items: string; name: string; qty: string; itemPrice: string; itemEmail: string; positions: string }
+  approval?: { price: string; agreed: string; waiting: string; approved: string; declined: string; consentRequired?: string[] }
+  parent?: { table: string; relation: string; email: string }
 }

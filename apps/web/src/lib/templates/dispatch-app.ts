@@ -20,6 +20,7 @@ export function dispatchFields(fields: readonly Field[]) {
 
 /** Used only for setup UI/idempotence; runtime permissions come from screens and row rules. */
 export function hasDispatchPreset(app: App, tableId: string): boolean {
+  if (app.customer?.tableId === tableId && app.customer.assignmentFieldId) return true
   return app.roles.some(role => role.id === 'staff' && role.name === 'Мастер') &&
     app.roles.some(role => role.id === 'manager' && role.name === 'Диспетчер') &&
     app.rowAccessRules.some(rule => rule.tableId === tableId && rule.match === 'email' && rule.appliesTo.includes('staff')) &&

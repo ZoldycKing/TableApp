@@ -7,6 +7,10 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from
 import { signOutAppAction } from '@/app/auth-actions'
 import { saveMovementAction, saveProductionAction } from '@/app/production-actions'
 import { InventoryReceipt } from './inventory-receipt'
+import { BookingForm } from './booking-form'
+import { BookingSetup } from './booking-setup'
+import { cancelBookingAction } from '@/app/booking-actions'
+import { dateInstant } from '@tableapp/schema'
 import { inventoryOperation } from '@/lib/inventory'
 import { useLiveApp } from '@/lib/use-live-app'
 import { appCreateRowAction, appDeleteRowAction, appUpdateRowAction } from '@/app/runtime-actions'
@@ -194,9 +198,13 @@ export function AppShell({
     null,
   )
   const [pending, startTransition] = useTransition()
+  const [moreTabs, setMoreTabs] = useState(false)
+  const [confirmCancellation, setConfirmCancellation] = useState(false)
+  const [bookingDraft, setBookingDraft] = useState<Record<string, unknown> | null>(null)
   const router = useRouter()
 
   const current = stack[stack.length - 1]!
+  useEffect(() => { setMoreTabs(false); setConfirmCancellation(false) }, [current.screenId, current.rowId])
   const contentRef = useEnterMotion(`${current.screenId}:${current.rowId ?? ''}:${sent === null ? 'screen' : 'sent'}:${intake === null ? 'form' : 'verify'}`)
   const screen = screens.get(current.screenId)
   const accent = accentTones(app.theme.accent)
@@ -362,7 +370,7 @@ export function AppShell({
 
   const runMutation = (work: () => Promise<{ ok: boolean; error?: string }>, after?: () => void) => {
     setError(null)
-    if (demo) {
+    if (demo || editing) {
       setError(DEMO_NOTE)
       return
     }
@@ -529,6 +537,11 @@ export function AppShell({
    */
   const heading = (() => {
     if (screen.type !== 'detail' || !row || !table) return screen.name
+    if (app.booking?.tables.visits === screen.tableId && app.screens.some(s => s.id === app.homeScreenId)) {
+      const ids = row.data[app.booking.visit.service]
+      const title = Array.isArray(ids) ? runtime.relatedTitles[app.booking.tables.services]?.find(item => item.id === ids[0])?.title : null
+      if (title) return title
+    }
     const titleField =
       table.fields.find((field) => field.id === table.primaryFieldId) ?? table.fields[0]
     const title = titleField ? formatCell(titleField, row.data[titleField.id]) : ''
@@ -704,9 +717,11 @@ export function AppShell({
                 screenId={intake.screenId}
                 values={intake.values}
                 accent={accent}
-                onCancel={() => setIntake(null)}
+                booking={Boolean(app.booking && intake.screenId === app.booking.formScreenId)}
+                onCancel={() => { setIntake(null); router.refresh() }}
                 onDone={() => {
                   setIntake(null)
+                  setBookingDraft(null)
                   // Кабинет только что появился: приложение надо перечитать,
                   // иначе человек останется на витрине без своих заявок.
                   router.refresh()
@@ -717,6 +732,15 @@ export function AppShell({
                 }}
               />
             ) : (
+            app.booking && screen.id === app.booking.rescheduleScreenId && !row ? <EmptyState title="Запись недоступна" hint="Откройте предстоящую запись из своего списка и выберите «Перенести запись»." /> :
+            app.booking && screen.id === app.booking.setupScreenId ? <BookingSetup runtime={runtime} demo={demo || editing} onSaved={() => router.refresh()} /> :
+            app.booking && [app.booking.formScreenId, app.booking.rescheduleScreenId].includes(screen.id) ? <BookingForm key={`${screen.id}:${row?.id ?? ''}`} runtime={runtime}
+              row={screen.id === app.booking.rescheduleScreenId ? row : null} demo={demo || editing} pending={pending} initialValues={bookingDraft} onSubmit={values => {
+                if (screen.id === app.booking!.rescheduleScreenId && row) {
+                  runMutation(() => appUpdateRowAction(app.slug, app.booking!.tables.visits, row.id, values, row.version), goBack)
+                } else if (viewer === null && !demo && !editing) { setBookingDraft(values); setError(null); setIntake({ screenId: screen.id, values }) }
+                else runMutation(() => appCreateRowAction(app.slug, app.booking!.tables.visits, values), () => { setBookingDraft(null); openTab(home) })
+              }} /> :
             app.inventory && inventoryOperation(app.inventory, screen.id) ? <InventoryReceipt key={`${screen.id}:${current.rowId}`} runtime={runtime}
               operation={inventoryOperation(app.inventory, screen.id)!} itemId={current.rowId} config={app.inventory} demo={demo || editing}
               confirmation={current.receipt} onSaved={receipt => go({ stack: [...stack.slice(0, -1), { ...current, receipt }], lists: listStates }, 'replace')}
@@ -802,13 +826,22 @@ export function AppShell({
               }}
             />
             )}
+            {sent === null && intake === null && app.booking && screen.type === 'detail' && screen.tableId === app.booking.tables.visits && row &&
+              row.data[app.booking.visit.status] === app.booking.statuses.booked && (dateInstant(row.data[app.booking.visit.start]) ?? 0) > Date.now() ?
+              <div className="mx-auto mt-5 flex max-w-xl flex-wrap items-center gap-3 rounded-2xl border border-sand-200 bg-white p-4">
+                {app.screens.some(s => s.id === app.booking!.rescheduleScreenId) ? <button type="button" disabled={pending} onClick={() => navigate(app.booking!.rescheduleScreenId, row.id)} className="rounded-xl border border-sand-200 px-4 py-2.5 text-sm font-medium">Перенести запись</button> : null}
+                {confirmCancellation ? <><p className="w-full text-sm text-ink-muted">Отменить запись? Это время станет доступно другим клиентам.</p>
+                  <button type="button" disabled={pending} onClick={() => runMutation(() => cancelBookingAction(app.slug, row.id, row.version ?? 0), () => { setConfirmCancellation(false); openTab(home) })} className="rounded-xl bg-red-50 px-4 py-2.5 text-sm font-medium text-red-700">Да, отменить запись</button>
+                  <button type="button" onClick={() => setConfirmCancellation(false)} className="px-3 py-2.5 text-sm">Оставить запись</button></> :
+                  <button type="button" disabled={pending} onClick={() => setConfirmCancellation(true)} className="rounded-xl px-4 py-2.5 text-sm text-red-700">Отменить запись</button>}
+              </div> : null}
           </div>
         </div>
 
         {/* Нижние вкладки — только на телефоне: на компьютере есть боковое меню. */}
         {tabs.length > 1 ? (
-          <nav className="flex border-t border-sand-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur @min-[860px]:hidden">
-            {tabs.slice(0, 5).map((tab) => {
+          <nav className="relative flex border-t border-sand-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur @min-[860px]:hidden">
+            {tabs.slice(0, tabs.length > 5 ? 4 : 5).map((tab) => {
               const active = stack[0]?.screenId === tab.id
               return (
                 <button
@@ -826,6 +859,8 @@ export function AppShell({
                 </button>
               )
             })}
+            {tabs.length > 5 ? <><button type="button" aria-expanded={moreTabs} onClick={() => setMoreTabs(!moreTabs)} className="flex flex-1 flex-col items-center gap-1 px-1 py-2.5 text-ink-muted"><Icon name="grid" className="size-5" /><span className="text-[11px]">Ещё</span></button>
+              {moreTabs ? <div className="absolute inset-x-3 bottom-full mb-2 max-h-[60vh] overflow-y-auto rounded-2xl border border-sand-200 bg-white p-2 shadow-soft">{tabs.slice(4).map(tab => <button type="button" key={tab.id} onClick={() => { setMoreTabs(false); openTab(tab.id) }} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm hover:bg-sand-50"><Icon name={tabIcon(tab)} className="size-5" />{tab.tab?.label ?? tab.name}</button>)}</div> : null}</> : null}
           </nav>
         ) : null}
       </div>

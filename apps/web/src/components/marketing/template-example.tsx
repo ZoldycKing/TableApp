@@ -62,6 +62,17 @@ export function TemplateExample({ id }: { id: string }) {
       </ScreenFrame>
     </div>
   }
+  if (template.id === 'salon') {
+    const own = rows.filter(row => row.tableId === table('visits').id && row.data[field('visits', 'email').id] === 'irina@example.com')
+    return <div className="grid gap-5 sm:grid-cols-2">
+      <ScreenFrame title="Услуги, цена и длительность" note="Клиент выбирает услугу, мастера и свободное время. Сервер проверяет, что вся процедура помещается в смену и не пересекается с другими записями. При первом оформлении подтверждается почта.">
+        <ScreenList title="Услуги" rows={rows.filter(row => row.tableId === table('services').id && row.data[field('services', 'active').id] === true).map(row => ({ title: text(row, field('services', 'name')), subtitle: `${text(row, field('services', 'minutes'))} минут`, meta: text(row, field('services', 'price')) }))} />
+      </ScreenFrame>
+      <ScreenFrame title="В кабинете клиента: его запись" note="Ирина видит только своё посещение. Предстоящую запись можно перенести или отменить; отмена освобождает время. Цена и длительность принятых записей сохраняются при изменении прайса.">
+        <ScreenList title="Мои записи" rows={own.map(row => ({ title: text(row, field('visits', 'service')), subtitle: `${text(row, field('visits', 'when'))} · ${text(row, field('visits', 'master'))}`, meta: text(row, field('visits', 'price')) }))} />
+      </ScreenFrame>
+    </div>
+  }
   const main = built.tables.find(item => item.id === built.appTableId)!
   const primary = example.fields.find(item => item.id === main.primaryFieldId)!
   const items = rows.filter(row => row.tableId === main.id)

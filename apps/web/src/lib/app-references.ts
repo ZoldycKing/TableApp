@@ -101,6 +101,34 @@ export function checkAppReferences(app: App, catalog: AppReferenceCatalog): stri
     screenLink(config.formScreenId)
     screenLink(config.movementScreenId)
   }
+  if (app.booking) {
+    const config = app.booking
+    if (new Set(Object.values(config.tables)).size !== 4) invalid('раздельные таблицы записи', config.tables.visits)
+    for (const id of Object.values(config.tables)) table(id)
+    const groups = [[config.service, config.tables.services], [config.master, config.tables.masters],
+      [config.schedule, config.tables.schedule], [config.visit, config.tables.visits]] as const
+    for (const [group, tableId] of groups) for (const id of Object.values(group)) field(id, tableId)
+    for (const id of [config.formScreenId, config.rescheduleScreenId, config.setupScreenId]) screenLink(id)
+    for (const [id, tableId, mode] of [[config.formScreenId, config.tables.visits, 'create'], [config.rescheduleScreenId, config.tables.visits, 'edit'], [config.setupScreenId, config.tables.masters, 'create']] as const) {
+      const screen = app.screens.find(s => s.id === id)
+      if (!screen || screen.type !== 'form' || screen.tableId !== tableId || screen.mode !== mode) invalid('форма записи', id)
+    }
+    for (const [id, type] of [[config.service.price, 'number'], [config.service.minutes, 'number'], [config.service.active, 'checkbox'],
+      [config.master.email, 'email'], [config.master.active, 'checkbox'], [config.visit.email, 'email'], [config.visit.masterEmail, 'email'],
+      [config.visit.start, 'datetime'], [config.visit.minutes, 'number'], [config.visit.price, 'number'], [config.visit.status, 'single_select'],
+      [config.schedule.weekday, 'single_select'], [config.schedule.start, 'text'], [config.schedule.end, 'text'], [config.schedule.date, 'date'], [config.schedule.closed, 'checkbox']] as const) {
+      if (catalog.fields.get(id)?.type !== type) invalid('поле записи', id)
+    }
+    for (const [id, target] of [[config.master.services, config.tables.services], [config.schedule.master, config.tables.masters],
+      [config.visit.service, config.tables.services], [config.visit.master, config.tables.masters]] as const) {
+      const relation = catalog.fields.get(id)
+      if (relation?.type !== 'relation' || relation.options.tableId !== target) invalid('связь записи', id)
+    }
+    const status = catalog.fields.get(config.visit.status)
+    if (status?.type !== 'single_select' || Object.values(config.statuses).some(id => !status.options.choices.some(choice => choice.id === id))) invalid('статус записи', config.visit.status)
+    const weekday = catalog.fields.get(config.schedule.weekday)
+    if (weekday?.type !== 'single_select' || new Set(config.weekdays).size !== 7 || config.weekdays.some(id => !weekday.options.choices.some(choice => choice.id === id))) invalid('дни недели', config.schedule.weekday)
+  }
   if (app.inventory) {
     const config = app.inventory
     table(config.tables.items); table(config.tables.movements)

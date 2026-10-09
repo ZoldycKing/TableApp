@@ -51,8 +51,10 @@ export async function insertRow(
   beforeInsert?: (tx: Transaction) => Promise<void>,
 ): Promise<{ id: string }> {
   const rules = rulesFor(app, tableId, author.visitor)
+  const owned = stampOwner(rules, author.viewer, values)
+  if (app.booking?.tables.visits === tableId) owned[app.booking.visit.status] = app.booking.statuses.booked
   return writeRows(app.workspaceId, (context) => createRow(context, tableId,
-    stampOwner(rules, author.viewer, values),
+    owned,
     { id: author.viewer?.id ?? null, kind: 'app_user', ip: author.ip },
     { origin: 'runtime', beforeInsert }))
 }

@@ -722,6 +722,22 @@ export const inventoryConfigSchema = z.object({
 })
 export type InventoryConfig = z.infer<typeof inventoryConfigSchema>
 
+/** Appointment identifiers belong to one business and are validated before use. */
+export const bookingConfigSchema = z.object({
+  tables: z.object({ services: z.string(), masters: z.string(), schedule: z.string(), visits: z.string() }),
+  service: z.object({ name: z.string(), price: z.string(), minutes: z.string(), active: z.string() }),
+  master: z.object({ name: z.string(), email: z.string(), services: z.string(), active: z.string() }),
+  schedule: z.object({ name: z.string(), master: z.string(), weekday: z.string(), start: z.string(), end: z.string(), date: z.string(), closed: z.string() }),
+  visit: z.object({ client: z.string(), phone: z.string(), email: z.string(), service: z.string(), master: z.string(), masterEmail: z.string(), price: z.string(), minutes: z.string(), start: z.string(), status: z.string(), note: z.string() }),
+  statuses: z.object({ booked: z.string(), arrived: z.string(), noShow: z.string(), cancelled: z.string() }),
+  weekdays: z.array(z.string()).length(7),
+  formScreenId: z.string(), rescheduleScreenId: z.string(), setupScreenId: z.string(),
+  stepMinutes: z.number().int().min(5).max(120).default(15),
+  horizonDays: z.number().int().min(1).max(365).default(60),
+  leadMinutes: z.number().int().min(0).max(1440).default(60),
+})
+export type BookingConfig = z.infer<typeof bookingConfigSchema>
+
 export const appSchema = z.object({
   id: z.string(),
   workspaceId: z.string(),
@@ -751,6 +767,7 @@ export const appSchema = z.object({
    */
   production: productionConfigSchema.nullable().default(null),
   inventory: inventoryConfigSchema.nullable().default(null),
+  booking: bookingConfigSchema.nullable().optional(),
 })
 export type App = z.infer<typeof appSchema>
 

@@ -61,7 +61,7 @@ describe('one customer identity, isolated business portals', () => {
 
   it('internal template defaults do not invite customers into employee screens', () => {
     for (const template of TEMPLATES) {
-      if (['portal', 'zayavki', 'sklad', 'proizvodstvo'].includes(template.id)) continue
+      if (['portal', 'zayavki', 'sklad', 'proizvodstvo', 'salon'].includes(template.id)) continue
       const { app } = templateExample(template.id)
       expect(canEnter(app, asRole('client', 'person@example.invalid')), template.id).toBe(false)
       expect(canEnter(app, ANONYMOUS), template.id).toBe(false)

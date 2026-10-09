@@ -6,7 +6,7 @@ import { planSalonPriceUpgrade } from './templates/salon-price-upgrade'
 describe('visit price snapshots', () => {
   const example = templateExample('salon')
   const price = example.field('visits', 'price'), service = example.field('visits', 'service')
-  const fields = example.byTable.get(example.table('visits').id)!
+  const fields = example.byTable.get(example.table('visits').id)!.filter(field => field.id !== example.field('visits', 'minutes').id)
   const selected = ['service-row']
   it('fills the current price once and preserves it when the price list changes', async () => {
     const read = vi.fn().mockResolvedValueOnce(2500).mockResolvedValueOnce(3000)

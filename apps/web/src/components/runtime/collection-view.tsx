@@ -4,6 +4,7 @@ import type { Attachment, Field, ScreenOf } from '@tableapp/schema'
 import { useMemo } from 'react'
 import { formatCell } from '@/lib/format'
 import type { TableRow } from '@/lib/table-store'
+import type { RelatedTitles } from '@/lib/queries'
 import { Icon } from './icons'
 import { EmptyState, StatusPill } from './ui'
 import { CHOICE_COLORS } from '@/components/views/card'
@@ -59,6 +60,7 @@ export function CollectionView({
   screen,
   rows,
   fields,
+  relatedTitles,
   state,
   onState,
   onOpenRow,
@@ -67,6 +69,7 @@ export function CollectionView({
   screen: Collection
   rows: TableRow[]
   fields: Field[]
+  relatedTitles: RelatedTitles
   /**
    * Отбор хранится в оболочке, а не здесь: этот компонент размонтируется
    * при каждом открытии карточки, и своё состояние он терял бы на «назад».
@@ -119,10 +122,10 @@ export function CollectionView({
       if (statusField && choiceId && !hasChoice(row.data[statusField.id], choiceId)) return false
       if (needle === '') return true
       return searchFields.some((item) =>
-        formatCell(item, row.data[item.id]).toLowerCase().includes(needle),
+        collectionText(item, row.data[item.id], relatedTitles).toLowerCase().includes(needle),
       )
     })
-  }, [rows, query, choiceId, statusField, searchFields])
+  }, [rows, query, choiceId, statusField, searchFields, relatedTitles])
 
   const filtering = query.trim() !== '' || choiceId !== null
 
@@ -260,6 +263,7 @@ export function CollectionView({
           metaField={metaField}
           imageField={imageField}
           statusField={statusField}
+          relatedTitles={relatedTitles}
           onOpenRow={onOpenRow}
         />
       ) : (
@@ -273,6 +277,7 @@ export function CollectionView({
               metaField={metaField}
               imageField={imageField}
               statusField={statusField}
+              relatedTitles={relatedTitles}
               onOpen={onOpenRow ? () => onOpenRow(row.id) : null}
             />
           ))}
@@ -288,6 +293,15 @@ type Parts = {
   metaField: Field | undefined
   imageField: Field | undefined
   statusField: Field | undefined
+  relatedTitles: RelatedTitles
+}
+
+/** Related labels are already filtered by server access; never substitute raw row IDs. */
+function collectionText(field: Field, value: unknown, relatedTitles: RelatedTitles): string {
+  if (field.type !== 'relation') return formatCell(field, value)
+  if (!Array.isArray(value)) return ''
+  const titles = relatedTitles[field.options.tableId] ?? []
+  return value.map(id => titles.find(item => item.id === id)?.title ?? 'Запись недоступна').join(', ')
 }
 
 /**
@@ -305,10 +319,11 @@ function Row({
   metaField,
   imageField,
   statusField,
+  relatedTitles,
 }: Parts & { row: TableRow; onOpen: (() => void) | null }) {
-  const title = titleField ? formatCell(titleField, row.data[titleField.id]) : ''
-  const subtitle = subtitleField ? formatCell(subtitleField, row.data[subtitleField.id]) : ''
-  const meta = metaField ? formatCell(metaField, row.data[metaField.id]) : ''
+  const title = titleField ? collectionText(titleField, row.data[titleField.id], relatedTitles) : ''
+  const subtitle = subtitleField ? collectionText(subtitleField, row.data[subtitleField.id], relatedTitles) : ''
+  const meta = metaField ? collectionText(metaField, row.data[metaField.id], relatedTitles) : ''
 
   return (
     <button
@@ -357,6 +372,7 @@ function Tiles({
   metaField,
   imageField,
   statusField,
+  relatedTitles,
 }: Parts & { rows: TableRow[]; onOpenRow: ((rowId: string) => void) | null }) {
   /*
    * Подпись бывает двух разных сортов, и место у них разное.
@@ -382,17 +398,17 @@ function Tiles({
           <span className="flex flex-1 flex-col gap-1 p-3.5">
             {subtitleField && !описание ? (
               <span className="truncate text-[11px] uppercase tracking-wide text-ink-muted">
-                {formatCell(subtitleField, row.data[subtitleField.id])}
+                {collectionText(subtitleField, row.data[subtitleField.id], relatedTitles)}
               </span>
             ) : null}
 
             <span className="line-clamp-2 text-sm font-semibold leading-snug">
-              {titleField ? formatCell(titleField, row.data[titleField.id]) || 'Без названия' : ''}
+              {titleField ? collectionText(titleField, row.data[titleField.id], relatedTitles) || 'Без названия' : ''}
             </span>
 
             {subtitleField && описание ? (
               <span className="line-clamp-3 text-xs leading-relaxed text-ink-muted">
-                {formatCell(subtitleField, row.data[subtitleField.id])}
+                {collectionText(subtitleField, row.data[subtitleField.id], relatedTitles)}
               </span>
             ) : null}
 
@@ -400,7 +416,7 @@ function Tiles({
               {statusField ? <StatusPill field={statusField} value={row.data[statusField.id]} /> : <span />}
               {metaField ? (
                 <span className="shrink-0 text-[15px] font-bold tabular-nums">
-                  {formatCell(metaField, row.data[metaField.id])}
+                  {collectionText(metaField, row.data[metaField.id], relatedTitles)}
                 </span>
               ) : null}
             </span>

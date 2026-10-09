@@ -10,6 +10,7 @@ import { publishTable } from './live'
 import { dependentRows } from './production-cascade'
 import { recountWorkspace } from './usage'
 import { withInitialValues } from './initial-values'
+import { prepareBookingWrite } from './booking-store'
 
 export class RowWriteError extends Error {
   constructor(readonly code: 'missing' | 'conflict' | 'denied' | 'invalid', message: string) {
@@ -123,6 +124,9 @@ export async function createRow(context: RowTransaction, tableId: string, data: 
     return { id, duplicate: true }
   }
   let clean = await initialValues(context, fields, parsePatch(fields, data), true)
+  const booking = await prepareBookingWrite(context.tx, context.workspaceId, tableId, clean)
+  if (booking.error) throw new RowWriteError('invalid', booking.error)
+  clean = booking.data
   const error = await validateRowAttachments(tableId, fields, clean, context.tx, actor, id)
   if (error) throw new RowWriteError('invalid', error)
   clean = await canonicalAttachments(fields, clean, context.tx)
@@ -170,7 +174,10 @@ export async function updateRow(context: RowTransaction, tableId: string, rowId:
   const error = await validateRowAttachments(tableId, fields, changed, context.tx, actor, rowId)
   if (error) throw new RowWriteError('invalid', error)
   changed = await canonicalAttachments(fields, changed, context.tx)
-  const after = stripDerived(computeRow(await initialValues(context, fields, { ...before, ...changed }), compileTableFormulas(fields)), fields)
+  const booking = await prepareBookingWrite(context.tx, context.workspaceId, tableId,
+    await initialValues(context, fields, { ...before, ...changed }), before, rowId)
+  if (booking.error) throw new RowWriteError('invalid', booking.error)
+  const after = stripDerived(computeRow(booking.data, compileTableFormulas(fields)), fields)
   await context.tx.update(rows).set({ data: after, updatedBy: actor.id, version: sql`${rows.version} + 1`, syncRevision: sql`nextval('row_sync_revision_seq')`, updatedAt: new Date(), sample: false })
     .where(and(eq(rows.id, rowId), eq(rows.tableId, tableId), isNull(rows.deletedAt)))
   await linkRowAttachments(tableId, rowId, fields, changed, context.tx, actor)

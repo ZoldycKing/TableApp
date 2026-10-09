@@ -2,7 +2,7 @@
 
 import { stripDerived } from '@tableapp/formula'
 import type { App, Field } from '@tableapp/schema'
-import { parseCellValue } from '@tableapp/schema'
+import { dateInstant, parseCellValue } from '@tableapp/schema'
 import { revalidatePath } from 'next/cache'
 import { currentAppAccess, type AppViewer } from '@/lib/app-session'
 import { permits, writableFields, type AppAction, type Visitor } from '@/lib/app-roles'
@@ -119,12 +119,14 @@ export async function appUpdateRowAction(
   if (!access.ok) return access
   const { app, viewer, visitor } = access
   const rules = rulesFor(app, tableId, visitor)
+  if (app.booking?.tables.visits === tableId && visitor.enrolled && !Number.isInteger(baseVersion)) return { ok: false, error: 'Обновите запись перед переносом.' }
   const allowed = writableFields(app, tableId, visitor, 'update')
   try {
     await writeRows(app.workspaceId, (context) => updateRow(context, tableId, rowId,
       (fields) => dropOwnerChange(rules, sanitize(values, fields, allowed)),
       { id: viewer?.id ?? null, kind: 'app_user' },
-      { baseVersion, guard: (data) => canAccessRow(rules, viewer, data) }))
+      { baseVersion, guard: (data) => canAccessRow(rules, viewer, data) && (!app.booking || tableId !== app.booking.tables.visits || !visitor.enrolled ||
+        data[app.booking.visit.status] === app.booking.statuses.booked && (dateInstant(data[app.booking.visit.start]) ?? 0) > Date.now()) }))
   } catch (error) {
     if (error instanceof RowWriteError) return { ok: false, error: error.message }
     throw error

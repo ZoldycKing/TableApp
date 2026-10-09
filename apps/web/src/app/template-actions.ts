@@ -80,6 +80,7 @@ export async function applyTemplateAction(
    * производственный учёт, склад с приёмками и заявки с ролями мастера и диспетчера.
    */
   const draft = templatePreset(generated, built)
+  if (draft.booking) draft.allowlist = [{ email: auth.member.email, roleId: 'manager', company: '' }]
 
   try {
     await writeRows(workspaceId, async (context) => {

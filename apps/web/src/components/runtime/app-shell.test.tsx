@@ -4,11 +4,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { inventoryFixture } from '@/lib/templates/inventory-fixture.test-utils'
 import { AppShell } from './app-shell'
 import { navFromHistory } from './nav-history'
+import { appUpdateRowAction } from '@/app/runtime-actions'
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }))
 vi.mock('@/app/auth-actions', () => ({ signOutAppAction: vi.fn() }))
 vi.mock('@/app/production-actions', () => ({ saveMovementAction: vi.fn(), saveProductionAction: vi.fn() }))
 vi.mock('@/app/runtime-actions', () => ({ appCreateRowAction: vi.fn(), appDeleteRowAction: vi.fn(), appUpdateRowAction: vi.fn() }))
+vi.mock('@/app/booking-actions', () => ({ bookingAvailabilityAction: vi.fn(), cancelBookingAction: vi.fn(), setupBookingMasterAction: vi.fn(), setBookingDayOffAction: vi.fn() }))
 const inventoryMocks = vi.hoisted(() => ({ receive: vi.fn(), operation: vi.fn() }))
 vi.mock('@/app/inventory-actions', () => ({ receiveStockAction: inventoryMocks.receive, saveStockOperationAction: inventoryMocks.operation }))
 vi.mock('@/lib/use-live-app', () => ({ useLiveApp: vi.fn() }))
@@ -17,6 +19,18 @@ vi.mock('./intake-verify', () => ({ IntakeVerify: () => null }))
 afterEach(() => { cleanup(); vi.restoreAllMocks(); window.history.replaceState(null, '', '/') })
 
 describe('runtime navigation during live refresh', () => {
+  it('does not mutate published data from an action in the builder preview', () => {
+    const { runtime } = inventoryFixture()
+    const detail = runtime.app.screens.find(screen => screen.type === 'detail' && screen.tableId === runtime.app.inventory!.tables.items)!
+    if (detail.type !== 'detail') throw new Error('Expected the item detail')
+    detail.components.push({ id: 'preview-update', position: 'zz', type: 'button', label: 'Тестовое изменение', style: 'secondary',
+      roles: null, visibleWhen: null, action: { id: 'preview-action', type: 'update_row', values: {} } })
+    const ui = render(<AppShell runtime={runtime} viewer={null} editing />)
+    fireEvent.click(ui.getByRole('button', { name: /Шуруповёрт аккумуляторный/ }))
+    fireEvent.click(ui.getByRole('button', { name: 'Тестовое изменение' }))
+    expect(appUpdateRowAction).not.toHaveBeenCalled()
+    expect(ui.getByText(/Это демонстрация: изменения не сохраняются/)).toBeTruthy()
+  })
   it('uses native history without Next internal flags and preserves the receipt draft on refresh', () => {
     window.history.replaceState({ __NA: true }, '', '/a/warehouse')
     const originalPush = window.history.pushState.bind(window.history)

@@ -103,6 +103,7 @@ export function ScreenView(props: Props) {
         screen={screen}
         rows={collection?.rows ?? []}
         fields={fields}
+        relatedTitles={relatedTitles}
         state={props.listState ?? EMPTY_LIST_STATE}
         onState={props.onListState ?? (() => {})}
         exportHref={props.exportHref ?? null}

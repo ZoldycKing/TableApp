@@ -23,6 +23,7 @@ export function IntakeVerify({
   accent,
   onDone,
   onCancel,
+  booking = false,
 }: {
   slug: string
   screenId: string
@@ -30,6 +31,7 @@ export function IntakeVerify({
   accent: ReturnType<typeof accentTones>
   onDone: () => void
   onCancel: () => void
+  booking?: boolean
 }) {
   const [email, setEmail] = useState('')
   const [code, setCode] = useState('')
@@ -56,8 +58,7 @@ export function IntakeVerify({
       >
         <h2 className="text-lg font-semibold">Введите код из письма</h2>
         <p className="text-sm text-ink-muted">
-          Отправили код на {sent.email}. Он действует пятнадцать минут. После него заявка
-          будет принята, а у вас появится личный кабинет, где её видно.
+          Отправили код на {sent.email}. Он действует пятнадцать минут. {booking ? 'После кода ещё раз проверим свободное время и сохраним запись в вашем кабинете.' : 'После подтверждения сохраним заявку в вашем личном кабинете.'}
         </p>
 
         {sent.hint ? (
@@ -88,8 +89,9 @@ export function IntakeVerify({
           disabled={pending}
           className={`w-full rounded-xl px-4 py-2.5 text-sm font-medium text-white disabled:opacity-40 ${accent.solid}`}
         >
-          {pending ? 'Проверяем…' : 'Подтвердить заявку'}
+          {pending ? 'Проверяем…' : booking ? 'Подтвердить запись' : 'Подтвердить заявку'}
         </button>
+        <button type="button" onClick={onCancel} className="w-full text-sm text-ink-muted underline">Вернуться к форме</button>
 
         <button
           type="button"
@@ -119,10 +121,9 @@ export function IntakeVerify({
         })
       }}
     >
-      <h2 className="text-lg font-semibold">Куда прислать ответ?</h2>
+      <h2 className="text-lg font-semibold">Подтвердите почту</h2>
       <p className="text-sm text-ink-muted">
-        Оставьте почту — пришлём короткий код. Он подтвердит заявку и откроет вам кабинет,
-        где видно, что с ней происходит. Пароль придумывать не нужно.
+        Оставьте почту — пришлём короткий код. {booking ? 'После подтверждения сохраним выбранное время и откроем кабинет с вашими записями.' : 'Он подтвердит заявку и откроет кабинет, где видно, что с ней происходит.'} Пароль придумывать не нужно.
       </p>
 
       <input

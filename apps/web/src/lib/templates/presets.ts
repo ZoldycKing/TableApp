@@ -4,9 +4,11 @@ import { asDispatch } from './dispatch-app'
 import { asInventory } from './inventory-app'
 import { asPortal } from './portal-app'
 import { asProduction } from './production-app'
+import { asSalon } from './salon-app'
 
 /** Installation and public examples must build the same application. */
 export function templatePreset(app: App, built: BuiltTemplate): App {
+  if (built.tables.find(table => table.id === built.appTableId)?.templateId === 'salon') return asSalon(app, built)
   if (built.portal) return asPortal(app, built.portal)
   if (built.production) return asProduction(app, built)
   if (built.inventory) return asInventory(app, built)

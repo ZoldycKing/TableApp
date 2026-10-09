@@ -113,7 +113,8 @@ function ActionEditor({
           <span className={LABEL}>Экран</span>
           <select
             value={action.screenId}
-            onChange={(event) => onChange({ ...action, screenId: event.target.value })}
+            // A different form needs its own prefill fields.
+            onChange={(event) => onChange({ id: action.id, type: action.type, screenId: event.target.value })}
             className={INPUT}
           >
             {screens.map((screen) => (

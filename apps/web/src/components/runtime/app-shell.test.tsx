@@ -5,6 +5,8 @@ import { inventoryFixture } from '@/lib/templates/inventory-fixture.test-utils'
 import { AppShell } from './app-shell'
 import { navFromHistory } from './nav-history'
 import { appUpdateRowAction } from '@/app/runtime-actions'
+import { templateExample } from '@/lib/templates/presentation'
+import { templateAppPreview } from '@/lib/templates/app-preview'
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }))
 vi.mock('@/app/auth-actions', () => ({ signOutAppAction: vi.fn() }))
@@ -19,6 +21,47 @@ vi.mock('./intake-verify', () => ({ IntakeVerify: () => null }))
 afterEach(() => { cleanup(); vi.restoreAllMocks(); window.history.replaceState(null, '', '/') })
 
 describe('runtime navigation during live refresh', () => {
+  it('starts guests in the service catalog and carries the chosen salon service into booking', async () => {
+    const example = templateExample('salon'), config = example.app.booking!
+    const { runtime, viewer, bookingData } = templateAppPreview(example, 'guest')
+    const ui = render(<AppShell runtime={runtime} viewer={viewer} demo demoBookingData={bookingData} />)
+    expect(ui.getByRole('heading', { name: 'Услуги и цены' })).toBeTruthy()
+    expect(ui.queryByRole('button', { name: 'Записаться' })).toBeNull()
+    fireEvent.click(ui.getByRole('button', { name: /Женская стрижка/ }))
+    expect(ui.getByText(/Подберём форму и длину/)).toBeTruthy()
+    fireEvent.click(ui.getByRole('button', { name: 'Записаться' }))
+    const first = example.rows.find(row => row.data[config.service.name] === 'Женская стрижка')!
+    expect((ui.getByLabelText('Услуга') as HTMLSelectElement).value).toBe(first.id)
+    await waitFor(() => expect(ui.getByRole('option', { name: 'Оля' })).toBeTruthy())
+    fireEvent.click(ui.getByRole('button', { name: 'Назад' }))
+    fireEvent.click(ui.getByRole('button', { name: 'Назад' }))
+    fireEvent.click(ui.getByRole('button', { name: /Мужская стрижка/ }))
+    fireEvent.click(ui.getByRole('button', { name: 'Записаться' }))
+    const second = example.rows.find(row => row.data[config.service.name] === 'Мужская стрижка')!
+    expect((ui.getByLabelText('Услуга') as HTMLSelectElement).value).toBe(second.id)
+    await waitFor(() => expect(ui.getByRole('option', { name: 'Женя' })).toBeTruthy())
+  })
+  it('keeps the signed-in salon cabinet and opens new booking through a service card', () => {
+    const { runtime, viewer, bookingData } = templateAppPreview(templateExample('salon'), 'client', 'irina@example.com', 'Ирина')
+    const ui = render(<AppShell runtime={runtime} viewer={viewer} demo demoBookingData={bookingData} />)
+    expect(ui.getByRole('heading', { name: 'Мои записи' })).toBeTruthy()
+    expect(ui.queryByRole('button', { name: 'Записаться' })).toBeNull()
+    fireEvent.click(ui.getAllByRole('button', { name: 'Услуги' })[0]!)
+    fireEvent.click(ui.getByRole('button', { name: /Женская стрижка/ }))
+    expect(ui.getByRole('button', { name: 'Записаться' })).toBeTruthy()
+  })
+  it('opens a portal request from a service card with its name filled and preserves the customer draft', () => {
+    const { runtime, viewer } = templateAppPreview(templateExample('portal'), 'guest')
+    const ui = render(<AppShell runtime={runtime} viewer={viewer} demo />)
+    expect(ui.getByRole('heading', { name: 'Услуги и цены' })).toBeTruthy()
+    expect(ui.queryByRole('button', { name: 'Заявка' })).toBeNull()
+    fireEvent.click(ui.getByRole('button', { name: /Диагностика техники/ }))
+    fireEvent.click(ui.getByRole('button', { name: 'Оставить заявку' }))
+    expect((ui.getByLabelText(/Что нужно сделать/) as HTMLInputElement).value).toBe('Диагностика техники')
+    fireEvent.change(ui.getByLabelText(/Что нужно сделать/), { target: { value: 'Диагностика моего ноутбука' } })
+    ui.rerender(<AppShell runtime={structuredClone(runtime)} viewer={viewer} demo />)
+    expect((ui.getByLabelText(/Что нужно сделать/) as HTMLInputElement).value).toBe('Диагностика моего ноутбука')
+  })
   it('does not mutate published data from an action in the builder preview', () => {
     const { runtime } = inventoryFixture()
     const detail = runtime.app.screens.find(screen => screen.type === 'detail' && screen.tableId === runtime.app.inventory!.tables.items)!

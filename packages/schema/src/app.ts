@@ -32,7 +32,11 @@ export type Binding = z.infer<typeof bindingSchema>
 const actionBase = { id: z.string() }
 
 export const actionSchema = z.discriminatedUnion('type', [
-  z.object({ ...actionBase, type: z.literal('open_screen'), screenId: z.string() }),
+  z.object({
+    ...actionBase, type: z.literal('open_screen'), screenId: z.string(),
+    /** Initial editable values for a create form, resolved from the source card. */
+    initialValues: z.record(z.string(), bindingSchema).optional(),
+  }),
   z.object({
     ...actionBase,
     type: z.literal('create_row'),

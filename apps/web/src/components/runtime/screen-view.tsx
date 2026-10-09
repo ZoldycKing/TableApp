@@ -28,6 +28,8 @@ type Props = {
   runtime: RuntimeApp
   /** Экран открыт владельцем в конструкторе: ему видно то, что нужно поправить. */
   editing?: boolean
+  /** Editable create-form values supplied by an action on another card. */
+  initialValues?: Record<string, unknown>
   /** Отбор списка: хранится в оболочке, чтобы пережить открытие карточки. */
   listState?: ListState
   onListState?: (next: ListState) => void
@@ -195,9 +197,10 @@ function FormScreen({
   onValues,
   formSlot,
   formNotice,
+  initialValues,
 }: Props & { fields: Field[] }) {
   const mode = screen.type === 'form' ? screen.mode : 'create'
-  const [values, setValues] = useState<Record<string, unknown>>(mode === 'edit' && row ? { ...row.data } : {})
+  const [values, setValues] = useState<Record<string, unknown>>(mode === 'edit' && row ? { ...row.data } : { ...initialValues })
   const [dirty, setDirty] = useState(false)
   const sourceKey = `${screen.id}:${mode}:${row?.id ?? 'new'}`
   const source = useRef(sourceKey)
@@ -212,8 +215,8 @@ function FormScreen({
     edited.current = false
     setDirty(false)
     baseVersion.current = row?.version
-    setValues(mode === 'edit' && row ? { ...row.data } : {})
-  }, [sourceKey, mode, row])
+    setValues(mode === 'edit' && row ? { ...row.data } : { ...initialValues })
+  }, [sourceKey, mode, row, initialValues])
 
   /*
    * О введённом сообщаем наружу через ссылку на обработчик, а не зависимостью

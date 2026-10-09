@@ -28,4 +28,19 @@ describe('template phone previews', () => {
       }
     }
   })
+  it('does not expose private source fields through a public form-prefill button', () => {
+    const example = templateExample('portal'), services = example.table('services').id
+    const card = example.app.screens.find(screen => screen.type === 'detail' && screen.tableId === services)!
+    if (card.type !== 'detail') throw new Error('fixture')
+    const button = card.components.find(component => component.type === 'button')!
+    if (button.type !== 'button' || button.action.type !== 'open_screen') throw new Error('fixture')
+    button.action.initialValues = { [example.field('orders', 'title').id]: { kind: 'field', fieldId: example.field('services', 'cost').id } }
+    for (const [role, email] of [['guest', null], ['client', 'petrov@example.ru']] as const) {
+      const { runtime } = templateAppPreview(example, role, email)
+      const projected = runtime.app.screens.find(screen => screen.id === card.id)!
+      if (projected.type !== 'detail') throw new Error('fixture')
+      expect(projected.components.some(component => component.id === button.id)).toBe(false)
+      expect(JSON.stringify(runtime)).not.toContain(example.field('services', 'cost').id)
+    }
+  })
 })

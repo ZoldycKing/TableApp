@@ -1,5 +1,6 @@
 import type { App, AppRole, Block, Component, Field, RoleId, Screen, View } from '@tableapp/schema'
 import { evalFilter, fieldsOfFilter, GUEST_ROLE, indexFields } from '@tableapp/schema'
+import { rulesFor } from './row-access'
 
 /**
  * Кто есть кто в приложении и что ему можно.
@@ -263,6 +264,11 @@ function addComponentFields(component: Component, into: Set<string>): void {
     }
   }
   if (component.type === 'related_list') into.add(component.relationFieldId)
+  if (component.type === 'button' && component.action.type === 'open_screen') {
+    for (const binding of Object.values(component.action.initialValues ?? {})) {
+      if (binding.kind === 'field') into.add(binding.fieldId)
+    }
+  }
 }
 
 /**
@@ -671,7 +677,13 @@ export function visibleScreensFor(app: App, visitor: Visitor): Screen[] {
     const components = partsFor(screen, visitor).components
       .filter((component) => {
         if (component.type !== 'button') return true
-        if (component.action.type === 'open_screen') return ids.has(component.action.screenId)
+        if (component.action.type === 'open_screen') {
+          if (visitor.enrolled && 'tableId' in screen && rulesFor(app, screen.tableId, visitor).length === 0) {
+            const open = publicFieldPolicy(screen)
+            if (Object.values(component.action.initialValues ?? {}).some(binding => binding.kind === 'field' && !open.has(binding.fieldId))) return false
+          }
+          return ids.has(component.action.screenId)
+        }
         return allowedAction(screen, component.action)
       })
       .map((component) =>

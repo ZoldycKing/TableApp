@@ -45,6 +45,7 @@ export function asPortal(
    */
   const showcaseCardId = newId('screen')
   const showcaseListId = newId('screen')
+  const request = app.screens.find(screen => screen.type === 'form' && screen.mode === 'create' && screen.tableId === portal.tableId)
   const showcaseAccess = {
     public: true,
     publicFields: portal.showcase.publicFieldIds,
@@ -100,7 +101,10 @@ export function asPortal(
        */
       components: [
         // Название уже стоит в шапке карточки — повторять его строкой незачем.
-        ...portal.showcase.publicFieldIds.slice(1).map((fieldId, index) => ({
+        ...portal.showcase.publicFieldIds.slice(1).map((fieldId, index) => fieldId === portal.showcase.publicFieldIds[1] ? ({
+          id: newId('component'), position: String.fromCharCode(97 + index), visibleWhen: null, roles: null,
+          type: 'text' as const, source: { kind: 'field' as const, fieldId }, style: 'body' as const,
+        }) : ({
           id: newId('component'),
           position: String.fromCharCode(97 + index),
           visibleWhen: null,
@@ -120,6 +124,12 @@ export function asPortal(
           label: null,
           showWhenEmpty: false,
         })),
+        ...(request ? [{
+          id: newId('component'), position: 'zz', visibleWhen: null, roles: null,
+          type: 'button' as const, label: 'Оставить заявку', style: 'primary' as const,
+          action: { id: newId('action'), type: 'open_screen' as const, screenId: request.id,
+            initialValues: { [portal.clientFieldIds[0]!]: { kind: 'field' as const, fieldId: portal.showcase.titleFieldId } } },
+        }] : []),
       ],
     },
   ]
@@ -235,8 +245,8 @@ export function asPortal(
           name: portal.guest.screenName,
           submitLabel: portal.guest.submitLabel,
           successText: portal.guest.successText,
-          // Вкладка нужна: с витрины должен быть понятный переход к заявке.
-          tab: { icon: 'plus', label: 'Заявка' },
+          // Начинаем оформление из карточки выбранной услуги.
+          tab: null,
           // Гостю возвращаться некуда: список ему не открыт, и рантайм
           // покажет подтверждение вместо той же пустой формы.
           components: [intro, ...fields],

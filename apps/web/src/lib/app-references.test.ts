@@ -69,6 +69,25 @@ describe('app reference ownership', () => {
     related.components[0].titleFieldId = 'name'
     expect(checkAppReferences(definition, catalog)).not.toBeNull()
   })
+  it('validates create-form prefills in the target table and source bindings in the current card', () => {
+    const definition = app({ type: 'detail', tableId: 'orders', components: [component({ type: 'button', label: 'Request',
+      action: { id: 'action', type: 'open_screen', screenId: 'request', initialValues: { 'item-name': { kind: 'field', fieldId: 'name' } } } })] })
+    definition.screens.push(appSchema.parse({ ...definition, screens: [{ id: 'request', appId: 'app', name: 'Request', position: 'b0',
+      type: 'form', mode: 'create', tableId: 'items', components: [component({ type: 'form_field', fieldId: 'item-name' })] }] }).screens[0]!)
+    expect(checkAppReferences(definition, catalog)).toBeNull()
+    const invalid = structuredClone(definition)
+    const source = invalid.screens[0]!
+    if (source.type !== 'detail' || source.components[0]?.type !== 'button' || source.components[0].action.type !== 'open_screen') throw new Error('fixture')
+    source.components[0].action.initialValues = { 'item-name': { kind: 'field', fieldId: 'item-name' } }
+    expect(checkAppReferences(invalid, catalog)).not.toBeNull()
+    source.components[0].action.initialValues = { name: { kind: 'literal', value: 'wrong table' } }
+    expect(checkAppReferences(invalid, catalog)).not.toBeNull()
+    source.components[0].action.initialValues = { 'item-name': { kind: 'field', fieldId: 'name' } }
+    const target = invalid.screens[1]!
+    if (target.type !== 'form') throw new Error('fixture')
+    target.components = []
+    expect(checkAppReferences(invalid, catalog)).not.toBeNull()
+  })
   it('ignores arbitrary reference-shaped literal values', () => {
     const definition = app({ type: 'detail', tableId: 'orders', components: [component({ type: 'text', source: { kind: 'literal', value: { tableId: 'foreign', fieldId: 'foreign-field' } } })] })
     expect(checkAppReferences(definition, catalog)).toBeNull()

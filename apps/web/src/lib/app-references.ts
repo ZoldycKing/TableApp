@@ -40,6 +40,16 @@ export function checkAppReferences(app: App, catalog: AppReferenceCatalog): stri
     const object = value as Record<string, unknown>
     if (object.kind === 'literal') return
 
+    if (object.type === 'open_screen' && object.initialValues) {
+      const target = app.screens.find(screen => screen.id === object.screenId)
+      if (!target || target.type !== 'form' || target.mode !== 'create') invalid('форма создания', String(object.screenId))
+      for (const [id, binding] of Object.entries(object.initialValues as Record<string, unknown>)) {
+        field(id, target?.type === 'form' ? target.tableId : undefined)
+        if (target?.type === 'form' && !target.components.some(component => component.type === 'form_field' && component.fieldId === id)) invalid('поле формы', id)
+        walk(binding, tableId)
+      }
+    }
+
     // Bindings read from the current row, even when the action creates another row.
     if (object.type === 'create_row' || object.type === 'update_row') {
       const target = object.type === 'create_row' ? table(object.tableId as string) : tableId
@@ -59,7 +69,7 @@ export function checkAppReferences(app: App, catalog: AppReferenceCatalog): stri
     }
     for (const [key, item] of Object.entries(object)) {
       // Filters contain arbitrary user data in value, not more references.
-      if (key === 'value' || key === 'values') continue
+      if (key === 'value' || key === 'values' || key === 'initialValues') continue
       if (key.endsWith('ScreenId') || key === 'screenId') screenLink(item)
       else if (key.endsWith('FieldId') || key === 'fieldId') {
         if (typeof item === 'string') {

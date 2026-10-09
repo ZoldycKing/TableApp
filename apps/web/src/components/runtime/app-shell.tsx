@@ -169,7 +169,7 @@ export function AppShell({
    */
   const known = (id: string | null | undefined) =>
     id && app.screens.some((item) => item.id === id) ? id : null
-  const home = known(initialScreenId) ?? known(app.homeScreenId) ?? app.screens[0]?.id ?? ''
+  const home = known(initialScreenId) ?? known(app.homeScreenId) ?? tabs[0]?.id ?? app.screens[0]?.id ?? ''
 
   /*
    * Начинаем с домашнего экрана — и на сервере, и в браузере.
@@ -205,6 +205,7 @@ export function AppShell({
   const [moreTabs, setMoreTabs] = useState(false)
   const [confirmCancellation, setConfirmCancellation] = useState(false)
   const [bookingDraft, setBookingDraft] = useState<Record<string, unknown> | null>(null)
+  const [formDraft, setFormDraft] = useState<{ screenId: string; values: Record<string, unknown> } | null>(null)
   const router = useRouter()
 
   const current = stack[stack.length - 1]!
@@ -388,8 +389,20 @@ export function AppShell({
 
   const handleAction = (action: Action) => {
     switch (action.type) {
-      case 'open_screen':
+      case 'open_screen': {
+        const target = screens.get(action.screenId)
+        if (target?.type === 'form' && target.mode === 'create') {
+          const editable = new Set(target.components.flatMap(component => component.type === 'form_field' ? [component.fieldId] : []))
+          setFormDraft({ screenId: target.id, values: Object.fromEntries(Object.entries(action.initialValues ?? {})
+            .filter(([fieldId]) => editable.has(fieldId)).map(([fieldId, binding]) => [fieldId, resolveBindingValue(binding, row, viewer)])) })
+          if (target.id === app.booking?.formScreenId) {
+            setBookingDraft(screen?.type === 'detail' && screen.tableId === app.booking.tables.services && row
+              ? { [app.booking.visit.service]: [row.id] } : null)
+          }
+          return navigate(action.screenId, action.initialValues || target.id === app.booking?.formScreenId ? null : current.rowId)
+        }
         return navigate(action.screenId)
+      }
       case 'go_back':
         return goBack()
       case 'open_url': {
@@ -758,6 +771,7 @@ export function AppShell({
               relatedTitles={runtime.relatedTitles}
               runtime={runtime}
               editing={editing}
+              initialValues={formDraft?.screenId === screen.id ? formDraft.values : undefined}
               listState={listStates[screen.id] ?? EMPTY_LIST}
               onListState={(next) => setListState(screen.id, next)}
               /*

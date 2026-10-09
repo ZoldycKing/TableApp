@@ -401,10 +401,10 @@ export function DeviceFrame({
       {desktop ? <BrowserChrome /> : null}
 
       <div
-        className={`demo-frame overflow-hidden ${
+        className={`demo-frame relative isolate overflow-hidden ${
           desktop ? 'min-h-0 flex-1' : bezel > 0 ? 'rounded-[1.9rem] bg-white' : 'bg-white'
         }`}
-        style={{ height }}
+        style={{ height, ...(device === 'mobile' && bezel > 0 ? { clipPath: 'inset(0 round 1.9rem)' } : {}) }}
       >
         {children}
       </div>

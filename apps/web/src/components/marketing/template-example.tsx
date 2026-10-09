@@ -25,7 +25,7 @@ export function TemplateExample({ id }: { id: string }) {
     const items = rows.filter(row => row.tableId === table('items').id)
     const low = items.filter(row => row.data[field('items', 'low').id] === true)
     return <div className="grid gap-5 sm:grid-cols-2">
-      <ScreenFrame title="В приложении кладовщика: товары и остатки" note={`Показаны 4 из ${items.length} товаров. В карточке нажмите «Принять товар» и введите, сколько поступило.`}>
+      <ScreenFrame title="В приложении кладовщика: товары и остатки" note={`Показаны 4 из ${items.length} товаров. В карточке — «Принять товар» и «Выдать товар»; списания и возвраты находятся в «Ещё действия».`}>
         <ScreenList title="Товары" right={String(items.length)} rows={items.slice(0, 4).map(row => ({ title: text(row, field('items', 'name')), subtitle: text(row, field('items', 'sku')), meta: `${text(row, field('items', 'qty'))} шт.` }))} />
       </ScreenFrame>
       <ScreenFrame device="desktop" title="В таблице владельца: товары, которые пора заказать" note="Товар попадает сюда, когда остаток равен порогу или меньше него. Например: осталось 4 фильтра, порог — 6. Стоимость запаса считается по текущей закупочной цене.">

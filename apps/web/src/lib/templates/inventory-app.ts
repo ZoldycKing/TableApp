@@ -1,4 +1,5 @@
-import { appSchema, newBlock, newId, positionSequence, type App, type BlockOf, type Component, type Screen } from '@tableapp/schema'
+import { appSchema, newBlock, newId, positionSequence, type App, type BlockOf, type Component, type Screen, type InventoryOperation } from '@tableapp/schema'
+import { INVENTORY_COPY } from '../inventory'
 import type { BuiltTemplate } from './build'
 
 /** A usable warehouse preset, with prices confined to the owner screens. */
@@ -59,8 +60,46 @@ export function asInventory(app: App, built: BuiltTemplate): App {
       components: s.type === 'form' ? s.components.filter(c => c.type !== 'form_field' || c.fieldId !== config.item.movements) : [] })),
   ]
   const positions = positionSequence(screens.length)
-  return appSchema.parse({ ...app, roles: [
+  const inventory = appSchema.parse({ ...app, roles: [
     { id: worker, name: 'Кладовщик', isDefault: true }, { id: owner, name: 'Владелец', isDefault: false },
   ], screens: screens.map((s, index) => ({ ...s, position: positions[index] })), homeScreenId: list.id,
-    inventory: { ...config, receiptScreenId: receiptId } })
+    inventory: { ...config, operations: null, receiptScreenId: receiptId } })
+  return config.operations ? withInventoryOperations(inventory, config.operations) : inventory
+}
+
+/** Add operations to a receipt preset without replacing its existing screens or roles. */
+export function withInventoryOperations(app: App, operations: NonNullable<NonNullable<BuiltTemplate['inventory']>['operations']>): App {
+  const config = app.inventory!
+  const receipt = app.screens.find(s => s.id === config.receiptScreenId)!
+  const detail = app.screens.find(s => s.type === 'detail' && s.tableId === config.tables.items)!
+  const journal = app.screens.find(s => s.type === 'list' && s.metaFieldId === config.movement.qty)!
+  const kinds = ['issue', 'writeOff', 'returnIn', 'returnOut', 'stocktake'] as const
+  const screenIds = Object.fromEntries(kinds.map(kind => [kind, newId('screen')])) as Record<Exclude<InventoryOperation, 'receipt'>, string>
+  const forms: Screen[] = kinds.map(kind => ({
+    ...receipt, id: screenIds[kind], name: INVENTORY_COPY[kind].name, tab: null,
+    ...(receipt.type === 'form' ? { submitLabel: INVENTORY_COPY[kind].action, components: receipt.components.map(c => ({ ...c, id: newId('component'),
+      ...(c.type === 'form_field' && c.fieldId === config.movement.note ? { required: INVENTORY_COPY[kind].reason } : {}) })) } : {}),
+    access: kind === 'stocktake' ? { ...receipt.access, roles: ['manager'], public: false } : receipt.access,
+  }))
+  const buttons: Component[] = kinds.map(kind => ({ id: newId('component'), position: 'zz', type: 'button',
+    roles: kind === 'stocktake' ? ['manager'] : null, visibleWhen: null, label: kind === 'stocktake' ? 'Пересчитать остаток' : INVENTORY_COPY[kind].action,
+    style: kind === 'issue' ? 'primary' : 'secondary', action: { id: newId('action'), type: 'open_screen', screenId: screenIds[kind] },
+  }))
+  const journalDetail: Screen = { id: newId('screen'), appId: app.id, position: 'a', name: 'Движение товара', tab: null,
+    type: 'detail', tableId: config.tables.movements, access: journal.access,
+    components: [operations.fields.kind, config.movement.qty, operations.fields.before, operations.fields.after,
+      config.movement.date, config.movement.author, config.movement.note].map((fieldId, index, all) => ({
+      id: newId('component'), position: positionSequence(all.length)[index]!, type: 'field', fieldId, roles: null, visibleWhen: null, label: null, showWhenEmpty: false,
+    })),
+  }
+  const screens = [...app.screens.map(screen => {
+    if (screen.id === detail.id && screen.type === 'detail') {
+      const parts = [...screen.components, ...buttons]
+      return { ...screen, components: parts.map((c, i) => ({ ...c, position: positionSequence(parts.length)[i]! })) }
+    }
+    if (screen.id === journal.id && screen.type === 'list') return { ...screen, name: 'Движения', tab: { icon: 'truck', label: 'Движения' }, onTapScreenId: journalDetail.id }
+    return screen
+  }), ...forms, journalDetail]
+  return appSchema.parse({ ...app, screens: screens.map((s, i) => ({ ...s, position: positionSequence(screens.length)[i] })),
+    inventory: { ...config, operations: { ...operations, screens: screenIds } } })
 }

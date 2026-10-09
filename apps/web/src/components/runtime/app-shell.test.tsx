@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render } from '@testing-library/react'
+import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { inventoryFixture } from '@/lib/templates/inventory-fixture.test-utils'
 import { AppShell } from './app-shell'
@@ -9,7 +9,8 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }))
 vi.mock('@/app/auth-actions', () => ({ signOutAppAction: vi.fn() }))
 vi.mock('@/app/production-actions', () => ({ saveMovementAction: vi.fn(), saveProductionAction: vi.fn() }))
 vi.mock('@/app/runtime-actions', () => ({ appCreateRowAction: vi.fn(), appDeleteRowAction: vi.fn(), appUpdateRowAction: vi.fn() }))
-vi.mock('@/app/inventory-actions', () => ({ receiveStockAction: vi.fn() }))
+const inventoryMocks = vi.hoisted(() => ({ receive: vi.fn(), operation: vi.fn() }))
+vi.mock('@/app/inventory-actions', () => ({ receiveStockAction: inventoryMocks.receive, saveStockOperationAction: inventoryMocks.operation }))
 vi.mock('@/lib/use-live-app', () => ({ useLiveApp: vi.fn() }))
 vi.mock('@/components/motion/enter-motion', () => ({ useEnterMotion: () => ({ current: null }) }))
 vi.mock('./intake-verify', () => ({ IntakeVerify: () => null }))
@@ -40,5 +41,26 @@ describe('runtime navigation during live refresh', () => {
     const restored = render(<AppShell runtime={refreshed} viewer={null} browserHistory />)
     expect(restored.getByRole('heading', { name: 'Приёмка товара' })).toBeTruthy()
     expect(navFromHistory(window.history.state, () => true)?.stack).toHaveLength(3)
+  })
+  it('restores saved confirmations when a framework refresh replaces custom history state', async () => {
+    const { runtime } = inventoryFixture()
+    window.history.replaceState(null, '', '/a/warehouse')
+    inventoryMocks.operation.mockResolvedValue({ ok: true, name: 'Фильтр', before: 4, quantity: 2, after: 2, repeated: false, operation: 'issue' })
+    const ui = render(<AppShell runtime={runtime} viewer={null} browserHistory />)
+    fireEvent.click(ui.getByRole('button', { name: /Фильтр воздушный/ }))
+    expect(ui.getByText('Ещё действия').closest('details')?.open).toBe(false)
+    expect(ui.queryByRole('button', { name: 'Пересчитать остаток' })).toBeNull()
+    fireEvent.click(ui.getByRole('button', { name: 'Выдать товар' }))
+    fireEvent.change(ui.getByRole('spinbutton'), { target: { value: '2' } })
+    fireEvent.click(ui.getByRole('button', { name: 'Выдать товар' }))
+    await waitFor(() => expect(ui.getByRole('status').textContent).toContain('4 → 2'))
+    window.history.replaceState({ __NA: true }, '')
+    const refreshed = structuredClone(runtime)
+    ui.rerender(<AppShell runtime={refreshed} viewer={null} browserHistory />)
+    expect(navFromHistory(window.history.state, () => true)?.stack.at(-1)?.receipt?.result.after).toBe(2)
+    ui.unmount()
+    const restored = render(<AppShell runtime={refreshed} viewer={null} browserHistory />)
+    expect(restored.getByRole('status').textContent).toContain('4 → 2')
+    expect(restored.queryByRole('spinbutton')).toBeNull()
   })
 })

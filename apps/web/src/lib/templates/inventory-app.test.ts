@@ -4,6 +4,8 @@ import { generateApp } from '../app-builder'
 import { checkAppReferences } from '../app-references'
 import { inventoryFixture } from './inventory-fixture.test-utils'
 import { prepareInventoryUpgrade } from './inventory-upgrade'
+import { asInventory } from './inventory-app'
+import { prepareStockOperationsUpgrade } from './inventory-upgrade'
 
 describe('warehouse preset and safe upgrade', () => {
   it('opens goods and receipts to the worker, while owner screens and prices stay private', () => {
@@ -30,6 +32,8 @@ describe('warehouse preset and safe upgrade', () => {
     expect(checkAppReferences(app, catalog)).toBeNull()
     expect(checkAppReferences({ ...app, inventory: { ...app.inventory!, tables: { ...app.inventory!.tables, movements: 'foreign' } } }, catalog)).not.toBeNull()
     expect(checkAppReferences({ ...app, inventory: { ...app.inventory!, item: { ...app.inventory!.item, stock: app.inventory!.item.opening } } }, catalog)).not.toBeNull()
+    const operations = app.inventory!.operations!
+    expect(checkAppReferences({ ...app, inventory: { ...app.inventory!, operations: { ...operations, fields: { ...operations.fields, before: app.inventory!.movement.qty } } } }, catalog)).not.toBeNull()
     const ownerDetail = visibleScreensFor(app, asRole('manager')).find(screen => screen.type === 'detail')!
     const workerDetail = visibleScreensFor(app, asRole('staff')).find(screen => screen.type === 'detail')!
     expect(ownerDetail.type === 'detail' && ownerDetail.components.some(component => component.type === 'button' && component.label === 'Изменить')).toBe(true)
@@ -47,6 +51,8 @@ describe('warehouse preset and safe upgrade', () => {
     expect(upgraded.tables).toHaveLength(1)
     expect(upgraded.fields.filter(field => field.tableId === table.id)).toHaveLength(3)
     expect(upgraded.app.screens.some(screen => screen.id === legacy.homeScreenId)).toBe(true)
+    const upgradedDetail = upgraded.app.screens.find(screen => screen.type === 'detail' && screen.tableId === table.id)!
+    expect(upgradedDetail.type === 'detail' && upgradedDetail.components.some(c => c.type === 'field' && c.fieldId === upgraded.app.inventory!.item.stock)).toBe(true)
     expect(built.rows[0]!.data[config.item.opening]).toBe(4)
     const allFields = [...oldFields.map(field => field.id === config.item.opening ? { ...field, name: 'Начальный остаток' } : field), ...upgraded.fields] as typeof fields
     expect(checkAppReferences(upgraded.app, { tableIds: new Set([table.id, ...upgraded.tables.map(table => table.id)]), fields: new Map(allFields.map(field => [field.id, field])), views: new Map([...views, ...upgraded.views].map(view => [view.id, view])) })).toBeNull()
@@ -56,5 +62,29 @@ describe('warehouse preset and safe upgrade', () => {
     expect(() => prepareInventoryUpgrade(generated, table, fields, views, null)).toThrow('Структура склада')
     expect(() => prepareInventoryUpgrade({ ...generated, roles: [...generated.roles, { id: 'custom', name: 'Custom', isDefault: false }] }, table, fields, views, null)).toThrow('нестандартные роли')
     expect(() => prepareInventoryUpgrade({ ...generated, screens: [...generated.screens, { ...generated.screens[0]!, id: 'extra' }] }, table, fields, views, null)).toThrow('Экраны склада доработаны')
+  })
+  it('keeps stocktake and the journal private while exposing both return directions to workers', () => {
+    const { app } = inventoryFixture(), ops = app.inventory!.operations!
+    const worker = visibleScreensFor(app, asRole('staff')), owner = visibleScreensFor(app, asRole('manager'))
+    expect(worker.some(s => s.id === ops.screens.stocktake)).toBe(false)
+    expect(owner.some(s => s.id === ops.screens.stocktake)).toBe(true)
+    for (const kind of ['issue', 'writeOff', 'returnIn', 'returnOut'] as const) expect(worker.some(s => s.id === ops.screens[kind])).toBe(true)
+    expect(worker.some(s => s.type === 'detail' && s.tableId === app.inventory!.tables.movements)).toBe(false)
+    const detail = owner.find(s => s.type === 'detail' && s.tableId === app.inventory!.tables.items)!
+    expect(detail.type === 'detail' && detail.components.some(c => c.type === 'button' && c.label === 'Пересчитать остаток')).toBe(true)
+  })
+  it('refuses ambiguous field names and customized formula dependencies before upgrading receipts', () => {
+    const { generated, built, fields, views } = inventoryFixture()
+    const oldBuilt = { ...built, inventory: { ...built.inventory!, operations: null } }
+    const old = asInventory(generated, oldBuilt), removed = new Set(Object.values(built.inventory!.operations!.fields))
+    const oldFields = fields.filter(f => !removed.has(f.id))
+    const upgrade = prepareStockOperationsUpgrade(old, oldFields, views)
+    expect(upgrade.fields).toHaveLength(3)
+    expect(upgrade.app.inventory!.receiptScreenId).toBe(old.inventory!.receiptScreenId)
+    expect(upgrade.app.roles).toEqual(old.roles)
+    expect(() => prepareStockOperationsUpgrade(old, fields, views)).toThrow('уже существует')
+    const rollup = oldFields.find(f => f.type === 'rollup')!
+    const renamed = oldFields.map(f => f.id === rollup.id ? { ...f, name: 'Принято, шт' } : f.id === old.inventory!.item.stock && f.type === 'formula' ? { ...f, options: { ...f.options, expression: '{Начальный остаток} + {Принято, шт}' } } : f)
+    expect(() => prepareStockOperationsUpgrade(old, [...renamed, { id: 'custom', tableId: old.inventory!.tables.items, name: 'Моя формула', type: 'formula', options: { expression: '{Принято, шт} * 2', resultType: 'number' }, position: 'zzz', description: null }], views)).toThrow('Ваша формула')
   })
 })

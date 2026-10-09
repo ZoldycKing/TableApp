@@ -122,6 +122,24 @@ export function checkAppReferences(app: App, catalog: AppReferenceCatalog): stri
       field.options.relationFieldId === config.item.movements && field.options.targetFieldId === config.movement.qty && field.options.fn === 'sum')
     const opening = catalog.fields.get(config.item.opening), stock = catalog.fields.get(config.item.stock)
     if (!rollup || stock?.type !== 'formula' || stock.options.expression !== `{${opening?.name}} + {${rollup.name}}`) invalid('формула остатка', config.item.stock)
+    if (config.operations) {
+      const ops = config.operations
+      if (new Set([...Object.values(config.movement), ...Object.values(ops.fields)]).size !== 9) invalid('раздельные поля движения', ops.fields.before)
+      for (const [name, id] of Object.entries(ops.fields)) {
+        field(id, config.tables.movements)
+        if (catalog.fields.get(id)?.type !== (name === 'kind' ? 'single_select' : 'number')) invalid('поле движения', id)
+      }
+      const kind = catalog.fields.get(ops.fields.kind)
+      const choices = kind?.type === 'single_select' ? kind.options.choices : []
+      if (new Set(Object.values(ops.kinds)).size !== 6 || Object.values(ops.kinds).some(id => !choices.some(choice => choice.id === id))) invalid('виды движений', ops.fields.kind)
+      const screenIds = [config.receiptScreenId, ...Object.values(ops.screens)]
+      if (new Set(screenIds).size !== 6) invalid('экраны движений', config.receiptScreenId ?? '')
+      for (const id of Object.values(ops.screens)) {
+        screenLink(id)
+        const screen = app.screens.find(s => s.id === id)
+        if (!screen || screen.type !== 'form' || screen.mode !== 'create' || screen.tableId !== config.tables.movements) invalid('экран движения', id)
+      }
+    }
   }
   return error
 }

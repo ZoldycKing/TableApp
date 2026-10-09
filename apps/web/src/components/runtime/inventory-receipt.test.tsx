@@ -6,8 +6,8 @@ import { hasUnsaved } from '@/lib/unsaved'
 import { InventoryReceipt } from './inventory-receipt'
 import { withNav } from './nav-history'
 
-const mocks = vi.hoisted(() => ({ receive: vi.fn(), refresh: vi.fn() }))
-vi.mock('@/app/inventory-actions', () => ({ receiveStockAction: mocks.receive }))
+const mocks = vi.hoisted(() => ({ receive: vi.fn(), operation: vi.fn(), refresh: vi.fn() }))
+vi.mock('@/app/inventory-actions', () => ({ receiveStockAction: mocks.receive, saveStockOperationAction: mocks.operation }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: mocks.refresh }) }))
 afterEach(() => { cleanup(); vi.clearAllMocks(); window.history.replaceState(null, '') })
 function setup(demo = false) {
@@ -81,5 +81,26 @@ describe('receipt form', () => {
     ui.rerender(<InventoryReceipt {...props} runtime={runtime} />)
     expect(ui.getByText(/Приёмка вам недоступна/)).toBeTruthy()
     expect(ui.queryByRole('button', { name: 'Принять товар' })).toBeNull()
+  })
+  it('restores a zero stocktake confirmation after refresh and keeps the opening version for retries', async () => {
+    const { app, runtime } = inventoryFixture('manager'), config = app.inventory!
+    const item = runtime.tables[config.tables.items]!.rows[0]!
+    const props = { runtime, config, itemId: item.id, demo: false, onBack: vi.fn(), operation: 'stocktake' as const }
+    const entry = { screenId: config.operations!.screens.stocktake, rowId: item.id }
+    window.history.replaceState(withNav(null, { stack: [entry], lists: {} }), '')
+    const ui = render(<InventoryReceipt {...props} />)
+    fireEvent.change(ui.getByRole('spinbutton'), { target: { value: '0' } })
+    fireEvent.change(ui.getByRole('textbox'), { target: { value: 'Пересчёт полки' } })
+    const changed = structuredClone(runtime)
+    changed.tables[config.tables.items]!.rows[0]!.version = 1
+    ui.rerender(<InventoryReceipt {...props} runtime={changed} />)
+    expect(ui.getByRole('alert').textContent).toContain('Товар изменился')
+    mocks.operation.mockResolvedValue({ ok: true, name: 'Фильтр', before: 4, quantity: 0, after: 0, repeated: true, operation: 'stocktake' })
+    fireEvent.click(ui.getByRole('button', { name: 'Сохранить фактический остаток' }))
+    await waitFor(() => expect(ui.getByRole('status').textContent).toContain('4 → 0'))
+    expect(mocks.operation.mock.calls[0]![2]).toMatchObject({ quantity: 0, baseVersion: 0 })
+    ui.unmount()
+    const restored = render(<InventoryReceipt {...props} runtime={changed} />)
+    expect(restored.getByRole('status').textContent).toContain('4 → 0')
   })
 })

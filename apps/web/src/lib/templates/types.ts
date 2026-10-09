@@ -231,5 +231,6 @@ export type TemplateDef = {
     tables: { items: string; movements: string }
     item: { name: string; opening: string; movements: string; stock: string; image: string; sku: string }
     movement: { name: string; item: string; qty: string; date: string; note: string; author: string }
+    operations?: { fields: { kind: string; before: string; after: string }; kinds: Record<import('@tableapp/schema').InventoryOperation, string> }
   }
 }

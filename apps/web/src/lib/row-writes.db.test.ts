@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { and, asc, eq, isNull, sql as query } from 'drizzle-orm'
+import { and, asc, eq, inArray, isNull, sql as query } from 'drizzle-orm'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defaultViewConfig, graceReserve, newId, planOf, viewSchema, type App, type Field } from '@tableapp/schema'
 
@@ -440,6 +440,116 @@ describe.skipIf(!process.env.DATABASE_URL)('row writes against Postgres', () => 
     expect(await test.journal()).toHaveLength(2)
     expect(((await read(test.item.id)).data as Record<string, unknown>)[test.config.item.movements]).toHaveLength(2)
     expect(await changes(test.item.id)).toHaveLength(2)
+  })
+  it('records a complete stock cycle with signed quantities and immutable confirmations', async () => {
+    const test = await inventory(), opening = Number((test.item.data as Record<string, unknown>)[test.config.item.opening])
+    const issue = { ...test.input, id: newId('row'), quantity: 2 }
+    expect(await test.module.saveStockOperationAction(test.appSlug, 'issue', issue)).toMatchObject({ ok: true, before: opening, after: opening - 2 })
+    for (const operation of ['writeOff', 'returnIn', 'returnOut'] as const) {
+      expect((await test.module.saveStockOperationAction(test.appSlug, operation, { ...test.input, id: newId('row'), quantity: 1 })).ok).toBe(true)
+    }
+    expect(await test.projectedStock()).toBe(opening - 3)
+    const entries = await test.journal(), ops = test.config.operations!
+    expect(entries.map(row => (row.data as Record<string, unknown>)[test.config.movement.qty]).sort()).toEqual([-1, -1, -2, 1])
+    expect(entries.every(row => typeof (row.data as Record<string, unknown>)[ops.fields.before] === 'number')).toBe(true)
+    expect(await test.module.saveStockOperationAction(test.appSlug, 'issue', issue)).toMatchObject({ ok: true, before: opening, after: opening - 2, repeated: true })
+    expect((await test.module.saveStockOperationAction(test.appSlug, 'returnOut', issue)).ok).toBe(false)
+    expect(await test.journal()).toHaveLength(4)
+  })
+  it('serializes competing issues so stock cannot become negative', async () => {
+    const test = await inventory()
+    const results = await Promise.all([1, 2].map(() => test.module.saveStockOperationAction(test.appSlug, 'issue', { ...test.input, id: newId('row'), quantity: 3 })))
+    expect(results.filter(result => result.ok)).toHaveLength(1)
+    expect(results.find(result => !result.ok)).toMatchObject({ ok: false, error: expect.stringContaining('Недостаточно товара') })
+    expect(await test.projectedStock()).toBe(1)
+    expect(await test.journal()).toHaveLength(1)
+    expect(await changes(test.item.id)).toHaveLength(1)
+  })
+  it('limits stocktake to the owner, detects stale counts, accepts zero and retries safely', async () => {
+    const test = await inventory()
+    const input = { ...test.input, id: newId('row'), quantity: 0, baseVersion: 0 }
+    expect((await test.module.saveStockOperationAction(test.appSlug, 'stocktake', input)).ok).toBe(false)
+    identity.roleId = 'manager'
+    expect((await test.module.saveStockOperationAction(test.appSlug, 'stocktake', { ...input, note: ' ' })).ok).toBe(false)
+    expect((await test.module.receiveStockAction(test.appSlug, { ...test.input, quantity: 1 })).ok).toBe(true)
+    expect(await test.module.saveStockOperationAction(test.appSlug, 'stocktake', input)).toMatchObject({ ok: false, error: expect.stringContaining('товар изменился') })
+    const fresh = { ...input, baseVersion: (await read(test.item.id)).version }
+    expect(await test.module.saveStockOperationAction(test.appSlug, 'stocktake', fresh)).toMatchObject({ ok: true, before: 5, after: 0 })
+    expect(await test.projectedStock()).toBe(0)
+    expect((await test.module.receiveStockAction(test.appSlug, { ...test.input, id: newId('row'), quantity: 2 })).ok).toBe(true)
+    expect(await test.module.saveStockOperationAction(test.appSlug, 'stocktake', fresh)).toMatchObject({ ok: true, before: 5, after: 0, repeated: true })
+    expect(await test.projectedStock()).toBe(2)
+    expect(await test.journal()).toHaveLength(3)
+  })
+  it('requires reasons and checks permissions on the specific operation form', async () => {
+    const test = await inventory(), { db, apps } = database
+    expect((await test.module.saveStockOperationAction(test.appSlug, 'writeOff', { ...test.input, note: '' })).ok).toBe(false)
+    const restricted = { ...test.definition, screens: test.definition.screens.map(screen => screen.id === test.config.operations!.screens.issue && screen.type === 'form' ? {
+      ...screen, components: screen.components.map(c => c.type === 'form_field' && c.fieldId === test.config.movement.qty ? { ...c, roles: ['manager'] } : c),
+    } : screen) }
+    await db.update(apps).set({ published: restricted }).where(eq(apps.id, test.appId))
+    expect((await test.module.saveStockOperationAction(test.appSlug, 'issue', test.input)).ok).toBe(false)
+    expect((await test.module.receiveStockAction(test.appSlug, test.input)).ok).toBe(true)
+    expect(await test.journal()).toHaveLength(1)
+  })
+  it('denies generic journal mutations through app synchronization, even for the owner', async () => {
+    const test = await inventory()
+    identity.roleId = 'manager'
+    const { POST } = await import('@/app/api/sync/route')
+    const response = await POST(new Request('http://localhost/api/sync', { method: 'POST', body: JSON.stringify({
+      tableId: test.config.tables.movements, appSlug: test.appSlug, deviceId: 'warehouse-test', mutations: [{
+        id: newId('change'), op: 'create', rowId: newId('row'), next: { [test.config.movement.item]: [test.item.id], [test.config.movement.qty]: -100 },
+      }],
+    }) }))
+    expect(response.status).toBe(200)
+    const body = await response.json()
+    expect(body.applied).toHaveLength(0)
+    expect(body.rejected).toHaveLength(1)
+    expect(await test.journal()).toHaveLength(0)
+    expect(await test.projectedStock()).toBe(4)
+  })
+  it('upgrades a receipt warehouse without rewriting data or activating unpublished operations', async () => {
+    const test = await inventory(), { db, fields, views, apps } = database
+    const { generateApp } = await import('./app-builder'), { asInventory } = await import('./templates/inventory-app')
+    const { buildTemplate } = await import('./templates/build'), { sklad } = await import('./templates/defs/sklad')
+    const built = buildTemplate({ template: sklad, workspaceId: ids.workspace })
+    // Reconstruct a receipt-only preset on the installed IDs, as older releases saved it.
+    const ownFields = await db.select().from(fields).where(eq(fields.tableId, test.config.tables.items))
+    const [view] = await db.select().from(views).where(eq(views.tableId, test.config.tables.items)).orderBy(asc(views.position))
+    const journalScreen = test.definition.screens.find(s => s.type === 'list' && s.metaFieldId === test.config.movement.qty) as Extract<App['screens'][number], { type: 'list' }>
+    const receiptBuilt = { ...built, appTableId: test.config.tables.items, inventory: { ...built.inventory!, ...test.config, operations: null,
+      views: { items: view!.id, movements: journalScreen.source.viewId } }, fields: ownFields as typeof built.fields }
+    const generated = generateApp({ appId: test.appId, workspaceId: ids.workspace, name: test.definition.name, slug: test.appSlug,
+      table: { id: test.config.tables.items, name: 'Позиции', primaryFieldId: test.config.item.name }, fields: ownFields as unknown as Field[], view: viewSchema.parse(view) })
+    const legacy = asInventory(generated, receiptBuilt)
+    await db.update(apps).set({ draft: legacy, published: legacy }).where(eq(apps.id, test.appId))
+    await db.delete(fields).where(inArray(fields.id, Object.values(test.config.operations!.fields)))
+    const rollup = ownFields.find(field => field.type === 'rollup')!
+    for (const [id, name] of [[test.config.item.movements, 'Приёмки'], [rollup.id, 'Принято, шт'],
+      [test.config.movement.name, 'Приёмка'], [test.config.movement.qty, 'Принято, шт'], [test.config.movement.author, 'Кто принял']] as const) {
+      await db.update(fields).set({ name }).where(eq(fields.id, id))
+    }
+    await db.update(fields).set({ options: { expression: '{Начальный остаток} + {Принято, шт}', resultType: 'number' } }).where(eq(fields.id, test.config.item.stock))
+    expect((await test.module.receiveStockAction(test.appSlug, test.input)).ok).toBe(true)
+    const before = await read(test.item.id), journalBefore = await test.journal()
+    const setup = await import('@/app/inventory-setup-actions')
+    expect((await setup.enableStockOperationsAction(test.appId, { ...legacy, name: 'stale' })).ok).toBe(false)
+    const results = await Promise.all([setup.enableStockOperationsAction(test.appId, legacy), setup.enableStockOperationsAction(test.appId, legacy)])
+    expect(results.every(result => result.ok), JSON.stringify(results)).toBe(true)
+    const [record] = await db.select().from(apps).where(eq(apps.id, test.appId))
+    const upgraded = record!.draft as App
+    expect(upgraded.inventory!.operations).toBeTruthy()
+    expect(upgraded.roles).toEqual(legacy.roles)
+    expect(upgraded.inventory!.receiptScreenId).toBe(legacy.inventory!.receiptScreenId)
+    expect(record!.published).toEqual(legacy)
+    expect(await read(test.item.id)).toEqual(before)
+    expect(await test.journal()).toEqual(journalBefore)
+    expect((await test.module.saveStockOperationAction(test.appSlug, 'issue', { ...test.input, id: newId('row') })).ok).toBe(false)
+    const { publishAppAction } = await import('@/app/app-actions')
+    expect((await publishAppAction(test.appId)).ok).toBe(true)
+    expect((await test.module.saveStockOperationAction(test.appSlug, 'issue', { ...test.input, id: newId('row'), quantity: 1 })).ok).toBe(true)
+    expect(await test.projectedStock()).toBe(7)
+    expect(await test.module.receiveStockAction(test.appSlug, test.input)).toMatchObject({ ok: true, repeated: true, legacyRepeat: true, after: 7 })
   })
   it('recognizes a simultaneous retry without duplicating stock, history or quota', async () => {
     const test = await inventory(), count = (await counter()).rows

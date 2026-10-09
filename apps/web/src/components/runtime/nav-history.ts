@@ -18,6 +18,7 @@
  */
 
 import type { SavedReceipt } from '@/app/inventory-actions'
+import { INVENTORY_OPERATIONS } from '@tableapp/schema'
 
 export type NavEntry = { screenId: string; rowId: string | null; receipt?: { operationId: string; result: SavedReceipt } }
 
@@ -82,9 +83,11 @@ function isReceipt(value: unknown): boolean {
   const receipt = value as { operationId?: unknown; result?: unknown }
   if (typeof receipt.operationId !== 'string' || !/^row_[a-zA-Z0-9_-]{8,64}$/.test(receipt.operationId) || !receipt.result || typeof receipt.result !== 'object') return false
   const result = receipt.result as Record<string, unknown>
+  if (result.legacyRepeat !== undefined && typeof result.legacyRepeat !== 'boolean') return false
+  if (result.operation !== undefined && !INVENTORY_OPERATIONS.includes(result.operation as typeof INVENTORY_OPERATIONS[number])) return false
   return result.ok === true && typeof result.name === 'string' && typeof result.repeated === 'boolean' &&
     typeof result.before === 'number' && Number.isFinite(result.before) && typeof result.after === 'number' && Number.isFinite(result.after) &&
-    typeof result.quantity === 'number' && Number.isSafeInteger(result.quantity) && result.quantity >= 1 && result.quantity <= 1_000_000
+    typeof result.quantity === 'number' && Number.isSafeInteger(result.quantity) && result.quantity >= (result.operation === 'stocktake' ? 0 : 1) && result.quantity <= 1_000_000
 }
 
 function readLists(value: unknown): Record<string, ListState> {

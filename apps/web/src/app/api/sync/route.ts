@@ -60,7 +60,7 @@ export async function POST(request: Request) {
     policy = await appReadPolicy(app, tableId, visitor, viewer)
     const rules = rulesFor(app, tableId, visitor)
     const writable = { create: writableFields(app, tableId, visitor, 'create'), update: writableFields(app, tableId, visitor, 'update') }
-    access = { guard: policy.canRead, may: (op) => permits(app, tableId, op, visitor),
+    access = { guard: policy.canRead, may: (op) => app.inventory?.tables.movements !== tableId && permits(app, tableId, op, visitor),
       mayField: (op, id) => op === 'delete' || writable[op === 'create' ? 'create' : 'update'].has(id),
       stamp: (data) => stampOwner(rules, viewer, data), locked: (id) => isOwnerField(rules, id) }
   } else {

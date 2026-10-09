@@ -1,7 +1,8 @@
 import { byPosition, positionBetween, type App, type Field, type View } from '@tableapp/schema'
 import { buildTemplate, type BuiltTemplate } from './build'
 import { sklad } from './defs/sklad'
-import { asInventory } from './inventory-app'
+import { asInventory, withInventoryOperations } from './inventory-app'
+import { checkAppReferences } from '../app-references'
 
 export class InventorySetupError extends Error {}
 
@@ -13,7 +14,7 @@ export function prepareInventoryUpgrade(app: App, table: { id: string; workspace
   if (app.screens.length !== 5 || app.screens.filter(screen => screen.type === 'list').length !== 1 ||
       app.screens.filter(screen => screen.type === 'detail').length !== 1 || app.screens.filter(screen => screen.type === 'dashboard').length !== 1 ||
       !['create', 'edit'].every(mode => app.screens.some(screen => screen.type === 'form' && screen.tableId === table.id && screen.mode === mode))) throw new InventorySetupError('Экраны склада доработаны. Автоматическое подключение не заменяет ваши экраны; используйте новый складской шаблон.')
-  if (!opening || fields.some(field => ['Начальный остаток', 'Приёмки', 'Принято, шт'].includes(field.name))) throw new InventorySetupError('Структура склада изменена: автоматическое подключение недоступно')
+  if (!opening || fields.some(field => ['Начальный остаток', 'Приёмки', 'Принято, шт', 'Движения', 'Изменение запаса, шт'].includes(field.name))) throw new InventorySetupError('Структура склада изменена: автоматическое подключение недоступно')
   const built = buildTemplate({ template: sklad, workspaceId: app.workspaceId, afterPosition })
   const replacements = new Map<string, string>([[built.appTableId, table.id]])
   const openingId = built.inventory!.item.opening
@@ -21,7 +22,7 @@ export function prepareInventoryUpgrade(app: App, table: { id: string; workspace
   for (const field of built.fields.filter(field => field.tableId === built.appTableId)) {
     const existing = field.id === openingId ? opening : fields.find(existing => existing.name === field.name && existing.type === field.type)
     if (existing) { replacements.set(field.id, existing.id); originalFields.add(existing.id) }
-    else if (!['Приёмки', 'Принято, шт', 'Остаток'].includes(field.name)) throw new InventorySetupError(`Не найдено поле «${field.name}» ожидаемого типа`)
+    else if (!['Движения', 'Изменение запаса, шт', 'Остаток'].includes(field.name)) throw new InventorySetupError(`Не найдено поле «${field.name}» ожидаемого типа`)
   }
   const list = app.screens.find(s => s.type === 'list')!
   const itemView = views.find(view => list.type === 'list' && view.id === list.source.viewId && view.tableId === table.id)
@@ -52,6 +53,40 @@ export function prepareInventoryUpgrade(app: App, table: { id: string; workspace
 function remapRead<T>(value: T, from: string, to: string): T {
   if (Array.isArray(value)) return value.map(item => remapRead(item, from, to)) as T
   if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, item]) =>
-    [key, key.endsWith('FieldId') && item === from ? to : remapRead(item, from, to)])) as T
+    [key, (key === 'fieldId' || key.endsWith('FieldId')) && item === from ? to : remapRead(item, from, to)])) as T
   return value
+}
+
+/** Upgrade receipt-only warehouses in place; never rewrite rows or published screens. */
+export function prepareStockOperationsUpgrade(app: App, fields: Field[], views: View[]) {
+  if (!app.inventory || app.inventory.operations) throw new InventorySetupError('Склад уже настроен или журнал приёмок ещё не подключён')
+  const config = app.inventory
+  if (!app.roles.some(role => role.id === 'manager') || app.roles.some(role => !['staff', 'manager', 'client'].includes(role.id)) ||
+      app.screens.length !== 7 || !app.screens.some(s => s.type === 'detail' && s.tableId === config.tables.items) ||
+      !app.screens.some(s => s.type === 'list' && s.metaFieldId === config.movement.qty)) throw new InventorySetupError('Склад содержит нестандартные роли или экраны. Автоматическое подключение не заменяет ваши настройки.')
+  const catalog = { tableIds: new Set([config.tables.items, config.tables.movements]), fields: new Map(fields.map(f => [f.id, f])), views: new Map(views.map(v => [v.id, v])) }
+  if (checkAppReferences(app, catalog)) throw new InventorySetupError('Структура склада изменена. Проверьте поля и формулу остатка перед подключением операций.')
+  const built = buildTemplate({ template: sklad, workspaceId: app.workspaceId })
+  const fresh = built.inventory!, operations = fresh.operations!
+  const positions = new Map<string, string | null>([config.tables.items, config.tables.movements].map(id => [id, fields.filter(f => f.tableId === id).sort(byPosition).at(-1)?.position ?? null]))
+  const additions = built.fields.filter(f => Object.values(operations.fields).includes(f.id)).map(f => {
+    if (fields.some(existing => existing.tableId === config.tables.movements && existing.name === f.name)) throw new InventorySetupError(`Поле «${f.name}» уже существует. Автоматическое подключение не изменяет ваши поля.`)
+    const position = positionBetween(positions.get(config.tables.movements) ?? null, null)
+    positions.set(config.tables.movements, position)
+    return { ...f, tableId: config.tables.movements, position }
+  })
+  const rollup = fields.find(f => f.tableId === config.tables.items && f.type === 'rollup' && f.options.relationFieldId === config.item.movements && f.options.targetFieldId === config.movement.qty && f.options.fn === 'sum')!
+  const renames = new Map([
+    [config.item.movements, 'Движения'], [rollup.id, 'Изменение запаса, шт'], [config.movement.name, 'Операция'],
+    [config.movement.qty, 'Изменение, шт'], [config.movement.author, 'Кто записал'],
+  ])
+  const updates = fields.filter(f => renames.has(f.id) || f.id === config.item.stock).map(f => {
+    const name = renames.get(f.id) ?? f.name
+    if (fields.some(other => other.id !== f.id && other.tableId === f.tableId && other.name === name)) throw new InventorySetupError(`Название «${name}» уже занято другой колонкой.`)
+    if (name !== f.name && fields.some(other => other.id !== config.item.stock && other.tableId === f.tableId && other.type === 'formula' && other.options.expression.includes(`{${f.name}}`))) throw new InventorySetupError(`Ваша формула использует «${f.name}». Автоматическое подключение не меняет пользовательские формулы.`)
+    const corresponding = built.fields.find(field => field.name === name)
+    return { ...f, name, description: corresponding?.description ?? f.description,
+      options: f.id === config.item.stock ? { ...f.options, expression: `{${fields.find(field => field.id === config.item.opening)!.name}} + {Изменение запаса, шт}` } : f.options }
+  })
+  return { fields: additions, updates, app: withInventoryOperations(app, operations) }
 }

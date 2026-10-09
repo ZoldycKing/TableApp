@@ -3,10 +3,11 @@
 import type { Action, Screen } from '@tableapp/schema'
 import { visibleFields } from '@/lib/apply-view'
 import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useMemo, useState, useTransition } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { signOutAppAction } from '@/app/auth-actions'
 import { saveMovementAction, saveProductionAction } from '@/app/production-actions'
 import { InventoryReceipt } from './inventory-receipt'
+import { inventoryOperation } from '@/lib/inventory'
 import { useLiveApp } from '@/lib/use-live-app'
 import { appCreateRowAction, appDeleteRowAction, appUpdateRowAction } from '@/app/runtime-actions'
 import type { RuntimeApp } from '@/lib/app-runtime'
@@ -346,6 +347,18 @@ export function AppShell({
     window.addEventListener('popstate', onPop)
     return () => window.removeEventListener('popstate', onPop)
   }, [browserHistory, screens])
+
+  const previousRuntime = useRef(runtime)
+  useEffect(() => {
+    if (previousRuntime.current === runtime) return
+    previousRuntime.current = runtime
+    if (!browserHistory) return
+    const entry = navFromSearch(window.location.search, id => screens.has(id))
+    if ((entry?.screenId ?? home) !== current.screenId || (entry?.rowId ?? null) !== current.rowId) return
+    // Next refresh replaces custom history state. Restore navigation and the
+    // saved confirmation from React state once the refreshed data commits.
+    window.history.replaceState(withNav(null, { stack, lists: listStates }), '', `${window.location.pathname}${navSearch(current, home)}`)
+  }, [runtime, browserHistory, screens, home, current, stack, listStates])
 
   const runMutation = (work: () => Promise<{ ok: boolean; error?: string }>, after?: () => void) => {
     setError(null)
@@ -704,8 +717,10 @@ export function AppShell({
                 }}
               />
             ) : (
-            app.inventory && screen.id === app.inventory.receiptScreenId ? <InventoryReceipt key={current.rowId} runtime={runtime}
-              itemId={current.rowId} config={app.inventory} demo={demo || editing} onBack={() => openTab(app.homeScreenId ?? home)} /> : <ScreenView
+            app.inventory && inventoryOperation(app.inventory, screen.id) ? <InventoryReceipt key={`${screen.id}:${current.rowId}`} runtime={runtime}
+              operation={inventoryOperation(app.inventory, screen.id)!} itemId={current.rowId} config={app.inventory} demo={demo || editing}
+              confirmation={current.receipt} onSaved={receipt => go({ stack: [...stack.slice(0, -1), { ...current, receipt }], lists: listStates }, 'replace')}
+              onBack={() => openTab(app.homeScreenId ?? home)} /> : <ScreenView
               screen={screen}
               table={table}
               row={row}

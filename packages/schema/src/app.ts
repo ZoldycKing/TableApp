@@ -704,12 +704,21 @@ export const productionConfigSchema = z.object({
 
 export type ProductionConfig = z.infer<typeof productionConfigSchema>
 
-/** Stock is opening balance plus the receipt journal; IDs survive field renames. */
+export const INVENTORY_OPERATIONS = ['receipt', 'issue', 'writeOff', 'returnIn', 'returnOut', 'stocktake'] as const
+export type InventoryOperation = typeof INVENTORY_OPERATIONS[number]
+const inventoryOperationsSchema = z.object({
+  fields: z.object({ kind: z.string(), before: z.string(), after: z.string() }),
+  kinds: z.object({ receipt: z.string(), issue: z.string(), writeOff: z.string(), returnIn: z.string(), returnOut: z.string(), stocktake: z.string() }),
+  screens: z.object({ issue: z.string(), writeOff: z.string(), returnIn: z.string(), returnOut: z.string(), stocktake: z.string() }),
+})
+
+/** Stock is opening balance plus signed journal movements; old receipt apps still work. */
 export const inventoryConfigSchema = z.object({
   tables: z.object({ items: z.string(), movements: z.string() }),
   item: z.object({ name: z.string(), opening: z.string(), movements: z.string(), stock: z.string(), image: z.string().nullable(), sku: z.string().nullable() }),
   movement: z.object({ name: z.string(), item: z.string(), qty: z.string(), date: z.string(), note: z.string(), author: z.string() }),
   receiptScreenId: z.string().nullable().default(null),
+  operations: inventoryOperationsSchema.nullable().default(null),
 })
 export type InventoryConfig = z.infer<typeof inventoryConfigSchema>
 

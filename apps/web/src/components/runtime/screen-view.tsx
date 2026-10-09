@@ -114,6 +114,12 @@ export function ScreenView(props: Props) {
   }
 
   if (screen.type === 'detail') {
+    const inventory = runtime.app.inventory
+    const extraTargets = inventory && screen.tableId === inventory.tables.items && inventory.operations
+      ? new Set([inventory.operations.screens.writeOff, inventory.operations.screens.returnIn, inventory.operations.screens.returnOut,
+        inventory.operations.screens.stocktake, ...runtime.app.screens.filter(s => s.type === 'form' && s.mode === 'edit' && s.tableId === inventory.tables.items).map(s => s.id)])
+      : new Set<string>()
+    const extras = screen.components.filter(c => c.type === 'button' && c.action.type === 'open_screen' && extraTargets.has(c.action.screenId))
     /*
      * Заголовок записи уже стоит в шапке экрана: сборщик добавляет его
      * ещё и компонентом, и карточка открывалась с названием заказа дважды
@@ -123,7 +129,7 @@ export function ScreenView(props: Props) {
     const components = [...screen.components]
       .filter(
         (component) =>
-          !(
+          !extras.includes(component) && !(
             component.type === 'heading' &&
             component.source.kind === 'field' &&
             component.source.fieldId === titleFieldId
@@ -166,6 +172,10 @@ export function ScreenView(props: Props) {
             </div>
           ),
         )}
+        {extras.length > 0 && <details className="border-t border-sand-200 pt-3">
+          <summary className="cursor-pointer py-1 text-sm font-medium text-ink-soft">Ещё действия</summary>
+          <div className="mt-3 space-y-3">{extras.map(component => <ComponentView key={component.id} component={component} ctx={ctx} />)}</div>
+        </details>}
       </div>
     )
   }

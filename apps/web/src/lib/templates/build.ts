@@ -66,7 +66,10 @@ export type BuiltTemplate = {
   appTableId: string
   appViewId: string
   appName: string
-  inventory?: (Omit<import('@tableapp/schema').InventoryConfig, 'receiptScreenId'> & { views: { items: string; movements: string } }) | null
+  inventory?: (Omit<import('@tableapp/schema').InventoryConfig, 'receiptScreenId' | 'operations'> & {
+    views: { items: string; movements: string }
+    operations: Omit<NonNullable<import('@tableapp/schema').InventoryConfig['operations']>, 'screens'> | null
+  }) | null
   /** Готовый кабинет клиента: таблица, поле с почтой, поля формы и название. */
   portal: {
     tableId: string
@@ -419,6 +422,14 @@ export function buildTemplate(input: {
         tables: { items: tableId(map.tables.items), movements: tableId(map.tables.movements) },
         views: { items: appView.id, movements: views.find(view => view.tableId === tableId(map.tables.movements))!.id },
         item: of(map.tables.items, map.item), movement: of(map.tables.movements, map.movement),
+        operations: map.operations ? {
+          fields: of(map.tables.movements, map.operations.fields),
+          kinds: Object.fromEntries(Object.entries(map.operations.kinds).map(([operation, name]) => {
+            const id = choiceIds.get(key(map.tables.movements, map.operations!.fields.kind))?.get(name)
+            if (!id) throw new Error(`Шаблон ${template.id}: нет вида движения «${name}»`)
+            return [operation, id]
+          })) as Record<import('@tableapp/schema').InventoryOperation, string>,
+        } : null,
       }
     })() : null,
   }

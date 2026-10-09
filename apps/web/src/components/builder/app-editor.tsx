@@ -4,7 +4,7 @@ import type { App, Device, RoleId, Component, Screen, ScreenType, View } from '@
 import { byPosition, DEVICES, newId, positionBetween, positionSequence } from '@tableapp/schema'
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { publishAppAction, updateAppDraftAction } from '@/app/app-actions'
-import { enableInventoryAction } from '@/app/inventory-setup-actions'
+import { enableInventoryAction, enableStockOperationsAction } from '@/app/inventory-setup-actions'
 import { enableDispatchAction } from '@/app/dispatch-setup-actions'
 import { hasDispatchPreset } from '@/lib/templates/dispatch-app'
 import { useRouter } from 'next/navigation'
@@ -645,14 +645,23 @@ export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTit
           </>}
         </div>}
         {inventoryUpgradeTableId && !app.inventory && <div className="space-y-2 rounded-xl border border-sand-200 p-3">
-          <p className="text-xs leading-relaxed text-ink-soft">Подключите журнал приёмок и роли «Кладовщик» и «Владелец». Текущие остатки сохранятся как начальные. После настройки опубликуйте черновик.</p>
+          <p className="text-xs leading-relaxed text-ink-soft">Подключите приёмку, выдачу, списания, возвраты и инвентаризацию. Текущие остатки сохранятся как начальные. После настройки проверьте роли и опубликуйте черновик.</p>
           <button type="button" disabled={pending || save.kind === 'dirty' || save.kind === 'saving' || save.kind === 'error'}
             onClick={() => startTransition(async () => {
               const result = await enableInventoryAction(app.id, inventoryUpgradeTableId)
               if (!result.ok) { setSave({ kind: 'error', text: result.error }); return }
-              setApp(result.app); setSave({ kind: 'note', text: 'Приёмка настроена. Опубликуйте черновик.' }); router.refresh()
+              setApp(result.app); setSave({ kind: 'note', text: 'Складской учёт настроен. Проверьте предпросмотр и опубликуйте черновик.' }); router.refresh()
             })}
-            className="w-full rounded-lg border border-sand-200 px-3 py-2 text-sm font-medium hover:bg-sand-100 disabled:opacity-40">Подключить приёмку</button>
+            className="w-full rounded-lg border border-sand-200 px-3 py-2 text-sm font-medium hover:bg-sand-100 disabled:opacity-40">Подключить складской учёт</button>
+        </div>}
+        {app.inventory && !app.inventory.operations && <div className="space-y-2 rounded-xl border border-sand-200 p-3">
+          <p className="text-xs leading-relaxed text-ink-soft">Добавьте выдачу, списания, возвраты и инвентаризацию. Остатки и приёмки сохранятся. Новые действия появятся после публикации черновика.</p>
+          <button type="button" disabled={pending || save.kind === 'dirty' || save.kind === 'saving' || save.kind === 'error'}
+            onClick={() => startTransition(async () => {
+              const result = await enableStockOperationsAction(app.id, app)
+              if (!result.ok) { setSave({ kind: 'error', text: result.error }); return }
+              setApp(result.app); setSave({ kind: 'note', text: 'Операции добавлены в черновик. Проверьте роли и опубликуйте его.' }); router.refresh()
+            })} className="w-full rounded-lg border border-sand-200 px-3 py-2 text-sm font-medium hover:bg-sand-100 disabled:opacity-40">Подключить складские операции</button>
         </div>}
         <button
           type="button"

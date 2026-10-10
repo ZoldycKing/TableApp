@@ -1,6 +1,7 @@
 import {
   bigint,
   boolean,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -273,8 +274,16 @@ export const apps = pgTable('apps', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   uniqueIndex('apps_slug_key').on(t.slug),
+  uniqueIndex('apps_workspace_id_key').on(t.workspaceId, t.id),
   index('apps_workspace_idx').on(t.workspaceId),
 ])
+
+/** One explicitly selected client app per business; the composite FK prevents cross-workspace binding. */
+export const workspaceClientApps = pgTable('workspace_client_apps', {
+  workspaceId: text('workspace_id').primaryKey().references(() => workspaces.id, { onDelete: 'cascade' }),
+  appId: text('app_id').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [foreignKey({ name: 'workspace_client_apps_owned_app_fk', columns: [t.workspaceId, t.appId], foreignColumns: [apps.workspaceId, apps.id] }).onDelete('cascade')])
 
 /** Конечные пользователи приложений. Отдельный контур: мест не занимают, платы нет. */
 export const appUsers = pgTable('app_users', {

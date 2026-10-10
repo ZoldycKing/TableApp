@@ -10,6 +10,7 @@ import { authorizeApp, authorizeTable, authorizeWorkspace } from '@/lib/authoriz
 import { generateApp, slugify } from '@/lib/app-builder'
 import { uniqueSlug } from '@/lib/app-slug'
 import { validateAppReferences } from '@/lib/app-references'
+import { checkModuleModelTransition } from '@/lib/app-modules'
 import type { ActionResult } from './actions'
 
 export async function createAppAction(
@@ -72,6 +73,12 @@ export async function updateAppDraftAction(appId: string, draft: unknown): Promi
     return { ok: false, error: 'Определение приложения не прошло проверку' }
   }
 
+  const [stored] = await db.select({ draft: apps.draft, published: apps.published }).from(apps)
+    .where(and(eq(apps.id, appId), eq(apps.workspaceId, auth.member.workspaceId))).limit(1)
+  if (!stored) return { ok: false, error: 'Приложение не найдено' }
+  const modelError = checkModuleModelTransition(parsed.data, stored.draft, stored.published)
+  if (modelError) return { ok: false, error: modelError }
+
   const slug = await uniqueSlug(slugify(parsed.data.slug || parsed.data.name), appId)
   const safeDraft = { ...parsed.data, id: appId, workspaceId: auth.member.workspaceId, slug }
   const referenceError = await validateAppReferences(safeDraft)
@@ -110,6 +117,8 @@ export async function publishAppAction(appId: string): Promise<ActionResult> {
 
   const parsed = appSchema.safeParse(app.draft)
   if (!parsed.success) return { ok: false, error: 'Черновик содержит ошибки и не может быть опубликован' }
+  const modelError = checkModuleModelTransition(parsed.data, app.published)
+  if (modelError) return { ok: false, error: modelError }
   if (parsed.data.screens.length === 0) return { ok: false, error: 'В приложении нет ни одного экрана' }
   const safeApp = { ...parsed.data, id: app.id, workspaceId: app.workspaceId }
   const referenceError = await validateAppReferences(safeApp)

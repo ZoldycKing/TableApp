@@ -164,6 +164,20 @@ describe.skipIf(!process.env.DATABASE_URL)('workspace isolation against Postgres
       await db.update(apps).set({ draft: definition, published: definition }).where(eq(apps.id, ids.app))
     }
   })
+  it('cannot bypass module validation by dropping an adopted manifest on save or publish', async () => {
+    const { db, apps } = database
+    const modular = { ...definition, modules: [] }
+    try {
+      expect((await appActions.updateAppDraftAction(ids.app, modular)).ok).toBe(true)
+      expect(await appActions.updateAppDraftAction(ids.app, definition)).toMatchObject({ ok: false, error: expect.stringMatching(/список модулей/) })
+      const [saved] = await db.select().from(apps).where(eq(apps.id, ids.app))
+      expect(saved!.draft).toEqual(modular)
+      await db.update(apps).set({ draft: definition, published: modular }).where(eq(apps.id, ids.app))
+      expect(await appActions.publishAppAction(ids.app)).toMatchObject({ ok: false, error: expect.stringMatching(/список модулей/) })
+    } finally {
+      await db.update(apps).set({ draft: definition, published: definition }).where(eq(apps.id, ids.app))
+    }
+  })
   it('uses the record workspace rather than an embedded workspace ID', async () => {
     const { db, apps } = database
     await db.update(apps).set({ published: { ...definition, workspaceId: ids.foreignWorkspace } }).where(eq(apps.id, ids.app))

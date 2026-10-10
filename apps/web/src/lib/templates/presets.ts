@@ -6,9 +6,16 @@ import { asPortal } from './portal-app'
 import { asProduction } from './production-app'
 import { asSalon } from './salon-app'
 import { asCustomerApp } from './customer-app'
+import { legacyAppModules } from '../app-modules'
 
 /** Installation and public examples must build the same application. */
 export function templatePreset(app: App, built: BuiltTemplate): App {
+  const preset = buildPreset(app, built)
+  const modules = legacyAppModules(preset, new Map(built.tables.filter(table => table.templateId).map(table => [table.id, table.templateId!])))
+  return modules.length ? { ...preset, modules } : preset
+}
+
+function buildPreset(app: App, built: BuiltTemplate): App {
   if (built.tables.find(table => table.id === built.appTableId)?.templateId === 'salon') return asSalon(app, built)
   if (built.customer) return asCustomerApp(app, built)
   if (built.portal) return asPortal(app, built.portal)

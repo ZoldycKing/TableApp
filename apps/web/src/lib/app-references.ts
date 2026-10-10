@@ -1,6 +1,7 @@
 import type { App, Field } from '@tableapp/schema'
 import { customerWorkflows, normalizeFieldOptions } from '@tableapp/schema'
 import { eq, inArray } from 'drizzle-orm'
+import { checkAppModules } from './app-modules'
 
 export type AppReferenceCatalog = {
   tableIds: Set<string>
@@ -233,7 +234,7 @@ export function checkAppReferences(app: App, catalog: AppReferenceCatalog): stri
       }
     }
   }
-  return error
+  return error ?? checkAppModules(app, catalog)
 }
 
 /** The catalog contains only objects owned by the authoritative workspace. */

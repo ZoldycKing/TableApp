@@ -1,0 +1,37 @@
+import { z } from 'zod'
+
+export const MODULE_KINDS = ['booking', 'sales', 'requests', 'delivery', 'repair', 'property', 'field_service', 'crm', 'support', 'inventory', 'production'] as const
+export type ModuleKind = typeof MODULE_KINDS[number]
+
+const reference = z.string().min(1).max(200)
+export const moduleSourceSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('booking') }).strict(),
+  z.object({ type: z.literal('customer'), tableId: reference }).strict(),
+  z.object({ type: z.literal('inventory') }).strict(),
+  z.object({ type: z.literal('production') }).strict(),
+])
+
+/** Ownership and draft/publication state come from the enclosing App, never from client-supplied tenant IDs. */
+export const appModuleSchema = z.object({
+  id: reference,
+  kind: z.enum(MODULE_KINDS),
+  version: z.number().int().positive(),
+  source: moduleSourceSchema,
+  dependsOn: z.array(reference).max(20).default([]),
+}).strict()
+export type AppModule = z.infer<typeof appModuleSchema>
+
+/** Version 1 refers to existing engine settings; it does not store a second copy of business rules or grant roles. */
+export const MODULE_DEFINITIONS = {
+  booking: { name: 'Запись на услуги', engine: 'booking', version: 1 },
+  sales: { name: 'Каталог и заказы', engine: 'customer', version: 1 },
+  requests: { name: 'Заявки на услуги', engine: 'customer', version: 1 },
+  delivery: { name: 'Доставка', engine: 'customer', version: 1 },
+  repair: { name: 'Ремонт', engine: 'customer', version: 1 },
+  property: { name: 'Просмотры недвижимости', engine: 'customer', version: 1 },
+  field_service: { name: 'Заявки и выезды', engine: 'customer', version: 1 },
+  crm: { name: 'Обращения в отдел продаж', engine: 'customer', version: 1 },
+  support: { name: 'Вопросы по своим обращениям', engine: 'customer', version: 1 },
+  inventory: { name: 'Складской учёт', engine: 'inventory', version: 1 },
+  production: { name: 'Производство', engine: 'production', version: 1 },
+} as const satisfies Record<ModuleKind, { name: string; engine: AppModule['source']['type']; version: number }>

@@ -18,7 +18,12 @@ describe('ready customer scenarios across templates', () => {
       expect(JSON.stringify(customer.runtime)).not.toContain('other2@example.invalid')
       expect(JSON.stringify(customer.runtime)).not.toContain('worker@example.invalid')
       const form = example.app.screens.find(screen => screen.id === config.formScreenId)!
-      expect(canOpenScreen(form, ANONYMOUS)).toBe(true)
+      expect(canOpenScreen(form, ANONYMOUS)).toBe(false)
+      const guest = templateAppPreview(example, 'guest').runtime
+      expect(guest.app.screens.some(screen => screen.type === 'form')).toBe(false)
+      expect(guest.app.screens.filter(screen => screen.tab)).toHaveLength(1)
+      const card = guest.app.screens.find(screen => screen.id === config.catalog!.detailScreenId)
+      if (!config.cart) expect(card?.type === 'detail' && card.components.some(component => component.type === 'button' && component.action.type === 'open_screen' && component.action.screenId === config.formScreenId)).toBe(true)
       const visitor = visitorFor(example.app, 'new-person@example.invalid')
       const allowed = writableFields(example.app, config.tableId, visitor, 'create')
       expect(allowed.has(config.statusFieldId)).toBe(false)
@@ -32,7 +37,7 @@ describe('ready customer scenarios across templates', () => {
       }
       values[config.statusFieldId] = config.terminalStatuses[0]
       const draft = draftFromAnonymous(example.app, form, values)
-      expect(draft.ok).toBe(true)
+      expect(draft.ok).toBe(false)
       const pending = revalidatePending(example.app, { screenId: form.id, tableId: config.tableId, values }, example.fields, visitor)
       expect(pending.ok).toBe(true)
       if (pending.ok) expect(config.statusFieldId in pending.values).toBe(false)

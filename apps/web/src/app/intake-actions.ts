@@ -42,6 +42,7 @@ import { explainToCustomer } from '@tableapp/schema'
 import { isPlanLimitError } from '@/lib/limits'
 import { insertRow, loadTableFields } from '@/lib/row-write'
 import { RowWriteError } from '@/lib/row-mutations'
+import { customerCheckoutIds } from '@/lib/customer-checkout'
 
 /**
  * Заявка с витрины, подтверждённая почтой.
@@ -98,6 +99,7 @@ export async function requestIntakeAction(
 
   const app = await loadApp(slug)
   if (!app) return { ok: false, error: 'Приложение не опубликовано' }
+  if (customerCheckoutIds(app).has(screenId)) return { ok: false, error: 'Сначала подтвердите почту, затем заполните форму оформления' }
 
   const screen = app.screens.find((item) => item.id === screenId)
   if (!screen || screen.type !== 'form' || screen.mode !== 'create') {

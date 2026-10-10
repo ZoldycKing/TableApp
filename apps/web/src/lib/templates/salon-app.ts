@@ -26,7 +26,7 @@ export function asSalon(app: App, built: BuiltTemplate): App {
   const list = app.screens.find(s => s.type === 'list')!, detail = app.screens.find(s => s.type === 'detail')!
   const visitFields = config.visit
   const create: Screen = { id: formId, appId: app.id, name: 'Записаться на услугу', position: 'a', tab: null,
-    access: access(['client', 'manager'], [], true), type: 'form', tableId: config.tables.visits, mode: 'create',
+    access: access(['client', 'manager']), type: 'form', tableId: config.tables.visits, mode: 'create',
     submitLabel: 'Подтвердить запись', successScreenId: list.id, successText: 'Вы записаны. Дата и время уже в вашем кабинете.',
     components: [...formFields([visitFields.service, visitFields.master, visitFields.start, visitFields.client, visitFields.phone]),
       { ...formFields([visitFields.email], false)[0]!, roles: ['manager'] }] }
@@ -76,7 +76,7 @@ export function asSalon(app: App, built: BuiltTemplate): App {
     ...serviceApp.screens.filter(s => s.type === 'list').map(s => ({ ...s, id: newId('screen'), name: 'Прайс', tab: { icon: 'tag', label: 'Прайс' },
       access: access(['manager']), ...(s.type === 'list' ? { source: { ...s.source, viewId: built.views.find(v => v.tableId === config.tables.services && v.name === 'Прайс')!.id } } : {}) })),
     { id: newId('screen'), appId: app.id, position: 'a', name: 'Имена мастеров', tab: null, type: 'list',
-      access: access(['client', 'staff', 'manager'], [config.master.name], true),
+      access: access(['client', 'staff', 'manager']),
       source: { viewId: built.views.find(v => v.tableId === config.tables.masters)!.id, extraFilter: null, searchFieldIds: [config.master.name] },
       titleFieldId: config.master.name, subtitleFieldId: null, metaFieldId: null, imageFieldId: null, statusFieldId: null, onTapScreenId: null, components: [] },
   ]

@@ -1,6 +1,7 @@
 import type { App, AppRole, Block, Component, Field, RoleId, Screen, View } from '@tableapp/schema'
 import { evalFilter, fieldsOfFilter, GUEST_ROLE, indexFields } from '@tableapp/schema'
 import { rulesFor } from './row-access'
+import { customerCheckoutIds, offersCustomerCheckout } from './customer-checkout'
 
 /**
  * Кто есть кто в приложении и что ему можно.
@@ -566,7 +567,8 @@ export function formFields(
 }
 
 export function screensFor(app: App, visitor: Visitor): Screen[] {
-  return app.screens.filter((screen) => canOpenScreen(screen, visitor))
+  const checkout = !visitor.authenticated ? customerCheckoutIds(app) : new Set<string>()
+  return app.screens.filter((screen) => canOpenScreen(screen, visitor) && !checkout.has(screen.id))
 }
 
 /**
@@ -682,7 +684,7 @@ export function visibleScreensFor(app: App, visitor: Visitor): Screen[] {
             const open = publicFieldPolicy(screen)
             if (Object.values(component.action.initialValues ?? {}).some(binding => binding.kind === 'field' && !open.has(binding.fieldId))) return false
           }
-          return ids.has(component.action.screenId)
+          return ids.has(component.action.screenId) || !visitor.authenticated && offersCustomerCheckout(app, screen, component.action.screenId)
         }
         return allowedAction(screen, component.action)
       })

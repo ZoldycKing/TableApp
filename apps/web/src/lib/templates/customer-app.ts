@@ -65,11 +65,11 @@ function customerAppSection(app: App, built: BuiltTemplate): App {
     customerDetail.components = customerDetail.components.filter(component => component.type !== 'field' || component.fieldId !== related.id)
     customerDetail.components.push({ id: newId('component'), position: 'y', type: 'related_list', relationFieldId: related.id, titleFieldId: itemFields[d.cart.name]!, subtitleFieldId: itemFields[d.cart.qty]!, imageFieldId: null, onTapScreenId: null, limit: 100, roles: null, visibleWhen: null })
   }
-  const request = form(formId, d.submitLabel, 'create', formFields, ['client'], !d.parent)
+  const request = form(formId, d.submitLabel, 'create', formFields, ['client'])
   if (request.type === 'form') {
     request.components = request.components.map(component => component.type !== 'form_field' ? component : { ...component,
       label: component.fieldId === f.requestName ? 'Ваше имя' : component.fieldId === f.requestPhone ? 'Ваш телефон' : component.fieldId === f.title ? 'Что нужно сделать' : null })
-    request.components.unshift({ id: newId('component'), position: '0', type: 'text', source: { kind: 'literal', value: d.intro }, style: 'body', roles: null, visibleWhen: null })
+    request.components.unshift({ id: newId('component'), position: '0', type: 'text', source: { kind: 'literal', value: `${d.intro.replace('Онлайн-оплаты нет.', '').trim()} Оплаты онлайн нет. После оформления сотрудник бизнеса свяжется с вами и согласует оплату.` }, style: 'body', roles: null, visibleWhen: null })
   }
   const managerFields = fields.filter(field => !['formula', 'lookup', 'rollup', 'count'].includes(field.type) && field.id !== f.cart && field.id !== f.submissionId && field.id !== config.approval?.approvedPriceFieldId).map(field => field.id)
   const workerShown = Array.from(new Set([...shown, f.requestName!, f.requestPhone!, f.requestAddress!].filter(Boolean))).filter(id => !(d.table === 'zayavki' && id === f.price))

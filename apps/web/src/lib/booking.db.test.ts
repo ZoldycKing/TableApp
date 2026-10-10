@@ -17,12 +17,12 @@ describe.skipIf(!process.env.DATABASE_URL)('salon scenarios with atomic PostgreS
   const example = templateExample('salon'), config = example.app.booking!, userId = newId('user'), workspaceId = newId('workspace')
   const email = `${newId('appUser')}@example.invalid`, admin = `${newId('appUser')}@example.invalid`
   let database: typeof import('@tableapp/db'), mutation: typeof import('./row-mutations'), runtime: typeof import('./app-runtime')
-  let actions: typeof import('@/app/booking-actions'), rowActions: typeof import('@/app/runtime-actions'), intake: typeof import('@/app/intake-actions'), session: typeof import('./app-session')
+  let actions: typeof import('@/app/booking-actions'), rowActions: typeof import('@/app/runtime-actions'), intake: typeof import('@/app/intake-actions'), session: typeof import('./app-session'), auth: typeof import('@/app/auth-actions')
   let chosen: { start: string; masterId: string }, ownId: string, loginCookie: string, later: { start: string; masterId: string }
   const day = instantToWallClock(new Date(Date.now() + 4 * 86400_000))!.date
   beforeAll(async () => {
     database = await import('@tableapp/db'); mutation = await import('./row-mutations'); runtime = await import('./app-runtime')
-    actions = await import('@/app/booking-actions'); rowActions = await import('@/app/runtime-actions'); intake = await import('@/app/intake-actions'); session = await import('./app-session')
+    actions = await import('@/app/booking-actions'); rowActions = await import('@/app/runtime-actions'); intake = await import('@/app/intake-actions'); session = await import('./app-session'); auth = await import('@/app/auth-actions')
     example.app.workspaceId = workspaceId; example.app.slug = `booking-test-${example.app.id.toLowerCase()}`
     example.app.allowlist = [{ email: admin, roleId: 'manager', company: '' }, { email: 'olga@example.com', roleId: 'staff', company: '' }]
     await database.db.insert(database.users).values({ id: userId, email: `${userId}@example.invalid` })
@@ -45,14 +45,19 @@ describe.skipIf(!process.env.DATABASE_URL)('salon scenarios with atomic PostgreS
   async function stored(id: string) { const row = (await database.db.select().from(database.rows).where(eq(database.rows.id, id)))[0]!; return { ...row, data: rowData(row.data) } }
   const input = (slot: { start: string; masterId: string }, title = 'Synthetic client') => ({ [config.visit.client]: title, [config.visit.phone]: '+7 900 000 00 00',
     [config.visit.service]: [serviceId], [config.visit.master]: [slot.masterId], [config.visit.start]: slot.start })
-  it('lists public availability without customer details, verifies the first visit and fixes its price and duration', async () => {
+  it('verifies email before choosing time and entering personal details, without creating a visit at login', async () => {
+    expect((await intake.requestIntakeAction(example.app.slug, config.formScreenId, email, {})).ok).toBe(false)
+    expect((await auth.requestAppLoginAction(example.app.slug, email)).ok).toBe(true)
+    expect(await auth.consumeAppCodeAction(example.app.slug, state.code)).toEqual({ ok: true })
+    const before = await runtime.loadPublishedApp(example.app.slug, (await session.currentAppAccess(example.app)).visitor)
+    expect(before!.tables[config.tables.visits]!.rows).toHaveLength(0)
     const available = await actions.bookingAvailabilityAction(example.app.slug, serviceId, day, masterId)
     if (!available.ok) throw new Error(available.error)
     chosen = available.slots.find(slot => slot.time === '10:00')!; later = available.slots.find(slot => slot.time === '15:00')!
     expect(chosen).toBeDefined(); expect(JSON.stringify(available)).not.toContain('Ирина')
-    const result = await intake.requestIntakeAction(example.app.slug, config.formScreenId, email,
+    const result = await rowActions.appCreateRowAction(example.app.slug, config.tables.visits,
       { ...input(chosen), [config.visit.email]: 'forged@example.invalid', [config.visit.price]: 1, [config.visit.minutes]: 1, [config.visit.status]: config.statuses.cancelled })
-    expect(result.ok).toBe(true); expect(await intake.confirmIntakeAction(example.app.slug, state.code)).toEqual({ ok: true })
+    expect(result.ok).toBe(true)
     loginCookie = state.jar.get('tableapp_staff')!
     const access = await session.currentAppAccess(example.app), loaded = await runtime.loadPublishedApp(example.app.slug, access.visitor)
     expect(loaded!.tables[config.tables.visits]!.rows).toHaveLength(1)

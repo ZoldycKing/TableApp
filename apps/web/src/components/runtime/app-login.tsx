@@ -12,11 +12,17 @@ export function AppLogin({
   appName,
   accent,
   initialError,
+  onDone,
+  onCancel,
+  demo = false,
 }: {
   slug: string
   appName: string
   accent: string
   initialError: string | null
+  onDone?: () => void
+  onCancel?: () => void
+  demo?: boolean
 }) {
   const router = useRouter()
   const [email, setEmail] = useState('')
@@ -24,7 +30,13 @@ export function AppLogin({
   const [error, setError] = useState<string | null>(initialError)
   const [sent, setSent] = useState<{ hint: string | null } | null>(null)
   const [pending, startTransition] = useTransition()
+  const [verified, setVerified] = useState(false)
   const styles = accentClasses(accent)
+  const request = () => demo
+    ? Promise.resolve({ ok: true as const, hint: 'Это пример: письмо не отправляется. Для продолжения введите код 123456.' })
+    : requestAppLoginAction(slug, email)
+
+  if (verified) return <p role="status" className="mx-auto max-w-sm p-6 text-sm text-ink-soft">Почта подтверждена. Открываем форму…</p>
 
   if (sent) {
     return (
@@ -32,18 +44,22 @@ export function AppLogin({
         className="mx-auto max-w-sm space-y-3 p-6"
         onSubmit={(event) => {
           event.preventDefault()
+          if (pending) return
           setError(null)
           startTransition(async () => {
-            const result = await consumeAppCodeAction(slug, code)
-            if (result.ok) router.push(`/a/${slug}`)
+            const result = demo ? { ok: code === '123456', error: 'В примере используйте код 123456' } : await consumeAppCodeAction(slug, code)
+            if (result.ok) {
+              if (onDone) { setVerified(true); onDone() }
+              else router.push(`/a/${slug}`)
+            }
             else setError(result.error ?? 'Не удалось войти')
           })
         }}
       >
         <h1 className="text-lg font-semibold">Введите код</h1>
         <p className="text-sm text-[var(--color-ink-muted)]">
-          Если для адреса {email} разрешён вход, код отправлен на почту. Он действует
-          {LOGIN_CODE_TTL_MINUTES} минут; в письме есть и ссылка.
+          Если для адреса {email} разрешён вход, код отправлен на почту. Он действует {LOGIN_CODE_TTL_MINUTES} минут.
+          {onDone ? ' После подтверждения заполните данные для оформления. Заказ пока не создан.' : ' В письме есть и ссылка.'}
         </p>
 
         {sent.hint ? (
@@ -55,6 +71,7 @@ export function AppLogin({
         <input
           inputMode="numeric"
           autoComplete="one-time-code"
+          aria-label="Код из письма"
           required
           autoFocus
           value={code}
@@ -73,13 +90,13 @@ export function AppLogin({
           aria-busy={pending}
           className={`w-full rounded-xl px-4 py-2.5 text-sm font-medium text-white disabled:opacity-40 ${styles.bg}`}
         >
-          {pending ? 'Проверяем…' : 'Войти'}
+          {pending ? 'Проверяем…' : onDone ? 'Подтвердить и продолжить' : 'Войти'}
         </button>
 
         <ResendCode
           busy={pending}
           onResend={async () => {
-            const again = await requestAppLoginAction(slug, email)
+            const again = await request()
             if (!again.ok) {
               setError(again.error)
               return null
@@ -101,6 +118,7 @@ export function AppLogin({
         >
           Ввести другой адрес
         </button>
+        {onCancel ? <button type="button" onClick={onCancel} className="w-full text-sm text-ink-muted">Вернуться к выбору</button> : null}
       </form>
     )
   }
@@ -110,21 +128,24 @@ export function AppLogin({
       className="mx-auto max-w-sm space-y-3 p-6"
       onSubmit={(event) => {
         event.preventDefault()
+        if (pending) return
         setError(null)
         startTransition(async () => {
-          const result = await requestAppLoginAction(slug, email)
+          const result = await request()
           if (result.ok) setSent({ hint: result.hint })
           else setError(result.error)
         })
       }}
     >
-      <h1 className="text-lg font-semibold">{appName}</h1>
+      <h1 className="text-lg font-semibold">{onDone ? 'Подтвердите почту' : appName}</h1>
       <p className="text-sm text-[var(--color-ink-muted)]">
-        Введите почту — пришлём код для входа. Пароль не нужен.
+        {onDone ? 'Сначала подтвердите почту одноразовым кодом. Затем заполните данные для заказа или записи. Пароль не нужен; повторно создавать аккаунт у другого бизнеса не потребуется.' : 'Введите почту — пришлём код для входа. Пароль не нужен.'}
       </p>
 
       <input
         type="email"
+        aria-label="Ваша почта"
+        autoComplete="email"
         required
         value={email}
         onChange={(event) => setEmail(event.target.value)}
@@ -144,6 +165,7 @@ export function AppLogin({
       >
         {pending ? 'Отправляем…' : 'Получить код'}
       </button>
+      {onCancel ? <button type="button" onClick={onCancel} className="w-full text-sm text-ink-muted">Вернуться к выбору</button> : null}
     </form>
   )
 }

@@ -19,11 +19,11 @@ if (!process.env.DATABASE_URL && existsSync(envFile)) process.loadEnvFile(envFil
 describe.skipIf(!process.env.DATABASE_URL)('all customer template workflows in PostgreSQL', () => {
   const email = `${newId('appUser')}@example.invalid`, worker = `${newId('appUser')}@example.invalid`, other = `${newId('appUser')}@example.invalid`
   const fixtures = TEMPLATES.filter(template => template.customer).map(template => ({ example: templateExample(template.id), workspaceId: newId('workspace'), userId: newId('user') }))
-  let database: typeof import('@tableapp/db'), runtime: typeof import('./app-runtime'), actions: typeof import('@/app/runtime-actions'), decisions: typeof import('@/app/customer-actions'), mutation: typeof import('./row-mutations'), sessions: typeof import('./app-session'), intake: typeof import('@/app/intake-actions')
+  let database: typeof import('@tableapp/db'), runtime: typeof import('./app-runtime'), actions: typeof import('@/app/runtime-actions'), decisions: typeof import('@/app/customer-actions'), mutation: typeof import('./row-mutations'), sessions: typeof import('./app-session'), intake: typeof import('@/app/intake-actions'), auth: typeof import('@/app/auth-actions')
   let customerCookie: string
   const ids = new Map<string, string>()
   beforeAll(async () => {
-    database = await import('@tableapp/db'); runtime = await import('./app-runtime'); actions = await import('@/app/runtime-actions'); decisions = await import('@/app/customer-actions'); mutation = await import('./row-mutations'); sessions = await import('./app-session'); intake = await import('@/app/intake-actions')
+    database = await import('@tableapp/db'); runtime = await import('./app-runtime'); actions = await import('@/app/runtime-actions'); decisions = await import('@/app/customer-actions'); mutation = await import('./row-mutations'); sessions = await import('./app-session'); intake = await import('@/app/intake-actions'); auth = await import('@/app/auth-actions')
     for (const { example, userId, workspaceId } of fixtures) {
       example.app.workspaceId = workspaceId; example.app.slug = `workflow-${example.app.id.toLowerCase()}`
       example.app.allowlist = [{ email: worker, roleId: 'staff', company: '' }]
@@ -65,13 +65,22 @@ describe.skipIf(!process.env.DATABASE_URL)('all customer template workflows in P
     await database.db.insert(database.staffSessions).values({ id, email: address, expiresAt: new Date(Date.now() + 3_600_000) })
     state.jar.set(STAFF_SESSION_COOKIE, id)
   }
-  it('verifies the first request, then shares the identity across businesses without sharing records or roles', async () => {
+  it('verifies email without creating an order, then shares identity across businesses without sharing records or roles', async () => {
     const first = fixtures[0]!.example, config = first.app.customer!
-    expect((await intake.requestIntakeAction(first.app.slug, config.formScreenId, email, input(first))).ok).toBe(true)
-    expect(await intake.confirmIntakeAction(first.app.slug, state.code)).toEqual({ ok: true })
-    customerCookie = state.jar.get(STAFF_SESSION_COOKIE)!
     for (const { example } of fixtures) {
-      if (example !== first) expect(await actions.appCreateRowAction(example.app.slug, example.app.customer!.tableId, input(example))).toEqual({ ok: true })
+      const guest = await runtime.loadPublishedApp(example.app.slug, (await sessions.currentAppAccess(example.app)).visitor)
+      expect(guest!.app.screens.some(screen => screen.type === 'form')).toBe(false)
+      expect((await intake.requestIntakeAction(example.app.slug, example.app.customer!.formScreenId, email, input(example))).ok).toBe(false)
+      expect((await actions.appCreateRowAction(example.app.slug, example.app.customer!.tableId, input(example))).ok).toBe(false)
+    }
+    expect((await auth.requestAppLoginAction(first.app.slug, email)).ok).toBe(true)
+    expect(await auth.consumeAppCodeAction(first.app.slug, 'wrong')).toMatchObject({ ok: false })
+    expect(await auth.consumeAppCodeAction(first.app.slug, state.code)).toEqual({ ok: true })
+    expect((await auth.consumeAppCodeAction(first.app.slug, state.code)).ok).toBe(false)
+    customerCookie = state.jar.get(STAFF_SESSION_COOKIE)!
+    expect(await own(first)).toHaveLength(0)
+    for (const { example } of fixtures) {
+      expect(await actions.appCreateRowAction(example.app.slug, example.app.customer!.tableId, input(example))).toEqual({ ok: true })
       const records = await own(example)
       expect(records).toHaveLength(1); ids.set(example.template.id, records[0]!.id)
       const access = await sessions.currentAppAccess(example.app), loaded = (await runtime.loadPublishedApp(example.app.slug, access.visitor))!

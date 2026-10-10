@@ -23,7 +23,9 @@ describe('complete salon preset and availability', () => {
     expect(runtime.tables[config.tables.services]!.rows).toHaveLength(5)
     expect(JSON.stringify(runtime)).not.toContain('просила чуть теплее')
     expect(JSON.stringify(runtime)).not.toContain('olga@example.com')
-    expect(project(ANONYMOUS).tables[config.tables.visits]!.rows).toEqual([])
+    expect(project(ANONYMOUS).tables[config.tables.visits]?.rows ?? []).toEqual([])
+    expect(project(ANONYMOUS).app.screens.filter(screen => screen.tab)).toHaveLength(1)
+    expect(project(ANONYMOUS).app.screens.some(screen => screen.type === 'form')).toBe(false)
     const foreign = structuredClone(example.app); foreign.booking!.tables.masters = 'foreign-table'
     expect(checkAppReferences(foreign, { tableIds: new Set(example.built.tables.map(row => row.id)), fields: new Map(example.fields.map(field => [field.id, field])), views: new Map(example.views.map(view => [view.id, view])) })).not.toBeNull()
   })

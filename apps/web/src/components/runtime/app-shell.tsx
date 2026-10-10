@@ -40,6 +40,8 @@ import {
   type NavState,
 } from './nav-history'
 import { IntakeVerify } from './intake-verify'
+import { AppLogin } from './app-login'
+import { customerCheckoutIds, parseCheckoutIntent, type CheckoutIntent } from '@/lib/customer-checkout'
 import {
   ConsumptionPanel,
   describeMovement,
@@ -134,6 +136,7 @@ export function AppShell({
   editing = false,
   browserHistory = false,
   demoBookingData,
+  onDemoSignIn,
 }: {
   runtime: RuntimeApp
   viewer: Viewer
@@ -161,6 +164,8 @@ export function AppShell({
   browserHistory?: boolean
   /** Sanitized availability metadata for synthetic template previews only. */
   demoBookingData?: BookingData
+  /** Template examples can demonstrate login without sending mail or creating an account. */
+  onDemoSignIn?: () => void
 }) {
   const [cart, setCart] = useState<CustomerCart>({ requestId: '', items: [] })
   const cartApp = useRef('')
@@ -181,6 +186,8 @@ export function AppShell({
     }
   }, [cart, demo, runtime.app.id, runtime.app.customer?.cart])
   const [pendingCabinet, setPendingCabinet] = useState(false)
+  const [checkout, setCheckout] = useState<CheckoutIntent | null>(null)
+  const [savedNotice, setSavedNotice] = useState<string | null>(null)
   const { app } = runtime
   useLiveApp(app.slug, !demo && !editing)
   const screens = useMemo(() => new Map(app.screens.map((screen) => [screen.id, screen])), [app.screens])
@@ -242,7 +249,7 @@ export function AppShell({
 
   const current = stack[stack.length - 1]!
   useEffect(() => { setMoreTabs(false); setConfirmCancellation(false) }, [current.screenId, current.rowId])
-  const contentRef = useEnterMotion(`${current.screenId}:${current.rowId ?? ''}:${sent === null ? 'screen' : 'sent'}:${intake === null ? 'form' : 'verify'}`)
+  const contentRef = useEnterMotion(`${current.screenId}:${current.rowId ?? ''}:${sent === null ? 'screen' : 'sent'}:${checkout ? 'login' : intake === null ? 'form' : 'verify'}`)
   const screen = screens.get(current.screenId)
   const customer = customerWorkflows(app).find(config => [config.formScreenId, config.detailScreenId, config.listScreenId].includes(current.screenId))
   const accent = accentTones(app.theme.accent)
@@ -300,6 +307,7 @@ export function AppShell({
    * на экран, а кнопка браузера уводила бы с приложения.
    */
   const goBack = () => {
+    if (checkout) { clearCheckout(); return }
     setSent(null)
     if (stack.length <= 1) return
     if (browserHistory && typeof window !== 'undefined') {
@@ -389,13 +397,48 @@ export function AppShell({
       setListStates(restored.lists)
       setSent(null)
       setIntake(null)
+      clearCheckout()
       setError(null)
     }
     window.addEventListener('popstate', onPop)
     return () => window.removeEventListener('popstate', onPop)
-  }, [browserHistory, screens])
+  }, [browserHistory, screens, app.id, demo, editing])
 
   const previousRuntime = useRef(runtime)
+  const clearCheckout = () => {
+    setCheckout(null)
+    if (!demo && !editing) try { sessionStorage.removeItem(`tableapp:checkout:${app.id}`) } catch { /* Storage is optional. */ }
+  }
+  useEffect(() => {
+    setCheckout(null)
+    if (demo || editing) return
+    try {
+      const saved = sessionStorage.getItem(`tableapp:checkout:${app.id}`)
+      if (saved) setCheckout(parseCheckoutIntent(saved, app))
+    } catch { /* The in-memory choice still survives the ordinary code step. */ }
+  }, [app.id, demo, editing])
+  useEffect(() => {
+    if (!checkout || !customerCheckoutIds(app).has(checkout.screenId)) return
+    if (!demo && !editing) try { sessionStorage.setItem(`tableapp:checkout:${app.id}`, JSON.stringify(checkout)) } catch { /* Storage is optional. */ }
+    if (!viewer) return
+    const target = screens.get(checkout.screenId)
+    if (target?.type !== 'form' || target.mode !== 'create') {
+      clearCheckout(); setError('С этой почтой оформление недоступно. Вернитесь в каталог или свяжитесь с бизнесом.'); return
+    }
+    const config = customerWorkflows(app).find(config => config.formScreenId === target.id)
+    const initial: Record<string, unknown> = {}
+    if (config?.catalog?.selectionFieldId && checkout.rowId) {
+      const selected = runtime.tables[config.catalog.tableId]?.rows.find(item => item.id === checkout.rowId)
+      if (!selected) { clearCheckout(); setError('Этот вариант больше недоступен. Выберите другой в каталоге.'); return }
+      initial[config.catalog.selectionFieldId] = [selected.id]
+      const primary = runtime.tables[config.tableId]?.primaryFieldId
+      if (primary && target.components.some(component => component.type === 'form_field' && component.fieldId === primary)) initial[primary] = selected.data[config.catalog.titleFieldId]
+    }
+    setFormDraft({ screenId: target.id, values: initial })
+    if (app.booking && target.id === app.booking.formScreenId) setBookingDraft(checkout.rowId ? { [app.booking.visit.service]: [checkout.rowId] } : null)
+    clearCheckout(); setSent(null); setError(null)
+    navigate(target.id, null)
+  }, [checkout, viewer, runtime, screens, app, demo, editing])
   useEffect(() => {
     if (pendingCabinet && viewer && app.homeScreenId && screens.has(app.homeScreenId)) {
       setPendingCabinet(false); setSent(null); openTab(app.homeScreenId)
@@ -429,6 +472,11 @@ export function AppShell({
   const handleAction = (action: Action) => {
     switch (action.type) {
       case 'open_screen': {
+        if (!viewer && !editing && customerCheckoutIds(app).has(action.screenId)) {
+          setError(null); setSavedNotice(null)
+          setCheckout({ screenId: action.screenId, rowId: current.rowId })
+          return
+        }
         const target = screens.get(action.screenId)
         if (target?.type === 'form' && target.mode === 'create') {
           const editable = new Set(target.components.flatMap(component => component.type === 'form_field' ? [component.fieldId] : []))
@@ -600,6 +648,7 @@ export function AppShell({
    * иначе по ней не отличить один открытый заказ от другого.
    */
   const heading = (() => {
+    if (checkout && !viewer) return 'Подтвердите почту'
     if (screen.type !== 'detail' || !row || !table) return screen.name
     if (app.booking?.tables.visits === screen.tableId && app.screens.some(s => s.id === app.homeScreenId)) {
       const ids = row.data[app.booking.visit.service]
@@ -764,6 +813,7 @@ export function AppShell({
             {error}
           </p>
         ) : null}
+        {savedNotice ? <p role="status" className="border-b border-sage-200 bg-sage-50 px-4 py-3 text-sm text-ink-soft sm:px-6">{savedNotice}</p> : null}
 
         {/*
          * Прокрутка только вдоль: поперёк приложению разъезжаться нечем, и
@@ -781,6 +831,10 @@ export function AppShell({
                   setFormValues({})
                 }}
               />
+            ) : checkout !== null ? (
+              viewer ? <p role="status" className="p-6 text-sm text-ink-soft">Открываем форму…</p> :
+              <AppLogin key={checkout.screenId} slug={app.slug} appName={runtime.business?.name ?? app.name} accent={app.theme.accent} initialError={null}
+                demo={demo} onCancel={clearCheckout} onDone={() => { if (demo) { if (onDemoSignIn) onDemoSignIn(); else { clearCheckout(); setError(DEMO_NOTE) } } else router.refresh() }} />
             ) : intake !== null ? (
               <IntakeVerify
                 slug={app.slug}
@@ -811,7 +865,7 @@ export function AppShell({
                 if (screen.id === app.booking!.rescheduleScreenId && row) {
                   runMutation(() => appUpdateRowAction(app.slug, app.booking!.tables.visits, row.id, values, row.version), goBack)
                 } else if (viewer === null && !demo && !editing) { setBookingDraft(values); setError(null); setIntake({ screenId: screen.id, values }) }
-                else runMutation(() => appCreateRowAction(app.slug, app.booking!.tables.visits, values), () => { setBookingDraft(null); openTab(home) })
+                else runMutation(() => appCreateRowAction(app.slug, app.booking!.tables.visits, values), () => { setBookingDraft(null); setSavedNotice('Запись оформлена. Оплата онлайн не требуется; порядок оплаты согласует сотрудник бизнеса.'); openTab(home) })
               }} /> :
             app.inventory && inventoryOperation(app.inventory, screen.id) ? <InventoryReceipt key={`${screen.id}:${current.rowId}`} runtime={runtime}
               operation={inventoryOperation(app.inventory, screen.id)!} itemId={current.rowId} config={app.inventory} demo={demo || editing}
@@ -889,6 +943,7 @@ export function AppShell({
                     return
                   }
                   runMutation(() => appCreateRowAction(app.slug, tableId, values), () => {
+                    if (customer && screen.id === customer.formScreenId) setSavedNotice('Оформлено. Ответственный сотрудник свяжется с вами для согласования условий и оплаты. Онлайн-оплаты нет.')
                     if (app.customer) setCart({ requestId: crypto.randomUUID(), items: [] })
                     if (screen.type === 'form' && screen.successScreenId) {
                       openTab(screen.successScreenId)
@@ -908,10 +963,10 @@ export function AppShell({
               }}
             />
             )}
-            {sent === null && intake === null && app.customer?.cart && app.customer.catalog && screen.type === 'detail' && screen.id === app.customer.catalog.detailScreenId && row ?
+            {sent === null && checkout === null && intake === null && app.customer?.cart && app.customer.catalog && screen.type === 'detail' && screen.id === app.customer.catalog.detailScreenId && row ?
               <button type="button" onClick={() => setCart(current => ({ ...current, items: current.items.some(item => item.id === row.id) ? current.items.map(item => item.id === row.id ? { ...item, qty: Math.min(1000, item.qty + 1) } : item) : [...current.items, { id: row.id, qty: 1 }].slice(0, 100) }))}
                 className={`mt-4 w-full rounded-xl px-4 py-3 text-sm font-semibold text-white ${accent.solid}`}>Добавить в заказ</button> : null}
-            {sent === null && intake === null && app.customer?.cart && cart.items.length > 0 && screen.id !== app.customer.formScreenId && screen.type !== 'form' ?
+            {sent === null && checkout === null && intake === null && app.customer?.cart && cart.items.length > 0 && screen.id !== app.customer.formScreenId && screen.type !== 'form' ?
               <CustomerCartButton count={cart.items.length} accent={app.theme.accent} onClick={() => handleAction({ id: 'cart-checkout', type: 'open_screen', screenId: app.customer!.formScreenId })} /> : null}
             {sent === null && intake === null && customer && screen.id === customer.detailScreenId && row ? <div className="mt-4 space-y-3 rounded-2xl border border-sand-200 bg-white p-4">
               {customer.approval && row.data[customer.statusFieldId] === customer.approval.waitingStatus ? <>

@@ -84,6 +84,7 @@ export function BookingForm({ runtime, row, demo, demoData, pending, initialValu
     </div> : null}
     {!row && administrator ? <label className="block space-y-1.5 text-sm font-medium">Почта клиента для кабинета (необязательно)<input aria-label="Почта клиента для кабинета" type="email" value={customerEmail} onChange={event => setCustomerEmail(event.target.value)} className={inputClass} disabled={pending} /><span className="block text-xs font-normal text-ink-muted">Клиент увидит эту запись после входа с указанной почтой. Письмо автоматически не отправляется.</span></label> : null}
     {error ? <p role="alert" className="text-sm text-red-700">{error}</p> : null}
+    {!row ? <p className="text-xs text-ink-muted">Запись оформляется без онлайн-оплаты. После оформления сотрудник бизнеса свяжется с вами для согласования оплаты.</p> : null}
     {demo ? <p className="text-xs text-ink-muted">Это демонстрация: запись не сохранится.</p> : null}
     <button type="submit" disabled={!chosen || loading || pending} className={`w-full rounded-xl px-4 py-3 text-sm font-semibold text-white disabled:opacity-40 ${accent.solid}`}>{pending ? 'Сохраняем…' : row ? 'Сохранить новое время' : 'Подтвердить запись'}</button>
   </form>

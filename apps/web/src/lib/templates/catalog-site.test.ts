@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+vi.mock('@/components/runtime/app-shell', () => ({ AppShell: () => null }))
 import { REQUESTS, ROLE_VIEWS } from '@/components/marketing/demos'
 import { TEMPLATE_DEMO_IDS } from '@/components/marketing/template-demo'
 import { SOLUTIONS } from '@/lib/solutions'

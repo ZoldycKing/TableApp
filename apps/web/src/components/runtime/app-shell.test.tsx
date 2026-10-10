@@ -7,9 +7,11 @@ import { navFromHistory } from './nav-history'
 import { appCreateRowAction, appUpdateRowAction } from '@/app/runtime-actions'
 import { templateExample } from '@/lib/templates/presentation'
 import { templateAppPreview } from '@/lib/templates/app-preview'
+import { consumeAppCodeAction, requestAppLoginAction } from '@/app/auth-actions'
+import { TemplatePreviewShell } from '@/components/marketing/template-preview-shell'
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }))
-vi.mock('@/app/auth-actions', () => ({ signOutAppAction: vi.fn() }))
+vi.mock('@/app/auth-actions', () => ({ signOutAppAction: vi.fn(), consumeAppCodeAction: vi.fn(), requestAppLoginAction: vi.fn() }))
 vi.mock('@/app/production-actions', () => ({ saveMovementAction: vi.fn(), saveProductionAction: vi.fn() }))
 vi.mock('@/app/runtime-actions', () => ({ appCreateRowAction: vi.fn(), appDeleteRowAction: vi.fn(), appUpdateRowAction: vi.fn() }))
 vi.mock('@/app/booking-actions', () => ({ bookingAvailabilityAction: vi.fn(), cancelBookingAction: vi.fn(), setupBookingMasterAction: vi.fn(), setBookingDayOffAction: vi.fn() }))
@@ -19,7 +21,15 @@ vi.mock('@/app/inventory-actions', () => ({ receiveStockAction: inventoryMocks.r
 vi.mock('@/lib/use-live-app', () => ({ useLiveApp: vi.fn() }))
 vi.mock('@/components/motion/enter-motion', () => ({ useEnterMotion: () => ({ current: null }) }))
 vi.mock('./intake-verify', () => ({ IntakeVerify: ({ onDone }: { onDone: () => void }) => <button onClick={onDone}>Подтверждение тестовой почты</button> }))
-afterEach(() => { cleanup(); vi.restoreAllMocks(); window.history.replaceState(null, '', '/') })
+afterEach(() => { cleanup(); vi.restoreAllMocks(); window.sessionStorage.clear(); window.history.replaceState(null, '', '/') })
+
+async function demoLogin(ui: ReturnType<typeof render>) {
+  expect(ui.queryByLabelText(/^Ваше имя/)).toBeNull()
+  fireEvent.change(ui.getByLabelText('Ваша почта'), { target: { value: 'irina@example.com' } })
+  fireEvent.click(ui.getByRole('button', { name: 'Получить код' }))
+  fireEvent.change(await ui.findByLabelText('Код из письма'), { target: { value: '123456' } })
+  fireEvent.click(ui.getByRole('button', { name: 'Подтвердить и продолжить' }))
+}
 
 describe('runtime navigation during live refresh', () => {
   it('keeps the business visible and opens a support form from the customer’s own order', () => {
@@ -35,19 +45,80 @@ describe('runtime navigation during live refresh', () => {
     expect(ui.queryByLabelText('Ключ оформления')).toBeNull()
     expect(ui.queryByLabelText('Статус')).toBeNull()
   })
-  it('opens the real cabinet after the first request is confirmed and its signed-in runtime arrives', async () => {
+  it('opens personal fields only after the code, and creates the first request only on final submission', async () => {
+    vi.mocked(appCreateRowAction).mockClear().mockResolvedValue({ ok: true })
+    vi.mocked(requestAppLoginAction).mockResolvedValue({ ok: true, delivered: true, hint: null, via: 'sent' })
+    vi.mocked(consumeAppCodeAction).mockResolvedValueOnce({ ok: false, error: 'Неверный код' }).mockResolvedValueOnce({ ok: true })
     const example = templateExample('portal'), guest = templateAppPreview(example, 'guest')
     const ui = render(<AppShell runtime={guest.runtime} viewer={null} />)
     fireEvent.click(ui.getByRole('button', { name: /Диагностика техники/ }))
     fireEvent.click(ui.getByRole('button', { name: 'Оставить заявку' }))
-    fireEvent.change(ui.getByLabelText(/^Ваше имя/), { target: { value: 'Ирина' } })
-    fireEvent.change(ui.getByLabelText(/^Ваш телефон/), { target: { value: '+7 900 000-00-00' } })
-    fireEvent.click(ui.getByRole('button', { name: 'Отправить заявку' }))
-    fireEvent.click(await ui.findByRole('button', { name: 'Подтверждение тестовой почты' }))
+    expect(ui.queryByLabelText(/^Ваше имя/)).toBeNull()
+    fireEvent.change(ui.getByLabelText('Ваша почта'), { target: { value: 'irina@example.com' } })
+    fireEvent.click(ui.getByRole('button', { name: 'Получить код' }))
+    fireEvent.change(await ui.findByLabelText('Код из письма'), { target: { value: '000000' } })
+    fireEvent.click(ui.getByRole('button', { name: 'Подтвердить и продолжить' }))
+    expect(await ui.findByText('Неверный код')).toBeTruthy()
+    expect(ui.queryByLabelText(/^Ваше имя/)).toBeNull()
+    fireEvent.change(ui.getByLabelText('Код из письма'), { target: { value: '123456' } })
+    fireEvent.click(ui.getByRole('button', { name: 'Подтвердить и продолжить' }))
+    await ui.findByText(/Почта подтверждена/)
+    expect(appCreateRowAction).not.toHaveBeenCalled()
     const customer = templateAppPreview(example, 'client', 'irina@example.com', 'Ирина')
     ui.rerender(<AppShell runtime={customer.runtime} viewer={customer.viewer} />)
+    fireEvent.change(await ui.findByLabelText(/^Ваше имя/), { target: { value: 'Ирина' } })
+    fireEvent.change(ui.getByLabelText(/^Ваш телефон/), { target: { value: '+7 900 000-00-00' } })
+    expect((ui.getByLabelText(/^Что нужно сделать/) as HTMLInputElement).value).toBe('Диагностика техники')
+    expect(appCreateRowAction).not.toHaveBeenCalled()
+    fireEvent.click(ui.getByRole('button', { name: 'Отправить заявку' }))
+    await waitFor(() => expect(appCreateRowAction).toHaveBeenCalledTimes(1))
     await waitFor(() => expect(ui.getByRole('heading', { name: 'Мои заказы' })).toBeTruthy())
     expect(ui.getByRole('button', { name: 'История 1' })).toBeTruthy()
+    expect(ui.getByRole('status').textContent).toContain('оплаты')
+  })
+  it('retains the guest cart and checkout selection after login and a page reload, with no order before submit', async () => {
+    const example = templateExample('katalog'), guest = templateAppPreview(example, 'guest'), config = example.app.customer!
+    vi.mocked(appCreateRowAction).mockClear().mockResolvedValue({ ok: true })
+    vi.mocked(requestAppLoginAction).mockResolvedValue({ ok: true, delivered: true, hint: null, via: 'sent' })
+    vi.mocked(consumeAppCodeAction).mockResolvedValue({ ok: true })
+    const ui = render(<AppShell runtime={guest.runtime} viewer={null} />)
+    const product = guest.runtime.tables[config.catalog!.tableId]!.rows[0]!, name = String(product.data[config.catalog!.titleFieldId])
+    fireEvent.click(ui.getByRole('button', { name: text => text.includes(name) }))
+    fireEvent.click(ui.getByRole('button', { name: 'Добавить в заказ' }))
+    fireEvent.click(ui.getByRole('button', { name: /Оформить заказ.*1/ }))
+    expect(ui.queryByRole('heading', { name: 'Ваш заказ' })).toBeNull()
+    expect(ui.queryByLabelText(/^Ваше имя/)).toBeNull()
+    fireEvent.change(ui.getByLabelText('Ваша почта'), { target: { value: 'irina@example.com' } })
+    fireEvent.click(ui.getByRole('button', { name: 'Получить код' }))
+    fireEvent.change(await ui.findByLabelText('Код из письма'), { target: { value: '123456' } })
+    fireEvent.click(ui.getByRole('button', { name: 'Подтвердить и продолжить' }))
+    await ui.findByText(/Почта подтверждена/)
+    expect(appCreateRowAction).not.toHaveBeenCalled()
+    const savedIntent = sessionStorage.getItem(`tableapp:checkout:${example.app.id}`)!
+    expect(JSON.parse(savedIntent)).toEqual({ screenId: config.formScreenId, rowId: product.id })
+    expect(savedIntent).not.toContain('irina@example.com')
+    ui.unmount()
+    const customer = templateAppPreview(example, 'client', 'irina@example.com', 'Ирина')
+    const resumed = render(<AppShell runtime={customer.runtime} viewer={customer.viewer} />)
+    expect(await resumed.findByLabelText(/^Ваше имя/)).toBeTruthy()
+    expect((resumed.getByLabelText(`Количество: ${name}`) as HTMLInputElement).value).toBe('1')
+    expect(sessionStorage.getItem(`tableapp:checkout:${example.app.id}`)).toBeNull()
+    expect(appCreateRowAction).not.toHaveBeenCalled()
+    fireEvent.change(resumed.getByLabelText(/^Ваше имя/), { target: { value: 'Ирина' } })
+    fireEvent.change(resumed.getByLabelText(/^Ваш телефон/), { target: { value: '+7 900 000-00-00' } })
+    fireEvent.click(resumed.getByRole('button', { name: 'Оформить заказ' }))
+    await waitFor(() => expect(appCreateRowAction).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(sessionStorage.getItem(`tableapp:cart:${example.app.id}`)).toBeNull())
+  })
+  it('returns to the selected service when checkout login is cancelled, without exposing a personal form', () => {
+    const example = templateExample('service'), guest = templateAppPreview(example, 'guest')
+    const ui = render(<AppShell runtime={guest.runtime} viewer={null} />)
+    fireEvent.click(ui.getByRole('button', { name: /Диагностика и ремонт/ }))
+    fireEvent.click(ui.getByRole('button', { name: 'Отправить заявку на ремонт' }))
+    fireEvent.click(ui.getByRole('button', { name: 'Вернуться к выбору' }))
+    expect(ui.getByRole('heading', { name: 'Диагностика и ремонт' })).toBeTruthy()
+    expect(ui.queryByLabelText(/^Ваше имя/)).toBeNull()
+    expect(sessionStorage.getItem(`tableapp:checkout:${example.app.id}`)).toBeNull()
   })
   it('submits the selected products and quantities while hiding technical cart fields', async () => {
     const example = templateExample('zakazy'), { runtime, viewer } = templateAppPreview(example, 'client', 'irina@example.com', 'Ирина'), config = example.app.customer!
@@ -115,15 +186,15 @@ describe('runtime navigation during live refresh', () => {
   })
   it('starts guests in the service catalog and carries the chosen salon service into booking', async () => {
     const example = templateExample('salon'), config = example.app.booking!
-    const { runtime, viewer, bookingData } = templateAppPreview(example, 'guest')
-    const ui = render(<AppShell runtime={runtime} viewer={viewer} demo demoBookingData={bookingData} />)
+    const ui = render(<TemplatePreviewShell initial={templateAppPreview(example, 'guest')} signedIn={templateAppPreview(example, 'client', 'irina@example.com', 'Ирина')} />)
     expect(ui.getByRole('heading', { name: 'Услуги и цены' })).toBeTruthy()
     expect(ui.queryByRole('button', { name: 'Записаться' })).toBeNull()
     fireEvent.click(ui.getByRole('button', { name: /Женская стрижка/ }))
     expect(ui.getByText(/Подберём форму и длину/)).toBeTruthy()
     fireEvent.click(ui.getByRole('button', { name: 'Записаться' }))
+    await demoLogin(ui)
     const first = example.rows.find(row => row.data[config.service.name] === 'Женская стрижка')!
-    expect((ui.getByLabelText('Услуга') as HTMLSelectElement).value).toBe(first.id)
+    expect((await ui.findByLabelText('Услуга') as HTMLSelectElement).value).toBe(first.id)
     await waitFor(() => expect(ui.getByRole('option', { name: 'Оля' })).toBeTruthy())
     fireEvent.click(ui.getByRole('button', { name: 'Назад' }))
     fireEvent.click(ui.getByRole('button', { name: 'Назад' }))
@@ -142,16 +213,18 @@ describe('runtime navigation during live refresh', () => {
     fireEvent.click(ui.getByRole('button', { name: /Женская стрижка/ }))
     expect(ui.getByRole('button', { name: 'Записаться' })).toBeTruthy()
   })
-  it('opens a portal request from a service card with its name filled and preserves the customer draft', () => {
-    const { runtime, viewer } = templateAppPreview(templateExample('portal'), 'guest')
-    const ui = render(<AppShell runtime={runtime} viewer={viewer} demo />)
+  it('opens a portal request from a service card after demo login and preserves the customer draft', async () => {
+    const example = templateExample('portal'), guest = templateAppPreview(example, 'guest'), customer = templateAppPreview(example, 'client', 'irina@example.com', 'Ирина')
+    const preview = <TemplatePreviewShell initial={guest} signedIn={customer} />
+    const ui = render(preview)
     expect(ui.getByRole('heading', { name: 'Услуги' })).toBeTruthy()
     expect(ui.queryByRole('button', { name: 'Заявка' })).toBeNull()
     fireEvent.click(ui.getByRole('button', { name: /Диагностика техники/ }))
     fireEvent.click(ui.getByRole('button', { name: 'Оставить заявку' }))
-    expect((ui.getByLabelText(/Что нужно сделать/) as HTMLInputElement).value).toBe('Диагностика техники')
+    await demoLogin(ui)
+    expect((await ui.findByLabelText(/Что нужно сделать/) as HTMLInputElement).value).toBe('Диагностика техники')
     fireEvent.change(ui.getByLabelText(/Что нужно сделать/), { target: { value: 'Диагностика моего ноутбука' } })
-    ui.rerender(<AppShell runtime={structuredClone(runtime)} viewer={viewer} demo />)
+    ui.rerender(<TemplatePreviewShell initial={structuredClone(guest)} signedIn={structuredClone(customer)} />)
     expect((ui.getByLabelText(/Что нужно сделать/) as HTMLInputElement).value).toBe('Диагностика моего ноутбука')
   })
   it('does not mutate published data from an action in the builder preview', () => {

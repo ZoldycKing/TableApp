@@ -75,7 +75,7 @@ export default async function AppRuntimePage({
   }
 
   // Правила видимости строк применяются на сервере по адресу вошедшего.
-  const runtime = await loadPublishedApp(slug, visitor)
+  const runtime = await loadPublishedApp(slug, visitor, { screenId: meta.app.homeScreenId ?? meta.app.screens[0]?.id ?? '' })
   if (!runtime) notFound()
 
   return (

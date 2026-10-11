@@ -14,6 +14,7 @@ export const ID_PREFIX = {
   view: 'viw',
   choice: 'sel',
   app: 'app',
+  appConfigVersion: 'acv',
   screen: 'scr',
   component: 'cmp',
   action: 'act',

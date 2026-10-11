@@ -285,6 +285,22 @@ export const workspaceClientApps = pgTable('workspace_client_apps', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [foreignKey({ name: 'workspace_client_apps_owned_app_fk', columns: [t.workspaceId, t.appId], foreignColumns: [apps.workspaceId, apps.id] }).onDelete('cascade')])
 
+/** Configuration checkpoints only. Business rows and attachments are never part of a restore. */
+export const appConfigVersions = pgTable('app_config_versions', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull(),
+  appId: text('app_id').notNull(),
+  number: integer('number').notNull(),
+  kind: text('kind').notNull(),
+  definition: jsonb('definition').notNull(),
+  fingerprint: text('fingerprint').notNull(),
+  authorId: text('author_id').references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('app_config_versions_number_key').on(t.appId, t.number),
+  foreignKey({ name: 'app_config_versions_owned_app_fk', columns: [t.workspaceId, t.appId], foreignColumns: [apps.workspaceId, apps.id] }).onDelete('cascade'),
+])
+
 /** Verified identity is shared; the profile and contact data belong to one business. */
 export const businessCustomers = pgTable('business_customers', {
   id: text('id').primaryKey(),

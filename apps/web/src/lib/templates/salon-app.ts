@@ -76,7 +76,9 @@ export function asSalon(app: App, built: BuiltTemplate): App {
     ...serviceApp.screens.filter(s => s.type === 'list').map(s => ({ ...s, id: newId('screen'), name: 'Прайс', tab: { icon: 'tag', label: 'Прайс' },
       access: access(['manager']), ...(s.type === 'list' ? { source: { ...s.source, viewId: built.views.find(v => v.tableId === config.tables.services && v.name === 'Прайс')!.id } } : {}) })),
     { id: newId('screen'), appId: app.id, position: 'a', name: 'Имена мастеров', tab: null, type: 'list',
-      access: access(['client', 'staff', 'manager']),
+      // Master names are already shown by booking availability. This narrow public
+      // source also lets enrolled clients resolve the master of a past visit.
+      access: access(['client', 'staff', 'manager'], [config.master.name], true),
       source: { viewId: built.views.find(v => v.tableId === config.tables.masters)!.id, extraFilter: null, searchFieldIds: [config.master.name] },
       titleFieldId: config.master.name, subtitleFieldId: null, metaFieldId: null, imageFieldId: null, statusFieldId: null, onTapScreenId: null, components: [] },
   ]

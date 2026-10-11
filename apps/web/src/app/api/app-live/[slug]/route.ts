@@ -13,7 +13,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   if (!app) return new Response('Приложение недоступно', { status: 404 })
   const access = await currentAppAccess(app)
   if (!canEnter(app, access.visitor)) return new Response('Доступ закрыт', { status: 403 })
-  const definition = await loadPublishedApp(slug, access.visitor)
+  const definition = await loadPublishedApp(slug, access.visitor, { screenId: null })
   if (!definition) return new Response('Приложение недоступно', { status: 404 })
   const ids = Object.keys(definition.tables).sort()
   const scope = JSON.stringify(app)

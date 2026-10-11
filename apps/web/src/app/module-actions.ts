@@ -16,6 +16,7 @@ import { templatePreset } from '@/lib/templates/presets'
 import { assertCanIncreaseUsage, isPlanLimitError, previewIncrease } from '@/lib/limits'
 import { RowWriteError, writeRows, type RowTransaction } from '@/lib/row-mutations'
 import { moduleOwnershipError } from '@/lib/module-lifecycle'
+import { checkpointBeforeChange, recordConfigVersion } from '@/lib/app-config-history'
 
 const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex')
 const ownedApp = (record: typeof apps.$inferSelect): App => appSchema.parse({ ...appSchema.parse(record.draft), id: record.id, workspaceId: record.workspaceId, slug: record.slug })
@@ -116,7 +117,9 @@ export async function connectModuleAction(appId: string, templateId: string, exp
       const error = checkAppReferences(result.app, await catalog(context))
       if (error) throw new RowWriteError('invalid', error)
       await context.tx.insert(workspaceClientApps).values({ workspaceId: context.workspaceId, appId }).onConflictDoNothing()
+      await checkpointBeforeChange(context.tx, record, auth.member.userId)
       await context.tx.update(apps).set({ draft: result.app, updatedAt: new Date() }).where(eq(apps.id, appId))
+      await recordConfigVersion(context.tx, record, result.app, 'module', auth.member.userId)
       return { ok: true as const, already: false }
     })
     revalidatePath(`/apps/${appId}`); revalidatePath('/apps')
@@ -134,7 +137,9 @@ export async function enableModuleAccessAction(appId: string) {
       const resources = await catalog(context), scoped = scopeModuleAccess(ownedApp(record), resources.views)
       const error = checkAppReferences(scoped, resources)
       if (error) throw new RowWriteError('invalid', error)
+      await checkpointBeforeChange(context.tx, record, auth.member.userId)
       await context.tx.update(apps).set({ draft: scoped, updatedAt: new Date() }).where(eq(apps.id, appId))
+      await recordConfigVersion(context.tx, record, scoped, 'access', auth.member.userId)
     })
     revalidatePath(`/apps/${appId}`)
     return { ok: true as const }
@@ -153,7 +158,9 @@ export async function setModuleIntakeAction(appId: string, moduleId: string, ena
       module.intakeEnabled = enabled
       const error = checkAppReferences(app, await catalog(context))
       if (error) throw new RowWriteError('invalid', error)
+      await checkpointBeforeChange(context.tx, record, auth.member.userId)
       await context.tx.update(apps).set({ draft: app, updatedAt: new Date() }).where(eq(apps.id, appId))
+      await recordConfigVersion(context.tx, record, app, 'intake', auth.member.userId)
     })
     revalidatePath(`/apps/${appId}`)
     return { ok: true as const }

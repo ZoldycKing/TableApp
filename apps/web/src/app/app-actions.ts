@@ -13,6 +13,7 @@ import { validateAppReferences } from '@/lib/app-references'
 import { checkModuleModelTransition } from '@/lib/app-modules'
 import { writeRows } from '@/lib/row-mutations'
 import { moduleOwnershipError } from '@/lib/module-lifecycle'
+import { recordConfigVersion } from '@/lib/app-config-history'
 import type { ActionResult } from './actions'
 
 export async function createAppAction(
@@ -135,12 +136,14 @@ export async function publishAppAction(appId: string): Promise<ActionResult> {
       const allowed = await mayIncrease({ workspaceId: auth.member.workspaceId, resource: 'publishedApps', tx: context.tx })
       if (!allowed.ok) return allowed
     }
+    if (app.published) await recordConfigVersion(context.tx, app, app.published, 'baseline', auth.member.userId)
+    await recordConfigVersion(context.tx, app, safeApp, 'published', auth.member.userId)
     await context.tx.update(apps)
       .set({ published: safeApp as unknown as Record<string, unknown>, publishedAt: new Date() })
       .where(eq(apps.id, appId))
     return { ok: true as const, slug: app.slug }
   })
-  if (result.ok) { revalidatePath('/apps'); revalidatePath(`/a/${result.slug}`) }
+  if (result.ok) { revalidatePath('/apps'); revalidatePath(`/apps/${appId}`); revalidatePath(`/a/${result.slug}`) }
   return result
 }
 

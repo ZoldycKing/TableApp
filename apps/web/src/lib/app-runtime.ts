@@ -12,6 +12,7 @@ import { validateAppReferences } from './app-references'
 import { loadBusinessProfile } from './business-profile'
 import type { BusinessProfile } from '@tableapp/schema'
 import { listAccessibleApps } from './customer-apps'
+import { configFingerprint } from './app-config-history'
 
 export type RuntimeTable = {
   id: string
@@ -25,6 +26,8 @@ export type RuntimeTable = {
 export type ScreenRows = { rowIds: string[] }
 
 export type RuntimeApp = {
+  /** Present only in the live client pilot. Missing rows on other screens have not been loaded yet. */
+  lazy?: { revision: string; loadedScreenIds: string[] }
   customerProfile?: { name: string | null; phone: string | null }
   business?: BusinessProfile | null
   businessApps?: { slug: string; name: string }[]
@@ -141,6 +144,7 @@ export async function loadAppMeta(slug: string): Promise<AppMeta | null> {
 export async function loadPublishedApp(
   slug: string,
   visitor: Visitor,
+  request?: { screenId: string | null },
 ): Promise<RuntimeApp | null> {
   const [record] = await db.select().from(apps).where(eq(apps.slug, slug)).limit(1)
   if (!record?.published) return null
@@ -154,12 +158,20 @@ export async function loadPublishedApp(
    * из базы и не уезжает в браузер.
    */
   const visible = { ...app, screens: visibleScreensFor(app, visitor) }
-  const runtime = await loadRuntimeForApp(visible, visitor)
+  const lazy = request?.screenId !== null && Boolean(request && app.moduleAccess && app.catalogScreenIds && (!visitor.authenticated || visitor.roleId === 'client'))
+  const selected = request?.screenId === null ? [] : lazy ? [...new Set([request?.screenId ?? app.homeScreenId!, ...app.catalogScreenIds!])] : undefined
+  if (selected?.some(id => !visible.screens.some(screen => screen.id === id))) return null
+  const runtime = await loadRuntimeForApp(visible, visitor, selected)
   if (!runtime) return null
+  const loadedTables = new Set((selected ?? []).flatMap(id => {
+    const screen = visible.screens.find(screen => screen.id === id)
+    return screen?.type === 'list' || screen?.type === 'tiles' ? [runtime.views[screen.source.viewId]?.tableId ?? ''] : screen?.type === 'detail' ? [screen.tableId] : []
+  }))
+  const loadedScreenIds = [...new Set([...(selected ?? []), ...visible.screens.filter(screen => screen.type === 'detail' && loadedTables.has(screen.tableId)).map(screen => screen.id)])]
   const [profile] = visitor.email && visitor.roleId === 'client' ? await db.select({ name: businessCustomers.name, phone: businessCustomers.phone }).from(businessCustomers)
     .where(and(eq(businessCustomers.workspaceId, app.workspaceId), eq(businessCustomers.email, visitor.email.trim().toLowerCase()))).limit(1) : []
   // Invitations and private staff grants are server inputs, never public runtime data.
-  return { ...runtime, ...(profile ? { customerProfile: profile } : {}), app: { ...runtime.app, allowlist: [], ...(runtime.app.moduleAccess ? { moduleAccess: { grants: [] } } : {}) } }
+  return { ...runtime, ...(profile ? { customerProfile: profile } : {}), ...(lazy ? { lazy: { revision: configFingerprint({ app, visitor }), loadedScreenIds } } : {}), app: { ...runtime.app, allowlist: [], ...(runtime.app.moduleAccess ? { moduleAccess: { grants: [] } } : {}) } }
 }
 
 /** Черновик для предпросмотра в конструкторе: тот же рантайм, неопубликованное определение. */
@@ -177,6 +189,7 @@ export async function loadDraftRuntime(appId: string): Promise<RuntimeApp | null
 export async function loadRuntimeForApp(
   app: App,
   visitor: Visitor,
+  dataScreenIds?: string[],
 ): Promise<RuntimeApp | null> {
   const scopedTables = db.select({ id: tables.id }).from(tables).where(eq(tables.workspaceId, app.workspaceId))
   const viewIds = referencedViews(app)
@@ -203,6 +216,14 @@ export async function loadRuntimeForApp(
     if (list) list.push(field)
     else fieldsByTable.set(row.tableId, [field])
   }
+
+  // Keep the full, permission-projected screen/field metadata for navigation.
+  // Read business rows only for opened screens and their calculation/form dependencies.
+  const dataScreens = dataScreenIds === undefined ? app.screens : app.screens.filter(screen => dataScreenIds.includes(screen.id))
+  const rowTables = new Set(referencedTables({ ...app, screens: dataScreens.filter(screen => screen.type !== 'form' || screen.mode !== 'create') }, views))
+  const dependencyTables = new Set(referencedTables({ ...app, screens: dataScreens }, views))
+  const dataTables = new Set(rowTables)
+  for (const id of dependencyTables) for (const field of fieldsByTable.get(id) ?? []) if (field.type === 'relation') dataTables.add(field.options.tableId)
 
   // Таблицы связей подгружаются даже если экранов у них нет: без них
   // не посчитать Lookup и Rollup и не показать название связанной строки.
@@ -232,13 +253,19 @@ export async function loadRuntimeForApp(
       .map((table) => [table.id, table.primaryFieldId]),
   )
 
-  const dataRows = await db
+  const rowDataIds = dataScreenIds === undefined ? allTableIds : [...dataTables]
+  const dataRows = rowDataIds.length ? await db
     .select()
     .from(rowsTable)
-    .where(and(inArray(rowsTable.tableId, allTableIds), inArray(rowsTable.tableId, scopedTables), isNull(rowsTable.deletedAt)))
-    .orderBy(asc(rowsTable.position))
+    .where(and(inArray(rowsTable.tableId, rowDataIds), inArray(rowsTable.tableId, scopedTables), isNull(rowsTable.deletedAt)))
+    .orderBy(asc(rowsTable.position)) : []
 
-  return { ...projectRuntime(app, visitor, views, tableRows, fieldsByTable, dataRows as RuntimeSourceRow[], primaryByTable), business: await loadBusinessProfile(app.workspaceId),
+  const projected = projectRuntime(app, visitor, views, tableRows, fieldsByTable, dataRows as RuntimeSourceRow[], primaryByTable)
+  if (dataScreenIds !== undefined) {
+    for (const table of Object.values(projected.tables)) if (!rowTables.has(table.id)) table.rows = []
+    for (const screen of app.screens) if (!dataScreenIds.includes(screen.id)) delete projected.screens[screen.id]
+  }
+  return { ...projected, business: await loadBusinessProfile(app.workspaceId),
     businessApps: visitor.email ? (await listAccessibleApps(visitor.email, app.workspaceId)).map(item => ({ slug: item.slug, name: item.name })) : [] }
 }
 

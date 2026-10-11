@@ -19,6 +19,7 @@ import type { BookingData } from '@/lib/booking'
 import { canCompleteBooking } from '@/lib/booking-lifecycle'
 import { inventoryOperation } from '@/lib/inventory'
 import { useLiveApp } from '@/lib/use-live-app'
+import { useScreenRuntime } from '@/lib/use-screen-runtime'
 import { appCreateRowAction, appDeleteRowAction, appUpdateRowAction } from '@/app/runtime-actions'
 import type { RuntimeApp } from '@/lib/app-runtime'
 import type { TableRow } from '@/lib/table-store'
@@ -129,7 +130,7 @@ export type { NavEntry, ListState } from './nav-history'
 export { EMPTY_LIST_STATE } from './nav-history'
 
 export function AppShell({
-  runtime,
+  runtime: initialRuntime,
   viewer,
   canSignIn = false,
   demo = false,
@@ -172,24 +173,24 @@ export function AppShell({
   const cartApp = useRef('')
   useEffect(() => {
     let initial: CustomerCart = { requestId: crypto.randomUUID(), items: [] }
-    if (!demo && runtime.app.customer?.cart) {
-      try { const saved = sessionStorage.getItem(`tableapp:cart:${runtime.app.id}`); if (saved) initial = parseCustomerCart(saved) } catch { /* Expired or invalid browser draft starts empty. */ }
+    if (!demo && initialRuntime.app.customer?.cart) {
+      try { const saved = sessionStorage.getItem(`tableapp:cart:${initialRuntime.app.id}`); if (saved) initial = parseCustomerCart(saved) } catch { /* Expired or invalid browser draft starts empty. */ }
     }
-    cartApp.current = runtime.app.id
+    cartApp.current = initialRuntime.app.id
     setCart(initial)
-  }, [runtime.app.id, demo])
+  }, [initialRuntime.app.id, demo])
   useEffect(() => {
-    if (!demo && runtime.app.customer?.cart && cart.requestId && cartApp.current === runtime.app.id) {
+    if (!demo && initialRuntime.app.customer?.cart && cart.requestId && cartApp.current === initialRuntime.app.id) {
       try {
-        const key = `tableapp:cart:${runtime.app.id}`
+        const key = `tableapp:cart:${initialRuntime.app.id}`
         if (cart.items.length) sessionStorage.setItem(key, JSON.stringify(cart)); else sessionStorage.removeItem(key)
       } catch { /* Storage is optional; the in-memory cart still works. */ }
     }
-  }, [cart, demo, runtime.app.id, runtime.app.customer?.cart])
+  }, [cart, demo, initialRuntime.app.id, initialRuntime.app.customer?.cart])
   const [pendingCabinet, setPendingCabinet] = useState(false)
   const [checkout, setCheckout] = useState<CheckoutIntent | null>(null)
   const [savedNotice, setSavedNotice] = useState<string | null>(null)
-  const { app } = runtime
+  const { app } = initialRuntime
   useLiveApp(app.slug, !demo && !editing)
   const screens = useMemo(() => new Map(app.screens.map((screen) => [screen.id, screen])), [app.screens])
   const tabs = app.screens.filter((screen) => screen.tab !== null)
@@ -212,6 +213,7 @@ export function AppShell({
    * и собирает заново. Один лишний кадр честнее сломанной гидрации.
    */
   const [stack, setStack] = useState<NavEntryType[]>([{ screenId: home, rowId: null }])
+  const { runtime, loading: screenLoading, error: screenLoadError, retry: retryScreen } = useScreenRuntime(initialRuntime, stack.at(-1)!.screenId, demo || editing)
   /** Отбор по каждому списку отдельно: у заказов и у позиций он свой. */
   const [listStates, setListStates] = useState<Record<string, ListStateType>>({})
   const [error, setError] = useState<string | null>(null)
@@ -822,7 +824,7 @@ export function AppShell({
          */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden">
           <div ref={contentRef} className="mx-auto w-full max-w-5xl px-4 py-5 sm:px-6 sm:py-6">
-            {sent !== null ? (
+            {screenLoadError ? <div className="space-y-3 p-6 text-sm"><p role="alert">{screenLoadError}</p><button type="button" onClick={retryScreen} className="rounded-lg border border-sand-200 px-3 py-2">Попробовать ещё раз</button></div> : screenLoading ? <p role="status" className="p-6 text-sm text-ink-soft">Загружаем раздел…</p> : sent !== null ? (
               <Sent
                 text={sent}
                 accent={accent}

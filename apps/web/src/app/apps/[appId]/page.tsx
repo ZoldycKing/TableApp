@@ -11,6 +11,7 @@ import { listMemberships, requireMember } from '@/lib/session'
 import { PRIVATE_PAGE } from '@/lib/seo'
 import { loadBusinessProfile } from '@/lib/business-profile'
 import { ModuleManager } from '@/components/module-manager'
+import { AppVersionHistory } from '@/components/app-version-history'
 
 /*
  * В поиске этой странице делать нечего: за ней рабочее пространство.
@@ -104,6 +105,7 @@ export default async function AppEditorPage({ params }: { params: Promise<{ appI
       )}
 
       <ModuleManager key={`modules:${record.updatedAt.toISOString()}`} app={parsed.data} primary={primary?.appId === appId} sources={sources} />
+      <AppVersionHistory key={`history-${appId}`} appId={appId} canRestore={member.role !== 'viewer'} revision={`${record.updatedAt.toISOString()}:${record.publishedAt?.toISOString() ?? ''}`} />
       <AppEditor
         key={record.updatedAt.toISOString()}
         business={await loadBusinessProfile(member.workspaceId)}

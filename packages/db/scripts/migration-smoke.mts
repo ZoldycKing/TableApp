@@ -37,11 +37,12 @@ try {
   assert.ok(await target`select workspace_id, app_id from public.workspace_client_apps limit 0`)
   assert.ok(await target`select workspace_id, email, name, phone from public.business_customers limit 0`)
   assert.ok(await target`select workspace_id, customer_id, app_id from public.business_customer_apps limit 0`)
+  assert.ok(await target`select workspace_id, app_id, number, kind, definition, fingerprint from public.app_config_versions limit 0`)
   const tableCount = await target`select count(*)::int as value from pg_tables where schemaname = 'public'`
   await migrate()
   assert.deepEqual([...(await target`select hash, created_at from drizzle.__drizzle_migrations order by created_at`)], [...applied])
   console.log(JSON.stringify({ status: 'passed', migrations: applied.length, tables: tableCount[0]!.value,
-    checked: ['empty database', 'sync revision', 'attachment state', 'business profile', 'business client app', 'business customer profiles', 'scoped customer app links', 'second run unchanged'] }))
+    checked: ['empty database', 'sync revision', 'attachment state', 'business profile', 'business client app', 'business customer profiles', 'scoped customer app links', 'scoped app config versions', 'second run unchanged'] }))
 } finally {
   await target.end()
   if (created) await admin.unsafe(`drop database "${name}"`)

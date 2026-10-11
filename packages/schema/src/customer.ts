@@ -5,6 +5,7 @@ export const customerWorkflowSchema = z.object({
   listScreenId: z.string(), detailScreenId: z.string(), formScreenId: z.string(),
   emailFieldId: z.string(), statusFieldId: z.string(),
   createdFieldId: z.string().optional(), submissionFieldId: z.string().optional(),
+  profile: z.object({ nameFieldId: z.string(), phoneFieldId: z.string() }).optional(),
   initialStatus: z.string(), terminalStatuses: z.array(z.string()),
   cancelStatus: z.string(), cancellableStatuses: z.array(z.string()),
   assignmentFieldId: z.string().nullable(),

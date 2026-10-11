@@ -6,6 +6,7 @@ import { roleName } from '@/lib/app-roles'
 import type { TableSummary } from '@/lib/queries'
 import { RolesSettings } from '@/components/builder/roles-settings'
 import { RowRules } from '@/components/builder/row-rules'
+import { ModuleGrantEditor } from './module-grant-editor'
 
 const EMAIL_FIELD_TYPES = new Set(['email', 'text'])
 
@@ -31,6 +32,7 @@ export function AppAccessSettings({
   tables: TableSummary[]
   onChange: (next: App) => void
 }) {
+  if (app.moduleAccess) return <div className="mt-3 space-y-4 rounded-lg border border-sand-200 p-3"><h3 className="text-sm font-medium">Рабочие права по возможностям</h3><ModuleGrantEditor app={app} onChange={onChange} /><RowRules app={app} tables={tables} onChange={onChange} /></div>
   const rule = app.rowAccessRules[0] ?? null
   const ruleTable = tables.find((table) => table.id === rule?.tableId)
   const emailFields = (candidate: TableSummary | undefined): Field[] =>

@@ -1,4 +1,5 @@
 import { MODULE_DEFINITIONS, customerWorkflows, type App, type AppModule, type Field, type FieldType, type ModuleKind } from '@tableapp/schema'
+import { checkModuleAccess } from './module-access'
 
 type Catalog = { tableIds: ReadonlySet<string>; fields: ReadonlyMap<string, Field> }
 type FieldRequirement = { name: string; tableId: string; fieldId: string; types: readonly FieldType[]; relationTableId?: string }
@@ -21,7 +22,7 @@ const templateKinds: Partial<Record<string, ModuleKind>> = {
 export function legacyAppModules(app: App, templateByTable: ReadonlyMap<string, string> = new Map()): AppModule[] {
   const modules: AppModule[] = []
   const add = (kind: ModuleKind, source: AppModule['source'], resourceId: string) => {
-    const module: AppModule = { id: `mod_${kind}_${resourceId}`, kind, version: 1, source, dependsOn: [] }
+    const module: AppModule = { id: `mod_${kind}_${resourceId}`, kind, version: 1, source, dependsOn: [], intakeEnabled: true }
     modules.push(module)
     return module
   }
@@ -48,6 +49,10 @@ export function appModules(app: App): AppModule[] { return app.modules ?? legacy
 
 /** A saved manifest cannot be removed to bypass the new compatibility checks. */
 export function checkModuleModelTransition(next: App, ...previous: unknown[]): string | null {
+  for (const value of previous) {
+    if (next.modules && value && typeof value === 'object' && 'modules' in value && Array.isArray(value.modules) && value.modules.some(module => module && typeof module.id === 'string' && !next.modules!.some(candidate => candidate.id === module.id))) return 'Не удаляйте установленный модуль: прекратите новые оформления в разделе возможностей приложения'
+  }
+  if (!next.moduleAccess && previous.some(value => value !== null && typeof value === 'object' && 'moduleAccess' in value && value.moduleAccess)) return 'Сохраните рабочие права модулей: возврат к общим ролям не поддерживается'
   if (next.modules !== undefined) return null
   const alreadyModular = previous.some(value => value !== null && typeof value === 'object' && 'modules' in value && Array.isArray(value.modules))
   return alreadyModular ? 'Сохраните список модулей приложения: возврат к старой модели настроек не поддерживается' : null
@@ -80,6 +85,7 @@ export function moduleContract(app: App, module: AppModule): ModuleContract | nu
       tables.records = tableId; writeTables.push(tableId)
       add('customerEmail', tableId, c.emailFieldId, ['email']); add('status', tableId, c.statusFieldId, ['single_select'])
       add('assignedEmail', tableId, c.assignmentFieldId, ['email']); add('created', tableId, c.createdFieldId, ['datetime']); add('submission', tableId, c.submissionFieldId, ['text'])
+      if (c.profile) { add('customerName', tableId, c.profile.nameFieldId, ['text']); add('customerPhone', tableId, c.profile.phoneFieldId, ['phone']) }
       if (c.catalog) {
         const cat = c.catalog
         tables.catalog = cat.tableId
@@ -129,6 +135,8 @@ export function moduleContract(app: App, module: AppModule): ModuleContract | nu
 
 /** V1 supports the installed presets and their support section. New compositions require the role/composition stages. */
 export function checkAppModules(app: App, catalog: Catalog): string | null {
+  const accessError = checkModuleAccess(app)
+  if (accessError) return accessError
   if (!app.modules) return null
   const modules = app.modules
   const byId = new Map(modules.map(module => [module.id, module]))
@@ -182,6 +190,11 @@ export function checkAppModules(app: App, catalog: Catalog): string | null {
   }
   if (modules.some(module => cycle(module.id))) return 'Зависимости модулей образуют цикл'
   const base = modules.filter(module => module.kind !== 'support')
-  if (base.length > 1) return 'Это сочетание модулей ещё не поддерживается: сначала требуется настройка отдельных рабочих ролей и общего интерфейса'
+  if (base.length > 1 && !(app.moduleAccess && app.catalogScreenIds?.length === 2 && base.map(module => module.kind).sort().join(',') === 'booking,sales')) return 'Это сочетание модулей ещё не поддерживается: сначала требуется настройка отдельных рабочих ролей и общего интерфейса'
+  if (app.catalogScreenIds && (!app.moduleAccess || new Set(app.catalogScreenIds).size !== app.catalogScreenIds.length || !app.catalogScreenIds.includes(app.homeScreenId ?? '') || app.catalogScreenIds.some(id => {
+    const screen = app.screens.find(screen => screen.id === id)
+    return !screen || !['list', 'tiles'].includes(screen.type) || !screen.access.public
+  }))) return 'Общий каталог должен использовать публичные каталоги подключённых модулей'
+  if (base.length > 1 && base.some(module => app.catalogScreenIds!.filter(id => module.screenIds?.includes(id)).length !== 1)) return 'Общий каталог должен показывать каталог каждого подключённого модуля'
   return null
 }

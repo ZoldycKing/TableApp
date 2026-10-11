@@ -17,7 +17,7 @@ import { loadApp } from '@/lib/app-write-access'
 import { isPlanLimitError } from '@/lib/limits'
 import { needFor, shortagesOf, type Need, type Norm } from '@/lib/production'
 import { canAccessRow, rulesFor, stampOwner } from '@/lib/row-access'
-import { createRow, updateRow, writeRows, RowWriteError } from '@/lib/row-mutations'
+import { assertCurrentModuleState, createRow, updateRow, writeRows, RowWriteError } from '@/lib/row-mutations'
 
 /**
  * Сохранение выпуска.
@@ -307,6 +307,7 @@ export async function saveMovementAction(
 
   try {
     const repeated = await writeRows(app.workspaceId, async (context) => {
+      await assertCurrentModuleState(context, app)
       const actor = { id: viewer?.id ?? null, kind: 'app_user' }
       const result = await createRow(context, config.tables.movements, {
         [config.movement.date]: when,
@@ -426,6 +427,7 @@ async function write(args: {
 }): Promise<boolean> {
   const { app, config, input, needs } = args
   return writeRows(app.workspaceId, async (context) => {
+    await assertCurrentModuleState(context, app)
     const actor = { id: args.viewer?.id ?? null, kind: 'app_user' }
     const runRules = rulesFor(app, config.tables.production, args.visitor)
     const run = await createRow(context, config.tables.production, stampOwner(runRules, args.viewer, {

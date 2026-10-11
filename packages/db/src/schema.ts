@@ -285,6 +285,27 @@ export const workspaceClientApps = pgTable('workspace_client_apps', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [foreignKey({ name: 'workspace_client_apps_owned_app_fk', columns: [t.workspaceId, t.appId], foreignColumns: [apps.workspaceId, apps.id] }).onDelete('cascade')])
 
+/** Verified identity is shared; the profile and contact data belong to one business. */
+export const businessCustomers = pgTable('business_customers', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  email: text('email').notNull(),
+  name: text('name'),
+  phone: text('phone'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [uniqueIndex('business_customers_email_key').on(t.workspaceId, t.email), uniqueIndex('business_customers_owned_key').on(t.workspaceId, t.id)])
+
+/** Lazy links preserve app users/history without transferring app roles to a business profile. */
+export const businessCustomerApps = pgTable('business_customer_apps', {
+  workspaceId: text('workspace_id').notNull(),
+  customerId: text('customer_id').notNull(),
+  appId: text('app_id').notNull(),
+}, (t) => [primaryKey({ columns: [t.customerId, t.appId] }),
+  foreignKey({ name: 'business_customer_apps_owned_customer_fk', columns: [t.workspaceId, t.customerId], foreignColumns: [businessCustomers.workspaceId, businessCustomers.id] }).onDelete('cascade'),
+  foreignKey({ name: 'business_customer_apps_owned_app_fk', columns: [t.workspaceId, t.appId], foreignColumns: [apps.workspaceId, apps.id] }).onDelete('cascade'),
+])
+
 /** Конечные пользователи приложений. Отдельный контур: мест не занимают, платы нет. */
 export const appUsers = pgTable('app_users', {
   id: text('id').primaryKey(),

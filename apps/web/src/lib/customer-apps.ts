@@ -3,6 +3,7 @@ import { appSchema, businessProfileSchema } from '@tableapp/schema'
 import { and, eq, isNotNull } from 'drizzle-orm'
 import { asRole, canEnter, defaultRole, visitorFor } from './app-roles'
 import { normalizeEmail } from './auth'
+import { grantedRoles } from './module-access'
 
 /** Caller supplies an email established by the session or a verified login challenge. */
 export async function listAccessibleApps(email: string, workspaceId?: string) {
@@ -16,7 +17,7 @@ export async function listAccessibleApps(email: string, workspaceId?: string) {
     const parsed = appSchema.safeParse(record.published)
     if (!parsed.success) return []
     const app = parsed.data
-    const invited = app.allowlist.some(entry => normalizeEmail(entry.email) === address)
+    const invited = app.moduleAccess ? grantedRoles(app, address).length > 0 : app.allowlist.some(entry => normalizeEmail(entry.email) === address)
     if (!workspaceId && !invited && !record.known) return []
     let visitor = visitorFor(app, address)
     if (!visitor.authenticated && record.enrolledRole && record.enrolledRole === defaultRole(app)) visitor = asRole(record.enrolledRole, address, '', true)

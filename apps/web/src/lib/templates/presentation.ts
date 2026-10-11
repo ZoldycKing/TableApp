@@ -20,6 +20,10 @@ export function templateRoleNames(template: TemplateDef): string[] {
 export function templateExample(id: string, now = new Date(), legacy = false) {
   const template = findTemplate(id, legacy)
   if (!template) throw new Error(`Нет шаблона ${id}`)
+  return templateExampleFromDefinition(template, now)
+}
+
+export function templateExampleFromDefinition(template: TemplateDef, now = new Date()) {
   const built = buildTemplate({ template, workspaceId: 'marketing-example', now })
   const fields = built.fields as Field[], views = built.views as unknown as View[]
   const byTable = new Map(built.tables.map(table => [table.id, fields.filter(field => field.tableId === table.id)]))
@@ -29,7 +33,7 @@ export function templateExample(id: string, now = new Date(), legacy = false) {
     compileTableFormulas(byTable.get(row.tableId)!)) }))
   const main = built.tables.find(table => table.id === built.appTableId)!
   const generated = generateApp({ appId: newId('app'), workspaceId: main.workspaceId, name: built.appName,
-    slug: `example-${id}`, table: main, fields: byTable.get(main.id)!, view: views.find(view => view.id === built.appViewId)! })
+    slug: `example-${template.id}`, table: main, fields: byTable.get(main.id)!, view: views.find(view => view.id === built.appViewId)! })
   const app = templatePreset(generated, built)
   const table = (key: string) => built.tables[template.tables.findIndex(item => item.key === key)]!
   const field = (tableKey: string, fieldKey: string) => {

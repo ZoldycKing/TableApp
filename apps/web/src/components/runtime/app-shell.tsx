@@ -42,6 +42,7 @@ import {
 import { IntakeVerify } from './intake-verify'
 import { AppLogin } from './app-login'
 import { customerCheckoutIds, parseCheckoutIntent, type CheckoutIntent } from '@/lib/customer-checkout'
+import { acceptsModuleIntake } from '@/lib/module-access'
 import {
   ConsumptionPanel,
   describeMovement,
@@ -861,7 +862,7 @@ export function AppShell({
             app.booking && screen.id === app.booking.rescheduleScreenId && !row ? <EmptyState title="Запись недоступна" hint="Откройте предстоящую запись из своего списка и выберите «Перенести запись»." /> :
             app.booking && screen.id === app.booking.setupScreenId ? <BookingSetup runtime={runtime} demo={demo || editing} onSaved={() => router.refresh()} /> :
             app.booking && [app.booking.formScreenId, app.booking.rescheduleScreenId].includes(screen.id) ? <BookingForm key={`${screen.id}:${row?.id ?? ''}`} runtime={runtime}
-              row={screen.id === app.booking.rescheduleScreenId ? row : null} demo={demo || editing} demoData={demo ? demoBookingData : undefined} pending={pending} initialValues={bookingDraft} onSubmit={values => {
+              row={screen.id === app.booking.rescheduleScreenId ? row : null} demo={demo || editing} demoData={demo ? demoBookingData : undefined} pending={pending} initialValues={screen.id === app.booking.rescheduleScreenId ? bookingDraft : { [app.booking.visit.client]: runtime.customerProfile?.name ?? viewer?.name ?? '', [app.booking.visit.phone]: runtime.customerProfile?.phone ?? '', ...bookingDraft }} onSubmit={values => {
                 if (screen.id === app.booking!.rescheduleScreenId && row) {
                   runMutation(() => appUpdateRowAction(app.slug, app.booking!.tables.visits, row.id, values, row.version), goBack)
                 } else if (viewer === null && !demo && !editing) { setBookingDraft(values); setError(null); setIntake({ screenId: screen.id, values }) }
@@ -881,7 +882,7 @@ export function AppShell({
               runtime={runtime}
               pending={pending}
               editing={editing}
-              initialValues={formDraft?.screenId === screen.id ? formDraft.values : undefined}
+              initialValues={{ ...(customer?.profile && runtime.customerProfile ? { [customer.profile.nameFieldId]: runtime.customerProfile.name ?? '', [customer.profile.phoneFieldId]: runtime.customerProfile.phone ?? '' } : {}), ...(formDraft?.screenId === screen.id ? formDraft.values : {}) }}
               now={now}
               listState={listStates[screen.id] ?? EMPTY_LIST}
               onListState={(next) => setListState(screen.id, next)}
@@ -963,10 +964,11 @@ export function AppShell({
               }}
             />
             )}
-            {sent === null && checkout === null && intake === null && app.customer?.cart && app.customer.catalog && screen.type === 'detail' && screen.id === app.customer.catalog.detailScreenId && row ?
+            {screen.type === 'detail' && ((app.customer?.catalog?.detailScreenId === screen.id && !acceptsModuleIntake(app, app.customer.tableId)) || (app.booking?.tables.services === screen.tableId && !acceptsModuleIntake(app, app.booking.tables.visits))) ? <p className="mt-4 rounded-xl bg-sand-50 p-3 text-sm text-ink-muted">Новые оформления в этом разделе временно приостановлены. Текущие обращения и история доступны в кабинете.</p> : null}
+            {sent === null && checkout === null && intake === null && app.customer?.cart && acceptsModuleIntake(app, app.customer.tableId) && app.customer.catalog && screen.type === 'detail' && screen.id === app.customer.catalog.detailScreenId && row ?
               <button type="button" onClick={() => setCart(current => ({ ...current, items: current.items.some(item => item.id === row.id) ? current.items.map(item => item.id === row.id ? { ...item, qty: Math.min(1000, item.qty + 1) } : item) : [...current.items, { id: row.id, qty: 1 }].slice(0, 100) }))}
                 className={`mt-4 w-full rounded-xl px-4 py-3 text-sm font-semibold text-white ${accent.solid}`}>Добавить в заказ</button> : null}
-            {sent === null && checkout === null && intake === null && app.customer?.cart && cart.items.length > 0 && screen.id !== app.customer.formScreenId && screen.type !== 'form' ?
+            {sent === null && checkout === null && intake === null && app.customer?.cart && acceptsModuleIntake(app, app.customer.tableId) && cart.items.length > 0 && screen.id !== app.customer.formScreenId && screen.type !== 'form' ?
               <CustomerCartButton count={cart.items.length} accent={app.theme.accent} onClick={() => handleAction({ id: 'cart-checkout', type: 'open_screen', screenId: app.customer!.formScreenId })} /> : null}
             {sent === null && intake === null && customer && screen.id === customer.detailScreenId && row ? <div className="mt-4 space-y-3 rounded-2xl border border-sand-200 bg-white p-4">
               {customer.approval && row.data[customer.statusFieldId] === customer.approval.waitingStatus ? <>

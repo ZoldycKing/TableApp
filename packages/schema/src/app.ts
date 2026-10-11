@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { customerWorkflowSchema } from './customer'
-import { appModuleSchema } from './modules'
+import { appModuleSchema, moduleAccessSchema } from './modules'
 import { COLORS } from './colors'
 import { filterGroupSchema, sortSchema } from './filters'
 
@@ -737,6 +737,7 @@ export const bookingConfigSchema = z.object({
   visit: z.object({ client: z.string(), phone: z.string(), email: z.string(), service: z.string(), master: z.string(), masterEmail: z.string(), price: z.string(), minutes: z.string(), start: z.string(), status: z.string(), note: z.string() }),
   statuses: z.object({ booked: z.string(), arrived: z.string(), noShow: z.string(), cancelled: z.string(), completed: z.string().optional() }),
   weekdays: z.array(z.string()).length(7),
+  listScreenId: z.string().optional(),
   formScreenId: z.string(), rescheduleScreenId: z.string(), setupScreenId: z.string(),
   stepMinutes: z.number().int().min(5).max(120).default(15),
   horizonDays: z.number().int().min(1).max(365).default(60),
@@ -778,6 +779,9 @@ export const appSchema = z.object({
   customerSections: z.array(customerWorkflowSchema).max(10).optional(),
   /** Missing on legacy apps. Module ownership is inherited from id/workspaceId. */
   modules: z.array(appModuleSchema).max(20).optional(),
+  moduleAccess: moduleAccessSchema.optional(),
+  /** Existing catalog screens provide data; the primary home renders their combined public catalog. */
+  catalogScreenIds: z.array(z.string().min(1)).max(20).optional(),
 })
 export type App = z.infer<typeof appSchema>
 

@@ -9,6 +9,7 @@ import { templateExample } from '@/lib/templates/presentation'
 import { templateAppPreview } from '@/lib/templates/app-preview'
 import { consumeAppCodeAction, requestAppLoginAction } from '@/app/auth-actions'
 import { TemplatePreviewShell } from '@/components/marketing/template-preview-shell'
+import { modularPilotExample } from '@/lib/templates/modular-pilot-example'
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }))
 vi.mock('@/app/auth-actions', () => ({ signOutAppAction: vi.fn(), consumeAppCodeAction: vi.fn(), requestAppLoginAction: vi.fn() }))
@@ -32,6 +33,40 @@ async function demoLogin(ui: ReturnType<typeof render>) {
 }
 
 describe('runtime navigation during live refresh', () => {
+  it('shows both catalogs in one guest screen and opens the correct workflow after signing in', async () => {
+    const example = modularPilotExample(), config = example.app.booking!
+    const guest = templateAppPreview(example, 'guest'), client = templateAppPreview(example, 'client', 'irina@example.com', 'Ирина')
+    const ui = render(<TemplatePreviewShell initial={guest} signedIn={client} />)
+    expect(ui.getByRole('heading', { name: 'Услуги' })).toBeTruthy()
+    expect(ui.getByRole('heading', { name: 'Товары' })).toBeTruthy()
+    expect(ui.queryByRole('button', { name: 'Записи' })).toBeNull()
+    const service = example.rows.find(row => row.tableId === config.tables.services && row.data[config.service.active] === true)!
+    const title = String(service.data[config.service.name])
+    fireEvent.change(ui.getByPlaceholderText('Найти услугу или товар'), { target: { value: title } })
+    expect(ui.getByRole('button', { name: new RegExp(title) })).toBeTruthy()
+    fireEvent.click(ui.getByRole('button', { name: new RegExp(title) }))
+    fireEvent.click(ui.getByRole('button', { name: 'Записаться' }))
+    await demoLogin(ui)
+    expect((await ui.findByLabelText(/^Услуга/)) as HTMLSelectElement).toHaveProperty('value', service.id)
+    expect(ui.getAllByRole('button', { name: 'Записи' }).length).toBeGreaterThan(0)
+    expect(ui.getAllByRole('button', { name: 'Мои заказы' }).length).toBeGreaterThan(0)
+    fireEvent.click(ui.getAllByRole('button', { name: 'Записи' })[0]!)
+    expect(ui.getByRole('button', { name: /^Предстоящие/ })).toHaveProperty('ariaPressed', 'true')
+    fireEvent.click(ui.getByRole('button', { name: /^История/ }))
+    expect(ui.getByText('Завершено')).toBeTruthy()
+    expect(ui.getByText('Отменил')).toBeTruthy()
+    fireEvent.click(ui.getAllByRole('button', { name: 'Каталог' })[0]!)
+    expect(ui.getByPlaceholderText('Найти услугу или товар')).toHaveProperty('value', title)
+    fireEvent.change(ui.getByPlaceholderText('Найти услугу или товар'), { target: { value: '' } })
+    const sales = example.app.customer!, productTable = example.built.tables.find(table => table.id === sales.catalog!.tableId)!
+    const product = client.runtime.tables[productTable.id]!.rows[0]!
+    fireEvent.click(ui.getByRole('button', { name: new RegExp(String(product.data[productTable.primaryFieldId!])) }))
+    fireEvent.click(ui.getByRole('button', { name: 'Добавить в заказ' }))
+    fireEvent.click(ui.getByRole('button', { name: /Оформить заказ.*1/ }))
+    expect(ui.getByLabelText(/^Ваше имя/)).toBeTruthy()
+    expect(ui.queryByLabelText('Код из письма')).toBeNull()
+    expect(ui.queryByLabelText(/^Услуга/)).toBeNull()
+  })
   it('keeps the business visible and opens a support form from the customer’s own order', () => {
     const example = templateExample('portal'), { runtime, viewer } = templateAppPreview(example, 'client', 'irina@example.com', 'Ирина')
     const ui = render(<AppShell runtime={runtime} viewer={viewer} demo />)

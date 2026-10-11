@@ -9,7 +9,7 @@ import { canOpenScreen, canSeePart } from '@/lib/app-roles'
 import { loadApp } from '@/lib/app-write-access'
 import { loadPublishedApp } from '@/lib/app-runtime'
 import { canAccessRow, rulesFor } from '@/lib/row-access'
-import { createRow, updateRow, lockedRow, RowWriteError, writeRows } from '@/lib/row-mutations'
+import { assertCurrentModuleState, createRow, updateRow, lockedRow, RowWriteError, writeRows } from '@/lib/row-mutations'
 import { isPlanLimitError } from '@/lib/limits'
 import { INVENTORY_COPY, inventoryScreen } from '@/lib/inventory'
 
@@ -45,6 +45,7 @@ export async function saveStockOperationAction(slug: string, operation: Inventor
   const rules = rulesFor(app, config.tables.items, visitor)
   try {
     const saved = await writeRows(app.workspaceId, async context => {
+      await assertCurrentModuleState(context, app)
       const current = await lockedRow(context, config.tables.items, input.itemId)
       if (!current || current.deletedAt || !canAccessRow(rules, viewer, current.data as Record<string, unknown>)) throw new RowWriteError('denied', 'Товар недоступен')
       const currentData = current.data as Record<string, unknown>, links = currentData[config.item.movements]

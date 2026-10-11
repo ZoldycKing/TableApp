@@ -5,12 +5,13 @@ import type { App, Field } from '@tableapp/schema'
 import { customerWorkflows, dateInstant, parseCellValue } from '@tableapp/schema'
 import { revalidatePath } from 'next/cache'
 import { currentAppAccess, type AppViewer } from '@/lib/app-session'
+import { hasRole, workflowRole } from '@/lib/module-access'
 import { permits, writableFields, type AppAction, type Visitor } from '@/lib/app-roles'
 import { assertTableAllowed, loadApp } from '@/lib/app-write-access'
 import { validateRowAttachments } from '@/lib/attachments'
 import { explainToCustomer } from '@tableapp/schema'
 import { isPlanLimitError } from '@/lib/limits'
-import { deleteRow, updateRow, writeRows, RowWriteError } from '@/lib/row-mutations'
+import { assertCurrentModuleState, deleteRow, updateRow, writeRows, RowWriteError } from '@/lib/row-mutations'
 import { insertRow, loadTableFields } from '@/lib/row-write'
 import { canAccessRow, dropOwnerChange, ownRowsDeclared, rulesFor } from '@/lib/row-access'
 import type { ActionResult } from './actions'
@@ -124,15 +125,18 @@ export async function appUpdateRowAction(
   if (app.booking?.tables.visits === tableId && visitor.enrolled && !Number.isInteger(baseVersion)) return { ok: false, error: 'Обновите запись перед переносом.' }
   const allowed = writableFields(app, tableId, visitor, 'update')
   try {
-    await writeRows(app.workspaceId, (context) => updateRow(context, tableId, rowId,
+    await writeRows(app.workspaceId, async (context) => {
+      await assertCurrentModuleState(context, app)
+      return updateRow(context, tableId, rowId,
       (fields, row) => {
         const patch = dropOwnerChange(rules, sanitize(values, fields, allowed))
-        if (customer && visitor.roleId === 'staff' && customer.terminalStatuses.includes(String((row.data as Record<string, unknown>)[customer.statusFieldId])) && customer.statusFieldId in patch && patch[customer.statusFieldId] !== (row.data as Record<string, unknown>)[customer.statusFieldId]) throw new RowWriteError('invalid', 'Обращение завершено. Для изменения статуса обратитесь к администратору.')
+        if (customer && hasRole(visitor, workflowRole(app, tableId, 'staff')) && !hasRole(visitor, workflowRole(app, tableId, 'manager')) && customer.terminalStatuses.includes(String((row.data as Record<string, unknown>)[customer.statusFieldId])) && customer.statusFieldId in patch && patch[customer.statusFieldId] !== (row.data as Record<string, unknown>)[customer.statusFieldId]) throw new RowWriteError('invalid', 'Обращение завершено. Для изменения статуса обратитесь к администратору.')
         return patch
       },
       { id: viewer?.id ?? null, kind: 'app_user' },
       { baseVersion, guard: (data) => canAccessRow(rules, viewer, data) && (!app.booking || tableId !== app.booking.tables.visits || !visitor.enrolled ||
-        data[app.booking.visit.status] === app.booking.statuses.booked && (dateInstant(data[app.booking.visit.start]) ?? 0) > Date.now()) }))
+        data[app.booking.visit.status] === app.booking.statuses.booked && (dateInstant(data[app.booking.visit.start]) ?? 0) > Date.now()) })
+    })
   } catch (error) {
     if (error instanceof RowWriteError) return { ok: false, error: error.message }
     throw error
@@ -149,9 +153,12 @@ export async function appDeleteRowAction(
   const { app, viewer, visitor } = access
   const rules = rulesFor(app, tableId, visitor)
   try {
-    await writeRows(app.workspaceId, (context) => deleteRow(context, tableId, rowId,
+    await writeRows(app.workspaceId, async (context) => {
+      await assertCurrentModuleState(context, app)
+      return deleteRow(context, tableId, rowId,
       { id: viewer?.id ?? null, kind: 'app_user' },
-      { baseVersion, guard: (data) => canAccessRow(rules, viewer, data) }))
+      { baseVersion, guard: (data) => canAccessRow(rules, viewer, data) })
+    })
   } catch (error) {
     if (error instanceof RowWriteError) return { ok: false, error: error.message }
     throw error

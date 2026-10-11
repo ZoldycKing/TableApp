@@ -12,6 +12,7 @@ import { recountWorkspace } from './usage'
 import { withInitialValues } from './initial-values'
 import { prepareBookingWrite } from './booking-store'
 import { prepareCustomerWrite } from './customer-store'
+import { currentModularAppError, moduleIntakeError } from './module-lifecycle'
 
 export class RowWriteError extends Error {
   constructor(readonly code: 'missing' | 'conflict' | 'denied' | 'invalid', message: string) {
@@ -22,9 +23,14 @@ export class RowWriteError extends Error {
 
 export type RowActor = { id: string | null; kind: string; ip?: string | null }
 export type RowTransaction = { tx: Transaction; workspaceId: string; changed: Set<string>;
-  usageLocked?: boolean; fieldCache?: Map<string, Field[]>; customerConfigCache?: CustomerWorkflow[] }
+  usageLocked?: boolean; fieldCache?: Map<string, Field[]>; customerConfigCache?: CustomerWorkflow[]; moduleStateCache?: import('@tableapp/schema').App[] }
 export type StoredRow = typeof rows.$inferSelect
 export const ROW_CONFLICT = 'Запись изменилась после открытия формы. Обновите её и повторите действие.'
+
+export async function assertCurrentModuleState(context: RowTransaction, app: import('@tableapp/schema').App): Promise<void> {
+  const error = await currentModularAppError(context, app)
+  if (error) throw new RowWriteError('conflict', error)
+}
 
 /** Notifications describe committed data only, including every cascade target. */
 export async function writeRows<T>(workspaceId: string, write: (context: RowTransaction) => Promise<T>): Promise<T> {
@@ -124,6 +130,8 @@ export async function createRow(context: RowTransaction, tableId: string, data: 
     checkRow(existing)
     return { id, duplicate: true }
   }
+  const intakeError = await moduleIntakeError(context, tableId)
+  if (intakeError) throw new RowWriteError('denied', intakeError)
   let clean = await initialValues(context, fields, parsePatch(fields, data), true)
   const booking = await prepareBookingWrite(context.tx, context.workspaceId, tableId, clean)
   if (booking.error) throw new RowWriteError('invalid', booking.error)

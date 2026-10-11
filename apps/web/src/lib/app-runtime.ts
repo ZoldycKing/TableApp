@@ -1,5 +1,5 @@
 import { projectRuntime, buildTitles, type RuntimeSourceRow } from './runtime-project'
-import { apps, db, fields as fieldsTable, rows as rowsTable, tables, views as viewsTable } from '@tableapp/db'
+import { apps, businessCustomers, db, fields as fieldsTable, rows as rowsTable, tables, views as viewsTable } from '@tableapp/db'
 import { compileTableFormulas, computeDerivedRow, relatedIndexFrom } from '@tableapp/formula'
 import type { App, Field, View } from '@tableapp/schema'
 import { appSchema, byPosition, normalizeFieldOptions, normalizeView, systemRowData } from '@tableapp/schema'
@@ -25,6 +25,7 @@ export type RuntimeTable = {
 export type ScreenRows = { rowIds: string[] }
 
 export type RuntimeApp = {
+  customerProfile?: { name: string | null; phone: string | null }
   business?: BusinessProfile | null
   businessApps?: { slug: string; name: string }[]
   /** Shared server clock for initial rendering of time-sensitive client screens. */
@@ -153,7 +154,12 @@ export async function loadPublishedApp(
    * из базы и не уезжает в браузер.
    */
   const visible = { ...app, screens: visibleScreensFor(app, visitor) }
-  return loadRuntimeForApp(visible, visitor)
+  const runtime = await loadRuntimeForApp(visible, visitor)
+  if (!runtime) return null
+  const [profile] = visitor.email && visitor.roleId === 'client' ? await db.select({ name: businessCustomers.name, phone: businessCustomers.phone }).from(businessCustomers)
+    .where(and(eq(businessCustomers.workspaceId, app.workspaceId), eq(businessCustomers.email, visitor.email.trim().toLowerCase()))).limit(1) : []
+  // Invitations and private staff grants are server inputs, never public runtime data.
+  return { ...runtime, ...(profile ? { customerProfile: profile } : {}), app: { ...runtime.app, allowlist: [], ...(runtime.app.moduleAccess ? { moduleAccess: { grants: [] } } : {}) } }
 }
 
 /** Черновик для предпросмотра в конструкторе: тот же рантайм, неопубликованное определение. */

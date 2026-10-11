@@ -10,9 +10,10 @@ import { canOpenScreen, visitorFor } from '@/lib/app-roles'
 import { canAccessRow, rulesFor } from '@/lib/row-access'
 import { bookingService, eligibleMasters, freeBookingSlots, oneRelation, type BookingSlot } from '@/lib/booking'
 import { loadBookingData } from '@/lib/booking-store'
-import { createRow, updateRow, writeRows, RowWriteError } from '@/lib/row-mutations'
+import { assertCurrentModuleState, createRow, updateRow, writeRows, RowWriteError } from '@/lib/row-mutations'
 import { isPlanLimitError } from '@/lib/limits'
 import { explainToCustomer, newId } from '@tableapp/schema'
+import { hasRole, moduleForTable, setModuleGrant, workflowRole } from '@/lib/module-access'
 
 export async function bookingAvailabilityAction(slug: string, serviceId: string, day: string, masterId = '', rowId?: string): Promise<
   { ok: true; slots: BookingSlot[]; masters: { id: string; name: string }[]; timeZone: string } | { ok: false; error: string }
@@ -43,11 +44,14 @@ export async function cancelBookingAction(slug: string, rowId: string, baseVersi
   const screen = app.screens.find(s => s.type === 'detail' && s.tableId === config.tables.visits)
   if (!visitor.authenticated || !viewer || !screen || !canOpenScreen(screen, visitor)) return { ok: false as const, error: 'Войдите в кабинет.' }
   try {
-    await writeRows(app.workspaceId, context => updateRow(context, config.tables.visits, rowId,
+    await writeRows(app.workspaceId, async context => {
+      await assertCurrentModuleState(context, app)
+      return updateRow(context, config.tables.visits, rowId,
       { [config.visit.status]: config.statuses.cancelled }, { id: viewer.id, kind: 'app_user' }, { baseVersion,
         guard: data => canAccessRow(rulesFor(app, config.tables.visits, visitor), viewer, data) &&
           data[config.visit.status] === config.statuses.booked && (dateInstant(data[config.visit.start]) ?? 0) > Date.now(),
-      }))
+      })
+    })
   } catch (error) {
     if (error instanceof RowWriteError) return { ok: false as const, error: error.message }
     throw error
@@ -62,7 +66,7 @@ export async function setupBookingMasterAction(slug: string, input: BookingSetup
   if (!app || !config) return { ok: false as const, error: 'Приложение не опубликовано.' }
   const { visitor, viewer } = await currentAppAccess(app)
   const screen = app.screens.find(s => s.id === config.setupScreenId)
-  if (!viewer || !screen || !canOpenScreen(screen, visitor) || visitor.roleId !== 'manager') return { ok: false as const, error: 'Настройка доступна администратору.' }
+  if (!viewer || !screen || !canOpenScreen(screen, visitor) || !hasRole(visitor, workflowRole(app, config.tables.visits, 'manager'))) return { ok: false as const, error: 'Настройка доступна администратору.' }
   const clock = (value: string) => /^([01]\d|2[0-3]):[0-5]\d$/.test(value) ? Number(value.slice(0, 2)) * 60 + Number(value.slice(3)) : -1
   const start = clock(input.start), end = clock(input.end), breakStart = clock(input.breakStart), breakEnd = clock(input.breakEnd)
   const hasBreak = Boolean(input.breakStart || input.breakEnd)
@@ -72,6 +76,7 @@ export async function setupBookingMasterAction(slug: string, input: BookingSetup
     hasBreak && (breakStart <= start || breakEnd <= breakStart || breakEnd >= end)) return { ok: false as const, error: 'Заполните имя, почту, услуги и рабочие часы. Перерыв должен быть внутри смены.' }
   try {
     await writeRows(app.workspaceId, async context => {
+      await assertCurrentModuleState(context, app)
       const data = await loadBookingData(config, app.workspaceId, context.tx)
       if (!data || input.serviceIds.some(id => !bookingService(config, data, id))) throw new RowWriteError('invalid', 'Выберите доступные услуги с ценой и длительностью.')
       if (data.masters.some(row => String(row.data[config.master.email]).trim().toLowerCase() === normalizeEmail(input.email))) throw new RowWriteError('invalid', 'Мастер с этой почтой уже есть. Измените его карточку и рабочее время.')
@@ -89,7 +94,13 @@ export async function setupBookingMasterAction(slug: string, input: BookingSetup
       if (!record?.published) throw new RowWriteError('conflict', 'Публикация изменилась. Обновите страницу.')
       const addMaster = (value: unknown) => {
         const definition = appSchema.parse(value), email = normalizeEmail(input.email)
-        if (JSON.stringify(definition.booking) !== JSON.stringify(config) || !definition.roles.some(role => role.id === 'staff')) throw new RowWriteError('conflict', 'Настройки приложения изменились. Обновите страницу.')
+        const staffRole = workflowRole(definition, config.tables.visits, 'staff')
+        if (JSON.stringify(definition.booking) !== JSON.stringify(config) || !definition.roles.some(role => role.id === staffRole)) throw new RowWriteError('conflict', 'Настройки приложения изменились. Обновите страницу.')
+        if (definition.moduleAccess) {
+          const module = moduleForTable(definition, config.tables.visits)!
+          if (!hasRole(visitorFor(definition, email), workflowRole(definition, config.tables.visits, 'manager'))) definition.moduleAccess = setModuleGrant(definition.moduleAccess, email, module.id, staffRole)
+          return definition
+        }
         const existing = definition.allowlist.find(entry => normalizeEmail(entry.email) === email)
         if (existing?.roleId !== 'manager') definition.allowlist = [
           ...definition.allowlist.filter(entry => normalizeEmail(entry.email) !== email), { email, roleId: 'staff', company: '' },
@@ -97,7 +108,7 @@ export async function setupBookingMasterAction(slug: string, input: BookingSetup
         return definition
       }
       const live = appSchema.parse(record.published)
-      if (visitorFor(live, viewer.email).roleId !== 'manager') throw new RowWriteError('denied', 'Права администратора изменились.')
+      if (!hasRole(visitorFor(live, viewer.email), workflowRole(live, config.tables.visits, 'manager'))) throw new RowWriteError('denied', 'Права администратора изменились.')
       const published = addMaster(record.published), draft = addMaster(record.draft)
       await context.tx.update(apps).set({ published, draft, allowlist: published.allowlist }).where(eq(apps.id, app.id))
     })
@@ -115,7 +126,7 @@ export async function setBookingDayOffAction(slug: string, masterId: string, day
   if (!app || !config) return { ok: false as const, error: 'Приложение не опубликовано.' }
   const { visitor, viewer } = await currentAppAccess(app)
   const screen = app.screens.find(s => s.id === config.setupScreenId)
-  if (!viewer || !screen || !canOpenScreen(screen, visitor) || visitor.roleId !== 'manager') return { ok: false as const, error: 'Настройка доступна администратору.' }
+  if (!viewer || !screen || !canOpenScreen(screen, visitor) || !hasRole(visitor, workflowRole(app, config.tables.visits, 'manager'))) return { ok: false as const, error: 'Настройка доступна администратору.' }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || calendarDay(day) !== day) return { ok: false as const, error: 'Выберите дату выходного.' }
   try {
     await writeRows(app.workspaceId, async context => {

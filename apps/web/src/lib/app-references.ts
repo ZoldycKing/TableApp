@@ -119,7 +119,11 @@ export function checkAppReferences(app: App, catalog: AppReferenceCatalog): stri
     const groups = [[config.service, config.tables.services], [config.master, config.tables.masters],
       [config.schedule, config.tables.schedule], [config.visit, config.tables.visits]] as const
     for (const [group, tableId] of groups) for (const id of Object.values(group)) field(id, tableId)
-    for (const id of [config.formScreenId, config.rescheduleScreenId, config.setupScreenId]) screenLink(id)
+    for (const id of [config.listScreenId, config.formScreenId, config.rescheduleScreenId, config.setupScreenId]) screenLink(id)
+    if (config.listScreenId) {
+      const list = app.screens.find(screen => screen.id === config.listScreenId)
+      if (!list || (list.type !== 'list' && list.type !== 'tiles') || catalog.views.get(list.source.viewId)?.tableId !== config.tables.visits || !list.access.roles.includes('client')) invalid('экран посещений клиента', config.listScreenId)
+    }
     for (const [id, tableId, mode] of [[config.formScreenId, config.tables.visits, 'create'], [config.rescheduleScreenId, config.tables.visits, 'edit'], [config.setupScreenId, config.tables.masters, 'create']] as const) {
       const screen = app.screens.find(s => s.id === id)
       if (!screen || screen.type !== 'form' || screen.tableId !== tableId || screen.mode !== mode) invalid('форма записи', id)
@@ -144,6 +148,10 @@ export function checkAppReferences(app: App, catalog: AppReferenceCatalog): stri
   if (new Set(customerConfigs.map(config => config.tableId)).size !== customerConfigs.length) invalid('повторяющийся клиентский раздел', app.id)
   for (const c of customerConfigs) {
     table(c.tableId)
+    if (c.profile) for (const [id, type] of [[c.profile.nameFieldId, 'text'], [c.profile.phoneFieldId, 'phone']]) {
+      field(id!, c.tableId)
+      if (catalog.fields.get(id!)?.type !== type) invalid('контакт клиента', id!)
+    }
     for (const id of [c.emailFieldId, c.statusFieldId, c.assignmentFieldId, c.createdFieldId, c.submissionFieldId]) if (id) field(id, c.tableId)
     for (const [id, type] of [[c.emailFieldId, 'email'], [c.statusFieldId, 'single_select'], ...(c.assignmentFieldId ? [[c.assignmentFieldId, 'email']] : []), ...(c.createdFieldId ? [[c.createdFieldId, 'datetime']] : []), ...(c.submissionFieldId ? [[c.submissionFieldId, 'text']] : [])]) if (catalog.fields.get(id!)?.type !== type) invalid('поле клиентского сценария', id!)
     for (const id of [c.listScreenId, c.detailScreenId, c.formScreenId]) screenLink(id)
@@ -238,13 +246,14 @@ export function checkAppReferences(app: App, catalog: AppReferenceCatalog): stri
 }
 
 /** The catalog contains only objects owned by the authoritative workspace. */
-export async function validateAppReferences(app: App): Promise<string | null> {
+export async function validateAppReferences(app: App, transaction?: import('./db-transaction').Transaction): Promise<string | null> {
   const { db, fields, tables, views } = await import('@tableapp/db')
-  const scopedTables = db.select({ id: tables.id }).from(tables).where(eq(tables.workspaceId, app.workspaceId))
+  const runner = transaction ?? db
+  const scopedTables = runner.select({ id: tables.id }).from(tables).where(eq(tables.workspaceId, app.workspaceId))
   const [tableRows, viewRows, fieldRows] = await Promise.all([
     scopedTables,
-    db.select({ id: views.id, tableId: views.tableId }).from(views).where(inArray(views.tableId, scopedTables)),
-    db.select().from(fields).where(inArray(fields.tableId, scopedTables)),
+    runner.select({ id: views.id, tableId: views.tableId }).from(views).where(inArray(views.tableId, scopedTables)),
+    runner.select().from(fields).where(inArray(fields.tableId, scopedTables)),
   ])
   return checkAppReferences(app, {
     tableIds: new Set(tableRows.map((row) => row.id)),

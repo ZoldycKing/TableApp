@@ -5,6 +5,8 @@ import { and, eq, gt, isNull } from 'drizzle-orm'
 import { cookies } from 'next/headers'
 import { ANONYMOUS, asRole, companyOf, defaultRole, visitorFor, type Visitor } from './app-roles'
 import { STAFF_SESSION_COOKIE, normalizeEmail } from './auth'
+import { ensureBusinessCustomer } from './business-customer'
+import type { ModuleAccessApp } from './module-access'
 
 export type AppViewer = {
   id: string
@@ -13,6 +15,8 @@ export type AppViewer = {
   company: string
   /** Пришёл с витрины, а не по приглашению: см. `canAccessRow`. */
   enrolled: boolean
+  /** Profile is scoped to this business; app user IDs and old ownership remain stable. */
+  businessCustomerId?: string
 }
 
 /** Кто пришёл и что ему можно: одно решение на чтение и на запись. */
@@ -47,7 +51,7 @@ export async function currentStaffEmail(): Promise<string | null> {
  * действии становится гостем.
  */
 export async function currentAppAccess(
-  app: Pick<App, 'id' | 'accessMode' | 'allowlist' | 'roles'>,
+  app: ModuleAccessApp,
 ): Promise<AppAccess> {
   return appAccessFor(app, await currentStaffEmail())
 }
@@ -60,7 +64,7 @@ export async function currentAppAccess(
  * заводит кабинет, а потом сразу пишет строку от его имени.
  */
 export async function appAccessFor(
-  app: Pick<App, 'id' | 'accessMode' | 'allowlist' | 'roles'>,
+  app: ModuleAccessApp,
   email: string | null,
 ): Promise<AppAccess> {
   if (!email) return { visitor: ANONYMOUS, viewer: null }
@@ -70,7 +74,8 @@ export async function appAccessFor(
     const viewer = await ensureAppUser(app.id, normalizeEmail(email))
     // Организацию берём из списка доступа: по ней работает правило
     // «видит строки своей фирмы».
-    return { visitor: declared, viewer: { ...viewer, company: companyOf(app, email), enrolled: declared.enrolled } }
+    const profile = declared.enrolled || declared.roleId === 'client' ? await ensureBusinessCustomer(app.id, email, viewer.name) : null
+    return { visitor: declared, viewer: { ...viewer, name: profile?.name ?? viewer.name, ...(profile ? { businessCustomerId: profile.id } : {}), company: companyOf(app, email), enrolled: declared.enrolled } }
   }
 
   return enrolledAccess(app, normalizeEmail(email))
@@ -88,7 +93,7 @@ export async function appAccessFor(
  * Поэтому чужая сессия от другого приложения ничего тут не открывает.
  */
 async function enrolledAccess(
-  app: Pick<App, 'id' | 'roles'>,
+  app: Pick<App, 'id' | 'roles' | 'moduleAccess'>,
   email: string,
 ): Promise<AppAccess> {
   const [record] = await db
@@ -98,6 +103,7 @@ async function enrolledAccess(
     .limit(1)
 
   if (!record?.roleId) return { visitor: ANONYMOUS, viewer: null }
+  if (app.moduleAccess && record.roleId !== defaultRole(app)) return { visitor: ANONYMOUS, viewer: null }
 
   /*
    * Роль могли удалить после того, как человек её получил. Отдавать ему
@@ -108,12 +114,13 @@ async function enrolledAccess(
     ? record.roleId
     : defaultRole(app)
   if (!roleId) return { visitor: ANONYMOUS, viewer: null }
+  const profile = await ensureBusinessCustomer(app.id, email, record.name)
 
   return {
     visitor: asRole(roleId, email, '', true),
     // Организации у пришедшего с витрины нет: её вписывает владелец
     // для клиента-юрлица, а этого человека он ещё не видел.
-    viewer: { id: record.id, email: record.email, name: record.name, company: '', enrolled: true },
+    viewer: { id: record.id, email: record.email, name: profile?.name ?? record.name, ...(profile ? { businessCustomerId: profile.id } : {}), company: '', enrolled: true },
   }
 }
 

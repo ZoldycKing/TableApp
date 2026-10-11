@@ -66,6 +66,7 @@ export function CollectionView({
   onOpenRow,
   exportHref,
   showStatusFilters = true,
+  showToolbar = true,
 }: {
   screen: Collection
   rows: TableRow[]
@@ -86,6 +87,7 @@ export function CollectionView({
    */
   exportHref: string | null
   showStatusFilters?: boolean
+  showToolbar?: boolean
 }) {
   const { query, choiceId } = state
   const setQuery = (next: string) => onState({ ...state, query: next })
@@ -174,7 +176,7 @@ export function CollectionView({
 
   return (
     <div className="@container space-y-3">
-      {searchFields.length > 0 || tabs.length > 0 ? (
+      {showToolbar && (searchFields.length > 0 || tabs.length > 0) ? (
         <div className="space-y-2.5">
           <div className="flex flex-col gap-2 @min-[560px]:flex-row @min-[560px]:items-center">
             {searchFields.length > 0 ? (

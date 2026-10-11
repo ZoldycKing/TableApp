@@ -3,7 +3,7 @@
 import { apps, db, fields as fieldsTable, tables, views as viewsTable } from '@tableapp/db'
 import type { App, Field, View } from '@tableapp/schema'
 import { appSchema, byPosition, newId, normalizeFieldOptions, normalizeView } from '@tableapp/schema'
-import { and, asc, eq, ne } from 'drizzle-orm'
+import { and, asc, eq, ne, sql } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { mayIncrease, noteRemoved } from '@/lib/limits'
 import { authorizeApp, authorizeTable, authorizeWorkspace } from '@/lib/authorize'
@@ -11,6 +11,8 @@ import { generateApp, slugify } from '@/lib/app-builder'
 import { uniqueSlug } from '@/lib/app-slug'
 import { validateAppReferences } from '@/lib/app-references'
 import { checkModuleModelTransition } from '@/lib/app-modules'
+import { writeRows } from '@/lib/row-mutations'
+import { moduleOwnershipError } from '@/lib/module-lifecycle'
 import type { ActionResult } from './actions'
 
 export async function createAppAction(
@@ -84,7 +86,7 @@ export async function updateAppDraftAction(appId: string, draft: unknown): Promi
   const referenceError = await validateAppReferences(safeDraft)
   if (referenceError) return { ok: false, error: referenceError }
 
-  await db
+  const saved = await db
     .update(apps)
     .set({
       name: parsed.data.name,
@@ -97,7 +99,9 @@ export async function updateAppDraftAction(appId: string, draft: unknown): Promi
       draft: safeDraft,
       updatedAt: new Date(),
     })
-    .where(eq(apps.id, appId))
+    .where(and(eq(apps.id, appId), eq(apps.workspaceId, auth.member.workspaceId), sql`${apps.draft} = ${JSON.stringify(stored.draft)}::jsonb`))
+    .returning({ id: apps.id })
+  if (!saved.length) return { ok: false, error: 'Настройки приложения изменились. Обновите страницу перед сохранением.' }
 
   revalidatePath('/apps')
   return { ok: true }
@@ -112,53 +116,44 @@ export async function publishAppAction(appId: string): Promise<ActionResult> {
   const auth = await authorizeApp(appId)
   if (!auth.ok) return auth
 
-  const [app] = await db.select().from(apps).where(eq(apps.id, appId)).limit(1)
-  if (!app) return { ok: false, error: 'Приложение не найдено' }
+  const result = await writeRows(auth.member.workspaceId, async context => {
+    const [app] = await context.tx.select().from(apps).where(and(eq(apps.id, appId), eq(apps.workspaceId, context.workspaceId))).for('update')
+    if (!app) return { ok: false, error: 'Приложение не найдено' }
 
-  const parsed = appSchema.safeParse(app.draft)
-  if (!parsed.success) return { ok: false, error: 'Черновик содержит ошибки и не может быть опубликован' }
-  const modelError = checkModuleModelTransition(parsed.data, app.published)
-  if (modelError) return { ok: false, error: modelError }
-  if (parsed.data.screens.length === 0) return { ok: false, error: 'В приложении нет ни одного экрана' }
-  const safeApp = { ...parsed.data, id: app.id, workspaceId: app.workspaceId }
-  const referenceError = await validateAppReferences(safeApp)
-  if (referenceError) return { ok: false, error: referenceError }
-  if ((safeApp.customer || safeApp.booking) && !(await (await import('@/lib/business-profile')).loadBusinessProfile(app.workspaceId))) return { ok: false, error: 'Укажите название бизнеса на странице «Приложения», чтобы клиент понимал, чей кабинет открывает.' }
+    const parsed = appSchema.safeParse(app.draft)
+    if (!parsed.success) return { ok: false, error: 'Черновик содержит ошибки и не может быть опубликован' }
+    const modelError = checkModuleModelTransition(parsed.data, app.published)
+    if (modelError) return { ok: false, error: modelError }
+    if (parsed.data.screens.length === 0) return { ok: false, error: 'В приложении нет ни одного экрана' }
+    const safeApp = { ...parsed.data, id: app.id, workspaceId: app.workspaceId }
+    const referenceError = await validateAppReferences(safeApp, context.tx) ?? await moduleOwnershipError(safeApp, context.tx)
+    if (referenceError) return { ok: false, error: referenceError }
+    if ((safeApp.customer || safeApp.booking) && !(await (await import('@/lib/business-profile')).loadBusinessProfile(app.workspaceId))) return { ok: false, error: 'Укажите название бизнеса на странице «Приложения», чтобы клиент понимал, чей кабинет открывает.' }
 
-  /*
-   * Потолок считаем только для того, что ещё не опубликовано. Повторная
-   * публикация уже живого приложения — это правка, а не новое приложение:
-   * запретить её значит запереть человека с ошибкой в опубликованной версии,
-   * которую он не может исправить.
-   */
-  if (!app.published) {
-    const allowed = await mayIncrease({
-      workspaceId: auth.member.workspaceId,
-      resource: 'publishedApps',
-    })
-    if (!allowed.ok) return allowed
-  }
-
-  await db
-    .update(apps)
-    .set({ published: safeApp as unknown as Record<string, unknown>, publishedAt: new Date() })
-    .where(eq(apps.id, appId))
-
-  revalidatePath('/apps')
-  revalidatePath(`/a/${app.slug}`)
-  return { ok: true }
+    // Updating an existing publication does not consume another application slot.
+    if (!app.published) {
+      const allowed = await mayIncrease({ workspaceId: auth.member.workspaceId, resource: 'publishedApps', tx: context.tx })
+      if (!allowed.ok) return allowed
+    }
+    await context.tx.update(apps)
+      .set({ published: safeApp as unknown as Record<string, unknown>, publishedAt: new Date() })
+      .where(eq(apps.id, appId))
+    return { ok: true as const, slug: app.slug }
+  })
+  if (result.ok) { revalidatePath('/apps'); revalidatePath(`/a/${result.slug}`) }
+  return result
 }
 
 export async function unpublishAppAction(appId: string): Promise<ActionResult> {
   const auth = await authorizeApp(appId)
   if (!auth.ok) return auth
 
-  const [app] = await db.select({ published: apps.published }).from(apps).where(eq(apps.id, appId)).limit(1)
-
-  await db.update(apps).set({ published: null, publishedAt: null }).where(eq(apps.id, appId))
-  // Снятое с публикации место больше не занимает — иначе владелец снял бы
-  // приложение и всё равно не смог опубликовать другое.
-  if (app?.published) await noteRemoved(auth.member.workspaceId, 'publishedApps')
+  await writeRows(auth.member.workspaceId, async context => {
+    const [app] = await context.tx.select({ published: apps.published }).from(apps)
+      .where(and(eq(apps.id, appId), eq(apps.workspaceId, context.workspaceId))).for('update')
+    await context.tx.update(apps).set({ published: null, publishedAt: null }).where(eq(apps.id, appId))
+    if (app?.published) await noteRemoved(context.workspaceId, 'publishedApps', 1, context.tx)
+  })
 
   revalidatePath('/apps')
   return { ok: true }
@@ -168,10 +163,12 @@ export async function deleteAppAction(appId: string): Promise<ActionResult> {
   const auth = await authorizeApp(appId)
   if (!auth.ok) return auth
 
-  const [app] = await db.select({ published: apps.published }).from(apps).where(eq(apps.id, appId)).limit(1)
-
-  await db.delete(apps).where(eq(apps.id, appId))
-  if (app?.published) await noteRemoved(auth.member.workspaceId, 'publishedApps')
+  await writeRows(auth.member.workspaceId, async context => {
+    const [app] = await context.tx.select({ published: apps.published }).from(apps)
+      .where(and(eq(apps.id, appId), eq(apps.workspaceId, context.workspaceId))).for('update')
+    await context.tx.delete(apps).where(eq(apps.id, appId))
+    if (app?.published) await noteRemoved(context.workspaceId, 'publishedApps', 1, context.tx)
+  })
   revalidatePath('/apps')
   return { ok: true }
 }

@@ -18,8 +18,17 @@ export const appModuleSchema = z.object({
   version: z.number().int().positive(),
   source: moduleSourceSchema,
   dependsOn: z.array(reference).max(20).default([]),
+  /** Explicit resource ownership and private roles are required when module access is enabled. */
+  screenIds: z.array(reference).max(100).optional(),
+  roles: z.record(reference, reference).optional(),
+  intakeEnabled: z.boolean().optional(),
 }).strict()
 export type AppModule = z.infer<typeof appModuleSchema>
+
+export const moduleAccessSchema = z.object({
+  grants: z.array(z.object({ email: z.email().max(254), moduleId: reference, roleId: reference }).strict()).max(500),
+}).strict()
+export type ModuleAccess = z.infer<typeof moduleAccessSchema>
 
 /** Version 1 refers to existing engine settings; it does not store a second copy of business rules or grant roles. */
 export const MODULE_DEFINITIONS = {

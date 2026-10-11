@@ -9,6 +9,7 @@ import { enableDispatchAction } from '@/app/dispatch-setup-actions'
 import { enableRepeatRequestsAction } from '@/app/portal-setup-actions'
 import { hasDispatchPreset } from '@/lib/templates/dispatch-app'
 import { useRouter } from 'next/navigation'
+import { useUnsaved } from '@/lib/unsaved'
 import {
   ANONYMOUS,
   ANONYMOUS_NAME,
@@ -138,6 +139,7 @@ export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTit
   const [screenId, setScreenId] = useState(initialApp.screens[0]?.id ?? '')
   const [componentId, setComponentId] = useState<string | null>(null)
   const [save, setSave] = useState<SaveState>({ kind: 'idle' })
+  useUnsaved(`app-editor:${initialApp.id}`, save.kind === 'dirty' || save.kind === 'saving' || save.kind === 'error')
   const [pending, startTransition] = useTransition()
 
   const screens = useMemo(() => [...app.screens].sort(byPosition), [app.screens])

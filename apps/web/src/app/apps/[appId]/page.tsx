@@ -1,4 +1,4 @@
-import { apps, db, tables as dbTables } from '@tableapp/db'
+import { apps, db, tables as dbTables, workspaceClientApps } from '@tableapp/db'
 import { appSchema } from '@tableapp/schema'
 import { eq } from 'drizzle-orm'
 import Link from 'next/link'
@@ -10,6 +10,7 @@ import type { TableSummary } from '@/lib/queries'
 import { listMemberships, requireMember } from '@/lib/session'
 import { PRIVATE_PAGE } from '@/lib/seo'
 import { loadBusinessProfile } from '@/lib/business-profile'
+import { ModuleManager } from '@/components/module-manager'
 
 /*
  * В поиске этой странице делать нечего: за ней рабочее пространство.
@@ -49,6 +50,12 @@ export default async function AppEditorPage({ params }: { params: Promise<{ appI
     memberships: await listMemberships(member.userId),
     activeWorkspaceId: member.workspaceId,
   }
+  const [primary] = await db.select().from(workspaceClientApps).where(eq(workspaceClientApps.workspaceId, member.workspaceId))
+  const sourceApps = await db.select().from(apps).where(eq(apps.workspaceId, member.workspaceId))
+  const sources = sourceApps.filter(source => source.id !== appId && !source.published).flatMap(source => {
+    const definition = appSchema.safeParse(source.draft)
+    return definition.success && definition.data.modules?.length === 1 ? [{ id: source.id, name: source.name, kind: definition.data.modules[0]!.kind }] : []
+  })
 
   return (
     <AppChrome {...chrome} wide>
@@ -96,7 +103,9 @@ export default async function AppEditorPage({ params }: { params: Promise<{ appI
         </p>
       )}
 
+      <ModuleManager key={`modules:${record.updatedAt.toISOString()}`} app={parsed.data} primary={primary?.appId === appId} sources={sources} />
       <AppEditor
+        key={record.updatedAt.toISOString()}
         business={await loadBusinessProfile(member.workspaceId)}
         portalUpgradeTableId={itemTable?.templateId === 'portal' ? itemTableId : null}
         dispatchUpgradeTableId={itemTable?.templateId === 'zayavki' ? itemTableId : null}

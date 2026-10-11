@@ -26,6 +26,7 @@ export const ID_PREFIX = {
   challenge: 'chl',
   event: 'evt',
   appUser: 'aus',
+  businessCustomer: 'bcu',
   /** Роль внутри приложения: их набор задаёт владелец. */
   role: 'rol',
   change: 'chg',

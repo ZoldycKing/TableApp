@@ -2,6 +2,7 @@ import type { App, AppRole, Block, Component, Field, RoleId, Screen, View } from
 import { evalFilter, fieldsOfFilter, GUEST_ROLE, indexFields } from '@tableapp/schema'
 import { rulesFor } from './row-access'
 import { customerCheckoutIds, offersCustomerCheckout } from './customer-checkout'
+import { acceptsModuleIntake, grantedRoles, hasRole } from './module-access'
 
 /**
  * Кто есть кто в приложении и что ему можно.
@@ -38,6 +39,8 @@ export type Visitor = {
   authenticated: boolean
   /** Роль среди вошедших. У не вошедшего — `null`, и это не «роль гостя». */
   roleId: RoleId | null
+  /** Private role IDs belong to separate modules; the primary role is only a display fallback. */
+  roleIds?: RoleId[]
   email: string | null
   /** Организация из списка доступа: по ней работает «видит заказы своей фирмы». */
   company: string
@@ -113,12 +116,13 @@ export function rolesForRowRules(app: Pick<App, 'roles'>): AppRole[] {
  * подтверждённого заказа. Её отсутствие означает, что человека мы не знаем.
  */
 export function maySendAppCode(
-  app: Pick<App, 'accessMode' | 'allowlist'>,
+  app: Pick<App, 'accessMode' | 'allowlist'> & Partial<Pick<App, 'modules' | 'moduleAccess' | 'roles'>>,
   email: string,
   enrolledRoleId: RoleId | null,
 ): boolean {
   // Открытое приложение пускает любого: адреса клиентов заранее не известны.
   if (app.accessMode !== 'allowlist') return true
+  if (app.moduleAccess) return Boolean(app.roles && (grantedRoles({ ...app, roles: app.roles }, email).length > 0 || app.allowlist.some(entry => sameEmail(entry.email, email) && entry.roleId === defaultRole({ roles: app.roles! })))) || enrolledRoleId !== null
   if (app.allowlist.some((entry) => sameEmail(entry.email, email))) return true
   return enrolledRoleId !== null
 }
@@ -135,10 +139,18 @@ export function maySendAppCode(
  * и не выпадает совсем: он получает роль по умолчанию, а если её нет — гостя.
  */
 export function visitorFor(
-  app: Pick<App, 'accessMode' | 'allowlist' | 'roles'>,
+  app: Pick<App, 'accessMode' | 'allowlist' | 'roles'> & Partial<Pick<App, 'modules' | 'moduleAccess'>>,
   email: string | null,
 ): Visitor {
   if (!email) return ANONYMOUS
+
+  if (app.moduleAccess) {
+    const roleIds = grantedRoles(app, email)
+    if (roleIds.length) return { ...asRole(roleIds[0]!, email), roleIds }
+    const client = defaultRole(app)
+    const roleId = app.accessMode === 'public' || app.allowlist.some(entry => sameEmail(entry.email, email) && entry.roleId === client) ? client : null
+    return roleId ? asRole(roleId, email, '', true) : ANONYMOUS
+  }
 
   const company = companyOf(app, email)
   // Роль отсюда — из списка доступа или из режима «открытое приложение»,
@@ -183,7 +195,7 @@ export function companyOf(app: Pick<App, 'allowlist'>, email: string | null): st
  */
 export function canOpenScreen(screen: Screen, visitor: Visitor): boolean {
   if (!visitor.authenticated || visitor.roleId === null) return screen.access.public
-  return screen.access.roles.includes(visitor.roleId)
+  return screen.access.roles.some(role => hasRole(visitor, role))
 }
 
 /**
@@ -203,7 +215,7 @@ export function canSeePart(
    * список полей: компонент по закрытой колонке отсеивается ниже.
    */
   if (!visitor.authenticated || visitor.roleId === null) return part.roles === null
-  return part.roles === null || part.roles.includes(visitor.roleId)
+  return part.roles === null || part.roles.some(role => hasRole(visitor, role))
 }
 
 /**
@@ -568,7 +580,7 @@ export function formFields(
 
 export function screensFor(app: App, visitor: Visitor): Screen[] {
   const checkout = !visitor.authenticated ? customerCheckoutIds(app) : new Set<string>()
-  return app.screens.filter((screen) => canOpenScreen(screen, visitor) && !checkout.has(screen.id))
+  return app.screens.filter((screen) => canOpenScreen(screen, visitor) && !checkout.has(screen.id) && !(screen.type === 'form' && screen.mode === 'create' && !acceptsModuleIntake(app, screen.tableId)))
 }
 
 /**
@@ -592,6 +604,7 @@ export function homeScreenFor(app: App, visitor: Visitor): Screen | null {
  * чужого идентификатора таблицы: экраны приложения перечислены наперёд.
  */
 export function permits(app: App, tableId: string, action: AppAction, visitor: Visitor): boolean {
+  if (action === 'create' && !acceptsModuleIntake(app, tableId)) return false
   // Не вошедший не пишет ни при каких настройках экрана: заказ с витрины
   // проходит через подтверждение почты, а не через это право.
   if (!visitor.authenticated || visitor.roleId === null) return false

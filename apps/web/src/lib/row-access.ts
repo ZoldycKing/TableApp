@@ -1,5 +1,6 @@
 import type { App, RoleId, RowAccessRule } from '@tableapp/schema'
 import type { Visitor } from './app-roles'
+import { hasRole } from './module-access'
 
 /**
  * Правила видимости строк для пользователей приложения.
@@ -35,9 +36,8 @@ export type AccessViewer = {
  */
 export function rulesFor(app: App, tableId: string, visitor: Visitor): RowAccessRule[] {
   if (!visitor.authenticated || visitor.roleId === null) return []
-  const roleId = visitor.roleId
   return app.rowAccessRules.filter(
-    (rule) => rule.tableId === tableId && rule.appliesTo.includes(roleId),
+    (rule) => rule.tableId === tableId && rule.appliesTo.some(role => hasRole(visitor, role)),
   )
 }
 

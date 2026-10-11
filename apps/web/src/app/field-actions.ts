@@ -17,6 +17,7 @@ import { publishTable } from '@/lib/live'
 import { authorizeTable } from '@/lib/authorize'
 import { renameInFormulas } from '@/lib/formula-rename'
 import { lockRowUsage } from '@/lib/row-mutations'
+import { modularFieldChangeError } from '@/lib/module-resource-guard'
 import type { ActionResult } from './actions'
 
 async function loadFields(tableId: string): Promise<Field[]> {
@@ -195,8 +196,10 @@ export async function updateFieldAction(
   const enriched = withInferredResultType(candidate, siblings)
   const typeChanged = nextType !== current.type
 
-  await db.transaction(async (tx) => {
+  const moduleError = await db.transaction(async (tx) => {
     await lockRowUsage({ tx, workspaceId: auth.member.workspaceId, changed: new Set() })
+    const error = await modularFieldChangeError(tx, auth.member.workspaceId, fieldId, enriched)
+    if (error) return error
     await tx
       .update(fieldsTable)
       .set({
@@ -224,7 +227,7 @@ export async function updateFieldAction(
         actorId: auth.member.userId, actorKind: 'member', before: data, after: next })
     }
   })
-
+  if (moduleError) return { ok: false, error: moduleError }
   revalidatePath('/t/[tableId]', 'page')
   publishTable(tableId, 'structure')
   return { ok: true }
@@ -267,8 +270,10 @@ export async function deleteFieldAction(tableId: string, fieldId: string): Promi
     return { ok: false, error: `Сначала измените поля, которые на него ссылаются: ${names}` }
   }
 
-  await db.transaction(async (tx) => {
+  const moduleError = await db.transaction(async (tx) => {
     await lockRowUsage({ tx, workspaceId: auth.member.workspaceId, changed: new Set() })
+    const error = await modularFieldChangeError(tx, auth.member.workspaceId, fieldId, null)
+    if (error) return error
     await tx.delete(fieldsTable).where(and(eq(fieldsTable.id, fieldId), eq(fieldsTable.tableId, tableId)))
 
     const rows = await tx.select().from(rowsTable).where(eq(rowsTable.tableId, tableId)).orderBy(asc(rowsTable.id)).for('update')
@@ -282,7 +287,7 @@ export async function deleteFieldAction(tableId: string, fieldId: string): Promi
         actorId: auth.member.userId, actorKind: 'member', before, after: data })
     }
   })
-
+  if (moduleError) return { ok: false, error: moduleError }
   revalidatePath('/t/[tableId]', 'page')
   publishTable(tableId, 'structure')
   return { ok: true }

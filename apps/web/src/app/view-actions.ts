@@ -7,6 +7,8 @@ import { and, asc, eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { publishTable } from '@/lib/live'
 import { authorizeTable } from '@/lib/authorize'
+import { lockRowUsage } from '@/lib/row-mutations'
+import { modularViewDeletionError } from '@/lib/module-resource-guard'
 import type { ActionResult } from './actions'
 
 const VIEW_TYPE_NAMES: Record<ViewType, string> = {
@@ -108,7 +110,13 @@ export async function deleteViewAction(tableId: string, viewId: string): Promise
   // Таблица без представлений нечитаема — последнее удалить нельзя.
   if (remaining.length <= 1) return { ok: false, error: 'Нельзя удалить единственное представление' }
 
-  await db.delete(viewsTable).where(and(eq(viewsTable.id, viewId), eq(viewsTable.tableId, tableId)))
+  const error = await db.transaction(async tx => {
+    await lockRowUsage({ tx, workspaceId: auth.member.workspaceId, changed: new Set() })
+    const error = await modularViewDeletionError(tx, auth.member.workspaceId, viewId)
+    if (error) return error
+    await tx.delete(viewsTable).where(and(eq(viewsTable.id, viewId), eq(viewsTable.tableId, tableId)))
+  })
+  if (error) return { ok: false, error }
 
   revalidatePath('/t/[tableId]', 'page')
   publishTable(tableId, 'structure')

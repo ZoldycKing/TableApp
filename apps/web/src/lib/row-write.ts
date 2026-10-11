@@ -4,10 +4,11 @@ import { customerWorkflows, normalizeFieldOptions } from '@tableapp/schema'
 import { asc, eq } from 'drizzle-orm'
 import type { AppViewer } from './app-session'
 import type { Visitor } from './app-roles'
-import { createRow, writeRows } from './row-mutations'
+import { assertCurrentModuleState, createRow, writeRows } from './row-mutations'
 import type { Transaction } from './db-transaction'
 import { rulesFor, stampOwner } from './row-access'
 import { createCustomerRecord } from './customer-create'
+import { updateBusinessCustomerContact } from './business-customer'
 
 /**
  * Создание строки от имени посетителя приложения.
@@ -55,11 +56,17 @@ export async function insertRow(
   const owned = stampOwner(rules, author.viewer, values)
   if (app.booking?.tables.visits === tableId) owned[app.booking.visit.status] = app.booking.statuses.booked
   const customer = customerWorkflows(app).find(config => config.tableId === tableId)
-  if (customer && author.visitor.roleId === 'client') {
-    return writeRows(app.workspaceId, context => createCustomerRecord(context, app, customer, owned, author, beforeInsert))
-  }
-  return writeRows(app.workspaceId, (context) => createRow(context, tableId,
+  return writeRows(app.workspaceId, async context => {
+    await assertCurrentModuleState(context, app)
+    const result = customer && author.visitor.roleId === 'client' ? await createCustomerRecord(context, app, customer, owned, author, beforeInsert) : await createRow(context, tableId,
     owned,
     { id: author.viewer?.id ?? null, kind: 'app_user', ip: author.ip },
-    { origin: 'runtime', beforeInsert }))
+    { origin: 'runtime', beforeInsert })
+    if (author.viewer && author.visitor.roleId === 'client') {
+      const name = app.booking?.tables.visits === tableId ? app.booking.visit.client : customer?.profile?.nameFieldId
+      const phone = app.booking?.tables.visits === tableId ? app.booking.visit.phone : customer?.profile?.phoneFieldId
+      if (name && phone) await updateBusinessCustomerContact(context.tx, app.workspaceId, author.viewer.email, owned[name], owned[phone])
+    }
+    return result
+  })
 }

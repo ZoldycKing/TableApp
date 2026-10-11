@@ -191,6 +191,20 @@ export async function limitRefusal(
  */
 export type Allowed = { ok: true } | { ok: false; error: string; details: PlanLimitDetails }
 
+/** Preflight refreshes actual usage but never reserves capacity for resources not yet created. */
+export async function previewIncrease(request: IncreaseRequest): Promise<Allowed> {
+  const { workspaceId, resource, amount = 1, origin = 'manual', tx } = request
+  if (amount <= 0) return { ok: true }
+  const plan = await planFor(workspaceId, tx), fresh = await recountWorkspace(workspaceId, tx)
+  const current = Number(fresh[resource]), limit = plan.limits[resource]
+  const ceiling = limit + (resource === 'rows' && origin === 'runtime' ? graceReserve(limit) : 0)
+  if (current + amount <= ceiling) return { ok: true }
+  const error = new PlanLimitError({ code: resource === 'rows' && origin === 'runtime' ? 'PLAN_ROW_GRACE_EXHAUSTED' : LIMIT_CODE[resource],
+    plan: plan.id, resource, used: current, limit, requested: amount, nextPlan: nextOf(plan.id),
+    ...(resource === 'rows' ? { graceUsed: graceUsed(current, limit), graceLimit: graceReserve(limit) } : {}) })
+  return { ok: false, error: error.message, details: error.details }
+}
+
 export async function mayIncrease(request: IncreaseRequest): Promise<Allowed> {
   try {
     await assertCanIncreaseUsage(request)

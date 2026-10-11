@@ -1,4 +1,5 @@
 import { customerWorkflows, type App, type Screen } from '@tableapp/schema'
+import { acceptsModuleIntake } from './module-access'
 
 /** Checkout is a private screen. Its public card may offer the email verification step. */
 export function customerCheckoutIds(app: App): Set<string> {
@@ -11,8 +12,8 @@ export function customerCheckoutIds(app: App): Set<string> {
 export function offersCustomerCheckout(app: App, source: Screen, targetId: string): boolean {
   if (!source.access.public || source.type !== 'detail') return false
   const config = customerWorkflows(app).find(config => config.formScreenId === targetId)
-  if (config?.catalog) return source.id === config.catalog.detailScreenId
-  return Boolean(app.booking && targetId === app.booking.formScreenId && source.tableId === app.booking.tables.services)
+  if (config?.catalog) return acceptsModuleIntake(app, config.tableId) && source.id === config.catalog.detailScreenId
+  return Boolean(app.booking && acceptsModuleIntake(app, app.booking.tables.visits) && targetId === app.booking.formScreenId && source.tableId === app.booking.tables.services)
 }
 
 export type CheckoutIntent = { screenId: string; rowId: string | null }

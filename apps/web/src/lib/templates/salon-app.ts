@@ -10,6 +10,7 @@ export function asSalon(app: App, built: BuiltTemplate): App {
   const group = <T extends Record<string, string>>(key: string, values: T): T => Object.fromEntries(Object.entries(values).map(([name, id]) => [name, field(key, id)])) as T
   const access = (roles: string[], publicFields: string[] = [], isPublic = false) => ({ roles, public: isPublic, publicFields, allowDelete: false })
   const formId = newId('screen'), rescheduleId = newId('screen'), setupId = newId('screen')
+  const list = app.screens.find(s => s.type === 'list')!, detail = app.screens.find(s => s.type === 'detail')!
   const config: BookingConfig = {
     tables: { services: table('services').id, masters: table('masters').id, schedule: table('schedule').id, visits: table('visits').id },
     service: group('services', { name: 'name', price: 'price', minutes: 'minutes', active: 'active' }),
@@ -19,11 +20,10 @@ export function asSalon(app: App, built: BuiltTemplate): App {
     statuses: Object.fromEntries(Object.entries({ booked: 'Записан', arrived: 'Пришёл', noShow: 'Не пришёл', cancelled: 'Отменил', completed: 'Завершено' }).map(([name, title]) => [name,
       (built.fields.find(item => item.id === field('visits', 'status'))!.options.choices as { id: string; name: string }[]).find(choice => choice.name === title)!.id])) as BookingConfig['statuses'],
     weekdays: (built.fields.find(item => item.id === field('schedule', 'weekday'))!.options.choices as { id: string }[]).map(choice => choice.id),
-    formScreenId: formId, rescheduleScreenId: rescheduleId, setupScreenId: setupId, stepMinutes: 15, leadMinutes: 60, horizonDays: 60,
+    listScreenId: list.id, formScreenId: formId, rescheduleScreenId: rescheduleId, setupScreenId: setupId, stepMinutes: 15, leadMinutes: 60, horizonDays: 60,
   }
   const formFields = (ids: string[], required = true): Component[] => ids.map((fieldId, index) => ({ id: newId('component'), position: positionSequence(ids.length)[index]!,
     type: 'form_field', fieldId, roles: null, visibleWhen: null, label: null, required, placeholder: null }))
-  const list = app.screens.find(s => s.type === 'list')!, detail = app.screens.find(s => s.type === 'detail')!
   const visitFields = config.visit
   const create: Screen = { id: formId, appId: app.id, name: 'Записаться на услугу', position: 'a', tab: null,
     access: access(['client', 'manager']), type: 'form', tableId: config.tables.visits, mode: 'create',

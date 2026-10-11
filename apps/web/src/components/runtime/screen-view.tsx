@@ -19,6 +19,7 @@ import { EmptyState } from './ui'
 import { FormFieldInput } from './form-field'
 import { useUnsaved } from '@/lib/unsaved'
 import { bookingVisitSection } from '@/lib/booking-lifecycle'
+import { CatalogHub } from './catalog-hub'
 
 type Props = {
   screen: Screen
@@ -64,6 +65,7 @@ type Props = {
 
 
 export function ScreenView(props: Props) {
+  if (props.screen.id === props.runtime.app.homeScreenId && props.runtime.app.catalogScreenIds) return <CatalogHub runtime={props.runtime} state={props.listState ?? EMPTY_LIST_STATE} onState={props.onListState ?? (() => {})} onOpenRow={props.onOpenRow} />
   const { screen, table, row, collection, viewer, accent, relatedTitles, runtime } = props
 
   const fields = table?.fields ?? []
@@ -109,17 +111,17 @@ export function ScreenView(props: Props) {
     if (customer && screen.id === customer.listScreenId) {
       const catalog = runtime.app.screens.find(candidate => 'source' in candidate && runtime.views[candidate.source.viewId]?.tableId === customer.catalog?.tableId)
       return <div className="space-y-4">{customer.parent ? <button type="button" onClick={() => props.onOpenScreen(customer.formScreenId)} className="rounded-xl border border-sand-200 bg-white px-4 py-2.5 text-sm font-medium">Задать вопрос по заказу</button> : null}<CustomerRecords config={customer} screen={screen} rows={collection?.rows ?? []} fields={fields} relatedTitles={relatedTitles} state={props.listState ?? EMPTY_LIST_STATE}
-        onState={props.onListState ?? (() => {})} accent={accent} onCatalog={catalog ? () => props.onOpenScreen(catalog.id) : null}
+        onState={props.onListState ?? (() => {})} accent={accent} onCatalog={catalog ? () => props.onOpenScreen(runtime.app.catalogScreenIds ? runtime.app.homeScreenId! : catalog.id) : null}
         onOpenRow={screen.onTapScreenId ? id => props.onOpenRow(screen.onTapScreenId!, id) : null} /></div>
     }
     const booking = runtime.app.booking
-    if (booking && screen.id === runtime.app.homeScreenId && table?.id === booking.tables.visits) {
+    if (booking && screen.id === (booking.listScreenId ?? runtime.app.homeScreenId) && table?.id === booking.tables.visits) {
       const services = runtime.app.screens.find(candidate => (candidate.type === 'list' || candidate.type === 'tiles') && runtime.views[candidate.source.viewId]?.tableId === booking.tables.services)
       const dateField = fields.find(field => field.id === booking.visit.start)
       return <BookingVisits screen={screen} rows={collection?.rows ?? []} fields={fields} relatedTitles={relatedTitles} config={booking}
         timeZone={dateField ? fieldTimeZone(dateField) : 'UTC'} now={props.now ?? runtime.loadedAt ?? Date.now()}
         state={props.listState ?? EMPTY_LIST_STATE} onState={props.onListState ?? (() => {})} accent={accent}
-        onChooseService={services ? () => props.onOpenScreen(services.id) : null}
+        onChooseService={services ? () => props.onOpenScreen(runtime.app.catalogScreenIds ? runtime.app.homeScreenId! : services.id) : null}
         onOpenRow={screen.onTapScreenId ? id => props.onOpenRow(screen.onTapScreenId!, id) : null} />
     }
     return (

@@ -5,7 +5,7 @@ import { TemplateAppPreview } from './template-app-preview'
 export function TemplateExample({ id }: { id: string }) {
   const example = templateExample(id)
   const { template, built, rows, field, table, text } = example
-  if (template.customer) {
+  if (template.customer && !template.internalOnly) {
     return <div className="grid gap-5 sm:grid-cols-2">
       <TemplateAppPreview example={example} role="guest" title="Без входа: каталог и описание"
         note="Откройте карточку и нажмите кнопку оформления. Сначала подтвердите почту, затем заполните данные и отправьте заказ или заявку. При действующем входе код повторно не нужен. Оплату согласует сотрудник бизнеса." />

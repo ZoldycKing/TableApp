@@ -1,4 +1,4 @@
-import type { App, Field } from '@tableapp/schema'
+import { appSchema, type App, type Field } from '@tableapp/schema'
 import type { BuiltTemplate } from './build'
 import { asDispatch } from './dispatch-app'
 import { asInventory } from './inventory-app'
@@ -17,7 +17,23 @@ export function templatePreset(app: App, built: BuiltTemplate): App {
 
 function buildPreset(app: App, built: BuiltTemplate): App {
   if (built.tables.find(table => table.id === built.appTableId)?.templateId === 'salon') return asSalon(app, built)
-  if (built.customer) return asCustomerApp(app, built)
+  if (built.customer) {
+    const ready = asCustomerApp(app, built)
+    if (built.tables.find(table => table.id === built.appTableId)?.templateId !== 'crm') return ready
+    // Retain the CRM engine and its configuration references. Client-only
+    // screens stay inaccessible; they are not exposed as duplicate staff tabs.
+    return appSchema.parse({ ...ready, accessMode: 'allowlist',
+      homeScreenId: ready.screens.find(screen => screen.type === 'dashboard' && screen.access.roles.includes('manager'))!.id,
+      screens: ready.screens.map(screen => {
+        const hidden = screen.access.public || !screen.access.roles.some(role => role === 'staff' || role === 'manager')
+        const names: Record<string, string> = { 'Назначенные мне': 'Мои сделки', 'Все обращения': 'Все сделки', 'Работа с обращением': 'Работа со сделкой', 'Управление обращением': 'Управление сделкой', 'Добавить обращение': 'Добавить сделку' }
+        return { ...screen, name: names[screen.name] ?? screen.name,
+          tab: hidden ? null : screen.tab ? { ...screen.tab, label: names[screen.tab.label] ?? screen.tab.label } : null,
+          access: { ...screen.access, public: false, publicFields: [], roles: hidden ? [] : screen.access.roles.filter(role => role !== 'client') },
+        }
+      }),
+    })
+  }
   if (built.portal) return asPortal(app, built.portal)
   if (built.production) return asProduction(app, built)
   if (built.inventory) return asInventory(app, built)

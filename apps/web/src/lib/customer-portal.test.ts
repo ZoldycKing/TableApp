@@ -61,7 +61,7 @@ describe('one customer identity, isolated business portals', () => {
   })
 
   it('internal template defaults do not invite customers into employee screens', () => {
-    for (const template of TEMPLATES.filter(template => ['sklad', 'proizvodstvo'].includes(template.id))) {
+    for (const template of TEMPLATES.filter(template => template.internalOnly || ['sklad', 'proizvodstvo'].includes(template.id))) {
       const { app } = templateExample(template.id)
       expect(canEnter(app, asRole('client', 'person@example.invalid')), template.id).toBe(false)
       expect(canEnter(app, ANONYMOUS), template.id).toBe(false)
@@ -70,7 +70,7 @@ describe('one customer identity, isolated business portals', () => {
   })
 
   it('public customer templates never expose the employee screens to customers or guests', () => {
-    for (const template of TEMPLATES.filter(template => template.customer || template.id === 'salon')) {
+    for (const template of TEMPLATES.filter(template => template.customer && !template.internalOnly || template.id === 'salon')) {
       const { app } = templateExample(template.id)
       const visitor = visitorFor(app, 'person@example.invalid')
       const employeeScreens = app.screens.filter(screen => screen.access.roles.some(role => ['manager', 'staff'].includes(role)) && !screen.access.roles.includes('client'))

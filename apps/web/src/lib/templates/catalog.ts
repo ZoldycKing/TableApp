@@ -11,6 +11,9 @@ import { sklad } from './defs/sklad'
 import { zakazy } from './defs/zakazy'
 import { zayavki } from './defs/zayavki'
 import { withCustomerScenario } from './customer-definitions'
+import { asSalesStarter } from './sales'
+import { STARTER_GROUPS } from './starter-groups'
+export { STARTER_GROUPS } from './starter-groups'
 
 /**
  * Готовые шаблоны.
@@ -37,7 +40,21 @@ const LEGACY_TEMPLATES: readonly TemplateDef[] = [
   dostavka,
   katalog,
 ]
-export const TEMPLATES: readonly TemplateDef[] = LEGACY_TEMPLATES.map(withCustomerScenario)
+/** Supported definitions include older starters for existing links and tools. */
+export const TEMPLATES: readonly TemplateDef[] = LEGACY_TEMPLATES.map(template => {
+  const ready = withCustomerScenario(template)
+  if (template.id === 'crm') return { ...ready, internalOnly: true,
+    gives: template.gives, limits: template.limits, kin: template.kin }
+  return template.id === 'zakazy' ? asSalesStarter(ready) : ready
+})
+
+/** The public choice is smaller than the compatibility registry. */
+export const STARTER_TEMPLATES: readonly TemplateDef[] = STARTER_GROUPS.flatMap(group =>
+  group.templateIds.map(id => TEMPLATES.find(template => template.id === id)!))
+
+export function findStarter(id: string | undefined): TemplateDef | undefined {
+  return STARTER_TEMPLATES.find(template => template.id === (id === 'katalog' ? 'zakazy' : id))
+}
 
 export function findTemplate(id: string, legacy = false): TemplateDef | undefined {
   return (legacy ? LEGACY_TEMPLATES : TEMPLATES).find((template) => template.id === id)

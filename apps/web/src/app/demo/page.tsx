@@ -186,7 +186,7 @@ export default async function DemoPage({
           для каждой роли
         </h1>
         <p className="mt-2 max-w-2xl text-base leading-relaxed text-ink-soft">
-          Перед вами настоящее приложение из шаблона «Клиентский портал». Переключайте роли,
+          Перед вами настоящий интерфейс кабинета клиента на учебных данных. Переключайте роли,
           открывайте заказы и сравнивайте интерфейс на компьютере и телефоне.
         </p>
 
@@ -279,7 +279,7 @@ export default async function DemoPage({
         <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
           <div className="max-w-2xl space-y-2 text-sm leading-relaxed text-ink-muted">
             <p>
-              Здесь приложение работает на вымышленных примерах из шаблона «Клиентский портал».
+              Здесь приложение работает на вымышленных примерах услуг и заказов.
               Можно переключить роль и увидеть разницу в доступе. Витрина «Услуги и цены» открыта всем по ссылке —
               владелец сам решил, какой раздел показывать без входа и какие колонки в нём
               публиковать. Себестоимость лежит в той же таблице и наружу не уходит.
@@ -301,14 +301,13 @@ export default async function DemoPage({
 
           <div className="flex flex-wrap gap-3">
             {/*
-              Показан один шаблон — «Клиентский портал», — и кнопка ведёт
-              именно к нему, а не в общий список, где его ещё надо найти.
+              Кабинет включён в клиентские наборы. Выбор зависит от задачи бизнеса.
             */}
             <Link
-              href="/templates/portal"
+              href="/templates#client-apps"
               className="rounded-xl bg-ink px-6 py-3.5 text-sm font-medium text-sand-50 shadow-soft transition-all hover:-translate-y-0.5 hover:bg-ink/90"
             >
-              Шаблон «Клиентский портал»
+              Выбрать сценарий бизнеса
             </Link>
             <Link
               href="/solutions/client-portal"

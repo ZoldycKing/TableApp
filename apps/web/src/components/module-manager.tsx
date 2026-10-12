@@ -10,8 +10,8 @@ export function ModuleManager({ app, primary, sources }: { app: App; primary: bo
   const router = useRouter(), [pending, start] = useTransition()
   const [message, setMessage] = useState<string | null>(null), [source, setSource] = useState('')
   const [preview, setPreview] = useState<Extract<Awaited<ReturnType<typeof previewModuleConnectionAction>>, { ok: true }> | null>(null)
-  const modules = app.modules ?? [], clientApp = Boolean(app.booking || app.customer)
-  const addition = modules.length === 1 && modules[0]?.kind === 'booking' ? 'katalog' : modules.length === 1 && modules[0]?.kind === 'sales' ? 'salon' : null
+  const modules = app.modules ?? [], clientApp = Boolean((app.booking || app.customer) && app.screens.some(screen => screen.access.public || screen.access.roles.includes('client')))
+  const addition = modules.length === 1 && modules[0]?.kind === 'booking' ? 'zakazy' : modules.length === 1 && modules[0]?.kind === 'sales' ? 'salon' : null
   const desiredKind = addition === 'salon' ? 'booking' : 'sales'
   const run = (action: () => Promise<{ ok: boolean; error?: string }>, success: string) => start(async () => {
     if (hasUnsaved()) { setMessage('Дождитесь сохранения изменений конструктора. Если сохранение завершилось ошибкой, сначала исправьте её.'); return }

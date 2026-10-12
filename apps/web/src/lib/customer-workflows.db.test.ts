@@ -18,7 +18,7 @@ if (!process.env.DATABASE_URL && existsSync(envFile)) process.loadEnvFile(envFil
 
 describe.skipIf(!process.env.DATABASE_URL)('all customer template workflows in PostgreSQL', () => {
   const email = `${newId('appUser')}@example.invalid`, worker = `${newId('appUser')}@example.invalid`, other = `${newId('appUser')}@example.invalid`
-  const fixtures = TEMPLATES.filter(template => template.customer).map(template => ({ example: templateExample(template.id), workspaceId: newId('workspace'), userId: newId('user') }))
+  const fixtures = TEMPLATES.filter(template => template.customer && !template.internalOnly).map(template => ({ example: templateExample(template.id), workspaceId: newId('workspace'), userId: newId('user') }))
   let database: typeof import('@tableapp/db'), runtime: typeof import('./app-runtime'), actions: typeof import('@/app/runtime-actions'), decisions: typeof import('@/app/customer-actions'), mutation: typeof import('./row-mutations'), sessions: typeof import('./app-session'), intake: typeof import('@/app/intake-actions'), auth: typeof import('@/app/auth-actions')
   let customerCookie: string
   const ids = new Map<string, string>()

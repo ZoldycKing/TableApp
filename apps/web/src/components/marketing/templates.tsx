@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { SOLUTIONS } from '@/lib/solutions'
-import { TEMPLATES } from '@/lib/templates/catalog'
+import { STARTER_TEMPLATES } from '@/lib/templates/catalog'
 
 /**
  * Решения на главной.
@@ -45,7 +45,7 @@ export function Templates() {
         </Link>
         <p className="text-sm text-ink-muted">
           {/* Число берётся из каталога: приписать лишний шаблон словами нельзя. */}
-          Готовых шаблонов — {TEMPLATES.length}: ставятся одним нажатием, с примерами внутри.
+          {STARTER_TEMPLATES.length} стартовых наборов для клиентов и внутреннего учёта. Кабинет клиента включён в клиентские сценарии.
         </p>
       </div>
     </div>

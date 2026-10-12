@@ -23,7 +23,7 @@ describe('template phone previews', () => {
       const role = template.production ? 'director' : template.inventory ? 'staff' : 'manager'
       const preview = templateAppPreview(example, role)
       expect(preview.runtime.app.screens.length, template.id).toBeGreaterThan(0)
-      if (!template.customer && !template.portal && template.id !== 'salon') {
+      if (template.internalOnly || !template.customer && !template.portal && template.id !== 'salon') {
         const customer = templateAppPreview(example, 'client', 'preview@example.invalid')
         expect(customer.runtime.app.screens.length, template.id).toBe(0)
       }

@@ -44,6 +44,31 @@ describe.skipIf(!process.env.DATABASE_URL)('modular business scenarios in Postgr
     const [record] = await database.db.select().from(database.apps).where(eq(database.apps.id, appId))
     return appSchema.parse(record!.draft)
   }
+  it('installs the unified sales catalogue in the salon app and keeps its existing bookings', async () => {
+    const first = await business(), before = await definition(first.appId)
+    const preview = await moduleActions.previewModuleConnectionAction(first.appId, 'zakazy')
+    if (!preview.ok) throw new Error(preview.error)
+    expect(await moduleActions.connectModuleAction(first.appId, 'zakazy', preview.expectedHash)).toMatchObject({ ok: true })
+    const combined = await definition(first.appId)
+    expect(combined.booking!.tables).toEqual(before.booking!.tables)
+    expect(combined.slug).toBe(first.slug)
+    expect(combined.customer!.cart).toBeTruthy()
+    const catalogueFields = await database.db.select().from(database.fields).where(eq(database.fields.tableId, combined.customer!.catalog!.tableId))
+    expect(catalogueFields.some(field => field.name === 'Фото')).toBe(true)
+    expect(catalogueFields.some(field => field.name === 'Описание')).toBe(true)
+    expect(combined.catalogScreenIds).toHaveLength(2)
+  })
+  it('publishes CRM as an internal workflow without selecting it as the customer app', async () => {
+    const first = await business('crm')
+    expect(await appActions.publishAppAction(first.appId)).toMatchObject({ ok: true })
+    expect(await moduleActions.setPrimaryClientAppAction(first.appId)).toMatchObject({ ok: false })
+    const app = await definition(first.appId)
+    expect(app.allowlist).toContainEqual({ email: ownerEmail, roleId: 'manager', company: '' })
+    const { canEnter, ANONYMOUS, asRole } = await import('./app-roles')
+    expect(canEnter(app, ANONYMOUS)).toBe(false)
+    expect(canEnter(app, asRole('client', clientEmail))).toBe(false)
+    expect(canEnter(app, asRole('manager', ownerEmail))).toBe(true)
+  })
   async function session(email: string) {
     const id = newId('session'); sessions.push(id)
     await database.db.insert(database.staffSessions).values({ id, email, expiresAt: new Date(Date.now() + 3_600_000) }); state.cookie = id

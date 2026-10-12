@@ -59,7 +59,7 @@ export default async function SolutionPage({ params }: { params: Promise<{ slug:
   const template = solution.templateId ? findTemplate(solution.templateId) : undefined
   // Человек с этой страницы идёт за шаблоном: ведём на его страницу, а не
   // на общий список, где ещё надо искать нужный.
-  const takeHref = template ? `/templates/${template.id}` : '/how-it-works'
+  const takeHref = template ? `/templates/${template.id}` : solution.capability ? '/templates#client-apps' : '/how-it-works'
   const related = solution.related
     .map((item) => findSolution(item))
     .filter((item): item is NonNullable<typeof item> => Boolean(item))
@@ -79,11 +79,11 @@ export default async function SolutionPage({ params }: { params: Promise<{ slug:
         actions={
           <>
             <PrimaryLink href={takeHref}>
-              {template ? 'Посмотреть шаблон' : 'Как собрать приложение'}
+              {template ? 'Посмотреть стартовый набор' : solution.capability ? 'Выбрать сценарий бизнеса' : 'Как собрать приложение'}
             </PrimaryLink>
             <SecondaryLink href="#primer">Посмотреть пример</SecondaryLink>
             {/* Живое демо собрано из этого шаблона — предлагаем его только здесь. */}
-            {solution.templateId === 'portal' ? (
+            {solution.slug === 'client-portal' ? (
               <SecondaryLink href="/demo">Открыть живое демо</SecondaryLink>
             ) : null}
           </>

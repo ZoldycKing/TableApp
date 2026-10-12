@@ -7,7 +7,7 @@ import { ANONYMOUS, canOpenScreen, visitorFor, writableFields } from '../app-rol
 import { draftFromAnonymous, revalidatePending } from '../pending-submission'
 
 describe('ready customer scenarios across templates', () => {
-  for (const template of TEMPLATES.filter(template => template.customer)) {
+  for (const template of TEMPLATES.filter(template => template.customer && !template.internalOnly)) {
     it(`${template.id}: first/repeat intake, own history and assigned staff are isolated`, () => {
       const example = templateExample(template.id), config = example.app.customer!
       expect(checkAppReferences(example.app, { tableIds: new Set(example.built.tables.map(table => table.id)), fields: new Map(example.fields.map(field => [field.id, field])), views: new Map(example.views.map(view => [view.id, view])) })).toBeNull()

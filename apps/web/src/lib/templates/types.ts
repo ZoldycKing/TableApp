@@ -198,6 +198,8 @@ export type TemplateProduction = {
 }
 
 export type TemplateDef = {
+  /** Internal workflow bindings do not imply a public client application. */
+  internalOnly?: boolean
   customer?: TemplateCustomer
   customerSections?: TemplateCustomer[]
   id: string

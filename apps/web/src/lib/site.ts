@@ -55,7 +55,7 @@ export const NAV_SOLUTIONS: SiteLink[] = [
   { href: '/solutions/production', label: 'Производственный учёт', hint: 'Выпуск, нормы, остатки материалов' },
   { href: '/solutions/employee-app', label: 'Рабочее приложение', hint: 'Сотрудник видит своё и работает с телефона' },
   { href: '/solutions/warehouse', label: 'Склад и остатки', hint: 'Что есть и что пора докупать' },
-  { href: '/solutions/catalog', label: 'Каталог для менеджера', hint: 'Витрина с ценами на телефоне' },
+  { href: '/solutions/catalog', label: 'Продажа товаров', hint: 'Каталог, корзина, заказы и кабинет' },
 ]
 
 export const NAV_MAIN: SiteLink[] = [

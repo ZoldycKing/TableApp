@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation'
 import { Logo } from '@/components/marketing/logo'
 import { MemberLogin } from '@/components/member-login'
 import { safeNext } from '@/lib/safe-next'
-import { TEMPLATES } from '@/lib/templates/catalog'
+import { findStarter, TEMPLATES } from '@/lib/templates/catalog'
 import { currentMember } from '@/lib/session'
 import { PRIVATE_PAGE } from '@/lib/seo'
 
@@ -28,9 +28,10 @@ export default async function LoginPage({
    * Человек пришёл со страницы шаблона: скажем, чем закончится вход.
    * Идентификатор проверяем по каталогу — в адресе может стоять что угодно.
    */
-  const chosen = TEMPLATES.find(
+  const previousChoice = TEMPLATES.find(
     (template) => target === `/templates?take=${template.id}`,
   )
+  const chosen = findStarter(previousChoice?.id) ?? previousChoice
 
   return (
     <div className="relative min-h-dvh overflow-hidden bg-sand-50">

@@ -8,6 +8,7 @@ import { templatePreset } from './presets'
 import type { TemplateDef } from './types'
 
 export function templateRoleNames(template: TemplateDef): string[] {
+  if (template.internalOnly) return ['Менеджер', 'Руководитель']
   if (template.customer) return ['Клиент', template.customer.workerName, template.customer.managerName]
   if (template.id === 'salon') return ['Клиент', 'Мастер', 'Администратор']
   if (template.id === 'zayavki') return ['Мастер', 'Диспетчер']
@@ -58,6 +59,7 @@ export function templateExampleFromDefinition(template: TemplateDef, now = new D
 
 /** Access explanation is shared by template cards and detail pages. */
 export function templateAccessNote(template: ReturnType<typeof findTemplate> & {}) {
+  if (template.internalOnly) return 'CRM предназначена для команды: менеджеры ведут клиентов и сделки, руководитель контролирует работу. Публичных экранов и клиентского оформления в этом наборе нет. Исполнитель видит назначенные ему сделки; администратор управляет всеми сделками и назначением.'
   if (template.customer) return 'Гость видит каталог и карточки. После нажатия кнопки оформления подтверждает почту, затем заполняет данные и отправляет обращение. В кабинете доступны только свои активные обращения и история. Исполнитель видит назначенную ему работу; администратор управляет назначением и условиями оплаты.'
   if (template.id === 'salon') return 'Клиент открывает услугу, нажимает «Записаться» и подтверждает почту. Затем выбирает мастера и свободное время, вводит контакты и оформляет запись. В кабинете доступны свои посещения, отмена и перенос. Администратор настраивает прайс и расписание; сотрудник согласует оплату.'
   if (template.id === 'zayavki') return 'Диспетчер видит все заявки, назначает мастеров и ведёт оплату. Мастер видит только заявки со своей почтой и меняет статус, фото и комментарий. Добавьте сотрудников в список доступа; адреса мастеров в примерах нужно заменить настоящими.'

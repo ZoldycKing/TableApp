@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation'
 import { useRef, useState, useTransition } from 'react'
 import { applyTemplateAction } from '@/app/template-actions'
+import { STARTER_GROUPS } from '@/lib/templates/starter-groups'
 import type { TemplateDef } from '@/lib/templates/types'
 
 /**
@@ -26,16 +27,20 @@ function plural(count: number, one: string, few: string, many: string): string {
 export function TemplateGallery({
   templates,
   chosen,
+  compatibilityTemplate,
 }: {
   templates: TemplateDef[]
   /**
    * Шаблон, который человек выбрал до входа.
    *
    * Он пришёл со страницы шаблона, нажал «Начать», вошёл — и должен увидеть
-   * свой выбор, а не искать его снова в списке из одиннадцати.
+   * свой выбор, а не искать его снова в каталоге.
    */
   chosen?: string | null
+  compatibilityTemplate?: TemplateDef | null
 }) {
+  const [groupId, setGroupId] = useState<string>(() => STARTER_GROUPS.find(group =>
+    group.templateIds.some(id => id === chosen))?.id ?? 'client-apps')
   const [busy, setBusy] = useState<string | null>(null)
   // Состояние приходит следующим кадром, а второй щелчок — раньше: без этой
   // защёлки двойное нажатие разворачивает шаблон дважды.
@@ -57,19 +62,24 @@ export function TemplateGallery({
         running.current = false
         return
       }
-      router.push(`/t/${result.tableId}`)
+      router.push(`/apps/${result.appId}`)
     })
   }
 
-  const picked = templates.find((template) => template.id === chosen)
+  const picked = compatibilityTemplate ?? templates.find((template) => template.id === chosen)
+  const group = STARTER_GROUPS.find(group => group.id === groupId)!
+  const visible = templates.filter(template => group.templateIds.some(id => id === template.id))
 
   return (
     <div className="space-y-6">
+      {compatibilityTemplate ? <p className="rounded-xl border border-sand-200 bg-sand-50 px-5 py-4 text-sm text-ink-soft">
+        Вы открыли прежний набор «Клиентский портал». Он сохранён для совместимости. В новых клиентских наборах кабинет уже включён — отдельно устанавливать его не нужно.
+      </p> : null}
       {picked ? (
         <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-sage-300 bg-sage-50 px-5 py-4">
           <p className="text-sm text-ink">
             <span aria-hidden className="mr-1.5">{picked.emoji}</span>
-            Вы выбрали шаблон <span className="font-semibold">«{picked.name}»</span>. Поставить его
+            Вы выбрали набор <span className="font-semibold">«{picked.name}»</span>. Поставить его
             в это пространство?
           </p>
           <button
@@ -87,8 +97,21 @@ export function TemplateGallery({
         <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
       ) : null}
 
+      <div className="flex flex-wrap gap-2" aria-label="Назначение приложения">
+        {STARTER_GROUPS.map(item => <button key={item.id} type="button" aria-pressed={groupId === item.id}
+          onClick={() => setGroupId(item.id)}
+          className={`rounded-xl border px-4 py-2.5 text-sm font-medium transition-colors ${groupId === item.id ? 'border-ink bg-ink text-sand-50' : 'border-sand-200 bg-white text-ink-soft hover:border-sage-300'}`}>
+          {item.name}
+        </button>)}
+      </div>
+      <div>
+        <h2 className="text-lg font-semibold text-ink">{group.name}</h2>
+        <p className="mt-2 max-w-3xl text-sm leading-relaxed text-ink-soft">{group.description}</p>
+        {groupId === 'client-apps' ? <p className="mt-2 text-sm text-ink-muted">Каталог доступен без входа. При оформлении клиент подтверждает почту; затем видит свои обращения и историю. Оплату согласует бизнес.</p> : null}
+      </div>
+
       <div className="grid gap-5 lg:grid-cols-2">
-        {templates.map((template) => {
+        {visible.map((template) => {
           const rowCount = template.tables.reduce((total, table) => total + table.rows.length, 0)
           return (
             <article
@@ -101,7 +124,7 @@ export function TemplateGallery({
               <div className="flex items-start gap-4">
                 <span aria-hidden className="text-3xl leading-none">{template.emoji}</span>
                 <div className="min-w-0">
-                  <h2 className="text-lg font-semibold text-ink">{template.name}</h2>
+                  <h3 className="text-lg font-semibold text-ink">{template.name}</h3>
                   <p className="mt-1 text-sm text-ink-soft">{template.tagline}</p>
                 </div>
               </div>
@@ -117,8 +140,9 @@ export function TemplateGallery({
                 ))}
               </ul>
 
-              <div className="mt-5 space-y-2 rounded-xl bg-sand-50 p-4 text-xs text-ink-soft">
-                <p className="font-medium text-ink">Что появится у вас</p>
+              <details className="mt-5 rounded-xl bg-sand-50 p-4 text-xs text-ink-soft">
+                <summary className="cursor-pointer font-medium text-ink">Таблицы и настройки набора</summary>
+                <div className="mt-3 space-y-2">
                 {template.tables.map((table) => (
                   <p key={table.key}>
                     Таблица «{table.name}» — {plural(table.fields.length, 'колонка', 'колонки', 'колонок')}.
@@ -128,9 +152,10 @@ export function TemplateGallery({
                 <p>
                   Черновик приложения «{template.appName}» и {plural(rowCount, 'учебная запись', 'учебные записи', 'учебных записей')}. Неизменённые примеры можно удалить отдельно в каждой таблице.
                 </p>
-                <p>После установки откроется таблица. Затем проверьте доступ и опубликуйте черновик приложения.</p>
+                <p>После установки откроется настройка приложения. Замените примеры, проверьте доступ и опубликуйте черновик.</p>
                 {!template.customer && template.id !== 'salon' && !template.portal && !template.inventory && !template.production && template.id !== 'zayavki' ? <p>Роли пока видят одинаковые экраны и записи. Ограничение по сотруднику или клиенту нужно настроить.</p> : null}
-              </div>
+                </div>
+              </details>
 
               <button
                 type="button"
@@ -138,7 +163,7 @@ export function TemplateGallery({
                 disabled={busy !== null}
                 className="mt-5 self-start rounded-xl bg-ink px-5 py-2.5 text-sm font-medium text-sand-50 transition-opacity hover:opacity-90 disabled:opacity-40"
               >
-                {busy === template.id ? 'Создаём…' : 'Взять шаблон'}
+                {busy === template.id ? 'Создаём…' : 'Начать с этого набора'}
               </button>
             </article>
           )

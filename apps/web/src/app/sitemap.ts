@@ -2,7 +2,7 @@ import type { MetadataRoute } from 'next'
 import { PUBLIC_ROUTES } from '@/lib/site'
 import { absolute } from '@/lib/site-url'
 import { SOLUTIONS } from '@/lib/solutions'
-import { TEMPLATES } from '@/lib/templates/catalog'
+import { STARTER_TEMPLATES } from '@/lib/templates/catalog'
 
 /**
  * Карта сайта.
@@ -32,7 +32,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.8,
     })),
     { url: absolute(PUBLIC_ROUTES.templates), lastModified: now, changeFrequency: 'weekly', priority: 0.9 },
-    ...TEMPLATES.map((template) => ({
+    ...STARTER_TEMPLATES.map((template) => ({
       url: absolute(`/templates/${template.id}`),
       lastModified: now,
       changeFrequency: 'monthly' as const,

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { PRIVATE_PREFIXES, PUBLIC_ROUTES } from '@/lib/site'
 import { SITE_URL, absolute } from '@/lib/site-url'
 import { SOLUTIONS } from '@/lib/solutions'
-import { TEMPLATES } from '@/lib/templates/catalog'
+import { STARTER_TEMPLATES } from '@/lib/templates/catalog'
 import robots from './robots'
 import sitemap from './sitemap'
 
@@ -42,9 +42,15 @@ describe('карта сайта', () => {
     for (const solution of SOLUTIONS) {
       expect(list, solution.slug).toContain(absolute(`/solutions/${solution.slug}`))
     }
-    for (const template of TEMPLATES) {
+    for (const template of STARTER_TEMPLATES) {
       expect(list, template.id).toContain(absolute(`/templates/${template.id}`))
     }
+  })
+
+  it('не предлагает отдельный портал и прежний каталог как самостоятельные наборы', () => {
+    const list = urls()
+    expect(list).not.toContain(absolute('/templates/portal'))
+    expect(list).not.toContain(absolute('/templates/katalog'))
   })
 
   it('не зовёт поисковика в рабочее пространство', () => {

@@ -20,7 +20,7 @@ import { checkpointBeforeChange, recordConfigVersion } from '@/lib/app-config-hi
 
 const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex')
 const ownedApp = (record: typeof apps.$inferSelect): App => appSchema.parse({ ...appSchema.parse(record.draft), id: record.id, workspaceId: record.workspaceId, slug: record.slug })
-const targetKind = (templateId: string) => templateId === 'salon' ? 'booking' : templateId === 'katalog' ? 'sales' : null
+const targetKind = (templateId: string) => templateId === 'salon' ? 'booking' : ['zakazy', 'katalog'].includes(templateId) ? 'sales' : null
 
 async function catalog(context: RowTransaction): Promise<AppReferenceCatalog> {
   const scoped = context.tx.select({ id: tables.id }).from(tables).where(eq(tables.workspaceId, context.workspaceId))
@@ -173,7 +173,9 @@ export async function setPrimaryClientAppAction(appId: string) {
   try {
     await writeRows(auth.member.workspaceId, async context => {
       const [record] = await context.tx.select().from(apps).where(and(eq(apps.id, appId), eq(apps.workspaceId, context.workspaceId))).for('update')
-      if (!record || !(ownedApp(record).booking || ownedApp(record).customer)) throw new RowWriteError('invalid', 'Выберите приложение с клиентским сценарием')
+      if (!record) throw new RowWriteError('invalid', 'Выберите приложение с клиентским сценарием')
+      const candidate = ownedApp(record)
+      if (!(candidate.booking || candidate.customer) || !candidate.screens.some(screen => screen.access.public || screen.access.roles.includes('client'))) throw new RowWriteError('invalid', 'Выберите приложение с клиентским сценарием')
       await context.tx.insert(workspaceClientApps).values({ workspaceId: context.workspaceId, appId })
         .onConflictDoUpdate({ target: workspaceClientApps.workspaceId, set: { appId } })
     })

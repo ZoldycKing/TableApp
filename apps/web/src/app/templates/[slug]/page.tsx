@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
+import { notFound, permanentRedirect } from 'next/navigation'
 import {
   CtaSection,
   MarketingShell,
@@ -16,7 +16,7 @@ import { pageMetadata } from '@/lib/seo'
 import { currentMember } from '@/lib/session'
 import { templateStart } from '@/lib/site'
 import { SOLUTIONS } from '@/lib/solutions'
-import { findTemplate, TEMPLATES } from '@/lib/templates/catalog'
+import { findStarter, findTemplate, STARTER_TEMPLATES, TEMPLATES } from '@/lib/templates/catalog'
 import type { TemplateDef } from '@/lib/templates/types'
 import { templateAccessNote, templateRoleNames } from '@/lib/templates/presentation'
 
@@ -60,13 +60,13 @@ function relatedTemplates(template: TemplateDef): TemplateDef[] {
     if (item && item.id !== template.id && !picked.some((x) => x.id === item.id)) picked.push(item)
   }
 
-  for (const id of template.kin ?? []) add(findTemplate(id))
+  for (const id of template.kin ?? []) add(findStarter(id))
 
   if (picked.length < 3) {
     const solution = SOLUTIONS.find((item) => item.templateId === template.id)
     const industries = new Set(solution?.industries ?? [])
     if (industries.size > 0) {
-      for (const item of TEMPLATES) {
+      for (const item of STARTER_TEMPLATES) {
         const own = SOLUTIONS.find((candidate) => candidate.templateId === item.id)
         if ((own?.industries ?? []).some((name) => industries.has(name))) add(item)
       }
@@ -82,6 +82,8 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>
 }): Promise<Metadata> {
   const { slug } = await params
+  if (slug === 'portal') return { ...pageMetadata({ path: '/solutions/client-portal', title: 'Кабинет клиента', description: 'Кабинет клиента входит в клиентские стартовые наборы: свои обращения, статусы и история в приложении бизнеса.' }), robots: { index: false, follow: true } }
+  if (slug === 'katalog') return pageMetadata({ path: '/templates/zakazy', title: 'Шаблон «Продажа товаров»', description: 'Каталог, корзина, оформление заказа и личный кабинет клиента в одном приложении.' })
   const template = findTemplate(slug)
   if (!template) return {}
 
@@ -94,6 +96,8 @@ export async function generateMetadata({
 
 export default async function TemplatePage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
+  if (slug === 'katalog') permanentRedirect('/templates/zakazy')
+  if (slug === 'portal') permanentRedirect('/solutions/client-portal')
   const template = findTemplate(slug)
   if (!template) notFound()
 
@@ -104,6 +108,7 @@ export default async function TemplatePage({ params }: { params: Promise<{ slug:
    */
   const start = templateStart(template.id, Boolean(member))
 
+  const clientScenario = template.customer && !template.internalOnly
   const roles = templateRoleNames(template)
   const solution = SOLUTIONS.find((item) => item.templateId === template.id)
   const appTable = template.tables.find((table) => table.key === template.appTable) ?? template.tables[0]!
@@ -167,14 +172,14 @@ export default async function TemplatePage({ params }: { params: Promise<{ slug:
 
         <div className="mt-8 grid gap-4 text-sm leading-relaxed text-ink-soft sm:grid-cols-2">
           <p>
-            {template.customer ? templateAccessNote(template) : template.id === 'salon' ? 'Клиент выбирает услугу и свободное время, затем видит свои посещения в кабинете. Мастер работает с назначенными ему записями. Администратор ведёт прайс, добавляет мастеров и задаёт рабочие часы; отменённые записи остаются в истории и освобождают время.' : template.id === 'zayavki' ? 'Диспетчер создаёт заявки и назначает мастеров по почте. Мастер видит свой список, клиента, телефон и адрес; меняет только статус, фото и комментарий. У диспетчера есть сводка, финансовые поля и список клиентов.' : template.inventory ? 'Кладовщик принимает и выдаёт штучные товары с телефона. Списания и возвраты доступны через «Ещё действия». Владелец сверяет фактический остаток при инвентаризации и видит все операции в журнале.' : template.portal ? 'Клиентский кабинет показывает заказы по почте клиента и публичные услуги. Таблица «Обращения» пока не подключена к экранам кабинета.' : template.production ? 'Начальник смены вводит выпуск, директор проверяет материалы, движения и сводку. Расход материалов считается по нормам годного выпуска; брак учитывается отдельно.' : <>Приложение собирается по таблице «{appTable.name}»: список, карточка записи, формы
+            {clientScenario ? templateAccessNote(template) : template.id === 'salon' ? 'Клиент выбирает услугу и свободное время, затем видит свои посещения в кабинете. Мастер работает с назначенными ему записями. Администратор ведёт прайс, добавляет мастеров и задаёт рабочие часы; отменённые записи остаются в истории и освобождают время.' : template.id === 'zayavki' ? 'Диспетчер создаёт заявки и назначает мастеров по почте. Мастер видит свой список, клиента, телефон и адрес; меняет только статус, фото и комментарий. У диспетчера есть сводка, финансовые поля и список клиентов.' : template.inventory ? 'Кладовщик принимает и выдаёт штучные товары с телефона. Списания и возвраты доступны через «Ещё действия». Владелец сверяет фактический остаток при инвентаризации и видит все операции в журнале.' : template.portal ? 'Клиентский кабинет показывает заказы по почте клиента и публичные услуги. Таблица «Обращения» пока не подключена к экранам кабинета.' : template.production ? 'Начальник смены вводит выпуск, директор проверяет материалы, движения и сводку. Расход материалов считается по нормам годного выпуска; брак учитывается отдельно.' : <>Приложение собирается по таблице «{appTable.name}»: список, карточка записи, формы
             добавления и правки, сводка с числами. Дальше всё правится мышкой — что показать,
             что спросить, что скрыть.</>}
           </p>
           <p>
             Открывается в браузере на компьютере и на телефоне, ставится на домашний экран.
             {' '}
-            {template.id === 'salon' || template.customer ? 'Сначала каталог и карточка, затем подтверждение почты, заполнение данных и оформление. Вход сам по себе не создаёт заказ. При следующем обращении действующий вход сохраняется. Оплату согласует сотрудник бизнеса; онлайн-оплаты нет. В шапке видно название бизнеса.' : template.portal ? 'Клиент подтверждает почту при первой заявке и получает кабинет со своими заказами. При действующем входе следующая заявка оформляется без нового кода. Доступ сотрудникам назначает владелец.' : 'Сотрудник входит по коду из письма, а вы решаете, что ему видно.'}
+            {template.id === 'salon' || clientScenario ? 'Сначала каталог и карточка, затем подтверждение почты, заполнение данных и оформление. Вход сам по себе не создаёт заказ. При следующем обращении действующий вход сохраняется. Оплату согласует сотрудник бизнеса; онлайн-оплаты нет. В шапке видно название бизнеса.' : template.portal ? 'Клиент подтверждает почту при первой заявке и получает кабинет со своими заказами. При действующем входе следующая заявка оформляется без нового кода. Доступ сотрудникам назначает владелец.' : 'Сотрудник входит по коду из письма, а вы решаете, что ему видно.'}
             {solution ? (
               <>
                 {' '}Как устроена такая работа целиком — на странице решения{' '}
@@ -238,11 +243,11 @@ export default async function TemplatePage({ params }: { params: Promise<{ slug:
             <h3 className="font-display text-base font-bold">Что подготовить вам</h3>
             <ul className="mt-3 space-y-2 text-sm leading-relaxed text-ink-soft">
               {[
-                ...(template.customer || template.id === 'salon' ? ['Название бизнеса на странице «Приложения»; адрес и телефон можно добавить при необходимости'] : []),
-                template.customer ? 'Свои товары, услуги или объекты. Замените учебные записи и отметьте доступные для новых обращений' : template.id === 'salon' ? 'Свои услуги, цены и длительность. Замените учебные записи или удалите примеры' : template.inventory ? 'При первом импорте сопоставьте количество с «Начальным остатком». Следующие поступления записывайте приёмками' : 'Свои данные — файлом из Excel или CSV. Проверьте типы и сопоставление колонок перед импортом',
-                template.customer ? 'Почта сотрудников и их роли в списке доступа. Клиентский кабинет и вход уже настроены; приглашать каждого клиента не нужно' : template.id === 'salon' ? 'После публикации войдите с почтой владельца: в разделе «Настройка» добавьте мастеров, их почту и услуги' : template.id === 'zayavki' ? 'Почта мастеров и диспетчеров в списке доступа, роль для каждого' : template.portal ? 'Почта сотрудников в списке доступа и роль для каждого. Клиенты подтверждают почту сами при первой заявке' : 'Адреса сотрудников и клиентов, которым нужен доступ, и роль для каждого',
+                ...(clientScenario || template.id === 'salon' ? ['Название бизнеса на странице «Приложения»; адрес и телефон можно добавить при необходимости'] : []),
+                clientScenario ? 'Свои товары, услуги или объекты. Замените учебные записи и отметьте доступные для новых обращений' : template.id === 'salon' ? 'Свои услуги, цены и длительность. Замените учебные записи или удалите примеры' : template.inventory ? 'При первом импорте сопоставьте количество с «Начальным остатком». Следующие поступления записывайте приёмками' : 'Свои данные — файлом из Excel или CSV. Проверьте типы и сопоставление колонок перед импортом',
+                clientScenario ? 'Почта сотрудников и их роли в списке доступа. Клиентский кабинет и вход уже настроены; приглашать каждого клиента не нужно' : template.id === 'salon' ? 'После публикации войдите с почтой владельца: в разделе «Настройка» добавьте мастеров, их почту и услуги' : template.id === 'zayavki' ? 'Почта мастеров и диспетчеров в списке доступа, роль для каждого' : template.portal ? 'Почта сотрудников в списке доступа и роль для каждого. Клиенты подтверждают почту сами при первой заявке' : 'Адреса сотрудников и клиентов, которым нужен доступ, и роль для каждого',
                 'Свои названия колонок и статусов, если наши не подходят',
-                template.customer ? 'Назначайте работу по почте сотрудника. Если добавляете заказ за клиента, укажите его почту; сервер сам проставляет её при онлайн-оформлении' : template.id === 'salon' ? 'Рабочие дни и часы мастеров, перерывы и выходные. Клиентский доступ к своим записям уже настроен' : template.id === 'zayavki' ? 'Настоящая «Почта мастера» в каждой назначенной заявке; имя мастера не определяет доступ' : template.portal ? 'Почта клиента в заказах, которые добавляете за него. Отбор своих заказов в кабинете уже настроен' : 'Решение, какие строки видит каждая роль: все или только свои',
+                clientScenario ? 'Назначайте работу по почте сотрудника. Если добавляете заказ за клиента, укажите его почту; сервер сам проставляет её при онлайн-оформлении' : template.id === 'salon' ? 'Рабочие дни и часы мастеров, перерывы и выходные. Клиентский доступ к своим записям уже настроен' : template.id === 'zayavki' ? 'Настоящая «Почта мастера» в каждой назначенной заявке; имя мастера не определяет доступ' : template.portal ? 'Почта клиента в заказах, которые добавляете за него. Отбор своих заказов в кабинете уже настроен' : 'Решение, какие строки видит каждая роль: все или только свои',
                 template.id === 'salon' ? 'Проверьте свободное время и права сотрудников, затем отправьте ссылку клиентам' : 'Проверка доступа, затем публикация приложения и отправка ссылки',
               ].map((line) => (
                 <li key={line} className="flex gap-3">
@@ -287,7 +292,7 @@ export default async function TemplatePage({ params }: { params: Promise<{ slug:
       ) : null}
 
       {/* --- Соседние -------------------------------------------------- */}
-      <Section title="Похожие шаблоны" tone={limits.length > 0 ? 'plain' : 'sand'}>
+      <Section title="Другие задачи бизнеса" tone={limits.length > 0 ? 'plain' : 'sand'}>
         <div className="grid gap-4 sm:grid-cols-3">
           {others.map((item) => (
             <Reveal key={item.id}>

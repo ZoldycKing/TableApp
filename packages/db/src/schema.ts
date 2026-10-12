@@ -1,5 +1,6 @@
 import {
   bigint,
+  bigserial,
   boolean,
   foreignKey,
   index,
@@ -138,7 +139,7 @@ export const tables = pgTable('tables', {
   templateId: text('template_id'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [index('tables_workspace_idx').on(t.workspaceId, t.position)])
+}, (t) => [index('tables_workspace_idx').on(t.workspaceId, t.position), uniqueIndex('tables_owned_key').on(t.workspaceId, t.id)])
 
 /**
  * Поля — это метаданные. Добавление поля не выполняет DDL и не блокирует таблицу:
@@ -185,6 +186,7 @@ export const rows = pgTable('rows', {
   index('rows_table_position_idx').on(t.tableId, t.position),
   index('rows_table_updated_idx').on(t.tableId, t.updatedAt),
   index('rows_table_sync_idx').on(t.tableId, t.syncRevision),
+  uniqueIndex('rows_owned_key').on(t.tableId, t.id),
 ])
 
 export const views = pgTable('views', {
@@ -363,6 +365,81 @@ export const staffSessions = pgTable('staff_sessions', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [index('staff_sessions_email_idx').on(t.email)])
 
+/** Conversations follow business resources, retaining history when an app is composed again. */
+export const conversations = pgTable('conversations', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  /** Origin is informational. Its deletion clears only app_id (see SQL migration), preserving business ownership. */
+  appId: text('app_id'),
+  moduleId: text('module_id').notNull(),
+  tableId: text('table_id').notNull(),
+  rowId: text('row_id').notNull(),
+  customerId: text('customer_id').notNull(),
+  closedAt: timestamp('closed_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, t => [
+  uniqueIndex('conversations_owned_key').on(t.workspaceId, t.id),
+  uniqueIndex('conversations_resource_customer_key').on(t.workspaceId, t.tableId, t.rowId, t.customerId),
+  foreignKey({ columns: [t.workspaceId, t.appId], foreignColumns: [apps.workspaceId, apps.id] }).onDelete('set null'),
+  foreignKey({ columns: [t.workspaceId, t.tableId], foreignColumns: [tables.workspaceId, tables.id] }).onDelete('cascade'),
+  foreignKey({ columns: [t.tableId, t.rowId], foreignColumns: [rows.tableId, rows.id] }).onDelete('cascade'),
+  foreignKey({ columns: [t.workspaceId, t.customerId], foreignColumns: [businessCustomers.workspaceId, businessCustomers.id] }).onDelete('cascade'),
+])
+
+export const conversationMessages = pgTable('conversation_messages', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull(),
+  conversationId: text('conversation_id').notNull(),
+  sequence: bigserial('sequence', { mode: 'number' }).notNull(),
+  authorId: text('author_id').notNull(),
+  authorKind: text('author_kind').notNull(),
+  authorName: text('author_name').notNull(),
+  requestId: text('request_id').notNull(),
+  body: text('body').notNull(),
+  version: integer('version').notNull().default(0),
+  editedAt: timestamp('edited_at', { withTimezone: true }),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, t => [
+  uniqueIndex('conversation_messages_owned_key').on(t.workspaceId, t.id),
+  uniqueIndex('conversation_messages_retry_key').on(t.conversationId, t.authorId, t.requestId),
+  index('conversation_messages_page_idx').on(t.conversationId, t.sequence),
+  index('conversation_messages_workspace_idx').on(t.workspaceId),
+  foreignKey({ columns: [t.workspaceId, t.conversationId], foreignColumns: [conversations.workspaceId, conversations.id] }).onDelete('cascade'),
+])
+
+/** Original text is visible only to its author and the business owner through the authorized API. */
+export const conversationRevisions = pgTable('conversation_revisions', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull(),
+  messageId: text('message_id').notNull(),
+  version: integer('version').notNull(),
+  body: text('body').notNull(),
+  operation: text('operation').notNull(),
+  actorId: text('actor_id').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, t => [
+  uniqueIndex('conversation_revisions_version_key').on(t.messageId, t.version),
+  foreignKey({ columns: [t.workspaceId, t.messageId], foreignColumns: [conversationMessages.workspaceId, conversationMessages.id] }).onDelete('cascade'),
+])
+
+/** Internal staff notes are a separate data source and never join client message responses. */
+export const conversationNotes = pgTable('conversation_notes', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull(),
+  conversationId: text('conversation_id').notNull(),
+  authorId: text('author_id').notNull(),
+  authorName: text('author_name').notNull(),
+  body: text('body').notNull(),
+  requestId: text('request_id').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, t => [
+  uniqueIndex('conversation_notes_retry_key').on(t.conversationId, t.authorId, t.requestId),
+  index('conversation_notes_page_idx').on(t.conversationId, t.createdAt),
+  index('conversation_notes_workspace_idx').on(t.workspaceId),
+  foreignKey({ columns: [t.workspaceId, t.conversationId], foreignColumns: [conversations.workspaceId, conversations.id] }).onDelete('cascade'),
+])
+
 export const attachments = pgTable('attachments', {
   id: text('id').primaryKey(),
   workspaceId: text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
@@ -383,6 +460,8 @@ export const attachments = pgTable('attachments', {
   tableId: text('table_id'),
   rowId: text('row_id'),
   fieldId: text('field_id'),
+  conversationId: text('conversation_id'),
+  messageId: text('message_id'),
   /** Файл, на который не сослалась ни одна ячейка, собирается уборщиком. */
   referenced: boolean('referenced').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -390,6 +469,9 @@ export const attachments = pgTable('attachments', {
   uniqueIndex('attachments_key_key').on(t.key),
   index('attachments_workspace_idx').on(t.workspaceId),
   index('attachments_row_idx').on(t.rowId),
+  index('attachments_message_idx').on(t.messageId),
+  foreignKey({ columns: [t.workspaceId, t.conversationId], foreignColumns: [conversations.workspaceId, conversations.id] }).onDelete('cascade'),
+  foreignKey({ columns: [t.workspaceId, t.messageId], foreignColumns: [conversationMessages.workspaceId, conversationMessages.id] }).onDelete('cascade'),
 ])
 
 /**

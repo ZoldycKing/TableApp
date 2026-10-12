@@ -1,22 +1,28 @@
 import { attachments, db } from '@tableapp/db'
 import { newId } from '@tableapp/schema'
-import { and, eq } from 'drizzle-orm'
+import { and, eq, gt, isNotNull, isNull, or, sql } from 'drizzle-orm'
 import { assertCanIncreaseUsage, noteRemoved, type Origin } from './limits'
-import { lockRowUsage } from './row-mutations'
+import { lockRowUsage, RowWriteError } from './row-mutations'
 import { deleteFile, fileKey, putFile } from './storage'
 import { recountFileBytes } from './usage'
 
 /** Keep metadata and quota durable while S3 is accessed outside DB locks. */
 export async function storeAttachment(workspaceId: string, uploadedBy: string, origin: Origin,
-  file: { name: string; type: string; bytes: Uint8Array }) {
+  file: { name: string; type: string; bytes: Uint8Array }, conversationId?: string) {
   const id = newId('attachment')
   const key = fileKey(workspaceId, file.name)
   await db.transaction(async (tx) => {
     await lockRowUsage({ tx, workspaceId, changed: new Set() })
+    if (conversationId) {
+      const [recent] = await tx.select({ count: sql<number>`count(*)` }).from(attachments).where(and(eq(attachments.workspaceId, workspaceId), eq(attachments.uploadedBy, uploadedBy), gt(attachments.createdAt, new Date(Date.now() - 60000))))
+      const [pending] = await tx.select({ count: sql<number>`count(*)` }).from(attachments).where(and(eq(attachments.workspaceId, workspaceId), or(isNotNull(attachments.conversationId), eq(attachments.state, 'deleting')), isNull(attachments.messageId)))
+      if (Number(recent?.count) >= 20) throw new RowWriteError('invalid', 'Слишком много файлов. Повторите загрузку через минуту.')
+      if (Number(pending?.count) >= 1000) throw new RowWriteError('invalid', 'Добавление файлов временно недоступно. Отправьте сообщение без вложений или свяжитесь с бизнесом.')
+    }
     await recountFileBytes(workspaceId, tx)
     await assertCanIncreaseUsage({ workspaceId, resource: 'fileBytes', amount: file.bytes.byteLength, origin, tx })
     await tx.insert(attachments).values({ id, key, workspaceId, uploadedBy, name: file.name,
-      mime: file.type, size: file.bytes.byteLength, state: 'uploading', referenced: false })
+      mime: file.type, size: file.bytes.byteLength, state: 'uploading', referenced: false, conversationId })
   })
   try {
     const result = await putFile(workspaceId, file, key)
@@ -38,7 +44,7 @@ export async function storeAttachment(workspaceId: string, uploadedBy: string, o
             mime: file.type, size: file.bytes.byteLength, state: 'deleting', referenced: false })
           await recountFileBytes(workspaceId, tx)
         } else {
-          if (record.referenced || record.tableId || record.rowId || record.fieldId) return false
+          if (record.referenced || record.tableId || record.rowId || record.fieldId || record.messageId) return false
           await tx.update(attachments).set({ state: 'deleting' }).where(eq(attachments.id, id))
         }
         return true

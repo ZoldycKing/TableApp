@@ -4,20 +4,21 @@ import type { Attachment } from '@tableapp/schema'
 import { useRef, useState } from 'react'
 import { isInlineImage } from '@/lib/file-policy'
 
-export function fileUrl(key: string): string {
-  return `/api/files/${key}?v=2`
+export function fileUrl(key: string, business = false): string {
+  return `/api/files/${key}?v=2${business ? '&business=1' : ''}`
 }
 
 export function isImage(mime: string): boolean {
   return isInlineImage(mime)
 }
 
-async function upload(file: File, appId?: string): Promise<{ ok: true; attachment: Attachment } | { ok: false; error: string }> {
+async function upload(file: File, appId?: string, conversation?: { slug: string; tableId: string; rowId: string; business?: boolean }): Promise<{ ok: true; attachment: Attachment } | { ok: false; error: string }> {
   const form = new FormData()
   form.set('file', file)
   if (appId) form.set('appId', appId)
+  if (conversation) for (const [key, value] of Object.entries(conversation)) form.set(key, String(value))
 
-  const response = await fetch('/api/files', { method: 'POST', body: form })
+  const response = await fetch(conversation ? '/api/conversations/files' : '/api/files', { method: 'POST', body: form })
   const payload = (await response.json()) as
     | { ok: true; attachment: Attachment }
     | { ok: false; error: string }
@@ -32,14 +33,18 @@ export function FileUpload({
   value,
   maxCount,
   appId,
+  conversation,
   compact,
   onChange,
+  onBusyChange,
 }: {
   value: Attachment[]
   maxCount: number
   appId?: string
+  conversation?: { slug: string; tableId: string; rowId: string; business?: boolean }
   compact?: boolean
   onChange: (value: Attachment[]) => void
+  onBusyChange?: (busy: boolean) => void
 }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -51,13 +56,14 @@ export function FileUpload({
     if (!files || files.length === 0) return
     setError(null)
     setBusy(true)
+    onBusyChange?.(true)
     const added: Attachment[] = []
-    for (const file of [...files].slice(0, maxCount - value.length)) {
-      const result = await upload(file, appId)
+    try { for (const file of [...files].slice(0, maxCount - value.length)) {
+      const result = await upload(file, appId, conversation)
       if (result.ok) added.push(result.attachment)
       else setError(result.error)
-    }
-    setBusy(false)
+    } } catch { setError('Не удалось загрузить файл. Попробуйте ещё раз') }
+    finally { setBusy(false); onBusyChange?.(false) }
     if (added.length > 0) onChange([...value, ...added])
     if (inputRef.current) inputRef.current.value = ''
   }
@@ -69,13 +75,13 @@ export function FileUpload({
           <span key={item.key} className="group relative inline-flex">
             {isImage(item.mime) ? (
               <img
-                src={fileUrl(item.key)}
+                src={fileUrl(item.key, Boolean(conversation?.business))}
                 alt={item.name}
                 className={compact ? 'h-7 w-7 rounded object-cover' : 'h-16 w-16 rounded-lg object-cover'}
               />
             ) : (
               <a
-                href={fileUrl(item.key)}
+                href={fileUrl(item.key, Boolean(conversation?.business))}
                 target="_blank"
                 rel="noreferrer"
                 className="max-w-40 truncate rounded border border-[var(--color-border-subtle)] px-2 py-1 text-xs underline"

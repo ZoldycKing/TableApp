@@ -104,7 +104,7 @@ export default async function AppEditorPage({ params }: { params: Promise<{ appI
         </p>
       )}
 
-      <ModuleManager key={`modules:${record.updatedAt.toISOString()}`} app={parsed.data} primary={primary?.appId === appId} sources={sources} />
+      <ModuleManager key={`modules:${record.updatedAt.toISOString()}`} app={parsed.data} primary={primary?.appId === appId} sources={sources} owner={member.role === 'owner'} />
       <AppVersionHistory key={`history-${appId}`} appId={appId} canRestore={member.role !== 'viewer'} revision={`${record.updatedAt.toISOString()}:${record.publishedAt?.toISOString() ?? ''}`} />
       <AppEditor
         key={record.updatedAt.toISOString()}

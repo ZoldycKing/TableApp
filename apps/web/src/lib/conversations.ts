@@ -1,0 +1,209 @@
+import { apps, attachments, businessCustomers, conversationMessages as messages, conversationNotes as notes, conversationRevisions as revisions,
+  conversations, db, rows, tables, workspaces } from '@tableapp/db'
+import { appSchema, newId, type Attachment } from '@tableapp/schema'
+import { and, asc, desc, eq, gt, inArray, isNull, lt, sql } from 'drizzle-orm'
+import { createHash } from 'node:crypto'
+import { currentAppAccess } from './app-session'
+import { currentMember } from './session'
+import { appReadPolicy } from './app-read-policy'
+import { validateAppReferences } from './app-references'
+import { canEnter } from './app-roles'
+import { hasRole, moduleForTable, workflowRole } from './module-access'
+import { legacyAppModules } from './app-modules'
+import { conversationResource } from './conversation-resource'
+import { RowWriteError, writeRows } from './row-mutations'
+import type { Transaction } from './db-transaction'
+import type { ConversationPage } from './conversation-types'
+
+type Runner = typeof db | Transaction
+const denied = () => new RowWriteError('denied', 'Переписка недоступна или обращение не найдено')
+const validReference = (value: string) => typeof value === 'string' && value.length > 0 && value.length <= 200
+const validRequest = (value: string) => typeof value === 'string' && /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(value)
+function bodyText(value: string) {
+  if (typeof value !== 'string' || value.length > 4000) throw new RowWriteError('invalid', 'Сообщение должно содержать не больше 4000 символов')
+  return value.trim()
+}
+
+/** Resolve tenant, parent, identity and live grants from the server on every operation. */
+export async function conversationAccess(slug: string, tableId: string, rowId: string, runner: Runner = db, business = false) {
+  if (typeof business !== 'boolean') throw denied()
+  if (![slug, tableId, rowId].every(validReference)) throw denied()
+  const [record] = await runner.select().from(apps).where(eq(apps.slug, slug)).limit(1)
+  const parsed = appSchema.safeParse(record?.published)
+  if (!record || !parsed.success) throw denied()
+  const app = { ...parsed.data, id: record.id, workspaceId: record.workspaceId, slug: record.slug }
+  if (!conversationResource(app, tableId) || await validateAppReferences(app)) throw denied()
+  const [parent] = await runner.select({ row: rows }).from(rows).innerJoin(tables, eq(rows.tableId, tables.id))
+    .where(and(eq(rows.id, rowId), eq(rows.tableId, tableId), eq(tables.workspaceId, app.workspaceId), isNull(rows.deletedAt))).limit(1)
+  if (!parent) throw denied()
+  const member = business ? await currentMember() : null
+  const [space] = await runner.select({ ownerId: workspaces.ownerId }).from(workspaces).where(eq(workspaces.id, app.workspaceId))
+  const owner = Boolean(member && member.workspaceId === app.workspaceId && member.role === 'owner' && space?.ownerId === member.userId)
+  if (business && !owner) throw denied()
+  const access = owner ? null : await currentAppAccess(app)
+  const module = moduleForTable(app, tableId) ?? legacyAppModules(app).find(module => module.source.type === 'booking'
+    ? app.booking?.tables.visits === tableId : module.source.type === 'customer' && module.source.tableId === tableId)
+  if (!module) throw denied()
+  const email = String((parent.row.data as Record<string, unknown>)[conversationResource(app, tableId)!.emailFieldId] ?? '').trim().toLowerCase()
+  if (!email || email.length > 254 || !email.includes('@')) throw denied()
+  let staff = owner, manager = owner
+  if (!owner) {
+    if (!access?.viewer || !access.visitor.authenticated || !canEnter(app, access.visitor)) throw denied()
+    manager = hasRole(access.visitor, workflowRole(app, tableId, 'manager'))
+    staff = manager || hasRole(access.visitor, workflowRole(app, tableId, 'staff')) || module.source.type === 'booking' && hasRole(access.visitor, workflowRole(app, tableId, 'master'))
+    const policy = await appReadPolicy(app, tableId, access.visitor, access.viewer)
+    if (!policy.canRead(parent.row.data as Record<string, unknown>, parent.row)) throw denied()
+    if (!staff && (access.visitor.roleId !== 'client' || access.viewer.email.trim().toLowerCase() !== email)) throw denied()
+  }
+  const [profile] = await runner.select().from(businessCustomers).where(and(eq(businessCustomers.workspaceId, app.workspaceId), eq(businessCustomers.email, email)))
+  // Verified identities survive app deletion and changes between customer/work roles.
+  // Authorization still uses the explicitly selected authentication circuit.
+  const actorEmail = owner ? member!.email : access!.viewer!.email
+  const actorId = `person_${createHash('sha256').update(`${app.workspaceId}:${actorEmail.trim().toLowerCase()}`).digest('hex')}`
+  return { app, parent: parent.row, module, customerId: profile?.id ?? null, email, staff, manager, owner, actorId,
+    uploadId: owner ? member!.userId : access!.viewer!.id,
+    authorKind: owner ? 'business' : staff ? 'staff' : 'client',
+    authorName: (owner ? member!.name ?? 'Владелец бизнеса' : access!.viewer!.name ?? (staff ? 'Сотрудник' : 'Клиент')).slice(0, 80) }
+}
+type Access = Awaited<ReturnType<typeof conversationAccess>>
+async function threadFor(access: Access, runner: Runner, create = false) {
+  if (!access.customerId && create) {
+    await runner.insert(businessCustomers).values({ id: newId('businessCustomer'), workspaceId: access.app.workspaceId, email: access.email }).onConflictDoNothing()
+    const [profile] = await runner.select({ id: businessCustomers.id }).from(businessCustomers).where(and(eq(businessCustomers.workspaceId, access.app.workspaceId), eq(businessCustomers.email, access.email)))
+    access.customerId = profile!.id
+  }
+  if (!access.customerId) return null
+  const where = and(eq(conversations.workspaceId, access.app.workspaceId), eq(conversations.tableId, access.parent.tableId),
+    eq(conversations.rowId, access.parent.id), eq(conversations.customerId, access.customerId))
+  let [thread] = await runner.select().from(conversations).where(where)
+  if (!thread && create) {
+    if (!access.app.communications?.enabled) throw new RowWriteError('invalid', 'Новые переписки временно отключены. Свяжитесь с бизнесом.')
+    ;[thread] = await runner.insert(conversations).values({ id: `con_${newId('row').slice(4)}`, workspaceId: access.app.workspaceId, appId: access.app.id,
+      moduleId: access.module.id, tableId: access.parent.tableId, rowId: access.parent.id, customerId: access.customerId }).returning()
+  }
+  if (thread && thread.moduleId !== access.module.id) throw denied()
+  return thread ?? null
+}
+
+const fileDTO = (file: typeof attachments.$inferSelect): Attachment => ({ id: file.id, key: file.key, name: file.name, mime: file.mime, size: file.size, width: null, height: null })
+export async function readConversation(slug: string, tableId: string, rowId: string, before?: number, business = false): Promise<ConversationPage> {
+  if (before !== undefined && (!Number.isSafeInteger(before) || before <= 0)) throw denied()
+  const access = await conversationAccess(slug, tableId, rowId, db, business), thread = await threadFor(access, db)
+  const base = { conversationId: thread?.id ?? null, enabled: Boolean(access.app.communications?.enabled), closed: Boolean(thread?.closedAt), staff: access.staff, canManage: access.manager }
+  if (!thread) return { ...base, messages: [], nextBefore: null, notes: [] }
+  const found = await db.select().from(messages).where(and(eq(messages.workspaceId, access.app.workspaceId), eq(messages.conversationId, thread.id),
+    before === undefined ? undefined : lt(messages.sequence, before))).orderBy(desc(messages.sequence)).limit(51)
+  const page = found.slice(0, 50).reverse(), ids = page.filter(message => !message.deletedAt).map(message => message.id)
+  const files = ids.length ? await db.select().from(attachments).where(and(eq(attachments.workspaceId, access.app.workspaceId), eq(attachments.conversationId, thread.id), inArray(attachments.messageId, ids), eq(attachments.state, 'ready'))) : []
+  // A client response never queries the notes table.
+  const privateNotes = access.staff && before === undefined ? await db.select().from(notes).where(and(eq(notes.workspaceId, access.app.workspaceId), eq(notes.conversationId, thread.id))).orderBy(desc(notes.createdAt), desc(notes.id)).limit(50) : []
+  return { ...base, nextBefore: found.length > 50 ? page[0]!.sequence : null,
+    messages: page.map(message => ({ id: message.id, sequence: message.sequence, body: message.deletedAt ? '' : message.body,
+      author: message.authorName, mine: message.authorId === access.actorId, version: message.version, createdAt: message.createdAt.toISOString(),
+      edited: Boolean(message.editedAt), deleted: Boolean(message.deletedAt), files: files.filter(file => file.messageId === message.id).map(fileDTO),
+      canModerate: !message.deletedAt && (access.owner || message.authorId === access.actorId && (message.authorKind === 'client' || access.staff)),
+      canViewRevisions: access.owner || message.authorId === access.actorId && (message.authorKind === 'client' || access.staff) })),
+    notes: privateNotes.reverse().map(note => ({ id: note.id, body: note.body, author: note.authorName, createdAt: note.createdAt.toISOString() })) }
+}
+
+async function limits(access: Access, threadId: string, tx: Transaction) {
+  const [totals] = await tx.select({ value: sql<number>`(select count(*) from conversation_messages where workspace_id=${access.app.workspaceId}) + (select count(*) from conversation_notes where workspace_id=${access.app.workspaceId})` }).from(workspaces).where(eq(workspaces.id, access.app.workspaceId))
+  const [threadCount] = await tx.select({ value: sql<number>`count(*)` }).from(messages).where(eq(messages.conversationId, threadId))
+  if (Number(totals?.value) >= 100000 || Number(threadCount?.value) >= 2000) throw new RowWriteError('invalid', 'Достигнут лимит переписки. Свяжитесь с бизнесом другим способом.')
+  const [recent] = await tx.select({ value: sql<number>`(select count(*) from conversation_messages where workspace_id=${access.app.workspaceId} and author_id=${access.actorId} and created_at>now()-interval '1 minute') + (select count(*) from conversation_notes where workspace_id=${access.app.workspaceId} and author_id=${access.actorId} and created_at>now()-interval '1 minute')` }).from(workspaces).where(eq(workspaces.id, access.app.workspaceId))
+  if (Number(recent?.value) >= 20) throw new RowWriteError('invalid', 'Слишком много сообщений. Подождите минуту.')
+}
+export async function sendConversation(slug: string, tableId: string, rowId: string, input: { body: string; requestId: string; fileIds?: string[]; internal?: boolean }, business = false) {
+  if (!input || typeof input !== 'object' || input.internal !== undefined && typeof input.internal !== 'boolean') throw new RowWriteError('invalid', 'Некорректное сообщение')
+  const body = bodyText(input.body), fileIds = input.fileIds ?? []
+  if (!validRequest(input.requestId) || !Array.isArray(fileIds) || fileIds.length > 5 || fileIds.some(id => !validReference(id)) || new Set(fileIds).size !== fileIds.length || (!body && !fileIds.length)) throw new RowWriteError('invalid', 'Напишите сообщение или приложите файл')
+  const initial = await conversationAccess(slug, tableId, rowId, db, business)
+  return writeRows(initial.app.workspaceId, async ({ tx, changed }) => {
+    const access = await conversationAccess(slug, tableId, rowId, tx, business), thread = await threadFor(access, tx, true)
+    if (input.internal && (!access.staff || fileIds.length)) throw denied()
+    const target = input.internal ? notes : messages
+    const [previous] = await tx.select({ id: target.id }).from(target).where(and(eq(target.conversationId, thread!.id), eq(target.authorId, access.actorId), eq(target.requestId, input.requestId.toLowerCase())))
+    if (previous) return previous
+    if (thread!.closedAt) throw new RowWriteError('invalid', 'Переписка закрыта. Ответственный может возобновить её.')
+    await limits(access, thread!.id, tx)
+    const common = { id: `msg_${newId('row').slice(4)}`, workspaceId: access.app.workspaceId, conversationId: thread!.id, authorId: access.actorId,
+      authorName: access.authorName, body, requestId: input.requestId.toLowerCase() }
+    if (input.internal) {
+      await tx.insert(notes).values(common)
+    } else {
+      const files = fileIds.length ? await tx.select().from(attachments).where(and(eq(attachments.workspaceId, access.app.workspaceId), inArray(attachments.id, fileIds))).for('update') : []
+      if (files.length !== fileIds.length || files.some(file => file.state !== 'ready' || file.uploadedBy !== access.uploadId || file.conversationId !== thread!.id || file.messageId || file.referenced || file.rowId || file.tableId || file.fieldId)) throw new RowWriteError('denied', 'Вложение недоступно. Загрузите файл заново.')
+      await tx.insert(messages).values({ ...common, authorKind: access.authorKind })
+      if (fileIds.length) await tx.update(attachments).set({ messageId: common.id, referenced: true }).where(inArray(attachments.id, fileIds))
+    }
+    changed.add(tableId)
+    return { id: common.id }
+  })
+}
+
+export async function changeConversationMessage(slug: string, tableId: string, rowId: string, messageId: string, version: number, body: string | null, business = false) {
+  if (!validReference(messageId) || !Number.isSafeInteger(version) || version < 0) throw denied()
+  const text = body === null ? null : bodyText(body)
+  if (text === '') throw new RowWriteError('invalid', 'Введите текст сообщения')
+  const initial = await conversationAccess(slug, tableId, rowId, db, business)
+  return writeRows(initial.app.workspaceId, async ({ tx, changed }) => {
+    const access = await conversationAccess(slug, tableId, rowId, tx, business), thread = await threadFor(access, tx)
+    if (!thread) throw denied()
+    const [message] = await tx.select().from(messages).where(and(eq(messages.workspaceId, access.app.workspaceId), eq(messages.conversationId, thread.id), eq(messages.id, messageId))).for('update')
+    const authored = message && message.authorId === access.actorId && (message.authorKind === 'client' || access.staff)
+    if (!message || !authored && !access.owner) throw denied()
+    if (text !== null && !authored) throw denied()
+    if (message.version !== version || message.deletedAt) throw new RowWriteError('conflict', 'Сообщение изменилось. Обновите переписку.')
+    if (version >= 20) throw new RowWriteError('invalid', 'Достигнут лимит правок сообщения')
+    await tx.insert(revisions).values({ id: newId('change'), workspaceId: access.app.workspaceId, messageId, version: message.version,
+      body: message.body, operation: text === null ? 'delete' : 'edit', actorId: access.actorId })
+    await tx.update(messages).set({ body: text ?? '', version: version + 1, editedAt: new Date(), deletedAt: text === null ? new Date() : null }).where(eq(messages.id, messageId))
+    changed.add(tableId)
+    return { id: messageId }
+  })
+}
+export async function conversationMessageHistory(slug: string, tableId: string, rowId: string, messageId: string, business = false) {
+  const access = await conversationAccess(slug, tableId, rowId, db, business), thread = await threadFor(access, db)
+  if (!thread || !validReference(messageId)) throw denied()
+  const [message] = await db.select().from(messages).where(and(eq(messages.conversationId, thread.id), eq(messages.id, messageId)))
+  if (!message || !access.owner && (message.authorId !== access.actorId || message.authorKind !== 'client' && !access.staff)) throw denied()
+  return (await db.select().from(revisions).where(eq(revisions.messageId, messageId)).orderBy(asc(revisions.version))).map(revision => ({ version: revision.version, body: revision.body, operation: revision.operation, createdAt: revision.createdAt.toISOString() }))
+}
+export async function closeConversation(slug: string, tableId: string, rowId: string, closed: boolean, business = false) {
+  if (typeof closed !== 'boolean') throw denied()
+  const initial = await conversationAccess(slug, tableId, rowId, db, business)
+  return writeRows(initial.app.workspaceId, async ({ tx, changed }) => {
+    const access = await conversationAccess(slug, tableId, rowId, tx, business), thread = await threadFor(access, tx)
+    if (!thread || !access.manager) throw denied()
+    await tx.update(conversations).set({ closedAt: closed ? new Date() : null }).where(eq(conversations.id, thread.id))
+    changed.add(tableId)
+    return { id: thread.id }
+  })
+}
+export async function prepareConversationUpload(slug: string, tableId: string, rowId: string, business = false) {
+  const initial = await conversationAccess(slug, tableId, rowId, db, business)
+  return writeRows(initial.app.workspaceId, async ({ tx }) => {
+    const access = await conversationAccess(slug, tableId, rowId, tx, business), thread = await threadFor(access, tx, true)
+    if (thread!.closedAt) throw new RowWriteError('invalid', 'Переписка закрыта')
+    await limits(access, thread!.id, tx)
+    return { workspaceId: access.app.workspaceId, conversationId: thread!.id, uploadedBy: access.uploadId, origin: access.owner ? 'manual' as const : 'runtime' as const }
+  })
+}
+/** Pending files belong only to their uploader; attached files follow current conversation permissions. */
+export async function canReadConversationFile(file: typeof attachments.$inferSelect, business = false) {
+  if (!file.conversationId) return false
+  const [thread] = await db.select().from(conversations).where(and(eq(conversations.id, file.conversationId), eq(conversations.workspaceId, file.workspaceId)))
+  if (!thread) return false
+  if (file.messageId) {
+    const [message] = await db.select({ id: messages.id }).from(messages).where(and(eq(messages.id, file.messageId), eq(messages.conversationId, thread.id), eq(messages.workspaceId, file.workspaceId), isNull(messages.deletedAt)))
+    if (!message) return false
+  }
+  const candidates = await db.select({ slug: apps.slug }).from(apps).where(eq(apps.workspaceId, file.workspaceId))
+  for (const app of candidates) {
+    try {
+      const access = await conversationAccess(app.slug, thread.tableId, thread.rowId, db, business)
+      if (access.module.id === thread.moduleId && access.customerId === thread.customerId && (file.messageId || file.uploadedBy === access.uploadId)) return true
+    } catch (error) { if (!(error instanceof RowWriteError)) throw error }
+  }
+  return false
+}

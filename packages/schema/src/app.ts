@@ -780,6 +780,8 @@ export const appSchema = z.object({
   /** Missing on legacy apps. Module ownership is inherited from id/workspaceId. */
   modules: z.array(appModuleSchema).max(20).optional(),
   moduleAccess: moduleAccessSchema.optional(),
+  /** Optional customer communication capability; disabling stops new threads, retaining existing ones. */
+  communications: z.object({ enabled: z.boolean() }).strict().optional(),
   /** Existing catalog screens provide data; the primary home renders their combined public catalog. */
   catalogScreenIds: z.array(z.string().min(1)).max(20).optional(),
 })

@@ -31,6 +31,7 @@ export const ATTACHMENT_IN_USE = 'Файл уже прикреплён к дру
 
 function attachmentError(record: typeof attachments.$inferSelect, target: Target, author?: AttachmentAuthor): string | null {
   if (record.state !== 'ready') return INVALID_ATTACHMENT
+  if (record.conversationId || record.messageId) return ATTACHMENT_IN_USE
   if (record.tableId || record.rowId || record.fieldId) {
     return record.tableId === target.tableId && record.rowId === target.rowId && record.fieldId === target.fieldId
       ? null : ATTACHMENT_IN_USE

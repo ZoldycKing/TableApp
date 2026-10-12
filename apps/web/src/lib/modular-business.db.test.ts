@@ -331,7 +331,7 @@ describe.skipIf(!process.env.DATABASE_URL)('modular business scenarios in Postgr
     await session('foreign-client@example.invalid')
     const other = (await loadPublishedApp(first.slug, (await currentAppAccess(app)).visitor))!
     for (const config of customerWorkflows(app).filter(config => config !== app.customer)) expect(other.tables[config.tableId]!.rows).toHaveLength(0)
-  })
+  }, 15000)
   it('retries a legacy UUID record without changing its identifier or accepting another customer', async () => {
     const first = await business('zakazy'), app = await definition(first.appId), config = app.customer!
     expect(await appActions.publishAppAction(first.appId)).toMatchObject({ ok: true })

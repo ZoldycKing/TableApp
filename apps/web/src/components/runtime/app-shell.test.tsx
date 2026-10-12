@@ -19,6 +19,7 @@ vi.mock('@/app/production-actions', () => ({ saveMovementAction: vi.fn(), savePr
 vi.mock('@/app/runtime-actions', () => ({ appCreateRowAction: vi.fn(), appDeleteRowAction: vi.fn(), appUpdateRowAction: vi.fn() }))
 vi.mock('@/app/booking-actions', () => ({ bookingAvailabilityAction: vi.fn(), cancelBookingAction: vi.fn(), setupBookingMasterAction: vi.fn(), setBookingDayOffAction: vi.fn() }))
 vi.mock('@/app/customer-actions', () => ({ customerDecisionAction: vi.fn() }))
+vi.mock('./conversation-panel', () => ({ ConversationPanel: () => null }))
 const inventoryMocks = vi.hoisted(() => ({ receive: vi.fn(), operation: vi.fn() }))
 vi.mock('@/app/inventory-actions', () => ({ receiveStockAction: inventoryMocks.receive, saveStockOperationAction: inventoryMocks.operation }))
 vi.mock('@/lib/use-live-app', () => ({ useLiveApp: vi.fn() }))

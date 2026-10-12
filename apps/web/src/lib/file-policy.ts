@@ -24,6 +24,7 @@ function isSvg(name: string, mime: string): boolean {
 }
 
 export function validateFileMetadata(file: { name: string; type: string; size: number }): string | null {
+  if (file.name.length > 255) return 'Имя файла слишком длинное. Сократите его до 255 символов.'
   if (file.size > MAX_FILE_BYTES) return 'Файл больше 25 МБ'
   if (isSvg(file.name, file.type)) return 'SVG не поддерживается. Используйте PNG, JPEG, WebP или GIF.'
   if (!isAllowed(file.type)) return 'Этот тип файла не поддерживается'

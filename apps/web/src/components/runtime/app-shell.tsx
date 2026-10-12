@@ -41,6 +41,8 @@ import {
   type NavState,
 } from './nav-history'
 import { IntakeVerify } from './intake-verify'
+import { ConversationPanel } from './conversation-panel'
+import { conversationResource } from '@/lib/conversation-resource'
 import { AppLogin } from './app-login'
 import { customerCheckoutIds, parseCheckoutIntent, type CheckoutIntent } from '@/lib/customer-checkout'
 import { acceptsModuleIntake, moduleForTable } from '@/lib/module-access'
@@ -995,6 +997,8 @@ export function AppShell({
                 <button type="button" onClick={() => setConfirmCancellation(false)} className="ml-2 text-sm">Оставить обращение</button>
               </> : <button type="button" onClick={() => setConfirmCancellation(true)} className="text-sm text-red-700">Отменить обращение</button> : <p className="text-xs text-ink-muted">Если нужно уточнить или изменить условия, свяжитесь с бизнесом{runtime.business?.phone ? `: ${runtime.business.phone}` : '.'}</p>}
             </div> : null}
+            {!demo && !editing && sent === null && intake === null && checkout === null && screen.type === 'detail' && row && conversationResource(app, screen.tableId) ?
+              <ConversationPanel key={`${app.id}:${screen.tableId}:${row.id}:${viewer?.id ?? 'guest'}`} slug={app.slug} tableId={screen.tableId} rowId={row.id} configured={Boolean(app.communications?.enabled)} /> : null}
             {sent === null && intake === null && app.booking && screen.type === 'detail' && screen.tableId === app.booking.tables.visits && row &&
               app.screens.some(candidate => candidate.type === 'form' && candidate.mode === 'edit' && candidate.tableId === app.booking!.tables.visits &&
                 candidate.components.some(component => component.type === 'form_field' && component.fieldId === app.booking!.visit.status)) &&

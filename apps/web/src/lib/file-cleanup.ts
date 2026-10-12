@@ -8,7 +8,7 @@ export function cleanupPredicate(now = new Date()) {
   return or(eq(attachments.state, 'deleting'),
     and(eq(attachments.state, 'uploading'), lt(attachments.createdAt, new Date(now.getTime() - 60 * 60 * 1000))),
     and(eq(attachments.state, 'ready'), eq(attachments.referenced, false), isNull(attachments.tableId),
-      isNull(attachments.rowId), isNull(attachments.fieldId), lt(attachments.createdAt, new Date(now.getTime() - 24 * 60 * 60 * 1000))))
+      isNull(attachments.rowId), isNull(attachments.fieldId), isNull(attachments.messageId), lt(attachments.createdAt, new Date(now.getTime() - 24 * 60 * 60 * 1000))))
 }
 export async function cleanupFiles({ run = false, workspaceId, now = new Date(), limit = 100 }:
   { run?: boolean; workspaceId?: string; now?: Date; limit?: number } = {}) {

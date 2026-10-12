@@ -11,6 +11,7 @@ import { checkAppReferences, type AppReferenceCatalog } from '@/lib/app-referenc
 import { legacyAppModules } from '@/lib/app-modules'
 import { composeModules, ModuleCompositionError, scopeModuleAccess } from '@/lib/module-composition'
 import { availableModuleStarters, moduleStarter } from '@/lib/module-options'
+import { conversationResource } from '@/lib/conversation-resource'
 import { buildTemplate } from '@/lib/templates/build'
 import { findTemplate } from '@/lib/templates/catalog'
 import { templatePreset } from '@/lib/templates/presets'
@@ -162,6 +163,26 @@ export async function setModuleIntakeAction(appId: string, moduleId: string, ena
       await checkpointBeforeChange(context.tx, record, auth.member.userId)
       await context.tx.update(apps).set({ draft: app, updatedAt: new Date() }).where(eq(apps.id, appId))
       await recordConfigVersion(context.tx, record, app, 'intake', auth.member.userId)
+    })
+    revalidatePath(`/apps/${appId}`)
+    return { ok: true as const }
+  } catch (error) { return message(error) }
+}
+
+export async function setCommunicationsAction(appId: string, enabled: boolean) {
+  const auth = await authorizeApp(appId)
+  if (!auth.ok) return auth
+  if (typeof enabled !== 'boolean') return { ok: false, error: 'Некорректный режим переписки' }
+  try {
+    await writeRows(auth.member.workspaceId, async context => {
+      const [record] = await context.tx.select().from(apps).where(and(eq(apps.id, appId), eq(apps.workspaceId, context.workspaceId))).for('update')
+      if (!record) throw new RowWriteError('missing', 'Приложение не найдено')
+      const app = ownedApp(record)
+      if (!app.screens.some(screen => screen.type === 'detail' && conversationResource(app, screen.tableId))) throw new RowWriteError('invalid', 'Для переписки нужен клиентский сценарий с карточкой обращения')
+      app.communications = { enabled }
+      await checkpointBeforeChange(context.tx, record, auth.member.userId)
+      await context.tx.update(apps).set({ draft: app, updatedAt: new Date() }).where(eq(apps.id, appId))
+      await recordConfigVersion(context.tx, record, app, 'module', auth.member.userId)
     })
     revalidatePath(`/apps/${appId}`)
     return { ok: true as const }

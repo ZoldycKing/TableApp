@@ -41,7 +41,17 @@ async function inventory(connection: postgres.Sql | postgres.TransactionSql) {
     select schemaname, tablename, indexname, indexdef from pg_indexes
     where schemaname not in ('pg_catalog', 'information_schema')
     order by schemaname, tablename, indexname`
-  return { tables: result, constraints: [...constraints], indexes: [...indexes] }
+  const triggers = await connection`
+    select n.nspname as schema, c.relname as name, t.tgname, pg_get_triggerdef(t.oid) as definition
+    from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace
+    where not t.tgisinternal and n.nspname not in ('pg_catalog', 'information_schema')
+    order by n.nspname, c.relname, t.tgname`
+  const functions = await connection`
+    select n.nspname as schema, p.proname as name, pg_get_functiondef(p.oid) as definition
+    from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname not in ('pg_catalog', 'information_schema') and p.prokind='f'
+    order by n.nspname, p.proname, p.oid::regprocedure::text`
+  return { tables: result, constraints: [...constraints], indexes: [...indexes], triggers: [...triggers], functions: [...functions] }
 }
 
 try {
@@ -59,8 +69,8 @@ try {
     await assert.rejects(() => restore(file, decodeURIComponent(sourceUrl.pathname.slice(1))))
     console.log(JSON.stringify({ status: 'passed', file, tables: before.tables.length,
       rows: before.tables.reduce((total, table) => total + Number(table.count), 0),
-      constraints: before.constraints.length, indexes: before.indexes.length,
-      checked: ['snapshot', 'all row digests', 'constraints', 'indexes', 'existing target refused', 'source refused'] }))
+      constraints: before.constraints.length, indexes: before.indexes.length, triggers: before.triggers.length, functions: before.functions.length,
+      checked: ['snapshot', 'all row digests', 'constraints', 'indexes', 'triggers', 'functions', 'existing target refused', 'source refused'] }))
   })
 } finally {
   await target.end()

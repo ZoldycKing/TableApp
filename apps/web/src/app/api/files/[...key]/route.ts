@@ -9,6 +9,7 @@ import { currentMember } from '@/lib/session'
 import { getFile } from '@/lib/storage'
 import { validateAppReferences } from '@/lib/app-references'
 import { fileDeliveryHeaders } from '@/lib/file-policy'
+import { canReadConversationFile } from '@/lib/conversations'
 
 export async function GET(_request: Request, { params }: { params: Promise<{ key: string[] }> }) {
   const { key: segments } = await params
@@ -16,8 +17,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ key
   const [record] = await db.select().from(attachments).where(eq(attachments.key, key)).limit(1)
   if (!record || record.state !== 'ready') return new NextResponse('Not found', { status: 404 })
   const member = await currentMember()
-  let allowed = member?.workspaceId === record.workspaceId
-  if (!allowed) {
+  let allowed = record.conversationId || record.messageId ? await canReadConversationFile(record, new URL(_request.url).searchParams.get('business') === '1') : member?.workspaceId === record.workspaceId
+  if (!allowed && !record.conversationId && !record.messageId) {
     const published = await db.select().from(apps).where(eq(apps.workspaceId, record.workspaceId))
     for (const candidate of published) {
       const parsed = candidate.published ? appSchema.safeParse(candidate.published) : null

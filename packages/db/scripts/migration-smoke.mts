@@ -38,11 +38,17 @@ try {
   assert.ok(await target`select workspace_id, email, name, phone from public.business_customers limit 0`)
   assert.ok(await target`select workspace_id, customer_id, app_id from public.business_customer_apps limit 0`)
   assert.ok(await target`select workspace_id, app_id, number, kind, definition, fingerprint from public.app_config_versions limit 0`)
+  assert.ok(await target`select workspace_id, table_id, row_id, customer_id from public.conversations limit 0`)
+  assert.ok(await target`select workspace_id, conversation_id, sequence, body, version, deleted_at from public.conversation_messages limit 0`)
+  assert.ok(await target`select workspace_id, conversation_id, body from public.conversation_notes limit 0`)
+  assert.ok(await target`select workspace_id, message_id, version, body from public.conversation_revisions limit 0`)
+  assert.ok(await target`select conversation_id, message_id from public.attachments limit 0`)
+  assert.equal((await target`select count(*)::int as value from pg_trigger where not tgisinternal and tgname in ('conversation_files_cleanup', 'conversation_message_files_cleanup')`)[0]!.value, 2)
   const tableCount = await target`select count(*)::int as value from pg_tables where schemaname = 'public'`
   await migrate()
   assert.deepEqual([...(await target`select hash, created_at from drizzle.__drizzle_migrations order by created_at`)], [...applied])
   console.log(JSON.stringify({ status: 'passed', migrations: applied.length, tables: tableCount[0]!.value,
-    checked: ['empty database', 'sync revision', 'attachment state', 'business profile', 'business client app', 'business customer profiles', 'scoped customer app links', 'scoped app config versions', 'second run unchanged'] }))
+    checked: ['empty database', 'sync revision', 'attachment state', 'business profile', 'business client app', 'business customer profiles', 'scoped customer app links', 'scoped app config versions', 'conversations', 'message revisions', 'private notes', 'conversation attachments', 'tracked conversation file cleanup triggers', 'second run unchanged'] }))
 } finally {
   await target.end()
   if (created) await admin.unsafe(`drop database "${name}"`)

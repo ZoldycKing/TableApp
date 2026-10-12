@@ -2,17 +2,19 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { MODULE_DEFINITIONS, type App } from '@tableapp/schema'
 import { hasUnsaved } from '@/lib/unsaved'
 import { availableModuleStarters } from '@/lib/module-options'
-import { connectModuleAction, enableModuleAccessAction, previewModuleConnectionAction, setModuleIntakeAction, setPrimaryClientAppAction } from '@/app/module-actions'
+import { legacyAppModules } from '@/lib/app-modules'
+import { connectModuleAction, enableModuleAccessAction, previewModuleConnectionAction, setCommunicationsAction, setModuleIntakeAction, setPrimaryClientAppAction } from '@/app/module-actions'
 
-export function ModuleManager({ app, primary, sources }: { app: App; primary: boolean; sources: { id: string; name: string; kind: string }[] }) {
+export function ModuleManager({ app, primary, sources, owner = false }: { app: App; primary: boolean; sources: { id: string; name: string; kind: string }[]; owner?: boolean }) {
   const router = useRouter(), [pending, start] = useTransition()
   const [message, setMessage] = useState<string | null>(null), [source, setSource] = useState('')
   const [preview, setPreview] = useState<Extract<Awaited<ReturnType<typeof previewModuleConnectionAction>>, { ok: true }> | null>(null)
   const [selection, setSelection] = useState('')
-  const modules = app.modules ?? [], clientApp = Boolean((app.booking || app.customer) && app.screens.some(screen => screen.access.public || screen.access.roles.includes('client')))
+  const modules = app.modules ?? legacyAppModules(app), clientApp = Boolean((app.booking || app.customer) && app.screens.some(screen => screen.access.public || screen.access.roles.includes('client')))
   const choices = availableModuleStarters(modules.map(module => module.kind))
   const choice = choices.find(choice => choice.templateId === selection) ?? choices[0]
   const addition = choice?.templateId, desiredKind = choice?.kind
@@ -33,6 +35,11 @@ export function ModuleManager({ app, primary, sources }: { app: App; primary: bo
       <span className="text-sm">{MODULE_DEFINITIONS[module.kind].name}{module.intakeEnabled === false ? ' · новые оформления приостановлены' : ''}</span>
       {['booking', 'customer'].includes(module.source.type) ? <button disabled={pending} className="text-xs underline underline-offset-2 disabled:opacity-50" onClick={() => run(() => setModuleIntakeAction(app.id, module.id, module.intakeEnabled === false), 'Режим сохранён в черновике. Опубликуйте изменения.')}>{module.intakeEnabled === false ? 'Возобновить' : 'Приостановить'}</button> : null}
     </div>)}</div>
+    {clientApp ? <div className="flex flex-wrap items-center gap-3 border-t border-sand-200 pt-3"><span className="text-sm">Переписка и документы по обращениям</span>
+      <button className={button} disabled={pending} onClick={() => run(() => setCommunicationsAction(app.id, !app.communications?.enabled), 'Режим переписки сохранён в черновике. Опубликуйте изменения.')}>{app.communications?.enabled ? 'Отключить новые переписки' : 'Включить переписку'}</button>
+      {owner ? <Link href={`/apps/${app.id}/conversations`} className="text-sm text-sage-700 underline">Открыть переписку клиентов</Link> : null}
+      <p className="w-full text-xs text-ink-muted">Сообщения и файлы доступны участникам конкретного обращения. Отключение сохраняет существующие диалоги.</p>
+    </div> : null}
     {!app.moduleAccess ? <button className={button} disabled={pending} onClick={() => run(() => enableModuleAccessAction(app.id), 'Рабочие права разделены по модулям в черновике. Прежние приглашения сохранены.')}>Разделить рабочие права по возможностям</button> : null}
     {addition ? <div className="space-y-3 border-t border-sand-200 pt-3">
       <label className="block space-y-1 text-sm"><span>Добавить возможность</span><select value={addition} disabled={pending} onChange={event => { setSelection(event.target.value); setSource(''); setPreview(null); setMessage(null) }} className="w-full max-w-lg rounded-lg border border-sand-200 px-3 py-2">

@@ -123,7 +123,12 @@ export function withCustomerScenario(original: TemplateDef): TemplateDef {
     if (existing && template.id === 'zayavki') scenario.assignment = existing.key
     else main.fields.push({ ...assignment, key: scenario.assignment })
   }
-  main.fields.push(...structuredClone(contact), structuredClone(summary))
+  if (template.id === 'dostavka') {
+    const recipient = (key: string) => key === 'requestName' ? 'receiver' : key === 'requestPhone' ? 'phone' : key
+    scenario.formFields = scenario.formFields.map(recipient)
+    scenario.requiredFields = scenario.requiredFields.map(recipient)
+  }
+  main.fields.push(...(template.id === 'dostavka' ? [] : structuredClone(contact)), structuredClone(summary))
   main.fields.push({ key: 'requestDate', name: 'Создано', type: 'datetime', options: { timeZone: 'Europe/Moscow' }, help: 'Дата оформления. При онлайн-заявке фиксируется сервером и видна в истории клиента.' },
     { key: 'submissionId', name: 'Ключ оформления', type: 'text', help: 'Служебный ключ, защищающий оформление от повторной отправки. Клиенту не показывается.' })
   scenario.formFields.push('submissionId'); scenario.customerFields.push('requestDate')

@@ -86,6 +86,10 @@ export function moduleContract(app: App, module: AppModule): ModuleContract | nu
       add('customerEmail', tableId, c.emailFieldId, ['email']); add('status', tableId, c.statusFieldId, ['single_select'])
       add('assignedEmail', tableId, c.assignmentFieldId, ['email']); add('created', tableId, c.createdFieldId, ['datetime']); add('submission', tableId, c.submissionFieldId, ['text'])
       if (c.profile) { add('customerName', tableId, c.profile.nameFieldId, ['text']); add('customerPhone', tableId, c.profile.phoneFieldId, ['phone']) }
+      if (c.logistics) {
+        add('deliveryAddress', tableId, c.logistics.addressFieldId, ['text'])
+        if (c.logistics.kind === 'delivery') add('deliveryContents', tableId, c.logistics.contentsFieldId, ['text', 'long_text'])
+      }
       if (c.catalog) {
         const cat = c.catalog
         tables.catalog = cat.tableId
@@ -169,7 +173,7 @@ export function checkAppModules(app: App, catalog: Catalog): string | null {
     for (const id of module.dependsOn) if (id === module.id || !byId.has(id)) return `Не найдена зависимость модуля «${definition.name}»`
     if (module.source.type === 'customer') {
       const tableId = module.source.tableId, config = customerWorkflows(app).find(config => config.tableId === tableId)!
-      const specialized = config.parent ? 'support' : config.cart ? 'sales' : config.approval ? 'repair' : config.appointment ? 'property' : null
+      const specialized = config.parent ? 'support' : config.cart ? 'sales' : config.logistics?.kind === 'delivery' ? 'delivery' : config.approval ? 'repair' : config.appointment ? 'property' : null
       if (specialized && module.kind !== specialized || !specialized && ['support', 'sales', 'repair', 'property'].includes(module.kind)) return `Тип модуля «${definition.name}» не соответствует его правилам`
       if (config.parent) {
         const parent = modules.find(candidate => candidate.source.type === 'customer' && candidate.source.tableId === config.parent!.tableId)

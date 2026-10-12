@@ -22,6 +22,7 @@ import { applyView, visibleFields } from '@/lib/apply-view'
 
 import { HistoryPanel } from '@/components/history-panel'
 import { RowCard } from '@/components/grid/row-card'
+import { OrderDeliveryPanel } from '@/components/runtime/order-delivery-panel'
 import { TemplateNotice } from '@/components/template-notice'
 import { VIEW_TYPE_LABELS } from '@/lib/field-labels'
 import type { LoadedTable } from '@/lib/queries'
@@ -442,6 +443,7 @@ export function TableScreen({ table, member, initialRowId = null }: { table: Loa
         return (
           <RowCard
             row={row}
+            actions={<OrderDeliveryPanel key={`${table.id}:${row.id}`} tableId={table.id} rowId={row.id} version={row.version ?? 0} business />}
             fields={store.table.fields}
             relatedTitles={table.relatedTitles}
             relatedTables={Object.fromEntries(

@@ -43,6 +43,7 @@ try {
   assert.ok(await target`select workspace_id, conversation_id, body from public.conversation_notes limit 0`)
   assert.ok(await target`select workspace_id, message_id, version, body from public.conversation_revisions limit 0`)
   assert.ok(await target`select workspace_id, conversation_id, actor_id, sequence from public.conversation_reads limit 0`)
+  assert.ok(await target`select workspace_id, order_table_id, order_row_id, delivery_table_id, delivery_row_id, contract from public.order_deliveries limit 0`)
   assert.ok(await target`select conversation_id, message_id from public.attachments limit 0`)
   assert.equal((await target`select count(*)::int as value from pg_trigger where not tgisinternal and tgname in ('conversation_files_cleanup', 'conversation_message_files_cleanup')`)[0]!.value, 2)
   const tableCount = await target`select count(*)::int as value from pg_tables where schemaname = 'public'`

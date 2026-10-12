@@ -43,6 +43,8 @@ import {
 import { IntakeVerify } from './intake-verify'
 import { ConversationInbox, MESSAGES_SCREEN, parseConversationTarget } from './conversation-inbox'
 import { conversationResource } from '@/lib/conversation-resource'
+import { OrderDeliveryPanel } from './order-delivery-panel'
+import { orderDeliveryPair } from '@/lib/order-delivery-config'
 import { AppLogin } from './app-login'
 import { customerCheckoutIds, parseCheckoutIntent, type CheckoutIntent } from '@/lib/customer-checkout'
 import { acceptsModuleIntake, moduleForTable } from '@/lib/module-access'
@@ -1004,6 +1006,7 @@ export function AppShell({
                 <button type="button" onClick={() => setConfirmCancellation(false)} className="ml-2 text-sm">Оставить обращение</button>
               </> : <button type="button" onClick={() => setConfirmCancellation(true)} className="text-sm text-red-700">Отменить обращение</button> : <p className="text-xs text-ink-muted">Если нужно уточнить или изменить условия, свяжитесь с бизнесом{runtime.business?.phone ? `: ${runtime.business.phone}` : '.'}</p>}
             </div> : null}
+            {!demo && !editing && viewer && sent === null && intake === null && checkout === null && screen.type === 'detail' && row && orderDeliveryPair(app) && customerWorkflows(app).some(config => config.tableId === screen.tableId && config.logistics) ? <OrderDeliveryPanel key={`${app.id}:${screen.tableId}:${row.id}`} slug={app.slug} tableId={screen.tableId} rowId={row.id} version={row.version ?? 0} onOpen={navigate} /> : null}
             {messagesAvailable && current.screenId !== MESSAGES_SCREEN && sent === null && intake === null && checkout === null && screen.type === 'detail' && row && conversationResource(app, screen.tableId) ?
               <div className="mx-auto mt-5 max-w-xl"><button type="button" onClick={() => navigate(MESSAGES_SCREEN, JSON.stringify({ slug: app.slug, tableId: screen.tableId, rowId: row.id }))} className="inline-flex items-center gap-2 rounded-xl border border-sand-200 bg-white px-4 py-2.5 text-sm font-medium text-sage-700 hover:bg-sand-50"><Icon name="chat" className="size-5" />Открыть переписку</button></div> : null}
             {sent === null && intake === null && app.booking && screen.type === 'detail' && screen.tableId === app.booking.tables.visits && row &&

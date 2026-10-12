@@ -163,8 +163,20 @@ export function checkAppReferences(app: App, catalog: AppReferenceCatalog): stri
     if (!list || !('source' in list) || sourceTable(list.source) !== c.tableId) invalid('клиентский список', c.listScreenId)
     if (!app.rowAccessRules.some(rule => rule.tableId === c.tableId && rule.fieldId === c.emailFieldId && rule.match === 'email' && rule.appliesTo.includes('client'))) invalid('принадлежность клиентской записи', c.emailFieldId)
     const status = catalog.fields.get(c.statusFieldId)
-    const statuses = [c.initialStatus, c.cancelStatus, ...c.terminalStatuses, ...c.cancellableStatuses, ...(c.approval ? [c.approval.waitingStatus, c.approval.approvedStatus, c.approval.declinedStatus, ...(c.approval.consentRequiredStatuses ?? [])] : []), ...(c.appointment ? [c.appointment.confirmedStatus] : [])]
+    const statuses = [c.initialStatus, c.cancelStatus, ...c.terminalStatuses, ...c.cancellableStatuses, ...(c.logistics ? [c.logistics.shippedStatus, c.logistics.deliveredStatus, ...(c.logistics.kind === 'delivery' ? [c.logistics.returnedStatus, c.logistics.missedStatus] : [])] : []), ...(c.approval ? [c.approval.waitingStatus, c.approval.approvedStatus, c.approval.declinedStatus, ...(c.approval.consentRequiredStatuses ?? [])] : []), ...(c.appointment ? [c.appointment.confirmedStatus] : [])]
     if (status?.type !== 'single_select' || statuses.some(id => !status.options.choices.some(choice => choice.id === id))) invalid('статус клиентского сценария', c.statusFieldId)
+    if (c.logistics) {
+      field(c.logistics.addressFieldId, c.tableId)
+      if (catalog.fields.get(c.logistics.addressFieldId)?.type !== 'text' || !c.profile || !c.assignmentFieldId) invalid('контакты доставки', c.tableId)
+      if (c.logistics.kind === 'sales' && !c.cart) invalid('заказ доставки', c.tableId)
+      if (c.logistics.kind === 'delivery') {
+        field(c.logistics.contentsFieldId, c.tableId)
+        if (!['text', 'long_text'].includes(catalog.fields.get(c.logistics.contentsFieldId)?.type ?? '') || c.cart) invalid('содержимое доставки', c.logistics.contentsFieldId)
+      }
+      if (!c.terminalStatuses.includes(c.logistics.deliveredStatus) || c.logistics.shippedStatus === c.cancelStatus || c.logistics.shippedStatus === c.initialStatus || c.terminalStatuses.includes(c.logistics.shippedStatus)) invalid('этапы доставки', c.statusFieldId)
+      const stages = [c.initialStatus, c.cancelStatus, c.logistics.shippedStatus, c.logistics.deliveredStatus, ...(c.logistics.kind === 'delivery' ? [c.logistics.returnedStatus, c.logistics.missedStatus] : [])]
+      if (new Set(stages).size !== stages.length || c.cancellableStatuses.includes(c.logistics.shippedStatus) || c.logistics.kind === 'delivery' && (!c.terminalStatuses.includes(c.logistics.returnedStatus) || c.terminalStatuses.includes(c.logistics.missedStatus))) invalid('согласованные этапы доставки', c.statusFieldId)
+    }
     if (c.catalog) {
       const cat = c.catalog
       table(cat.tableId); sourceTable({ viewId: cat.viewId }); screenLink(cat.detailScreenId)

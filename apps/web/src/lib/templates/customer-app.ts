@@ -56,9 +56,12 @@ function customerAppSection(app: App, built: BuiltTemplate): App {
   const config: CustomerWorkflow = { tableId, listScreenId: listId, detailScreenId: detailId, formScreenId: formId, emailFieldId: f[d.email]!, statusFieldId: f[d.status]!, initialStatus: choice(d.initial), terminalStatuses: d.terminal.map(choice), cancelStatus: choice(d.cancel), cancellableStatuses: d.cancellable.map(choice), assignmentFieldId: d.assignment ? f[d.assignment]! : null,
     createdFieldId: f.requestDate!, submissionFieldId: f.submissionId!,
     ...(f.requestName && f.requestPhone ? { profile: { nameFieldId: f.requestName, phoneFieldId: f.requestPhone } } : {}),
+    ...(d.table === 'deliveries' ? { profile: { nameFieldId: f.receiver!, phoneFieldId: f.phone! } } : {}),
     parent: d.parent ? { tableId: built.fields.find(field => field.id === fieldIds[d.parent!.table]![d.parent!.email])!.tableId, relationFieldId: f[d.parent.relation]!, emailFieldId: fieldIds[d.parent.table]![d.parent.email]! } : null,
     catalog: null, cart: null, approval: d.approval ? { priceFieldId: f[d.approval.price]!, approvedPriceFieldId: f[d.approval.agreed]!, waitingStatus: choice(d.approval.waiting), approvedStatus: choice(d.approval.approved), declinedStatus: choice(d.approval.declined), consentRequiredStatuses: d.approval.consentRequired?.map(choice) } : null }
   if (f.scheduled) config.appointment = { fieldId: f.scheduled, minutes: 60, confirmedStatus: choice('Просмотр назначен') }
+  if (d.cart && f.address) config.logistics = { kind: 'sales', addressFieldId: f.address, shippedStatus: choice('Отгружен'), deliveredStatus: choice('Доставлен') }
+  if (d.table === 'deliveries') config.logistics = { kind: 'delivery', addressFieldId: f.address!, contentsFieldId: f.what!, shippedStatus: choice('В пути'), deliveredStatus: choice('Доставлена'), returnedStatus: choice('Возврат'), missedStatus: choice('Не застали') }
   const customerDetail: Screen = { id: detailId, appId: app.id, position: 'a', name: 'Подробности', tab: null, type: 'detail', tableId, access: access(['client']), components: componentFields(shown) }
   const related = fields.find(field => field.id === f.positions)
   if (d.cart && related?.type === 'relation') {
@@ -69,11 +72,11 @@ function customerAppSection(app: App, built: BuiltTemplate): App {
   const request = form(formId, d.submitLabel, 'create', formFields, ['client'])
   if (request.type === 'form') {
     request.components = request.components.map(component => component.type !== 'form_field' ? component : { ...component,
-      label: component.fieldId === f.requestName ? 'Ваше имя' : component.fieldId === f.requestPhone ? 'Ваш телефон' : component.fieldId === f.title ? 'Что нужно сделать' : null })
+      label: component.fieldId === config.profile?.nameFieldId ? d.table === 'deliveries' ? 'Имя получателя' : 'Ваше имя' : component.fieldId === config.profile?.phoneFieldId ? d.table === 'deliveries' ? 'Телефон получателя' : 'Ваш телефон' : component.fieldId === f.title ? 'Что нужно сделать' : null })
     request.components.unshift({ id: newId('component'), position: '0', type: 'text', source: { kind: 'literal', value: `${d.intro.replace('Онлайн-оплаты нет.', '').trim()} Оплаты онлайн нет. После оформления сотрудник бизнеса свяжется с вами и согласует оплату.` }, style: 'body', roles: null, visibleWhen: null })
   }
   const managerFields = fields.filter(field => !['formula', 'lookup', 'rollup', 'count'].includes(field.type) && field.id !== f.cart && field.id !== f.submissionId && field.id !== config.approval?.approvedPriceFieldId).map(field => field.id)
-  const workerShown = Array.from(new Set([...shown, f.requestName!, f.requestPhone!, f.requestAddress!].filter(Boolean))).filter(id => !(d.table === 'zayavki' && id === f.price))
+  const workerShown = Array.from(new Set([...shown, config.profile?.nameFieldId!, config.profile?.phoneFieldId!, f.requestAddress!].filter(Boolean))).filter(id => !(d.table === 'zayavki' && id === f.price))
   const screens: Screen[] = [collection(listId, d.title, ['client'], detailId), request, customerDetail,
     collection(staffListId, d.parent ? 'Назначенные обращения' : 'Назначенные мне', ['staff'], staffDetailId),
     { id: staffDetailId, appId: app.id, position: 'a', name: 'Рабочая карточка', type: 'detail', tableId, tab: null, access: access(['staff', 'manager']), components: [...componentFields(workerShown).map(component => ({ ...component, roles: ['staff'] })), ...componentFields(fields.map(field => field.id).filter(id => id !== f.cart && id !== f.submissionId)).map(component => ({ ...component, roles: ['manager'] })), button('Изменить', workerEditId, ['staff']), button('Изменить', adminEditId, ['manager'])] },

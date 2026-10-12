@@ -1,7 +1,7 @@
 'use client'
 
 import { dateInstant, fieldTimeZone, instantToWallClock, isComputed, type Attachment, type Field } from '@tableapp/schema'
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { useUnsaved } from '@/lib/unsaved'
 import { FileUpload } from '@/components/file-upload'
 import type { TitleIndex } from '@/lib/table-export'
@@ -30,6 +30,7 @@ export function RowCard({
   onPrev,
   onNext,
   onClose,
+  actions,
 }: {
   row: { id: string; data: Record<string, unknown> }
   fields: readonly Field[]
@@ -43,6 +44,7 @@ export function RowCard({
   onPrev?: () => void
   onNext?: () => void
   onClose: () => void
+  actions?: ReactNode
 }) {
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-ink/20" onClick={onClose}>
@@ -87,6 +89,7 @@ export function RowCard({
         </header>
 
         <div className="flex-1 overflow-y-auto px-5 py-4">
+          {actions}
           <div className="space-y-3">
             {fields.map((field) => (
               <FieldRow

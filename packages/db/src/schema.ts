@@ -228,6 +228,25 @@ export const rowChanges = pgTable('row_changes', {
 
 // --- Приложения --------------------------------------------------------------
 
+/** One handoff per order. Contract preserves the accepted workflow after an app is removed. */
+export const orderDeliveries = pgTable('order_deliveries', {
+  workspaceId: text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  orderTableId: text('order_table_id').notNull(),
+  orderRowId: text('order_row_id').notNull(),
+  deliveryTableId: text('delivery_table_id').notNull(),
+  deliveryRowId: text('delivery_row_id').notNull(),
+  contract: jsonb('contract').$type<{ order: import('@tableapp/schema').CustomerWorkflow; delivery: import('@tableapp/schema').CustomerWorkflow }>().notNull(),
+  orderStatusBefore: text('order_status_before').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.workspaceId, t.orderTableId, t.orderRowId] }),
+  uniqueIndex('order_deliveries_delivery_key').on(t.workspaceId, t.deliveryTableId, t.deliveryRowId),
+  foreignKey({ name: 'order_deliveries_order_table_fk', columns: [t.workspaceId, t.orderTableId], foreignColumns: [tables.workspaceId, tables.id] }).onDelete('cascade'),
+  foreignKey({ name: 'order_deliveries_delivery_table_fk', columns: [t.workspaceId, t.deliveryTableId], foreignColumns: [tables.workspaceId, tables.id] }).onDelete('cascade'),
+  foreignKey({ name: 'order_deliveries_order_row_fk', columns: [t.orderTableId, t.orderRowId], foreignColumns: [rows.tableId, rows.id] }).onDelete('cascade'),
+  foreignKey({ name: 'order_deliveries_delivery_row_fk', columns: [t.deliveryTableId, t.deliveryRowId], foreignColumns: [rows.tableId, rows.id] }).onDelete('cascade'),
+])
+
 /**
  * Применённые правки из очереди устройств.
  *

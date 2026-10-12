@@ -6,6 +6,11 @@ export const customerWorkflowSchema = z.object({
   emailFieldId: z.string(), statusFieldId: z.string(),
   createdFieldId: z.string().optional(), submissionFieldId: z.string().optional(),
   profile: z.object({ nameFieldId: z.string(), phoneFieldId: z.string() }).optional(),
+  /** Explicit installed IDs; integration never guesses columns or statuses by their labels. */
+  logistics: z.discriminatedUnion('kind', [
+    z.object({ kind: z.literal('sales'), addressFieldId: z.string(), shippedStatus: z.string(), deliveredStatus: z.string() }),
+    z.object({ kind: z.literal('delivery'), addressFieldId: z.string(), contentsFieldId: z.string(), shippedStatus: z.string(), deliveredStatus: z.string(), returnedStatus: z.string(), missedStatus: z.string() }),
+  ]).optional(),
   initialStatus: z.string(), terminalStatuses: z.array(z.string()),
   cancelStatus: z.string(), cancellableStatuses: z.array(z.string()),
   assignmentFieldId: z.string().nullable(),

@@ -52,6 +52,72 @@ describe.skipIf(!process.env.DATABASE_URL)('conversation persistence and access 
     return { app, workspaceId, tableId, rowId, assignment, emailField }
   }
   type Business = Awaited<ReturnType<typeof business>>
+  it('aggregates business modules with live work grants, keeping the client and platform identities separate', async () => {
+    const first = await business('service', true), second = await business()
+    await signIn(clientEmail); await send(first, 'Вопрос по ремонту'); await send(second, 'Чужой бизнес')
+    const sales = first.app.customerSections![0]!, [sale] = await database.db.select().from(database.rows).where(eq(database.rows.tableId, sales.tableId)).limit(1)
+    await database.db.update(database.rows).set({ data: { ...sale!.data as object, [sales.emailFieldId]: clientEmail, [sales.assignmentFieldId!]: 'sales-worker@example.invalid' } }).where(eq(database.rows.id, sale!.id))
+    await service.sendConversation(first.app.slug, sales.tableId, sale!.id, { body: 'Вопрос по покупке', requestId: randomUUID() })
+    const inbox = await import('./conversation-inbox'), clientCookie = identity.cookie
+    owner(first); identity.cookie = clientCookie
+    const all = await inbox.listConversationInbox({}, true)
+    expect(all.items).toHaveLength(2)
+    expect(all.items.every(item => [first.tableId, sales.tableId].includes(item.tableId))).toBe(true)
+    expect((await inbox.listConversationInbox({ slug: first.app.slug })).items).toHaveLength(2)
+    await send(first, 'INTERNAL SECRET', randomUUID(), [], true)
+    expect(JSON.stringify(await inbox.listConversationInbox({ slug: first.app.slug }))).not.toContain('INTERNAL SECRET')
+    identity.member = { ...identity.member!, userId: 'verified-worker', email: 'sales-worker@example.invalid', role: 'editor' }
+    const assigned = await inbox.listConversationInbox({}, true)
+    expect(assigned.items.map(item => item.tableId)).toEqual([sales.tableId])
+    expect((await service.readConversation(first.app.slug, sales.tableId, sale!.id, undefined, true)).staff).toBe(true)
+    await expectDenied(() => service.readConversation(first.app.slug, first.tableId, first.rowId, undefined, true))
+    identity.member = { ...identity.member!, email: 'ungranted@example.invalid' }
+    expect((await inbox.listConversationInbox({}, true)).items).toEqual([])
+    await expectDenied(() => service.readConversation(first.app.slug, sales.tableId, sale!.id, undefined, true))
+  })
+  it('tracks only incoming public messages and never marks a concurrent reply or another person as read', async () => {
+    const first = await business(), inbox = await import('./conversation-inbox')
+    await signIn(clientEmail); await send(first, 'Вопрос')
+    expect((await inbox.listConversationInbox({ slug: first.app.slug })).items[0]!.unread).toBe(0)
+    owner(first)
+    expect((await inbox.listConversationInbox({}, true)).items[0]!.unread).toBe(1)
+    await send(first, 'Приватная заметка', randomUUID(), [], true)
+    expect((await inbox.listConversationInbox({}, true)).items[0]!.unread).toBe(1)
+    const loaded = (await read(first)).messages.at(-1)!.sequence
+    await inbox.markConversationRead(first.app.slug, first.tableId, first.rowId, loaded, true)
+    expect((await inbox.listConversationInbox({ unreadOnly: true }, true)).items).toEqual([])
+    await send(first, 'Ответ')
+    await signIn(clientEmail)
+    const seen = (await read(first)).messages.at(-1)!.sequence
+    expect((await inbox.listConversationInbox({ slug: first.app.slug })).items[0]!.unread).toBe(1)
+    owner(first); await send(first, 'Новый ответ после загрузки')
+    await signIn(clientEmail)
+    await inbox.markConversationRead(first.app.slug, first.tableId, first.rowId, seen)
+    expect((await inbox.listConversationInbox({ slug: first.app.slug, unreadOnly: true })).items[0]!.unread).toBe(1)
+    await inbox.markConversationRead(first.app.slug, first.tableId, first.rowId, (await read(first)).messages.at(-1)!.sequence)
+    await inbox.markConversationRead(first.app.slug, first.tableId, first.rowId, loaded)
+    expect((await inbox.listConversationInbox({ slug: first.app.slug })).items[0]!.unread).toBe(0)
+    await signIn('other@example.invalid')
+    await expectDenied(() => inbox.markConversationRead(first.app.slug, first.tableId, first.rowId, seen))
+    await signIn(clientEmail)
+    await expectDenied(() => inbox.markConversationRead(first.app.slug, first.tableId, first.rowId, seen + 1000000))
+  })
+  it('keeps a pagination cursor when the first candidate page contains only inaccessible conversations', async () => {
+    const first = await business(), inbox = await import('./conversation-inbox')
+    const [source] = await database.db.select().from(database.rows).where(eq(database.rows.id, first.rowId))
+    const ownCustomer = newId('businessCustomer'), foreignCustomer = newId('businessCustomer')
+    await database.db.insert(database.businessCustomers).values([{ id: ownCustomer, workspaceId: first.workspaceId, email: clientEmail }, { id: foreignCustomer, workspaceId: first.workspaceId, email: 'foreign@example.invalid' }])
+    const module = first.app.modules?.find(module => module.source.type === 'customer' && module.source.tableId === first.tableId) ?? (await import('./app-modules')).legacyAppModules(first.app)[0]!
+    const candidates = Array.from({ length: 53 }, (_, index) => ({ id: `row_inbox_${index}_${first.workspaceId}`, index }))
+    await database.db.insert(database.rows).values(candidates.map(item => ({ ...source!, id: item.id, data: { ...source!.data as object, [first.emailField]: item.index === 0 ? clientEmail : 'foreign@example.invalid' } })))
+    await database.db.insert(database.conversations).values(candidates.map(item => ({ id: `con_page_${item.index === 0 ? 'a' : `z${String(item.index).padStart(3, '0')}`}_${first.workspaceId}`, workspaceId: first.workspaceId, appId: first.app.id, moduleId: module.id, tableId: first.tableId, rowId: item.id, customerId: item.index === 0 ? ownCustomer : foreignCustomer })))
+    await signIn(clientEmail)
+    const page = await inbox.listConversationInbox({ slug: first.app.slug })
+    expect(page.items).toEqual([]); expect(page.next).toBeTruthy()
+    const next = await inbox.listConversationInbox({ slug: first.app.slug, before: page.next! })
+    expect(next.items.map(item => item.rowId)).toEqual([candidates[0]!.id]); expect(next.next).toBeNull()
+    await expectDenied(() => inbox.listConversationInbox({ slug: first.app.slug, before: 'broken' }))
+  })
   async function signIn(email: string) {
     identity.member = null
     const id = newId('session'); sessions.push(id)
@@ -78,6 +144,7 @@ describe.skipIf(!process.env.DATABASE_URL)('conversation persistence and access 
   it.each(['salon', 'zakazy', 'service', 'dostavka', 'zayavki', 'nedvizhimost'])('supports client and assigned staff messages for %s', async template => {
     const first = await business(template)
     await signIn(clientEmail); await send(first, 'Мой вопрос')
+    if (template === 'salon') expect((await read(first)).contextTitle).toContain('Окрашивание в один тон')
     await signIn(staffEmail); await send(first, 'Ответ сотрудника')
     await signIn(clientEmail); const page = await read(first)
     expect(page.messages.map(message => message.body)).toEqual(['Мой вопрос', 'Ответ сотрудника'])

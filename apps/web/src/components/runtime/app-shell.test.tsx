@@ -20,6 +20,7 @@ vi.mock('@/app/runtime-actions', () => ({ appCreateRowAction: vi.fn(), appDelete
 vi.mock('@/app/booking-actions', () => ({ bookingAvailabilityAction: vi.fn(), cancelBookingAction: vi.fn(), setupBookingMasterAction: vi.fn(), setBookingDayOffAction: vi.fn() }))
 vi.mock('@/app/customer-actions', () => ({ customerDecisionAction: vi.fn() }))
 vi.mock('./conversation-panel', () => ({ ConversationPanel: () => null }))
+vi.mock('./conversation-inbox', () => ({ MESSAGES_SCREEN: '__tableapp_messages', parseConversationTarget: (value: string | null) => value ? JSON.parse(value) : null, ConversationInbox: () => <p>Список переписок бизнеса</p> }))
 const inventoryMocks = vi.hoisted(() => ({ receive: vi.fn(), operation: vi.fn() }))
 vi.mock('@/app/inventory-actions', () => ({ receiveStockAction: inventoryMocks.receive, saveStockOperationAction: inventoryMocks.operation }))
 vi.mock('@/lib/use-live-app', () => ({ useLiveApp: vi.fn() }))
@@ -44,6 +45,14 @@ function joinExamples(first: ReturnType<typeof templateExample>, second: ReturnT
 }
 
 describe('runtime navigation during live refresh', () => {
+  it('marks messages as the current tab when opened through a deep link above the catalog home', async () => {
+    const { runtime, viewer } = templateAppPreview(templateExample('salon'), 'client', 'irina@example.com', 'Ирина')
+    window.history.replaceState(null, '', '/a/review?e=__tableapp_messages')
+    const ui = render(<AppShell runtime={runtime} viewer={viewer} browserHistory />)
+    await ui.findByText('Список переписок бизнеса')
+    expect(ui.getAllByRole('button', { name: 'Сообщения' }).at(-1)!.getAttribute('aria-current')).toBe('page')
+    for (const button of ui.queryAllByRole('button', { name: /^(Услуги|Каталог)$/ })) expect(button.getAttribute('aria-current')).toBeNull()
+  })
   it('keeps a secondary sales cart through two repair submissions, rotating the repair key and selecting the right service', async () => {
     const repairExample = templateExample('service'), repair = repairExample.app.customer!, firstOption = repairExample.rows.find(row => row.tableId === repair.catalog!.tableId)!
     const selected = { ...firstOption, id: 'row_special_repair', position: 'zz', data: { ...firstOption.data, [repair.catalog!.titleFieldId]: 'Особая диагностика' } }

@@ -37,7 +37,7 @@ export function ModuleManager({ app, primary, sources, owner = false }: { app: A
     </div>)}</div>
     {clientApp ? <div className="flex flex-wrap items-center gap-3 border-t border-sand-200 pt-3"><span className="text-sm">Переписка и документы по обращениям</span>
       <button className={button} disabled={pending} onClick={() => run(() => setCommunicationsAction(app.id, !app.communications?.enabled), 'Режим переписки сохранён в черновике. Опубликуйте изменения.')}>{app.communications?.enabled ? 'Отключить новые переписки' : 'Включить переписку'}</button>
-      {owner ? <Link href={`/apps/${app.id}/conversations`} className="text-sm text-sage-700 underline">Открыть переписку клиентов</Link> : null}
+      {owner ? <Link href="/messages" className="text-sm text-sage-700 underline">Открыть сообщения клиентов</Link> : null}
       <p className="w-full text-xs text-ink-muted">Сообщения и файлы доступны участникам конкретного обращения. Отключение сохраняет существующие диалоги.</p>
     </div> : null}
     {!app.moduleAccess ? <button className={button} disabled={pending} onClick={() => run(() => enableModuleAccessAction(app.id), 'Рабочие права разделены по модулям в черновике. Прежние приглашения сохранены.')}>Разделить рабочие права по возможностям</button> : null}

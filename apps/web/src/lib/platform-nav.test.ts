@@ -75,6 +75,9 @@ describe('подсветка вложенных страниц', () => {
     expect(activeNavId('/usage')).toBe('usage')
     expect(activeNavId('/team')).toBe('team')
   })
+  it('общая переписка подсвечивает «Сообщения»', () => {
+    expect(activeNavId('/messages')).toBe('messages')
+  })
 
   it('похожие адреса не путаются', () => {
     /*

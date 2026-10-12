@@ -386,6 +386,17 @@ export const conversations = pgTable('conversations', {
   foreignKey({ columns: [t.workspaceId, t.customerId], foreignColumns: [businessCustomers.workspaceId, businessCustomers.id] }).onDelete('cascade'),
 ])
 
+/** Per-person watermarks; module grants are still checked on every read. */
+export const conversationReads = pgTable('conversation_reads', {
+  workspaceId: text('workspace_id').notNull(),
+  conversationId: text('conversation_id').notNull(),
+  actorId: text('actor_id').notNull(),
+  sequence: bigint('sequence', { mode: 'number' }).notNull().default(0),
+}, t => [
+  primaryKey({ columns: [t.workspaceId, t.conversationId, t.actorId] }),
+  foreignKey({ columns: [t.workspaceId, t.conversationId], foreignColumns: [conversations.workspaceId, conversations.id] }).onDelete('cascade'),
+])
+
 export const conversationMessages = pgTable('conversation_messages', {
   id: text('id').primaryKey(),
   workspaceId: text('workspace_id').notNull(),

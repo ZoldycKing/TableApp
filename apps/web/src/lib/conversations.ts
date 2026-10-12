@@ -3,7 +3,7 @@ import { apps, attachments, businessCustomers, conversationMessages as messages,
 import { appSchema, newId, type Attachment } from '@tableapp/schema'
 import { and, asc, desc, eq, gt, inArray, isNull, lt, sql } from 'drizzle-orm'
 import { createHash } from 'node:crypto'
-import { currentAppAccess } from './app-session'
+import { appAccessFor, currentAppAccess } from './app-session'
 import { currentMember } from './session'
 import { appReadPolicy } from './app-read-policy'
 import { validateAppReferences } from './app-references'
@@ -11,6 +11,7 @@ import { canEnter } from './app-roles'
 import { hasRole, moduleForTable, workflowRole } from './module-access'
 import { legacyAppModules } from './app-modules'
 import { conversationResource } from './conversation-resource'
+import { conversationContextTitle } from './conversation-context'
 import { RowWriteError, writeRows } from './row-mutations'
 import type { Transaction } from './db-transaction'
 import type { ConversationPage } from './conversation-types'
@@ -39,28 +40,31 @@ export async function conversationAccess(slug: string, tableId: string, rowId: s
   const member = business ? await currentMember() : null
   const [space] = await runner.select({ ownerId: workspaces.ownerId }).from(workspaces).where(eq(workspaces.id, app.workspaceId))
   const owner = Boolean(member && member.workspaceId === app.workspaceId && member.role === 'owner' && space?.ownerId === member.userId)
-  if (business && !owner) throw denied()
-  const access = owner ? null : await currentAppAccess(app)
+  if (business && (!member || member.workspaceId !== app.workspaceId)) throw denied()
+  const access = owner ? null : business ? await appAccessFor(app, member!.email) : await currentAppAccess(app)
   const module = moduleForTable(app, tableId) ?? legacyAppModules(app).find(module => module.source.type === 'booking'
     ? app.booking?.tables.visits === tableId : module.source.type === 'customer' && module.source.tableId === tableId)
   if (!module) throw denied()
   const email = String((parent.row.data as Record<string, unknown>)[conversationResource(app, tableId)!.emailFieldId] ?? '').trim().toLowerCase()
   if (!email || email.length > 254 || !email.includes('@')) throw denied()
-  let staff = owner, manager = owner
+  let staff = owner, manager = owner, readableData = parent.row.data as Record<string, unknown>
   if (!owner) {
     if (!access?.viewer || !access.visitor.authenticated || !canEnter(app, access.visitor)) throw denied()
     manager = hasRole(access.visitor, workflowRole(app, tableId, 'manager'))
     staff = manager || hasRole(access.visitor, workflowRole(app, tableId, 'staff')) || module.source.type === 'booking' && hasRole(access.visitor, workflowRole(app, tableId, 'master'))
     const policy = await appReadPolicy(app, tableId, access.visitor, access.viewer)
     if (!policy.canRead(parent.row.data as Record<string, unknown>, parent.row)) throw denied()
+    readableData = policy.project(parent.row.data as Record<string, unknown>, parent.row)
     if (!staff && (access.visitor.roleId !== 'client' || access.viewer.email.trim().toLowerCase() !== email)) throw denied()
+    // Platform membership alone never grants access to client correspondence.
+    if (business && !staff) throw denied()
   }
   const [profile] = await runner.select().from(businessCustomers).where(and(eq(businessCustomers.workspaceId, app.workspaceId), eq(businessCustomers.email, email)))
   // Verified identities survive app deletion and changes between customer/work roles.
   // Authorization still uses the explicitly selected authentication circuit.
   const actorEmail = owner ? member!.email : access!.viewer!.email
   const actorId = `person_${createHash('sha256').update(`${app.workspaceId}:${actorEmail.trim().toLowerCase()}`).digest('hex')}`
-  return { app, parent: parent.row, module, customerId: profile?.id ?? null, email, staff, manager, owner, actorId,
+  return { app, parent: parent.row, readableData, access, module, customerId: profile?.id ?? null, email, staff, manager, owner, actorId,
     uploadId: owner ? member!.userId : access!.viewer!.id,
     authorKind: owner ? 'business' : staff ? 'staff' : 'client',
     authorName: (owner ? member!.name ?? 'Владелец бизнеса' : access!.viewer!.name ?? (staff ? 'Сотрудник' : 'Клиент')).slice(0, 80) }
@@ -89,7 +93,8 @@ const fileDTO = (file: typeof attachments.$inferSelect): Attachment => ({ id: fi
 export async function readConversation(slug: string, tableId: string, rowId: string, before?: number, business = false): Promise<ConversationPage> {
   if (before !== undefined && (!Number.isSafeInteger(before) || before <= 0)) throw denied()
   const access = await conversationAccess(slug, tableId, rowId, db, business), thread = await threadFor(access, db)
-  const base = { conversationId: thread?.id ?? null, enabled: Boolean(access.app.communications?.enabled), closed: Boolean(thread?.closedAt), staff: access.staff, canManage: access.manager }
+  const base = { conversationId: thread?.id ?? null, enabled: Boolean(access.app.communications?.enabled), closed: Boolean(thread?.closedAt), staff: access.staff, canManage: access.manager,
+    contextTitle: await conversationContextTitle(access.app, tableId, access.readableData, access.access) }
   if (!thread) return { ...base, messages: [], nextBefore: null, notes: [] }
   const found = await db.select().from(messages).where(and(eq(messages.workspaceId, access.app.workspaceId), eq(messages.conversationId, thread.id),
     before === undefined ? undefined : lt(messages.sequence, before))).orderBy(desc(messages.sequence)).limit(51)

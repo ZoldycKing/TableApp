@@ -4,11 +4,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ConversationPanel } from './conversation-panel'
 import type { ConversationPage } from '@/lib/conversation-types'
 
-const mocks = vi.hoisted(() => ({ read: vi.fn(), send: vi.fn(), edit: vi.fn(), close: vi.fn(), history: vi.fn() }))
+const mocks = vi.hoisted(() => ({ read: vi.fn(), send: vi.fn(), edit: vi.fn(), close: vi.fn(), history: vi.fn(), mark: vi.fn().mockResolvedValue({ ok: true }) }))
 vi.mock('@/app/conversation-actions', () => ({ readConversationAction: mocks.read, sendConversationAction: mocks.send,
-  changeConversationMessageAction: mocks.edit, closeConversationAction: mocks.close, conversationMessageHistoryAction: mocks.history }))
+  changeConversationMessageAction: mocks.edit, closeConversationAction: mocks.close, conversationMessageHistoryAction: mocks.history, markConversationReadAction: mocks.mark }))
 vi.mock('@/components/file-upload', () => ({ FileUpload: () => <span>Загрузка документа</span>, fileUrl: (key: string, business = false) => `/api/files/${key}${business ? '?business=1' : ''}`, isImage: () => false }))
-afterEach(() => { cleanup(); vi.resetAllMocks() })
+afterEach(() => { cleanup(); vi.clearAllMocks() })
 const empty: ConversationPage = { conversationId: null, enabled: true, closed: false, staff: false, canManage: false, messages: [], notes: [], nextBefore: null }
 const props = { slug: 'business', tableId: 'orders', rowId: 'own-order', configured: true }
 describe('conversation inside a record card', () => {
@@ -17,6 +17,7 @@ describe('conversation inside a record card', () => {
       files: [{ id: 'attachment', key: 'workspace/receipt.txt', name: 'Акт.txt', mime: 'text/plain', size: 10, width: null, height: null }], canModerate: true, canViewRevisions: true }] } })
     const ui = render(<ConversationPanel {...props} />)
     expect((await ui.findByRole('link', { name: 'Акт.txt' })).getAttribute('href')).toBe('/api/files/workspace/receipt.txt')
+    await waitFor(() => expect(mocks.mark).toHaveBeenCalledWith('business', 'orders', 'own-order', 1, false))
   })
   it('uses the owner circuit explicitly on the business page', async () => {
     mocks.read.mockResolvedValue({ ok: true, value: { ...empty, staff: true, canManage: true, conversationId: 'thread' } })

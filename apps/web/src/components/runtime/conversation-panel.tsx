@@ -3,18 +3,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Attachment } from '@tableapp/schema'
 import { FileUpload, fileUrl, isImage } from '@/components/file-upload'
-import { changeConversationMessageAction, closeConversationAction, conversationMessageHistoryAction, readConversationAction, sendConversationAction } from '@/app/conversation-actions'
+import { changeConversationMessageAction, closeConversationAction, conversationMessageHistoryAction, markConversationReadAction, readConversationAction, sendConversationAction } from '@/app/conversation-actions'
 import type { ConversationMessage, ConversationPage } from '@/lib/conversation-types'
 
-type Props = { slug: string; tableId: string; rowId: string; configured: boolean; business?: boolean }
+type Props = { slug: string; tableId: string; rowId: string; configured: boolean; business?: boolean; showContext?: boolean }
 const date = (value: string) => new Date(value).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
-export function ConversationPanel({ slug, tableId, rowId, configured, business = false }: Props) {
+export function ConversationPanel({ slug, tableId, rowId, configured, business = false, showContext = true }: Props) {
   const [page, setPage] = useState<ConversationPage | null>(null), [error, setError] = useState<string | null>(null)
   const [body, setBody] = useState(''), [files, setFiles] = useState<Attachment[]>([]), [internal, setInternal] = useState(false)
   const [busy, setBusy] = useState(false), [uploading, setUploading] = useState(false), [editing, setEditing] = useState<ConversationMessage | null>(null)
   const [editBody, setEditBody] = useState(''), [deleting, setDeleting] = useState<string | null>(null)
   const [history, setHistory] = useState<{ messageId: string; rows: { version: number; body: string; operation: string; createdAt: string }[] } | null>(null)
-  const request = useRef(''), generation = useRef(0), sending = useRef(false)
+  const request = useRef(''), generation = useRef(0), sending = useRef(false), readThrough = useRef(0)
   const load = useCallback(async (older = false) => {
     const snapshot = generation.current
     let result: Awaited<ReturnType<typeof readConversationAction>>
@@ -27,6 +27,12 @@ export function ConversationPanel({ slug, tableId, rowId, configured, business =
       return
     }
     setError(null)
+    const sequence = result.value.messages.at(-1)?.sequence ?? 0
+    if (!older && sequence > readThrough.current && document.visibilityState === 'visible') {
+      void markConversationReadAction(slug, tableId, rowId, sequence, business).then(marked => {
+        if (snapshot === generation.current && marked.ok) { readThrough.current = Math.max(readThrough.current, sequence); window.dispatchEvent(new Event('tableapp:messages-read')) }
+      }).catch(() => { /* Keep unread state until a later successful read. */ })
+    }
     setPage(current => !current || current.conversationId !== result.value.conversationId || current.staff !== result.value.staff || current.canManage !== result.value.canManage ? result.value : older ? { ...result.value, notes: current.notes,
       messages: [...result.value.messages, ...current.messages.filter(message => !result.value.messages.some(item => item.id === message.id))] }
       : current ? { ...result.value, nextBefore: current.messages.length > 50 ? current.nextBefore : result.value.nextBefore,
@@ -36,6 +42,7 @@ export function ConversationPanel({ slug, tableId, rowId, configured, business =
   useEffect(() => { if (page && !page.staff) setInternal(false); setHistory(null); setEditing(null); setDeleting(null) }, [page?.staff, page?.canManage, page?.conversationId])
   useEffect(() => {
     generation.current += 1
+    readThrough.current = 0
     setPage(null); setBody(''); setFiles([]); setInternal(false); setError(null); setEditing(null); setDeleting(null); setHistory(null)
     request.current = crypto.randomUUID()
     void loadRef.current()
@@ -43,7 +50,7 @@ export function ConversationPanel({ slug, tableId, rowId, configured, business =
     return () => { generation.current += 1; clearInterval(timer) }
   }, [slug, tableId, rowId, business])
   if (!page && !configured) return null
-  if (page && !page.enabled && !page.conversationId) return null
+  if (page && !page.enabled && !page.conversationId) return configured ? <p className="mt-4 rounded-xl bg-sand-50 p-4 text-sm text-ink-muted">Бизнес пока не принимает новые сообщения. Свяжитесь с ответственным другим способом.</p> : null
   const mutate = async (run: () => Promise<{ ok: boolean; error?: string }>, after?: () => void) => {
     if (sending.current) return
     sending.current = true; setBusy(true); setError(null)
@@ -55,7 +62,7 @@ export function ConversationPanel({ slug, tableId, rowId, configured, business =
     finally { sending.current = false; setBusy(false) }
   }
   return <section aria-label="Переписка по обращению" className="mx-auto mt-5 max-w-xl space-y-4 rounded-2xl border border-sand-200 bg-white p-4">
-    <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">Переписка и документы</h3>
+    <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">{showContext && page?.contextTitle ? page.contextTitle : 'Переписка и документы'}</h3>
       {page?.canManage && page.conversationId ? <button disabled={busy} type="button" className="text-xs text-sage-700 underline" onClick={() => void mutate(() => closeConversationAction(slug, tableId, rowId, !page.closed, business))}>{page.closed ? 'Возобновить обсуждение' : 'Завершить обсуждение'}</button> : null}
     </div>
     <p className="text-xs leading-relaxed text-ink-muted">Сообщения относятся к этому обращению. Их видите вы и сотрудники бизнеса, которым оно доступно.</p>

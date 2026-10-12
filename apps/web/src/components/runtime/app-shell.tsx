@@ -41,7 +41,7 @@ import {
   type NavState,
 } from './nav-history'
 import { IntakeVerify } from './intake-verify'
-import { ConversationPanel } from './conversation-panel'
+import { ConversationInbox, MESSAGES_SCREEN, parseConversationTarget } from './conversation-inbox'
 import { conversationResource } from '@/lib/conversation-resource'
 import { AppLogin } from './app-login'
 import { customerCheckoutIds, parseCheckoutIntent, type CheckoutIntent } from '@/lib/customer-checkout'
@@ -198,8 +198,10 @@ export function AppShell({
   const { app } = initialRuntime
   const sales = customerCartWorkflow(app)
   useLiveApp(app.slug, !demo && !editing)
-  const screens = useMemo(() => new Map(app.screens.map((screen) => [screen.id, screen])), [app.screens])
-  const tabs = app.screens.filter((screen) => screen.tab !== null)
+  const messagesAvailable = !demo && !editing && Boolean(viewer) && Boolean(app.booking || customerWorkflows(app).some(workflow => moduleForTable(app, workflow.tableId)?.kind !== 'crm'))
+  const messagesTab = useMemo(() => messagesAvailable && app.screens[0] ? { ...app.screens[0], id: MESSAGES_SCREEN, name: 'Сообщения', tab: { label: 'Сообщения', icon: 'chat' } } as Screen : null, [messagesAvailable, app.screens])
+  const screens = useMemo(() => new Map([...app.screens, ...(messagesTab ? [messagesTab] : [])].map((screen) => [screen.id, screen])), [app.screens, messagesTab])
+  const tabs = [...app.screens.filter((screen) => screen.tab !== null), ...(messagesTab ? [messagesTab] : [])]
 
   /*
    * Домашний экран может быть закрыт этой роли — тогда его в приложении нет,
@@ -219,7 +221,7 @@ export function AppShell({
    * и собирает заново. Один лишний кадр честнее сломанной гидрации.
    */
   const [stack, setStack] = useState<NavEntryType[]>([{ screenId: home, rowId: null }])
-  const { runtime, loading: screenLoading, error: screenLoadError, retry: retryScreen } = useScreenRuntime(initialRuntime, stack.at(-1)!.screenId, demo || editing)
+  const { runtime, loading: screenLoading, error: screenLoadError, retry: retryScreen } = useScreenRuntime(initialRuntime, stack.at(-1)!.screenId, demo || editing || stack.at(-1)!.screenId === MESSAGES_SCREEN)
   /** Отбор по каждому списку отдельно: у заказов и у позиций он свой. */
   const [listStates, setListStates] = useState<Record<string, ListStateType>>({})
   const [error, setError] = useState<string | null>(null)
@@ -659,6 +661,7 @@ export function AppShell({
    * иначе по ней не отличить один открытый заказ от другого.
    */
   const heading = (() => {
+    if (current.screenId === MESSAGES_SCREEN) return 'Сообщения'
     if (checkout && !viewer) return 'Подтвердите почту'
     if (screen.type !== 'detail' || !row || !table) return screen.name
     if (app.booking?.tables.visits === screen.tableId && app.screens.some(s => s.id === app.homeScreenId)) {
@@ -729,11 +732,12 @@ export function AppShell({
 
           <nav className="flex-1 space-y-0.5 px-2 pb-2">
             {tabs.map((tab) => {
-              const active = stack[0]?.screenId === tab.id
+              const active = (current.screenId === MESSAGES_SCREEN ? current.screenId : stack[0]?.screenId) === tab.id
               return (
                 <button
                   key={tab.id}
                   type="button"
+                  aria-current={active ? 'page' : undefined}
                   onClick={() => openTab(tab.id)}
                   className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm transition-colors ${
                     active
@@ -832,7 +836,10 @@ export function AppShell({
          */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden">
           <div ref={contentRef} className="mx-auto w-full max-w-5xl px-4 py-5 sm:px-6 sm:py-6">
-            {screenLoadError ? <div className="space-y-3 p-6 text-sm"><p role="alert">{screenLoadError}</p><button type="button" onClick={retryScreen} className="rounded-lg border border-sand-200 px-3 py-2">Попробовать ещё раз</button></div> : screenLoading ? <p role="status" className="p-6 text-sm text-ink-soft">Загружаем раздел…</p> : sent !== null ? (
+            {current.screenId === MESSAGES_SCREEN ? <ConversationInbox key={`${app.id}:${viewer?.id}`} slug={app.slug} initialTarget={parseConversationTarget(current.rowId)} onOpenRecord={item => {
+              if (item.slug === app.slug && screens.has(item.detailScreenId)) navigate(item.detailScreenId, item.rowId)
+              else window.location.assign(`/a/${encodeURIComponent(item.slug)}?e=${encodeURIComponent(item.detailScreenId)}&r=${encodeURIComponent(item.rowId)}`)
+            }} /> : screenLoadError ? <div className="space-y-3 p-6 text-sm"><p role="alert">{screenLoadError}</p><button type="button" onClick={retryScreen} className="rounded-lg border border-sand-200 px-3 py-2">Попробовать ещё раз</button></div> : screenLoading ? <p role="status" className="p-6 text-sm text-ink-soft">Загружаем раздел…</p> : sent !== null ? (
               <Sent
                 text={sent}
                 accent={accent}
@@ -997,8 +1004,8 @@ export function AppShell({
                 <button type="button" onClick={() => setConfirmCancellation(false)} className="ml-2 text-sm">Оставить обращение</button>
               </> : <button type="button" onClick={() => setConfirmCancellation(true)} className="text-sm text-red-700">Отменить обращение</button> : <p className="text-xs text-ink-muted">Если нужно уточнить или изменить условия, свяжитесь с бизнесом{runtime.business?.phone ? `: ${runtime.business.phone}` : '.'}</p>}
             </div> : null}
-            {!demo && !editing && sent === null && intake === null && checkout === null && screen.type === 'detail' && row && conversationResource(app, screen.tableId) ?
-              <ConversationPanel key={`${app.id}:${screen.tableId}:${row.id}:${viewer?.id ?? 'guest'}`} slug={app.slug} tableId={screen.tableId} rowId={row.id} configured={Boolean(app.communications?.enabled)} /> : null}
+            {messagesAvailable && current.screenId !== MESSAGES_SCREEN && sent === null && intake === null && checkout === null && screen.type === 'detail' && row && conversationResource(app, screen.tableId) ?
+              <div className="mx-auto mt-5 max-w-xl"><button type="button" onClick={() => navigate(MESSAGES_SCREEN, JSON.stringify({ slug: app.slug, tableId: screen.tableId, rowId: row.id }))} className="inline-flex items-center gap-2 rounded-xl border border-sand-200 bg-white px-4 py-2.5 text-sm font-medium text-sage-700 hover:bg-sand-50"><Icon name="chat" className="size-5" />Открыть переписку</button></div> : null}
             {sent === null && intake === null && app.booking && screen.type === 'detail' && screen.tableId === app.booking.tables.visits && row &&
               app.screens.some(candidate => candidate.type === 'form' && candidate.mode === 'edit' && candidate.tableId === app.booking!.tables.visits &&
                 candidate.components.some(component => component.type === 'form_field' && component.fieldId === app.booking!.visit.status)) &&
@@ -1025,11 +1032,12 @@ export function AppShell({
         {tabs.length > 1 ? (
           <nav className="relative flex border-t border-sand-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur @min-[860px]:hidden">
             {tabs.slice(0, tabs.length > 5 ? 4 : 5).map((tab) => {
-              const active = stack[0]?.screenId === tab.id
+              const active = (current.screenId === MESSAGES_SCREEN ? current.screenId : stack[0]?.screenId) === tab.id
               return (
                 <button
                   key={tab.id}
                   type="button"
+                  aria-current={active ? 'page' : undefined}
                   onClick={() => openTab(tab.id)}
                   className={`flex flex-1 flex-col items-center gap-1 px-1 py-2.5 transition-colors ${
                     active ? accent.text : 'text-ink-muted hover:text-ink'

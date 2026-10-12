@@ -12,11 +12,13 @@ import { PRIVATE_PAGE } from '@/lib/seo'
  */
 export const metadata = PRIVATE_PAGE
 
-export default async function TablePage({ params }: { params: Promise<{ tableId: string }> }) {
+export default async function TablePage({ params, searchParams }: { params: Promise<{ tableId: string }>; searchParams: Promise<{ r?: string }> }) {
   const member = await requireMember()
   const { tableId } = await params
   const table = await loadTable(tableId, member.workspaceId)
   if (!table) notFound()
+  const selected = (await searchParams).r
+  const initialRowId = selected && table.rows.some(row => row.id === selected) ? selected : null
   return (
     <AppChrome
       wide
@@ -24,7 +26,7 @@ export default async function TablePage({ params }: { params: Promise<{ tableId:
       memberships={await listMemberships(member.userId)}
       activeWorkspaceId={member.workspaceId}
     >
-      <TableScreen table={table} member={{ role: member.role }} />
+      <TableScreen key={`${table.id}:${initialRowId ?? ''}`} table={table} member={{ role: member.role }} initialRowId={initialRowId} />
     </AppChrome>
   )
 }

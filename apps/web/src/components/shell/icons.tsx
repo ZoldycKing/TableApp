@@ -10,6 +10,7 @@
  */
 
 const PATHS: Record<string, string> = {
+  chat: 'M20 12.2c0 3.8-3.6 6.9-8 6.9-1 0-2-.2-2.9-.5L4 20l1.3-3.3A6.5 6.5 0 0 1 4 12.2c0-3.8 3.6-6.9 8-6.9s8 3.1 8 6.9Z',
   table: 'M4 6.5h16v13H4zM4 11h16M9.5 11v8.5M4 6.5V11',
   template: 'M4 5.5h16v4H4zM4 13h6.5v6H4zM13.5 13H20v6h-6.5z',
   apps: 'M4.5 4.5h6v6h-6zM13.5 4.5h6v6h-6zM4.5 13.5h6v6h-6zM13.5 13.5h6v6h-6z',

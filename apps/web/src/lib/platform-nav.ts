@@ -82,6 +82,14 @@ export const NAV_ITEMS: NavItem[] = [
     match: ['/apps'],
   },
   {
+    id: 'messages',
+    label: 'Сообщения',
+    href: '/messages',
+    icon: 'chat',
+    group: 'work',
+    match: ['/messages'],
+  },
+  {
     id: 'team',
     label: 'Команда',
     href: '/team',

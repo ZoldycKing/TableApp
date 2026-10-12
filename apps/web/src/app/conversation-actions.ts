@@ -2,6 +2,7 @@
 
 import { changeConversationMessage, closeConversation, conversationMessageHistory, readConversation, sendConversation } from '@/lib/conversations'
 import { RowWriteError } from '@/lib/row-mutations'
+import { listConversationInbox, markConversationRead, type InboxInput } from '@/lib/conversation-inbox'
 
 async function result<T>(run: () => Promise<T>) {
   try { return { ok: true as const, value: await run() } }
@@ -21,4 +22,10 @@ export async function conversationMessageHistoryAction(slug: string, tableId: st
 }
 export async function closeConversationAction(slug: string, tableId: string, rowId: string, closed: boolean, business = false) {
   return result(() => closeConversation(slug, tableId, rowId, closed, business))
+}
+export async function listConversationInboxAction(input: InboxInput = {}, business = false) {
+  return result(() => listConversationInbox(input, business))
+}
+export async function markConversationReadAction(slug: string, tableId: string, rowId: string, sequence: number, business = false) {
+  return result(() => markConversationRead(slug, tableId, rowId, sequence, business))
 }

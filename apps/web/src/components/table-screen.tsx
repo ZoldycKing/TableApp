@@ -37,7 +37,7 @@ import { ViewBar } from './views/view-bar'
 
 const SAVE_DELAY_MS = 600
 
-export function TableScreen({ table, member }: { table: LoadedTable; member: { role: string } }) {
+export function TableScreen({ table, member, initialRowId = null }: { table: LoadedTable; member: { role: string }; initialRowId?: string | null }) {
   const readOnly = member.role === 'viewer'
 
   const store = useTable({
@@ -52,7 +52,7 @@ export function TableScreen({ table, member }: { table: LoadedTable; member: { r
   const [search, setSearch] = useState('')
   const [historyOpen, setHistoryOpen] = useState(false)
   const [keepVisible, setKeepVisible] = useState<string[]>([])
-  const [openRowId, setOpenRowId] = useState<string | null>(null)
+  const [openRowId, setOpenRowId] = useState<string | null>(() => table.rows.some(row => row.id === initialRowId) ? initialRowId : null)
   const [error, setError] = useState<string | null>(null)
   const [editingField, setEditingField] = useState<Field | null | 'new'>(null)
   const [pending, startTransition] = useTransition()
@@ -437,7 +437,7 @@ export function TableScreen({ table, member }: { table: LoadedTable; member: { r
 
       {openRowId ? (() => {
         const index = shown.rows.findIndex((row) => row.id === openRowId)
-        const row = shown.rows[index]
+        const row = shown.rows[index] ?? store.table.rows.find(row => row.id === openRowId)
         if (!row) return null
         return (
           <RowCard
@@ -448,12 +448,12 @@ export function TableScreen({ table, member }: { table: LoadedTable; member: { r
               table.workspaceTables.map((item) => [item.id, { name: item.name, fields: item.fields }]),
             )}
             readOnly={readOnly}
-            position={index + 1}
-            total={shown.rows.length}
+            position={index >= 0 ? index + 1 : 1}
+            total={index >= 0 ? shown.rows.length : 1}
             onSetCell={setCell}
             onPrev={index > 0 ? () => setOpenRowId(shown.rows[index - 1]!.id) : undefined}
             onNext={
-              index < shown.rows.length - 1 ? () => setOpenRowId(shown.rows[index + 1]!.id) : undefined
+              index >= 0 && index < shown.rows.length - 1 ? () => setOpenRowId(shown.rows[index + 1]!.id) : undefined
             }
             onClose={() => setOpenRowId(null)}
           />

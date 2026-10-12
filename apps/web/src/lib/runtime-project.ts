@@ -61,7 +61,6 @@ export function projectRuntime(app: App, visitor: Visitor, views: Record<string,
     const readingVisitor = visitorForReading(app, table.id, visitor)
     const publicReach = publicOnly ? rowReach(app, table.id, views, fields, ANONYMOUS) : null
     const policy = fieldPolicy(app, table.id, readingVisitor, views)
-    if (policy.restricted) readableByTable[table.id] = policy.fields
 
     /*
      * Строки, положенные человеку по правам, со всеми значениями.
@@ -112,6 +111,10 @@ export function projectRuntime(app: App, visitor: Visitor, views: Record<string,
       if (screen.type !== 'form' || screen.tableId !== table.id) continue
       for (const fieldId of formFields(app, screen, visitor)) shown.add(fieldId)
     }
+    // A visible relation input needs permitted target titles even when that
+    // relation is not displayed on existing records. Row values still use
+    // policy.fields; buildTitles separately checks each target's read access.
+    if (policy.restricted) readableByTable[table.id] = shown
 
     /*
      * Отбор представления — здесь, а не в браузере.

@@ -3,9 +3,11 @@
 import type { CustomerCart } from '@/lib/customer-cart'
 import type { RuntimeApp } from '@/lib/app-runtime'
 import { accentTones } from './ui'
+import { customerCartWorkflow } from '@tableapp/schema'
 
 export function CustomerCartEditor({ runtime, cart, onChange }: { runtime: RuntimeApp; cart: CustomerCart; onChange: (cart: CustomerCart) => void }) {
-  const config = runtime.app.customer!
+  const config = customerCartWorkflow(runtime.app)
+  if (!config?.cart || !config.catalog) return null
   const goods = config.catalog ? runtime.tables[config.catalog.tableId]?.rows ?? [] : []
   let total = 0
   return <section className="space-y-3 rounded-2xl border border-sand-200 bg-white p-4" aria-label="Корзина">

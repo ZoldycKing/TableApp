@@ -14,7 +14,7 @@ import { customerDecisionAction } from '@/app/customer-actions'
 import { CustomerCartButton, CustomerCartEditor } from './customer-cart'
 import type { CustomerCart } from '@/lib/customer-cart'
 import { parseCustomerCart } from '@/lib/customer-cart'
-import { customerWorkflows, dateInstant, fieldTimeZone } from '@tableapp/schema'
+import { customerCartWorkflow, customerWorkflows, dateInstant, fieldTimeZone } from '@tableapp/schema'
 import type { BookingData } from '@/lib/booking'
 import { canCompleteBooking } from '@/lib/booking-lifecycle'
 import { inventoryOperation } from '@/lib/inventory'
@@ -43,7 +43,7 @@ import {
 import { IntakeVerify } from './intake-verify'
 import { AppLogin } from './app-login'
 import { customerCheckoutIds, parseCheckoutIntent, type CheckoutIntent } from '@/lib/customer-checkout'
-import { acceptsModuleIntake } from '@/lib/module-access'
+import { acceptsModuleIntake, moduleForTable } from '@/lib/module-access'
 import {
   ConsumptionPanel,
   describeMovement,
@@ -170,27 +170,31 @@ export function AppShell({
   onDemoSignIn?: () => void
 }) {
   const [cart, setCart] = useState<CustomerCart>({ requestId: '', items: [] })
+  const initialCartWorkflow = customerCartWorkflow(initialRuntime.app)
+  const submissionIds = useRef(new Map<string, string>())
   const cartApp = useRef('')
   useEffect(() => {
     let initial: CustomerCart = { requestId: crypto.randomUUID(), items: [] }
-    if (!demo && initialRuntime.app.customer?.cart) {
+    if (!demo && initialCartWorkflow?.cart) {
       try { const saved = sessionStorage.getItem(`tableapp:cart:${initialRuntime.app.id}`); if (saved) initial = parseCustomerCart(saved) } catch { /* Expired or invalid browser draft starts empty. */ }
     }
     cartApp.current = initialRuntime.app.id
+    submissionIds.current.clear()
     setCart(initial)
   }, [initialRuntime.app.id, demo])
   useEffect(() => {
-    if (!demo && initialRuntime.app.customer?.cart && cart.requestId && cartApp.current === initialRuntime.app.id) {
+    if (!demo && initialCartWorkflow?.cart && cart.requestId && cartApp.current === initialRuntime.app.id) {
       try {
         const key = `tableapp:cart:${initialRuntime.app.id}`
         if (cart.items.length) sessionStorage.setItem(key, JSON.stringify(cart)); else sessionStorage.removeItem(key)
       } catch { /* Storage is optional; the in-memory cart still works. */ }
     }
-  }, [cart, demo, initialRuntime.app.id, initialRuntime.app.customer?.cart])
+  }, [cart, demo, initialRuntime.app.id, initialCartWorkflow?.cart])
   const [pendingCabinet, setPendingCabinet] = useState(false)
   const [checkout, setCheckout] = useState<CheckoutIntent | null>(null)
   const [savedNotice, setSavedNotice] = useState<string | null>(null)
   const { app } = initialRuntime
+  const sales = customerCartWorkflow(app)
   useLiveApp(app.slug, !demo && !editing)
   const screens = useMemo(() => new Map(app.screens.map((screen) => [screen.id, screen])), [app.screens])
   const tabs = app.screens.filter((screen) => screen.tab !== null)
@@ -255,6 +259,7 @@ export function AppShell({
   const contentRef = useEnterMotion(`${current.screenId}:${current.rowId ?? ''}:${sent === null ? 'screen' : 'sent'}:${checkout ? 'login' : intake === null ? 'form' : 'verify'}`)
   const screen = screens.get(current.screenId)
   const customer = customerWorkflows(app).find(config => [config.formScreenId, config.detailScreenId, config.listScreenId].includes(current.screenId))
+  const catalogCustomer = customerWorkflows(app).find(config => config.catalog?.detailScreenId === current.screenId)
   const accent = accentTones(app.theme.accent)
 
   /** Таблица экрана: у списка она берётся из представления, у остальных задана прямо. */
@@ -435,7 +440,7 @@ export function AppShell({
       if (!selected) { clearCheckout(); setError('Этот вариант больше недоступен. Выберите другой в каталоге.'); return }
       initial[config.catalog.selectionFieldId] = [selected.id]
       const primary = runtime.tables[config.tableId]?.primaryFieldId
-      if (primary && target.components.some(component => component.type === 'form_field' && component.fieldId === primary)) initial[primary] = selected.data[config.catalog.titleFieldId]
+      if (moduleForTable(app, config.tableId)?.kind === 'requests' && primary && target.components.some(component => component.type === 'form_field' && component.fieldId === primary)) initial[primary] = selected.data[config.catalog.titleFieldId]
     }
     setFormDraft({ screenId: target.id, values: initial })
     if (app.booking && target.id === app.booking.formScreenId) setBookingDraft(checkout.rowId ? { [app.booking.visit.service]: [checkout.rowId] } : null)
@@ -485,10 +490,11 @@ export function AppShell({
           const editable = new Set(target.components.flatMap(component => component.type === 'form_field' ? [component.fieldId] : []))
           const initial = Object.fromEntries(Object.entries(action.initialValues ?? {})
             .filter(([fieldId]) => editable.has(fieldId)).map(([fieldId, binding]) => [fieldId, resolveBindingValue(binding, row, viewer)]))
-          if (target.id === app.customer?.formScreenId && app.customer.catalog?.selectionFieldId && screen?.id === app.customer.catalog.detailScreenId && row) {
-            initial[app.customer.catalog.selectionFieldId] = [row.id]
-            const primary = runtime.tables[app.customer.tableId]?.primaryFieldId
-            if (primary && editable.has(primary)) initial[primary] = row.data[app.customer.catalog.titleFieldId]
+          const targetCustomer = customerWorkflows(app).find(config => config.formScreenId === target.id)
+          if (targetCustomer?.catalog?.selectionFieldId && screen?.id === targetCustomer.catalog.detailScreenId && row) {
+            initial[targetCustomer.catalog.selectionFieldId] = [row.id]
+            const primary = runtime.tables[targetCustomer.tableId]?.primaryFieldId
+            if (moduleForTable(app, targetCustomer.tableId)?.kind === 'requests' && primary && editable.has(primary)) initial[primary] = row.data[targetCustomer.catalog.titleFieldId]
           }
           const child = customerWorkflows(app).find(config => config.formScreenId === target.id && config.parent?.tableId === tableId)
           if (child?.parent && row) initial[child.parent.relationFieldId] = [row.id]
@@ -919,7 +925,7 @@ export function AppShell({
                 ) : null
               }
               formSlot={
-                app.customer?.cart && screen.id === app.customer.formScreenId ? <CustomerCartEditor runtime={runtime} cart={cart} onChange={setCart} /> : isRunForm ? <><p className="text-xs leading-relaxed text-ink-muted">В «Произведено» укажите только годные изделия. Брак записывается отдельно и не входит в это количество.</p><ConsumptionPanel preview={preview} loading={previewing} /></> : null
+                sales?.cart && screen.id === sales.formScreenId ? <CustomerCartEditor runtime={runtime} cart={cart} onChange={setCart} /> : isRunForm ? <><p className="text-xs leading-relaxed text-ink-muted">В «Произведено» укажите только годные изделия. Брак записывается отдельно и не входит в это количество.</p><ConsumptionPanel preview={preview} loading={previewing} /></> : null
               }
               onSubmit={(values, mode, baseVersion) => {
                 if (pending) return
@@ -929,10 +935,14 @@ export function AppShell({
                 if (mode === 'create' && isMovementForm) return saveMovement(values)
                 if (!tableId) return
                 if (mode === 'create') {
-                  if (customer?.submissionFieldId && screen.id === customer.formScreenId) values = { ...values, [customer.submissionFieldId]: cart.requestId }
-                  if (app.customer?.cart && screen.id === app.customer.formScreenId) {
+                  if (customer?.submissionFieldId && screen.id === customer.formScreenId) {
+                    const requestId = customer.cart ? cart.requestId : submissionIds.current.get(customer.tableId) ?? crypto.randomUUID()
+                    if (!customer.cart) submissionIds.current.set(customer.tableId, requestId)
+                    values = { ...values, [customer.submissionFieldId]: requestId }
+                  }
+                  if (sales?.cart && screen.id === sales.formScreenId) {
                     if (!cart.items.length) return setError('Добавьте хотя бы один товар в корзину')
-                    values = { ...values, [app.customer.cart.fieldId]: JSON.stringify(cart) }
+                    values = { ...values, [sales.cart.fieldId]: JSON.stringify(cart) }
                   }
                   /*
                    * Не вошедший не пишет напрямую: сначала он подтверждает
@@ -947,7 +957,8 @@ export function AppShell({
                   }
                   runMutation(() => appCreateRowAction(app.slug, tableId, values), () => {
                     if (customer && screen.id === customer.formScreenId) setSavedNotice('Оформлено. Ответственный сотрудник свяжется с вами для согласования условий и оплаты. Онлайн-оплаты нет.')
-                    if (app.customer) setCart({ requestId: crypto.randomUUID(), items: [] })
+                    if (customer && screen.id === customer.formScreenId) submissionIds.current.delete(customer.tableId)
+                    if (sales && screen.id === sales.formScreenId) setCart({ requestId: crypto.randomUUID(), items: [] })
                     if (screen.type === 'form' && screen.successScreenId) {
                       openTab(screen.successScreenId)
                     } else if (stack.length > 1) {
@@ -966,12 +977,12 @@ export function AppShell({
               }}
             />
             )}
-            {screen.type === 'detail' && ((app.customer?.catalog?.detailScreenId === screen.id && !acceptsModuleIntake(app, app.customer.tableId)) || (app.booking?.tables.services === screen.tableId && !acceptsModuleIntake(app, app.booking.tables.visits))) ? <p className="mt-4 rounded-xl bg-sand-50 p-3 text-sm text-ink-muted">Новые оформления в этом разделе временно приостановлены. Текущие обращения и история доступны в кабинете.</p> : null}
-            {sent === null && checkout === null && intake === null && app.customer?.cart && acceptsModuleIntake(app, app.customer.tableId) && app.customer.catalog && screen.type === 'detail' && screen.id === app.customer.catalog.detailScreenId && row ?
+            {screen.type === 'detail' && ((catalogCustomer && !acceptsModuleIntake(app, catalogCustomer.tableId)) || (app.booking?.tables.services === screen.tableId && !acceptsModuleIntake(app, app.booking.tables.visits))) ? <p className="mt-4 rounded-xl bg-sand-50 p-3 text-sm text-ink-muted">Новые оформления в этом разделе временно приостановлены. Текущие обращения и история доступны в кабинете.</p> : null}
+            {sent === null && checkout === null && intake === null && sales?.cart && acceptsModuleIntake(app, sales.tableId) && sales.catalog && screen.type === 'detail' && screen.id === sales.catalog.detailScreenId && row ?
               <button type="button" onClick={() => setCart(current => ({ ...current, items: current.items.some(item => item.id === row.id) ? current.items.map(item => item.id === row.id ? { ...item, qty: Math.min(1000, item.qty + 1) } : item) : [...current.items, { id: row.id, qty: 1 }].slice(0, 100) }))}
                 className={`mt-4 w-full rounded-xl px-4 py-3 text-sm font-semibold text-white ${accent.solid}`}>Добавить в заказ</button> : null}
-            {sent === null && checkout === null && intake === null && app.customer?.cart && acceptsModuleIntake(app, app.customer.tableId) && cart.items.length > 0 && screen.id !== app.customer.formScreenId && screen.type !== 'form' ?
-              <CustomerCartButton count={cart.items.length} accent={app.theme.accent} onClick={() => handleAction({ id: 'cart-checkout', type: 'open_screen', screenId: app.customer!.formScreenId })} /> : null}
+            {sent === null && checkout === null && intake === null && sales?.cart && acceptsModuleIntake(app, sales.tableId) && cart.items.length > 0 && screen.id !== sales.formScreenId && screen.type !== 'form' ?
+              <CustomerCartButton count={cart.items.length} accent={app.theme.accent} onClick={() => handleAction({ id: 'cart-checkout', type: 'open_screen', screenId: sales!.formScreenId })} /> : null}
             {sent === null && intake === null && customer && screen.id === customer.detailScreenId && row ? <div className="mt-4 space-y-3 rounded-2xl border border-sand-200 bg-white p-4">
               {customer.approval && row.data[customer.statusFieldId] === customer.approval.waitingStatus ? <>
                 <p className="text-sm text-ink-soft">Мастер предложил стоимость ремонта. Согласуйте её перед началом работ.</p>

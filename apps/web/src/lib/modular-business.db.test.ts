@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { and, eq, inArray } from 'drizzle-orm'
-import { appSchema, instantToWallClock, newId, type App } from '@tableapp/schema'
+import { appSchema, customerCartWorkflow, customerWorkflows, instantToWallClock, newId, type App } from '@tableapp/schema'
 
 const envFile = resolve(import.meta.dirname, '../../../../.env')
 if (!process.env.DATABASE_URL && existsSync(envFile)) process.loadEnvFile(envFile)
@@ -266,6 +266,93 @@ describe.skipIf(!process.env.DATABASE_URL)('modular business scenarios in Postgr
     expect(await moduleActions.previewModuleConnectionAction(first.appId, 'katalog')).toMatchObject({ ok: false })
     expect(await counts(first.workspaceId)).toEqual(before)
     expect(await definition(first.appId)).toEqual(original)
+  })
+  it('runs seven modules with secondary sales, isolated records, repair consent and per-module pause', async () => {
+    const first = await business('crm'), internal = (await definition(first.appId)).customer!
+    for (const template of ['service', 'dostavka', 'zayavki', 'nedvizhimost', 'salon', 'zakazy']) {
+      const preview = await moduleActions.previewModuleConnectionAction(first.appId, template)
+      if (!preview.ok) throw new Error(preview.error)
+      expect(await moduleActions.connectModuleAction(first.appId, template, preview.expectedHash)).toMatchObject({ ok: true })
+    }
+    const app = await definition(first.appId), sales = customerCartWorkflow(app)!
+    expect(app.customer!.tableId).toBe(internal.tableId)
+    expect(app.modules).toHaveLength(7)
+    expect(app.catalogScreenIds).toHaveLength(6)
+    expect(await appActions.publishAppAction(first.appId)).toMatchObject({ ok: true })
+    const { writeRows, createRow, updateRow } = await import('./row-mutations')
+    const actions = await import('@/app/runtime-actions'), decisions = await import('@/app/customer-actions')
+    const { currentAppAccess } = await import('./app-session'), { loadPublishedApp } = await import('./app-runtime')
+    const records = new Map<string, string>(), submissions = new Map<string, Record<string, unknown>>()
+    const sameToken = randomUUID()
+    await session(clientEmail)
+    for (const config of customerWorkflows(app).filter(config => config !== app.customer)) {
+      const product = await writeRows(first.workspaceId, context => createRow(context, config.catalog!.tableId, {
+        [config.catalog!.titleFieldId]: `Public option ${config.tableId}`, [config.catalog!.activeFieldId]: true,
+        ...(config.cart ? { [config.cart.priceFieldId]: 700 } : {}),
+      }, { id: owner, kind: 'member' }))
+      const columns = await database.db.select().from(database.fields).where(eq(database.fields.tableId, config.tableId))
+      const form = app.screens.find(screen => screen.id === config.formScreenId)!
+      if (form.type !== 'form') throw new Error('Missing form')
+      const values: Record<string, unknown> = { [config.submissionFieldId!]: sameToken }
+      for (const component of form.components) if (component.type === 'form_field' && component.required) {
+        const column = columns.find(field => field.id === component.fieldId)!
+        values[column.id] = column.type === 'relation' ? [product.id] : column.type === 'phone' ? '+79991234567' : 'Client information'
+      }
+      if (config.cart) values[config.cart.fieldId] = JSON.stringify({ requestId: sameToken, items: [{ id: product.id, qty: 2 }] })
+      expect(await actions.appCreateRowAction(first.slug, config.tableId, values)).toMatchObject({ ok: true })
+      expect(await actions.appCreateRowAction(first.slug, config.tableId, values)).toMatchObject({ ok: true })
+      const rows = await database.db.select().from(database.rows).where(eq(database.rows.tableId, config.tableId))
+      expect(rows).toHaveLength(1)
+      expect((rows[0]!.data as Record<string, unknown>)[config.emailFieldId]).toBe(clientEmail)
+      records.set(config.tableId, rows[0]!.id); submissions.set(config.tableId, values)
+    }
+    expect(await actions.appCreateRowAction(first.slug, internal.tableId, {})).toMatchObject({ ok: false })
+    const visitor = (await currentAppAccess(app)).visitor
+    const mine = (await loadPublishedApp(first.slug, visitor))!
+    expect(mine.app.allowlist).toEqual([])
+    for (const config of customerWorkflows(app).filter(config => config !== app.customer)) expect(mine.tables[config.tableId]!.rows.map(row => row.id)).toEqual([records.get(config.tableId)])
+    const lazy = (await loadPublishedApp(first.slug, visitor, { screenId: sales.listScreenId }))!
+    expect(lazy.tables[sales.tableId]!.rows).toHaveLength(1)
+    const repair = customerWorkflows(app).find(config => config.approval)!, repairId = records.get(repair.tableId)!
+    const update = (values: Record<string, unknown>) => writeRows(first.workspaceId, context => updateRow(context, repair.tableId, repairId, values, { id: owner, kind: 'member' }))
+    await update({ [repair.approval!.priceFieldId]: 2300, [repair.statusFieldId]: repair.approval!.waitingStatus })
+    const before = (await database.db.select().from(database.rows).where(eq(database.rows.id, repairId)))[0]!
+    expect(await decisions.customerDecisionAction(first.slug, repairId, before.version, 'approve', repair.tableId)).toMatchObject({ ok: true })
+    await update({ [repair.approval!.priceFieldId]: 2700 })
+    await expect(update({ [repair.statusFieldId]: repair.approval!.approvedStatus })).rejects.toThrow(/соглас/)
+    const delivery = app.modules!.find(module => module.kind === 'delivery')!, deliveryConfig = customerWorkflows(app).find(config => delivery.source.type === 'customer' && config.tableId === delivery.source.tableId)!
+    expect(await moduleActions.setModuleIntakeAction(first.appId, delivery.id, false)).toMatchObject({ ok: true })
+    expect(await appActions.publishAppAction(first.appId)).toMatchObject({ ok: true })
+    const newDelivery = { ...submissions.get(deliveryConfig.tableId), [deliveryConfig.submissionFieldId!]: randomUUID() }
+    expect(await actions.appCreateRowAction(first.slug, deliveryConfig.tableId, newDelivery)).toMatchObject({ ok: false })
+    const retained = (await database.db.select().from(database.rows).where(eq(database.rows.id, records.get(deliveryConfig.tableId)!)))[0]!
+    expect(await decisions.customerDecisionAction(first.slug, retained.id, retained.version, 'cancel', deliveryConfig.tableId)).toMatchObject({ ok: true })
+    expect(await actions.appCreateRowAction(first.slug, repair.tableId, { ...submissions.get(repair.tableId), [repair.submissionFieldId!]: randomUUID() })).toMatchObject({ ok: true })
+    await session('foreign-client@example.invalid')
+    const other = (await loadPublishedApp(first.slug, (await currentAppAccess(app)).visitor))!
+    for (const config of customerWorkflows(app).filter(config => config !== app.customer)) expect(other.tables[config.tableId]!.rows).toHaveLength(0)
+  })
+  it('retries a legacy UUID record without changing its identifier or accepting another customer', async () => {
+    const first = await business('zakazy'), app = await definition(first.appId), config = app.customer!
+    expect(await appActions.publishAppAction(first.appId)).toMatchObject({ ok: true })
+    const token = randomUUID(), legacyId = `row_${token}`, { writeRows, createRow } = await import('./row-mutations')
+    await writeRows(first.workspaceId, context => createRow(context, config.tableId, {
+      [config.emailFieldId]: clientEmail, [config.statusFieldId]: config.initialStatus,
+      [config.submissionFieldId!]: token,
+    }, { id: owner, kind: 'member' }, { id: legacyId }))
+    const { appCreateRowAction } = await import('@/app/runtime-actions')
+    const form = app.screens.find(screen => screen.id === config.formScreenId)!
+    if (form.type !== 'form') throw new Error('Missing form')
+    const values: Record<string, unknown> = { [config.submissionFieldId!]: token,
+      [config.cart!.fieldId]: JSON.stringify({ requestId: token, items: [{ id: 'no-longer-available-product', qty: 1 }] }) }
+    for (const component of form.components) if (component.type === 'form_field' && component.required && !(component.fieldId in values)) values[component.fieldId] = component.fieldId === config.profile!.phoneFieldId ? '+79991234567' : 'Client information'
+    await session(clientEmail)
+    expect(await appCreateRowAction(first.slug, config.tableId, values)).toMatchObject({ ok: true })
+    expect((await database.db.select().from(database.rows).where(eq(database.rows.tableId, config.tableId))).map(row => row.id)).toEqual(expect.arrayContaining([legacyId]))
+    const before = (await database.db.select().from(database.rows).where(eq(database.rows.tableId, config.tableId))).length
+    await session('legacy-foreign@example.invalid')
+    expect(await appCreateRowAction(first.slug, config.tableId, values)).toMatchObject({ ok: false })
+    expect((await database.db.select().from(database.rows).where(eq(database.rows.tableId, config.tableId))).length).toBe(before)
   })
   it('restores configuration only, preserving current access, publication, URL and new business rows', async () => {
     const first = await business()

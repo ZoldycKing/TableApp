@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { appSchema, type Field } from '@tableapp/schema'
+import { appSchema, customerCartWorkflow, customerWorkflows, type Field } from '@tableapp/schema'
 import { ANONYMOUS, canOpenScreen, permits, visitorFor } from './app-roles'
 import { checkAppReferences } from './app-references'
-import { scopeModuleAccess, composePilot } from './module-composition'
+import { scopeModuleAccess, composeModules, composePilot } from './module-composition'
 import { hasRole, setModuleGrant, workflowRole } from './module-access'
 import { templateExample } from './templates/presentation'
 import { TEMPLATES } from './templates/catalog'
@@ -60,5 +60,73 @@ describe('scoped module roles and pilot composition', () => {
     scoped.moduleAccess!.grants.push({ email: 'someone@example.invalid', moduleId: scoped.modules![0]!.id, roleId: 'manager' })
     expect(checkAppReferences(scoped, catalog)).toMatch(/другого модуля/)
     expect(appSchema.safeParse({ ...scoped, moduleAccess: { grants: [{ email: 'bad', moduleId: 'x', roleId: 'y' }] } }).success).toBe(false)
+  })
+
+  it.each(['service', 'dostavka', 'zayavki', 'nedvizhimost', 'crm'])('joins sales to %s without replacing its rules or granting its staff sales access', id => {
+    const base = fixture(id), sales = fixture('zakazy')
+    base.app.allowlist = [{ email: 'worker@example.invalid', roleId: 'staff', company: '' }]
+    const original = structuredClone(base.app.customer)
+    for (const tableId of sales.catalog.tableIds) base.catalog.tableIds.add(tableId)
+    for (const [fieldId, field] of sales.catalog.fields) base.catalog.fields.set(fieldId, field)
+    for (const [viewId, view] of sales.catalog.views) base.catalog.views.set(viewId, view)
+    const app = composeModules(base.app, sales.app, base.catalog.views)
+    expect(checkAppReferences(app, base.catalog)).toBeNull()
+    expect(app.customer).toEqual(original)
+    expect(customerWorkflows(app)).toHaveLength(2)
+    expect(customerCartWorkflow(app)?.tableId).toBe(sales.app.customer!.tableId)
+    expect(app.catalogScreenIds).toHaveLength(id === 'crm' ? 1 : 2)
+    const worker = visitorFor(app, 'worker@example.invalid')
+    expect(permits(app, sales.app.customer!.tableId, 'update', worker)).toBe(false)
+    const client = visitorFor(app, 'customer@example.invalid')
+    expect(permits(app, sales.app.customer!.tableId, 'create', client)).toBe(true)
+    if (id === 'crm') expect(permits(app, original!.tableId, 'create', client)).toBe(false)
+    else expect(permits(app, original!.tableId, 'create', client)).toBe(true)
+  })
+
+  it.each([false, true])('supports seven independent scenarios including internal CRM (CRM first: %s)', internalFirst => {
+    const ids = ['salon', 'zakazy', 'service', 'dostavka', 'zayavki', 'nedvizhimost']
+    if (internalFirst) ids.unshift('crm'); else ids.push('crm')
+    const first = fixture(ids[0]!), originals = [first.app]
+    let app = first.app
+    for (const id of ids.slice(1)) {
+      const next = fixture(id); originals.push(next.app)
+      for (const tableId of next.catalog.tableIds) first.catalog.tableIds.add(tableId)
+      for (const [fieldId, field] of next.catalog.fields) first.catalog.fields.set(fieldId, field)
+      for (const [viewId, view] of next.catalog.views) first.catalog.views.set(viewId, view)
+      app = composeModules(app, next.app, first.catalog.views)
+      expect(checkAppReferences(app, first.catalog)).toBeNull()
+    }
+    expect(app.modules).toHaveLength(7)
+    expect(app.catalogScreenIds).toHaveLength(6)
+    expect(customerWorkflows(app)).toHaveLength(6)
+    expect(app.booking!.tables).toEqual(originals.find(app => app.booking)!.booking!.tables)
+    for (const original of originals.filter(app => app.customer)) {
+      expect(customerWorkflows(app).find(config => config.tableId === original.customer!.tableId)).toEqual(original.customer)
+    }
+    expect(app.screens.filter(screen => screen.tab && canOpenScreen(screen, ANONYMOUS))).toHaveLength(1)
+  })
+
+  it('rejects a duplicate engine, cross-business resources and unintegrated stock/production combinations', () => {
+    const base = fixture('salon'), duplicate = fixture('salon'), foreign = fixture('zakazy'), stock = fixture('sklad')
+    expect(() => composeModules(base.app, duplicate.app, base.catalog.views)).toThrow(/уже подключён/)
+    foreign.app.workspaceId = 'another-business'
+    expect(() => composeModules(base.app, foreign.app, base.catalog.views)).toThrow(/одного бизнеса/)
+    expect(() => composeModules(base.app, stock.app, base.catalog.views)).toThrow(/склада и производства/)
+  })
+  it('retains a legacy portal support dependency when adding repair and sales', () => {
+    const first = fixture('portal'), support = first.app.customerSections![0]!
+    let app = first.app
+    for (const id of ['service', 'zakazy']) {
+      const next = fixture(id)
+      for (const tableId of next.catalog.tableIds) first.catalog.tableIds.add(tableId)
+      for (const [fieldId, field] of next.catalog.fields) first.catalog.fields.set(fieldId, field)
+      for (const [viewId, view] of next.catalog.views) first.catalog.views.set(viewId, view)
+      app = composeModules(app, next.app, first.catalog.views)
+      expect(checkAppReferences(app, first.catalog)).toBeNull()
+    }
+    expect(app.modules).toHaveLength(4)
+    expect(customerWorkflows(app).find(config => config.tableId === support.tableId)).toEqual(support)
+    const supportModule = app.modules!.find(module => module.kind === 'support')!
+    expect(supportModule.dependsOn).toEqual([app.modules!.find(module => module.kind === 'requests')!.id])
   })
 })

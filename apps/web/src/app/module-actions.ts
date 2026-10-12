@@ -9,7 +9,8 @@ import { authorizeApp } from '@/lib/authorize'
 import { generateApp } from '@/lib/app-builder'
 import { checkAppReferences, type AppReferenceCatalog } from '@/lib/app-references'
 import { legacyAppModules } from '@/lib/app-modules'
-import { composePilot, ModuleCompositionError, scopeModuleAccess } from '@/lib/module-composition'
+import { composeModules, ModuleCompositionError, scopeModuleAccess } from '@/lib/module-composition'
+import { availableModuleStarters, moduleStarter } from '@/lib/module-options'
 import { buildTemplate } from '@/lib/templates/build'
 import { findTemplate } from '@/lib/templates/catalog'
 import { templatePreset } from '@/lib/templates/presets'
@@ -20,7 +21,7 @@ import { checkpointBeforeChange, recordConfigVersion } from '@/lib/app-config-hi
 
 const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex')
 const ownedApp = (record: typeof apps.$inferSelect): App => appSchema.parse({ ...appSchema.parse(record.draft), id: record.id, workspaceId: record.workspaceId, slug: record.slug })
-const targetKind = (templateId: string) => templateId === 'salon' ? 'booking' : ['zakazy', 'katalog'].includes(templateId) ? 'sales' : null
+const targetKind = (templateId: string) => moduleStarter(templateId)?.kind ?? null
 
 async function catalog(context: RowTransaction): Promise<AppReferenceCatalog> {
   const scoped = context.tx.select({ id: tables.id }).from(tables).where(eq(tables.workspaceId, context.workspaceId))
@@ -31,10 +32,10 @@ async function catalog(context: RowTransaction): Promise<AppReferenceCatalog> {
 
 async function prepare(context: RowTransaction, record: typeof apps.$inferSelect, templateId: string, ownerEmail: string, sourceAppId?: string) {
   const base = ownedApp(record), kind = targetKind(templateId)
-  if (!kind) throw new RowWriteError('invalid', 'Выберите запись на услуги или продажу товаров')
+  if (!kind) throw new RowWriteError('invalid', 'Выберите поддерживаемую возможность приложения')
   const modules = base.modules ?? legacyAppModules(base)
   if (modules.some(module => module.kind === kind)) return { already: true as const, app: base, tables: [], fields: [], views: [], source: null }
-  if (modules.length !== 1 || !['booking', 'sales'].includes(modules[0]!.kind)) throw new RowWriteError('invalid', 'Первое сочетание поддерживает салон и продажу товаров. Другие сочетания пока недоступны.')
+  if (!modules.length || !availableModuleStarters(modules.map(module => module.kind)).some(starter => starter.kind === kind)) throw new RowWriteError('invalid', 'Это сочетание требует отдельной интеграции склада или производства. Текущие возможности сохранены.')
   const existing = await catalog(context)
   const referenceError = checkAppReferences(base, existing)
   if (referenceError) throw new RowWriteError('invalid', referenceError)
@@ -46,7 +47,7 @@ async function prepare(context: RowTransaction, record: typeof apps.$inferSelect
     if (sourceModules.length !== 1 || sourceModules[0]!.kind !== kind) throw new RowWriteError('invalid', 'Источник использует другой рабочий сценарий')
     const sourceError = checkAppReferences(addition, existing)
     if (sourceError) throw new RowWriteError('invalid', sourceError)
-    return { already: false as const, app: composePilot(base, addition, existing.views), tables: [], fields: [], views: [], source: source.id }
+    return { already: false as const, app: composeModules(base, addition, existing.views), tables: [], fields: [], views: [], source: source.id }
   }
   const [last] = await context.tx.select({ position: tables.position }).from(tables).where(eq(tables.workspaceId, context.workspaceId)).orderBy(desc(tables.position)).limit(1)
   const built = buildTemplate({ template: findTemplate(templateId)!, workspaceId: context.workspaceId, afterPosition: last?.position ?? null })
@@ -58,7 +59,7 @@ async function prepare(context: RowTransaction, record: typeof apps.$inferSelect
   for (const table of built.tables) existing.tableIds.add(table.id)
   for (const field of built.fields) existing.fields.set(field.id, field as Field)
   for (const view of built.views) existing.views.set(view.id, view)
-  return { already: false as const, app: composePilot(base, addition, existing.views), tables: built.tables, fields: built.fields, views: built.views, source: null }
+  return { already: false as const, app: composeModules(base, addition, existing.views), tables: built.tables, fields: built.fields, views: built.views, source: null }
 }
 
 function message(error: unknown) {

@@ -1,6 +1,7 @@
 import { rows, tables } from '@tableapp/db'
+import { createHash } from 'node:crypto'
 import type { App, CustomerWorkflow } from '@tableapp/schema'
-import { and, eq, isNull } from 'drizzle-orm'
+import { and, eq, inArray, isNull } from 'drizzle-orm'
 import { createRow, lockedRow, RowWriteError, type RowTransaction } from './row-mutations'
 import type { RowAuthor } from './row-write'
 import type { Transaction } from './db-transaction'
@@ -15,16 +16,27 @@ export async function createCustomerRecord(context: RowTransaction, app: App, co
   const actor = { id: author.viewer.id, kind: 'app_user', ip: author.ip }
   const title = (await context.tx.select({ primary: tables.primaryFieldId }).from(tables).where(and(eq(tables.id, config.tableId), eq(tables.workspaceId, app.workspaceId))))[0]?.primary
   const catalog = config.catalog
+  const submissionId = (token: string) => `row_req_${createHash('sha256').update(`${config.tableId}:${token.toLowerCase()}`).digest('hex')}`
+  const previousSubmission = async (token: string) => {
+    // New keys belong to this workflow. Existing UUID-based records remain
+    // valid on retry, without looking up another module's row by that UUID.
+    const candidates = [...new Set([submissionId(token), `row_${token}`, `row_${token.toLowerCase()}`])]
+    const matching = await context.tx.select().from(rows).where(and(eq(rows.tableId, config.tableId), inArray(rows.id, candidates))).for('update')
+    for (const id of candidates) {
+      const existing = matching.find(row => row.id === id)
+      if (!existing) continue
+      if (existing.deletedAt || String((existing.data as Record<string, unknown>)[config.emailFieldId] ?? '').trim().toLowerCase() !== email) throw new RowWriteError('conflict', 'Обновите форму перед оформлением')
+      return { id: existing.id }
+    }
+    return null
+  }
   let orderId: string | undefined
   if (config.submissionFieldId) {
     const token = data[config.submissionFieldId]
     if (typeof token !== 'string' || !/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(token)) throw new RowWriteError('invalid', 'Обновите форму перед оформлением')
-    orderId = `row_${token}`
-    const existing = await lockedRow(context, config.tableId, orderId)
-    if (existing) {
-      if (existing.deletedAt || (existing.data as Record<string, unknown>)[config.emailFieldId] !== email) throw new RowWriteError('conflict', 'Обновите форму перед оформлением')
-      return { id: existing.id }
-    }
+    orderId = submissionId(token)
+    const existing = await previousSubmission(token)
+    if (existing) return existing
   }
   if (config.parent) {
     const selection = data[config.parent.relationFieldId]
@@ -44,13 +56,10 @@ export async function createCustomerRecord(context: RowTransaction, app: App, co
     const cart = config.cart
     let input
     try { input = parseCustomerCart(data[cart.fieldId]) } catch { throw new RowWriteError('invalid', 'Добавьте товары в корзину и проверьте количество') }
-    if (orderId && orderId !== `row_${input.requestId}`) throw new RowWriteError('invalid', 'Обновите корзину перед оформлением')
-    orderId = `row_${input.requestId}`
-    const existing = await lockedRow(context, config.tableId, orderId)
-    if (existing) {
-      if (existing.deletedAt || (existing.data as Record<string, unknown>)[config.emailFieldId] !== email) throw new RowWriteError('conflict', 'Обновите корзину перед оформлением')
-      return { id: existing.id }
-    }
+    if (orderId && orderId !== submissionId(input.requestId)) throw new RowWriteError('invalid', 'Обновите корзину перед оформлением')
+    orderId = submissionId(input.requestId)
+    const existing = config.submissionFieldId ? null : await previousSubmission(input.requestId)
+    if (existing) return existing
     const positions: string[] = []
     for (const item of input.items) {
       const [source] = await context.tx.select().from(rows).where(and(eq(rows.tableId, catalog.tableId), eq(rows.id, item.id), isNull(rows.deletedAt))).for('share')

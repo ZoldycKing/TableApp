@@ -1,4 +1,4 @@
-import { appSchema, MODULE_DEFINITIONS, positionSequence, type App, type AppModule, type Screen } from '@tableapp/schema'
+import { appSchema, compatibleModuleKinds, customerWorkflows, MODULE_DEFINITIONS, positionSequence, type App, type AppModule, type Screen } from '@tableapp/schema'
 import { legacyAppModules, moduleContract } from './app-modules'
 
 type ViewTables = ReadonlyMap<string, { tableId: string }>
@@ -48,24 +48,44 @@ export function scopeModuleAccess(input: App, views: ViewTables): App {
   return appSchema.parse(app)
 }
 
-/** Pilot only: one appointment engine and one sales engine, each retaining its own tables and rules. */
-export function composePilot(base: App, addition: App, views: ViewTables): App {
+/** Join independent engines while retaining their original configuration and resource IDs. */
+export function composeModules(base: App, addition: App, views: ViewTables): App {
+  if (base.workspaceId !== addition.workspaceId) throw new ModuleCompositionError('Можно подключать возможности только внутри одного бизнеса')
   const first = scopeModuleAccess(base, views), second = scopeModuleAccess(addition, views)
-  const kinds = [...first.modules!, ...second.modules!].map(module => module.kind).sort()
-  if (kinds.join(',') !== 'booking,sales') throw new ModuleCompositionError('Сейчас можно объединить запись на услуги и продажу товаров')
+  const modules = [...first.modules!, ...second.modules!]
+  if (!compatibleModuleKinds(modules.map(module => module.kind))) throw new ModuleCompositionError('Этот модуль уже подключён или сочетание требует отдельной интеграции склада и производства')
+  if (new Set(modules.map(module => module.id)).size !== modules.length) throw new ModuleCompositionError('Эти возможности уже используют один модуль')
   const screens = [...first.screens, ...second.screens]
-  const publicCatalog = (app: App) => app.screens.find(screen => (screen.type === 'list' || screen.type === 'tiles') && screen.access.public)?.id
-  const catalogScreens = [publicCatalog(first), publicCatalog(second)]
-  if (catalogScreens.some(id => !id)) throw new ModuleCompositionError('Для каждого раздела требуется публичный каталог')
-  const bookingOwner = first.booking ? first : second, booking = bookingOwner.booking!
-  const listScreenId = booking.listScreenId ?? bookingOwner.screens.find(screen => (screen.type === 'list' || screen.type === 'tiles') &&
-    screen.access.roles.includes('client') && views.get(screen.source.viewId)?.tableId === booking.tables.visits)?.id
-  if (!listScreenId) throw new ModuleCompositionError('Для записи требуется экран собственных посещений клиента')
-  return appSchema.parse({ ...first, booking: { ...booking, listScreenId }, customer: first.customer ?? second.customer,
-    modules: [...first.modules!, ...second.modules!], moduleAccess: { grants: [...first.moduleAccess!.grants, ...second.moduleAccess!.grants] },
+  if (new Set(screens.map(screen => screen.id)).size !== screens.length) throw new ModuleCompositionError('Экраны подключаемых возможностей пересекаются')
+  const publicCatalogs = (app: App) => (app.modules ?? []).flatMap(module => {
+    if (module.kind === 'support') return []
+    const config = module.source.type === 'customer' ? customerWorkflows(app).find(config => module.source.type === 'customer' && config.tableId === module.source.tableId) : null
+    const catalog = app.screens.find(screen => (screen.type === 'list' || screen.type === 'tiles') && screen.access.public && module.screenIds?.includes(screen.id) &&
+      (module.source.type === 'booking' ? views.get(screen.source.viewId)?.tableId === app.booking?.tables.services : screen.source.viewId === config?.catalog?.viewId))
+    if (!catalog && module.kind !== 'crm') throw new ModuleCompositionError(`Для модуля «${MODULE_DEFINITIONS[module.kind].name}» требуется публичный каталог`)
+    return catalog ? [catalog.id] : []
+  })
+  const catalogScreens = [...publicCatalogs(first), ...publicCatalogs(second)]
+  if (!catalogScreens.length) throw new ModuleCompositionError('Для клиентского приложения требуется хотя бы один каталог')
+  const bookingOwner = first.booking ? first : second.booking ? second : null, booking = bookingOwner?.booking
+  const listScreenId = booking?.listScreenId ?? bookingOwner?.screens.find(screen => (screen.type === 'list' || screen.type === 'tiles') &&
+    screen.access.roles.includes('client') && views.get(screen.source.viewId)?.tableId === booking!.tables.visits)?.id
+  if (booking && !listScreenId) throw new ModuleCompositionError('Для записи требуется экран собственных посещений клиента')
+  const workflows = [...customerWorkflows(first), ...customerWorkflows(second)]
+  if (new Set(workflows.map(config => config.tableId)).size !== workflows.length) throw new ModuleCompositionError('Несколько возможностей используют одни и те же обращения')
+  const primary = first.customer ?? second.customer ?? null
+  // Opening the newly attached client module to customers must not expose
+  // the internal CRM screens. Existing customer admission policies stay intact.
+  const firstHasClients = first.screens.some(screen => screen.access.public || screen.access.roles.includes('client'))
+  return appSchema.parse({ ...first, accessMode: firstHasClients ? first.accessMode : second.accessMode,
+    booking: booking ? { ...booking, listScreenId } : null, customer: primary, customerSections: workflows.filter(config => config !== primary),
+    modules, moduleAccess: { grants: [...first.moduleAccess!.grants, ...second.moduleAccess!.grants] },
     roles: [...first.roles, ...second.roles.filter(role => !first.roles.some(existing => existing.id === role.id))],
     rowAccessRules: [...first.rowAccessRules, ...second.rowAccessRules], catalogScreenIds: catalogScreens, homeScreenId: catalogScreens[0],
     screens: screens.map((screen, index) => ({ ...screen, appId: first.id, position: positionSequence(screens.length)[index]!,
-      ...(screen.id === catalogScreens[0] ? { name: 'Каталог', tab: { icon: 'grid', label: 'Каталог' } } : screen.id === catalogScreens[1] ? { tab: null } : {}) })),
+      ...(screen.id === catalogScreens[0] ? { name: 'Каталог', tab: { icon: 'grid', label: 'Каталог' } } : catalogScreens.includes(screen.id) ? { tab: null } : {}) })),
   })
 }
+
+/** Kept for existing pilot fixtures and callers. */
+export const composePilot = composeModules

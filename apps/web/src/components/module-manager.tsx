@@ -4,20 +4,23 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { MODULE_DEFINITIONS, type App } from '@tableapp/schema'
 import { hasUnsaved } from '@/lib/unsaved'
+import { availableModuleStarters } from '@/lib/module-options'
 import { connectModuleAction, enableModuleAccessAction, previewModuleConnectionAction, setModuleIntakeAction, setPrimaryClientAppAction } from '@/app/module-actions'
 
 export function ModuleManager({ app, primary, sources }: { app: App; primary: boolean; sources: { id: string; name: string; kind: string }[] }) {
   const router = useRouter(), [pending, start] = useTransition()
   const [message, setMessage] = useState<string | null>(null), [source, setSource] = useState('')
   const [preview, setPreview] = useState<Extract<Awaited<ReturnType<typeof previewModuleConnectionAction>>, { ok: true }> | null>(null)
+  const [selection, setSelection] = useState('')
   const modules = app.modules ?? [], clientApp = Boolean((app.booking || app.customer) && app.screens.some(screen => screen.access.public || screen.access.roles.includes('client')))
-  const addition = modules.length === 1 && modules[0]?.kind === 'booking' ? 'zakazy' : modules.length === 1 && modules[0]?.kind === 'sales' ? 'salon' : null
-  const desiredKind = addition === 'salon' ? 'booking' : 'sales'
+  const choices = availableModuleStarters(modules.map(module => module.kind))
+  const choice = choices.find(choice => choice.templateId === selection) ?? choices[0]
+  const addition = choice?.templateId, desiredKind = choice?.kind
   const run = (action: () => Promise<{ ok: boolean; error?: string }>, success: string) => start(async () => {
     if (hasUnsaved()) { setMessage('Дождитесь сохранения изменений конструктора. Если сохранение завершилось ошибкой, сначала исправьте её.'); return }
     const result = await action()
     setMessage(result.ok ? success : result.error ?? 'Не удалось сохранить')
-    if (result.ok) { setPreview(null); router.refresh() }
+    if (result.ok) { setPreview(null); setSource(''); setSelection(''); router.refresh() }
   })
   if (!modules.length) return null
   const button = 'rounded-lg border border-sand-200 bg-white px-3 py-2 text-sm disabled:opacity-50 hover:bg-sand-50'
@@ -32,7 +35,9 @@ export function ModuleManager({ app, primary, sources }: { app: App; primary: bo
     </div>)}</div>
     {!app.moduleAccess ? <button className={button} disabled={pending} onClick={() => run(() => enableModuleAccessAction(app.id), 'Рабочие права разделены по модулям в черновике. Прежние приглашения сохранены.')}>Разделить рабочие права по возможностям</button> : null}
     {addition ? <div className="space-y-3 border-t border-sand-200 pt-3">
-      <p className="text-sm font-medium">Добавить {addition === 'salon' ? 'запись на услуги' : 'продажу товаров'} в это приложение</p>
+      <label className="block space-y-1 text-sm"><span>Добавить возможность</span><select value={addition} disabled={pending} onChange={event => { setSelection(event.target.value); setSource(''); setPreview(null); setMessage(null) }} className="w-full max-w-lg rounded-lg border border-sand-200 px-3 py-2">
+        {choices.map(choice => <option key={choice.templateId} value={choice.templateId}>{choice.name}</option>)}
+      </select></label>
       <label className="block space-y-1 text-sm"><span>Данные нового раздела</span><select value={source} disabled={pending} onChange={event => { setSource(event.target.value); setPreview(null) }} className="w-full max-w-lg rounded-lg border border-sand-200 px-3 py-2">
         <option value="">Создать пустые таблицы для нового раздела</option>
         {sources.filter(item => item.kind === desiredKind).map(item => <option key={item.id} value={item.id}>Использовать таблицы: {item.name}</option>)}

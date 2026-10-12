@@ -32,3 +32,8 @@ export type CustomerWorkflow = z.infer<typeof customerWorkflowSchema>
 export function customerWorkflows(app: { customer?: CustomerWorkflow | null; customerSections?: CustomerWorkflow[] }): CustomerWorkflow[] {
   return [...(app.customer ? [app.customer] : []), ...(app.customerSections ?? [])]
 }
+
+/** The sales workflow can be a secondary section of a composite application. */
+export function customerCartWorkflow(app: Parameters<typeof customerWorkflows>[0]): CustomerWorkflow | undefined {
+  return customerWorkflows(app).find(workflow => workflow.cart !== null)
+}

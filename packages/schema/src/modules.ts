@@ -3,6 +3,13 @@ import { z } from 'zod'
 export const MODULE_KINDS = ['booking', 'sales', 'requests', 'delivery', 'repair', 'property', 'field_service', 'crm', 'support', 'inventory', 'production'] as const
 export type ModuleKind = typeof MODULE_KINDS[number]
 
+/** Engines with independent resources that can share one client application. */
+export const COMPOSABLE_MODULE_KINDS: readonly ModuleKind[] = ['booking', 'sales', 'requests', 'delivery', 'repair', 'property', 'field_service', 'crm', 'support']
+export function compatibleModuleKinds(kinds: readonly ModuleKind[]): boolean {
+  const independent = kinds.filter(kind => kind !== 'support')
+  return kinds.every(kind => COMPOSABLE_MODULE_KINDS.includes(kind)) && new Set(independent).size === independent.length
+}
+
 const reference = z.string().min(1).max(200)
 export const moduleSourceSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('booking') }).strict(),
@@ -39,7 +46,7 @@ export const MODULE_DEFINITIONS = {
   repair: { name: 'Ремонт', engine: 'customer', version: 1 },
   property: { name: 'Просмотры недвижимости', engine: 'customer', version: 1 },
   field_service: { name: 'Заявки и выезды', engine: 'customer', version: 1 },
-  crm: { name: 'Обращения в отдел продаж', engine: 'customer', version: 1 },
+  crm: { name: 'Клиенты и сделки', engine: 'customer', version: 1 },
   support: { name: 'Вопросы по своим обращениям', engine: 'customer', version: 1 },
   inventory: { name: 'Складской учёт', engine: 'inventory', version: 1 },
   production: { name: 'Производство', engine: 'production', version: 1 },

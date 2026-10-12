@@ -1,4 +1,4 @@
-import { MODULE_DEFINITIONS, customerWorkflows, type App, type AppModule, type Field, type FieldType, type ModuleKind } from '@tableapp/schema'
+import { MODULE_DEFINITIONS, compatibleModuleKinds, customerWorkflows, type App, type AppModule, type Field, type FieldType, type ModuleKind } from '@tableapp/schema'
 import { checkModuleAccess } from './module-access'
 
 type Catalog = { tableIds: ReadonlySet<string>; fields: ReadonlyMap<string, Field> }
@@ -190,11 +190,15 @@ export function checkAppModules(app: App, catalog: Catalog): string | null {
   }
   if (modules.some(module => cycle(module.id))) return 'Зависимости модулей образуют цикл'
   const base = modules.filter(module => module.kind !== 'support')
-  if (base.length > 1 && !(app.moduleAccess && app.catalogScreenIds?.length === 2 && base.map(module => module.kind).sort().join(',') === 'booking,sales')) return 'Это сочетание модулей ещё не поддерживается: сначала требуется настройка отдельных рабочих ролей и общего интерфейса'
+  if (base.length > 1 && !(app.moduleAccess && app.catalogScreenIds?.length && compatibleModuleKinds(modules.map(module => module.kind)))) return 'Это сочетание модулей ещё не поддерживается: сначала требуется настройка отдельных рабочих ролей и общего интерфейса'
   if (app.catalogScreenIds && (!app.moduleAccess || new Set(app.catalogScreenIds).size !== app.catalogScreenIds.length || !app.catalogScreenIds.includes(app.homeScreenId ?? '') || app.catalogScreenIds.some(id => {
     const screen = app.screens.find(screen => screen.id === id)
     return !screen || !['list', 'tiles'].includes(screen.type) || !screen.access.public
   }))) return 'Общий каталог должен использовать публичные каталоги подключённых модулей'
-  if (base.length > 1 && base.some(module => app.catalogScreenIds!.filter(id => module.screenIds?.includes(id)).length !== 1)) return 'Общий каталог должен показывать каталог каждого подключённого модуля'
+  if (base.length > 1 && base.some(module => {
+    const count = app.catalogScreenIds!.filter(id => module.screenIds?.includes(id)).length
+    const publicScreens = app.screens.some(screen => module.screenIds?.includes(screen.id) && screen.access.public)
+    return count !== (module.kind === 'crm' && !publicScreens ? 0 : 1)
+  })) return 'Общий каталог должен показывать каталог каждого внешнего модуля; внутренние экраны CRM остаются закрытыми'
   return null
 }

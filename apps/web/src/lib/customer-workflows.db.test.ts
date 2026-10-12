@@ -97,7 +97,8 @@ describe.skipIf(!process.env.DATABASE_URL)('all customer template workflows in P
       const countBefore = (await own(example)).length
       const results = await Promise.all([actions.appCreateRowAction(example.app.slug, config.tableId, values), actions.appCreateRowAction(example.app.slug, config.tableId, values)])
       expect(results).toEqual([{ ok: true }, { ok: true }]); expect(await own(example)).toHaveLength(countBefore + 1)
-      const row = (await own(example)).find(row => row.id === `row_${JSON.parse(String(values[cart.fieldId])).requestId}`)!
+      const row = (await database.db.select().from(database.rows).where(eq(database.rows.tableId, config.tableId)))
+        .find(row => (row.data as Record<string, unknown>)[config.submissionFieldId!] === JSON.parse(String(values[cart.fieldId])).requestId)!
       const original = (await stored(row.id)).data as Record<string, unknown>, positions = original[cart.positionsFieldId] as string[]
       expect(positions).toHaveLength(1)
       const item = (await stored(positions[0]!)).data as Record<string, unknown>

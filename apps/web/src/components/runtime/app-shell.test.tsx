@@ -10,6 +10,8 @@ import { templateAppPreview } from '@/lib/templates/app-preview'
 import { consumeAppCodeAction, requestAppLoginAction } from '@/app/auth-actions'
 import { TemplatePreviewShell } from '@/components/marketing/template-preview-shell'
 import { modularPilotExample } from '@/lib/templates/modular-pilot-example'
+import { composeModules } from '@/lib/module-composition'
+import { customerCartWorkflow, customerWorkflows } from '@tableapp/schema'
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }))
 vi.mock('@/app/auth-actions', () => ({ signOutAppAction: vi.fn(), consumeAppCodeAction: vi.fn(), requestAppLoginAction: vi.fn() }))
@@ -32,7 +34,53 @@ async function demoLogin(ui: ReturnType<typeof render>) {
   fireEvent.click(ui.getByRole('button', { name: 'Подтвердить и продолжить' }))
 }
 
+function joinExamples(first: ReturnType<typeof templateExample>, second: ReturnType<typeof templateExample>) {
+  const views = [...first.views, ...second.views]
+  return { ...first, app: composeModules(first.app, second.app, new Map(views.map(view => [view.id, view]))), views,
+    fields: [...first.fields, ...second.fields], rows: [...first.rows, ...second.rows], byTable: new Map([...first.byTable, ...second.byTable]),
+    built: { ...first.built, tables: [...first.built.tables, ...second.built.tables], fields: [...first.built.fields, ...second.built.fields],
+      views: [...first.built.views, ...second.built.views], rows: [...first.built.rows, ...second.built.rows] } }
+}
+
 describe('runtime navigation during live refresh', () => {
+  it('keeps a secondary sales cart through two repair submissions, rotating the repair key and selecting the right service', async () => {
+    const repairExample = templateExample('service'), repair = repairExample.app.customer!, firstOption = repairExample.rows.find(row => row.tableId === repair.catalog!.tableId)!
+    const selected = { ...firstOption, id: 'row_special_repair', position: 'zz', data: { ...firstOption.data, [repair.catalog!.titleFieldId]: 'Особая диагностика' } }
+    repairExample.rows.push(selected)
+    const example = joinExamples(joinExamples(templateExample('crm'), repairExample), templateExample('zakazy'))
+    const { runtime, viewer } = templateAppPreview(example, 'client', 'irina@example.com', 'Ирина'), sales = customerCartWorkflow(example.app)!
+    expect(runtime.relatedTitles[repair.catalog!.tableId]).toContainEqual({ id: selected.id, title: 'Особая диагностика' })
+    vi.mocked(appCreateRowAction).mockClear().mockResolvedValue({ ok: true })
+    const ui = render(<AppShell runtime={runtime} viewer={viewer} />)
+    const product = runtime.tables[sales.catalog!.tableId]!.rows[0]!, name = String(product.data[sales.catalog!.titleFieldId])
+    fireEvent.click(ui.getByRole('button', { name: text => text.includes(name) }))
+    fireEvent.click(ui.getByRole('button', { name: 'Добавить в заказ' }))
+    const savedCart = sessionStorage.getItem(`tableapp:cart:${example.app.id}`)!
+    expect(JSON.parse(savedCart).items).toEqual([{ id: product.id, qty: 1 }])
+    const primaryField = runtime.tables[repair.tableId]!.fields.find(field => field.id === runtime.tables[repair.tableId]!.primaryFieldId)!
+    const selectionField = runtime.tables[repair.tableId]!.fields.find(field => field.id === repair.catalog!.selectionFieldId)!
+    for (const label of ['Ноутбук', 'Телефон']) {
+      fireEvent.click(ui.getAllByRole('button', { name: /^Каталог$/ })[0]!)
+      fireEvent.click(ui.getByRole('button', { name: /Особая диагностика/ }))
+      fireEvent.click(ui.getByRole('button', { name: /^Отправить заявку на ремонт$/ }))
+      expect((ui.getByLabelText(new RegExp(`^${selectionField.name}`)) as HTMLSelectElement).value).toBe(selected.id)
+      expect((ui.getByLabelText(new RegExp(`^${primaryField.name}`)) as HTMLInputElement).value).toBe('')
+      fireEvent.change(ui.getByLabelText(new RegExp(`^${primaryField.name}`)), { target: { value: label } })
+      fireEvent.change(ui.getByLabelText(/^Ваше имя/), { target: { value: 'Ирина' } })
+      fireEvent.change(ui.getByLabelText(/^Ваш телефон/), { target: { value: '+7 900 000-00-00' } })
+      fireEvent.change(ui.getByLabelText(/^Неисправность со слов клиента/), { target: { value: 'Не включается' } })
+      fireEvent.click(ui.getByRole('button', { name: /^Отправить заявку на ремонт$/ }))
+      await ui.findByRole('heading', { name: /^Мои ремонты$/ })
+      expect(sessionStorage.getItem(`tableapp:cart:${example.app.id}`)).toBe(savedCart)
+    }
+    const calls = vi.mocked(appCreateRowAction).mock.calls
+    expect(calls).toHaveLength(2)
+    expect(calls.every(call => call[1] === repair.tableId)).toBe(true)
+    expect(calls[0]![2][repair.submissionFieldId!]).not.toBe(calls[1]![2][repair.submissionFieldId!])
+    fireEvent.click(ui.getByRole('button', { name: /Оформить заказ.*1/ }))
+    expect(ui.getByLabelText(`Количество: ${name}`)).toBeTruthy()
+    expect(customerWorkflows(example.app).find(config => config.formScreenId === sales.formScreenId)!.tableId).toBe(sales.tableId)
+  })
   it('shows both catalogs in one guest screen and opens the correct workflow after signing in', async () => {
     const example = modularPilotExample(), config = example.app.booking!
     const guest = templateAppPreview(example, 'guest'), client = templateAppPreview(example, 'client', 'irina@example.com', 'Ирина')

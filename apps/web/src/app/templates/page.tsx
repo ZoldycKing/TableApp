@@ -84,7 +84,7 @@ export default async function TemplatesPage({
 
           <div className="mt-8">
             <p className="mb-6 rounded-xl border border-sand-200 bg-sand-50 px-5 py-4 text-sm leading-relaxed text-ink-soft">
-              Уже есть приложение салона или продаж? Добавьте второй раздел в его настройках, чтобы сохранить одну ссылку и кабинет бизнеса.
+              Уже есть приложение бизнеса? Подключите новую возможность в его настройках, чтобы сохранить одну ссылку и кабинет бизнеса.
               {' '}<Link href="/apps" className="font-medium text-sage-700 underline underline-offset-4">Открыть мои приложения</Link>
             </p>
             <TemplateGallery key={chosen ?? compatibilityTemplate?.id ?? 'default'} templates={[...STARTER_TEMPLATES]} chosen={chosen} compatibilityTemplate={compatibilityTemplate} />
@@ -181,8 +181,8 @@ export default async function TemplatesPage({
       </Section>)}
 
       <Section title="Возможности одного приложения" tone="white" width="narrow">
-        <p className="text-sm leading-relaxed text-ink-soft">Кабинет клиента и история входят в выбранный сценарий. Уже можно объединить запись на услуги и продажу товаров в одном приложении: добавить второй раздел в настройках приложения, сохранив одну ссылку и отдельные рабочие роли.</p>
-        <p className="mt-3 text-sm leading-relaxed text-ink-muted">Склад, доставка, CRM и производство пока запускаются отдельными наборами. Подключение этих возможностей к существующему приложению будет доступно после проверки соответствующих сочетаний.</p>
+        <p className="text-sm leading-relaxed text-ink-soft">Кабинет клиента и история входят в выбранный сценарий. Запись на услуги, продажи, ремонт, доставка, выезды и недвижимость могут работать в одном приложении. CRM подключается как внутренний инструмент команды. Ссылка сохраняется, а рабочие роли и правила каждого раздела остаются отдельными.</p>
+        <p className="mt-3 text-sm leading-relaxed text-ink-muted">Склад и производство пока работают отдельными наборами. Доставка принимает собственные заявки; автоматического переноса заказов курьеру и объединения всех обращений с CRM пока нет.</p>
       </Section>
 
       <Section title="Что происходит, когда вы нажимаете «Взять шаблон»" tone="white">

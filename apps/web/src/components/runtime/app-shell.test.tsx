@@ -46,6 +46,15 @@ function joinExamples(first: ReturnType<typeof templateExample>, second: ReturnT
 }
 
 describe('runtime navigation during live refresh', () => {
+  it('marks a directly opened CRM client list as current and retains it when opening a client card', async () => {
+    const example = templateExample('crm'), crm = example.app.customer!.crm!, { runtime, viewer } = templateAppPreview(example, 'manager', 'manager@example.invalid')
+    window.history.replaceState(null, '', `/a/review?e=${crm.listScreenId}`)
+    const ui = render(<AppShell runtime={runtime} viewer={viewer} demo browserHistory />)
+    await waitFor(() => expect(ui.getAllByRole('button', { name: 'Клиенты' }).every(button => button.getAttribute('aria-current') === 'page')).toBe(true))
+    const client = runtime.tables[crm.clientsTableId]!.rows[0]!, name = String(client.data[crm.nameFieldId])
+    fireEvent.click(ui.getByRole('button', { name: text => text.includes(name) }))
+    expect(ui.getAllByRole('button', { name: 'Клиенты' }).every(button => button.getAttribute('aria-current') === 'page')).toBe(true)
+  })
   it('marks messages as the current tab when opened through a deep link above the catalog home', async () => {
     const { runtime, viewer } = templateAppPreview(templateExample('salon'), 'client', 'irina@example.com', 'Ирина')
     window.history.replaceState(null, '', '/a/review?e=__tableapp_messages')

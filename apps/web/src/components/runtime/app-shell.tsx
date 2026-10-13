@@ -265,6 +265,7 @@ export function AppShell({
   const router = useRouter()
 
   const current = stack[stack.length - 1]!
+  const activeTabId = current.screenId === MESSAGES_SCREEN ? current.screenId : [...stack].reverse().find(entry => screens.get(entry.screenId)?.tab)?.screenId
   useEffect(() => { setMoreTabs(false); setConfirmCancellation(false) }, [current.screenId, current.rowId])
   const contentRef = useEnterMotion(`${current.screenId}:${current.rowId ?? ''}:${sent === null ? 'screen' : 'sent'}:${checkout ? 'login' : intake === null ? 'form' : 'verify'}`)
   const screen = screens.get(current.screenId)
@@ -740,7 +741,7 @@ export function AppShell({
 
           <nav className="flex-1 space-y-0.5 px-2 pb-2">
             {tabs.map((tab) => {
-              const active = (current.screenId === MESSAGES_SCREEN ? current.screenId : stack[0]?.screenId) === tab.id
+              const active = activeTabId === tab.id
               return (
                 <button
                   key={tab.id}
@@ -1049,7 +1050,7 @@ export function AppShell({
         {tabs.length > 1 ? (
           <nav className="relative flex border-t border-sand-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur @min-[860px]:hidden">
             {tabs.slice(0, tabs.length > 5 ? 4 : 5).map((tab) => {
-              const active = (current.screenId === MESSAGES_SCREEN ? current.screenId : stack[0]?.screenId) === tab.id
+              const active = activeTabId === tab.id
               return (
                 <button
                   key={tab.id}

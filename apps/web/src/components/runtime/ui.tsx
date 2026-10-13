@@ -65,9 +65,9 @@ export function Avatar({
 }: {
   name: string | null
   email: string
-  size?: 's' | 'm'
+  size?: 's' | 'm' | 'l'
 }) {
-  const box = size === 's' ? 'size-8 text-[11px]' : 'size-9 text-xs'
+  const box = size === 's' ? 'size-8 text-[11px]' : size === 'l' ? 'size-14 text-lg' : 'size-9 text-xs'
   return (
     <span
       aria-hidden

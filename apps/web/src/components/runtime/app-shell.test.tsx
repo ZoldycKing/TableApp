@@ -46,6 +46,13 @@ function joinExamples(first: ReturnType<typeof templateExample>, second: ReturnT
 }
 
 describe('runtime navigation during live refresh', () => {
+  it('keeps the CRM contact directory selected when a client card is opened directly', async () => {
+    const example = templateExample('crm'), crm = example.app.customer!.crm!, { runtime, viewer } = templateAppPreview(example, 'manager', 'manager@example.invalid')
+    const client = runtime.tables[crm.clientsTableId]!.rows[0]!
+    window.history.replaceState(null, '', `/a/review?e=${crm.detailScreenId}&r=${client.id}`)
+    const ui = render(<AppShell runtime={runtime} viewer={viewer} demo browserHistory />)
+    await waitFor(() => expect(ui.getAllByRole('button', { name: 'Клиенты' }).every(button => button.getAttribute('aria-current') === 'page')).toBe(true))
+  })
   it('marks a directly opened CRM client list as current and retains it when opening a client card', async () => {
     const example = templateExample('crm'), crm = example.app.customer!.crm!, { runtime, viewer } = templateAppPreview(example, 'manager', 'manager@example.invalid')
     window.history.replaceState(null, '', `/a/review?e=${crm.listScreenId}`)

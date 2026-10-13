@@ -88,6 +88,7 @@ describe.skipIf(!process.env.DATABASE_URL)('shared customer history and CRM dire
     expect(page.items.map(item => item.id).sort()).toEqual(space.selected.sort())
     expect(page.items.every(item => !foreign.selected.includes(item.id))).toBe(true)
     expect(page.items.some(item => item.status)).toBe(true)
+    expect(page.items.every(item => item.statusColor)).toBe(true)
     const deal = { tableId: space.crmConfig.tableId, rowId: space.selected.find(id => page.items.find(item => item.id === id)?.kind === 'crm')!, slug: space.app.slug }
     expect((await history.readCustomerHistory(deal))!.items.map(item => item.id).sort()).toEqual(page.items.map(item => item.id).sort())
   })
@@ -143,6 +144,7 @@ describe.skipIf(!process.env.DATABASE_URL)('shared customer history and CRM dire
     const page = (await history.readCustomerHistory(anchor(space)))!
     expect(page.customer.phone).toBeNull()
     expect(page.items.find(item => item.kind === 'repair')?.status).toBeNull()
+    expect(page.items.find(item => item.kind === 'repair')?.statusColor).toBeNull()
     expect(page.items.find(item => item.kind === 'repair')?.when).toBeNull()
     expect((await directory.readCustomerDirectory({ tableId: space.crm.clientsTableId, slug: space.app.slug, query: '900 000' })).items).toHaveLength(0)
   })

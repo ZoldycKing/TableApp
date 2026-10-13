@@ -265,10 +265,12 @@ export function AppShell({
   const router = useRouter()
 
   const current = stack[stack.length - 1]!
-  const activeTabId = current.screenId === MESSAGES_SCREEN ? current.screenId : [...stack].reverse().find(entry => screens.get(entry.screenId)?.tab)?.screenId
   useEffect(() => { setMoreTabs(false); setConfirmCancellation(false) }, [current.screenId, current.rowId])
   const contentRef = useEnterMotion(`${current.screenId}:${current.rowId ?? ''}:${sent === null ? 'screen' : 'sent'}:${checkout ? 'login' : intake === null ? 'form' : 'verify'}`)
   const screen = screens.get(current.screenId)
+  const contactConfig = screen?.type === 'detail' ? crmForTable(app, screen.tableId)?.crm : undefined
+  const contactTabId = contactConfig && screen?.type === 'detail' && screen.tableId === contactConfig.clientsTableId && screens.get(contactConfig.listScreenId ?? '')?.tab ? contactConfig.listScreenId : undefined
+  const activeTabId = current.screenId === MESSAGES_SCREEN ? current.screenId : contactTabId ?? [...stack].reverse().find(entry => screens.get(entry.screenId)?.tab)?.screenId
   const customer = customerWorkflows(app).find(config => [config.formScreenId, config.detailScreenId, config.listScreenId].includes(current.screenId))
   const catalogCustomer = customerWorkflows(app).find(config => config.catalog?.detailScreenId === current.screenId)
   const accent = accentTones(app.theme.accent)

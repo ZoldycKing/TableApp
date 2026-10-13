@@ -162,8 +162,10 @@ export async function readCustomerHistory(input: HistoryInput, business = false)
     if (context.owner && !ownerColumns.has(scope.tableId)) ownerColumns.set(scope.tableId, await (await import('./row-write')).loadTableFields(scope.tableId))
     const ownerFields = ownerColumns.get(scope.tableId) ?? []
     const text = (id: string | undefined) => { const field = ownerFields.find(field => field.id === id); return field && data[field.id] != null ? formatCell(field, data[field.id]) : label(id) }
+    const statusField = (scope.policy?.fields ?? ownerFields).find(field => field.id === scope.statusField)
+    const statusColor = statusField?.type === 'single_select' && data[scope.statusField] != null ? statusField.options.choices.find(choice => choice.id === data[scope.statusField])?.color ?? null : null
     items.push({ id: item.row.id, tableId: item.row.tableId, slug: scope.app.slug, screenId: screen.id, kind: scope.kind,
-      module: kinds.find(kind => kind.id === scope.kind)!.name, title: await conversationContextTitle(scope.app, scope.tableId, data, scope.access, item.primary), status: text(scope.statusField), when: scope.kind === 'booking' ? null : text(scope.dateField) })
+      module: kinds.find(kind => kind.id === scope.kind)!.name, title: await conversationContextTitle(scope.app, scope.tableId, data, scope.access, item.primary), status: text(scope.statusField), statusColor, when: scope.kind === 'booking' ? null : text(scope.dateField) })
   }
   const last = page.at(-1)
   return { customer: context.customer, items, kinds, next: candidates.length > 50 && last ? historyCursor({ revision: last.row.syncRevision, id: last.row.id, upper: cursor?.upper ?? candidates[0]!.row.syncRevision }, binding) : null }

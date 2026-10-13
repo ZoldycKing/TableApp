@@ -380,3 +380,4 @@ describe('runtime navigation during live refresh', () => {
     expect(restored.queryByRole('spinbutton')).toBeNull()
   })
 })
+vi.mock('@/app/customer-history-actions', () => ({ readCustomerHistoryAction: vi.fn(), readCustomerDirectoryAction: vi.fn() }))

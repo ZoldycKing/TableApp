@@ -177,6 +177,18 @@ export function checkAppReferences(app: App, catalog: AppReferenceCatalog): stri
       const stages = [c.initialStatus, c.cancelStatus, c.logistics.shippedStatus, c.logistics.deliveredStatus, ...(c.logistics.kind === 'delivery' ? [c.logistics.returnedStatus, c.logistics.missedStatus] : [])]
       if (new Set(stages).size !== stages.length || c.cancellableStatuses.includes(c.logistics.shippedStatus) || c.logistics.kind === 'delivery' && (!c.terminalStatuses.includes(c.logistics.returnedStatus) || c.terminalStatuses.includes(c.logistics.missedStatus))) invalid('согласованные этапы доставки', c.statusFieldId)
     }
+    if (c.crm) {
+      const crm = c.crm
+      table(crm.clientsTableId); field(crm.relationFieldId, c.tableId)
+      for (const id of [crm.emailFieldId, crm.nameFieldId, crm.phoneFieldId]) field(id, crm.clientsTableId)
+      const relation = catalog.fields.get(crm.relationFieldId)
+      if (c.tableId === crm.clientsTableId || relation?.type !== 'relation' || relation.options.tableId !== crm.clientsTableId || relation.options.allowMultiple || catalog.fields.get(crm.emailFieldId)?.type !== 'email' || catalog.fields.get(crm.nameFieldId)?.type !== 'text' || catalog.fields.get(crm.phoneFieldId)?.type !== 'phone') invalid('клиент сделки', crm.relationFieldId)
+      for (const [id, type] of [[crm.listScreenId, 'list'], [crm.detailScreenId, 'detail']] as const) if (id) {
+        screenLink(id)
+        const screen = app.screens.find(screen => screen.id === id)
+        if (!screen || (type === 'list' ? screen.type !== 'list' && screen.type !== 'tiles' : screen.type !== 'detail') || ('tableId' in screen ? screen.tableId : 'source' in screen ? sourceTable(screen.source) : null) !== crm.clientsTableId || screen.access.public || screen.access.roles.some(id => app.roles.some(role => role.id === id && role.isDefault))) invalid('внутренний экран клиентов', id)
+      }
+    }
     if (c.catalog) {
       const cat = c.catalog
       table(cat.tableId); sourceTable({ viewId: cat.viewId }); screenLink(cat.detailScreenId)

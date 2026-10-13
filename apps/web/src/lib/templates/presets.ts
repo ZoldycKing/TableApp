@@ -1,4 +1,4 @@
-import { appSchema, type App, type Field } from '@tableapp/schema'
+import { type App, type Field } from '@tableapp/schema'
 import type { BuiltTemplate } from './build'
 import { asDispatch } from './dispatch-app'
 import { asInventory } from './inventory-app'
@@ -6,6 +6,7 @@ import { asPortal } from './portal-app'
 import { asProduction } from './production-app'
 import { asSalon } from './salon-app'
 import { asCustomerApp } from './customer-app'
+import { asCRM } from './crm-app'
 import { legacyAppModules } from '../app-modules'
 
 /** Installation and public examples must build the same application. */
@@ -20,19 +21,7 @@ function buildPreset(app: App, built: BuiltTemplate): App {
   if (built.customer) {
     const ready = asCustomerApp(app, built)
     if (built.tables.find(table => table.id === built.appTableId)?.templateId !== 'crm') return ready
-    // Retain the CRM engine and its configuration references. Client-only
-    // screens stay inaccessible; they are not exposed as duplicate staff tabs.
-    return appSchema.parse({ ...ready, accessMode: 'allowlist',
-      homeScreenId: ready.screens.find(screen => screen.type === 'dashboard' && screen.access.roles.includes('manager'))!.id,
-      screens: ready.screens.map(screen => {
-        const hidden = screen.access.public || !screen.access.roles.some(role => role === 'staff' || role === 'manager')
-        const names: Record<string, string> = { 'Назначенные мне': 'Мои сделки', 'Все обращения': 'Все сделки', 'Работа с обращением': 'Работа со сделкой', 'Управление обращением': 'Управление сделкой', 'Добавить обращение': 'Добавить сделку' }
-        return { ...screen, name: names[screen.name] ?? screen.name,
-          tab: hidden ? null : screen.tab ? { ...screen.tab, label: names[screen.tab.label] ?? screen.tab.label } : null,
-          access: { ...screen.access, public: false, publicFields: [], roles: hidden ? [] : screen.access.roles.filter(role => role !== 'client') },
-        }
-      }),
-    })
+    return asCRM(ready, built)
   }
   if (built.portal) return asPortal(app, built.portal)
   if (built.production) return asProduction(app, built)

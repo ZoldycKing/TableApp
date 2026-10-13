@@ -4,6 +4,7 @@ import { loadTable } from '@/lib/queries'
 import { AppChrome } from '@/components/app-chrome'
 import { listMemberships, requireMember } from '@/lib/session'
 import { PRIVATE_PAGE } from '@/lib/seo'
+import { hasCustomerHistoryTable } from '@/lib/customer-history'
 
 /*
  * В поиске этой странице делать нечего: за ней рабочее пространство.
@@ -26,7 +27,7 @@ export default async function TablePage({ params, searchParams }: { params: Prom
       memberships={await listMemberships(member.userId)}
       activeWorkspaceId={member.workspaceId}
     >
-      <TableScreen key={`${table.id}:${initialRowId ?? ''}`} table={table} member={{ role: member.role }} initialRowId={initialRowId} />
+      <TableScreen key={`${table.id}:${initialRowId ?? ''}`} table={table} member={{ role: member.role }} initialRowId={initialRowId} customerHistoryAvailable={await hasCustomerHistoryTable(member.workspaceId, table.id)} />
     </AppChrome>
   )
 }

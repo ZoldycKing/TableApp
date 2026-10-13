@@ -152,6 +152,7 @@ docs/              архитектура, эксплуатация и план 
 - [Шаблоны, доступ и перенос цены посещения](docs/templates.md).
 - [План модульных приложений](docs/modular-business-app-roadmap.md) и [состояние пилота «салон + товары»](docs/modular-business-pilot-2026-10-12.md).
 - [История настроек и загрузка разделов по необходимости](docs/modular-history-and-runtime-2026-10-12.md).
+- [Общая история клиента и внутренний список CRM](docs/crm-customer-history-2026-10-13.md).
 - [Оптимизация синхронизации и замеры](docs/performance.md).
 - [Развёртывание](docs/deploy.md) и [резервные копии](docs/backups.md).
 - [Почта](docs/mail-setup.md), [платежи](docs/payments.md) и

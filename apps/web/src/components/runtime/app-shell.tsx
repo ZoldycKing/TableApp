@@ -44,6 +44,10 @@ import { IntakeVerify } from './intake-verify'
 import { ConversationInbox, MESSAGES_SCREEN, parseConversationTarget } from './conversation-inbox'
 import { conversationResource } from '@/lib/conversation-resource'
 import { OrderDeliveryPanel } from './order-delivery-panel'
+import { CustomerHistoryPanel } from './customer-history-panel'
+import { CustomerDirectory } from './customer-directory'
+import { crmForTable } from '@/lib/customer-history-config'
+import { CRM_PROFILE_PREFIX } from '@/lib/customer-history-types'
 import { orderDeliveryPair } from '@/lib/order-delivery-config'
 import { AppLogin } from './app-login'
 import { customerCheckoutIds, parseCheckoutIntent, type CheckoutIntent } from '@/lib/customer-checkout'
@@ -282,6 +286,8 @@ export function AppShell({
   const tableId = tableOf(screen)
   const table = tableId ? runtime.tables[tableId] : undefined
   const row = current.rowId ? (table?.rows.find((item) => item.id === current.rowId) ?? null) : null
+  const crm = !demo && !editing && tableId ? crmForTable(app, tableId)?.crm : undefined
+  const profileDetail = crm && screen?.id === crm.detailScreenId && current.rowId?.startsWith(CRM_PROFILE_PREFIX)
   const bookingDateField = app.booking ? table?.fields.find(field => field.id === app.booking!.visit.start) : undefined
 
   /**
@@ -878,6 +884,10 @@ export function AppShell({
                 }}
               />
             ) : (
+            profileDetail ? <CustomerHistoryPanel key={`${app.id}:${current.rowId}`} tableId={tableId!} rowId={current.rowId!} slug={app.slug} profile onOpen={item => {
+              if (item.slug === app.slug && screens.has(item.screenId)) navigate(item.screenId, item.id)
+              else window.location.assign(`/a/${encodeURIComponent(item.slug)}?e=${encodeURIComponent(item.screenId)}&r=${encodeURIComponent(item.id)}`)
+            }} /> : crm && screen.id === crm.listScreenId ? <CustomerDirectory key={`${app.id}:${tableId}`} tableId={tableId!} slug={app.slug} onOpen={id => navigate(crm.detailScreenId!, id)} onCreate={app.screens.some(candidate => candidate.type === 'form' && candidate.mode === 'create' && candidate.tableId === crm.clientsTableId) ? () => navigate(app.screens.find(candidate => candidate.type === 'form' && candidate.mode === 'create' && candidate.tableId === crm.clientsTableId)!.id, null) : undefined} /> :
             app.booking && screen.id === app.booking.rescheduleScreenId && !row ? <EmptyState title="Запись недоступна" hint="Откройте предстоящую запись из своего списка и выберите «Перенести запись»." /> :
             app.booking && screen.id === app.booking.setupScreenId ? <BookingSetup runtime={runtime} demo={demo || editing} onSaved={() => router.refresh()} /> :
             app.booking && [app.booking.formScreenId, app.booking.rescheduleScreenId].includes(screen.id) ? <BookingForm key={`${screen.id}:${row?.id ?? ''}`} runtime={runtime}
@@ -1007,6 +1017,10 @@ export function AppShell({
               </> : <button type="button" onClick={() => setConfirmCancellation(true)} className="text-sm text-red-700">Отменить обращение</button> : <p className="text-xs text-ink-muted">Если нужно уточнить или изменить условия, свяжитесь с бизнесом{runtime.business?.phone ? `: ${runtime.business.phone}` : '.'}</p>}
             </div> : null}
             {!demo && !editing && viewer && sent === null && intake === null && checkout === null && screen.type === 'detail' && row && orderDeliveryPair(app) && customerWorkflows(app).some(config => config.tableId === screen.tableId && config.logistics) ? <OrderDeliveryPanel key={`${app.id}:${screen.tableId}:${row.id}`} slug={app.slug} tableId={screen.tableId} rowId={row.id} version={row.version ?? 0} onOpen={navigate} /> : null}
+            {!demo && !editing && viewer && sent === null && intake === null && checkout === null && screen.type === 'detail' && row && crmForTable(app, screen.tableId) ? <CustomerHistoryPanel key={`${app.id}:${screen.tableId}:${row.id}`} slug={app.slug} tableId={screen.tableId} rowId={row.id} onOpen={item => {
+              if (item.slug === app.slug && screens.has(item.screenId)) navigate(item.screenId, item.id)
+              else window.location.assign(`/a/${encodeURIComponent(item.slug)}?e=${encodeURIComponent(item.screenId)}&r=${encodeURIComponent(item.id)}`)
+            }} /> : null}
             {messagesAvailable && current.screenId !== MESSAGES_SCREEN && sent === null && intake === null && checkout === null && screen.type === 'detail' && row && conversationResource(app, screen.tableId) ?
               <div className="mx-auto mt-5 max-w-xl"><button type="button" onClick={() => navigate(MESSAGES_SCREEN, JSON.stringify({ slug: app.slug, tableId: screen.tableId, rowId: row.id }))} className="inline-flex items-center gap-2 rounded-xl border border-sand-200 bg-white px-4 py-2.5 text-sm font-medium text-sage-700 hover:bg-sand-50"><Icon name="chat" className="size-5" />Открыть переписку</button></div> : null}
             {sent === null && intake === null && app.booking && screen.type === 'detail' && screen.tableId === app.booking.tables.visits && row &&

@@ -16,7 +16,7 @@ export function grantedRoles(app: Pick<App, 'modules' | 'moduleAccess' | 'roles'
 
 export function moduleForTable(app: App, tableId: string): AppModule | undefined {
   return app.modules?.find(module => module.source.type === 'booking' ? Object.values(app.booking?.tables ?? {}).includes(tableId)
-    : module.source.type === 'customer' ? module.source.tableId === tableId || customerWorkflows(app).find(config => module.source.type === 'customer' && config.tableId === module.source.tableId)?.cart?.itemsTableId === tableId
+    : module.source.type === 'customer' ? module.source.tableId === tableId || customerWorkflows(app).some(config => module.source.type === 'customer' && config.tableId === module.source.tableId && (config.cart?.itemsTableId === tableId || config.crm?.clientsTableId === tableId))
     : module.source.type === 'inventory' ? Object.values(app.inventory?.tables ?? {}).includes(tableId)
     : Object.values(app.production?.tables ?? {}).includes(tableId))
 }

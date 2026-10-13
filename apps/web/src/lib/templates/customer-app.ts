@@ -60,6 +60,10 @@ function customerAppSection(app: App, built: BuiltTemplate): App {
     parent: d.parent ? { tableId: built.fields.find(field => field.id === fieldIds[d.parent!.table]![d.parent!.email])!.tableId, relationFieldId: f[d.parent.relation]!, emailFieldId: fieldIds[d.parent.table]![d.parent.email]! } : null,
     catalog: null, cart: null, approval: d.approval ? { priceFieldId: f[d.approval.price]!, approvedPriceFieldId: f[d.approval.agreed]!, waitingStatus: choice(d.approval.waiting), approvedStatus: choice(d.approval.approved), declinedStatus: choice(d.approval.declined), consentRequiredStatuses: d.approval.consentRequired?.map(choice) } : null }
   if (f.scheduled) config.appointment = { fieldId: f.scheduled, minutes: 60, confirmedStatus: choice('Просмотр назначен') }
+  if (d.table === 'deals' && fieldIds.clients) {
+    const client = fieldIds.clients
+    config.crm = { clientsTableId: built.fields.find(field => field.id === client.email)!.tableId, relationFieldId: f.client!, emailFieldId: client.email!, nameFieldId: client.name!, phoneFieldId: client.phone! }
+  }
   if (d.cart && f.address) config.logistics = { kind: 'sales', addressFieldId: f.address, shippedStatus: choice('Отгружен'), deliveredStatus: choice('Доставлен') }
   if (d.table === 'deliveries') config.logistics = { kind: 'delivery', addressFieldId: f.address!, contentsFieldId: f.what!, shippedStatus: choice('В пути'), deliveredStatus: choice('Доставлена'), returnedStatus: choice('Возврат'), missedStatus: choice('Не застали') }
   const customerDetail: Screen = { id: detailId, appId: app.id, position: 'a', name: 'Подробности', tab: null, type: 'detail', tableId, access: access(['client']), components: componentFields(shown) }

@@ -39,7 +39,7 @@ describe('receipt form', () => {
     await waitFor(() => expect(ui.getByRole('status').textContent).toContain('Приёмка уже записана'))
     expect(mocks.receive.mock.calls[0]![1].id).toBe(mocks.receive.mock.calls[1]![1].id)
     expect(mocks.refresh).toHaveBeenCalledTimes(1)
-    expect(hasUnsaved()).toBe(false)
+    await waitFor(() => expect(hasUnsaved()).toBe(false))
   })
   it('does not write in previews', async () => {
     const { ui } = setup(true)

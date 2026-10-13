@@ -23,6 +23,7 @@ import { applyView, visibleFields } from '@/lib/apply-view'
 import { HistoryPanel } from '@/components/history-panel'
 import { RowCard } from '@/components/grid/row-card'
 import { OrderDeliveryPanel } from '@/components/runtime/order-delivery-panel'
+import { CustomerHistoryPanel } from '@/components/runtime/customer-history-panel'
 import { TemplateNotice } from '@/components/template-notice'
 import { VIEW_TYPE_LABELS } from '@/lib/field-labels'
 import type { LoadedTable } from '@/lib/queries'
@@ -38,7 +39,7 @@ import { ViewBar } from './views/view-bar'
 
 const SAVE_DELAY_MS = 600
 
-export function TableScreen({ table, member, initialRowId = null }: { table: LoadedTable; member: { role: string }; initialRowId?: string | null }) {
+export function TableScreen({ table, member, initialRowId = null, customerHistoryAvailable = false }: { table: LoadedTable; member: { role: string }; initialRowId?: string | null; customerHistoryAvailable?: boolean }) {
   const readOnly = member.role === 'viewer'
 
   const store = useTable({
@@ -443,7 +444,7 @@ export function TableScreen({ table, member, initialRowId = null }: { table: Loa
         return (
           <RowCard
             row={row}
-            actions={<OrderDeliveryPanel key={`${table.id}:${row.id}`} tableId={table.id} rowId={row.id} version={row.version ?? 0} business />}
+            actions={<><OrderDeliveryPanel key={`${table.id}:${row.id}`} tableId={table.id} rowId={row.id} version={row.version ?? 0} business />{customerHistoryAvailable ? <CustomerHistoryPanel key={`history:${table.id}:${row.id}`} tableId={table.id} rowId={row.id} business /> : null}</>}
             fields={store.table.fields}
             relatedTitles={table.relatedTitles}
             relatedTables={Object.fromEntries(

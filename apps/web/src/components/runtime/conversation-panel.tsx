@@ -61,7 +61,7 @@ export function ConversationPanel({ slug, tableId, rowId, configured, business =
     } catch { setError('Не удалось сохранить. Повторите отправку.') }
     finally { sending.current = false; setBusy(false) }
   }
-  return <section aria-label="Переписка по обращению" className="mx-auto mt-5 max-w-xl space-y-4 rounded-2xl border border-sand-200 bg-white p-4">
+  return <section aria-label="Переписка по обращению" className="mx-auto mt-5 min-w-0 w-full max-w-xl space-y-4 rounded-2xl border border-sand-200 bg-white p-4 [overflow-wrap:anywhere]">
     <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">{showContext && page?.contextTitle ? page.contextTitle : 'Переписка и документы'}</h3>
       {page?.canManage && page.conversationId ? <button disabled={busy} type="button" className="text-xs text-sage-700 underline" onClick={() => void mutate(() => closeConversationAction(slug, tableId, rowId, !page.closed, business))}>{page.closed ? 'Возобновить обсуждение' : 'Завершить обсуждение'}</button> : null}
     </div>

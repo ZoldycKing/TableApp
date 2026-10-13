@@ -106,6 +106,48 @@ describe.skipIf(!process.env.DATABASE_URL)('shared customer history and CRM dire
     repair.app.allowlist = []; await publish(repair.app)
     expect((await history.readCustomerHistory(anchor(space)))!.items.some(item => item.id === source.id)).toBe(false)
   })
+  it('separates actual customer orders from internal deals before pagination', async () => {
+    const space = await business(['crm', 'salon', 'service'])
+    await signIn(manager)
+    const page = (await history.readCustomerHistory({ ...anchor(space), ordersOnly: true }))!
+    expect(page.items.map(item => item.kind).sort()).toEqual(['booking', 'repair'])
+    expect(page.kinds.map(item => item.id).sort()).toEqual(['booking', 'repair'])
+    expect((await history.readCustomerHistory(anchor(space)))!.items).toHaveLength(3)
+    await expect(history.readCustomerHistory({ ...anchor(space), ordersOnly: 'true' as unknown as boolean })).rejects.toThrow('недоступна')
+  })
+  it('filters customer messages using an authorized source card and rechecks each target grant', async () => {
+    const space = await business(['crm', 'salon', 'service']), foreign = await business(['crm'])
+    const inbox = await import('./conversation-inbox'), profileId = newId('businessCustomer'), otherId = newId('businessCustomer')
+    await database.db.insert(database.businessCustomers).values([{ id: profileId, workspaceId: space.workspaceId, email: customer }, { id: otherId, workspaceId: space.workspaceId, email: 'other-messages@example.invalid' }])
+    const ownThreads: string[] = []
+    for (const rowId of space.selected.slice(1)) {
+      const [row] = await database.db.select().from(database.rows).where(eq(database.rows.id, rowId))
+      const module = space.app.modules!.find(module => module.source.type === 'booking' ? row!.tableId === space.app.booking!.tables.visits : module.source.type === 'customer' && module.source.tableId === row!.tableId)!
+      const id = `con_${newId('row')}`; ownThreads.push(id)
+      await database.db.insert(database.conversations).values({ id, workspaceId: space.workspaceId, appId: space.app.id, moduleId: module.id, tableId: row!.tableId, rowId, customerId: profileId })
+    }
+    const repair = customerWorkflows(space.app).find(config => !config.crm)!, source = (await database.db.select().from(database.rows).where(eq(database.rows.id, space.selected[1]!)))[0]!
+    const otherRowId = newId('row'), otherThread = `con_${newId('row')}`
+    await database.db.insert(database.rows).values({ id: otherRowId, tableId: repair.tableId, position: 'other-message', data: { ...source.data as object, [repair.emailFieldId]: 'other-messages@example.invalid', [repair.assignmentFieldId!]: worker } })
+    const repairModule = space.app.modules!.find(module => module.source.type === 'customer' && module.source.tableId === repair.tableId)!
+    await database.db.insert(database.conversations).values({ id: otherThread, workspaceId: space.workspaceId, appId: space.app.id, moduleId: repairModule.id, tableId: repair.tableId, rowId: otherRowId, customerId: otherId })
+    await signIn(manager)
+    const input = { slug: space.app.slug, customer: { tableId: space.crm.clientsTableId, rowId: space.contactId } }
+    expect((await inbox.listConversationInbox({ slug: space.app.slug })).items).toHaveLength(3)
+    expect((await inbox.listConversationInbox(input)).items.map(item => item.id).sort()).toEqual(ownThreads.sort())
+    expect((await inbox.listConversationInbox({ ...input, customer: { ...input.customer, rowId: `${CRM_PROFILE_PREFIX}${profileId}` } })).items).toHaveLength(2)
+    await expect(inbox.listConversationInbox({ ...input, customer: { tableId: foreign.crm.clientsTableId, rowId: foreign.contactId } })).rejects.toThrow('недоступна')
+    const limited = structuredClone(space.app); limited.moduleAccess!.grants = limited.moduleAccess!.grants.filter(grant => grant.email !== manager || grant.moduleId !== repairModule.id)
+    await publish(limited)
+    expect((await inbox.listConversationInbox(input)).items).toHaveLength(1)
+    await publish(space.app); await signIn(worker)
+    await expect(inbox.listConversationInbox(input)).rejects.toThrow('недоступна')
+    await signIn(customer)
+    await expect(inbox.listConversationInbox(input)).rejects.toThrow('недоступна')
+    owner(space)
+    await expect(inbox.listConversationInbox(input)).rejects.toThrow('недоступна')
+    expect((await inbox.listConversationInbox({ customer: input.customer }, true)).items).toHaveLength(2)
+  })
   it('requires current grants in every target module and never borrows platform owner access for an app customer', async () => {
     const space = await business(), limited = structuredClone(space.app)
     limited.moduleAccess!.grants = limited.moduleAccess!.grants.filter(grant => grant.email !== manager || limited.modules!.find(module => module.id === grant.moduleId)?.kind === 'crm')
@@ -183,6 +225,7 @@ describe.skipIf(!process.env.DATABASE_URL)('shared customer history and CRM dire
     expect(second.items.map(item => item.id)).toEqual([source.id])
     await expect(history.readCustomerHistory({ ...input, before: `${first.next!}x` })).rejects.toThrow('устарела')
     await expect(history.readCustomerHistory({ ...input, before: first.next!, kind: 'crm' })).rejects.toThrow('устарела')
+    await expect(history.readCustomerHistory({ ...input, before: first.next!, ordersOnly: true })).rejects.toThrow('устарела')
     const revoked = structuredClone(space.app); revoked.moduleAccess!.grants = revoked.moduleAccess!.grants.filter(grant => grant.email !== worker)
     await publish(revoked)
     await expect(history.readCustomerHistory({ ...input, before: first.next! })).rejects.toThrow('недоступна')

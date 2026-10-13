@@ -15,7 +15,7 @@ import { conversationContextTitle } from './conversation-context'
 import { formatCell } from './format'
 import { CRM_PROFILE_PREFIX, type CustomerHistoryPage } from './customer-history-types'
 
-export type HistoryInput = { tableId: string; rowId: string; slug?: string; before?: string; kind?: string }
+export type HistoryInput = { tableId: string; rowId: string; slug?: string; before?: string; kind?: string; ordersOnly?: boolean }
 const denied = () => new RowWriteError('denied', 'История клиента недоступна')
 const ref = (value: unknown) => typeof value === 'string' && value.length > 0 && value.length <= 200
 const emailValue = (value: unknown) => typeof value === 'string' && value.trim().length <= 254 && value.includes('@') ? value.trim().toLowerCase() : ''
@@ -103,10 +103,10 @@ function matchesCustomer(config: CustomerWorkflow, email: string): SQL {
 }
 
 export async function readCustomerHistory(input: HistoryInput, business = false): Promise<CustomerHistoryPage | null> {
-  if (input?.before !== undefined && typeof input.before !== 'string' || input?.kind !== undefined && (typeof input.kind !== 'string' || input.kind.length > 100)) throw denied()
+  if (input?.before !== undefined && typeof input.before !== 'string' || input?.kind !== undefined && (typeof input.kind !== 'string' || input.kind.length > 100) || input?.ordersOnly !== undefined && typeof input.ordersOnly !== 'boolean') throw denied()
   const context = await customerHistoryContext(input, business)
   if (!context) return null
-  if (!context.email) return { customer: context.customer, items: [], kinds: [], next: null, reason: 'Укажите почту клиента в CRM, чтобы найти связанные обращения.' }
+  if (!context.email) return { customer: context.customer, items: [], kinds: [], next: null, reason: 'Укажите почту в карточке клиента, чтобы найти его заказы и записи.' }
   const records = await db.select().from(apps).where(eq(apps.workspaceId, context.app.workspaceId))
   type Scope = { app: App; tableId: string; email: SQL; config?: CustomerWorkflow; emailFieldId?: string; statusField: string; dateField?: string; kind: string; policy: Awaited<ReturnType<typeof appReadPolicy>> | null; access: AppAccess | null }
   const scopes: Scope[] = []
@@ -120,13 +120,14 @@ export async function readCustomerHistory(input: HistoryInput, business = false)
     const candidates = [...customerWorkflows(app).map(config => ({ tableId: config.tableId, email: matchesCustomer(config, context.email), config, emailFieldId: config.emailFieldId, statusField: config.statusFieldId, dateField: config.createdFieldId, kind: moduleForTable(app, config.tableId)?.kind ?? 'requests' })),
       ...(app.booking ? [{ tableId: app.booking.tables.visits, email: sql`lower(btrim(coalesce(${rows.data}->>${app.booking.visit.email},'')))=${context.email}`, emailFieldId: app.booking.visit.email, statusField: app.booking.visit.status, dateField: app.booking.visit.start, kind: 'booking' }] : [])]
     for (const candidate of candidates) {
+      if (input.ordersOnly && ('config' in candidate && candidate.config.crm || candidate.kind === 'crm' || candidate.kind === 'support')) continue
       if (!context.owner && !['manager', 'staff', 'master'].some(role => hasRole(access!.visitor, workflowRole(app, candidate.tableId, role)))) continue
       if (!app.screens.some(screen => screen.type === 'detail' && screen.tableId === candidate.tableId && (context.owner || canOpenScreen(screen, access!.visitor)))) continue
       scopes.push({ ...candidate, app, access, policy: context.owner ? null : await appReadPolicy(app, candidate.tableId, access!.visitor, access!.viewer!) })
     }
   }
   const kinds = [...new Map(scopes.map(scope => [scope.kind, { id: scope.kind, name: MODULE_DEFINITIONS[scope.kind as keyof typeof MODULE_DEFINITIONS]?.name ?? 'Обращения' }])).values()]
-  const binding = configFingerprint(['history', business, context.actor, context.app.workspaceId, input.tableId, input.rowId, context.email, input.kind ?? '', scopes.map(scope => scope.app)])
+  const binding = configFingerprint(['history', business, context.actor, context.app.workspaceId, input.tableId, input.rowId, context.email, input.kind ?? '', Boolean(input.ordersOnly), scopes.map(scope => scope.app)])
   const cursor = readHistoryCursor(input.before, binding) as { revision: number; id: string; upper: number } | null
   if (cursor && (!Number.isSafeInteger(cursor.revision) || !Number.isSafeInteger(cursor.upper) || cursor.revision < 0 || cursor.upper < cursor.revision || !ref(cursor.id))) throw denied()
   const active = input.kind ? scopes.filter(scope => scope.kind === input.kind) : scopes

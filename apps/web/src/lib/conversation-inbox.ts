@@ -12,11 +12,12 @@ import { conversationAccess } from './conversations'
 import { hasRole, moduleForTable, workflowRole } from './module-access'
 import { currentMember } from './session'
 import { RowWriteError } from './row-mutations'
+import { customerHistoryContext } from './customer-history'
 import type { ConversationInboxPage } from './conversation-types'
 
 const denied = () => new RowWriteError('denied', 'Сообщения недоступны. Войдите в кабинет этого бизнеса.')
 const person = (workspace: string, email: string) => `person_${createHash('sha256').update(`${workspace}:${email.trim().toLowerCase()}`).digest('hex')}`
-export type InboxInput = { slug?: string; before?: string; unreadOnly?: boolean; appId?: string }
+export type InboxInput = { slug?: string; before?: string; unreadOnly?: boolean; appId?: string; customer?: { tableId: string; rowId: string } }
 
 /** Paginate candidates before projection, retaining the cursor even on an empty authorized page. */
 export async function listConversationInbox(input: InboxInput = {}, business = false): Promise<ConversationInboxPage> {
@@ -41,6 +42,10 @@ export async function listConversationInbox(input: InboxInput = {}, business = f
   }
   const [space] = await db.select({ ownerId: workspaces.ownerId }).from(workspaces).where(eq(workspaces.id, workspaceId))
   const owner = Boolean(business && member?.role === 'owner' && space?.ownerId === member.userId)
+  // The source card establishes the customer on the server; callers never provide an email or tenant.
+  const customerContext = input.customer === undefined ? null : await customerHistoryContext({ ...input.customer, slug: input.slug }, business)
+  if (input.customer !== undefined && (!customerContext || customerContext.app.workspaceId !== workspaceId)) throw denied()
+  if (customerContext && !customerContext.email) return { items: [], next: null }
   const records = await db.select().from(apps).where(and(eq(apps.workspaceId, workspaceId), input.appId ? eq(apps.id, input.appId) : undefined))
   type Scope = { app: App; tableId: string; emailFieldId: string; moduleId: string; staff: boolean; owner: boolean; visitor: Visitor | null; viewer: AppViewer | null; policy: Awaited<ReturnType<typeof appReadPolicy>> | null }
   const scopes: Scope[] = []
@@ -72,6 +77,7 @@ export async function listConversationInbox(input: InboxInput = {}, business = f
     .innerJoin(tables, and(eq(tables.id, conversations.tableId), eq(tables.workspaceId, workspaceId)))
     .innerJoin(businessCustomers, and(eq(businessCustomers.id, conversations.customerId), eq(businessCustomers.workspaceId, workspaceId)))
     .where(and(eq(conversations.workspaceId, workspaceId), isNull(rows.deletedAt), inArray(conversations.tableId, scopes.map(scope => scope.tableId)),
+      customerContext ? eq(businessCustomers.email, customerContext.email) : undefined,
       input.unreadOnly ? sql`${unread}>0` : undefined,
       cursor ? or(lt(lastSequence, Number(cursor[0])), and(eq(lastSequence, Number(cursor[0])), lt(conversations.id, cursor[1]!))) : undefined))
     .orderBy(desc(lastSequence), desc(conversations.id)).limit(51)

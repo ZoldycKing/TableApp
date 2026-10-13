@@ -20,6 +20,7 @@ vi.mock('@/app/runtime-actions', () => ({ appCreateRowAction: vi.fn(), appDelete
 vi.mock('@/app/booking-actions', () => ({ bookingAvailabilityAction: vi.fn(), cancelBookingAction: vi.fn(), setupBookingMasterAction: vi.fn(), setBookingDayOffAction: vi.fn() }))
 vi.mock('@/app/customer-actions', () => ({ customerDecisionAction: vi.fn() }))
 vi.mock('./conversation-panel', () => ({ ConversationPanel: () => null }))
+vi.mock('@/app/conversation-actions', () => ({ listConversationInboxAction: vi.fn().mockResolvedValue({ ok: true, value: { items: [], next: null } }) }))
 vi.mock('./order-delivery-panel', () => ({ OrderDeliveryPanel: () => <p>Связь заказа с доставкой</p> }))
 vi.mock('./conversation-inbox', () => ({ MESSAGES_SCREEN: '__tableapp_messages', parseConversationTarget: (value: string | null) => value ? JSON.parse(value) : null, ConversationInbox: () => <p>Список переписок бизнеса</p> }))
 const inventoryMocks = vi.hoisted(() => ({ receive: vi.fn(), operation: vi.fn() }))

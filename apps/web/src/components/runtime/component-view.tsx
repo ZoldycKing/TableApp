@@ -27,7 +27,9 @@ const TEXT_STYLES = {
   quote: 'border-l-2 border-[var(--color-border-subtle)] pl-3 text-sm italic',
 } as const
 
-export function ComponentView({ component, ctx }: { component: Component; ctx: ComponentContext }) {
+export function ComponentView({ component, ctx, desktopButton, desktopEmphasis = false }: {
+  component: Component; ctx: ComponentContext; desktopButton?: 'compact' | 'secondary'; desktopEmphasis?: boolean
+}) {
   // Условие видимости проверяется тем же движком фильтров, что и в представлениях.
   if (component.visibleWhen && ctx.row) {
     if (!evalFilter(component.visibleWhen, ctx.row.data, indexFields(ctx.fields))) return null
@@ -78,9 +80,9 @@ export function ComponentView({ component, ctx }: { component: Component; ctx: C
       if (!text && !component.showWhenEmpty && field.type !== 'checkbox') return null
 
       return (
-        <div className="flex items-baseline justify-between gap-4 border-b border-sand-200 py-3 last:border-0">
+        <div className={`flex items-baseline justify-between gap-4 border-b border-sand-200 py-3 last:border-0 ${desktopEmphasis ? '@min-[860px]:justify-start @min-[860px]:gap-3 @min-[860px]:py-1' : ''}`}>
           <span className="shrink-0 text-[13px] text-ink-muted">{component.label ?? field.name}</span>
-          <span className="min-w-0 text-right text-sm font-medium">
+          <span className={`min-w-0 text-right text-sm font-medium ${desktopEmphasis ? '@min-[860px]:text-3xl @min-[860px]:font-semibold @min-[860px]:tabular-nums @min-[860px]:[&>span]:text-3xl' : ''}`}>
             <FieldValue field={field} value={raw} ctx={ctx} />
           </span>
         </div>
@@ -99,7 +101,7 @@ export function ComponentView({ component, ctx }: { component: Component; ctx: C
         <button
           type="button"
           onClick={() => ctx.onAction(component.action)}
-          className={`w-full rounded-xl px-4 py-2.5 text-sm font-medium ${styles[component.style] ?? styles.primary}`}
+          className={`w-full rounded-xl px-4 py-2.5 text-sm font-medium ${styles[component.style] ?? styles.primary} ${desktopButton ? '@min-[860px]:min-h-11 @min-[860px]:w-auto @min-[860px]:transition-colors @min-[860px]:focus-visible:outline-2 @min-[860px]:focus-visible:outline-ink @min-[860px]:focus-visible:outline-offset-2' : ''} ${desktopButton === 'secondary' ? '@min-[860px]:border @min-[860px]:border-sand-200 @min-[860px]:bg-white @min-[860px]:text-ink @min-[860px]:hover:bg-sand-50' : ''}`}
         >
           {component.label}
         </button>

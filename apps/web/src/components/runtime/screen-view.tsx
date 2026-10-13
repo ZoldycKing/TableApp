@@ -147,6 +147,11 @@ export function ScreenView(props: Props) {
       [booking.statuses.booked, booking.statuses.arrived].includes(String(row.data[booking.visit.status])) &&
       bookingVisitSection(booking, row, bookingDate ? fieldTimeZone(bookingDate) : 'UTC', props.now ?? runtime.loadedAt ?? Date.now()) === 'history'
     const inventory = runtime.app.inventory
+    const primaryTargets = inventory && screen.tableId === inventory.tables.items
+      ? new Set([inventory.receiptScreenId, inventory.operations?.screens.issue].filter((id): id is string => Boolean(id)))
+      : new Set<string>()
+    const isStockAction = (component: typeof screen.components[number]) => component.type === 'button' && component.action.type === 'open_screen' && primaryTargets.has(component.action.screenId)
+    const stockLayout = screen.components.some(isStockAction)
     const extraTargets = inventory && screen.tableId === inventory.tables.items && inventory.operations
       ? new Set([inventory.operations.screens.writeOff, inventory.operations.screens.returnIn, inventory.operations.screens.returnOut,
         inventory.operations.screens.stocktake, ...runtime.app.screens.filter(s => s.type === 'form' && s.mode === 'edit' && s.tableId === inventory.tables.items).map(s => s.id)])
@@ -180,34 +185,45 @@ export function ScreenView(props: Props) {
      * иначе между строчками «Телефон» и «Сумма» появляется воздух, которого
      * в таблице значений быть не должно, и карточка расползается на экран.
      */
-    const blocks: { fields: typeof components; other: typeof components[number] | null }[] = []
+    const blocks: { fields: typeof components; other: typeof components[number] | null; actions?: typeof components }[] = []
     for (const component of components) {
       if (component.type === 'field') {
         const last = blocks[blocks.length - 1]
-        if (last && last.other === null) last.fields.push(component)
+        if (last && last.other === null && !last.actions) last.fields.push(component)
         else blocks.push({ fields: [component], other: null })
+      } else if (isStockAction(component)) {
+        const last = blocks[blocks.length - 1]
+        if (last?.actions) last.actions.push(component)
+        else blocks.push({ fields: [], other: null, actions: [component] })
       } else {
         blocks.push({ fields: [], other: component })
       }
     }
 
-    return (
-      <div className="space-y-4 rounded-2xl border border-sand-200 bg-white p-5 shadow-soft sm:p-6">
-        {outcomePending && <p className="text-xs leading-relaxed text-ink-muted">Результат посещения ещё не отмечен. Статус обновит мастер или администратор после оказания услуги.</p>}
-        {blocks.map((block, index) =>
+    const content = blocks.map((block, index) =>
+          block.actions ? <div key={`actions-${index}`} className="grid gap-4 empty:hidden @min-[860px]:flex @min-[860px]:flex-wrap @min-[860px]:justify-end @min-[860px]:gap-3">
+            {block.actions.map(component => <ComponentView key={component.id} component={component} ctx={ctx}
+              desktopButton={component.type === 'button' && component.action.type === 'open_screen' && component.action.screenId === inventory?.operations?.screens.issue ? 'secondary' : 'compact'} />)}
+          </div> :
           block.other ? (
-            <ComponentView key={block.other.id} component={block.other} ctx={ctx} />
+            stockLayout ? <div key={block.other.id} className="empty:hidden @min-[860px]:col-span-2"><ComponentView component={block.other} ctx={ctx} /></div>
+              : <ComponentView key={block.other.id} component={block.other} ctx={ctx} />
           ) : (
             <div key={`fields-${index}`}>
               {block.fields.map((component) => (
-                <ComponentView key={component.id} component={component} ctx={ctx} />
+                <ComponentView key={component.id} component={component} ctx={ctx}
+                  desktopEmphasis={stockLayout && component.type === 'field' && component.fieldId === inventory?.item.stock} />
               ))}
             </div>
           ),
-        )}
+        )
+    return (
+      <div className="space-y-4 rounded-2xl border border-sand-200 bg-white p-5 shadow-soft sm:p-6">
+        {outcomePending && <p className="text-xs leading-relaxed text-ink-muted">Результат посещения ещё не отмечен. Статус обновит мастер или администратор после оказания услуги.</p>}
+        {stockLayout ? <div className="space-y-4 @min-[860px]:grid @min-[860px]:grid-cols-[minmax(0,1fr)_auto] @min-[860px]:items-center @min-[860px]:gap-x-8 @min-[860px]:gap-y-4 @min-[860px]:space-y-0">{content}</div> : content}
         {extras.length > 0 && <details className="border-t border-sand-200 pt-3">
           <summary className="cursor-pointer py-1 text-sm font-medium text-ink-soft">Ещё действия</summary>
-          <div className="mt-3 space-y-3">{extras.map(component => <ComponentView key={component.id} component={component} ctx={ctx} />)}</div>
+          <div className="mt-3 grid gap-3 @min-[860px]:flex @min-[860px]:flex-wrap">{extras.map(component => <ComponentView key={component.id} component={component} ctx={ctx} desktopButton="compact" />)}</div>
         </details>}
       </div>
     )

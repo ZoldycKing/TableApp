@@ -50,5 +50,7 @@ export function InventoryBalancePanel({ tableId, rowId, version, slug, business 
     void readInventoryBalanceAction(tableId, rowId, slug, business).then(result => { if (request === generation.current && result.ok) setState(result.state) }).catch(() => {})
     return () => { generation.current++ }
   }, [tableId, rowId, version, slug, business])
-  return state ? <section aria-label="Доступность товара" className="mt-4 grid grid-cols-3 gap-3 rounded-2xl border border-sand-200 bg-white p-4 text-center"><div><p className="text-xs text-ink-muted">На складе</p><p className="mt-1 font-semibold tabular-nums">{state.stock}</p></div><div><p className="text-xs text-ink-muted">В заказах</p><p className="mt-1 font-semibold tabular-nums">{state.reserved}</p></div><div><p className="text-xs text-ink-muted">Свободно</p><p className="mt-1 font-semibold tabular-nums">{state.available}</p></div></section> : null
+  return state ? <section aria-label="Доступность товара" className="mt-4 grid grid-cols-3 gap-3 rounded-2xl border border-sand-200 bg-white p-4 text-center @min-[860px]:divide-x @min-[860px]:divide-sand-200 @min-[860px]:py-6">{[
+    ['На складе', state.stock], ['В заказах', state.reserved], ['Свободно', state.available],
+  ].map(([label, value]) => <div key={label}><p className="text-xs text-ink-muted">{label}</p><p className="mt-1 font-semibold tabular-nums @min-[860px]:mt-2 @min-[860px]:text-2xl">{value}</p></div>)}</section> : null
 }

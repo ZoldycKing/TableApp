@@ -23,6 +23,7 @@ import { applyView, visibleFields } from '@/lib/apply-view'
 import { HistoryPanel } from '@/components/history-panel'
 import { RowCard } from '@/components/grid/row-card'
 import { OrderDeliveryPanel } from '@/components/runtime/order-delivery-panel'
+import { InventoryBalancePanel, OrderStockPanel } from '@/components/runtime/order-stock-panel'
 import { CustomerHistoryPanel } from '@/components/runtime/customer-history-panel'
 import { TemplateNotice } from '@/components/template-notice'
 import { VIEW_TYPE_LABELS } from '@/lib/field-labels'
@@ -444,7 +445,7 @@ export function TableScreen({ table, member, initialRowId = null, customerHistor
         return (
           <RowCard
             row={row}
-            actions={<><OrderDeliveryPanel key={`${table.id}:${row.id}`} tableId={table.id} rowId={row.id} version={row.version ?? 0} business />{customerHistoryAvailable ? <CustomerHistoryPanel key={`history:${table.id}:${row.id}`} tableId={table.id} rowId={row.id} business /> : null}</>}
+            actions={<><OrderStockPanel key={`stock:${table.id}:${row.id}`} tableId={table.id} rowId={row.id} version={row.version ?? 0} business /><InventoryBalancePanel key={`balance:${table.id}:${row.id}`} tableId={table.id} rowId={row.id} version={row.version ?? 0} business /><OrderDeliveryPanel key={`${table.id}:${row.id}`} tableId={table.id} rowId={row.id} version={row.version ?? 0} business />{customerHistoryAvailable ? <CustomerHistoryPanel key={`history:${table.id}:${row.id}`} tableId={table.id} rowId={row.id} business /> : null}</>}
             fields={store.table.fields}
             relatedTitles={table.relatedTitles}
             relatedTables={Object.fromEntries(

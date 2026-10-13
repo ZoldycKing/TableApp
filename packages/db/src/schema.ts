@@ -2,6 +2,7 @@ import {
   bigint,
   bigserial,
   boolean,
+  check,
   foreignKey,
   index,
   integer,
@@ -227,6 +228,41 @@ export const rowChanges = pgTable('row_changes', {
 ])
 
 // --- Приложения --------------------------------------------------------------
+
+/** Accepted stock contracts survive changes/deletion of the originating app. */
+export const orderStockReservations = pgTable('order_stock_reservations', {
+  workspaceId: text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  orderTableId: text('order_table_id').notNull(),
+  orderRowId: text('order_row_id').notNull(),
+  state: text('state').$type<'reserved' | 'released' | 'issued' | 'returned'>().notNull().default('reserved'),
+  contract: jsonb('contract').$type<{ order: import('@tableapp/schema').CustomerWorkflow; inventory: import('@tableapp/schema').InventoryConfig }>().notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, t => [
+  primaryKey({ columns: [t.workspaceId, t.orderTableId, t.orderRowId] }),
+  foreignKey({ columns: [t.workspaceId, t.orderTableId], foreignColumns: [tables.workspaceId, tables.id] }).onDelete('cascade'),
+  foreignKey({ columns: [t.orderTableId, t.orderRowId], foreignColumns: [rows.tableId, rows.id] }).onDelete('cascade'),
+  check('order_stock_state_check', sql`${t.state} in ('reserved','released','issued','returned')`),
+])
+
+export const orderStockItems = pgTable('order_stock_items', {
+  workspaceId: text('workspace_id').notNull(),
+  orderTableId: text('order_table_id').notNull(),
+  orderRowId: text('order_row_id').notNull(),
+  productTableId: text('product_table_id').notNull(),
+  productRowId: text('product_row_id').notNull(),
+  quantity: integer('quantity').notNull(),
+  positionIds: jsonb('position_ids').$type<string[]>().notNull(),
+  issueMovementId: text('issue_movement_id'),
+  returnMovementId: text('return_movement_id'),
+}, t => [
+  primaryKey({ columns: [t.workspaceId, t.orderTableId, t.orderRowId, t.productRowId] }),
+  index('order_stock_product_idx').on(t.workspaceId, t.productTableId, t.productRowId),
+  foreignKey({ columns: [t.workspaceId, t.orderTableId, t.orderRowId], foreignColumns: [orderStockReservations.workspaceId, orderStockReservations.orderTableId, orderStockReservations.orderRowId] }).onDelete('cascade'),
+  foreignKey({ columns: [t.workspaceId, t.productTableId], foreignColumns: [tables.workspaceId, tables.id] }).onDelete('cascade'),
+  foreignKey({ columns: [t.productTableId, t.productRowId], foreignColumns: [rows.tableId, rows.id] }).onDelete('cascade'),
+  check('order_stock_quantity_check', sql`${t.quantity}>0`),
+])
 
 /** One handoff per order. Contract preserves the accepted workflow after an app is removed. */
 export const orderDeliveries = pgTable('order_deliveries', {

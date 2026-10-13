@@ -18,7 +18,7 @@ export async function prepareOrderDeliveryWrite(context: RowTransaction, tableId
     if (tableId === order.cart?.itemsTableId) {
       const source = await lockedRow(context, link.orderTableId, link.orderRowId)
       const ids = (source?.data as Record<string, unknown> | undefined)?.[order.cart.positionsFieldId]
-      if (Array.isArray(ids) && ids.includes(rowId) && (!before || [order.cart.nameFieldId, order.cart.quantityFieldId, order.cart.itemPriceFieldId, order.cart.itemEmailFieldId].some(id => !sameCellValue(before[id], data[id])))) throw immutable()
+      if (Array.isArray(ids) && ids.includes(rowId) && (!before || [order.cart.nameFieldId, order.cart.quantityFieldId, order.cart.itemPriceFieldId, order.cart.itemEmailFieldId, order.cart.productFieldId].some(id => id && !sameCellValue(before[id], data[id])))) throw immutable()
       continue
     }
     const side = tableId === link.orderTableId && rowId === link.orderRowId ? 'order' : tableId === link.deliveryTableId && rowId === link.deliveryRowId ? 'delivery' : null
@@ -48,8 +48,10 @@ export async function prepareOrderDeliveryWrite(context: RowTransaction, tableId
     }
     context.orderDeliverySync ??= new Set()
     context.orderDeliverySync.add(link.orderRowId)
+    const returning = side === 'delivery' && status === shipping.returnedStatus
+    if (returning) { context.orderStockReturn ??= new Set(); context.orderStockReturn.add(`${targetTable}:${targetId}`) }
     try { await updateRow(context, targetTable, targetId, { [targetStatusField]: targetStatus }, { ...actor, kind: 'order_delivery_sync' }) }
-    finally { context.orderDeliverySync.delete(link.orderRowId) }
+    finally { context.orderDeliverySync.delete(link.orderRowId); if (returning) context.orderStockReturn?.delete(`${targetTable}:${targetId}`) }
   }
 }
 

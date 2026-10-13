@@ -110,6 +110,7 @@ export function moduleContract(app: App, module: AppModule): ModuleContract | nu
         tables.positions = cart.itemsTableId; writeTables.push(cart.itemsTableId)
         add('cart', tableId, cart.fieldId, ['long_text']); add('positions', tableId, cart.positionsFieldId, ['relation'], cart.itemsTableId)
         add('price', c.catalog.tableId, cart.priceFieldId, ['number'])
+        add('product', cart.itemsTableId, cart.productFieldId, ['relation'], c.catalog.tableId)
         group(cart.itemsTableId, { name: cart.nameFieldId, qty: cart.quantityFieldId, price: cart.itemPriceFieldId, email: cart.itemEmailFieldId, assigned: cart.itemAssignmentFieldId }, { qty: ['number'], price: ['number'], email: ['email'], assigned: ['email'] })
       }
       if (c.approval) { add('estimate', tableId, c.approval.priceFieldId, ['number']); add('approvedEstimate', tableId, c.approval.approvedPriceFieldId, ['number']) }
@@ -123,7 +124,7 @@ export function moduleContract(app: App, module: AppModule): ModuleContract | nu
     case 'inventory': {
       const c = app.inventory
       if (!c) return null
-      Object.assign(tables, c.tables); writeTables.push(c.tables.movements)
+      Object.assign(tables, c.tables); writeTables.push(c.tables.items, c.tables.movements)
       group(c.tables.items, { name: c.item.name, opening: c.item.opening, movements: c.item.movements, stock: c.item.stock }, { opening: ['number'], movements: ['relation'], stock: ['formula'] }, { movements: c.tables.movements })
       add('image', c.tables.items, c.item.image, ['image', 'attachment']); add('sku', c.tables.items, c.item.sku, ['text'])
       group(c.tables.movements, c.movement, { item: ['relation'], qty: ['number'], date: ['datetime'], author: ['email'] }, { item: c.tables.items })
@@ -210,7 +211,7 @@ export function checkAppModules(app: App, catalog: Catalog): string | null {
   if (base.length > 1 && base.some(module => {
     const count = app.catalogScreenIds!.filter(id => module.screenIds?.includes(id)).length
     const publicScreens = app.screens.some(screen => module.screenIds?.includes(screen.id) && screen.access.public)
-    return count !== (module.kind === 'crm' && !publicScreens ? 0 : 1)
+    return count !== (module.kind === 'inventory' || module.kind === 'crm' && !publicScreens ? 0 : 1)
   })) return 'Общий каталог должен показывать каталог каждого внешнего модуля; внутренние экраны CRM остаются закрытыми'
   return null
 }

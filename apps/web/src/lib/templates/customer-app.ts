@@ -103,7 +103,8 @@ function customerAppSection(app: App, built: BuiltTemplate): App {
       { id: catalogCardId, appId: app.id, position: 'a', type: 'detail', name: 'Описание', tableId: table.id, tab: null, access: access(['client', 'staff', 'manager'], publicFields, true), components: [...componentFields(publicFields.filter(id => id !== table.primaryFieldId)), ...(d.cart ? [] : [button(d.table === 'orders' ? 'Оставить заявку' : d.submitLabel, formId)])] })
     if (d.cart) {
       const cart = d.cart, items = fieldIds[cart.items]!, itemsTable = built.tables[Object.keys(fieldIds).indexOf(cart.items)]!
-      config.cart = { fieldId: f[cart.field]!, priceFieldId: cf[cart.price]!, itemsTableId: itemsTable.id, nameFieldId: items[cart.name]!, quantityFieldId: items[cart.qty]!, itemPriceFieldId: items[cart.itemPrice]!, itemEmailFieldId: items[cart.itemEmail]!, itemAssignmentFieldId: items.assignedEmail!, positionsFieldId: f[cart.positions]! }
+      config.cart = { fieldId: f[cart.field]!, priceFieldId: cf[cart.price]!, itemsTableId: itemsTable.id, nameFieldId: items[cart.name]!, quantityFieldId: items[cart.qty]!, itemPriceFieldId: items[cart.itemPrice]!, itemEmailFieldId: items[cart.itemEmail]!, itemAssignmentFieldId: items.assignedEmail!, positionsFieldId: f[cart.positions]!, ...(items.product ? { productFieldId: items.product } : {}) }
+      if (items.product) config.stock = { confirmedStatus: choice('Собирается') }
       rowAccessRules.push({ tableId: itemsTable.id, fieldId: config.cart.itemEmailFieldId, match: 'email', appliesTo: ['client'] }, { tableId: itemsTable.id, fieldId: config.cart.itemAssignmentFieldId, match: 'email', appliesTo: ['staff'] })
       const itemApp = generateApp({ appId: app.id, workspaceId: app.workspaceId, name: itemsTable.name, slug: app.slug, table: itemsTable, fields: built.fields.filter(field => field.tableId === itemsTable.id) as Field[], view: built.views.find(view => view.tableId === itemsTable.id)! as unknown as View })
       const itemDetail = itemApp.screens.find(s => s.type === 'detail')!
@@ -115,7 +116,7 @@ function customerAppSection(app: App, built: BuiltTemplate): App {
         staffDetail.components.splice(staffDetail.components.findIndex(component => component.type === 'button'), 0,
           { ...relatedComponent, id: newId('component'), roles: ['staff', 'manager'] })
       }
-      if (itemDetail.type === 'detail') screens.push({ ...itemDetail, access: access(['client', 'staff', 'manager']), components: componentFields([items[cart.name]!, items[cart.qty]!, items[cart.itemPrice]!]) })
+      if (itemDetail.type === 'detail') screens.push({ ...itemDetail, access: access(['client', 'staff', 'manager']), components: [...componentFields([items[cart.name]!, items[cart.qty]!, items[cart.itemPrice]!]), ...(items.product ? componentFields([items.product]).map(component => ({ ...component, roles: ['manager'] })) : [])] })
     }
   }
   return appSchema.parse({ ...app, accessMode: 'public', roles: [{ id: 'client', name: 'Клиент', isDefault: true }, { id: 'staff', name: d.workerName, isDefault: false }, { id: 'manager', name: d.managerName, isDefault: false }], rowAccessRules, homeScreenId: listId, customer: config, screens: screens.map((screen, i) => ({ ...screen, position: positionSequence(screens.length)[i]!, ...('components' in screen ? { components: screen.components.map((component, n) => ({ ...component, position: positionSequence(screen.components.length)[n]! })) } : {}) })) })

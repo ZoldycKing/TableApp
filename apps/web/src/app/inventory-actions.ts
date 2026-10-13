@@ -12,6 +12,8 @@ import { canAccessRow, rulesFor } from '@/lib/row-access'
 import { assertCurrentModuleState, createRow, updateRow, lockedRow, RowWriteError, writeRows } from '@/lib/row-mutations'
 import { isPlanLimitError } from '@/lib/limits'
 import { INVENTORY_COPY, inventoryScreen } from '@/lib/inventory'
+import { orderStockPair } from '@/lib/order-stock-config'
+import { stockBalance } from '@/lib/order-stock-store'
 
 export type ReceiptInput = { id: string; itemId: string; quantity: number; note: string; baseVersion?: number }
 export type SavedReceipt = { ok: true; name: string; before: number; quantity: number; after: number; repeated: boolean; operation?: InventoryOperation; legacyRepeat?: boolean }
@@ -71,6 +73,10 @@ export async function saveStockOperationAction(slug: string, operation: Inventor
       const after = before + delta
       if (after < 0) throw new RowWriteError('invalid', `Недостаточно товара: доступно ${before} шт., запрошено ${input.quantity} шт.`)
       if (!Number.isSafeInteger(after)) throw new RowWriteError('invalid', 'Количество слишком велико для складского учёта')
+      if (orderStockPair(app)) {
+        const held = await stockBalance(context, config, input.itemId, currentData)
+        if (after < held.reserved) throw new RowWriteError('invalid', `Свободно ${held.available} шт. Ещё ${held.reserved} шт. закреплены за заказами — их нельзя выдать или списать отдельно.`)
+      }
       const movement = {
         [config.movement.name]: `${copy.name} · ${String(currentData[config.item.name] ?? name)}`,
         [config.movement.item]: [input.itemId], [config.movement.qty]: delta,

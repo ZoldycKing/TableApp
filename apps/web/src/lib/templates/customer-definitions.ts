@@ -56,6 +56,7 @@ export function withCustomerScenario(original: TemplateDef): TemplateDef {
         template.appTable = 'orders'; template.appName = 'Заказы и каталог'; main = template.tables.find(table => table.key === 'orders')!
       }
       const items = template.tables.find(table => table.key === 'items')!
+      items.fields.push({ key: 'product', name: 'Товар каталога', type: 'relation', relationTable: 'goods', allowMultiple: false, help: 'Постоянная ссылка на товар. При оформлении заполняется сервером; название и цена заказа сохраняются отдельно.' })
       items.fields.push(structuredClone(email))
       items.fields.push(structuredClone(assignment))
       main.fields.push({ key: 'cart', name: 'Состав нового заказа', type: 'long_text', help: 'Заполняется корзиной. Цена берётся сервером из каталога, позиции создаются отдельно для каждого заказа.' })

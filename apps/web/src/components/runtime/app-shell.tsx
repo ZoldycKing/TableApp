@@ -44,6 +44,8 @@ import { IntakeVerify } from './intake-verify'
 import { ConversationInbox, MESSAGES_SCREEN, parseConversationTarget } from './conversation-inbox'
 import { conversationResource } from '@/lib/conversation-resource'
 import { OrderDeliveryPanel } from './order-delivery-panel'
+import { InventoryBalancePanel, OrderStockPanel } from './order-stock-panel'
+import { orderStockPair } from '@/lib/order-stock-config'
 import { CustomerHistoryPanel } from './customer-history-panel'
 import { CustomerDirectory } from './customer-directory'
 import { crmForTable } from '@/lib/customer-history-config'
@@ -1019,6 +1021,8 @@ export function AppShell({
                 <button type="button" onClick={() => setConfirmCancellation(false)} className="ml-2 text-sm">Оставить обращение</button>
               </> : <button type="button" onClick={() => setConfirmCancellation(true)} className="text-sm text-red-700">Отменить обращение</button> : <p className="text-xs text-ink-muted">Если нужно уточнить или изменить условия, свяжитесь с бизнесом{runtime.business?.phone ? `: ${runtime.business.phone}` : '.'}</p>}
             </div> : null}
+            {!demo && !editing && viewer && sent === null && intake === null && checkout === null && screen.type === 'detail' && row && orderStockPair(app)?.order.tableId === screen.tableId ? <OrderStockPanel tableId={screen.tableId} rowId={row.id} version={row.version ?? 0} slug={app.slug} /> : null}
+            {!demo && !editing && viewer && sent === null && intake === null && checkout === null && screen.type === 'detail' && row && app.inventory?.tables.items === screen.tableId && app.modules?.some(module => module.kind === 'inventory' && module.screenIds?.includes(screen.id)) ? <InventoryBalancePanel tableId={screen.tableId} rowId={row.id} version={row.version ?? 0} slug={app.slug} /> : null}
             {!demo && !editing && viewer && sent === null && intake === null && checkout === null && screen.type === 'detail' && row && orderDeliveryPair(app) && customerWorkflows(app).some(config => config.tableId === screen.tableId && config.logistics) ? <OrderDeliveryPanel key={`${app.id}:${screen.tableId}:${row.id}`} slug={app.slug} tableId={screen.tableId} rowId={row.id} version={row.version ?? 0} onOpen={navigate} /> : null}
             {!demo && !editing && viewer && sent === null && intake === null && checkout === null && screen.type === 'detail' && row && crmForTable(app, screen.tableId) ? <CustomerHistoryPanel key={`${app.id}:${screen.tableId}:${row.id}`} slug={app.slug} tableId={screen.tableId} rowId={row.id} onOpen={item => {
               if (item.slug === app.slug && screens.has(item.screenId)) navigate(item.screenId, item.id)

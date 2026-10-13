@@ -1,4 +1,4 @@
-import { apps, db, orderDeliveries, rows, tables, workspaces } from '@tableapp/db'
+import { apps, db, orderDeliveries, orderStockReservations, rows, tables, workspaces } from '@tableapp/db'
 import { appSchema, customerWorkflows } from '@tableapp/schema'
 import { and, eq, isNull, or } from 'drizzle-orm'
 import { createHash } from 'node:crypto'
@@ -10,10 +10,11 @@ import { currentMember } from './session'
 import { acceptsModuleIntake, hasRole, workflowRole } from './module-access'
 import { assertCurrentModuleState, checkRow, createRow, lockedRow, RowWriteError, updateRow, writeRows } from './row-mutations'
 import { orderDeliveryPair, type OrderDeliveryState } from './order-delivery-config'
+import { orderStockPair } from './order-stock-config'
 
 const denied = () => new RowWriteError('denied', 'Заказ или доставка недоступны')
 const ref = (value: unknown) => typeof value === 'string' && value.length > 0 && value.length <= 200
-async function accessFor(tableId: string, rowId: string, slug?: string, business = false) {
+export async function orderWorkflowAccess(tableId: string, rowId: string, slug?: string, business = false) {
   if (!ref(tableId) || !ref(rowId) || slug !== undefined && !ref(slug) || typeof business !== 'boolean') throw denied()
   const member = business ? await currentMember() : null
   if (business && !member || !business && !slug) throw denied()
@@ -44,7 +45,7 @@ async function accessFor(tableId: string, rowId: string, slug?: string, business
 }
 
 export async function readOrderDelivery(tableId: string, rowId: string, slug?: string, business = false): Promise<OrderDeliveryState | null> {
-  const access = await accessFor(tableId, rowId, slug, business)
+  const access = await orderWorkflowAccess(tableId, rowId, slug, business)
   if (!access) return null
   const { app, pair } = access
   const [link] = await db.select().from(orderDeliveries).where(and(eq(orderDeliveries.workspaceId, app.workspaceId), or(and(eq(orderDeliveries.orderTableId, tableId), eq(orderDeliveries.orderRowId, rowId)), and(eq(orderDeliveries.deliveryTableId, tableId), eq(orderDeliveries.deliveryRowId, rowId)))))
@@ -52,6 +53,10 @@ export async function readOrderDelivery(tableId: string, rowId: string, slug?: s
     if (!pair || tableId !== pair.order.tableId || !access.canCreate) return null
     const data = access.parent.data as Record<string, unknown>, status = String(data[pair.order.statusFieldId] ?? '')
     const ready = pair.order.cancellableStatuses.includes(status)
+    if (orderStockPair(app)) {
+      const [stock] = await db.select({ state: orderStockReservations.state }).from(orderStockReservations).where(and(eq(orderStockReservations.workspaceId, app.workspaceId), eq(orderStockReservations.orderTableId, tableId), eq(orderStockReservations.orderRowId, rowId)))
+      if (stock?.state !== 'reserved') return { canCreate: false, reason: 'Сначала подтвердите заказ и закрепите товары за ним.' }
+    }
     return { canCreate: ready && acceptsModuleIntake(app, pair.delivery.tableId), reason: !ready ? 'На этом этапе передача в доставку недоступна.' : !acceptsModuleIntake(app, pair.delivery.tableId) ? 'Приём новых доставок приостановлен.' : undefined }
   }
   const side = link.orderRowId === rowId && link.orderTableId === tableId ? 'order' : 'delivery'
@@ -80,7 +85,7 @@ export async function readOrderDelivery(tableId: string, rowId: string, slug?: s
 /** The source version, snapshot, link and usage accounting commit together under the workspace lock. */
 export async function handoffOrderDelivery(tableId: string, rowId: string, baseVersion: number, slug?: string, business = false) {
   if (!Number.isSafeInteger(baseVersion) || baseVersion < 0) throw denied()
-  const access = await accessFor(tableId, rowId, slug, business)
+  const access = await orderWorkflowAccess(tableId, rowId, slug, business)
   if (!access?.canCreate || !access.pair) throw denied()
   const { app, pair, actor } = access, { order, delivery } = pair
   const source = order.logistics!, destination = delivery.logistics!
@@ -95,6 +100,10 @@ export async function handoffOrderDelivery(tableId: string, rowId: string, baseV
     const [existing] = await context.tx.select().from(orderDeliveries).where(and(eq(orderDeliveries.workspaceId, app.workspaceId), eq(orderDeliveries.orderTableId, tableId), eq(orderDeliveries.orderRowId, rowId)))
     if (existing) return { id: existing.deliveryRowId, duplicate: true }
     checkRow(current, { baseVersion })
+    if (orderStockPair(app)) {
+      const [stock] = await context.tx.select({ state: orderStockReservations.state }).from(orderStockReservations).where(and(eq(orderStockReservations.workspaceId, app.workspaceId), eq(orderStockReservations.orderTableId, tableId), eq(orderStockReservations.orderRowId, rowId)))
+      if (stock?.state !== 'reserved') throw new RowWriteError('invalid', 'Сначала подтвердите заказ и закрепите товары за ним.')
+    }
     const status = String(data[order.statusFieldId] ?? '')
     if (!order.cancellableStatuses.includes(status)) throw new RowWriteError('invalid', 'Передайте заказ до отгрузки, завершения или отмены')
     const read = access.policy ? access.policy.project(data, current) : data

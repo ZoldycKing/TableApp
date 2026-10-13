@@ -1,5 +1,6 @@
 import { appSchema, compatibleModuleKinds, customerWorkflows, MODULE_DEFINITIONS, positionSequence, type App, type AppModule, type Screen } from '@tableapp/schema'
 import { legacyAppModules, moduleContract } from './app-modules'
+import { orderStockPair } from './order-stock-config'
 
 type ViewTables = ReadonlyMap<string, { tableId: string }>
 export class ModuleCompositionError extends Error {}
@@ -58,7 +59,7 @@ export function composeModules(base: App, addition: App, views: ViewTables): App
   const screens = [...first.screens, ...second.screens]
   if (new Set(screens.map(screen => screen.id)).size !== screens.length) throw new ModuleCompositionError('Экраны подключаемых возможностей пересекаются')
   const publicCatalogs = (app: App) => (app.modules ?? []).flatMap(module => {
-    if (module.kind === 'support') return []
+    if (module.kind === 'support' || module.kind === 'inventory') return []
     const config = module.source.type === 'customer' ? customerWorkflows(app).find(config => module.source.type === 'customer' && config.tableId === module.source.tableId) : null
     const catalog = app.screens.find(screen => (screen.type === 'list' || screen.type === 'tiles') && screen.access.public && module.screenIds?.includes(screen.id) &&
       (module.source.type === 'booking' ? views.get(screen.source.viewId)?.tableId === app.booking?.tables.services : screen.source.viewId === config?.catalog?.viewId))
@@ -77,7 +78,8 @@ export function composeModules(base: App, addition: App, views: ViewTables): App
   // Opening the newly attached client module to customers must not expose
   // the internal CRM screens. Existing customer admission policies stay intact.
   const firstHasClients = first.screens.some(screen => screen.access.public || screen.access.roles.includes('client'))
-  return appSchema.parse({ ...first, accessMode: firstHasClients ? first.accessMode : second.accessMode,
+  const combined = appSchema.parse({ ...first, accessMode: firstHasClients ? first.accessMode : second.accessMode,
+    inventory: first.inventory ?? second.inventory,
     booking: booking ? { ...booking, listScreenId } : null, customer: primary, customerSections: workflows.filter(config => config !== primary),
     modules, moduleAccess: { grants: [...first.moduleAccess!.grants, ...second.moduleAccess!.grants] },
     roles: [...first.roles, ...second.roles.filter(role => !first.roles.some(existing => existing.id === role.id))],
@@ -85,6 +87,8 @@ export function composeModules(base: App, addition: App, views: ViewTables): App
     screens: screens.map((screen, index) => ({ ...screen, appId: first.id, position: positionSequence(screens.length)[index]!,
       ...(screen.id === catalogScreens[0] ? { name: 'Каталог', tab: { icon: 'grid', label: 'Каталог' } } : catalogScreens.includes(screen.id) ? { tab: null } : {}) })),
   })
+  if (combined.inventory && !orderStockPair(combined)) throw new ModuleCompositionError('Продажи и склад должны использовать общий каталог и явные привязки товаров заказа. Подключите склад через возможность приложения; перенос существующего склада выполняется отдельно.')
+  return combined
 }
 
 /** Kept for existing pilot fixtures and callers. */

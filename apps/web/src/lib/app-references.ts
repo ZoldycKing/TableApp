@@ -2,6 +2,7 @@ import type { App, Field } from '@tableapp/schema'
 import { customerWorkflows, normalizeFieldOptions } from '@tableapp/schema'
 import { eq, inArray } from 'drizzle-orm'
 import { checkAppModules } from './app-modules'
+import { orderStockPair } from './order-stock-config'
 
 export type AppReferenceCatalog = {
   tableIds: Set<string>
@@ -210,7 +211,13 @@ export function checkAppReferences(app: App, catalog: AppReferenceCatalog): stri
       if (!c.catalog || c.tableId === cart.itemsTableId || cart.itemsTableId === c.catalog.tableId || relation?.type !== 'relation' || relation.options.tableId !== cart.itemsTableId) invalid('состав заказа', cart.positionsFieldId)
       for (const [id, type] of [[cart.fieldId, 'long_text'], [cart.priceFieldId, 'number'], [cart.quantityFieldId, 'number'], [cart.itemPriceFieldId, 'number'], [cart.itemEmailFieldId, 'email'], [cart.itemAssignmentFieldId, 'email']]) if (catalog.fields.get(id!)?.type !== type) invalid('поле корзины', id!)
       if (!app.rowAccessRules.some(rule => rule.tableId === cart.itemsTableId && rule.fieldId === cart.itemEmailFieldId && rule.match === 'email' && rule.appliesTo.includes('client'))) invalid('принадлежность позиции', cart.itemEmailFieldId)
+      if (cart.productFieldId) {
+        field(cart.productFieldId, cart.itemsTableId)
+        const product = catalog.fields.get(cart.productFieldId)
+        if (product?.type !== 'relation' || product.options.tableId !== c.catalog?.tableId || product.options.allowMultiple) invalid('товар позиции заказа', cart.productFieldId)
+      }
     }
+    if (c.stock && (!c.cart?.productFieldId || !c.cancellableStatuses.includes(c.stock.confirmedStatus) || c.stock.confirmedStatus === c.initialStatus)) invalid('подтверждение складского заказа', c.stock.confirmedStatus)
     if (c.approval) for (const id of [c.approval.priceFieldId, c.approval.approvedPriceFieldId]) {
       field(id, c.tableId)
       if (catalog.fields.get(id)?.type !== 'number') invalid('стоимость ремонта', id)
@@ -227,6 +234,7 @@ export function checkAppReferences(app: App, catalog: AppReferenceCatalog): stri
     }
   }
   if (app.inventory) {
+    if (app.modules && app.modules.length > 1 && !orderStockPair(app)) invalid('общий каталог продаж и склада', app.inventory.tables.items)
     const config = app.inventory
     table(config.tables.items); table(config.tables.movements)
     for (const id of Object.values(config.item)) if (id) field(id, config.tables.items)

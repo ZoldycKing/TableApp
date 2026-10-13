@@ -1,9 +1,9 @@
 'use server'
 
 import { createHash } from 'node:crypto'
-import { apps, fields, tables, views, workspaceClientApps } from '@tableapp/db'
+import { apps, fields, orderDeliveries, rows, tables, views, workspaceClientApps } from '@tableapp/db'
 import { appSchema, normalizeFieldOptions, type App, type Field, type View } from '@tableapp/schema'
-import { and, desc, eq, inArray } from 'drizzle-orm'
+import { and, desc, eq, inArray, isNull } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { authorizeApp } from '@/lib/authorize'
 import { generateApp } from '@/lib/app-builder'
@@ -18,6 +18,7 @@ import { templatePreset } from '@/lib/templates/presets'
 import { assertCanIncreaseUsage, isPlanLimitError, previewIncrease } from '@/lib/limits'
 import { RowWriteError, writeRows, type RowTransaction } from '@/lib/row-mutations'
 import { moduleOwnershipError } from '@/lib/module-lifecycle'
+import { connectSalesInventory } from '@/lib/sales-inventory-connection'
 import { checkpointBeforeChange, recordConfigVersion } from '@/lib/app-config-history'
 
 const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex')
@@ -40,6 +41,21 @@ async function prepare(context: RowTransaction, record: typeof apps.$inferSelect
   const existing = await catalog(context)
   const referenceError = checkAppReferences(base, existing)
   if (referenceError) throw new RowWriteError('invalid', referenceError)
+  if (kind === 'inventory') {
+    if (sourceAppId) throw new RowWriteError('invalid', 'Перенос существующего склада выполняется отдельно, чтобы сохранить его товары и остатки.')
+    const salesTable = modules.find(module => module.kind === 'sales')?.source
+    if (salesTable?.type === 'customer') {
+      const active = await context.tx.select({ contract: orderDeliveries.contract, data: rows.data }).from(orderDeliveries)
+        .innerJoin(rows, and(eq(rows.tableId, orderDeliveries.deliveryTableId), eq(rows.id, orderDeliveries.deliveryRowId)))
+        .where(and(eq(orderDeliveries.workspaceId, context.workspaceId), eq(orderDeliveries.orderTableId, salesTable.tableId), isNull(rows.deletedAt)))
+      if (active.some(link => {
+        const c = link.contract.delivery, logistics = c.logistics
+        return logistics?.kind === 'delivery' && ![c.cancelStatus, logistics.deliveredStatus, logistics.returnedStatus].includes(String((link.data as Record<string, unknown>)[c.statusFieldId]))
+      })) throw new RowWriteError('invalid', 'Сначала завершите уже переданные доставки. Подключение склада к действующим отправкам требует отдельного переноса, чтобы сохранить их историю.')
+    }
+    const [last] = await context.tx.select({ position: tables.position }).from(tables).where(eq(tables.workspaceId, context.workspaceId)).orderBy(desc(tables.position)).limit(1)
+    return connectSalesInventory(base, ownerEmail, existing.fields, existing.views, last?.position ?? null)
+  }
   if (sourceAppId) {
     const [source] = await context.tx.select().from(apps).where(and(eq(apps.id, sourceAppId), eq(apps.workspaceId, context.workspaceId))).limit(1)
     if (!source || source.id === record.id || source.published) throw new RowWriteError('invalid', 'Для повторного использования выберите своё неопубликованное приложение. Перенос действующих приложений будет отдельной операцией.')

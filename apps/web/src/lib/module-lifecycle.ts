@@ -1,11 +1,13 @@
-import { apps } from '@tableapp/db'
-import { appSchema } from '@tableapp/schema'
+import { apps, orderStockReservations } from '@tableapp/db'
+import { appSchema, customerWorkflows } from '@tableapp/schema'
 import { and, eq } from 'drizzle-orm'
 import type { RowTransaction } from './row-mutations'
 import { acceptsModuleIntake } from './module-access'
 import { legacyAppModules, moduleContract } from './app-modules'
 import type { App } from '@tableapp/schema'
 import type { Transaction } from './db-transaction'
+import { inventoryBinding, orderBinding } from './order-stock-contract'
+import { orderStockPair } from './order-stock-config'
 
 /** A request may wait for the workspace lock after access was checked. Reject a stale published policy. */
 export async function currentModularAppError(context: RowTransaction, app: App): Promise<string | null> {
@@ -32,6 +34,12 @@ export async function moduleIntakeError(context: RowTransaction, tableId: string
 
 /** Only one published modular application may own a workflow's writes. Legacy readers remain untouched. */
 export async function moduleOwnershipError(app: App, tx: Transaction): Promise<string | null> {
+  const stock = await tx.selectDistinct({ contract: orderStockReservations.contract }).from(orderStockReservations).where(eq(orderStockReservations.workspaceId, app.workspaceId))
+  for (const { contract } of stock) {
+    const order = customerWorkflows(app).find(config => config.tableId === contract.order.tableId)
+    if (order && (!orderStockPair(app) || orderBinding(order) !== orderBinding(contract.order))) return 'Привязки подтверждённых заказов должны сохраняться. Изменяйте названия, экраны и права, сохраняя товары, количества и этапы обработки.'
+    if (app.inventory?.tables.items === contract.inventory.tables.items && inventoryBinding(app.inventory) !== inventoryBinding(contract.inventory)) return 'Каталог уже использует складскую историю заказов. Сохраните его журнал и правила остатка.'
+  }
   const own = new Set((app.modules ?? legacyAppModules(app)).flatMap(module => moduleContract(app, module)?.writeTables ?? []))
   const stored = await tx.select({ id: apps.id, published: apps.published }).from(apps).where(eq(apps.workspaceId, app.workspaceId))
   for (const other of stored) {

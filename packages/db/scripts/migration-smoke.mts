@@ -44,13 +44,16 @@ try {
   assert.ok(await target`select workspace_id, message_id, version, body from public.conversation_revisions limit 0`)
   assert.ok(await target`select workspace_id, conversation_id, actor_id, sequence from public.conversation_reads limit 0`)
   assert.ok(await target`select workspace_id, order_table_id, order_row_id, delivery_table_id, delivery_row_id, contract from public.order_deliveries limit 0`)
+  assert.ok(await target`select workspace_id, order_table_id, order_row_id, state, contract from public.order_stock_reservations limit 0`)
+  assert.ok(await target`select workspace_id, order_table_id, order_row_id, product_table_id, product_row_id, quantity, position_ids, issue_movement_id, return_movement_id from public.order_stock_items limit 0`)
+  assert.equal((await target`select count(*)::int as value from pg_constraint where conname in ('order_stock_state_check','order_stock_quantity_check')`)[0]!.value, 2)
   assert.ok(await target`select conversation_id, message_id from public.attachments limit 0`)
   assert.equal((await target`select count(*)::int as value from pg_trigger where not tgisinternal and tgname in ('conversation_files_cleanup', 'conversation_message_files_cleanup')`)[0]!.value, 2)
   const tableCount = await target`select count(*)::int as value from pg_tables where schemaname = 'public'`
   await migrate()
   assert.deepEqual([...(await target`select hash, created_at from drizzle.__drizzle_migrations order by created_at`)], [...applied])
   console.log(JSON.stringify({ status: 'passed', migrations: applied.length, tables: tableCount[0]!.value,
-    checked: ['empty database', 'sync revision', 'attachment state', 'business profile', 'business client app', 'business customer profiles', 'scoped customer app links', 'scoped app config versions', 'conversations', 'message revisions', 'private notes', 'conversation attachments', 'tracked conversation file cleanup triggers', 'second run unchanged'] }))
+    checked: ['empty database', 'sync revision', 'attachment state', 'business profile', 'business client app', 'business customer profiles', 'scoped customer app links', 'scoped app config versions', 'conversations', 'message revisions', 'private notes', 'conversation attachments', 'tracked conversation file cleanup triggers', 'order stock bindings and checks', 'second run unchanged'] }))
 } finally {
   await target.end()
   if (created) await admin.unsafe(`drop database "${name}"`)

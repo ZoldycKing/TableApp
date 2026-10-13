@@ -68,7 +68,7 @@ export async function createCustomerRecord(context: RowTransaction, app: App, co
       if (!product || product[catalog.activeFieldId] !== true) throw new RowWriteError('invalid', 'Один из товаров больше недоступен. Обновите корзину.')
       if (typeof price !== 'number' || !Number.isFinite(price) || price < 0 || !Number.isSafeInteger(Math.round(price * 100)) || price > 1_000_000_000) throw new RowWriteError('invalid', 'Цена товара не указана. Свяжитесь с бизнесом.')
       const position = await createRow(context, cart.itemsTableId, { [cart.nameFieldId]: String(product[catalog.titleFieldId] ?? 'Товар'), [cart.quantityFieldId]: item.qty,
-        [cart.itemPriceFieldId]: price, [cart.itemEmailFieldId]: email, [cart.itemAssignmentFieldId]: '' }, actor, { origin: 'runtime' })
+        [cart.itemPriceFieldId]: price, [cart.itemEmailFieldId]: email, [cart.itemAssignmentFieldId]: '', ...(cart.productFieldId ? { [cart.productFieldId]: [item.id] } : {}) }, actor, { origin: 'runtime' })
       positions.push(position.id)
     }
     data[cart.positionsFieldId] = positions

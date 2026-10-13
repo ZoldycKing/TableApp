@@ -1,9 +1,10 @@
-import { apps, fields, orderDeliveries, tables, views } from '@tableapp/db'
+import { apps, fields, orderDeliveries, orderStockReservations, tables, views } from '@tableapp/db'
 import { appSchema, normalizeFieldOptions, type App, type Field } from '@tableapp/schema'
 import { eq, inArray } from 'drizzle-orm'
 import type { Transaction } from './db-transaction'
 import { checkAppReferences } from './app-references'
 import { moduleContract } from './app-modules'
+import { retainedStockFieldError } from './order-stock-contract'
 
 async function definitions(tx: Transaction, workspaceId: string): Promise<App[]> {
   const records = await tx.select().from(apps).where(eq(apps.workspaceId, workspaceId))
@@ -15,11 +16,22 @@ async function definitions(tx: Transaction, workspaceId: string): Promise<App[]>
 
 /** Caller holds the workspace write lock; paused modules still need their historical fields. */
 export async function modularFieldChangeError(tx: Transaction, workspaceId: string, fieldId: string, next: Field | null): Promise<string | null> {
+  const stock = await tx.selectDistinct({ contract: orderStockReservations.contract }).from(orderStockReservations).where(eq(orderStockReservations.workspaceId, workspaceId))
+  if (stock.length) {
+    const [record] = await tx.select().from(fields).where(eq(fields.id, fieldId))
+    if (record) {
+      const original = { ...record, options: normalizeFieldOptions(record.type as Field['type'], record.options) } as unknown as Field
+      for (const { contract } of stock) {
+        const error = retainedStockFieldError(contract, original, next)
+        if (error) return error
+      }
+    }
+  }
   // Accepted handoffs keep using these identifiers even after the original app is deleted.
   const links = await tx.select({ contract: orderDeliveries.contract }).from(orderDeliveries).where(eq(orderDeliveries.workspaceId, workspaceId))
   for (const link of links) for (const config of [link.contract.order, link.contract.delivery]) {
     const ids = [config.emailFieldId, config.statusFieldId, config.profile?.nameFieldId, config.profile?.phoneFieldId, config.logistics?.addressFieldId,
-      ...(config.logistics?.kind === 'delivery' ? [config.logistics.contentsFieldId] : []), ...(config.cart ? [config.cart.positionsFieldId, config.cart.nameFieldId, config.cart.quantityFieldId, config.cart.itemPriceFieldId, config.cart.itemEmailFieldId] : [])]
+      ...(config.logistics?.kind === 'delivery' ? [config.logistics.contentsFieldId] : []), ...(config.cart ? [config.cart.positionsFieldId, config.cart.productFieldId, config.cart.nameFieldId, config.cart.quantityFieldId, config.cart.itemPriceFieldId, config.cart.itemEmailFieldId] : [])]
     if (!ids.includes(fieldId)) continue
     if (!next) return 'Поле используется в зафиксированном заказе и доставке. Сохраните его для истории и обработки доставки.'
     const original = (await tx.select().from(fields).where(eq(fields.id, fieldId)))[0]
@@ -30,6 +42,7 @@ export async function modularFieldChangeError(tx: Transaction, workspaceId: stri
       if (required.some(id => !next.options.choices.some(choice => choice.id === id))) return 'Этот статус используется связанным заказом и доставкой. Его название можно изменить, идентификатор нужно сохранить.'
     }
     if (fieldId === config.cart?.positionsFieldId && next.type === 'relation' && next.options.tableId !== config.cart.itemsTableId) return 'Состав связанного заказа должен оставаться в своей таблице позиций.'
+    if (fieldId === config.cart?.productFieldId && next.type === 'relation' && (next.options.tableId !== config.catalog?.tableId || next.options.allowMultiple)) return 'Товар связанного заказа должен оставаться в своём каталоге.'
   }
   const definitionsInBusiness = await definitions(tx, workspaceId)
   if (!definitionsInBusiness.length) return null

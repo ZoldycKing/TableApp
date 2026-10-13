@@ -8,12 +8,13 @@ import { asSalon } from './salon-app'
 import { asCustomerApp } from './customer-app'
 import { asCRM } from './crm-app'
 import { legacyAppModules } from '../app-modules'
+import { withWorkflowScreenNames } from '../workflow-screen-names'
 
 /** Installation and public examples must build the same application. */
 export function templatePreset(app: App, built: BuiltTemplate): App {
   const preset = buildPreset(app, built)
   const modules = legacyAppModules(preset, new Map(built.tables.filter(table => table.templateId).map(table => [table.id, table.templateId!])))
-  return modules.length ? { ...preset, modules } : preset
+  return withWorkflowScreenNames(modules.length ? { ...preset, modules } : preset, Object.fromEntries(built.views.map(view => [view.id, view])))
 }
 
 function buildPreset(app: App, built: BuiltTemplate): App {

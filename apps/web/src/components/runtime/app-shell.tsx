@@ -54,6 +54,7 @@ import { orderDeliveryPair } from '@/lib/order-delivery-config'
 import { AppLogin } from './app-login'
 import { customerCheckoutIds, parseCheckoutIntent, type CheckoutIntent } from '@/lib/customer-checkout'
 import { acceptsModuleIntake, moduleForTable } from '@/lib/module-access'
+import { withWorkflowScreenNames } from '@/lib/workflow-screen-names'
 import {
   ConsumptionPanel,
   describeMovement,
@@ -204,12 +205,13 @@ export function AppShell({
   const [checkout, setCheckout] = useState<CheckoutIntent | null>(null)
   const [savedNotice, setSavedNotice] = useState<string | null>(null)
   const { app } = initialRuntime
+  const namedScreens = useMemo(() => editing ? app.screens : withWorkflowScreenNames(app, initialRuntime.views).screens, [app, initialRuntime.views, editing])
   const sales = customerCartWorkflow(app)
   useLiveApp(app.slug, !demo && !editing)
   const messagesAvailable = !demo && !editing && Boolean(viewer) && Boolean(app.booking || customerWorkflows(app).some(workflow => moduleForTable(app, workflow.tableId)?.kind !== 'crm'))
   const messagesTab = useMemo(() => messagesAvailable && app.screens[0] ? { ...app.screens[0], id: MESSAGES_SCREEN, name: 'Сообщения', tab: { label: 'Сообщения', icon: 'chat' } } as Screen : null, [messagesAvailable, app.screens])
-  const screens = useMemo(() => new Map([...app.screens, ...(messagesTab ? [messagesTab] : [])].map((screen) => [screen.id, screen])), [app.screens, messagesTab])
-  const tabs = [...app.screens.filter((screen) => screen.tab !== null), ...(messagesTab ? [messagesTab] : [])]
+  const screens = useMemo(() => new Map([...namedScreens, ...(messagesTab ? [messagesTab] : [])].map((screen) => [screen.id, screen])), [namedScreens, messagesTab])
+  const tabs = [...namedScreens.filter((screen) => screen.tab !== null), ...(messagesTab ? [messagesTab] : [])]
 
   /*
    * Домашний экран может быть закрыт этой роли — тогда его в приложении нет,
@@ -1074,7 +1076,7 @@ export function AppShell({
                 </button>
               )
             })}
-            {tabs.length > 5 ? <><button type="button" aria-expanded={moreTabs} onClick={() => setMoreTabs(!moreTabs)} className="flex flex-1 flex-col items-center gap-1 px-1 py-2.5 text-ink-muted"><Icon name="grid" className="size-5" /><span className="text-[11px]">Ещё</span></button>
+            {tabs.length > 5 ? <><button type="button" aria-expanded={moreTabs} onClick={() => setMoreTabs(!moreTabs)} className="flex flex-1 flex-col items-center gap-1 px-1 py-2.5 text-ink-muted"><Icon name="more" className="size-5" /><span className="text-[11px]">Ещё</span></button>
               {moreTabs ? <div className="absolute inset-x-3 bottom-full mb-2 max-h-[60vh] overflow-y-auto rounded-2xl border border-sand-200 bg-white p-2 shadow-soft">{tabs.slice(4).map(tab => <button type="button" key={tab.id} onClick={() => { setMoreTabs(false); openTab(tab.id) }} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm hover:bg-sand-50"><Icon name={tabIcon(tab)} className="size-5" />{tab.tab?.label ?? tab.name}</button>)}</div> : null}</> : null}
           </nav>
         ) : null}

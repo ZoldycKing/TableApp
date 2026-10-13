@@ -48,6 +48,23 @@ function joinExamples(first: ReturnType<typeof templateExample>, second: ReturnT
 }
 
 describe('runtime navigation during live refresh', () => {
+  it('shows domain names for an existing sales app without changing its stored definition or records', async () => {
+    const example = templateExample('zakazy'), config = example.app.customer!, { runtime, viewer } = templateAppPreview(example, 'manager', 'manager@example.invalid')
+    const list = runtime.app.screens.find(screen => (screen.type === 'list' || screen.type === 'tiles') && runtime.views[screen.source.viewId]?.tableId === config.tableId)!
+    const create = runtime.app.screens.find(screen => screen.type === 'form' && screen.mode === 'create' && screen.tableId === config.tableId)!
+    list.name = 'Все обращения'; list.tab!.label = 'Все обращения'
+    create.name = 'Добавить обращение'; create.tab!.label = 'Добавить'
+    const stored = JSON.stringify(runtime.app), records = JSON.stringify(runtime.tables[config.tableId]!.rows)
+    window.history.replaceState(null, '', `/a/review?e=${list.id}`)
+    const ui = render(<AppShell runtime={runtime} viewer={viewer} demo browserHistory />)
+    await ui.findByRole('heading', { name: 'Заказы' })
+    expect(ui.queryByText('Все обращения')).toBeNull()
+    fireEvent.click(ui.getAllByRole('button', { name: 'Новый заказ' })[0]!)
+    await ui.findByRole('heading', { name: 'Новый заказ' })
+    expect(ui.queryByText('Добавить обращение')).toBeNull()
+    expect(JSON.stringify(runtime.app)).toBe(stored)
+    expect(JSON.stringify(runtime.tables[config.tableId]!.rows)).toBe(records)
+  })
   it('keeps the CRM contact directory selected when a client card is opened directly', async () => {
     const example = templateExample('crm'), crm = example.app.customer!.crm!, { runtime, viewer } = templateAppPreview(example, 'manager', 'manager@example.invalid')
     const client = runtime.tables[crm.clientsTableId]!.rows[0]!

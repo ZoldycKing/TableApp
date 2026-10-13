@@ -24,7 +24,7 @@ describe('stock runtime controls', () => {
     const ui = render(<OrderStockPanel tableId="orders" rowId="order" version={7} slug="shop" />)
     fireEvent.click(await ui.findByRole('button', { name: 'Подтвердить заказ' }))
     expect((await ui.findByRole('alert')).textContent).toContain('проверьте состояние')
-    expect(ui.getByRole('button', { name: 'Подтвердить заказ' }).hasAttribute('disabled')).toBe(false)
+    await waitFor(() => expect(ui.getByRole('button', { name: 'Подтвердить заказ' }).hasAttribute('disabled')).toBe(false))
     expect(mocks.refresh).not.toHaveBeenCalled()
   })
   it('discards a delayed response from a previous product and refreshes balance with the current version', async () => {

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { inventoryFixture } from '@/lib/templates/inventory-fixture.test-utils'
 import { AppShell } from './app-shell'
@@ -11,7 +11,11 @@ import { consumeAppCodeAction, requestAppLoginAction } from '@/app/auth-actions'
 import { TemplatePreviewShell } from '@/components/marketing/template-preview-shell'
 import { modularPilotExample } from '@/lib/templates/modular-pilot-example'
 import { composeModules } from '@/lib/module-composition'
-import { customerCartWorkflow, customerWorkflows } from '@tableapp/schema'
+import { customerCartWorkflow, customerWorkflows, normalizeView, type Field } from '@tableapp/schema'
+import { connectSalesInventory } from '@/lib/sales-inventory-connection'
+import { connectProductionInventory } from '@/lib/production-inventory-connection'
+import { projectRuntime } from '@/lib/runtime-project'
+import { visibleScreensFor, visitorFor } from '@/lib/app-roles'
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }))
 vi.mock('@/app/auth-actions', () => ({ signOutAppAction: vi.fn(), consumeAppCodeAction: vi.fn(), requestAppLoginAction: vi.fn() }))
@@ -47,7 +51,51 @@ function joinExamples(first: ReturnType<typeof templateExample>, second: ReturnT
       views: [...first.built.views, ...second.built.views], rows: [...first.built.rows, ...second.built.rows] } }
 }
 
+function workshopPreview() {
+  const sales = templateExample('zakazy'), email = 'navigation@example.invalid'
+  sales.app.allowlist = [{ email, roleId: 'manager', company: '' }]
+  const fields = new Map<string, Field>(sales.fields.map(field => [field.id, field])), views = new Map(sales.views.map(view => [view.id, view]))
+  const stock = connectSalesInventory(sales.app, email, fields, views)
+  for (const field of stock.fields) fields.set(field.id, field as Field)
+  for (const view of stock.views) views.set(view.id, normalizeView(view))
+  const production = connectProductionInventory(stock.app, email, fields, views)
+  for (const field of production.fields) fields.set(field.id, field as Field)
+  for (const view of production.views) views.set(view.id, normalizeView(view))
+  const app = production.app, visitor = visitorFor(app, email), tables = [...sales.built.tables, ...stock.tables, ...production.tables]
+  const byTable = new Map<string, Field[]>()
+  for (const field of fields.values()) { const list = byTable.get(field.tableId) ?? []; list.push(field); byTable.set(field.tableId, list) }
+  const now = new Date(), runtime = projectRuntime({ ...app, screens: visibleScreensFor(app, visitor) }, visitor, Object.fromEntries(views), tables, byTable,
+    sales.rows.map(row => ({ ...row, version: 0, createdAt: now, updatedAt: now, createdBy: null, updatedBy: null })), new Map(tables.map(table => [table.id, table.primaryFieldId])))
+  return { runtime, viewer: { id: 'workshop-preview', email, name: 'Проверка' } }
+}
+
 describe('runtime navigation during live refresh', () => {
+  it('selects the stock section for a directly opened shared product card instead of the catalogue home', async () => {
+    const { runtime, viewer } = workshopPreview(), app = runtime.app, module = app.modules!.find(module => module.kind === 'inventory')!
+    const list = app.screens.find(screen => screen.type === 'list' && module.screenIds!.includes(screen.id) && runtime.views[screen.source.viewId]?.tableId === app.inventory!.tables.items)!
+    if (list.type !== 'list') throw new Error('Missing stock list')
+    const product = runtime.tables[app.inventory!.tables.items]!.rows[0]!
+    window.history.replaceState(null, '', `/a/review?e=${list.onTapScreenId}&r=${product.id}`)
+    const ui = render(<AppShell runtime={runtime} viewer={viewer} demo browserHistory />)
+    const nav = within(ui.getByRole('navigation', { name: 'Разделы приложения' }))
+    await waitFor(() => expect(nav.getByRole('button', { name: 'Остатки' }).getAttribute('aria-current')).toBe('page'))
+    expect(nav.getByRole('button', { name: 'Каталог' }).getAttribute('aria-current')).toBeNull()
+    expect(nav.getByRole('group', { name: 'Продажи' })).toBeTruthy()
+    expect(nav.getByRole('group', { name: 'Склад' })).toBeTruthy()
+    expect(nav.getByRole('group', { name: 'Производство' })).toBeTruthy()
+  })
+  it('moves a work create action into its list and preserves search when returning from the form', async () => {
+    const { runtime, viewer } = workshopPreview(), app = runtime.app
+    const list = app.screens.find(screen => screen.type === 'list' && !screen.access.public && runtime.views[screen.source.viewId]?.tableId === app.customer!.tableId)!
+    const ui = render(<AppShell runtime={runtime} viewer={viewer} demo initialScreenId={list.id} />)
+    expect(within(ui.getByRole('navigation', { name: 'Разделы приложения' })).queryByRole('button', { name: 'Новый заказ' })).toBeNull()
+    fireEvent.change(ui.getByRole('textbox', { name: 'Поиск по списку' }), { target: { value: 'Стрижка' } })
+    fireEvent.click(ui.getByRole('button', { name: 'Новый заказ' }))
+    expect(ui.getByRole('heading', { name: 'Новый заказ' })).toBeTruthy()
+    fireEvent.click(ui.getByRole('button', { name: 'Назад' }))
+    expect(ui.getByRole('textbox', { name: 'Поиск по списку' })).toHaveProperty('value', 'Стрижка')
+    expect(ui.getByRole('heading', { name: 'Заказы' })).toBeTruthy()
+  })
   it('shows domain names for an existing sales app without changing its stored definition or records', async () => {
     const example = templateExample('zakazy'), config = example.app.customer!, { runtime, viewer } = templateAppPreview(example, 'manager', 'manager@example.invalid')
     const list = runtime.app.screens.find(screen => (screen.type === 'list' || screen.type === 'tiles') && runtime.views[screen.source.viewId]?.tableId === config.tableId)!

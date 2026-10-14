@@ -25,7 +25,7 @@ import type { RuntimeApp } from '@/lib/app-runtime'
 import type { TableRow } from '@/lib/table-store'
 import { resolveBindingValue, type Viewer } from './bindings'
 import { formatCell } from '@/lib/format'
-import { Icon, hasIcon } from './icons'
+import { Icon } from './icons'
 import { EmptyState } from './ui'
 import { accentTones, Avatar, greeting, viewerName } from './ui'
 import { ScreenView } from './screen-view'
@@ -55,6 +55,8 @@ import { AppLogin } from './app-login'
 import { customerCheckoutIds, parseCheckoutIntent, type CheckoutIntent } from '@/lib/customer-checkout'
 import { acceptsModuleIntake, moduleForTable } from '@/lib/module-access'
 import { withWorkflowScreenNames } from '@/lib/workflow-screen-names'
+import { buildRuntimeNavigation } from '@/lib/runtime-navigation'
+import { RuntimeNavigationView } from './runtime-navigation-view'
 import {
   ConsumptionPanel,
   describeMovement,
@@ -67,27 +69,6 @@ import {
 
 /** Показ на сайте: экраны настоящие, записи не идут. Ответ один на все действия. */
 const DEMO_NOTE = 'Это демонстрация: изменения не сохраняются. В своём приложении кнопка сработает.'
-
-/** Иконка по типу экрана: список, витрина и форма должны отличаться в меню. */
-function iconByType(screen: Screen): string {
-  if (screen.type === 'tiles') return 'grid'
-  if (screen.type === 'form') return 'plus'
-  if (screen.type === 'detail') return 'file'
-  return 'list'
-}
-
-/**
- * Иконка вкладки.
- *
- * «list» — это умолчание конструктора, а не выбор человека: с ним все вкладки
- * в меню выглядели одинаково. Поэтому своей считаем только иконку, отличную
- * от умолчания, а иначе берём по типу экрана.
- */
-function tabIcon(screen: Screen): string {
-  const named = screen.tab?.icon ?? ''
-  if (named && named !== 'list' && hasIcon(named)) return named
-  return iconByType(screen)
-}
 
 /**
  * «Отправлено».
@@ -205,13 +186,21 @@ export function AppShell({
   const [checkout, setCheckout] = useState<CheckoutIntent | null>(null)
   const [savedNotice, setSavedNotice] = useState<string | null>(null)
   const { app } = initialRuntime
-  const namedScreens = useMemo(() => editing ? app.screens : withWorkflowScreenNames(app, initialRuntime.views).screens, [app, initialRuntime.views, editing])
+  const workflowScreens = useMemo(() => editing ? app.screens : withWorkflowScreenNames(app, initialRuntime.views).screens, [app, initialRuntime.views, editing])
+  const navigation = useMemo(() => buildRuntimeNavigation({ ...app, screens: workflowScreens }, initialRuntime.views), [app, workflowScreens, initialRuntime.views])
+  const namedScreens = useMemo(() => {
+    if (editing) return workflowScreens
+    const displayed = new Map([...navigation.tabs, ...Object.values(navigation.actionsByScreen).flat()].map(screen => [screen.id, screen]))
+    return workflowScreens.map(screen => displayed.get(screen.id) ?? screen)
+  }, [workflowScreens, navigation, editing])
   const sales = customerCartWorkflow(app)
   useLiveApp(app.slug, !demo && !editing)
   const messagesAvailable = !demo && !editing && Boolean(viewer) && Boolean(app.booking || customerWorkflows(app).some(workflow => moduleForTable(app, workflow.tableId)?.kind !== 'crm'))
   const messagesTab = useMemo(() => messagesAvailable && app.screens[0] ? { ...app.screens[0], id: MESSAGES_SCREEN, name: 'Сообщения', tab: { label: 'Сообщения', icon: 'chat' } } as Screen : null, [messagesAvailable, app.screens])
   const screens = useMemo(() => new Map([...namedScreens, ...(messagesTab ? [messagesTab] : [])].map((screen) => [screen.id, screen])), [namedScreens, messagesTab])
-  const tabs = [...namedScreens.filter((screen) => screen.tab !== null), ...(messagesTab ? [messagesTab] : [])]
+  const tabs = [...(editing ? namedScreens.filter(screen => screen.tab !== null) : navigation.tabs), ...(messagesTab ? [messagesTab] : [])]
+  const navigationGroups = editing ? [] : navigation.groups
+  const hasNavigation = tabs.length > 1 || !editing && navigation.work && tabs.length > 0
 
   /*
    * Домашний экран может быть закрыт этой роли — тогда его в приложении нет,
@@ -258,7 +247,6 @@ export function AppShell({
     null,
   )
   const [pending, startTransition] = useTransition()
-  const [moreTabs, setMoreTabs] = useState(false)
   const [confirmCancellation, setConfirmCancellation] = useState(false)
   const [bookingDraft, setBookingDraft] = useState<Record<string, unknown> | null>(null)
   const [formDraft, setFormDraft] = useState<{ screenId: string; values: Record<string, unknown> } | null>(null)
@@ -273,12 +261,21 @@ export function AppShell({
   const router = useRouter()
 
   const current = stack[stack.length - 1]!
-  useEffect(() => { setMoreTabs(false); setConfirmCancellation(false) }, [current.screenId, current.rowId])
+  useEffect(() => { setConfirmCancellation(false) }, [current.screenId, current.rowId])
   const contentRef = useEnterMotion(`${current.screenId}:${current.rowId ?? ''}:${sent === null ? 'screen' : 'sent'}:${checkout ? 'login' : intake === null ? 'form' : 'verify'}`)
   const screen = screens.get(current.screenId)
   const contactConfig = screen?.type === 'detail' ? crmForTable(app, screen.tableId)?.crm : undefined
   const contactTabId = contactConfig && screen?.type === 'detail' && screen.tableId === contactConfig.clientsTableId && screens.get(contactConfig.listScreenId ?? '')?.tab ? contactConfig.listScreenId : undefined
-  const activeTabId = current.screenId === MESSAGES_SCREEN ? current.screenId : contactTabId ?? [...stack].reverse().find(entry => screens.get(entry.screenId)?.tab)?.screenId
+  const activeTabId = (() => {
+    if (current.screenId === MESSAGES_SCREEN) return current.screenId
+    if (tabs.some(tab => tab.id === current.screenId)) return current.screenId
+    const origin = [...stack].reverse().find(entry => tabs.some(tab => tab.id === entry.screenId))?.screenId
+    const parents = tabs.filter(tab => (tab.type === 'list' || tab.type === 'tiles') && tab.onTapScreenId === current.screenId)
+    if (parents.length) return parents.find(tab => tab.id === origin)?.id ?? parents[0]!.id
+    if (contactTabId && tabs.some(tab => tab.id === contactTabId)) return contactTabId
+    const parent = editing ? undefined : navigation.activeParentByScreen[current.screenId]
+    return parent ?? origin
+  })()
   const customer = customerWorkflows(app).find(config => [config.formScreenId, config.detailScreenId, config.listScreenId].includes(current.screenId))
   const catalogCustomer = customerWorkflows(app).find(config => config.catalog?.detailScreenId === current.screenId)
   const accent = accentTones(app.theme.accent)
@@ -739,8 +736,8 @@ export function AppShell({
      * оставляя списку полосу в две буквы.
      */
     <div className="@container flex h-full bg-sand-50">
-      {tabs.length > 1 ? (
-        <aside className="hidden w-64 shrink-0 flex-col border-r border-sand-200 bg-white @min-[860px]:flex">
+      {hasNavigation ? (
+        <aside className="hidden min-h-0 w-64 shrink-0 flex-col border-r border-sand-200 bg-white @min-[860px]:flex">
           <div className="flex items-center gap-2.5 px-4 py-4">
             <span
               className={`flex size-9 shrink-0 items-center justify-center rounded-xl text-sm font-bold text-white ${accent.solid}`}
@@ -749,33 +746,15 @@ export function AppShell({
             </span>
             <span className="min-w-0">
               <span className="block font-display text-sm font-bold tracking-tight">{runtime.business?.name ?? app.name}</span>
-              {viewer ? (
+              {!editing && navigation.work ? (
+                <span className="block truncate text-[11px] text-ink-muted" title={app.name}>{app.name}</span>
+              ) : viewer ? (
                 <span className="block truncate text-[11px] text-ink-muted">{viewer.email}</span>
               ) : null}
             </span>
           </div>
 
-          <nav className="flex-1 space-y-0.5 px-2 pb-2">
-            {tabs.map((tab) => {
-              const active = activeTabId === tab.id
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  aria-current={active ? 'page' : undefined}
-                  onClick={() => openTab(tab.id)}
-                  className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm transition-colors ${
-                    active
-                      ? `${accent.soft} font-medium ${accent.text}`
-                      : 'text-ink-soft hover:bg-sand-50 hover:text-ink'
-                  }`}
-                >
-                  <Icon name={tabIcon(tab)} className="size-5 shrink-0" />
-                  <span className="truncate">{tab.tab?.label ?? tab.name}</span>
-                </button>
-              )
-            })}
-          </nav>
+          <RuntimeNavigationView variant="desktop" groups={navigationGroups} tabs={tabs} activeId={activeTabId} currentScreenId={current.screenId} accent={accent} onOpen={openTab} />
 
           {viewer ? (
             <div className="flex items-center gap-2 border-t border-sand-200 px-3 py-3">
@@ -861,6 +840,11 @@ export function AppShell({
          */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden">
           <div ref={contentRef} className="mx-auto w-full max-w-5xl px-4 py-5 sm:px-6 sm:py-6">
+            {!editing && sent === null && checkout === null && intake === null && (screen.type === 'list' || screen.type === 'tiles') && navigation.actionsByScreen[screen.id]?.length ?
+              <div className="mb-4 flex flex-wrap justify-end gap-2">{navigation.actionsByScreen[screen.id]!.map(action => <button key={action.id} type="button" disabled={pending || screenLoading}
+                onClick={() => navigate(action.id, null)} className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium text-white transition-colors disabled:opacity-50 ${accent.solid}`}>
+                <Icon name="plus" className="size-4" />{action.name}
+              </button>)}</div> : null}
             {current.screenId === MESSAGES_SCREEN ? <ConversationInbox key={`${app.id}:${viewer?.id}`} slug={app.slug} initialTarget={parseConversationTarget(current.rowId)} onOpenRecord={item => {
               if (item.slug === app.slug && screens.has(item.detailScreenId)) navigate(item.detailScreenId, item.rowId)
               else window.location.assign(`/a/${encodeURIComponent(item.slug)}?e=${encodeURIComponent(item.detailScreenId)}&r=${encodeURIComponent(item.rowId)}`)
@@ -1066,31 +1050,7 @@ export function AppShell({
         </div>
 
         {/* Нижние вкладки — только на телефоне: на компьютере есть боковое меню. */}
-        {tabs.length > 1 ? (
-          <nav className="relative flex border-t border-sand-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur @min-[860px]:hidden">
-            {tabs.slice(0, tabs.length > 5 ? 4 : 5).map((tab) => {
-              const active = activeTabId === tab.id
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  aria-current={active ? 'page' : undefined}
-                  onClick={() => openTab(tab.id)}
-                  className={`flex flex-1 flex-col items-center gap-1 px-1 py-2.5 transition-colors ${
-                    active ? accent.text : 'text-ink-muted hover:text-ink'
-                  }`}
-                >
-                  <Icon name={tabIcon(tab)} className="size-5" />
-                  <span className={`truncate text-[11px] ${active ? 'font-semibold' : ''}`}>
-                    {tab.tab?.label ?? tab.name}
-                  </span>
-                </button>
-              )
-            })}
-            {tabs.length > 5 ? <><button type="button" aria-expanded={moreTabs} onClick={() => setMoreTabs(!moreTabs)} className="flex flex-1 flex-col items-center gap-1 px-1 py-2.5 text-ink-muted"><Icon name="more" className="size-5" /><span className="text-[11px]">Ещё</span></button>
-              {moreTabs ? <div className="absolute inset-x-3 bottom-full mb-2 max-h-[60vh] overflow-y-auto rounded-2xl border border-sand-200 bg-white p-2 shadow-soft">{tabs.slice(4).map(tab => <button type="button" key={tab.id} onClick={() => { setMoreTabs(false); openTab(tab.id) }} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm hover:bg-sand-50"><Icon name={tabIcon(tab)} className="size-5" />{tab.tab?.label ?? tab.name}</button>)}</div> : null}</> : null}
-          </nav>
-        ) : null}
+        {hasNavigation ? <RuntimeNavigationView variant="mobile" groups={navigationGroups} tabs={tabs} activeId={activeTabId} currentScreenId={current.screenId} accent={accent} onOpen={openTab} /> : null}
       </div>
     </div>
   )

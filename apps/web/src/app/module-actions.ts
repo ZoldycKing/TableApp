@@ -19,6 +19,7 @@ import { assertCanIncreaseUsage, isPlanLimitError, previewIncrease } from '@/lib
 import { RowWriteError, writeRows, type RowTransaction } from '@/lib/row-mutations'
 import { moduleOwnershipError } from '@/lib/module-lifecycle'
 import { connectSalesInventory } from '@/lib/sales-inventory-connection'
+import { connectProductionInventory } from '@/lib/production-inventory-connection'
 import { checkpointBeforeChange, recordConfigVersion } from '@/lib/app-config-history'
 
 const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex')
@@ -55,6 +56,11 @@ async function prepare(context: RowTransaction, record: typeof apps.$inferSelect
     }
     const [last] = await context.tx.select({ position: tables.position }).from(tables).where(eq(tables.workspaceId, context.workspaceId)).orderBy(desc(tables.position)).limit(1)
     return connectSalesInventory(base, ownerEmail, existing.fields, existing.views, last?.position ?? null)
+  }
+  if (kind === 'production') {
+    if (sourceAppId) throw new RowWriteError('invalid', 'Перенос существующего производства выполняется отдельно, чтобы сохранить выпуски, нормы и складскую историю.')
+    const [last] = await context.tx.select({ position: tables.position }).from(tables).where(eq(tables.workspaceId, context.workspaceId)).orderBy(desc(tables.position)).limit(1)
+    return connectProductionInventory(base, ownerEmail, existing.fields, existing.views, last?.position ?? null)
   }
   if (sourceAppId) {
     const [source] = await context.tx.select().from(apps).where(and(eq(apps.id, sourceAppId), eq(apps.workspaceId, context.workspaceId))).limit(1)

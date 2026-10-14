@@ -18,6 +18,7 @@ import { isPlanLimitError } from '@/lib/limits'
 import { needFor, shortagesOf, type Need, type Norm } from '@/lib/production'
 import { canAccessRow, rulesFor, stampOwner } from '@/lib/row-access'
 import { assertCurrentModuleState, createRow, updateRow, writeRows, RowWriteError } from '@/lib/row-mutations'
+import { previewConnectedProduction, saveConnectedMaterialMovement, saveConnectedProduction } from '@/lib/production-stock'
 
 /**
  * Сохранение выпуска.
@@ -48,6 +49,8 @@ export type SavedProduction = {
   product: string
   /** Повтор той же отправки: строки не задвоились. */
   repeated: boolean
+  /** Finished goods posted to the shared warehouse together with material consumption. */
+  stockReceipt?: { quantity: number; before?: number; after?: number }
 }
 
 export type ProductionInput = {
@@ -184,6 +187,11 @@ export async function previewConsumptionAction(
   if (!ready.ok) return ready
   const { config } = ready
 
+  if (config.stock) {
+    try { return await previewConnectedProduction(ready, productId, quantity) }
+    catch (error) { if (error instanceof RowWriteError) return { ok: false, error: error.message }; throw error }
+  }
+
   const needs = needFor(quantity, await normsFor(config, productId))
   const materials = await materialsOf(config)
   const short = new Map(shortagesOf(needs, new Map([...materials].map(([id, m]) => [id, m.stock]))).map((item) => [item.materialId, item]))
@@ -275,6 +283,18 @@ export async function saveMovementAction(
   if (!ready.ok) return ready
   const { app, config, viewer, visitor } = ready
 
+  if (config.stock) {
+    try {
+      const saved = await saveConnectedMaterialMovement(ready, input)
+      revalidatePath(`/a/${slug}`)
+      return saved
+    } catch (error) {
+      if (error instanceof RowWriteError) return { ok: false, error: error.message }
+      if (isPlanLimitError(error)) return { ok: false, error: visitor.enrolled ? explainToCustomer() : error.message }
+      throw error
+    }
+  }
+
   if (!Number.isFinite(input.amount) || input.amount === 0) {
     return { ok: false, error: 'Укажите количество: приход со знаком плюс, списание со знаком минус' }
   }
@@ -352,6 +372,18 @@ export async function saveProductionAction(
   const ready = await open(slug)
   if (!ready.ok) return ready
   const { app, config, viewer, visitor } = ready
+
+  if (config.stock) {
+    try {
+      const saved = await saveConnectedProduction(ready, input)
+      revalidatePath(`/a/${slug}`)
+      return saved
+    } catch (error) {
+      if (error instanceof RowWriteError) return { ok: false, error: error.message }
+      if (isPlanLimitError(error)) return { ok: false, error: visitor.enrolled ? explainToCustomer() : error.message }
+      throw error
+    }
+  }
 
   if (!Number.isFinite(input.quantity) || input.quantity <= 0) {
     return { ok: false, error: 'Укажите, сколько произвели: число должно быть больше нуля' }

@@ -663,6 +663,7 @@ export function asProduction(app: App, built: BuiltTemplate): App {
     homeScreenId: dashboard.id,
     screens: screens.map((screen, index) => ({ ...screen, position: positions[index]! })),
     production: {
+      stock: null,
       tables: production.tables,
       run: production.run,
       norm: production.norm,

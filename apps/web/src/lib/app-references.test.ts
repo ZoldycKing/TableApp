@@ -103,6 +103,7 @@ describe('app reference ownership', () => {
   it('checks production table and field ownership', () => {
     const definition = app()
     definition.production = {
+      stock: null,
       tables: { production: 'orders', movements: 'items', norms: 'items', materials: 'items' },
       run: { date: 'name', product: 'name', qty: 'name', defects: 'name', shift: 'name', note: 'name' },
       norm: { product: 'item-name', material: 'item-name', perUnit: 'item-name', active: 'item-name' },

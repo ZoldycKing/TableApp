@@ -72,16 +72,18 @@ const decimal = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 6 })
 /** Что сказать человеку после сохранения: числами, а не «успешно». */
 export function describeSaved(result: SavedProduction): string {
   if (result.repeated) {
+    if (result.stockReceipt) return 'Этот выпуск уже сохранён — второй раз материалы не списывались и готовая продукция на склад не поступала.'
     return 'Этот выпуск уже сохранён — второй раз материалы не списывались.'
   }
-  const head = `Выпуск сохранён: ${result.product}, ${decimal.format(result.quantity)}.`
+  const receipt = result.stockReceipt ? ` На склад поступило ${decimal.format(result.stockReceipt.quantity)} шт.${result.stockReceipt.after !== undefined ? ` Остаток — ${decimal.format(result.stockReceipt.after)} шт.` : ''}` : ''
+  const head = `Выпуск сохранён: ${result.product}, ${decimal.format(result.quantity)}.${receipt}`
   if (result.wrote.length === 0) {
     return `${head} Материалы не списаны: для этого изделия не задано ни одной действующей нормы.`
   }
   const list = result.wrote
     .map((line) => `${line.material} — ${decimal.format(line.amount)} ${line.unit}`.trim())
     .join(', ')
-  return `${head} Списано: ${list}.`
+  return `${head} Списано: ${list.replace(/\.$/, '')}.`
 }
 
 export function describeMovement(result: SavedMovement): string {

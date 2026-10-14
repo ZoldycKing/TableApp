@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ModuleManager } from './module-manager'
 import { templateExample } from '@/lib/templates/presentation'
+import { connectSalesInventory } from '@/lib/sales-inventory-connection'
 
 const mocks = vi.hoisted(() => ({ preview: vi.fn(), connect: vi.fn(), refresh: vi.fn() }))
 vi.mock('next/navigation', () => ({ useRouter: () => mocks }))
@@ -41,5 +42,43 @@ describe('technical module attachment controls', () => {
   it('does not offer unintegrated stock/production combinations', () => {
     const ui = render(<ModuleManager app={templateExample('sklad').app} primary={false} sources={[]} />)
     expect(ui.queryByLabelText('Добавить возможность')).toBeNull()
+  })
+  it('offers production only after sales and the shared warehouse are connected', () => {
+    const sales = templateExample('zakazy')
+    const ui = render(<ModuleManager app={sales.app} primary sources={[]} />)
+    expect(ui.queryByRole('option', { name: 'Производство' })).toBeNull()
+    const connected = connectSalesInventory(sales.app, 'owner@example.invalid', new Map(sales.fields.map(field => [field.id, field])), new Map(sales.views.map(view => [view.id, view])))
+    ui.rerender(<ModuleManager app={connected.app} primary sources={[]} />)
+    expect(ui.getByRole('option', { name: 'Производство' })).toBeTruthy()
+  })
+  it('keeps warehouse installation on the shared catalogue instead of offering existing warehouse sources', () => {
+    const ui = render(<ModuleManager app={templateExample('zakazy').app} primary sources={[{ id: 'existing-stock', name: 'Действующий склад', kind: 'inventory' }]} />)
+    fireEvent.change(ui.getByLabelText('Добавить возможность'), { target: { value: 'sklad' } })
+    const source = ui.getByLabelText('Данные нового раздела') as HTMLSelectElement
+    expect([...source.options].map(option => option.value)).toEqual([''])
+  })
+  it('clears reused data and preview when selecting production, explains shared stock and connects the checked draft', async () => {
+    const sales = templateExample('zakazy')
+    const connected = connectSalesInventory(sales.app, 'owner@example.invalid', new Map(sales.fields.map(field => [field.id, field])), new Map(sales.views.map(view => [view.id, view])))
+    mocks.preview.mockResolvedValueOnce({ ok: true, expectedHash: 'repair-hash', newTables: 0, resources: [], already: false, reused: true, sourceHash: 'source-hash' })
+    mocks.preview.mockResolvedValueOnce({ ok: true, expectedHash: 'production-hash', newTables: 4, resources: ['Выпуски', 'Нормы расхода', 'Материалы', 'Движение материалов'], already: false, reused: false, sourceHash: null })
+    mocks.connect.mockResolvedValue({ ok: true })
+    const ui = render(<ModuleManager app={connected.app} primary sources={[{ id: 'existing-repair', name: 'Ремонт', kind: 'repair' }, { id: 'existing-production', name: 'Действующее производство', kind: 'production' }]} />)
+    const choices = ui.getByLabelText('Добавить возможность')
+    fireEvent.change(choices, { target: { value: 'service' } })
+    fireEvent.change(ui.getByLabelText('Данные нового раздела'), { target: { value: 'existing-repair' } })
+    fireEvent.click(ui.getByRole('button', { name: 'Проверить подключение' }))
+    await ui.findByRole('button', { name: 'Подключить в черновик' })
+    fireEvent.change(choices, { target: { value: 'proizvodstvo' } })
+    expect(ui.queryByRole('button', { name: 'Подключить в черновик' })).toBeNull()
+    const source = ui.getByLabelText('Данные нового раздела') as HTMLSelectElement
+    expect(source.value).toBe('')
+    expect([...source.options].map(option => option.value)).toEqual([''])
+    fireEvent.click(ui.getByRole('button', { name: 'Проверить подключение' }))
+    await ui.findByText('Годные изделия поступят на общий склад; материалы списываются по нормам. Резервы заказов сохраняются.')
+    expect(mocks.preview).toHaveBeenLastCalledWith(connected.app.id, 'proizvodstvo', undefined)
+    fireEvent.click(ui.getByRole('button', { name: 'Подключить в черновик' }))
+    await waitFor(() => expect(mocks.connect).toHaveBeenCalledWith(connected.app.id, 'proizvodstvo', 'production-hash', undefined, null))
+    await waitFor(() => expect(mocks.refresh).toHaveBeenCalledOnce())
   })
 })

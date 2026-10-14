@@ -264,6 +264,38 @@ export const orderStockItems = pgTable('order_stock_items', {
   check('order_stock_quantity_check', sql`${t.quantity}>0`),
 ])
 
+/** A completed production run and its stock receipt retain their bindings after app deletion. */
+export const productionStockRuns = pgTable('production_stock_runs', {
+  workspaceId: text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  productionTableId: text('production_table_id').notNull(),
+  runRowId: text('run_row_id').notNull(),
+  productTableId: text('product_table_id').notNull(),
+  productRowId: text('product_row_id').notNull(),
+  stockMovementTableId: text('stock_movement_table_id').notNull(),
+  stockMovementRowId: text('stock_movement_row_id').notNull(),
+  actorId: text('actor_id').notNull(),
+  payloadHash: text('payload_hash').notNull(),
+  outputQuantity: integer('output_quantity').notNull(),
+  contract: jsonb('contract').$type<{
+    production: import('@tableapp/schema').ProductionConfig
+    inventory: import('@tableapp/schema').InventoryConfig
+    materialMovements: { tableId: string; rowId: string; materialId: string; quantity: number }[]
+  }>().notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, t => [
+  primaryKey({ columns: [t.workspaceId, t.productionTableId, t.runRowId] }),
+  uniqueIndex('production_stock_receipt_key').on(t.workspaceId, t.stockMovementTableId, t.stockMovementRowId),
+  index('production_stock_product_idx').on(t.workspaceId, t.productTableId, t.productRowId),
+  foreignKey({ name: 'production_stock_run_table_fk', columns: [t.workspaceId, t.productionTableId], foreignColumns: [tables.workspaceId, tables.id] }),
+  foreignKey({ name: 'production_stock_product_table_fk', columns: [t.workspaceId, t.productTableId], foreignColumns: [tables.workspaceId, tables.id] }),
+  foreignKey({ name: 'production_stock_receipt_table_fk', columns: [t.workspaceId, t.stockMovementTableId], foreignColumns: [tables.workspaceId, tables.id] }),
+  foreignKey({ name: 'production_stock_run_row_fk', columns: [t.productionTableId, t.runRowId], foreignColumns: [rows.tableId, rows.id] }),
+  foreignKey({ name: 'production_stock_product_row_fk', columns: [t.productTableId, t.productRowId], foreignColumns: [rows.tableId, rows.id] }),
+  foreignKey({ name: 'production_stock_receipt_row_fk', columns: [t.stockMovementTableId, t.stockMovementRowId], foreignColumns: [rows.tableId, rows.id] }),
+  check('production_stock_quantity_check', sql`${t.outputQuantity}>0`),
+  check('production_stock_payload_hash_check', sql`${t.payloadHash} ~ '^[a-f0-9]{64}$'`),
+])
+
 /** One handoff per order. Contract preserves the accepted workflow after an app is removed. */
 export const orderDeliveries = pgTable('order_deliveries', {
   workspaceId: text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),

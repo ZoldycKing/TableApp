@@ -650,6 +650,8 @@ export type AllowlistEntry = z.infer<typeof allowlistEntrySchema>
  * а не притворяется общим механизмом.
  */
 export const productionConfigSchema = z.object({
+  /** Finished goods use the explicitly connected sales warehouse; standalone material accounting keeps this null. */
+  stock: z.object({ itemsTableId: z.string(), materialStockFieldId: z.string() }).nullable().default(null),
   tables: z.object({
     production: z.string(),
     movements: z.string(),

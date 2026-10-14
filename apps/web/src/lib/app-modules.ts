@@ -1,5 +1,6 @@
 import { MODULE_DEFINITIONS, compatibleModuleKinds, customerWorkflows, type App, type AppModule, type Field, type FieldType, type ModuleKind } from '@tableapp/schema'
 import { checkModuleAccess } from './module-access'
+import { orderStockPair } from './order-stock-config'
 
 type Catalog = { tableIds: ReadonlySet<string>; fields: ReadonlyMap<string, Field> }
 type FieldRequirement = { name: string; tableId: string; fieldId: string; types: readonly FieldType[]; relationTableId?: string }
@@ -135,8 +136,13 @@ export function moduleContract(app: App, module: AppModule): ModuleContract | nu
       const c = app.production
       if (!c) return null
       Object.assign(tables, c.tables); writeTables.push(c.tables.production, c.tables.movements)
-      group(c.tables.production, c.run, { date: ['date', 'datetime'], product: ['relation'], qty: ['number'], defects: ['number'], shift: ['single_select'] })
-      group(c.tables.norms, c.norm, { product: ['relation'], material: ['relation'], perUnit: ['number'], active: ['checkbox'] }, { material: c.tables.materials })
+      if (c.stock) {
+        tables.products = c.stock.itemsTableId
+        add('materialStock', c.tables.materials, c.stock.materialStockFieldId, ['formula'])
+      }
+      const productTarget: Record<string, string> = c.stock ? { product: c.stock.itemsTableId } : {}
+      group(c.tables.production, c.run, { date: ['date', 'datetime'], product: ['relation'], qty: ['number'], defects: ['number'], shift: ['single_select'] }, productTarget)
+      group(c.tables.norms, c.norm, { product: ['relation'], material: ['relation'], perUnit: ['number'], active: ['checkbox'] }, { ...productTarget, material: c.tables.materials })
       group(c.tables.movements, c.movement, { date: ['date', 'datetime'], material: ['relation'], kind: ['single_select'], qty: ['number'], run: ['relation'] }, { material: c.tables.materials, run: c.tables.production })
       group(c.tables.materials, c.material, { unit: ['single_select'], opening: ['number'], movements: ['relation'] }, { movements: c.tables.movements })
       // Products are addressed by the existing relation, not a guessed table name.
@@ -190,6 +196,19 @@ export function checkAppModules(app: App, catalog: Catalog): string | null {
       }
     }
   }
+  const productionModule = modules.find(module => module.source.type === 'production')
+  if (productionModule && app.production && (app.production.stock || modules.length > 1)) {
+    const c = app.production, pair = orderStockPair(app), inventory = modules.find(module => module.kind === 'inventory')
+    if (!c.stock || !pair || c.stock.itemsTableId !== pair.inventory.tables.items || !inventory || !productionModule.dependsOn.includes(inventory.id)) return 'Производство требует общий каталог продаж и склада и явную зависимость от склада'
+    const privateTables = Object.values(c.tables)
+    if (new Set(privateTables).size !== 4 || privateTables.some(id => Object.values(pair.inventory.tables).includes(id))) return 'Материалы, нормы, выпуски и движения материалов должны использовать отдельные таблицы производства'
+    const runProduct = catalog.fields.get(c.run.product), normProduct = catalog.fields.get(c.norm.product)
+    if (runProduct?.type === 'relation' && runProduct.options.allowMultiple || normProduct?.type === 'relation' && normProduct.options.allowMultiple) return 'Выпуск и норма должны относиться к одному товару каталога'
+    if (productionModule.screenIds?.some(id => {
+      const screen = app.screens.find(candidate => candidate.id === id)
+      return screen?.access.public || screen?.access.roles.some(role => app.roles.some(candidate => candidate.id === role && candidate.isDefault))
+    })) return 'Экраны производства доступны только его отдельным рабочим ролям'
+  }
   const expected = legacyAppModules(app).map(module => moduleSourceKey(module.source))
   if (expected.length !== sources.size || expected.some(key => !sources.has(key))) return 'Не все рабочие сценарии приложения привязаны к модулям'
   const visiting = new Set<string>(), visited = new Set<string>()
@@ -211,7 +230,7 @@ export function checkAppModules(app: App, catalog: Catalog): string | null {
   if (base.length > 1 && base.some(module => {
     const count = app.catalogScreenIds!.filter(id => module.screenIds?.includes(id)).length
     const publicScreens = app.screens.some(screen => module.screenIds?.includes(screen.id) && screen.access.public)
-    return count !== (module.kind === 'inventory' || module.kind === 'crm' && !publicScreens ? 0 : 1)
+    return count !== (module.kind === 'inventory' || module.kind === 'production' || module.kind === 'crm' && !publicScreens ? 0 : 1)
   })) return 'Общий каталог должен показывать каталог каждого внешнего модуля; внутренние экраны CRM остаются закрытыми'
   return null
 }

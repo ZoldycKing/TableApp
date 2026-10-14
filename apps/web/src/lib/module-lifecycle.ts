@@ -1,4 +1,4 @@
-import { apps, orderStockReservations } from '@tableapp/db'
+import { apps, orderStockReservations, productionStockRuns } from '@tableapp/db'
 import { appSchema, customerWorkflows } from '@tableapp/schema'
 import { and, eq } from 'drizzle-orm'
 import type { RowTransaction } from './row-mutations'
@@ -8,6 +8,7 @@ import type { App } from '@tableapp/schema'
 import type { Transaction } from './db-transaction'
 import { inventoryBinding, orderBinding } from './order-stock-contract'
 import { orderStockPair } from './order-stock-config'
+import { retainedProductionStockAppError } from './production-stock-contract'
 
 /** A request may wait for the workspace lock after access was checked. Reject a stale published policy. */
 export async function currentModularAppError(context: RowTransaction, app: App): Promise<string | null> {
@@ -34,6 +35,13 @@ export async function moduleIntakeError(context: RowTransaction, tableId: string
 
 /** Only one published modular application may own a workflow's writes. Legacy readers remain untouched. */
 export async function moduleOwnershipError(app: App, tx: Transaction): Promise<string | null> {
+  const stored = await tx.select({ id: apps.id, published: apps.published }).from(apps).where(eq(apps.workspaceId, app.workspaceId))
+  const previous = appSchema.safeParse(stored.find(record => record.id === app.id)?.published)
+  const production = await tx.selectDistinct({ contract: productionStockRuns.contract }).from(productionStockRuns).where(eq(productionStockRuns.workspaceId, app.workspaceId))
+  for (const { contract } of production) {
+    const error = retainedProductionStockAppError(app, contract, previous.success ? previous.data : null)
+    if (error) return error
+  }
   const stock = await tx.selectDistinct({ contract: orderStockReservations.contract }).from(orderStockReservations).where(eq(orderStockReservations.workspaceId, app.workspaceId))
   for (const { contract } of stock) {
     const order = customerWorkflows(app).find(config => config.tableId === contract.order.tableId)
@@ -41,7 +49,6 @@ export async function moduleOwnershipError(app: App, tx: Transaction): Promise<s
     if (app.inventory?.tables.items === contract.inventory.tables.items && inventoryBinding(app.inventory) !== inventoryBinding(contract.inventory)) return 'Каталог уже использует складскую историю заказов. Сохраните его журнал и правила остатка.'
   }
   const own = new Set((app.modules ?? legacyAppModules(app)).flatMap(module => moduleContract(app, module)?.writeTables ?? []))
-  const stored = await tx.select({ id: apps.id, published: apps.published }).from(apps).where(eq(apps.workspaceId, app.workspaceId))
   for (const other of stored) {
     if (other.id === app.id) continue
     const parsed = appSchema.safeParse(other.published)

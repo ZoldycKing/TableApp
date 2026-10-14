@@ -1,10 +1,11 @@
-import { apps, fields, orderDeliveries, orderStockReservations, tables, views } from '@tableapp/db'
+import { apps, fields, orderDeliveries, orderStockReservations, productionStockRuns, tables, views } from '@tableapp/db'
 import { appSchema, normalizeFieldOptions, type App, type Field } from '@tableapp/schema'
 import { eq, inArray } from 'drizzle-orm'
 import type { Transaction } from './db-transaction'
 import { checkAppReferences } from './app-references'
 import { moduleContract } from './app-modules'
 import { retainedStockFieldError } from './order-stock-contract'
+import { retainedProductionStockFieldError } from './production-stock-contract'
 
 async function definitions(tx: Transaction, workspaceId: string): Promise<App[]> {
   const records = await tx.select().from(apps).where(eq(apps.workspaceId, workspaceId))
@@ -16,6 +17,17 @@ async function definitions(tx: Transaction, workspaceId: string): Promise<App[]>
 
 /** Caller holds the workspace write lock; paused modules still need their historical fields. */
 export async function modularFieldChangeError(tx: Transaction, workspaceId: string, fieldId: string, next: Field | null): Promise<string | null> {
+  const production = await tx.selectDistinct({ contract: productionStockRuns.contract }).from(productionStockRuns).where(eq(productionStockRuns.workspaceId, workspaceId))
+  if (production.length) {
+    const [record] = await tx.select().from(fields).where(eq(fields.id, fieldId))
+    if (record) {
+      const original = { ...record, options: normalizeFieldOptions(record.type as Field['type'], record.options) } as unknown as Field
+      for (const { contract } of production) {
+        const error = retainedProductionStockFieldError(contract, original, next)
+        if (error) return error
+      }
+    }
+  }
   const stock = await tx.selectDistinct({ contract: orderStockReservations.contract }).from(orderStockReservations).where(eq(orderStockReservations.workspaceId, workspaceId))
   if (stock.length) {
     const [record] = await tx.select().from(fields).where(eq(fields.id, fieldId))

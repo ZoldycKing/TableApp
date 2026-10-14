@@ -15,6 +15,7 @@ import { prepareCustomerWrite } from './customer-store'
 import { currentModularAppError, moduleIntakeError } from './module-lifecycle'
 import { prepareOrderDeliveryWrite, assertOrderDeliveryDeletion } from './order-delivery-store'
 import { prepareOrderStockWrite, assertOrderStockDeletion } from './order-stock-store'
+import { prepareProductionStockWrite, assertProductionStockDeletion, type ProductionStockAuthorization } from './production-stock-write'
 
 export class RowWriteError extends Error {
   constructor(readonly code: 'missing' | 'conflict' | 'denied' | 'invalid', message: string) {
@@ -25,7 +26,7 @@ export class RowWriteError extends Error {
 
 export type RowActor = { id: string | null; kind: string; ip?: string | null }
 export type RowTransaction = { tx: Transaction; workspaceId: string; changed: Set<string>;
-  usageLocked?: boolean; fieldCache?: Map<string, Field[]>; customerConfigCache?: CustomerWorkflow[]; moduleStateCache?: import('@tableapp/schema').App[]; orderDeliverySync?: Set<string>; orderStockInternal?: Set<string>; orderStockReturn?: Set<string> }
+  usageLocked?: boolean; fieldCache?: Map<string, Field[]>; customerConfigCache?: CustomerWorkflow[]; moduleStateCache?: import('@tableapp/schema').App[]; orderDeliverySync?: Set<string>; orderStockInternal?: Set<string>; orderStockReturn?: Set<string>; productionStockInternal?: ProductionStockAuthorization }
 export type StoredRow = typeof rows.$inferSelect
 export const ROW_CONFLICT = 'Запись изменилась после открытия формы. Обновите её и повторите действие.'
 
@@ -139,6 +140,7 @@ export async function createRow(context: RowTransaction, tableId: string, data: 
   if (booking.error) throw new RowWriteError('invalid', booking.error)
   clean = booking.data
   clean = await prepareCustomerWrite(context, tableId, clean, null, actor, id)
+  await prepareProductionStockWrite(context, tableId, id, clean, null)
   await prepareOrderStockWrite(context, tableId, id, clean, null, actor)
   await prepareOrderDeliveryWrite(context, tableId, id, clean, null, actor)
   const error = await validateRowAttachments(tableId, fields, clean, context.tx, actor, id)
@@ -192,6 +194,7 @@ export async function updateRow(context: RowTransaction, tableId: string, rowId:
     await initialValues(context, fields, { ...before, ...changed }), before, rowId)
   if (booking.error) throw new RowWriteError('invalid', booking.error)
   const customerData = await prepareCustomerWrite(context, tableId, booking.data, before, actor, rowId)
+  await prepareProductionStockWrite(context, tableId, rowId, customerData, before)
   await prepareOrderStockWrite(context, tableId, rowId, customerData, before, actor)
   await prepareOrderDeliveryWrite(context, tableId, rowId, customerData, before, actor)
   const after = stripDerived(computeRow(customerData, compileTableFormulas(fields)), fields)
@@ -208,11 +211,18 @@ export async function deleteRow(context: RowTransaction, tableId: string, rowId:
   await mutationFields(context, tableId)
   const current = await lockedRow(context, tableId, rowId)
   checkRow(current, options)
+  await assertProductionStockDeletion(context, tableId, rowId)
   await assertOrderStockDeletion(context, tableId, rowId)
   await assertOrderDeliveryDeletion(context, tableId, rowId)
   const dependent = await dependentRows(tableId, rowId, context.tx)
   const targets = [{ tableId, id: rowId, data: current.data as Record<string, unknown> },
     ...(dependent?.rows ?? []).map((row) => ({ ...row, tableId: dependent!.tableId }))]
+  // Cascade targets obey their own accepted contracts before any row is removed.
+  for (const target of targets.slice(1)) {
+    await assertProductionStockDeletion(context, target.tableId, target.id)
+    await assertOrderStockDeletion(context, target.tableId, target.id)
+    await assertOrderDeliveryDeletion(context, target.tableId, target.id)
+  }
   let removed = 0
   const now = new Date()
   for (const target of targets) {

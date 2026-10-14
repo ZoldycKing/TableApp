@@ -4,10 +4,11 @@ export const MODULE_KINDS = ['booking', 'sales', 'requests', 'delivery', 'repair
 export type ModuleKind = typeof MODULE_KINDS[number]
 
 /** Engines with independent resources that can share one client application. */
-export const COMPOSABLE_MODULE_KINDS: readonly ModuleKind[] = ['booking', 'sales', 'requests', 'delivery', 'repair', 'property', 'field_service', 'crm', 'support', 'inventory']
+export const COMPOSABLE_MODULE_KINDS: readonly ModuleKind[] = ['booking', 'sales', 'requests', 'delivery', 'repair', 'property', 'field_service', 'crm', 'support', 'inventory', 'production']
 export function compatibleModuleKinds(kinds: readonly ModuleKind[]): boolean {
   const independent = kinds.filter(kind => kind !== 'support')
   return kinds.every(kind => COMPOSABLE_MODULE_KINDS.includes(kind)) && new Set(independent).size === independent.length && (!kinds.includes('inventory') || kinds.includes('sales'))
+    && (!kinds.includes('production') || kinds.includes('sales') && kinds.includes('inventory'))
 }
 
 const reference = z.string().min(1).max(200)

@@ -47,13 +47,14 @@ export function ModuleManager({ app, primary, sources, owner = false }: { app: A
       </select></label>
       <label className="block space-y-1 text-sm"><span>Данные нового раздела</span><select value={source} disabled={pending} onChange={event => { setSource(event.target.value); setPreview(null) }} className="w-full max-w-lg rounded-lg border border-sand-200 px-3 py-2">
         <option value="">Создать пустые таблицы для нового раздела</option>
-        {sources.filter(item => item.kind === desiredKind).map(item => <option key={item.id} value={item.id}>Использовать таблицы: {item.name}</option>)}
+        {desiredKind !== 'inventory' && desiredKind !== 'production' ? sources.filter(item => item.kind === desiredKind).map(item => <option key={item.id} value={item.id}>Использовать таблицы: {item.name}</option>) : null}
       </select></label>
       <button className={button} disabled={pending} onClick={() => start(async () => {
         const result = await previewModuleConnectionAction(app.id, addition, source || undefined)
         if (result.ok) { setPreview(result); setMessage(null) } else { setPreview(null); setMessage(result.error) }
       })}>Проверить подключение</button>
       {preview ? <div className="space-y-2 rounded-lg bg-sand-50 p-3 text-sm"><p>{preview.already ? 'Раздел уже подключён.' : preview.reused ? 'Будут использованы существующие таблицы и записи. Новые таблицы не создаются.' : `Будут созданы ${preview.newTables} таблицы без демонстрационных записей: ${preview.resources.join(', ')}.`}</p>
+        {desiredKind === 'production' ? <p>Годные изделия поступят на общий склад; материалы списываются по нормам. Резервы заказов сохраняются.</p> : null}
         <p>Ссылка приложения сохранится. Рабочие права текущих сотрудников не расширятся. Изменения потребуют публикации.</p>
         {!preview.already ? <button className={button} disabled={pending} onClick={() => run(() => connectModuleAction(app.id, addition, preview.expectedHash, source || undefined, preview.sourceHash), 'Возможность подключена в черновик. Проверьте данные и опубликуйте приложение.')}>Подключить в черновик</button> : null}
       </div> : null}

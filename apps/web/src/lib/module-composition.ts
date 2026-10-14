@@ -59,7 +59,7 @@ export function composeModules(base: App, addition: App, views: ViewTables): App
   const screens = [...first.screens, ...second.screens]
   if (new Set(screens.map(screen => screen.id)).size !== screens.length) throw new ModuleCompositionError('Экраны подключаемых возможностей пересекаются')
   const publicCatalogs = (app: App) => (app.modules ?? []).flatMap(module => {
-    if (module.kind === 'support' || module.kind === 'inventory') return []
+    if (module.kind === 'support' || module.kind === 'inventory' || module.kind === 'production') return []
     const config = module.source.type === 'customer' ? customerWorkflows(app).find(config => module.source.type === 'customer' && config.tableId === module.source.tableId) : null
     const catalog = app.screens.find(screen => (screen.type === 'list' || screen.type === 'tiles') && screen.access.public && module.screenIds?.includes(screen.id) &&
       (module.source.type === 'booking' ? views.get(screen.source.viewId)?.tableId === app.booking?.tables.services : screen.source.viewId === config?.catalog?.viewId))
@@ -80,6 +80,7 @@ export function composeModules(base: App, addition: App, views: ViewTables): App
   const firstHasClients = first.screens.some(screen => screen.access.public || screen.access.roles.includes('client'))
   const combined = appSchema.parse({ ...first, accessMode: firstHasClients ? first.accessMode : second.accessMode,
     inventory: first.inventory ?? second.inventory,
+    production: first.production ?? second.production,
     booking: booking ? { ...booking, listScreenId } : null, customer: primary, customerSections: workflows.filter(config => config !== primary),
     modules, moduleAccess: { grants: [...first.moduleAccess!.grants, ...second.moduleAccess!.grants] },
     roles: [...first.roles, ...second.roles.filter(role => !first.roles.some(existing => existing.id === role.id))],
@@ -88,6 +89,7 @@ export function composeModules(base: App, addition: App, views: ViewTables): App
       ...(screen.id === catalogScreens[0] ? { name: 'Каталог', tab: { icon: 'grid', label: 'Каталог' } } : catalogScreens.includes(screen.id) ? { tab: null } : {}) })),
   })
   if (combined.inventory && !orderStockPair(combined)) throw new ModuleCompositionError('Продажи и склад должны использовать общий каталог и явные привязки товаров заказа. Подключите склад через возможность приложения; перенос существующего склада выполняется отдельно.')
+  if (combined.production && (!combined.production.stock || combined.production.stock.itemsTableId !== combined.inventory?.tables.items)) throw new ModuleCompositionError('Производство подключается к общему каталогу продаж и склада. Перенос отдельного производства требует явной проверки продукции и истории.')
   return combined
 }
 

@@ -110,6 +110,19 @@ export function checkAppReferences(app: App, catalog: AppReferenceCatalog): stri
       [config.run, config.tables.production], [config.norm, config.tables.norms],
       [config.movement, config.tables.movements], [config.material, config.tables.materials],
     ] as const) for (const id of Object.values(group)) field(id, tableId)
+    if (config.stock) {
+      const itemsTableId = table(config.stock.itemsTableId), pair = orderStockPair(app)
+      if (!pair || pair.inventory.tables.items !== itemsTableId) invalid('склад готовой продукции', config.stock.itemsTableId)
+      field(config.stock.materialStockFieldId, config.tables.materials)
+      const materialStock = catalog.fields.get(config.stock.materialStockFieldId), opening = catalog.fields.get(config.material.opening)
+      const sum = [...catalog.fields.values()].find(field => field.tableId === config.tables.materials && field.type === 'rollup' &&
+        field.options.relationFieldId === config.material.movements && field.options.targetFieldId === config.movement.qty && field.options.fn === 'sum')
+      if (!sum || materialStock?.type !== 'formula' || materialStock.options.expression !== `{${opening?.name}} + {${sum.name}}`) invalid('остаток материала', config.stock.materialStockFieldId)
+      for (const id of [config.run.product, config.norm.product]) {
+        const product = catalog.fields.get(id)
+        if (product?.type !== 'relation' || product.options.tableId !== itemsTableId || product.options.allowMultiple) invalid('товар выпуска', id)
+      }
+    }
     screenLink(config.formScreenId)
     screenLink(config.movementScreenId)
   }

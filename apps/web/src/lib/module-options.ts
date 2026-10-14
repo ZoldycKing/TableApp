@@ -10,6 +10,7 @@ export const MODULE_STARTERS = [
   { kind: 'property', templateId: 'nedvizhimost', name: 'Недвижимость' },
   { kind: 'crm', templateId: 'crm', name: 'Клиенты и сделки' },
   { kind: 'inventory', templateId: 'sklad', name: 'Склад и остатки' },
+  { kind: 'production', templateId: 'proizvodstvo', name: 'Производство' },
 ] as const satisfies readonly { kind: ModuleKind; templateId: string; name: string }[]
 
 export function moduleStarter(templateId: string) {
@@ -17,5 +18,7 @@ export function moduleStarter(templateId: string) {
 }
 export function availableModuleStarters(kinds: readonly ModuleKind[]) {
   if (kinds.includes('inventory') && !kinds.includes('sales')) return []
-  return MODULE_STARTERS.filter(starter => !kinds.includes(starter.kind) && compatibleModuleKinds([...kinds, starter.kind]))
+  return MODULE_STARTERS.filter(starter => !kinds.includes(starter.kind) &&
+    (starter.kind !== 'production' || kinds.includes('sales') && kinds.includes('inventory')) &&
+    compatibleModuleKinds([...kinds, starter.kind]))
 }

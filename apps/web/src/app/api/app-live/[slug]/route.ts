@@ -3,6 +3,7 @@ import { currentAppAccess } from '@/lib/app-session'
 import { canEnter } from '@/lib/app-roles'
 import { loadPublishedApp } from '@/lib/app-runtime'
 import { tableLiveStream } from '@/lib/table-live-stream'
+import { loadRuntimePageMetadata } from '@/lib/runtime-page-data'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -15,7 +16,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   if (!canEnter(app, access.visitor)) return new Response('Доступ закрыт', { status: 403 })
   const definition = await loadPublishedApp(slug, access.visitor, { screenId: null })
   if (!definition) return new Response('Приложение недоступно', { status: 404 })
-  const ids = Object.keys(definition.tables).sort()
+  const dependencies = await loadRuntimePageMetadata(app, access.visitor)
+  const ids = [...dependencies.primaryByTable.keys()].sort()
   const scope = JSON.stringify(app)
   const identity = JSON.stringify(access.visitor)
   const authorize = async () => {

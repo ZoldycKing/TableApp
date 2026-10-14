@@ -20,6 +20,7 @@ import { FormFieldInput } from './form-field'
 import { useUnsaved } from '@/lib/unsaved'
 import { bookingVisitSection } from '@/lib/booking-lifecycle'
 import { CatalogHub } from './catalog-hub'
+import type { RuntimePageControls } from '@/lib/use-screen-runtime'
 
 type Props = {
   screen: Screen
@@ -39,6 +40,7 @@ type Props = {
   /** Отбор списка: хранится в оболочке, чтобы пережить открытие карточки. */
   listState?: ListState
   onListState?: (next: ListState) => void
+  pageControls?: Readonly<Record<string, RuntimePageControls>>
   /** Адрес выгрузки списка; `null` — если выгружать нечего или не из чего. */
   exportHref?: string | null
   onOpenRow: (screenId: string, rowId: string) => void
@@ -65,7 +67,7 @@ type Props = {
 
 
 export function ScreenView(props: Props) {
-  if (props.screen.id === props.runtime.app.homeScreenId && props.runtime.app.catalogScreenIds) return <CatalogHub runtime={props.runtime} state={props.listState ?? EMPTY_LIST_STATE} onState={props.onListState ?? (() => {})} onOpenRow={props.onOpenRow} />
+  if (props.screen.id === props.runtime.app.homeScreenId && props.runtime.app.catalogScreenIds) return <CatalogHub runtime={props.runtime} state={props.listState ?? EMPTY_LIST_STATE} onState={props.onListState ?? (() => {})} onOpenRow={props.onOpenRow} pageControls={props.pageControls} />
   const { screen, table, row, collection, viewer, accent, relatedTitles, runtime } = props
 
   const fields = table?.fields ?? []
@@ -79,7 +81,7 @@ export function ScreenView(props: Props) {
     const target = runtime.tables[relation.options.tableId]
     return ids.map((id) => ({
       id,
-      title: titles.find((candidate) => candidate.id === id)?.title ?? 'Строка удалена',
+      title: titles.find((candidate) => candidate.id === id)?.title ?? 'Запись недоступна',
       row: target?.rows.find((candidate) => candidate.id === id) ?? null,
     }))
   }
@@ -92,6 +94,7 @@ export function ScreenView(props: Props) {
     relatedTitles,
     relatedRows,
     onAction: props.onAction,
+    onOpenRow: props.onOpenRow,
   }
 
   if (screen.type === 'dashboard') {
@@ -112,17 +115,17 @@ export function ScreenView(props: Props) {
       const catalog = runtime.app.screens.find(candidate => 'source' in candidate && runtime.views[candidate.source.viewId]?.tableId === customer.catalog?.tableId)
       return <div className="space-y-4">{customer.parent ? <button type="button" onClick={() => props.onOpenScreen(customer.formScreenId)} className="rounded-xl border border-sand-200 bg-white px-4 py-2.5 text-sm font-medium">Задать вопрос по заказу</button> : null}<CustomerRecords config={customer} screen={screen} rows={collection?.rows ?? []} fields={fields} relatedTitles={relatedTitles} state={props.listState ?? EMPTY_LIST_STATE}
         onState={props.onListState ?? (() => {})} accent={accent} onCatalog={catalog ? () => props.onOpenScreen(runtime.app.catalogScreenIds ? runtime.app.homeScreenId! : catalog.id) : null}
-        onOpenRow={screen.onTapScreenId ? id => props.onOpenRow(screen.onTapScreenId!, id) : null} /></div>
+        onOpenRow={screen.onTapScreenId ? id => props.onOpenRow(screen.onTapScreenId!, id) : null} page={runtime.screens[screen.id]?.page} pageControls={props.pageControls?.[screen.id]} /></div>
     }
     const booking = runtime.app.booking
     if (booking && screen.id === (booking.listScreenId ?? runtime.app.homeScreenId) && table?.id === booking.tables.visits) {
       const services = runtime.app.screens.find(candidate => (candidate.type === 'list' || candidate.type === 'tiles') && runtime.views[candidate.source.viewId]?.tableId === booking.tables.services)
       const dateField = fields.find(field => field.id === booking.visit.start)
       return <BookingVisits screen={screen} rows={collection?.rows ?? []} fields={fields} relatedTitles={relatedTitles} config={booking}
-        timeZone={dateField ? fieldTimeZone(dateField) : 'UTC'} now={props.now ?? runtime.loadedAt ?? Date.now()}
+        timeZone={dateField ? fieldTimeZone(dateField) : 'UTC'} now={runtime.screens[screen.id]?.page?.asOf ?? props.now ?? runtime.loadedAt ?? Date.now()}
         state={props.listState ?? EMPTY_LIST_STATE} onState={props.onListState ?? (() => {})} accent={accent}
         onChooseService={services ? () => props.onOpenScreen(runtime.app.catalogScreenIds ? runtime.app.homeScreenId! : services.id) : null}
-        onOpenRow={screen.onTapScreenId ? id => props.onOpenRow(screen.onTapScreenId!, id) : null} />
+        onOpenRow={screen.onTapScreenId ? id => props.onOpenRow(screen.onTapScreenId!, id) : null} page={runtime.screens[screen.id]?.page} pageControls={props.pageControls?.[screen.id]} />
     }
     return (
       <CollectionView
@@ -133,6 +136,8 @@ export function ScreenView(props: Props) {
         state={props.listState ?? EMPTY_LIST_STATE}
         onState={props.onListState ?? (() => {})}
         exportHref={props.exportHref ?? null}
+        page={runtime.screens[screen.id]?.page}
+        pageControls={props.pageControls?.[screen.id]}
         onOpenRow={
           screen.onTapScreenId ? (rowId) => props.onOpenRow(screen.onTapScreenId!, rowId) : null
         }
@@ -140,6 +145,7 @@ export function ScreenView(props: Props) {
     )
   }
 
+  if (runtime.lazy?.paged && !row && (screen.type === 'detail' || screen.type === 'form' && screen.mode === 'edit')) return <div className="rounded-2xl border border-sand-200 bg-white shadow-soft"><EmptyState icon="file" title="Запись недоступна" hint="Откройте другую запись из своего списка." /></div>
   if (screen.type === 'detail') {
     const booking = runtime.app.booking
     const bookingDate = booking ? fields.find(field => field.id === booking.visit.start) : undefined

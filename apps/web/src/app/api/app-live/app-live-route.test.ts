@@ -4,10 +4,11 @@ import { inventoryFixture } from '@/lib/templates/inventory-fixture.test-utils'
 import { listenerCount, publishTable } from '@/lib/live'
 import { GET } from './[slug]/route'
 
-const mocks = vi.hoisted(() => ({ app: vi.fn(), access: vi.fn(), runtime: vi.fn() }))
+const mocks = vi.hoisted(() => ({ app: vi.fn(), access: vi.fn(), runtime: vi.fn(), metadata: vi.fn() }))
 vi.mock('@/lib/app-write-access', () => ({ loadApp: mocks.app }))
 vi.mock('@/lib/app-session', () => ({ currentAppAccess: mocks.access }))
 vi.mock('@/lib/app-runtime', () => ({ loadPublishedApp: mocks.runtime }))
+vi.mock('@/lib/runtime-page-data', () => ({ loadRuntimePageMetadata: mocks.metadata }))
 const controllers: AbortController[] = []
 beforeEach(() => vi.useFakeTimers())
 afterEach(() => { controllers.splice(0).forEach(controller => controller.abort()); vi.useRealTimers(); vi.clearAllMocks() })
@@ -20,6 +21,7 @@ function setup() {
   mocks.app.mockResolvedValue(fixture.app)
   mocks.access.mockResolvedValue({ visitor: asRole('staff'), viewer: null })
   mocks.runtime.mockResolvedValue(fixture.runtime)
+  mocks.metadata.mockResolvedValue({ primaryByTable: new Map(Object.keys(fixture.runtime.tables).map(id => [id, null])) })
   return fixture
 }
 describe('published app notification access', () => {
@@ -52,5 +54,19 @@ describe('published app notification access', () => {
     expect(new TextDecoder().decode((await reader.read()).value)).toContain('"changed":true')
     expect((await reader.read()).done).toBe(true)
     expect(Object.keys(runtime.tables).every(id => listenerCount(id) === 0)).toBe(true)
+  })
+  it('observes related-only dependencies without exposing their identifiers or rows', async () => {
+    const { runtime } = setup(), relatedTable = 'private_related_dependency'
+    mocks.metadata.mockResolvedValue({ primaryByTable: new Map([...Object.keys(runtime.tables), relatedTable].map(id => [id, null])) })
+    const response = await GET(request(), { params: Promise.resolve({ slug: 'warehouse' }) })
+    const reader = response.body!.getReader(); await reader.read()
+    expect(listenerCount(relatedTable)).toBe(1)
+    publishTable(relatedTable, 'rows')
+    const event = new TextDecoder().decode((await reader.read()).value)
+    expect(event).toBe('data: {"changed":true}\n\n')
+    expect(event).not.toContain(relatedTable)
+    expect(mocks.runtime).toHaveBeenCalledTimes(1)
+    await reader.cancel()
+    expect(listenerCount(relatedTable)).toBe(0)
   })
 })

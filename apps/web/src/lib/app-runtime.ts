@@ -13,6 +13,7 @@ import { loadBusinessProfile } from './business-profile'
 import type { BusinessProfile } from '@tableapp/schema'
 import { listAccessibleApps } from './customer-apps'
 import { configFingerprint } from './app-config-history'
+import { usesRuntimePages, runtimePageEnvelope, readRuntimeSelectedRows, mergeRuntimeSlices } from './runtime-page-runtime'
 
 export type RuntimeTable = {
   id: string
@@ -23,11 +24,11 @@ export type RuntimeTable = {
 }
 
 /** Строки одного списка: уже отобранные и уже упорядоченные. */
-export type ScreenRows = { rowIds: string[] }
+export type ScreenRows = { rowIds: string[]; page?: import('./runtime-page-types').CollectionPage }
 
 export type RuntimeApp = {
   /** Present only in the live client pilot. Missing rows on other screens have not been loaded yet. */
-  lazy?: { revision: string; loadedScreenIds: string[] }
+  lazy?: { revision: string; loadedScreenIds: string[]; paged?: boolean; loadedRows?: Record<string, string[]> }
   customerProfile?: { name: string | null; phone: string | null }
   business?: BusinessProfile | null
   businessApps?: { slug: string; name: string }[]
@@ -144,7 +145,7 @@ export async function loadAppMeta(slug: string): Promise<AppMeta | null> {
 export async function loadPublishedApp(
   slug: string,
   visitor: Visitor,
-  request?: { screenId: string | null },
+  request?: { screenId: string | null; rowId?: string | null },
 ): Promise<RuntimeApp | null> {
   const [record] = await db.select().from(apps).where(eq(apps.slug, slug)).limit(1)
   if (!record?.published) return null
@@ -158,6 +159,31 @@ export async function loadPublishedApp(
    * из базы и не уезжает в браузер.
    */
   const visible = { ...app, screens: visibleScreensFor(app, visitor) }
+  if (request && request.screenId !== null && usesRuntimePages(app, visitor)) {
+    const { readRuntimeCollection } = await import('./runtime-collection-pages')
+    const { loadRuntimePageMetadata, projectPageData } = await import('./runtime-page-data')
+    const selected = [...new Set([request.screenId, ...app.catalogScreenIds!])]
+    if (selected.some(id => !visible.screens.some(screen => screen.id === id))) return null
+    const metadata = await loadRuntimePageMetadata(app, visitor)
+    let runtime = projectPageData(metadata, [], Date.now())
+    // Only requested collections are loaded. Empty memberships for deferred
+    // screens would make the client mistake them for a completed empty page.
+    runtime.screens = {}
+    runtime.blocks = {}
+    const loaded: string[] = []
+    for (const id of selected) {
+      const screen = visible.screens.find(screen => screen.id === id)!
+      if (screen.type === 'list' || screen.type === 'tiles') { runtime = mergeRuntimeSlices(runtime, await readRuntimeCollection(app, visitor, id)); loaded.push(id) }
+      else if (screen.type === 'detail' && request.rowId && id === request.screenId) { runtime = mergeRuntimeSlices(runtime, await readRuntimeSelectedRows(app, visitor, id, [request.rowId])); loaded.push(id) }
+      else if (screen.type === 'form') {
+        // Relationship choices are requested when a form opens; they do not bulk-load the initial catalogue/history.
+        const formRuntime = await loadRuntimeForApp(visible, visitor, [id])
+        if (formRuntime) runtime = mergeRuntimeSlices(runtime, { ...formRuntime, screens: {} })
+        loaded.push(id)
+      }
+    }
+    return runtimePageEnvelope(app, visitor, runtime, loaded, request.rowId ? { [request.screenId]: [request.rowId] } : undefined)
+  }
   const lazy = request?.screenId !== null && Boolean(request && app.moduleAccess && app.catalogScreenIds && (!visitor.authenticated || visitor.roleId === 'client'))
   const selected = request?.screenId === null ? [] : lazy ? [...new Set([request?.screenId ?? app.homeScreenId!, ...app.catalogScreenIds!])] : undefined
   if (selected?.some(id => !visible.screens.some(screen => screen.id === id))) return null

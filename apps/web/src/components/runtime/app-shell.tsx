@@ -231,9 +231,13 @@ export function AppShell({
    * и собирает заново. Один лишний кадр честнее сломанной гидрации.
    */
   const [stack, setStack] = useState<NavEntryType[]>([{ screenId: home, rowId: null }])
-  const { runtime, loading: screenLoading, error: screenLoadError, retry: retryScreen } = useScreenRuntime(initialRuntime, stack.at(-1)!.screenId, demo || editing || stack.at(-1)!.screenId === MESSAGES_SCREEN)
   /** Отбор по каждому списку отдельно: у заказов и у позиций он свой. */
   const [listStates, setListStates] = useState<Record<string, ListStateType>>({})
+  const checkoutCatalog = checkout ? customerWorkflows(app).find(config => config.formScreenId === checkout.screenId)?.catalog?.detailScreenId
+    ?? (checkout.screenId === app.booking?.formScreenId ? app.screens.find(screen => screen.type === 'detail' && screen.tableId === app.booking!.tables.services)?.id : undefined) : undefined
+  const selectedCatalogRow = checkout?.rowId && checkoutCatalog ? { screenId: checkoutCatalog, rowId: checkout.rowId } : null
+  const { runtime, loading: screenLoading, error: screenLoadError, retry: retryScreen, pageControls } = useScreenRuntime(initialRuntime, stack.at(-1)!.screenId, demo || editing || stack.at(-1)!.screenId === MESSAGES_SCREEN,
+    { rowId: stack.at(-1)!.rowId, listStates, cartProductIds: cart.items.map(item => item.id), selectedCatalogRow })
   const [error, setError] = useState<string | null>(null)
   /**
    * Подтверждение после отправки, когда идти некуда.
@@ -454,6 +458,12 @@ export function AppShell({
     }
     const config = customerWorkflows(app).find(config => config.formScreenId === target.id)
     const initial: Record<string, unknown> = {}
+    if (selectedCatalogRow) {
+      if (runtime.lazy?.paged && !runtime.lazy.loadedRows?.[selectedCatalogRow.screenId]?.includes(selectedCatalogRow.rowId)) return
+      const catalogScreen = screens.get(selectedCatalogRow.screenId)
+      const catalogTable = catalogScreen && 'tableId' in catalogScreen ? catalogScreen.tableId : null
+      if (catalogTable && !runtime.tables[catalogTable]?.rows.some(row => row.id === selectedCatalogRow.rowId)) { clearCheckout(); setError('Этот вариант больше недоступен. Выберите другой в каталоге.'); return }
+    }
     if (config?.catalog?.selectionFieldId && checkout.rowId) {
       const selected = runtime.tables[config.catalog.tableId]?.rows.find(item => item.id === checkout.rowId)
       if (!selected) { clearCheckout(); setError('Этот вариант больше недоступен. Выберите другой в каталоге.'); return }
@@ -465,7 +475,7 @@ export function AppShell({
     if (app.booking && target.id === app.booking.formScreenId) setBookingDraft(checkout.rowId ? { [app.booking.visit.service]: [checkout.rowId] } : null)
     clearCheckout(); setSent(null); setError(null)
     navigate(target.id, null)
-  }, [checkout, viewer, runtime, screens, app, demo, editing])
+  }, [checkout, viewer, runtime, screens, app, demo, editing, selectedCatalogRow?.screenId])
   useEffect(() => {
     if (pendingCabinet && viewer && app.homeScreenId && screens.has(app.homeScreenId)) {
       setPendingCabinet(false); setSent(null); openTab(app.homeScreenId)
@@ -922,6 +932,7 @@ export function AppShell({
               now={now}
               listState={listStates[screen.id] ?? EMPTY_LIST}
               onListState={(next) => setListState(screen.id, next)}
+              pageControls={pageControls}
               /*
                * Кнопки выгрузки нет у не вошедшего: посторонний на витрине
                * ничего своего не забирает. Нет её и в показе на сайте

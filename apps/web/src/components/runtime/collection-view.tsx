@@ -1,7 +1,7 @@
 'use client'
 
 import type { Attachment, Field, ScreenOf } from '@tableapp/schema'
-import { useMemo } from 'react'
+import { useMemo, type ReactNode } from 'react'
 import { formatCell } from '@/lib/format'
 import type { TableRow } from '@/lib/table-store'
 import type { RelatedTitles } from '@/lib/queries'
@@ -10,6 +10,8 @@ import { EmptyState, StatusPill } from './ui'
 import { CHOICE_COLORS } from '@/components/views/card'
 import type { ListState } from './app-shell'
 import { fileUrl, isImage } from '@/components/file-upload'
+import type { CollectionPage } from '@/lib/runtime-page-types'
+import type { RuntimePageControls } from '@/lib/use-screen-runtime'
 
 /**
  * Список записей.
@@ -67,6 +69,9 @@ export function CollectionView({
   exportHref,
   showStatusFilters = true,
   showToolbar = true,
+  page,
+  pageControls,
+  emptyState,
 }: {
   screen: Collection
   rows: TableRow[]
@@ -88,6 +93,9 @@ export function CollectionView({
   exportHref: string | null
   showStatusFilters?: boolean
   showToolbar?: boolean
+  page?: CollectionPage
+  pageControls?: RuntimePageControls
+  emptyState?: ReactNode
 }) {
   const { query, choiceId } = state
   const setQuery = (next: string) => onState({ ...state, query: next })
@@ -111,9 +119,9 @@ export function CollectionView({
     }
     return statusField.options.choices.map((choice) => ({
       ...choice,
-      count: rows.filter((row) => hasChoice(row.data[statusField.id], choice.id)).length,
+      count: page ? page.choiceCounts[choice.id] ?? 0 : rows.filter((row) => hasChoice(row.data[statusField.id], choice.id)).length,
     }))
-  }, [showStatusFilters, statusField, rows])
+  }, [showStatusFilters, statusField, rows, page])
 
   const searchFields = useMemo(
     () => screen.source.searchFieldIds.map((id) => byId(id)).filter((item): item is Field => Boolean(item)),
@@ -121,6 +129,7 @@ export function CollectionView({
   )
 
   const shown = useMemo(() => {
+    if (page) return rows
     const needle = query.trim().toLowerCase()
     return rows.filter((row) => {
       if (statusField && choiceId && !hasChoice(row.data[statusField.id], choiceId)) return false
@@ -129,7 +138,7 @@ export function CollectionView({
         collectionText(item, row.data[item.id], relatedTitles).toLowerCase().includes(needle),
       )
     })
-  }, [rows, query, choiceId, statusField, searchFields, relatedTitles])
+  }, [rows, query, choiceId, statusField, searchFields, relatedTitles, page])
 
   const filtering = query.trim() !== '' || choiceId !== null
 
@@ -150,7 +159,7 @@ export function CollectionView({
      * ничего, и выдавать её за показатель нельзя. Каталог у нас плиткой,
      * рабочий перечень — списком, и это же различие решает здесь.
      */
-    if (screen.type === 'tiles') return null
+    if (page || screen.type === 'tiles') return null
     if (!metaField || metaField.type !== 'number') return null
     if (metaField.options.format !== 'currency') return null
     if (!/^(сумма|итого|стоимость заказа|стоимость ремонта|осталось доплатить)$/i.test(metaField.name.trim())) return null
@@ -160,9 +169,9 @@ export function CollectionView({
       return acc + (typeof value === 'number' && Number.isFinite(value) ? value : 0)
     }, 0)
     return sum === 0 ? null : formatCell(metaField, sum)
-  }, [shown, metaField])
+  }, [shown, metaField, page])
 
-  if (rows.length === 0) {
+  if (rows.length === 0 && !page) {
     return (
       <div className="rounded-2xl border border-sand-200 bg-white shadow-soft">
         <EmptyState
@@ -176,7 +185,7 @@ export function CollectionView({
 
   return (
     <div className="@container space-y-3">
-      {showToolbar && (searchFields.length > 0 || tabs.length > 0) ? (
+      {showToolbar && (page || searchFields.length > 0 || tabs.length > 0) ? (
         <div className="space-y-2.5">
           <div className="flex flex-col gap-2 @min-[560px]:flex-row @min-[560px]:items-center">
             {searchFields.length > 0 ? (
@@ -202,7 +211,7 @@ export function CollectionView({
             */}
             <div className="flex w-full shrink-0 items-center justify-between gap-3 @min-[560px]:w-auto @min-[560px]:justify-end">
               <p className="text-xs text-ink-muted">
-                {filtering ? `${shown.length} из ${rows.length}` : `Всего ${rows.length}`}
+                {pageControls?.loading && shown.length === 0 ? 'Загружаем…' : filtering ? `${page?.matched ?? shown.length} из ${page?.total ?? rows.length}` : `Всего ${page?.total ?? rows.length}`}
                 {total ? (
                   <>
                     {' · сумма '}
@@ -225,7 +234,7 @@ export function CollectionView({
              */
             <div className="flex flex-wrap gap-1.5">
               <Tab active={choiceId === null} onClick={() => setChoiceId(null)}>
-                Все <Count value={rows.length} />
+                Все <Count value={page?.total ?? rows.length} />
               </Tab>
               {tabs.map((choice) => (
                 <Tab
@@ -242,7 +251,10 @@ export function CollectionView({
         </div>
       ) : null}
 
-      {shown.length === 0 ? (
+      {shown.length === 0 && pageControls?.loading ? <p role="status" className="rounded-xl border border-sand-200 bg-white p-4 text-sm text-ink-muted">Загружаем записи…</p> :
+      shown.length === 0 && pageControls?.error ? null :
+      shown.length === 0 && page && !filtering ? emptyState ?? <div className="rounded-2xl border border-sand-200 bg-white shadow-soft"><EmptyState icon={screen.type === 'tiles' ? 'grid' : 'inbox'} title="Здесь пока пусто" hint="Записи появятся, как только их добавят." /></div> :
+      shown.length === 0 ? (
         <div className="rounded-2xl border border-sand-200 bg-white shadow-soft">
           <EmptyState
             icon="search"
@@ -287,6 +299,11 @@ export function CollectionView({
           ))}
         </div>
       )}
+      {page && <div className="space-y-2">
+        {shown.length > 0 && <p className="text-center text-xs text-ink-muted">Показано {shown.length} из {page.matched}</p>}
+        {pageControls?.error ? <div className="space-y-2 rounded-xl border border-sand-200 bg-white p-4 text-sm"><p role="alert">{pageControls.error}</p><button type="button" disabled={pageControls.loading} onClick={pageControls.onRetry} className="rounded-lg border border-sand-200 px-3 py-2 disabled:opacity-50">Попробовать ещё раз</button></div> :
+          page.next && pageControls ? <button type="button" disabled={pageControls.loading} onClick={pageControls.onMore} className="w-full rounded-xl border border-sand-200 bg-white px-4 py-2.5 text-sm font-medium transition-colors hover:bg-sand-50 disabled:opacity-50">{pageControls.loading ? 'Загружаем…' : 'Показать ещё'}</button> : null}
+      </div>}
     </div>
   )
 }

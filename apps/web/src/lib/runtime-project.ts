@@ -15,7 +15,7 @@ export type RuntimeSourceRow = RowMetadata & { tableId: string; position: string
 /** Pure runtime projection shared by stored applications and synthetic demo data. */
 export function projectRuntime(app: App, visitor: Visitor, views: Record<string, View>,
   tableRows: { id: string; name: string; primaryFieldId: string | null }[],
-  fieldsByTable: Map<string, Field[]>, dataRows: RuntimeSourceRow[], primaryByTable: ReadonlyMap<string, string | null>): RuntimeApp {
+  fieldsByTable: Map<string, Field[]>, dataRows: RuntimeSourceRow[], primaryByTable: ReadonlyMap<string, string | null>, options: { now?: Date } = {}): RuntimeApp {
   const rawByTable = new Map<string, Map<string, Record<string, unknown>>>()
   for (const row of dataRows) {
     let bucket = rawByTable.get(row.tableId)
@@ -28,7 +28,7 @@ export function projectRuntime(app: App, visitor: Visitor, views: Record<string,
 
   // Связанные строки с посчитанными формулами: Rollup по формульной колонке
   // иначе суммирует то, чего в базе нет, и показывает ноль.
-  const related = relatedIndexFrom(rawByTable, fieldsByTable)
+  const related = relatedIndexFrom(rawByTable, fieldsByTable, options)
 
   /*
    * Порядок здесь и есть правило безопасности, и менять его нельзя:
@@ -78,7 +78,7 @@ export function projectRuntime(app: App, visitor: Visitor, views: Record<string,
         id: row.id,
         version: row.version,
         position: row.position,
-        data: computeDerivedRow(systemRowData(row, fields), fields, related, formulas),
+        data: computeDerivedRow(systemRowData(row, fields), fields, related, formulas, options),
       }))
       .filter(row => !publicOnly || publicReach?.kind === 'gated' && publicReach.allows(row.data))
 
@@ -168,12 +168,12 @@ export function projectRuntime(app: App, visitor: Visitor, views: Record<string,
   }
 
   return {
-    ...(app.booking ? { loadedAt: Date.now() } : {}),
+    ...(app.booking ? { loadedAt: options.now?.getTime() ?? Date.now() } : {}),
     app,
     views,
     tables: result,
     screens,
-    relatedTitles: buildTitles(primaryByTable, fieldsByTable, rawByTable, {
+    relatedTitles: buildTitles(primaryByTable, fieldsByTable, related, {
       app,
       visitor,
       views,

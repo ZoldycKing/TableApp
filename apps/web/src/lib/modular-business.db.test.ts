@@ -412,7 +412,7 @@ describe.skipIf(!process.env.DATABASE_URL)('modular business scenarios in Postgr
     const app = await definition(first.appId), booking = app.booking!, own = newId('row'), other = newId('row')
     const [master] = await database.db.select().from(database.rows).where(eq(database.rows.tableId, booking.tables.masters))
     await database.db.insert(database.rows).values([
-      { id: own, tableId: booking.tables.visits, data: { [booking.visit.email]: clientEmail, [booking.visit.client]: 'Synthetic client', [booking.visit.master]: [master!.id], [booking.visit.status]: booking.statuses.booked }, position: 'z1' },
+      { id: own, tableId: booking.tables.visits, data: { [booking.visit.email]: clientEmail, [booking.visit.client]: 'Synthetic client', [booking.visit.master]: [master!.id], [booking.visit.start]: new Date(Date.now() + 86_400_000).toISOString(), [booking.visit.minutes]: 60, [booking.visit.status]: booking.statuses.booked }, position: 'z1' },
       { id: other, tableId: booking.tables.visits, data: { [booking.visit.email]: 'another@example.invalid', [booking.visit.client]: 'Other client', [booking.visit.status]: booking.statuses.booked }, position: 'z2' },
     ])
     await session(clientEmail)

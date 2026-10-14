@@ -18,6 +18,7 @@ export type ComponentContext = {
   relatedTitles: RelatedTitles
   relatedRows: (relationFieldId: string) => { id: string; title: string; row: TableRow | null }[]
   onAction: (action: Action) => void
+  onOpenRow?: (screenId: string, rowId: string) => void
 }
 
 const HEADING_SIZES = { s: 'text-base', m: 'text-lg', l: 'text-2xl' } as const
@@ -120,7 +121,7 @@ export function ComponentView({ component, ctx, desktopButton, desktopEmphasis =
               disabled={!component.onTapScreenId}
               onClick={() =>
                 component.onTapScreenId &&
-                ctx.onAction({ id: 'inline', type: 'open_screen', screenId: component.onTapScreenId })
+                (ctx.onOpenRow ? ctx.onOpenRow(component.onTapScreenId, item.id) : ctx.onAction({ id: 'inline', type: 'open_screen', screenId: component.onTapScreenId }))
               }
               className="w-full rounded-lg border border-[var(--color-border-subtle)] px-3 py-2 text-left text-sm disabled:cursor-default"
             >

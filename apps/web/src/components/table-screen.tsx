@@ -261,6 +261,8 @@ export function TableScreen({ table, member, initialRowId = null, customerHistor
         tables={table.workspaceTables}
         activeTableId={table.id}
         onError={setError}
+        compact
+        canCreate={!readOnly}
       />
 
       {table.templateId && table.sampleCount > 0 ? (

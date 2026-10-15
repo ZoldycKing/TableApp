@@ -17,6 +17,8 @@ export function NavList({
   role,
   variant = 'wide',
   onNavigate,
+  omitIds = [],
+  contextName,
 }: {
   pathname: string
   role: string
@@ -24,8 +26,10 @@ export function NavList({
   /** Выдвижная панель закрывается после перехода: иначе она перекрывает то,
    *  ради чего её открыли. */
   onNavigate?: () => void
+  omitIds?: readonly string[]
+  contextName?: string
 }) {
-  const items = navItemsFor(role)
+  const items = navItemsFor(role).filter(item => !omitIds.includes(item.id))
   const active = activeNavId(pathname, items)
 
   return (
@@ -42,9 +46,10 @@ export function NavList({
               черта делает панель полосатой.
             */}
             <p
-              className={`mb-1 px-3 text-[11px] font-medium uppercase tracking-wide text-ink-muted ${ONLY_WIDE_BLOCK[variant]}`}
+              title={contextName && group.id === 'work' ? contextName : undefined}
+              className={`mb-1 truncate px-3 text-[11px] font-medium text-ink-muted ${contextName ? '' : 'uppercase tracking-wide'} ${ONLY_WIDE_BLOCK[variant]}`}
             >
-              {group.label}
+              {contextName ? group.id === 'work' ? `Бизнес: ${contextName}` : 'Настройки бизнеса' : group.label}
             </p>
 
             <ul className="space-y-0.5">

@@ -9,10 +9,15 @@ export function TableSwitcher({
   tables,
   activeTableId,
   onError,
+  compact = false,
+  canCreate = true,
 }: {
   tables: TableSummary[]
   activeTableId: string
   onError: (message: string) => void
+  /** The business tree already lists tables; only keep creation here. */
+  compact?: boolean
+  canCreate?: boolean
 }) {
   const [creating, setCreating] = useState(false)
   const [name, setName] = useState('')
@@ -20,8 +25,9 @@ export function TableSwitcher({
   const router = useRouter()
 
   const create = () => {
+    if (!canCreate || pending || !name.trim()) return
     startTransition(async () => {
-      const result = await createTableAction(name)
+      const result = await createTableAction(name.trim())
       if (!result.ok) return onError(result.error)
       setCreating(false)
       setName('')
@@ -29,9 +35,11 @@ export function TableSwitcher({
     })
   }
 
+  if (compact && !canCreate) return null
+
   return (
-    <nav className="mb-4 flex flex-wrap items-center gap-1 border-b border-[var(--color-border-subtle)] pb-2">
-      {tables.map((table) => (
+    <nav aria-label={compact ? 'Создание таблицы' : 'Таблицы бизнеса'} className={`mb-4 flex flex-wrap items-center gap-1 ${compact ? '' : 'border-b border-[var(--color-border-subtle)] pb-2'}`}>
+      {!compact ? tables.map((table) => (
         <button
           key={table.id}
           type="button"
@@ -44,9 +52,9 @@ export function TableSwitcher({
         >
           {table.name}
         </button>
-      ))}
+      )) : null}
 
-      {creating ? (
+      {canCreate ? creating ? (
         <span className="flex items-center gap-1">
           <input
             autoFocus
@@ -57,12 +65,15 @@ export function TableSwitcher({
               if (event.key === 'Escape') setCreating(false)
             }}
             placeholder="Название таблицы"
+            aria-label="Название таблицы"
+            disabled={pending}
+            maxLength={160}
             className="w-44 rounded border border-[var(--color-border-subtle)] px-2 py-1 text-sm outline-none focus:border-sage-400"
           />
           <button
             type="button"
             onClick={create}
-            disabled={pending}
+            disabled={pending || !name.trim()}
             className="rounded-lg bg-ink px-2.5 py-1.5 text-sm text-white hover:bg-ink/90 disabled:opacity-40"
           >
             {pending ? '…' : 'Создать'}
@@ -76,7 +87,7 @@ export function TableSwitcher({
         >
           + Таблица
         </button>
-      )}
+      ) : null}
     </nav>
   )
 }

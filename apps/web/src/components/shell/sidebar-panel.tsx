@@ -7,6 +7,8 @@ import { NavList } from './nav-list'
 import { UserMenu } from './user-menu'
 import { LABEL, LABEL_MOTION, ROW, type ShellVariant } from './variant'
 import { WorkspaceSwitcher, type ShellWorkspace } from './workspace-switcher'
+import { BusinessTree } from './business-tree'
+import type { BusinessNavigation } from '@/lib/business-navigation-types'
 
 /**
  * Содержимое боковой панели.
@@ -44,6 +46,7 @@ export function SidebarPanel({
   workspaceName,
   workspaces,
   activeWorkspaceId,
+  businesses,
   variant,
   action,
   onAction,
@@ -54,6 +57,7 @@ export function SidebarPanel({
   workspaceName: string
   workspaces: ShellWorkspace[]
   activeWorkspaceId?: string
+  businesses?: BusinessNavigation[]
   variant: ShellVariant
   /**
    * Кнопка называет действие, а не состояние.
@@ -101,16 +105,19 @@ export function SidebarPanel({
           {variant === 'wide' ? button : null}
         </div>
 
-        <WorkspaceSwitcher
+        {businesses === undefined ? <WorkspaceSwitcher
           name={workspaceName}
           workspaces={workspaces}
           activeWorkspaceId={activeWorkspaceId}
           variant={variant}
-        />
+        /> : null}
       </div>
 
-      <div className="flex-1 overflow-y-auto overflow-x-hidden px-3 py-4">
-        <NavList pathname={pathname} role={role} variant={variant} />
+      <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overflow-x-hidden px-3 py-4">
+        {businesses !== undefined ? <BusinessTree businesses={businesses} activeWorkspaceId={activeWorkspaceId} pathname={pathname} variant={variant} /> : null}
+        <NavList pathname={pathname} role={role} variant={variant}
+          omitIds={businesses !== undefined && variant === 'wide' ? ['data', 'apps'] : []}
+          contextName={businesses !== undefined ? businesses.find(business => business.workspaceId === activeWorkspaceId)?.businessName ?? workspaceName : undefined} />
       </div>
 
       <div className="px-3 py-2.5">

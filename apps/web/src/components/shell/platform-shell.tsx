@@ -21,6 +21,8 @@ import {
   type SidebarMode,
 } from './variant'
 import { WorkspaceSwitcher, type ShellWorkspace } from './workspace-switcher'
+import { BusinessTree } from './business-tree'
+import type { BusinessNavigation } from '@/lib/business-navigation-types'
 
 /**
  * Оболочка платформы: панель слева, работа справа.
@@ -30,10 +32,11 @@ import { WorkspaceSwitcher, type ShellWorkspace } from './workspace-switcher'
  * отнимали место у навигации. Тариф и дорожная карта её бы добили.
  *
  * Панель — **плавающая карточка вне потока страницы**: узкая полоска слева,
- * которая разворачивается поверх содержимого. Раскладка при этом
- * не пересчитывается никогда, и в этом весь смысл: таблица на тысячу строк,
+ * которая по наведению разворачивается поверх содержимого. Раскладка при этом
+ * не пересчитывается: таблица на тысячу строк,
  * конструктор приложений и сводка не должны дёргаться оттого, что человек
- * повёл мышь к краю экрана.
+ * повёл мышь к краю экрана. Закреплённое дерево бизнесов занимает своё место,
+ * чтобы владелец мог постоянно видеть ресурсы рядом с открытой страницей.
  */
 
 export function PlatformShell({
@@ -42,6 +45,7 @@ export function PlatformShell({
   workspaceName,
   workspaces,
   activeWorkspaceId,
+  businesses,
   initialMode,
   children,
 }: {
@@ -50,6 +54,7 @@ export function PlatformShell({
   workspaceName: string
   workspaces: ShellWorkspace[]
   activeWorkspaceId?: string
+  businesses?: BusinessNavigation[]
   /**
    * Пришло с сервера из куки, и другого пути нет.
    *
@@ -185,12 +190,11 @@ export function PlatformShell({
 
         <div className="flex">
           {/*
-            Место под полоску. Сама панель стоит вне потока, и содержимое
-            начинается после полоски и её отступов: под ней ему делать нечего.
-            Разворачиваясь, панель ненадолго накрывает левый край содержимого —
-            так и задумано, зато ничего не двигается.
+            Под полоску резервируем узкое место. Наведение не меняет раскладку.
+            После явного закрепления дерева бизнесов отводим место полной
+            панели: рабочая страница остаётся целиком доступной рядом с ней.
           */}
-          <div aria-hidden="true" data-rail-spacer className={`hidden shrink-0 md:block ${SPACER}`} />
+          <div aria-hidden="true" data-rail-spacer className={`hidden shrink-0 md:block ${businesses !== undefined && mode === 'pinned' ? 'w-[304px]' : SPACER}`} />
 
           {/*
             `min-w-0` обязателен: без него широкая таблица внутри распирает
@@ -223,7 +227,7 @@ export function PlatformShell({
             if (event.currentTarget.contains(event.relatedTarget as Node | null)) return
             if (!hovering.current) letGo()
           }}
-          className={`fixed z-40 hidden flex-col overflow-hidden rounded-2xl border border-sand-200 bg-white shadow-soft transition-[width] duration-200 ease-out md:flex ${FLOAT} ${PANEL[variant]}`}
+          className={`fixed z-40 hidden flex-col overflow-hidden rounded-2xl border border-sand-200 bg-white shadow-soft transition-[width] duration-200 ease-out md:flex ${FLOAT} ${businesses !== undefined && variant === 'wide' ? 'w-[280px]' : PANEL[variant]}`}
         >
           <div className="flex h-full flex-col">
             <SidebarPanel
@@ -233,6 +237,7 @@ export function PlatformShell({
               workspaceName={workspaceName}
               workspaces={workspaces}
               activeWorkspaceId={activeWorkspaceId}
+              businesses={businesses}
               variant={variant}
               action={action}
               onAction={onAction}
@@ -249,6 +254,7 @@ export function PlatformShell({
           workspaceName={workspaceName}
           workspaces={workspaces}
           activeWorkspaceId={activeWorkspaceId}
+          businesses={businesses}
         />
       </div>
     </HoverLockProvider>
@@ -299,6 +305,7 @@ function Drawer({
   workspaceName,
   workspaces,
   activeWorkspaceId,
+  businesses,
 }: {
   open: boolean
   onClose: () => void
@@ -308,6 +315,7 @@ function Drawer({
   workspaceName: string
   workspaces: ShellWorkspace[]
   activeWorkspaceId?: string
+  businesses?: BusinessNavigation[]
 }) {
   const panel = useRef<HTMLDivElement>(null)
 
@@ -386,17 +394,20 @@ function Drawer({
           </button>
         </div>
 
-        <div className="px-3 pt-3">
+        {businesses === undefined ? <div className="px-3 pt-3">
           <WorkspaceSwitcher
             name={workspaceName}
             workspaces={workspaces}
             activeWorkspaceId={activeWorkspaceId}
             variant="wide"
           />
-        </div>
+        </div> : null}
 
-        <div className="flex-1 overflow-y-auto px-3 py-4">
-          <NavList pathname={pathname} role={role} onNavigate={onClose} />
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-3 py-4">
+          {businesses !== undefined ? <BusinessTree businesses={businesses} activeWorkspaceId={activeWorkspaceId} pathname={pathname} variant="wide" mobile onNavigate={onClose} /> : null}
+          <NavList pathname={pathname} role={role} onNavigate={onClose}
+            omitIds={businesses !== undefined ? ['data', 'apps'] : []}
+            contextName={businesses !== undefined ? businesses.find(business => business.workspaceId === activeWorkspaceId)?.businessName ?? workspaceName : undefined} />
         </div>
 
         <div className="border-t border-sand-200 px-3 py-2.5">

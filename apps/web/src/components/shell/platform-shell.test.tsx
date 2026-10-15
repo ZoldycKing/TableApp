@@ -45,6 +45,7 @@ vi.mock('next/link', () => ({
 }))
 vi.mock('@/app/auth-actions', () => ({ signOutMemberAction: vi.fn() }))
 vi.mock('@/app/team-actions', () => ({ switchWorkspaceAction: vi.fn() }))
+vi.mock('@/app/business-navigation-actions', () => ({ navigateBusinessResourceAction: vi.fn(), createBusinessAction: vi.fn() }))
 
 const { PlatformShell } = await import('./platform-shell')
 const { COOKIE_VALUE, modeFromCookie } = await import('./variant')
@@ -150,6 +151,44 @@ describe('боковая панель', () => {
     show()
     const switcher = screen.getAllByRole('button', { name: /Рабочее пространство/ })[0]!
     expect(switcher.textContent).not.toContain('@')
+  })
+})
+
+describe('ресурсы нескольких бизнесов', () => {
+  const businesses = [
+    { workspaceId: 'wsp_1', workspaceName: 'Демо-воркспейс', businessName: 'ООО «Ромашка»', role: 'owner' as const,
+      tables: [{ id: 'tbl_goods', name: 'Товары', icon: 'box' }], apps: [{ id: 'app_shop', name: 'Магазин «Ромашка»', published: true }] },
+    { workspaceId: 'wsp_2', workspaceName: 'Вторая фирма', businessName: 'ИП Иванов', role: 'viewer' as const,
+      tables: [{ id: 'tbl_services', name: 'Услуги', icon: 'table' }], apps: [] },
+  ]
+
+  it('показывает дерево вместо повторных общих пунктов и переключателя', () => {
+    pathname = '/t/tbl_goods'
+    show({ businesses, initialMode: 'pinned' })
+    const panel = document.querySelector('#platform-sidebar') as HTMLElement
+    expect(panel.className).toContain('w-[280px]')
+    expect(document.querySelector('[data-rail-spacer]')?.className).toContain('w-[304px]')
+    const tree = within(panel).getByRole('navigation', { name: 'Бизнесы, таблицы и приложения' })
+    expect(within(tree).getByRole('button', { name: 'Товары', current: 'page' })).toBeTruthy()
+    expect(within(tree).getByRole('button', { name: 'Бизнес: ИП Иванов' })).toBeTruthy()
+    expect(within(panel).queryByRole('button', { name: /Рабочее пространство/ })).toBeNull()
+    expect(within(panel).queryByRole('link', { name: 'Данные' })).toBeNull()
+    expect(within(panel).queryByRole('link', { name: 'Приложения' })).toBeNull()
+    expect(within(panel).getByText('Бизнес: ООО «Ромашка»')).toBeTruthy()
+    expect(within(panel).getByRole('link', { name: 'Команда' })).toBeTruthy()
+  })
+
+  it('на телефоне показывает выбор бизнеса и только его ресурсы', () => {
+    show({ businesses })
+    fireEvent.click(screen.getByRole('button', { name: 'Открыть меню' }))
+    const drawer = screen.getByRole('dialog', { name: 'Меню платформы' })
+    expect(within(drawer).getByRole('combobox', { name: 'Бизнес' })).toBeTruthy()
+    expect(within(drawer).getByRole('button', { name: 'Товары' })).toBeTruthy()
+    expect(within(drawer).queryByRole('button', { name: 'Услуги' })).toBeNull()
+    expect(within(drawer).queryByRole('link', { name: 'Данные' })).toBeNull()
+    expect(within(drawer).getByRole('link', { name: 'Шаблоны' })).toBeTruthy()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByRole('dialog')).toBeNull()
   })
 })
 

@@ -59,11 +59,11 @@ export const NAV_ITEMS: NavItem[] = [
   {
     id: 'data',
     label: 'Данные',
-    href: '/app',
+    href: '/tables',
     icon: 'table',
     group: 'work',
     // Загрузка файла — тоже про данные: подсветка не должна пропадать.
-    match: ['/app', '/t', '/import'],
+    match: ['/app', '/tables', '/t', '/import'],
   },
   {
     id: 'templates',

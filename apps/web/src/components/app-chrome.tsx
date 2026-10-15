@@ -2,6 +2,7 @@ import { cookies } from 'next/headers'
 import type { ReactNode } from 'react'
 import { PlatformShell } from '@/components/shell/platform-shell'
 import { modeFromCookie, SIDEBAR_COOKIE } from '@/components/shell/variant'
+import { loadBusinessNavigation } from '@/lib/business-navigation'
 
 export type ChromeMember = { email: string; workspaceName: string; role: string }
 export type ChromeWorkspace = { workspaceId: string; workspaceName: string }
@@ -36,7 +37,7 @@ export async function AppChrome({
    */
   wide?: boolean
 }) {
-  const store = await cookies()
+  const [store, businesses] = await Promise.all([cookies(), loadBusinessNavigation()])
 
   /*
    * Куки нет — панель спрятана: место на экране принадлежит работе. Старые
@@ -51,6 +52,7 @@ export async function AppChrome({
       workspaceName={member.workspaceName}
       workspaces={memberships ?? []}
       activeWorkspaceId={activeWorkspaceId}
+      businesses={businesses}
       initialMode={mode}
     >
       {children}

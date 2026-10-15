@@ -109,6 +109,9 @@ export async function prepareOrderStockWrite(context: RowTransaction, tableId: s
     if (tableId !== reservation.orderTableId || rowId !== reservation.orderRowId) continue
     if (!before || [order.emailFieldId, cart.positionsFieldId].some(id => !sameCellValue(before[id], data[id]))) throw frozen()
     const status = String(data[order.statusFieldId] ?? ''), previous = String(before[order.statusFieldId] ?? '')
+    const returnStatuses = new Set([order.stock?.returnedStatus, pairs.find(pair => pair.order.tableId === tableId)?.order.stock?.returnedStatus].filter(Boolean))
+    if (status !== previous && returnStatuses.has(status) && !context.orderStockReturn?.has(keyOf(tableId, rowId))) throw new RowWriteError('invalid', 'Оформите возврат самовывоза из карточки заказа. Ручная смена статуса не возвращает товар на склад.')
+    if (status !== previous && order.stock?.returnedStatus && previous === order.stock.returnedStatus) throw new RowWriteError('invalid', 'Заказ уже возвращён. Сохраните историю и оформите новый заказ.')
     if (context.orderStockReturn?.has(keyOf(tableId, rowId)) && reservation.state === 'issued') { await transition(context, reservation, 'returned', actor); continue }
     if (status === previous) continue
     if (status === order.cancelStatus) {
@@ -121,7 +124,7 @@ export async function prepareOrderStockWrite(context: RowTransaction, tableId: s
   }
   if (!accepted.some(reservation => reservation.orderTableId === tableId && reservation.orderRowId === rowId)) {
     const pair = pairs.find(pair => pair.order.tableId === tableId)
-    if (pair && (!before || !sameCellValue(before[pair.order.statusFieldId], data[pair.order.statusFieldId])) && [pair.order.stock!.confirmedStatus, pair.order.logistics!.shippedStatus, pair.order.logistics!.deliveredStatus].includes(String(data[pair.order.statusFieldId] ?? ''))) throw new RowWriteError('invalid', 'Сначала подтвердите заказ и зарезервируйте товары из его карточки.')
+    if (pair && (!before || !sameCellValue(before[pair.order.statusFieldId], data[pair.order.statusFieldId])) && [pair.order.stock!.confirmedStatus, pair.order.stock!.returnedStatus, pair.order.logistics!.shippedStatus, pair.order.logistics!.deliveredStatus].includes(String(data[pair.order.statusFieldId] ?? ''))) throw new RowWriteError('invalid', 'Сначала подтвердите заказ и зарезервируйте товары из его карточки.')
   }
 }
 

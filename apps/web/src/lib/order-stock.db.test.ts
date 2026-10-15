@@ -64,6 +64,13 @@ describe.skipIf(!process.env.DATABASE_URL)('orders and stock reservations in Pos
   async function confirm(space: Business, id: string) { return service.confirmOrderStock(space.pair.order.tableId, id, (await row(space.pair.order.tableId, id)).version, space.app.slug) }
   async function balance(space: Business) { return (await import('./inventory-balance')).readInventoryBalance(space.pair.inventory.tables.items, space.productId, space.app.slug) }
   function owner(space: Business) { identity.member = { userId: ownerId, email: ownerEmail, workspaceId: space.workspaceId, workspaceName: '', role: 'owner', name: 'Owner' } }
+  async function pickup(space: Business, quantity = 1) {
+    const id = await order(space, quantity); await signIn(manager); await confirm(space, id)
+    await service.issueOrderStock(space.pair.order.tableId, id, (await row(space.pair.order.tableId, id)).version, space.app.slug)
+    return id
+  }
+  const returnPickup = async (space: Business, id: string, version?: number, business = false) => service.returnOrderStock(space.pair.order.tableId, id,
+    version ?? (await row(space.pair.order.tableId, id)).version, business ? undefined : space.app.slug, business)
 
   it('links checkout positions to exact product IDs, reserves only on confirmation and issues once on pickup', async () => {
     const space = await business(), id = await order(space, 2), config = space.pair.order
@@ -248,5 +255,155 @@ describe.skipIf(!process.env.DATABASE_URL)('orders and stock reservations in Pos
     await (await import('./order-delivery')).handoffOrderDelivery(space.pair.order.tableId, id, (await row(space.pair.order.tableId, id)).version, space.app.slug)
     owner(space)
     expect(await (await import('@/app/module-actions')).previewModuleConnectionAction(base.id, 'sklad')).toMatchObject({ ok: false, error: expect.stringContaining('Сначала завершите') })
+  })
+
+  it('returns a complete pickup once under concurrent retries and preserves other orders reservations', async () => {
+    const space = await business(10), id = await pickup(space, 2), otherId = await order(space, 3)
+    await signIn(manager); await confirm(space, otherId)
+    const config = space.pair.order, before = await row(config.tableId, id)
+    expect(await balance(space)).toEqual({ stock: 8, reserved: 3, available: 5 })
+    expect(await service.readOrderStock(config.tableId, id, space.app.slug)).toMatchObject({ state: 'issued', canReturn: true })
+    const results = await Promise.all([returnPickup(space, id, before.version), returnPickup(space, id, before.version)])
+    expect(results.filter(result => result.repeated)).toHaveLength(1)
+    expect(results.filter(result => !result.repeated)).toHaveLength(1)
+    expect(await returnPickup(space, id, 0)).toEqual({ state: 'returned', repeated: true })
+    expect(await balance(space)).toEqual({ stock: 10, reserved: 3, available: 7 })
+    const returned = await row(config.tableId, id)
+    expect(returned.version).toBe(before.version + 1)
+    expect((returned.data as Record<string, unknown>)[config.statusFieldId]).toBe(config.stock!.returnedStatus)
+    expect(await service.readOrderStock(config.tableId, id, space.app.slug)).toMatchObject({ state: 'returned', canConfirm: false, canIssue: false, canReturn: false })
+    const records = await database.db.select().from(database.orderStockItems).where(and(eq(database.orderStockItems.workspaceId, space.workspaceId), eq(database.orderStockItems.orderRowId, id)))
+    expect(records[0]!.issueMovementId).toBeTruthy(); expect(records[0]!.returnMovementId).toBeTruthy()
+    const movements = await database.db.select().from(database.rows).where(eq(database.rows.tableId, space.pair.inventory.tables.movements))
+    expect(movements).toHaveLength(2)
+    expect(movements.map(movement => (movement.data as Record<string, unknown>)[space.pair.inventory.movement.qty]).sort()).toEqual([-2, 2])
+  })
+
+  it('rejects a stale pickup return version without moving stock, then lets the platform owner return it', async () => {
+    const space = await business(3), id = await pickup(space, 2), config = space.pair.order
+    const source = await row(config.tableId, id)
+    await expect(returnPickup(space, id, source.version - 1)).rejects.toThrow('изменилась')
+    expect(await balance(space)).toEqual({ stock: 1, reserved: 0, available: 1 })
+    expect((await row(config.tableId, id)).version).toBe(source.version)
+    expect(await database.db.select().from(database.rows).where(eq(database.rows.tableId, space.pair.inventory.tables.movements))).toHaveLength(1)
+    owner(space)
+    expect(await returnPickup(space, id, source.version, true)).toEqual({ state: 'returned', repeated: false })
+    await signIn(manager)
+    expect(await balance(space)).toEqual({ stock: 3, reserved: 0, available: 3 })
+  })
+
+  it('shows the returned pickup in its clients history, without active actions or another clients order', async () => {
+    const space = await business(10), id = await pickup(space, 2), config = space.pair.order
+    await returnPickup(space, id)
+    const otherClient = `${newId('user')}@example.invalid`, otherId = await order(space, 1, otherClient)
+    await signIn(manager); await confirm(space, otherId)
+    await service.issueOrderStock(config.tableId, otherId, (await row(config.tableId, otherId)).version, space.app.slug)
+    await returnPickup(space, otherId)
+    await signIn(client)
+    const { visitor } = await (await import('./app-session')).currentAppAccess(space.app)
+    const read = (await import('./runtime-collection-pages')).readRuntimeCollection
+    const history = await read(space.app, visitor, config.listScreenId, { customerSection: 'history' })
+    expect(history.screens[config.listScreenId]!.rowIds).toEqual([id])
+    expect(history.tables[config.tableId]!.rows.find(row => row.id === id)?.data[config.statusFieldId]).toBe(config.stock!.returnedStatus)
+    expect(JSON.stringify(history.tables)).not.toContain(otherId)
+    const active = await read(space.app, visitor, config.listScreenId, { customerSection: 'active' })
+    expect(active.screens[config.listScreenId]!.rowIds).toEqual([])
+    expect(await service.readOrderStock(config.tableId, id, space.app.slug)).toBeNull()
+  })
+
+  it('does not return an unissued order, a client order through the wrong identity circuit, or an order from another business', async () => {
+    const space = await business(), other = await business(), pending = await order(space)
+    await signIn(manager)
+    expect((await service.readOrderStock(space.pair.order.tableId, pending, space.app.slug))!.canReturn).toBe(false)
+    await expect(returnPickup(space, pending)).rejects.toThrow('настроен')
+    await confirm(space, pending)
+    await expect(returnPickup(space, pending)).rejects.toThrow('только после выдачи')
+    const id = await pickup(space), foreignId = await pickup(other)
+    await signIn(client); owner(space)
+    await expect(returnPickup(space, id)).rejects.toThrow('недоступны')
+    await expect(returnPickup(other, foreignId, undefined, true)).rejects.toThrow('недоступны')
+    await signIn(manager)
+    const limited = structuredClone(space.app)
+    limited.moduleAccess!.grants = limited.moduleAccess!.grants.filter(grant => limited.modules!.find(module => module.id === grant.moduleId)?.kind !== 'inventory')
+    await database.db.update(database.apps).set({ draft: limited, published: limited }).where(eq(database.apps.id, limited.id))
+    await expect(returnPickup(space, id)).rejects.toThrow('недоступны')
+    expect(await service.readOrderStock(space.pair.order.tableId, id, space.app.slug)).toBeNull()
+    const readonly = structuredClone(space.app)
+    for (const screen of readonly.screens) if (screen.type === 'form' && screen.mode === 'edit' && screen.tableId === space.pair.order.tableId) screen.components = screen.components.filter(component => !('fieldId' in component) || component.fieldId !== space.pair.order.statusFieldId)
+    await database.db.update(database.apps).set({ draft: readonly, published: readonly }).where(eq(database.apps.id, readonly.id))
+    await expect(returnPickup(space, id)).rejects.toThrow('недоступны')
+    expect((await service.readOrderStock(space.pair.order.tableId, id, space.app.slug))!.canReturn).toBe(false)
+  })
+
+  it('requires the explicit matching return status in both the live app and accepted contract', async () => {
+    const space = await business(), id = await pickup(space), legacy = structuredClone(space.app)
+    delete orderStockPair(legacy)!.order.stock!.returnedStatus
+    await database.db.update(database.apps).set({ draft: legacy, published: legacy }).where(eq(database.apps.id, legacy.id))
+    expect((await service.readOrderStock(space.pair.order.tableId, id, space.app.slug))!.canReturn).toBe(false)
+    await expect(returnPickup(space, id)).rejects.toThrow('не настроен')
+    await database.db.update(database.apps).set({ draft: space.app, published: space.app }).where(eq(database.apps.id, space.app.id))
+    const [accepted] = await database.db.select().from(database.orderStockReservations).where(and(eq(database.orderStockReservations.workspaceId, space.workspaceId), eq(database.orderStockReservations.orderRowId, id)))
+    const oldContract = structuredClone(accepted!.contract); delete oldContract.order.stock!.returnedStatus
+    await database.db.update(database.orderStockReservations).set({ contract: oldContract }).where(and(eq(database.orderStockReservations.workspaceId, space.workspaceId), eq(database.orderStockReservations.orderRowId, id)))
+    expect((await service.readOrderStock(space.pair.order.tableId, id, space.app.slug))!.canReturn).toBe(false)
+    await expect(returnPickup(space, id)).rejects.toThrow('не настроен')
+    expect(await balance(space)).toEqual({ stock: 2, reserved: 0, available: 2 })
+  })
+
+  it('never uses pickup return for an order with any linked delivery, including completed returns', async () => {
+    const space = await business(3, true), id = await order(space, 2); await signIn(manager); await confirm(space, id)
+    const shipping = await (await import('./order-delivery')).handoffOrderDelivery(space.pair.order.tableId, id, (await row(space.pair.order.tableId, id)).version, space.app.slug)
+    const config = (await import('@tableapp/schema')).customerWorkflows(space.app).find(config => config.logistics?.kind === 'delivery')!, logistics = config.logistics!
+    if (logistics.kind !== 'delivery') throw new Error('Wrong fixture')
+    const actor = { id: ownerId, kind: 'member' }
+    await writes.writeRows(space.workspaceId, context => writes.updateRow(context, config.tableId, shipping.id, { [config.assignmentFieldId!]: 'courier-stock@example.invalid' }, actor))
+    for (const status of [logistics.shippedStatus, logistics.returnedStatus]) {
+      await writes.writeRows(space.workspaceId, context => writes.updateRow(context, config.tableId, shipping.id, { [config.statusFieldId]: status }, actor))
+      expect((await service.readOrderStock(space.pair.order.tableId, id, space.app.slug))!.canReturn).toBe(false)
+      await expect(returnPickup(space, id)).rejects.toThrow('связан с доставкой')
+    }
+    expect(await balance(space)).toEqual({ stock: 3, reserved: 0, available: 3 })
+  })
+
+  it('rejects manual return status changes, preserves the returned order composition and protects both journal movements', async () => {
+    const space = await business(), id = await pickup(space, 2), config = space.pair.order, actor = { id: ownerId, kind: 'member' }
+    await expect(writes.writeRows(space.workspaceId, context => writes.updateRow(context, config.tableId, id, { [config.statusFieldId]: config.stock!.returnedStatus }, actor))).rejects.toThrow('Оформите возврат')
+    await returnPickup(space, id)
+    await expect(writes.writeRows(space.workspaceId, context => writes.updateRow(context, config.tableId, id, { [config.statusFieldId]: config.cancelStatus }, actor))).rejects.toThrow('уже возвращён')
+    const positions = (await row(config.tableId, id)).data as Record<string, unknown>, line = (positions[config.cart!.positionsFieldId] as string[])[0]!
+    await expect(writes.writeRows(space.workspaceId, context => writes.updateRow(context, config.cart!.itemsTableId, line, { [config.cart!.quantityFieldId]: 1 }, actor))).rejects.toThrow('зафиксированы')
+    const [item] = await database.db.select().from(database.orderStockItems).where(and(eq(database.orderStockItems.workspaceId, space.workspaceId), eq(database.orderStockItems.orderRowId, id)))
+    for (const movement of [item!.issueMovementId!, item!.returnMovementId!]) {
+      await expect(writes.writeRows(space.workspaceId, context => writes.updateRow(context, space.pair.inventory.tables.movements, movement, { [space.pair.inventory.movement.qty]: 99 }, actor))).rejects.toThrow('связано с заказом')
+      await expect(writes.writeRows(space.workspaceId, context => writes.deleteRow(context, space.pair.inventory.tables.movements, movement, actor))).rejects.toThrow('подтверждённым')
+    }
+    await expect(writes.writeRows(space.workspaceId, context => writes.updateRow(context, space.pair.inventory.tables.items, space.productId, { [space.pair.inventory.item.movements]: [item!.issueMovementId!] }, actor))).rejects.toThrow('Не удаляйте')
+    expect(await balance(space)).toEqual({ stock: 3, reserved: 0, available: 3 })
+  })
+
+  it('rolls back every compensating movement and the status if one accepted product is unavailable', async () => {
+    const space = await business(3), id = await order(space, 2), config = space.pair.order, cart = config.cart!, actor = { id: ownerId, kind: 'member' }
+    const products = await database.db.select().from(database.rows).where(eq(database.rows.tableId, space.pair.inventory.tables.items)), secondProduct = products.find(product => product.id !== space.productId)!
+    const initial = await row(config.tableId, id), firstLine = ((initial.data as Record<string, unknown>)[cart.positionsFieldId] as string[])[0]!, secondLine = newId('row')
+    await writes.writeRows(space.workspaceId, async context => {
+      await writes.updateRow(context, space.pair.inventory.tables.items, secondProduct.id, { [space.pair.inventory.item.opening]: 3 }, actor)
+      await writes.createRow(context, cart.itemsTableId, { ...(await row(cart.itemsTableId, firstLine)).data as Record<string, unknown>, [cart.productFieldId!]: [secondProduct.id], [cart.quantityFieldId]: 1 }, actor, { id: secondLine })
+      await writes.updateRow(context, config.tableId, id, { [cart.positionsFieldId]: [firstLine, secondLine] }, actor)
+    })
+    await signIn(manager); await confirm(space, id)
+    await service.issueOrderStock(config.tableId, id, (await row(config.tableId, id)).version, space.app.slug)
+    const before = await row(config.tableId, id), historyBefore = await database.db.select({ id: database.rowChanges.id }).from(database.rowChanges).where(inArray(database.rowChanges.tableId, [config.tableId, space.pair.inventory.tables.movements, space.pair.inventory.tables.items]))
+    // Controlled corruption models a missing product that ordinary deletion guards would reject.
+    await database.db.update(database.rows).set({ deletedAt: new Date() }).where(eq(database.rows.id, secondProduct.id))
+    await expect(returnPickup(space, id, before.version)).rejects.toThrow('Строка не найдена')
+    expect((await row(config.tableId, id)).version).toBe(before.version)
+    expect((await row(config.tableId, id)).data).toEqual(before.data)
+    expect(await balance(space)).toEqual({ stock: 1, reserved: 0, available: 1 })
+    expect(await database.db.select().from(database.rows).where(eq(database.rows.tableId, space.pair.inventory.tables.movements))).toHaveLength(2)
+    const accepted = await database.db.select().from(database.orderStockReservations).where(and(eq(database.orderStockReservations.workspaceId, space.workspaceId), eq(database.orderStockReservations.orderRowId, id)))
+    expect(accepted[0]!.state).toBe('issued')
+    const items = await database.db.select().from(database.orderStockItems).where(and(eq(database.orderStockItems.workspaceId, space.workspaceId), eq(database.orderStockItems.orderRowId, id)))
+    expect(items.every(item => item.returnMovementId === null)).toBe(true)
+    expect(await database.db.select({ id: database.rowChanges.id }).from(database.rowChanges).where(inArray(database.rowChanges.tableId, [config.tableId, space.pair.inventory.tables.movements, space.pair.inventory.tables.items]))).toHaveLength(historyBefore.length)
   })
 })

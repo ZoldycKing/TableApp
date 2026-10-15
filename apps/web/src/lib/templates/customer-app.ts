@@ -104,7 +104,7 @@ function customerAppSection(app: App, built: BuiltTemplate): App {
     if (d.cart) {
       const cart = d.cart, items = fieldIds[cart.items]!, itemsTable = built.tables[Object.keys(fieldIds).indexOf(cart.items)]!
       config.cart = { fieldId: f[cart.field]!, priceFieldId: cf[cart.price]!, itemsTableId: itemsTable.id, nameFieldId: items[cart.name]!, quantityFieldId: items[cart.qty]!, itemPriceFieldId: items[cart.itemPrice]!, itemEmailFieldId: items[cart.itemEmail]!, itemAssignmentFieldId: items.assignedEmail!, positionsFieldId: f[cart.positions]!, ...(items.product ? { productFieldId: items.product } : {}) }
-      if (items.product) config.stock = { confirmedStatus: choice('Собирается') }
+      if (items.product) config.stock = { confirmedStatus: choice('Собирается'), returnedStatus: choice('Возвращён') }
       rowAccessRules.push({ tableId: itemsTable.id, fieldId: config.cart.itemEmailFieldId, match: 'email', appliesTo: ['client'] }, { tableId: itemsTable.id, fieldId: config.cart.itemAssignmentFieldId, match: 'email', appliesTo: ['staff'] })
       const itemApp = generateApp({ appId: app.id, workspaceId: app.workspaceId, name: itemsTable.name, slug: app.slug, table: itemsTable, fields: built.fields.filter(field => field.tableId === itemsTable.id) as Field[], view: built.views.find(view => view.tableId === itemsTable.id)! as unknown as View })
       const itemDetail = itemApp.screens.find(s => s.type === 'detail')!

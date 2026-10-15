@@ -1,16 +1,18 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { OrderStockPanel, InventoryBalancePanel } from './order-stock-panel'
-import { confirmOrderStockAction, readOrderStockAction, readInventoryBalanceAction } from '@/app/order-stock-actions'
+import { confirmOrderStockAction, returnOrderStockAction, readOrderStockAction, readInventoryBalanceAction } from '@/app/order-stock-actions'
 const mocks = vi.hoisted(() => ({ refresh: vi.fn() }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: mocks.refresh }) }))
-vi.mock('@/app/order-stock-actions', () => ({ confirmOrderStockAction: vi.fn(), issueOrderStockAction: vi.fn(), readOrderStockAction: vi.fn(), readInventoryBalanceAction: vi.fn() }))
+vi.mock('@/app/order-stock-actions', () => ({ confirmOrderStockAction: vi.fn(), issueOrderStockAction: vi.fn(), returnOrderStockAction: vi.fn(), readOrderStockAction: vi.fn(), readInventoryBalanceAction: vi.fn() }))
 afterEach(() => { cleanup(); vi.resetAllMocks() })
-const waiting = { state: 'waiting' as const, canConfirm: true, canIssue: false }
+const waiting = { state: 'waiting' as const, canConfirm: true, canIssue: false, canReturn: false }
+const issued = { state: 'issued' as const, canConfirm: false, canIssue: false, canReturn: true }
+const returned = { state: 'returned' as const, canConfirm: false, canIssue: false, canReturn: false }
 describe('stock runtime controls', () => {
   it('confirms the displayed version and replaces the button only after the server accepts it', async () => {
-    vi.mocked(readOrderStockAction).mockResolvedValueOnce({ ok: true, state: waiting }).mockResolvedValue({ ok: true, state: { state: 'reserved', canConfirm: false, canIssue: true } })
+    vi.mocked(readOrderStockAction).mockResolvedValueOnce({ ok: true, state: waiting }).mockResolvedValue({ ok: true, state: { state: 'reserved', canConfirm: false, canIssue: true, canReturn: false } })
     vi.mocked(confirmOrderStockAction).mockResolvedValue({ ok: true, value: { state: 'reserved', repeated: false } })
     const ui = render(<OrderStockPanel tableId="orders" rowId="order" version={7} slug="shop" />)
     fireEvent.click(await ui.findByRole('button', { name: 'Подтвердить заказ' }))
@@ -36,5 +38,68 @@ describe('stock runtime controls', () => {
     await ui.findByText('5')
     finish({ ok: true, state: { stock: 100, reserved: 0, available: 100 } })
     await waitFor(() => expect(ui.queryByText('100')).toBeNull())
+  })
+  it('returns the full pickup order only after inline confirmation and replaces state after a server read', async () => {
+    let finish!: (value: Awaited<ReturnType<typeof returnOrderStockAction>>) => void
+    vi.mocked(readOrderStockAction).mockResolvedValueOnce({ ok: true, state: issued }).mockResolvedValue({ ok: true, state: returned })
+    vi.mocked(returnOrderStockAction).mockReturnValue(new Promise(resolve => { finish = resolve }))
+    const ui = render(<OrderStockPanel tableId="orders" rowId="pickup" version={9} slug="shop" business />)
+    fireEvent.click(await ui.findByRole('button', { name: 'Оформить возврат' }))
+    expect(returnOrderStockAction).not.toHaveBeenCalled()
+    expect(ui.getByText(/все товары заказа фактически приняты обратно/)).toBeTruthy()
+    fireEvent.click(ui.getByRole('button', { name: 'Отмена' }))
+    expect(ui.queryByRole('button', { name: 'Подтвердить возврат' })).toBeNull()
+    fireEvent.click(ui.getByRole('button', { name: 'Оформить возврат' }))
+    const confirm = ui.getByRole('button', { name: 'Подтвердить возврат' })
+    fireEvent.click(confirm); fireEvent.click(confirm)
+    expect(returnOrderStockAction).toHaveBeenCalledOnce()
+    expect(returnOrderStockAction).toHaveBeenCalledWith('orders', 'pickup', 9, 'shop', true)
+    expect(ui.getByText('Товары выданы со склада')).toBeTruthy()
+    expect(ui.queryByText('Товары возвращены на склад')).toBeNull()
+    expect(ui.getByRole('button', { name: 'Отмена' }).hasAttribute('disabled')).toBe(true)
+    await act(async () => finish({ ok: true, value: { state: 'returned', repeated: false } }))
+    await ui.findByText('Товары возвращены на склад')
+    expect(ui.queryByRole('button', { name: 'Оформить возврат' })).toBeNull()
+    expect(mocks.refresh).toHaveBeenCalledOnce()
+  })
+  it('keeps issued goods unchanged when the server refuses a return', async () => {
+    vi.mocked(readOrderStockAction).mockResolvedValue({ ok: true, state: issued })
+    vi.mocked(returnOrderStockAction).mockResolvedValue({ ok: false, error: 'Заказ уже изменён. Обновите карточку.' })
+    const ui = render(<OrderStockPanel tableId="orders" rowId="pickup" version={9} slug="shop" />)
+    fireEvent.click(await ui.findByRole('button', { name: 'Оформить возврат' }))
+    fireEvent.click(ui.getByRole('button', { name: 'Подтвердить возврат' }))
+    expect((await ui.findByRole('alert')).textContent).toBe('Заказ уже изменён. Обновите карточку.')
+    expect(ui.getByText('Товары выданы со склада')).toBeTruthy()
+    expect(ui.queryByText('Товары возвращены на склад')).toBeNull()
+    expect(mocks.refresh).not.toHaveBeenCalled()
+  })
+  it('offers no return without explicit server permission and clears confirmation after a version change', async () => {
+    vi.mocked(readOrderStockAction).mockResolvedValueOnce({ ok: true, state: { ...issued, canReturn: false } }).mockResolvedValue({ ok: true, state: issued })
+    const ui = render(<OrderStockPanel tableId="orders" rowId="pickup" version={9} slug="shop" />)
+    await ui.findByText('Товары выданы со склада')
+    expect(ui.queryByRole('button', { name: 'Оформить возврат' })).toBeNull()
+    ui.rerender(<OrderStockPanel tableId="orders" rowId="pickup" version={10} slug="shop" />)
+    fireEvent.click(await ui.findByRole('button', { name: 'Оформить возврат' }))
+    expect(ui.getByRole('button', { name: 'Подтвердить возврат' })).toBeTruthy()
+    ui.rerender(<OrderStockPanel tableId="orders" rowId="pickup" version={11} slug="shop" />)
+    await ui.findByRole('button', { name: 'Оформить возврат' })
+    expect(ui.queryByRole('button', { name: 'Подтвердить возврат' })).toBeNull()
+    expect(returnOrderStockAction).not.toHaveBeenCalled()
+  })
+  it('discards a late return completion after switching the business and order', async () => {
+    let finish!: (value: Awaited<ReturnType<typeof returnOrderStockAction>>) => void
+    vi.mocked(readOrderStockAction).mockResolvedValueOnce({ ok: true, state: issued }).mockResolvedValue({ ok: true, state: waiting })
+    vi.mocked(returnOrderStockAction).mockReturnValue(new Promise(resolve => { finish = resolve }))
+    const ui = render(<OrderStockPanel tableId="orders" rowId="pickup" version={9} slug="shop" />)
+    fireEvent.click(await ui.findByRole('button', { name: 'Оформить возврат' }))
+    fireEvent.click(ui.getByRole('button', { name: 'Подтвердить возврат' }))
+    ui.rerender(<OrderStockPanel tableId="other-orders" rowId="new-order" version={1} slug="other-shop" business />)
+    await ui.findByRole('button', { name: 'Подтвердить заказ' })
+    await act(async () => finish({ ok: true, value: { state: 'returned', repeated: false } }))
+    expect(ui.getByText('Ожидает подтверждения')).toBeTruthy()
+    expect(ui.queryByText('Товары возвращены на склад')).toBeNull()
+    expect(ui.queryByRole('button', { name: 'Подтвердить возврат' })).toBeNull()
+    expect(readOrderStockAction).toHaveBeenCalledTimes(2)
+    expect(mocks.refresh).not.toHaveBeenCalled()
   })
 })

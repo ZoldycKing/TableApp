@@ -64,6 +64,7 @@ export const zakazy: TemplateDef = {
             { name: 'Собирается', color: 'amber' },
             { name: 'Отгружен', color: 'violet' },
             { name: 'Доставлен', color: 'green' },
+            { name: 'Возвращён', color: 'orange' },
             { name: 'Отменён', color: 'gray' },
           ],
           help: 'Где сейчас заказ. По этому полю строится доска — колонки на ней и есть статусы.',

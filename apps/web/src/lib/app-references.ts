@@ -177,7 +177,7 @@ export function checkAppReferences(app: App, catalog: AppReferenceCatalog): stri
     if (!list || !('source' in list) || sourceTable(list.source) !== c.tableId) invalid('клиентский список', c.listScreenId)
     if (!app.rowAccessRules.some(rule => rule.tableId === c.tableId && rule.fieldId === c.emailFieldId && rule.match === 'email' && rule.appliesTo.includes('client'))) invalid('принадлежность клиентской записи', c.emailFieldId)
     const status = catalog.fields.get(c.statusFieldId)
-    const statuses = [c.initialStatus, c.cancelStatus, ...c.terminalStatuses, ...c.cancellableStatuses, ...(c.logistics ? [c.logistics.shippedStatus, c.logistics.deliveredStatus, ...(c.logistics.kind === 'delivery' ? [c.logistics.returnedStatus, c.logistics.missedStatus] : [])] : []), ...(c.approval ? [c.approval.waitingStatus, c.approval.approvedStatus, c.approval.declinedStatus, ...(c.approval.consentRequiredStatuses ?? [])] : []), ...(c.appointment ? [c.appointment.confirmedStatus] : [])]
+    const statuses = [c.initialStatus, c.cancelStatus, ...c.terminalStatuses, ...c.cancellableStatuses, ...(c.stock ? [c.stock.confirmedStatus, ...(c.stock.returnedStatus ? [c.stock.returnedStatus] : [])] : []), ...(c.logistics ? [c.logistics.shippedStatus, c.logistics.deliveredStatus, ...(c.logistics.kind === 'delivery' ? [c.logistics.returnedStatus, c.logistics.missedStatus] : [])] : []), ...(c.approval ? [c.approval.waitingStatus, c.approval.approvedStatus, c.approval.declinedStatus, ...(c.approval.consentRequiredStatuses ?? [])] : []), ...(c.appointment ? [c.appointment.confirmedStatus] : [])]
     if (status?.type !== 'single_select' || statuses.some(id => !status.options.choices.some(choice => choice.id === id))) invalid('статус клиентского сценария', c.statusFieldId)
     if (c.logistics) {
       field(c.logistics.addressFieldId, c.tableId)
@@ -231,6 +231,8 @@ export function checkAppReferences(app: App, catalog: AppReferenceCatalog): stri
       }
     }
     if (c.stock && (!c.cart?.productFieldId || !c.cancellableStatuses.includes(c.stock.confirmedStatus) || c.stock.confirmedStatus === c.initialStatus)) invalid('подтверждение складского заказа', c.stock.confirmedStatus)
+    if (c.stock?.returnedStatus && (c.logistics?.kind !== 'sales' || !c.terminalStatuses.includes(c.stock.returnedStatus) || c.cancellableStatuses.includes(c.stock.returnedStatus)
+      || [c.initialStatus, c.cancelStatus, c.stock.confirmedStatus, c.logistics.shippedStatus, c.logistics.deliveredStatus].includes(c.stock.returnedStatus))) invalid('возврат складского заказа', c.stock.returnedStatus)
     if (c.approval) for (const id of [c.approval.priceFieldId, c.approval.approvedPriceFieldId]) {
       field(id, c.tableId)
       if (catalog.fields.get(id)?.type !== 'number') invalid('стоимость ремонта', id)

@@ -7,6 +7,22 @@ import { ANONYMOUS, canOpenScreen, visitorFor, writableFields } from '../app-rol
 import { draftFromAnonymous, revalidatePending } from '../pending-submission'
 
 describe('ready customer scenarios across templates', () => {
+  it.each(['zakazy', 'katalog'])('%s: uses a separate terminal return status and validates its binding', id => {
+    const example = templateExample(id), config = example.app.customer!, returned = config.stock!.returnedStatus!
+    const catalog = { tableIds: new Set(example.built.tables.map(table => table.id)), fields: new Map(example.fields.map(field => [field.id, field])), views: new Map(example.views.map(view => [view.id, view])) }
+    const status = example.fields.find(field => field.id === config.statusFieldId)!
+    expect(status.type === 'single_select' && status.options.choices.find(choice => choice.id === returned)?.name).toBe('Возвращён')
+    expect(config.terminalStatuses).toContain(returned)
+    expect(config.cancellableStatuses).not.toContain(returned)
+    for (const invalid of [config.cancelStatus, config.logistics!.deliveredStatus, config.stock!.confirmedStatus, 'missing-status']) {
+      const changed = structuredClone(example.app)
+      changed.customer!.stock!.returnedStatus = invalid
+      expect(checkAppReferences(changed, catalog)).not.toBeNull()
+    }
+    const legacy = structuredClone(example.app)
+    delete legacy.customer!.stock!.returnedStatus
+    expect(checkAppReferences(legacy, catalog)).toBeNull()
+  })
   for (const template of TEMPLATES.filter(template => template.customer && !template.internalOnly)) {
     it(`${template.id}: first/repeat intake, own history and assigned staff are isolated`, () => {
       const example = templateExample(template.id), config = example.app.customer!

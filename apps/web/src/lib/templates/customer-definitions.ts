@@ -50,7 +50,7 @@ export function withCustomerScenario(original: TemplateDef): TemplateDef {
         template.tables.push({ key: 'orders', name: 'Заказы', icon: 'box', primary: 'title', fields: [
           { key: 'title', name: 'Заказ', type: 'text' }, { key: 'positions', name: 'Позиции', type: 'relation', relationTable: 'items', allowMultiple: true },
           { key: 'total', name: 'Итого', type: 'rollup', through: 'positions', target: 'cost', fn: 'sum' },
-          { key: 'status', name: 'Статус', type: 'single_select', choices: [{ name: 'Новый', color: 'blue' }, { name: 'Собирается', color: 'amber' }, { name: 'Отгружен', color: 'violet' }, { name: 'Доставлен', color: 'green' }, { name: 'Отменён', color: 'gray' }] },
+          { key: 'status', name: 'Статус', type: 'single_select', choices: [{ name: 'Новый', color: 'blue' }, { name: 'Собирается', color: 'amber' }, { name: 'Отгружен', color: 'violet' }, { name: 'Доставлен', color: 'green' }, { name: 'Возвращён', color: 'orange' }, { name: 'Отменён', color: 'gray' }] },
           { key: 'address', name: 'Адрес получения', type: 'text' }, { key: 'note', name: 'Комментарий', type: 'long_text' },
         ], views: [{ name: 'Все заказы', type: 'grid' }], rows: [] })
         template.appTable = 'orders'; template.appName = 'Заказы и каталог'; main = template.tables.find(table => table.key === 'orders')!
@@ -62,7 +62,7 @@ export function withCustomerScenario(original: TemplateDef): TemplateDef {
       main.fields.push({ key: 'cart', name: 'Состав нового заказа', type: 'long_text', help: 'Заполняется корзиной. Цена берётся сервером из каталога, позиции создаются отдельно для каждого заказа.' })
       scenario = { ...common, table: 'orders', title: 'Мои заказы', submitLabel: 'Оформить заказ', intro: 'Проверьте состав и контакты. Мы свяжемся с вами для подтверждения и согласуем получение. Онлайн-оплаты нет.',
         formFields: ['requestName', 'requestPhone', 'address', 'note', 'cart'], customerFields: ['status', 'positions', 'total', 'date', 'address', 'note', 'clientSummary'], workerFields: ['status', 'date', 'clientSummary'],
-        status: 'status', initial: 'Новый', terminal: ['Доставлен', 'Отменён'], cancel: 'Отменён', cancellable: ['Новый', 'Собирается'],
+        status: 'status', initial: 'Новый', terminal: ['Доставлен', 'Возвращён', 'Отменён'], cancel: 'Отменён', cancellable: ['Новый', 'Собирается'],
         catalog: { table: 'goods', view: template.id === 'zakazy' ? 'Доступные' : 'В наличии', fields: template.id === 'zakazy' ? ['name', 'descr', 'price'] : ['name', 'photo', 'descr', 'price', 'unit', 'category', 'lead'], active: 'available', selection: null, title: 'Каталог' },
         cart: { field: 'cart', price: 'price', items: 'items', name: 'name', qty: 'qty', itemPrice: 'price', itemEmail: 'customerEmail', positions: 'positions' } }
       break

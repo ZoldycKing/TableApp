@@ -4,7 +4,7 @@ import { appReadPolicy } from './app-read-policy'
 import { writableFields } from './app-roles'
 import { hasRole, workflowRole } from './module-access'
 import { orderWorkflowAccess } from './order-delivery'
-import { orderStockPair, type OrderStockState } from './order-stock-config'
+import { orderStockPair, pickupReturnStatus, type OrderStockState } from './order-stock-config'
 import { stockBalance } from './order-stock-store'
 import { assertCurrentModuleState, checkRow, lockedRow, RowWriteError, updateRow, writeRows } from './row-mutations'
 
@@ -31,6 +31,7 @@ export async function readOrderStock(tableId: string, rowId: string, slug?: stri
     const state = reservation?.state ?? 'waiting'
     const items = reservation ? await context.tx.select().from(orderStockItems).where(and(eq(orderStockItems.workspaceId, context.workspaceId), eq(orderStockItems.orderTableId, tableId), eq(orderStockItems.orderRowId, rowId))) : []
     return { state, canConfirm: canChangeStatus(access) && !reservation && status === pair.order.initialStatus, canIssue: canChangeStatus(access) && state === 'reserved' && !delivery,
+      canReturn: canChangeStatus(access) && state === 'issued' && !delivery && Boolean(reservation && pickupReturnStatus(pair.order, reservation.contract.order)) && status === reservation?.contract.order.logistics?.deliveredStatus,
       ...(reservation ? { quantity: items.reduce((sum, item) => sum + item.quantity, 0) } : {}), ...(delivery ? { reason: 'Товар спишется со склада при передаче курьеру.' } : {}) }
   })
 }
@@ -91,5 +92,35 @@ export async function issueOrderStock(tableId: string, rowId: string, baseVersio
     checkRow(current, { baseVersion })
     await updateRow(context, tableId, rowId, { [pair.order.statusFieldId]: pair.order.logistics!.deliveredStatus }, { ...access.actor, kind: 'order_stock_pickup' })
     return { repeated: false }
+  })
+}
+
+/** Full pickup return: accepted issue, compensating movements and terminal status commit together. */
+export async function returnOrderStock(tableId: string, rowId: string, baseVersion: number, slug?: string, business = false) {
+  if (!Number.isSafeInteger(baseVersion) || baseVersion < 0) throw denied()
+  const initial = await orderWorkflowAccess(tableId, rowId, slug, business), initialPair = initial && orderStockPair(initial.app)
+  if (!initial || !initialPair || initialPair.order.tableId !== tableId || !manages(initial) || !canChangeStatus(initial)) throw denied()
+  return writeRows(initial.app.workspaceId, async context => {
+    // Re-read live grants after waiting for the workspace write lock.
+    const access = await orderWorkflowAccess(tableId, rowId, slug, business), pair = access && orderStockPair(access.app)
+    if (!access || !pair || access.app.workspaceId !== context.workspaceId || pair.order.tableId !== tableId || !manages(access) || !canChangeStatus(access)) throw denied()
+    await assertCurrentModuleState(context, access.app)
+    const current = await lockedRow(context, tableId, rowId); checkRow(current, { guard: data => !access.policy || access.policy.canRead(data, current) })
+    const [reservation] = await context.tx.select().from(orderStockReservations).where(filter(context.workspaceId, tableId, rowId))
+    const [delivery] = await context.tx.select({ id: orderDeliveries.deliveryRowId }).from(orderDeliveries)
+      .where(and(eq(orderDeliveries.workspaceId, context.workspaceId), eq(orderDeliveries.orderTableId, tableId), eq(orderDeliveries.orderRowId, rowId))).limit(1)
+    if (delivery) throw new RowWriteError('invalid', 'Заказ связан с доставкой. Оформите возврат через доставку.')
+    const returnedStatus = reservation && pickupReturnStatus(pair.order, reservation.contract.order)
+    if (!reservation || !returnedStatus) throw new RowWriteError('invalid', 'Возврат самовывоза не настроен для этого заказа.')
+    const status = (current.data as Record<string, unknown>)[reservation.contract.order.statusFieldId]
+    if (reservation.state === 'returned' && status === returnedStatus) return { state: 'returned' as const, repeated: true }
+    checkRow(current, { baseVersion })
+    if (reservation.state !== 'issued' || status !== reservation.contract.order.logistics?.deliveredStatus) throw new RowWriteError('invalid', 'Возврат доступен только после выдачи заказа самовывозом.')
+    const key = `${tableId}:${rowId}`
+    context.orderStockReturn ??= new Set(); context.orderStockReturn.add(key)
+    try {
+      await updateRow(context, tableId, rowId, { [reservation.contract.order.statusFieldId]: returnedStatus }, { ...access.actor, kind: 'order_stock_pickup_return' })
+    } finally { context.orderStockReturn.delete(key) }
+    return { state: 'returned' as const, repeated: false }
   })
 }

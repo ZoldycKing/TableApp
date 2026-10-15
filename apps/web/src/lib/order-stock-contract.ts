@@ -27,7 +27,7 @@ export function retainedStockFieldError(contract: StockContract, original: Field
   if (next.type === 'relation' && original.type === 'relation' && (next.options.tableId !== original.options.tableId || next.options.allowMultiple !== original.options.allowMultiple)) return 'Связь подтверждённого заказа или движения склада нельзя перенастроить.'
   if (next.type === 'formula' && original.type === 'formula' && next.options.expression !== original.options.expression) return 'Формула остатка используется подтверждёнными заказами и должна сохранять прежний расчёт.'
   if (next.type === 'single_select') {
-    const required = original.id === o.statusFieldId ? [o.initialStatus, o.cancelStatus, o.stock!.confirmedStatus, ...o.cancellableStatuses, ...o.terminalStatuses, o.logistics!.shippedStatus, o.logistics!.deliveredStatus]
+    const required = original.id === o.statusFieldId ? [o.initialStatus, o.cancelStatus, o.stock!.confirmedStatus, ...(o.stock!.returnedStatus ? [o.stock!.returnedStatus] : []), ...o.cancellableStatuses, ...o.terminalStatuses, o.logistics!.shippedStatus, o.logistics!.deliveredStatus]
       : original.id === i.operations!.fields.kind ? Object.values(i.operations!.kinds) : []
     if (required.some(id => !next.options.choices.some(choice => choice.id === id))) return 'Этот статус используется подтверждённым заказом или складом. Название можно изменить, идентификатор нужно сохранить.'
   }

@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { confirmOrderStock, issueOrderStock, readOrderStock } from '@/lib/order-stock'
+import { confirmOrderStock, issueOrderStock, readOrderStock, returnOrderStock } from '@/lib/order-stock'
 import { readInventoryBalance } from '@/lib/inventory-balance'
 import { RowWriteError } from '@/lib/row-mutations'
 import { isPlanLimitError } from '@/lib/limits'
@@ -20,5 +20,9 @@ export async function confirmOrderStockAction(tableId: string, rowId: string, ve
 }
 export async function issueOrderStockAction(tableId: string, rowId: string, version: number, slug?: string, business = false) {
   try { const value = await issueOrderStock(tableId, rowId, version, slug, business); if (slug) revalidatePath(`/a/${slug}`); revalidatePath(`/t/${tableId}`); return { ok: true as const, value } }
+  catch (error) { return { ok: false as const, error: message(error) } }
+}
+export async function returnOrderStockAction(tableId: string, rowId: string, version: number, slug?: string, business = false) {
+  try { const value = await returnOrderStock(tableId, rowId, version, slug, business); if (slug) revalidatePath(`/a/${slug}`); revalidatePath(`/t/${tableId}`); return { ok: true as const, value } }
   catch (error) { return { ok: false as const, error: message(error) } }
 }

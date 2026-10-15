@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ConversationPanel } from './conversation-panel'
-import type { ConversationPage } from '@/lib/conversation-types'
+import { GENERAL_CONVERSATION_TABLE, type ConversationPage } from '@/lib/conversation-types'
 
 const mocks = vi.hoisted(() => ({ read: vi.fn(), send: vi.fn(), edit: vi.fn(), close: vi.fn(), history: vi.fn(), mark: vi.fn().mockResolvedValue({ ok: true }) }))
 vi.mock('@/app/conversation-actions', () => ({ readConversationAction: mocks.read, sendConversationAction: mocks.send,
@@ -65,5 +65,40 @@ describe('conversation inside a record card', () => {
     await ui.findByText('Переписка недоступна'); expect(ui.queryByText('Доступная история')).toBeNull()
     mocks.read.mockResolvedValue({ ok: true, value: empty }); ui.rerender(<ConversationPanel {...props} rowId="another-order" />)
     expect((await ui.findByLabelText('Сообщение') as HTMLTextAreaElement).value).toBe('')
+  })
+  it('uses general question copy and the protected general target while retaining message tools', async () => {
+    mocks.read.mockResolvedValue({ ok: true, value: empty })
+    mocks.send.mockResolvedValue({ ok: true, value: { id: 'question' } })
+    const ui = render(<ConversationPanel slug="salon" tableId={GENERAL_CONVERSATION_TABLE} rowId="self" configured />)
+    await ui.findByLabelText('Сообщение')
+    expect(ui.getByRole('region', { name: 'Вопрос бизнесу' })).toBeTruthy()
+    expect(ui.getByRole('heading', { name: 'Вопрос бизнесу' })).toBeTruthy()
+    expect(ui.queryByText(/относятся к этому обращению/)).toBeNull()
+    expect(ui.getByText('Загрузка документа')).toBeTruthy()
+    fireEvent.change(ui.getByLabelText('Сообщение'), { target: { value: 'Вы открыты в воскресенье?' } })
+    fireEvent.click(ui.getByRole('button', { name: 'Отправить сообщение' }))
+    await waitFor(() => expect(mocks.send).toHaveBeenCalledWith('salon', GENERAL_CONVERSATION_TABLE, 'self', expect.objectContaining({ body: 'Вы открыты в воскресенье?', internal: false }), false))
+  })
+  it('lets a client resume a closed general conversation with a new message', async () => {
+    mocks.read.mockResolvedValueOnce({ ok: true, value: { ...empty, conversationId: 'question', closed: true } })
+      .mockResolvedValue({ ok: true, value: { ...empty, conversationId: 'question' } })
+    mocks.send.mockResolvedValue({ ok: true, value: { id: 'follow-up' } })
+    const ui = render(<ConversationPanel slug="salon" tableId={GENERAL_CONVERSATION_TABLE} rowId="self" configured />)
+    await ui.findByText('Предыдущий вопрос закрыт. Новое сообщение возобновит переписку.')
+    expect(ui.queryByRole('button', { name: 'Возобновить обсуждение' })).toBeNull()
+    fireEvent.change(ui.getByLabelText('Сообщение'), { target: { value: 'И ещё вопрос: можно перенести визит?' } })
+    fireEvent.click(ui.getByRole('button', { name: 'Отправить сообщение' }))
+    await waitFor(() => expect(mocks.send).toHaveBeenCalledWith('salon', GENERAL_CONVERSATION_TABLE, 'self', expect.objectContaining({ body: 'И ещё вопрос: можно перенести визит?' }), false))
+    await waitFor(() => expect(ui.queryByText('Предыдущий вопрос закрыт. Новое сообщение возобновит переписку.')).toBeNull())
+    expect(mocks.close).not.toHaveBeenCalled()
+  })
+  it('keeps a general client dialog readable without a composer when the business disables messages', async () => {
+    mocks.read.mockResolvedValue({ ok: true, value: { ...empty, conversationId: 'question', enabled: false } })
+    const ui = render(<ConversationPanel slug="salon" tableId={GENERAL_CONVERSATION_TABLE} rowId="self" configured />)
+    await ui.findByText('Бизнес пока не принимает новые сообщения. История переписки сохранена.')
+    expect(ui.queryByLabelText('Сообщение')).toBeNull()
+    expect(ui.queryByRole('button', { name: 'Отправить сообщение' })).toBeNull()
+    ui.rerender(<ConversationPanel {...props} />)
+    expect(await ui.findByLabelText('Сообщение')).toBeTruthy()
   })
 })

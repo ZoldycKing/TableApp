@@ -15,6 +15,7 @@ export function AppLogin({
   onDone,
   onCancel,
   demo = false,
+  purpose = 'checkout',
 }: {
   slug: string
   appName: string
@@ -23,6 +24,7 @@ export function AppLogin({
   onDone?: () => void
   onCancel?: () => void
   demo?: boolean
+  purpose?: 'checkout' | 'question'
 }) {
   const router = useRouter()
   const [email, setEmail] = useState('')
@@ -32,11 +34,12 @@ export function AppLogin({
   const [pending, startTransition] = useTransition()
   const [verified, setVerified] = useState(false)
   const styles = accentClasses(accent)
+  const question = purpose === 'question'
   const request = () => demo
     ? Promise.resolve({ ok: true as const, hint: 'Это пример: письмо не отправляется. Для продолжения введите код 123456.' })
-    : requestAppLoginAction(slug, email)
+    : question ? requestAppLoginAction(slug, email, 'question') : requestAppLoginAction(slug, email)
 
-  if (verified) return <p role="status" className="mx-auto max-w-sm p-6 text-sm text-ink-soft">Почта подтверждена. Открываем форму…</p>
+  if (verified) return <p role="status" className="mx-auto max-w-sm p-6 text-sm text-ink-soft">{question ? 'Почта подтверждена. Возвращаемся к вопросу…' : 'Почта подтверждена. Открываем форму…'}</p>
 
   if (sent) {
     return (
@@ -58,8 +61,8 @@ export function AppLogin({
       >
         <h1 className="text-lg font-semibold">Введите код</h1>
         <p className="text-sm text-[var(--color-ink-muted)]">
-          Если для адреса {email} разрешён вход, код отправлен на почту. Он действует {LOGIN_CODE_TTL_MINUTES} минут.
-          {onDone ? ' После подтверждения заполните данные для оформления. Заказ пока не создан.' : ' В письме есть и ссылка.'}
+          {question ? `Введите одноразовый код для ${email}.` : `Если для адреса ${email} разрешён вход, код отправлен на почту.`} Он действует {LOGIN_CODE_TTL_MINUTES} минут.
+          {question ? ' После подтверждения сможете написать вопрос бизнесу.' : onDone ? ' После подтверждения заполните данные для оформления. Заказ пока не создан.' : ' В письме есть и ссылка.'}
         </p>
 
         {sent.hint ? (
@@ -90,7 +93,7 @@ export function AppLogin({
           aria-busy={pending}
           className={`w-full rounded-xl px-4 py-2.5 text-sm font-medium text-white disabled:opacity-40 ${styles.bg}`}
         >
-          {pending ? 'Проверяем…' : onDone ? 'Подтвердить и продолжить' : 'Войти'}
+          {pending ? 'Проверяем…' : question ? 'Подтвердить и написать' : onDone ? 'Подтвердить и продолжить' : 'Войти'}
         </button>
 
         <ResendCode
@@ -118,7 +121,7 @@ export function AppLogin({
         >
           Ввести другой адрес
         </button>
-        {onCancel ? <button type="button" onClick={onCancel} className="w-full text-sm text-ink-muted">Вернуться к выбору</button> : null}
+        {onCancel ? <button type="button" onClick={onCancel} className="w-full text-sm text-ink-muted">{question ? 'Вернуться к вопросу' : 'Вернуться к выбору'}</button> : null}
       </form>
     )
   }
@@ -137,9 +140,9 @@ export function AppLogin({
         })
       }}
     >
-      <h1 className="text-lg font-semibold">{onDone ? 'Подтвердите почту' : appName}</h1>
+      <h1 className="text-lg font-semibold">{question ? 'Написать бизнесу' : onDone ? 'Подтвердите почту' : appName}</h1>
       <p className="text-sm text-[var(--color-ink-muted)]">
-        {onDone ? 'Сначала подтвердите почту одноразовым кодом. Затем заполните данные для заказа или записи. Пароль не нужен; повторно создавать аккаунт у другого бизнеса не потребуется.' : 'Введите почту — пришлём код для входа. Пароль не нужен.'}
+        {question ? 'Подтвердите почту одноразовым кодом, чтобы написать вопрос бизнесу. Пароль не нужен; повторно создавать аккаунт у другого бизнеса не потребуется.' : onDone ? 'Сначала подтвердите почту одноразовым кодом. Затем заполните данные для заказа или записи. Пароль не нужен; повторно создавать аккаунт у другого бизнеса не потребуется.' : 'Введите почту — пришлём код для входа. Пароль не нужен.'}
       </p>
 
       <input
@@ -165,7 +168,7 @@ export function AppLogin({
       >
         {pending ? 'Отправляем…' : 'Получить код'}
       </button>
-      {onCancel ? <button type="button" onClick={onCancel} className="w-full text-sm text-ink-muted">Вернуться к выбору</button> : null}
+      {onCancel ? <button type="button" onClick={onCancel} className="w-full text-sm text-ink-muted">{question ? 'Вернуться к вопросу' : 'Вернуться к выбору'}</button> : null}
     </form>
   )
 }

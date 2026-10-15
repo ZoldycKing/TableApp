@@ -16,15 +16,18 @@ import { connectSalesInventory } from '@/lib/sales-inventory-connection'
 import { connectProductionInventory } from '@/lib/production-inventory-connection'
 import { projectRuntime } from '@/lib/runtime-project'
 import { visibleScreensFor, visitorFor } from '@/lib/app-roles'
+import { beginGeneralQuestionAction } from '@/app/question-auth-actions'
+import { sendConversationAction } from '@/app/conversation-actions'
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }))
 vi.mock('@/app/auth-actions', () => ({ signOutAppAction: vi.fn(), consumeAppCodeAction: vi.fn(), requestAppLoginAction: vi.fn() }))
+vi.mock('@/app/question-auth-actions', () => ({ beginGeneralQuestionAction: vi.fn().mockResolvedValue({ ok: true, authenticated: false }) }))
 vi.mock('@/app/production-actions', () => ({ saveMovementAction: vi.fn(), saveProductionAction: vi.fn() }))
 vi.mock('@/app/runtime-actions', () => ({ appCreateRowAction: vi.fn(), appDeleteRowAction: vi.fn(), appUpdateRowAction: vi.fn() }))
 vi.mock('@/app/booking-actions', () => ({ bookingAvailabilityAction: vi.fn(), cancelBookingAction: vi.fn(), setupBookingMasterAction: vi.fn(), setBookingDayOffAction: vi.fn() }))
 vi.mock('@/app/customer-actions', () => ({ customerDecisionAction: vi.fn() }))
 vi.mock('./conversation-panel', () => ({ ConversationPanel: () => null }))
-vi.mock('@/app/conversation-actions', () => ({ listConversationInboxAction: vi.fn().mockResolvedValue({ ok: true, value: { items: [], next: null } }) }))
+vi.mock('@/app/conversation-actions', () => ({ sendConversationAction: vi.fn(), listConversationInboxAction: vi.fn().mockResolvedValue({ ok: true, value: { items: [], next: null } }) }))
 vi.mock('./order-delivery-panel', () => ({ OrderDeliveryPanel: () => <p>Связь заказа с доставкой</p> }))
 vi.mock('./order-stock-panel', () => ({ OrderStockPanel: () => null, InventoryBalancePanel: () => null }))
 vi.mock('./conversation-inbox', () => ({ MESSAGES_SCREEN: '__tableapp_messages', parseConversationTarget: (value: string | null) => value ? JSON.parse(value) : null, ConversationInbox: () => <p>Список переписок бизнеса</p> }))
@@ -70,6 +73,52 @@ function workshopPreview() {
 }
 
 describe('runtime navigation during live refresh', () => {
+  it('keeps a general question through email verification and sends it only after explicit confirmation, without creating a booking', async () => {
+    const example = templateExample('salon')
+    example.app.communications = { enabled: true }
+    const guest = templateAppPreview(example, 'guest'), client = templateAppPreview(example, 'client', 'question@example.invalid', 'Анна')
+    vi.mocked(beginGeneralQuestionAction).mockResolvedValue({ ok: true, authenticated: false })
+    vi.mocked(requestAppLoginAction).mockResolvedValue({ ok: true, delivered: true, via: 'sent', hint: null })
+    vi.mocked(consumeAppCodeAction).mockResolvedValue({ ok: true })
+    vi.mocked(sendConversationAction).mockClear().mockResolvedValue({ ok: true, value: { id: 'msg_question' } })
+    vi.mocked(appCreateRowAction).mockClear()
+    const ui = render(<AppShell runtime={guest.runtime} viewer={null} />)
+    fireEvent.click(ui.getByRole('button', { name: 'Задать вопрос' }))
+    fireEvent.change(await ui.findByLabelText('Ваш вопрос'), { target: { value: 'Можно прийти со своим красителем?' } })
+    fireEvent.click(ui.getByRole('button', { name: 'Задать вопрос' }))
+    fireEvent.change(await ui.findByLabelText('Ваша почта'), { target: { value: 'question@example.invalid' } })
+    fireEvent.click(ui.getByRole('button', { name: 'Получить код' }))
+    fireEvent.change(await ui.findByLabelText('Код из письма'), { target: { value: '123456' } })
+    fireEvent.click(ui.getByRole('button', { name: 'Подтвердить и написать' }))
+    await waitFor(() => expect(consumeAppCodeAction).toHaveBeenCalled())
+    expect(requestAppLoginAction).toHaveBeenCalledWith(example.app.slug, 'question@example.invalid', 'question')
+    const key = `tableapp:question:${example.app.workspaceId}:${example.app.id}`
+    const requestId = JSON.parse(sessionStorage.getItem(key)!).requestId
+    expect(sendConversationAction).not.toHaveBeenCalled()
+    ui.rerender(<AppShell runtime={client.runtime} viewer={client.viewer} />)
+    await waitFor(() => expect(ui.getByLabelText('Ваш вопрос')).toHaveProperty('value', 'Можно прийти со своим красителем?'))
+    expect(sendConversationAction).not.toHaveBeenCalled()
+    fireEvent.click(ui.getByRole('button', { name: 'Отправить вопрос' }))
+    await ui.findByText('Список переписок бизнеса')
+    expect(sendConversationAction).toHaveBeenCalledExactlyOnceWith(example.app.slug, '__tableapp_general', 'self', { body: 'Можно прийти со своим красителем?', requestId }, false)
+    expect(appCreateRowAction).not.toHaveBeenCalled()
+    expect(sessionStorage.getItem(key)).toBeNull()
+  })
+
+  it('restores an unfinished question after reloading the login step in the same business', async () => {
+    const example = templateExample('salon'); example.app.communications = { enabled: true }
+    const guest = templateAppPreview(example, 'guest')
+    const ui = render(<AppShell runtime={guest.runtime} viewer={null} />)
+    fireEvent.click(ui.getByRole('button', { name: 'Задать вопрос' }))
+    fireEvent.change(await ui.findByLabelText('Ваш вопрос'), { target: { value: 'Есть ли парковка?' } })
+    fireEvent.click(ui.getByRole('button', { name: 'Задать вопрос' }))
+    await ui.findByLabelText('Ваша почта')
+    ui.unmount()
+    const restored = render(<AppShell runtime={guest.runtime} viewer={null} />)
+    await restored.findByLabelText('Ваша почта')
+    fireEvent.click(restored.getByRole('button', { name: 'Вернуться к вопросу' }))
+    expect(restored.getByLabelText('Ваш вопрос')).toHaveProperty('value', 'Есть ли парковка?')
+  })
   it('selects the stock section for a directly opened shared product card instead of the catalogue home', async () => {
     const { runtime, viewer } = workshopPreview(), app = runtime.app, module = app.modules!.find(module => module.kind === 'inventory')!
     const list = app.screens.find(screen => screen.type === 'list' && module.screenIds!.includes(screen.id) && runtime.views[screen.source.viewId]?.tableId === app.inventory!.tables.items)!

@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ConversationInbox, parseConversationTarget } from './conversation-inbox'
-import type { ConversationSummary } from '@/lib/conversation-types'
+import { GENERAL_CONVERSATION_TABLE, type ConversationSummary } from '@/lib/conversation-types'
 
 const list = vi.hoisted(() => vi.fn())
 vi.mock('@/app/conversation-actions', () => ({ listConversationInboxAction: list }))
@@ -47,5 +47,31 @@ describe('business and client inbox', () => {
     await ui.findByText('salon:another-visit:client')
     ui.rerender(<ConversationInbox slug="salon" />)
     await waitFor(() => expect(ui.queryByText('salon:another-visit:client')).toBeNull())
+  })
+  it('offers a question without an order and keeps the action available alongside existing dialogs', async () => {
+    list.mockResolvedValue({ ok: true, value: { items: [], next: null } })
+    const ask = vi.fn(), ui = render(<ConversationInbox slug="salon" onAskQuestion={ask} />)
+    expect(await ui.findByText('Диалогов пока нет. Вы можете задать вопрос бизнесу — оформлять заказ или запись для этого не нужно.')).toBeTruthy()
+    fireEvent.click(ui.getByRole('button', { name: 'Задать вопрос' }))
+    expect(ask).toHaveBeenCalledOnce()
+    list.mockResolvedValue({ ok: true, value: { items: [item], next: null } })
+    window.dispatchEvent(new Event('tableapp:messages-read'))
+    await ui.findByRole('button', { name: /Анна/ })
+    expect(ui.getByRole('button', { name: 'Задать вопрос' })).toBeTruthy()
+    ui.rerender(<ConversationInbox slug="salon" business onAskQuestion={ask} />)
+    expect(ui.queryByRole('button', { name: 'Задать вопрос' })).toBeNull()
+  })
+  it('resolves the client self shortcut to general dialog metadata without exposing a fake record link', async () => {
+    const general: ConversationSummary = { ...item, id: 'question', tableId: GENERAL_CONVERSATION_TABLE, rowId: 'bcu_anna', kind: 'general', title: 'Вопрос бизнесу', detailScreenId: '' }
+    list.mockResolvedValue({ ok: true, value: { items: [general], next: null } })
+    const open = vi.fn(), ui = render(<ConversationInbox slug="salon" initialTarget={{ slug: 'salon', tableId: GENERAL_CONVERSATION_TABLE, rowId: 'self' }} onOpenRecord={open} />)
+    await ui.findAllByText('Вопрос бизнесу')
+    expect(ui.getByRole('button', { current: true }).textContent).toContain('Анна')
+    expect(ui.queryByRole('button', { name: 'Открыть обращение' })).toBeNull()
+    expect(ui.queryByRole('link', { name: 'Открыть обращение' })).toBeNull()
+    expect(open).not.toHaveBeenCalled()
+    ui.rerender(<ConversationInbox slug="salon" initialTarget={general} business />)
+    await ui.findByText(`salon:bcu_anna:business`)
+    expect(ui.queryByRole('link', { name: 'Открыть обращение' })).toBeNull()
   })
 })

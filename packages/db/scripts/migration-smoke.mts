@@ -39,6 +39,18 @@ try {
   assert.ok(await target`select workspace_id, customer_id, app_id from public.business_customer_apps limit 0`)
   assert.ok(await target`select workspace_id, app_id, number, kind, definition, fingerprint from public.app_config_versions limit 0`)
   assert.ok(await target`select workspace_id, table_id, row_id, customer_id from public.conversations limit 0`)
+  assert.ok(await target`select workspace_id, user_id, created_at from public.general_message_operators limit 0`)
+  const [conversationKind] = await target`select is_nullable, column_default from information_schema.columns where table_schema='public' and table_name='conversations' and column_name='kind'`
+  assert.equal(conversationKind!.is_nullable, 'NO')
+  assert.match(conversationKind!.column_default, /record/)
+  assert.equal((await target`select count(*)::int as value from pg_constraint where conname='conversations_kind_target_check'`)[0]!.value, 1)
+  const [generalIndex] = await target`select indexdef from pg_indexes where schemaname='public' and indexname='conversations_general_customer_key'`
+  assert.match(generalIndex!.indexdef, /UNIQUE.*workspace_id, customer_id.*WHERE.*general/)
+  const [operatorForeignKey] = await target`select pg_get_constraintdef(oid) as definition from pg_constraint where conrelid='public.general_message_operators'::regclass and contype='f'`
+  assert.match(operatorForeignKey!.definition, /FOREIGN KEY \(workspace_id, user_id\) REFERENCES workspace_members\(workspace_id, user_id\) ON DELETE CASCADE/)
+  // Keep the existing column-scoped SET NULL behavior: deleting an app must not clear business ownership.
+  const [conversationAppForeignKey] = await target`select pg_get_constraintdef(oid) as definition from pg_constraint where conrelid='public.conversations'::regclass and confrelid='public.apps'::regclass and contype='f'`
+  assert.match(conversationAppForeignKey!.definition, /ON DELETE SET NULL \(app_id\)/)
   assert.ok(await target`select workspace_id, conversation_id, sequence, body, version, deleted_at from public.conversation_messages limit 0`)
   assert.ok(await target`select workspace_id, conversation_id, body from public.conversation_notes limit 0`)
   assert.ok(await target`select workspace_id, message_id, version, body from public.conversation_revisions limit 0`)
@@ -55,7 +67,7 @@ try {
   await migrate()
   assert.deepEqual([...(await target`select hash, created_at from drizzle.__drizzle_migrations order by created_at`)], [...applied])
   console.log(JSON.stringify({ status: 'passed', migrations: applied.length, tables: tableCount[0]!.value,
-    checked: ['empty database', 'sync revision', 'attachment state', 'business profile', 'business client app', 'business customer profiles', 'scoped customer app links', 'scoped app config versions', 'conversations', 'message revisions', 'private notes', 'conversation attachments', 'tracked conversation file cleanup triggers', 'order stock bindings and checks', 'production stock bindings and checks', 'second run unchanged'] }))
+    checked: ['empty database', 'sync revision', 'attachment state', 'business profile', 'business client app', 'business customer profiles', 'scoped customer app links', 'scoped app config versions', 'conversations', 'general conversation kind and target check', 'one general conversation per business customer', 'general operator membership foreign key', 'preserved conversation app deletion behavior', 'message revisions', 'private notes', 'conversation attachments', 'tracked conversation file cleanup triggers', 'order stock bindings and checks', 'production stock bindings and checks', 'second run unchanged'] }))
 } finally {
   await target.end()
   if (created) await admin.unsafe(`drop database "${name}"`)

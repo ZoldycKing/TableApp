@@ -1,4 +1,4 @@
-import { apps, attachments, businessCustomers, conversationMessages as messages, conversationNotes as notes, conversationRevisions as revisions,
+import { apps, attachments, businessCustomerApps, businessCustomers, conversationMessages as messages, conversationNotes as notes, conversationRevisions as revisions,
   conversations, db, rows, tables, workspaces } from '@tableapp/db'
 import { appSchema, newId, type Attachment } from '@tableapp/schema'
 import { and, asc, desc, eq, gt, inArray, isNull, lt, sql } from 'drizzle-orm'
@@ -15,6 +15,8 @@ import { conversationContextTitle } from './conversation-context'
 import { RowWriteError, writeRows } from './row-mutations'
 import type { Transaction } from './db-transaction'
 import type { ConversationPage } from './conversation-types'
+import { GENERAL_CONVERSATION_TABLE } from './conversation-types'
+import { generalConversationAccess } from './general-conversation-access'
 
 type Runner = typeof db | Transaction
 const denied = () => new RowWriteError('denied', 'Переписка недоступна или обращение не найдено')
@@ -33,6 +35,10 @@ export async function conversationAccess(slug: string, tableId: string, rowId: s
   const parsed = appSchema.safeParse(record?.published)
   if (!record || !parsed.success) throw denied()
   const app = { ...parsed.data, id: record.id, workspaceId: record.workspaceId, slug: record.slug }
+  if (tableId === GENERAL_CONVERSATION_TABLE) {
+    if (await validateAppReferences(app)) throw denied()
+    return generalConversationAccess(app, rowId, runner, business)
+  }
   if (!conversationResource(app, tableId) || await validateAppReferences(app)) throw denied()
   const [parent] = await runner.select({ row: rows }).from(rows).innerJoin(tables, eq(rows.tableId, tables.id))
     .where(and(eq(rows.id, rowId), eq(rows.tableId, tableId), eq(tables.workspaceId, app.workspaceId), isNull(rows.deletedAt))).limit(1)
@@ -64,7 +70,7 @@ export async function conversationAccess(slug: string, tableId: string, rowId: s
   // Authorization still uses the explicitly selected authentication circuit.
   const actorEmail = owner ? member!.email : access!.viewer!.email
   const actorId = `person_${createHash('sha256').update(`${app.workspaceId}:${actorEmail.trim().toLowerCase()}`).digest('hex')}`
-  return { app, parent: parent.row, readableData, access, module, customerId: profile?.id ?? null, email, staff, manager, owner, actorId,
+  return { kind: 'record' as const, app, parent: parent.row, readableData, access, module, customerId: profile?.id ?? null, email, staff, manager, owner, actorId,
     uploadId: owner ? member!.userId : access!.viewer!.id,
     authorKind: owner ? 'business' : staff ? 'staff' : 'client',
     authorName: (owner ? member!.name ?? 'Владелец бизнеса' : access!.viewer!.name ?? (staff ? 'Сотрудник' : 'Клиент')).slice(0, 80) }
@@ -77,15 +83,19 @@ async function threadFor(access: Access, runner: Runner, create = false) {
     access.customerId = profile!.id
   }
   if (!access.customerId) return null
-  const where = and(eq(conversations.workspaceId, access.app.workspaceId), eq(conversations.tableId, access.parent.tableId),
-    eq(conversations.rowId, access.parent.id), eq(conversations.customerId, access.customerId))
+  const where = and(eq(conversations.workspaceId, access.app.workspaceId), eq(conversations.kind, access.kind),
+    eq(conversations.customerId, access.customerId), access.kind === 'record'
+      ? and(eq(conversations.tableId, access.parent.tableId), eq(conversations.rowId, access.parent.id)) : undefined)
   let [thread] = await runner.select().from(conversations).where(where)
   if (!thread && create) {
     if (!access.app.communications?.enabled) throw new RowWriteError('invalid', 'Новые переписки временно отключены. Свяжитесь с бизнесом.')
     ;[thread] = await runner.insert(conversations).values({ id: `con_${newId('row').slice(4)}`, workspaceId: access.app.workspaceId, appId: access.app.id,
-      moduleId: access.module.id, tableId: access.parent.tableId, rowId: access.parent.id, customerId: access.customerId }).returning()
+      kind: access.kind, moduleId: access.module?.id ?? null, tableId: access.parent?.tableId ?? null, rowId: access.parent?.id ?? null, customerId: access.customerId }).onConflictDoNothing().returning()
+    if (!thread) [thread] = await runner.select().from(conversations).where(where)
   }
-  if (thread && thread.moduleId !== access.module.id) throw denied()
+  if (thread && (thread.kind !== access.kind || thread.moduleId !== (access.module?.id ?? null))) throw denied()
+  if (thread && create && access.kind === 'general') await runner.insert(businessCustomerApps)
+    .values({ workspaceId: access.app.workspaceId, customerId: access.customerId, appId: access.app.id }).onConflictDoNothing()
   return thread ?? null
 }
 
@@ -94,7 +104,7 @@ export async function readConversation(slug: string, tableId: string, rowId: str
   if (before !== undefined && (!Number.isSafeInteger(before) || before <= 0)) throw denied()
   const access = await conversationAccess(slug, tableId, rowId, db, business), thread = await threadFor(access, db)
   const base = { conversationId: thread?.id ?? null, enabled: Boolean(access.app.communications?.enabled), closed: Boolean(thread?.closedAt), staff: access.staff, canManage: access.manager,
-    contextTitle: await conversationContextTitle(access.app, tableId, access.readableData, access.access) }
+    contextTitle: access.kind === 'general' ? 'Вопрос бизнесу' : await conversationContextTitle(access.app, tableId, access.readableData, access.access) }
   if (!thread) return { ...base, messages: [], nextBefore: null, notes: [] }
   const found = await db.select().from(messages).where(and(eq(messages.workspaceId, access.app.workspaceId), eq(messages.conversationId, thread.id),
     before === undefined ? undefined : lt(messages.sequence, before))).orderBy(desc(messages.sequence)).limit(51)
@@ -129,6 +139,11 @@ export async function sendConversation(slug: string, tableId: string, rowId: str
     const target = input.internal ? notes : messages
     const [previous] = await tx.select({ id: target.id }).from(target).where(and(eq(target.conversationId, thread!.id), eq(target.authorId, access.actorId), eq(target.requestId, input.requestId.toLowerCase())))
     if (previous) return previous
+    if (access.kind === 'general' && !access.app.communications?.enabled) throw new RowWriteError('invalid', 'Новые сообщения временно отключены. Свяжитесь с бизнесом другим способом.')
+    if (thread!.closedAt && access.kind === 'general' && !access.staff && !input.internal) {
+      await tx.update(conversations).set({ closedAt: null }).where(eq(conversations.id, thread!.id))
+      thread!.closedAt = null
+    }
     if (thread!.closedAt) throw new RowWriteError('invalid', 'Переписка закрыта. Ответственный может возобновить её.')
     await limits(access, thread!.id, tx)
     const common = { id: `msg_${newId('row').slice(4)}`, workspaceId: access.app.workspaceId, conversationId: thread!.id, authorId: access.actorId,
@@ -141,7 +156,7 @@ export async function sendConversation(slug: string, tableId: string, rowId: str
       await tx.insert(messages).values({ ...common, authorKind: access.authorKind })
       if (fileIds.length) await tx.update(attachments).set({ messageId: common.id, referenced: true }).where(inArray(attachments.id, fileIds))
     }
-    changed.add(tableId)
+    if (access.kind === 'record') changed.add(tableId)
     return { id: common.id }
   })
 }
@@ -163,7 +178,7 @@ export async function changeConversationMessage(slug: string, tableId: string, r
     await tx.insert(revisions).values({ id: newId('change'), workspaceId: access.app.workspaceId, messageId, version: message.version,
       body: message.body, operation: text === null ? 'delete' : 'edit', actorId: access.actorId })
     await tx.update(messages).set({ body: text ?? '', version: version + 1, editedAt: new Date(), deletedAt: text === null ? new Date() : null }).where(eq(messages.id, messageId))
-    changed.add(tableId)
+    if (access.kind === 'record') changed.add(tableId)
     return { id: messageId }
   })
 }
@@ -181,7 +196,7 @@ export async function closeConversation(slug: string, tableId: string, rowId: st
     const access = await conversationAccess(slug, tableId, rowId, tx, business), thread = await threadFor(access, tx)
     if (!thread || !access.manager) throw denied()
     await tx.update(conversations).set({ closedAt: closed ? new Date() : null }).where(eq(conversations.id, thread.id))
-    changed.add(tableId)
+    if (access.kind === 'record') changed.add(tableId)
     return { id: thread.id }
   })
 }
@@ -189,6 +204,7 @@ export async function prepareConversationUpload(slug: string, tableId: string, r
   const initial = await conversationAccess(slug, tableId, rowId, db, business)
   return writeRows(initial.app.workspaceId, async ({ tx }) => {
     const access = await conversationAccess(slug, tableId, rowId, tx, business), thread = await threadFor(access, tx, true)
+    if (access.kind === 'general' && !access.app.communications?.enabled) throw new RowWriteError('invalid', 'Новые сообщения временно отключены. Свяжитесь с бизнесом другим способом.')
     if (thread!.closedAt) throw new RowWriteError('invalid', 'Переписка закрыта')
     await limits(access, thread!.id, tx)
     return { workspaceId: access.app.workspaceId, conversationId: thread!.id, uploadedBy: access.uploadId, origin: access.owner ? 'manual' as const : 'runtime' as const }
@@ -206,8 +222,8 @@ export async function canReadConversationFile(file: typeof attachments.$inferSel
   const candidates = await db.select({ slug: apps.slug }).from(apps).where(eq(apps.workspaceId, file.workspaceId))
   for (const app of candidates) {
     try {
-      const access = await conversationAccess(app.slug, thread.tableId, thread.rowId, db, business)
-      if (access.module.id === thread.moduleId && access.customerId === thread.customerId && (file.messageId || file.uploadedBy === access.uploadId)) return true
+      const access = await conversationAccess(app.slug, thread.kind === 'general' ? GENERAL_CONVERSATION_TABLE : thread.tableId!, thread.kind === 'general' ? thread.customerId : thread.rowId!, db, business)
+      if (access.kind === thread.kind && (access.module?.id ?? null) === thread.moduleId && access.customerId === thread.customerId && (file.messageId || file.uploadedBy === access.uploadId)) return true
     } catch (error) { if (!(error instanceof RowWriteError)) throw error }
   }
   return false

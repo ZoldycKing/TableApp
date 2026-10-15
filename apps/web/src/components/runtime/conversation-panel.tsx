@@ -4,11 +4,12 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Attachment } from '@tableapp/schema'
 import { FileUpload, fileUrl, isImage } from '@/components/file-upload'
 import { changeConversationMessageAction, closeConversationAction, conversationMessageHistoryAction, markConversationReadAction, readConversationAction, sendConversationAction } from '@/app/conversation-actions'
-import type { ConversationMessage, ConversationPage } from '@/lib/conversation-types'
+import { GENERAL_CONVERSATION_TABLE, type ConversationMessage, type ConversationPage } from '@/lib/conversation-types'
 
 type Props = { slug: string; tableId: string; rowId: string; configured: boolean; business?: boolean; showContext?: boolean }
 const date = (value: string) => new Date(value).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 export function ConversationPanel({ slug, tableId, rowId, configured, business = false, showContext = true }: Props) {
+  const general = tableId === GENERAL_CONVERSATION_TABLE
   const [page, setPage] = useState<ConversationPage | null>(null), [error, setError] = useState<string | null>(null)
   const [body, setBody] = useState(''), [files, setFiles] = useState<Attachment[]>([]), [internal, setInternal] = useState(false)
   const [busy, setBusy] = useState(false), [uploading, setUploading] = useState(false), [editing, setEditing] = useState<ConversationMessage | null>(null)
@@ -51,6 +52,7 @@ export function ConversationPanel({ slug, tableId, rowId, configured, business =
   }, [slug, tableId, rowId, business])
   if (!page && !configured) return null
   if (page && !page.enabled && !page.conversationId) return configured ? <p className="mt-4 rounded-xl bg-sand-50 p-4 text-sm text-ink-muted">Бизнес пока не принимает новые сообщения. Свяжитесь с ответственным другим способом.</p> : null
+  const clientGeneralDisabled = Boolean(general && page && !page.staff && !page.enabled)
   const mutate = async (run: () => Promise<{ ok: boolean; error?: string }>, after?: () => void) => {
     if (sending.current) return
     sending.current = true; setBusy(true); setError(null)
@@ -61,11 +63,13 @@ export function ConversationPanel({ slug, tableId, rowId, configured, business =
     } catch { setError('Не удалось сохранить. Повторите отправку.') }
     finally { sending.current = false; setBusy(false) }
   }
-  return <section aria-label="Переписка по обращению" className="mx-auto mt-5 min-w-0 w-full max-w-xl space-y-4 rounded-2xl border border-sand-200 bg-white p-4 [overflow-wrap:anywhere]">
-    <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">{showContext && page?.contextTitle ? page.contextTitle : 'Переписка и документы'}</h3>
+  return <section aria-label={general ? 'Вопрос бизнесу' : 'Переписка по обращению'} className="mx-auto mt-5 min-w-0 w-full max-w-xl space-y-4 rounded-2xl border border-sand-200 bg-white p-4 [overflow-wrap:anywhere]">
+    <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">{general ? 'Вопрос бизнесу' : showContext && page?.contextTitle ? page.contextTitle : 'Переписка и документы'}</h3>
       {page?.canManage && page.conversationId ? <button disabled={busy} type="button" className="text-xs text-sage-700 underline" onClick={() => void mutate(() => closeConversationAction(slug, tableId, rowId, !page.closed, business))}>{page.closed ? 'Возобновить обсуждение' : 'Завершить обсуждение'}</button> : null}
     </div>
-    <p className="text-xs leading-relaxed text-ink-muted">Сообщения относятся к этому обращению. Их видите вы и сотрудники бизнеса, которым оно доступно.</p>
+    <p className="text-xs leading-relaxed text-ink-muted">{general
+      ? business ? 'Сообщения клиента вашему бизнесу. Их видят клиент и сотрудники с доступом к сообщениям.' : 'Здесь вы общаетесь с сотрудниками этого бизнеса. Создавать заказ или запись не нужно.'
+      : 'Сообщения относятся к этому обращению. Их видите вы и сотрудники бизнеса, которым оно доступно.'}</p>
     {error ? <p role="alert" className="text-sm text-red-700">{error}</p> : null}
     {!page ? <button type="button" className="text-sm text-sage-700 underline" onClick={() => void loadRef.current()}>Загрузить переписку</button> : <>
       {page.nextBefore ? <button disabled={busy} type="button" className="text-xs text-sage-700 underline" onClick={() => void load(true)}>Показать предыдущие сообщения</button> : null}
@@ -93,11 +97,13 @@ export function ConversationPanel({ slug, tableId, rowId, configured, business =
           {history.rows.map(revision => <p key={revision.version} className="mb-2 whitespace-pre-wrap break-words">{date(revision.createdAt)} · {revision.operation === 'delete' ? 'Удаление' : 'Изменение'}<br />{revision.body}</p>)}
           <button type="button" className="underline" onClick={() => setHistory(null)}>Скрыть историю</button></div> : null}
       </article>)}</div>
-      {!page.messages.length ? <p className="text-sm text-ink-muted">Задайте вопрос по этому обращению или приложите документ.</p> : null}
+      {!page.messages.length ? <p className="text-sm text-ink-muted">{general ? business ? 'Здесь появится переписка с клиентом.' : 'Напишите вопрос о товарах, услугах или работе бизнеса.' : 'Задайте вопрос по этому обращению или приложите документ.'}</p> : null}
       {page.staff ? <div className="space-y-2 border-t border-sand-200 pt-3"><p className="text-xs font-medium">Внутренние заметки · клиенту не видны</p>
         {page.notes.map(note => <div key={note.id} className="rounded-lg bg-sand-50 p-2 text-xs"><span className="text-ink-muted">{note.author} · {date(note.createdAt)}</span><p className="whitespace-pre-wrap break-words">{note.body}</p></div>)}
       </div> : null}
-      {page.closed ? <p className="text-sm text-ink-muted">Обсуждение завершено. Сообщения и документы сохранены в истории.</p> : <form className="space-y-3 border-t border-sand-200 pt-3" onSubmit={event => {
+      {clientGeneralDisabled ? <p className="text-sm text-ink-muted">Бизнес пока не принимает новые сообщения. История переписки сохранена.</p> : null}
+      {page.closed && !clientGeneralDisabled ? <p className="text-sm text-ink-muted">{general && !page.staff && page.enabled ? 'Предыдущий вопрос закрыт. Новое сообщение возобновит переписку.' : 'Обсуждение завершено. Сообщения и документы сохранены в истории.'}</p> : null}
+      {!clientGeneralDisabled && (!page.closed || general && !page.staff) ? <form className="space-y-3 border-t border-sand-200 pt-3" onSubmit={event => {
         event.preventDefault()
         void mutate(() => sendConversationAction(slug, tableId, rowId, { body, requestId: request.current, fileIds: internal ? [] : files.map(file => file.id), internal }, business),
           () => { setBody(''); if (!internal) setFiles([]); request.current = crypto.randomUUID() })
@@ -106,7 +112,7 @@ export function ConversationPanel({ slug, tableId, rowId, configured, business =
         <label className="block text-sm">{internal ? 'Заметка' : 'Сообщение'}<textarea value={body} disabled={busy} onChange={event => { request.current = crypto.randomUUID(); setBody(event.target.value) }} rows={3} maxLength={4000} required={!files.length || internal} className="mt-1 w-full rounded-xl border border-sand-200 p-3 text-sm" /></label>
         {!internal ? <FileUpload value={files} maxCount={5} compact conversation={{ slug, tableId, rowId, business }} onChange={value => { request.current = crypto.randomUUID(); setFiles(value) }} onBusyChange={setUploading} /> : null}
         <button type="submit" disabled={busy || uploading || !body.trim() && (!files.length || internal)} className="rounded-xl bg-sage-700 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-40">{busy ? 'Сохранение…' : internal ? 'Сохранить заметку' : 'Отправить сообщение'}</button>
-      </form>}
+      </form> : null}
     </>}
   </section>
 }

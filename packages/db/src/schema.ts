@@ -458,19 +458,32 @@ export const conversations = pgTable('conversations', {
   workspaceId: text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
   /** Origin is informational. Its deletion clears only app_id (see SQL migration), preserving business ownership. */
   appId: text('app_id'),
-  moduleId: text('module_id').notNull(),
-  tableId: text('table_id').notNull(),
-  rowId: text('row_id').notNull(),
+  kind: text('kind').$type<'record' | 'general'>().notNull().default('record'),
+  moduleId: text('module_id'),
+  tableId: text('table_id'),
+  rowId: text('row_id'),
   customerId: text('customer_id').notNull(),
   closedAt: timestamp('closed_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, t => [
   uniqueIndex('conversations_owned_key').on(t.workspaceId, t.id),
   uniqueIndex('conversations_resource_customer_key').on(t.workspaceId, t.tableId, t.rowId, t.customerId),
+  uniqueIndex('conversations_general_customer_key').on(t.workspaceId, t.customerId).where(sql`${t.kind} = 'general'`),
+  check('conversations_kind_target_check', sql`(${t.kind} = 'record' and ${t.moduleId} is not null and ${t.tableId} is not null and ${t.rowId} is not null) or (${t.kind} = 'general' and ${t.moduleId} is null and ${t.tableId} is null and ${t.rowId} is null)`),
   foreignKey({ columns: [t.workspaceId, t.appId], foreignColumns: [apps.workspaceId, apps.id] }).onDelete('set null'),
   foreignKey({ columns: [t.workspaceId, t.tableId], foreignColumns: [tables.workspaceId, tables.id] }).onDelete('cascade'),
   foreignKey({ columns: [t.tableId, t.rowId], foreignColumns: [rows.tableId, rows.id] }).onDelete('cascade'),
   foreignKey({ columns: [t.workspaceId, t.customerId], foreignColumns: [businessCustomers.workspaceId, businessCustomers.id] }).onDelete('cascade'),
+])
+
+/** General client questions require an explicit business-level operator grant. */
+export const generalMessageOperators = pgTable('general_message_operators', {
+  workspaceId: text('workspace_id').notNull(),
+  userId: text('user_id').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, t => [
+  primaryKey({ columns: [t.workspaceId, t.userId] }),
+  foreignKey({ columns: [t.workspaceId, t.userId], foreignColumns: [workspaceMembers.workspaceId, workspaceMembers.userId] }).onDelete('cascade'),
 ])
 
 /** Per-person watermarks; module grants are still checked on every read. */

@@ -1,6 +1,6 @@
-import { appUsers, authEvents, authTokens, db, staffSessions } from '@tableapp/db'
+import { apps, appUsers, authEvents, authTokens, db, staffSessions } from '@tableapp/db'
 import { newId } from '@tableapp/schema'
-import { and, eq, gt, lt, sql } from 'drizzle-orm'
+import { and, eq, gt, isNull, lt, sql } from 'drizzle-orm'
 import { cookies, headers } from 'next/headers'
 import {
   CHALLENGE_COOKIE,
@@ -198,12 +198,27 @@ export async function verifyCode(
  * для «заказавших с витрины» не заводится.
  */
 export async function completeStaffLogin(found: AuthToken): Promise<{ ok: boolean; error?: string }> {
+  if (found.intent === 'question') {
+    if (found.purpose !== 'app_login' || !found.appId) return { ok: false, error: 'Попытка входа недействительна' }
+    const [record] = await db.select({ slug: apps.slug }).from(apps).where(eq(apps.id, found.appId)).limit(1)
+    const { enrolFromQuestion, questionAppFor } = await import('./app-session')
+    const app = record ? await questionAppFor(record.slug) : null
+    if (!app) return { ok: false, error: 'Вопросы этому бизнесу сейчас недоступны' }
+    if (!await enrolFromQuestion(app, found.email)) return { ok: false, error: 'Для этого адреса настроен рабочий доступ. Войдите как сотрудник.' }
+  }
   const sessionId = newId('session')
   const agent = await userAgent()
   const ip = await requestIp()
 
-  await db.transaction(async (tx) => {
-    await tx.update(authTokens).set({ consumedAt: new Date() }).where(eq(authTokens.id, found.id))
+  const completed = await db.transaction(async (tx) => {
+    if (found.intent === 'question') {
+      const claimed = await tx.update(authTokens).set({ consumedAt: new Date() })
+        .where(and(eq(authTokens.id, found.id), isNull(authTokens.consumedAt), gt(authTokens.expiresAt, new Date())))
+        .returning({ id: authTokens.id })
+      if (!claimed.length) return false
+    } else {
+      await tx.update(authTokens).set({ consumedAt: new Date() }).where(eq(authTokens.id, found.id))
+    }
     await tx.insert(staffSessions).values({
       id: sessionId,
       email: found.email,
@@ -213,7 +228,9 @@ export async function completeStaffLogin(found: AuthToken): Promise<{ ok: boolea
       expiresAt: expiresAt(SESSION_TTL_MS),
     })
     await tx.update(appUsers).set({ lastSeenAt: new Date() }).where(eq(appUsers.email, found.email))
+    return true
   })
+  if (!completed) return { ok: false, error: 'Код уже использован или срок его действия истёк' }
 
   const store = await cookies()
   store.set(STAFF_SESSION_COOKIE, sessionId, {

@@ -49,6 +49,7 @@ import { PER_EMAIL, PER_IP, takeAttempt } from '@/lib/auth-rate'
 import { maySendAppCode } from '@/lib/app-roles'
 import { mailHintFor, sendMagicLink, type MailResult } from '@/lib/mailer'
 import { hashRecoveryCode, verifyTotp } from '@/lib/totp'
+import { questionAppFor } from '@/lib/app-session'
 
 export type LoginIntent = 'owner' | 'staff'
 
@@ -126,7 +127,8 @@ async function tooOften(email: string, ip: string): Promise<string | null> {
 }
 
 /** Запрос ссылки для входа в приложение. */
-export async function requestAppLoginAction(slug: string, rawEmail: string): Promise<LoginRequestResult> {
+export async function requestAppLoginAction(slug: string, rawEmail: string, purpose: 'default' | 'question' = 'default'): Promise<LoginRequestResult> {
+  if (purpose !== 'default' && purpose !== 'question') return { ok: false, error: 'Неизвестный способ входа' }
   const email = normalizeEmail(rawEmail)
   if (!isValidEmail(email)) return { ok: false, error: 'Введите корректный адрес почты' }
 
@@ -136,6 +138,7 @@ export async function requestAppLoginAction(slug: string, rawEmail: string): Pro
   const parsed = appSchema.safeParse(record.published)
   if (!parsed.success) return { ok: false, error: 'Приложение собрано с ошибкой' }
   const app = parsed.data
+  if (purpose === 'question' && !await questionAppFor(slug)) return { ok: false, error: 'Вопросы этому бизнесу сейчас недоступны' }
 
   const ip = await requestIp()
   const often = await tooOften(email, ip)
@@ -151,7 +154,7 @@ export async function requestAppLoginAction(slug: string, rawEmail: string): Pro
    * собственный кабинет. Что он там увидит, решают роли и правило на строки,
    * а не сам факт входа.
    */
-  if (app.accessMode === 'allowlist') {
+  if (app.accessMode === 'allowlist' && purpose !== 'question') {
     const [existing] = await db
       .select({ id: appUsers.id, roleId: appUsers.roleId })
       .from(appUsers)
@@ -185,6 +188,7 @@ export async function requestAppLoginAction(slug: string, rawEmail: string): Pro
     challengeId,
     requestIp: ip,
     purpose: 'app_login',
+    ...(purpose === 'question' ? { intent: 'question' } : {}),
     appId: record.id,
     expiresAt: expiresAt(TOKEN_TTL_MS),
   })

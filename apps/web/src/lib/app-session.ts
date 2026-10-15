@@ -1,12 +1,14 @@
 import type { App } from '@tableapp/schema'
-import { appUsers, db, staffSessions } from '@tableapp/db'
-import { newId } from '@tableapp/schema'
+import { apps, appUsers, db, staffSessions } from '@tableapp/db'
+import { appSchema, newId } from '@tableapp/schema'
 import { and, eq, gt, isNull } from 'drizzle-orm'
 import { cookies } from 'next/headers'
 import { ANONYMOUS, asRole, companyOf, defaultRole, visitorFor, type Visitor } from './app-roles'
 import { STAFF_SESSION_COOKIE, normalizeEmail } from './auth'
 import { ensureBusinessCustomer } from './business-customer'
 import type { ModuleAccessApp } from './module-access'
+import { generalChatAvailableApp } from './general-conversation-config'
+import { validateAppReferences } from './app-references'
 
 export type AppViewer = {
   id: string
@@ -40,6 +42,36 @@ export async function currentStaffEmail(): Promise<string | null> {
     .limit(1)
 
   return session?.email ?? null
+}
+
+/** A public question is a separate verified-client entry, never an invitation to a private app. */
+export async function questionAppFor(slug: string): Promise<App | null> {
+  if (typeof slug !== 'string' || !slug || slug.length > 200) return null
+  const [record] = await db.select().from(apps).where(eq(apps.slug, slug)).limit(1)
+  const parsed = appSchema.safeParse(record?.published)
+  if (!record || !parsed.success) return null
+  const app = { ...parsed.data, id: record.id, workspaceId: record.workspaceId, slug: record.slug }
+  if (!app.communications?.enabled || defaultRole(app) !== 'client' || !generalChatAvailableApp(app) || await validateAppReferences(app)) return null
+  return app
+}
+
+/** Caller supplies an email from an existing verified session or a checked OTP, never browser input. */
+export async function enrolFromQuestion(app: App, email: string): Promise<boolean> {
+  if (defaultRole(app) !== 'client') return false
+  const normalized = normalizeEmail(email), declared = visitorFor(app, normalized)
+  if (declared.authenticated && (declared.roleIds ?? [declared.roleId]).some(role => role !== 'client')) return false
+  const [existing] = await db.select({ roleId: appUsers.roleId }).from(appUsers)
+    .where(and(eq(appUsers.appId, app.id), eq(appUsers.email, normalized))).limit(1)
+  if (existing?.roleId && existing.roleId !== 'client') return false
+  await ensureAppUser(app.id, normalized)
+  // A concurrent explicit role assignment wins over client enrollment.
+  await db.update(appUsers).set({ roleId: 'client', joinedVia: 'question' })
+    .where(and(eq(appUsers.appId, app.id), eq(appUsers.email, normalized), isNull(appUsers.roleId)))
+  const [confirmed] = await db.select({ roleId: appUsers.roleId }).from(appUsers)
+    .where(and(eq(appUsers.appId, app.id), eq(appUsers.email, normalized))).limit(1)
+  if (confirmed?.roleId !== 'client') return false
+  const profile = await ensureBusinessCustomer(app.id, normalized)
+  return profile?.workspaceId === app.workspaceId
 }
 
 /**

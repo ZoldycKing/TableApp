@@ -3,6 +3,7 @@
 import { changeConversationMessage, closeConversation, conversationMessageHistory, readConversation, sendConversation } from '@/lib/conversations'
 import { RowWriteError } from '@/lib/row-mutations'
 import { listConversationInbox, markConversationRead, type InboxInput } from '@/lib/conversation-inbox'
+import { getGeneralMessageAccess, setGeneralMessageAccess } from '@/lib/general-conversation-access'
 
 async function result<T>(run: () => Promise<T>) {
   try { return { ok: true as const, value: await run() } }
@@ -28,4 +29,14 @@ export async function listConversationInboxAction(input: InboxInput = {}, busine
 }
 export async function markConversationReadAction(slug: string, tableId: string, rowId: string, sequence: number, business = false) {
   return result(() => markConversationRead(slug, tableId, rowId, sequence, business))
+}
+
+export async function getGeneralMessageAccessAction() {
+  const found = await result(getGeneralMessageAccess)
+  return found.ok ? { ok: true as const, ...found.value } : found
+}
+
+export async function setGeneralMessageAccessAction(userId: string, allowed: boolean) {
+  const saved = await result(() => setGeneralMessageAccess(userId, allowed))
+  return saved.ok ? { ok: true as const } : saved
 }

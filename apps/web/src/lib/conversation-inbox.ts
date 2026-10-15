@@ -1,8 +1,8 @@
 import { apps, businessCustomers, conversationMessages as messages, conversationReads as reads, conversations, db, fields, rows, tables, workspaces } from '@tableapp/db'
 import { appSchema, customerWorkflows, dateInstant, fieldTimeZone, normalizeFieldOptions, type App, type Field } from '@tableapp/schema'
-import { and, desc, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm'
+import { and, desc, eq, inArray, isNull, isNotNull, lt, or, sql } from 'drizzle-orm'
 import { createHash } from 'node:crypto'
-import { appAccessFor, currentAppAccess, type AppViewer } from './app-session'
+import { appAccessFor, currentAppAccess, currentStaffEmail, type AppViewer } from './app-session'
 import { canEnter, canOpenScreen, type Visitor } from './app-roles'
 import { appReadPolicy } from './app-read-policy'
 import { validateAppReferences } from './app-references'
@@ -14,6 +14,9 @@ import { currentMember } from './session'
 import { RowWriteError } from './row-mutations'
 import { customerHistoryContext } from './customer-history'
 import type { ConversationInboxPage } from './conversation-types'
+import { GENERAL_CONVERSATION_TABLE, GENERAL_CONVERSATION_SELF } from './conversation-types'
+import { generalChatAvailableApp } from './general-conversation-config'
+import { generalConversationAccess, generalOperator } from './general-conversation-access'
 
 const denied = () => new RowWriteError('denied', 'Сообщения недоступны. Войдите в кабинет этого бизнеса.')
 const person = (workspace: string, email: string) => `person_${createHash('sha256').update(`${workspace}:${email.trim().toLowerCase()}`).digest('hex')}`
@@ -36,9 +39,10 @@ export async function listConversationInbox(input: InboxInput = {}, business = f
     const [root] = await db.select().from(apps).where(eq(apps.slug, input.slug)).limit(1)
     const parsed = appSchema.safeParse(root?.published)
     if (!root || !parsed.success) throw denied()
-    const access = await currentAppAccess({ ...parsed.data, id: root.id })
-    if (!access.viewer || !access.visitor.authenticated || !canEnter(parsed.data, access.visitor)) throw denied()
-    workspaceId = root.workspaceId; actorEmail = access.viewer.email
+    const app = { ...parsed.data, id: root.id, workspaceId: root.workspaceId, slug: root.slug }
+    const access = await currentAppAccess(app), verifiedEmail = await currentStaffEmail()
+    if ((!access.viewer || !access.visitor.authenticated || !canEnter(app, access.visitor)) && (!verifiedEmail || !generalChatAvailableApp(app))) throw denied()
+    workspaceId = root.workspaceId; actorEmail = access.viewer?.email ?? verifiedEmail!
   }
   const [space] = await db.select({ ownerId: workspaces.ownerId }).from(workspaces).where(eq(workspaces.id, workspaceId))
   const owner = Boolean(business && member?.role === 'owner' && space?.ownerId === member.userId)
@@ -47,6 +51,8 @@ export async function listConversationInbox(input: InboxInput = {}, business = f
   if (input.customer !== undefined && (!customerContext || customerContext.app.workspaceId !== workspaceId)) throw denied()
   if (customerContext && !customerContext.email) return { items: [], next: null }
   const records = await db.select().from(apps).where(and(eq(apps.workspaceId, workspaceId), input.appId ? eq(apps.id, input.appId) : undefined))
+  const operator = await generalOperator(workspaceId, business)
+  const generalApps: App[] = []
   type Scope = { app: App; tableId: string; emailFieldId: string; moduleId: string; staff: boolean; owner: boolean; visitor: Visitor | null; viewer: AppViewer | null; policy: Awaited<ReturnType<typeof appReadPolicy>> | null }
   const scopes: Scope[] = []
   for (const record of records) {
@@ -54,6 +60,13 @@ export async function listConversationInbox(input: InboxInput = {}, business = f
     if (!parsed.success) continue
     const app = { ...parsed.data, id: record.id, workspaceId, slug: record.slug }
     if (await validateAppReferences(app)) continue
+    if (generalChatAvailableApp(app)) {
+      if (operator) generalApps.push(app)
+      else if (!business) {
+        try { await generalConversationAccess(app, GENERAL_CONVERSATION_SELF); generalApps.push(app) }
+        catch (error) { if (!(error instanceof RowWriteError)) throw error }
+      }
+    }
     const access = owner ? null : await appAccessFor(app, actorEmail)
     if (!owner && (!access?.viewer || !access.visitor.authenticated || !canEnter(app, access.visitor))) continue
     const ids = [...new Set(app.screens.filter(screen => screen.type === 'detail').map(screen => screen.tableId))]
@@ -66,17 +79,20 @@ export async function listConversationInbox(input: InboxInput = {}, business = f
       scopes.push({ app, tableId, emailFieldId: resource.emailFieldId, moduleId: module.id, staff, owner, visitor: access?.visitor ?? null, viewer: access?.viewer ?? null, policy: owner ? null : await appReadPolicy(app, tableId, access!.visitor, access!.viewer!) })
     }
   }
-  if (!scopes.length) return { items: [], next: null }
+  if (!scopes.length && !generalApps.length) return { items: [], next: null }
+  generalApps.sort((a, b) => Number(b.slug === input.slug) - Number(a.slug === input.slug))
   const actorId = person(workspaceId, actorEmail)
   const lastSequence = sql<number>`coalesce((select max(m.sequence) from conversation_messages m where m.conversation_id=${conversations.id}),0)`
   const unread = sql<number>`(select count(*) from conversation_messages m where m.conversation_id=${conversations.id} and m.deleted_at is null and m.author_id<>${actorId} and m.sequence>coalesce((select r.sequence from conversation_reads r where r.workspace_id=${workspaceId} and r.conversation_id=${conversations.id} and r.actor_id=${actorId}),0))`
   const found = await db.select({ thread: conversations, row: rows, primary: tables.primaryFieldId, customer: businessCustomers.name, email: businessCustomers.email, lastSequence, unread,
     preview: sql<string | null>`(select case when m.deleted_at is not null then 'Сообщение удалено' when m.body='' then 'Документ' else left(m.body,160) end from conversation_messages m where m.conversation_id=${conversations.id} order by m.sequence desc limit 1)`,
     lastAt: sql<string | null>`(select m.created_at::text from conversation_messages m where m.conversation_id=${conversations.id} order by m.sequence desc limit 1)` })
-    .from(conversations).innerJoin(rows, and(eq(rows.id, conversations.rowId), eq(rows.tableId, conversations.tableId)))
-    .innerJoin(tables, and(eq(tables.id, conversations.tableId), eq(tables.workspaceId, workspaceId)))
+    .from(conversations).leftJoin(rows, and(eq(rows.id, conversations.rowId), eq(rows.tableId, conversations.tableId)))
+    .leftJoin(tables, and(eq(tables.id, conversations.tableId), eq(tables.workspaceId, workspaceId)))
     .innerJoin(businessCustomers, and(eq(businessCustomers.id, conversations.customerId), eq(businessCustomers.workspaceId, workspaceId)))
-    .where(and(eq(conversations.workspaceId, workspaceId), isNull(rows.deletedAt), inArray(conversations.tableId, scopes.map(scope => scope.tableId)),
+    .where(and(eq(conversations.workspaceId, workspaceId), or(
+      and(eq(conversations.kind, 'record'), isNotNull(rows.id), isNull(rows.deletedAt), eq(tables.workspaceId, workspaceId), inArray(conversations.tableId, scopes.map(scope => scope.tableId))),
+      generalApps.length ? and(eq(conversations.kind, 'general'), operator ? undefined : eq(businessCustomers.email, actorEmail.trim().toLowerCase())) : sql`false`),
       customerContext ? eq(businessCustomers.email, customerContext.email) : undefined,
       input.unreadOnly ? sql`${unread}>0` : undefined,
       cursor ? or(lt(lastSequence, Number(cursor[0])), and(eq(lastSequence, Number(cursor[0])), lt(conversations.id, cursor[1]!))) : undefined))
@@ -85,10 +101,19 @@ export async function listConversationInbox(input: InboxInput = {}, business = f
   const titles = new Map<string, string>()
   const servicePolicies = new Map<string, Awaited<ReturnType<typeof appReadPolicy>>>()
   for (const item of page) {
+    if (item.thread.kind === 'general') {
+      const app = generalApps[0]
+      if (!app || !operator && item.email !== actorEmail.trim().toLowerCase()) continue
+      items.push({ id: item.thread.id, kind: 'general', slug: app.slug, tableId: GENERAL_CONVERSATION_TABLE, rowId: item.thread.customerId,
+        title: 'Вопрос бизнесу', customer: item.customer || (operator ? item.email : 'Вы'), appName: app.name, detailScreenId: '',
+        preview: item.preview ?? 'Сообщений пока нет', lastAt: item.lastAt ? new Date(item.lastAt).toISOString() : item.thread.createdAt.toISOString(), unread: Number(item.unread), closed: Boolean(item.thread.closedAt) })
+      continue
+    }
+    if (!item.row) continue
     const data = item.row.data as Record<string, unknown>
     const scope = scopes.filter(scope => scope.tableId === item.thread.tableId && scope.moduleId === item.thread.moduleId)
       .sort((a, b) => Number(b.app.slug === input.slug) - Number(a.app.slug === input.slug))
-      .find(scope => String(data[scope.emailFieldId] ?? '').trim().toLowerCase() === item.email && (scope.owner || scope.policy!.canRead(data, item.row) && (scope.staff || item.email === actorEmail.trim().toLowerCase())))
+      .find(scope => String(data[scope.emailFieldId] ?? '').trim().toLowerCase() === item.email && (scope.owner || scope.policy!.canRead(data, item.row!) && (scope.staff || item.email === actorEmail.trim().toLowerCase())))
     if (!scope) continue
     const projected = scope.policy ? scope.policy.project(data, item.row) : data
     let title = String(projected[item.primary ?? ''] ?? 'Обращение').slice(0, 160)
@@ -115,7 +140,7 @@ export async function listConversationInbox(input: InboxInput = {}, business = f
     if (!detail) continue
     const nameField = booking?.tables.visits === item.thread.tableId ? booking.visit.client : customerWorkflows(scope.app).find(workflow => workflow.tableId === item.thread.tableId)?.profile?.nameFieldId
     const recordName = nameField && typeof projected[nameField] === 'string' ? String(projected[nameField]).trim().slice(0, 80) : ''
-    items.push({ id: item.thread.id, slug: scope.app.slug, tableId: item.thread.tableId, rowId: item.thread.rowId, title,
+    items.push({ id: item.thread.id, slug: scope.app.slug, tableId: item.thread.tableId!, rowId: item.thread.rowId!, title,
       customer: item.customer || recordName || (scope.staff ? 'Клиент' : 'Вы'), appName: scope.app.name, detailScreenId: detail.id,
       preview: item.preview ?? 'Сообщений пока нет', lastAt: item.lastAt ? new Date(item.lastAt).toISOString() : item.thread.createdAt.toISOString(), unread: Number(item.unread), closed: Boolean(item.thread.closedAt) })
   }
@@ -128,7 +153,8 @@ export async function markConversationRead(slug: string, tableId: string, rowId:
   if (!Number.isSafeInteger(sequence) || sequence <= 0) throw denied()
   const access = await conversationAccess(slug, tableId, rowId, db, business)
   if (!access.customerId) throw denied()
-  const [thread] = await db.select().from(conversations).where(and(eq(conversations.workspaceId, access.app.workspaceId), eq(conversations.tableId, tableId), eq(conversations.rowId, rowId), eq(conversations.customerId, access.customerId), eq(conversations.moduleId, access.module.id)))
+  const [thread] = await db.select().from(conversations).where(and(eq(conversations.workspaceId, access.app.workspaceId), eq(conversations.kind, access.kind), eq(conversations.customerId, access.customerId),
+    access.kind === 'record' ? and(eq(conversations.tableId, tableId), eq(conversations.rowId, rowId), eq(conversations.moduleId, access.module.id)) : undefined))
   if (!thread) throw denied()
   const [message] = await db.select({ id: messages.id }).from(messages).where(and(eq(messages.conversationId, thread.id), eq(messages.sequence, sequence)))
   if (!message) throw denied()

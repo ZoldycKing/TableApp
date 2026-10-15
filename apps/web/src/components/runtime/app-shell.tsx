@@ -43,6 +43,10 @@ import {
 import { IntakeVerify } from './intake-verify'
 import { ConversationInbox, MESSAGES_SCREEN, parseConversationTarget } from './conversation-inbox'
 import { conversationResource } from '@/lib/conversation-resource'
+import { GeneralQuestion } from './general-question'
+import { generalChatAvailableApp } from '@/lib/general-conversation-config'
+import { GENERAL_QUESTION_SCREEN, parseGeneralQuestionDraft, type GeneralQuestionDraft } from '@/lib/general-question-draft'
+import { beginGeneralQuestionAction } from '@/app/question-auth-actions'
 import { OrderDeliveryPanel } from './order-delivery-panel'
 import { InventoryBalancePanel, OrderStockPanel } from './order-stock-panel'
 import { orderStockPair } from '@/lib/order-stock-config'
@@ -186,8 +190,15 @@ export function AppShell({
   const [checkout, setCheckout] = useState<CheckoutIntent | null>(null)
   const [savedNotice, setSavedNotice] = useState<string | null>(null)
   const { app } = initialRuntime
+  const questionKey = `tableapp:question:${app.workspaceId}:${app.id}`
+  const questionActor = `${questionKey}:${viewer?.id ?? ''}`
+  const questionContext = useRef(questionActor)
+  questionContext.current = questionActor
+  const [questionDraft, setQuestionDraft] = useState<GeneralQuestionDraft>({ key: '', body: '', requestId: '', ownerId: null, active: false, login: false })
+  const [resumeQuestion, setResumeQuestion] = useState(false)
   const workflowScreens = useMemo(() => editing ? app.screens : withWorkflowScreenNames(app, initialRuntime.views).screens, [app, initialRuntime.views, editing])
   const navigation = useMemo(() => buildRuntimeNavigation({ ...app, screens: workflowScreens }, initialRuntime.views), [app, workflowScreens, initialRuntime.views])
+  const questionAvailable = !demo && !editing && !navigation.work && generalChatAvailableApp(app) && Boolean(app.communications?.enabled)
   const namedScreens = useMemo(() => {
     if (editing) return workflowScreens
     const displayed = new Map([...navigation.tabs, ...Object.values(navigation.actionsByScreen).flat()].map(screen => [screen.id, screen]))
@@ -197,7 +208,8 @@ export function AppShell({
   useLiveApp(app.slug, !demo && !editing)
   const messagesAvailable = !demo && !editing && Boolean(viewer) && Boolean(app.booking || customerWorkflows(app).some(workflow => moduleForTable(app, workflow.tableId)?.kind !== 'crm'))
   const messagesTab = useMemo(() => messagesAvailable && app.screens[0] ? { ...app.screens[0], id: MESSAGES_SCREEN, name: 'Сообщения', tab: { label: 'Сообщения', icon: 'chat' } } as Screen : null, [messagesAvailable, app.screens])
-  const screens = useMemo(() => new Map([...namedScreens, ...(messagesTab ? [messagesTab] : [])].map((screen) => [screen.id, screen])), [namedScreens, messagesTab])
+  const questionScreen = useMemo(() => questionAvailable && app.screens[0] ? { ...app.screens[0], id: GENERAL_QUESTION_SCREEN, name: 'Задать вопрос', tab: null } as Screen : null, [questionAvailable, app.screens])
+  const screens = useMemo(() => new Map([...namedScreens, ...(messagesTab ? [messagesTab] : []), ...(questionScreen ? [questionScreen] : [])].map((screen) => [screen.id, screen])), [namedScreens, messagesTab, questionScreen])
   const tabs = [...(editing ? namedScreens.filter(screen => screen.tab !== null) : navigation.tabs), ...(messagesTab ? [messagesTab] : [])]
   const navigationGroups = editing ? [] : navigation.groups
   const hasNavigation = tabs.length > 1 || !editing && navigation.work && tabs.length > 0
@@ -225,7 +237,7 @@ export function AppShell({
   const checkoutCatalog = checkout ? customerWorkflows(app).find(config => config.formScreenId === checkout.screenId)?.catalog?.detailScreenId
     ?? (checkout.screenId === app.booking?.formScreenId ? app.screens.find(screen => screen.type === 'detail' && screen.tableId === app.booking!.tables.services)?.id : undefined) : undefined
   const selectedCatalogRow = checkout?.rowId && checkoutCatalog ? { screenId: checkoutCatalog, rowId: checkout.rowId } : null
-  const { runtime, loading: screenLoading, error: screenLoadError, retry: retryScreen, pageControls } = useScreenRuntime(initialRuntime, stack.at(-1)!.screenId, demo || editing || stack.at(-1)!.screenId === MESSAGES_SCREEN,
+  const { runtime, loading: screenLoading, error: screenLoadError, retry: retryScreen, pageControls } = useScreenRuntime(initialRuntime, stack.at(-1)!.screenId, demo || editing || [MESSAGES_SCREEN, GENERAL_QUESTION_SCREEN].includes(stack.at(-1)!.screenId),
     { rowId: stack.at(-1)!.rowId, listStates, cartProductIds: cart.items.map(item => item.id), selectedCatalogRow })
   const [error, setError] = useState<string | null>(null)
   /**
@@ -433,6 +445,45 @@ export function AppShell({
   }, [browserHistory, screens, app.id, demo, editing])
 
   const previousRuntime = useRef(runtime)
+  useEffect(() => {
+    if (demo || editing) return
+    let saved: GeneralQuestionDraft | null = null
+    try { saved = parseGeneralQuestionDraft(sessionStorage.getItem(questionKey), questionKey, viewer?.id ?? null) } catch { /* Storage is optional. */ }
+    setQuestionDraft(saved ?? { key: questionKey, body: '', requestId: crypto.randomUUID(), ownerId: viewer?.id ?? null, active: false, login: false })
+    setResumeQuestion(Boolean(saved?.active))
+  }, [questionKey, viewer?.id, demo, editing])
+  useEffect(() => {
+    if (demo || editing || questionDraft.key !== questionKey) return
+    try {
+      if (questionDraft.body || questionDraft.active) sessionStorage.setItem(questionKey, JSON.stringify({ ...questionDraft, active: questionDraft.active && current.screenId === GENERAL_QUESTION_SCREEN }))
+      else sessionStorage.removeItem(questionKey)
+    } catch { /* The in-memory question still survives ordinary login. */ }
+  }, [questionDraft, questionKey, current.screenId, demo, editing])
+  useEffect(() => {
+    if (!resumeQuestion || questionDraft.key !== questionKey || !questionAvailable) return
+    setResumeQuestion(false)
+    if (current.screenId !== GENERAL_QUESTION_SCREEN) navigate(GENERAL_QUESTION_SCREEN, null)
+    // Restoring one draft is a single navigation, not a reaction to each edit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resumeQuestion, questionDraft.key, questionKey, questionAvailable])
+  const startQuestion = () => {
+    if (!questionAvailable || pending) return
+    setError(null)
+    setQuestionDraft(draft => ({ ...draft, key: questionKey, active: true, login: false, ownerId: viewer?.id ?? null, requestId: draft.requestId || crypto.randomUUID() }))
+    navigate(GENERAL_QUESTION_SCREEN, null)
+    if (!viewer) startTransition(async () => {
+      try {
+        const result = await beginGeneralQuestionAction(app.slug)
+        if (questionContext.current !== questionActor) return
+        if (!result.ok) setError(result.error)
+        else if (result.authenticated) router.refresh()
+      } catch { if (questionContext.current === questionActor) setError('Не удалось проверить вход. Попробуйте ещё раз.') }
+    })
+  }
+  const cancelQuestion = () => {
+    setQuestionDraft(draft => ({ ...draft, active: false, login: false }))
+    goBack()
+  }
   const clearCheckout = () => {
     setCheckout(null)
     if (!demo && !editing) try { sessionStorage.removeItem(`tableapp:checkout:${app.id}`) } catch { /* Storage is optional. */ }
@@ -683,6 +734,7 @@ export function AppShell({
    * иначе по ней не отличить один открытый заказ от другого.
    */
   const heading = (() => {
+    if (current.screenId === GENERAL_QUESTION_SCREEN) return questionDraft.login && !viewer ? 'Подтвердите почту' : 'Задать вопрос'
     if (current.screenId === MESSAGES_SCREEN) return 'Сообщения'
     if (checkout && !viewer) return 'Подтвердите почту'
     if (screen.type !== 'detail' || !row || !table) return screen.name
@@ -845,7 +897,21 @@ export function AppShell({
                 onClick={() => navigate(action.id, null)} className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium text-white transition-colors disabled:opacity-50 ${accent.solid}`}>
                 <Icon name="plus" className="size-4" />{action.name}
               </button>)}</div> : null}
-            {current.screenId === MESSAGES_SCREEN ? <ConversationInbox key={`${app.id}:${viewer?.id}`} slug={app.slug} initialTarget={parseConversationTarget(current.rowId)} onOpenRecord={item => {
+            {questionAvailable && current.screenId !== GENERAL_QUESTION_SCREEN && current.screenId !== MESSAGES_SCREEN && sent === null && checkout === null && intake === null && screen.access.public && (screen.type === 'list' || screen.type === 'tiles' || screen.type === 'detail') ?
+              <div className="mb-4 flex justify-end"><button type="button" disabled={pending} onClick={startQuestion} className="inline-flex items-center gap-2 rounded-xl border border-sand-200 bg-white px-3 py-2 text-sm font-medium text-sage-700 outline-none hover:bg-sand-50 focus-visible:ring-2 focus-visible:ring-sage-400 disabled:opacity-50"><Icon name="chat" className="size-4" />Задать вопрос</button></div> : null}
+            {current.screenId === GENERAL_QUESTION_SCREEN ? questionDraft.login && !viewer ?
+              <AppLogin purpose="question" slug={app.slug} appName={runtime.business?.name ?? app.name} accent={app.theme.accent} initialError={null}
+                onCancel={() => setQuestionDraft(draft => ({ ...draft, login: false }))} onDone={() => router.refresh()} /> :
+              <GeneralQuestion key={questionActor} slug={app.slug} businessName={runtime.business?.name ?? app.name} authenticated={Boolean(viewer)}
+                body={questionDraft.key === questionKey && (!questionDraft.ownerId || questionDraft.ownerId === viewer?.id) ? questionDraft.body : ''}
+                requestId={questionDraft.requestId} onBodyChange={body => setQuestionDraft(draft => ({ ...draft, body, requestId: crypto.randomUUID() }))}
+                onLogin={() => setQuestionDraft(draft => ({ ...draft, login: true, active: true }))}
+                onCancel={cancelQuestion} onSent={target => {
+                  if (questionContext.current !== questionActor) return
+                  setQuestionDraft({ key: questionKey, body: '', requestId: crypto.randomUUID(), ownerId: viewer?.id ?? null, active: false, login: false })
+                  try { sessionStorage.removeItem(questionKey) } catch { /* Storage is optional. */ }
+                  navigate(MESSAGES_SCREEN, JSON.stringify(target))
+                }} /> : current.screenId === MESSAGES_SCREEN ? <ConversationInbox key={`${app.id}:${viewer?.id}`} slug={app.slug} initialTarget={parseConversationTarget(current.rowId)} onAskQuestion={questionAvailable ? startQuestion : undefined} onOpenRecord={item => {
               if (item.slug === app.slug && screens.has(item.detailScreenId)) navigate(item.detailScreenId, item.rowId)
               else window.location.assign(`/a/${encodeURIComponent(item.slug)}?e=${encodeURIComponent(item.detailScreenId)}&r=${encodeURIComponent(item.rowId)}`)
             }} /> : screenLoadError ? <div className="space-y-3 p-6 text-sm"><p role="alert">{screenLoadError}</p><button type="button" onClick={retryScreen} className="rounded-lg border border-sand-200 px-3 py-2">Попробовать ещё раз</button></div> : screenLoading ? <p role="status" className="p-6 text-sm text-ink-soft">Загружаем раздел…</p> : sent !== null ? (

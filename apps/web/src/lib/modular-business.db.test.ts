@@ -173,8 +173,9 @@ describe.skipIf(!process.env.DATABASE_URL)('modular business scenarios in Postgr
     expect(order).toMatchObject({ ok: true })
     const orders = await database.db.select().from(database.rows).where(eq(database.rows.tableId, config.tableId)); expect(orders).toHaveLength(1)
     const orderId = orders[0]!.id, stored = orders[0]!.data as Record<string, unknown>
+    expect(order.rowId).toBe(orderId)
     expect(stored[config.emailFieldId]).toBe(clientEmail)
-    expect(await appCreateRowAction(first.slug, config.tableId, values)).toMatchObject({ ok: true })
+    expect(await appCreateRowAction(first.slug, config.tableId, values)).toEqual({ ok: true, rowId: orderId })
     expect(await database.db.select().from(database.rows).where(eq(database.rows.tableId, config.tableId))).toHaveLength(1)
     const { loadPublishedApp } = await import('./app-runtime'), { currentAppAccess } = await import('./app-session')
     const mine = await loadPublishedApp(first.slug, (await currentAppAccess(app)).visitor)

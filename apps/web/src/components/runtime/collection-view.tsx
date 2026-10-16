@@ -12,6 +12,7 @@ import type { ListState } from './app-shell'
 import { fileUrl, isImage } from '@/components/file-upload'
 import type { CollectionPage } from '@/lib/runtime-page-types'
 import type { RuntimePageControls } from '@/lib/use-screen-runtime'
+import { collectionSearchFields } from '@/lib/collection-search-fields'
 
 /**
  * Список записей.
@@ -72,6 +73,7 @@ export function CollectionView({
   page,
   pageControls,
   emptyState,
+  fieldUnits,
 }: {
   screen: Collection
   rows: TableRow[]
@@ -96,6 +98,8 @@ export function CollectionView({
   page?: CollectionPage
   pageControls?: RuntimePageControls
   emptyState?: ReactNode
+  /** Units supplied by an explicit product binding, e.g. booking duration in minutes. */
+  fieldUnits?: Readonly<Record<string, string>>
 }) {
   const { query, choiceId } = state
   const setQuery = (next: string) => onState({ ...state, query: next })
@@ -124,8 +128,8 @@ export function CollectionView({
   }, [showStatusFilters, statusField, rows, page])
 
   const searchFields = useMemo(
-    () => screen.source.searchFieldIds.map((id) => byId(id)).filter((item): item is Field => Boolean(item)),
-    [screen.source.searchFieldIds, fields],
+    () => collectionSearchFields(screen, fields),
+    [screen.source.searchFieldIds, screen.titleFieldId, screen.subtitleFieldId, screen.metaFieldId, fields],
   )
 
   const shown = useMemo(() => {
@@ -135,10 +139,10 @@ export function CollectionView({
       if (statusField && choiceId && !hasChoice(row.data[statusField.id], choiceId)) return false
       if (needle === '') return true
       return searchFields.some((item) =>
-        collectionText(item, row.data[item.id], relatedTitles).toLowerCase().includes(needle),
+        collectionText(item, row.data[item.id], relatedTitles, fieldUnits).toLowerCase().includes(needle),
       )
     })
-  }, [rows, query, choiceId, statusField, searchFields, relatedTitles, page])
+  }, [rows, query, choiceId, statusField, searchFields, relatedTitles, page, fieldUnits])
 
   const filtering = query.trim() !== '' || choiceId !== null
 
@@ -280,6 +284,7 @@ export function CollectionView({
           imageField={imageField}
           statusField={statusField}
           relatedTitles={relatedTitles}
+          fieldUnits={fieldUnits}
           onOpenRow={onOpenRow}
         />
       ) : (
@@ -294,6 +299,7 @@ export function CollectionView({
               imageField={imageField}
               statusField={statusField}
               relatedTitles={relatedTitles}
+              fieldUnits={fieldUnits}
               onOpen={onOpenRow ? () => onOpenRow(row.id) : null}
             />
           ))}
@@ -315,11 +321,15 @@ type Parts = {
   imageField: Field | undefined
   statusField: Field | undefined
   relatedTitles: RelatedTitles
+  fieldUnits?: Readonly<Record<string, string>>
 }
 
 /** Related labels are already filtered by server access; never substitute raw row IDs. */
-function collectionText(field: Field, value: unknown, relatedTitles: RelatedTitles): string {
-  if (field.type !== 'relation') return formatCell(field, value)
+function collectionText(field: Field, value: unknown, relatedTitles: RelatedTitles, units?: Readonly<Record<string, string>>): string {
+  if (field.type !== 'relation') {
+    const text = formatCell(field, value)
+    return text && units?.[field.id] ? `${text} ${units[field.id]}` : text
+  }
   if (!Array.isArray(value)) return ''
   const titles = relatedTitles[field.options.tableId] ?? []
   return value.map(id => titles.find(item => item.id === id)?.title ?? 'Запись недоступна').join(', ')
@@ -341,10 +351,11 @@ function Row({
   imageField,
   statusField,
   relatedTitles,
+  fieldUnits,
 }: Parts & { row: TableRow; onOpen: (() => void) | null }) {
-  const title = titleField ? collectionText(titleField, row.data[titleField.id], relatedTitles) : ''
-  const subtitle = subtitleField ? collectionText(subtitleField, row.data[subtitleField.id], relatedTitles) : ''
-  const meta = metaField ? collectionText(metaField, row.data[metaField.id], relatedTitles) : ''
+  const title = titleField ? collectionText(titleField, row.data[titleField.id], relatedTitles, fieldUnits) : ''
+  const subtitle = subtitleField ? collectionText(subtitleField, row.data[subtitleField.id], relatedTitles, fieldUnits) : ''
+  const meta = metaField ? collectionText(metaField, row.data[metaField.id], relatedTitles, fieldUnits) : ''
 
   return (
     <button
@@ -394,6 +405,7 @@ function Tiles({
   imageField,
   statusField,
   relatedTitles,
+  fieldUnits,
 }: Parts & { rows: TableRow[]; onOpenRow: ((rowId: string) => void) | null }) {
   /*
    * Подпись бывает двух разных сортов, и место у них разное.
@@ -419,17 +431,17 @@ function Tiles({
           <span className="flex flex-1 flex-col gap-1 p-3.5">
             {subtitleField && !описание ? (
               <span className="truncate text-[11px] uppercase tracking-wide text-ink-muted">
-                {collectionText(subtitleField, row.data[subtitleField.id], relatedTitles)}
+                {collectionText(subtitleField, row.data[subtitleField.id], relatedTitles, fieldUnits)}
               </span>
             ) : null}
 
             <span className="line-clamp-2 text-sm font-semibold leading-snug">
-              {titleField ? collectionText(titleField, row.data[titleField.id], relatedTitles) || 'Без названия' : ''}
+              {titleField ? collectionText(titleField, row.data[titleField.id], relatedTitles, fieldUnits) || 'Без названия' : ''}
             </span>
 
             {subtitleField && описание ? (
               <span className="line-clamp-3 text-xs leading-relaxed text-ink-muted">
-                {collectionText(subtitleField, row.data[subtitleField.id], relatedTitles)}
+                {collectionText(subtitleField, row.data[subtitleField.id], relatedTitles, fieldUnits)}
               </span>
             ) : null}
 
@@ -437,7 +449,7 @@ function Tiles({
               {statusField ? <StatusPill field={statusField} value={row.data[statusField.id]} /> : <span />}
               {metaField ? (
                 <span className="shrink-0 text-[15px] font-bold tabular-nums">
-                  {collectionText(metaField, row.data[metaField.id], relatedTitles)}
+                  {collectionText(metaField, row.data[metaField.id], relatedTitles, fieldUnits)}
                 </span>
               ) : null}
             </span>

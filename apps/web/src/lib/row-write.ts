@@ -56,6 +56,7 @@ export async function insertRow(
   const owned = stampOwner(rules, author.viewer, values)
   if (app.booking?.tables.visits === tableId) owned[app.booking.visit.status] = app.booking.statuses.booked
   const customer = customerWorkflows(app).find(config => config.tableId === tableId)
+  if (customer?.createdFieldId) owned[customer.createdFieldId] = new Date().toISOString()
   return writeRows(app.workspaceId, async context => {
     await assertCurrentModuleState(context, app)
     const result = customer && author.visitor.roleId === 'client' ? await createCustomerRecord(context, app, customer, owned, author, beforeInsert) : await createRow(context, tableId,

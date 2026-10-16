@@ -8,8 +8,13 @@ import type { RuntimeApp } from '@/lib/app-runtime'
 import type { TableRow } from '@/lib/table-store'
 import { accentTones } from './ui'
 
-export function BookingForm({ runtime, row, demo, demoData, pending, initialValues, onSubmit }: {
-  runtime: RuntimeApp; row: TableRow | null; demo: boolean; demoData?: BookingData; pending: boolean; initialValues?: Record<string, unknown> | null; onSubmit: (values: Record<string, unknown>) => void
+export type BookingFormDraft = {
+  serviceId: string; masterId: string; day: string; name: string; phone: string; customerEmail: string; chosen: BookingSlot | null; baseVersion?: number
+}
+
+export function BookingForm({ runtime, row, demo, demoData, pending, initialValues, initialDraft, onDraftChange, availabilityRevision = 0, onSubmit }: {
+  runtime: RuntimeApp; row: TableRow | null; demo: boolean; demoData?: BookingData; pending: boolean; initialValues?: Record<string, unknown> | null
+  initialDraft?: BookingFormDraft | null; onDraftChange?: (draft: BookingFormDraft) => void; availabilityRevision?: number; onSubmit: (values: Record<string, unknown>) => void
 }) {
   const config = runtime.app.booking!, visit = config.visit, accent = accentTones(runtime.app.theme.accent)
   const fields = runtime.tables[config.tables.visits]?.fields ?? []
@@ -17,20 +22,29 @@ export function BookingForm({ runtime, row, demo, demoData, pending, initialValu
   const timeZone = startField ? fieldTimeZone(startField) : 'Europe/Moscow'
   const services = (runtime.tables[config.tables.services]?.rows ?? []).filter(row => row.data[config.service.active] === true)
   const seed = row?.data ?? initialValues
-  const restoreSlot = useRef(initialValues?.[visit.start] ? { start: String(initialValues[visit.start]), master: oneRelation(initialValues[visit.master]) } : null)
-  const [serviceId, setServiceId] = useState(oneRelation(seed?.[visit.service]) ?? '')
-  const [masterId, setMasterId] = useState(oneRelation(seed?.[visit.master]) ?? '')
-  const [day, setDay] = useState(instantToWallClock(seed?.[visit.start] ? String(seed[visit.start]) : new Date(), timeZone)!.date)
-  const [name, setName] = useState(String(seed?.[visit.client] ?? ''))
-  const [phone, setPhone] = useState(String(seed?.[visit.phone] ?? ''))
-  const [customerEmail, setCustomerEmail] = useState('')
+  const baseVersion = useRef(initialDraft?.baseVersion ?? row?.version)
+  const restoreSlot = useRef(initialDraft?.chosen ? { start: initialDraft.chosen.start, master: initialDraft.chosen.masterId }
+    : initialValues?.[visit.start] ? { start: String(initialValues[visit.start]), master: oneRelation(initialValues[visit.master]) } : null)
+  const [serviceId, setServiceId] = useState(initialDraft?.serviceId ?? oneRelation(seed?.[visit.service]) ?? '')
+  const [masterId, setMasterId] = useState(initialDraft?.masterId ?? oneRelation(seed?.[visit.master]) ?? '')
+  const [day, setDay] = useState(initialDraft?.day ?? instantToWallClock(seed?.[visit.start] ? String(seed[visit.start]) : new Date(), timeZone)!.date)
+  const [name, setName] = useState(initialDraft?.name ?? String(seed?.[visit.client] ?? ''))
+  const [phone, setPhone] = useState(initialDraft?.phone ?? String(seed?.[visit.phone] ?? ''))
+  const [customerEmail, setCustomerEmail] = useState(initialDraft?.customerEmail ?? '')
   const administrator = runtime.app.screens.some(screen => screen.id === config.setupScreenId)
   const [slots, setSlots] = useState<BookingSlot[]>([]), [masters, setMasters] = useState<{ id: string; name: string }[]>([])
   const [chosen, setChosen] = useState<BookingSlot | null>(null), [loading, setLoading] = useState(false), [error, setError] = useState<string | null>(null)
+  const [retry, setRetry] = useState(0)
+  const chosenRef = useRef(chosen); chosenRef.current = chosen
+  const draftCallback = useRef(onDraftChange); draftCallback.current = onDraftChange
+  useEffect(() => {
+    draftCallback.current?.({ serviceId, masterId, day, name, phone, customerEmail, chosen, baseVersion: baseVersion.current })
+  }, [serviceId, masterId, day, name, phone, customerEmail, chosen])
   useEffect(() => {
     let stopped = false
+    const previousChoice = chosenRef.current
     setChosen(null); setSlots([]); setError(null)
-    if (!serviceId || !day) return
+    if (!serviceId || !day) { setLoading(false); return }
     setLoading(true)
     const load = async () => {
       if (demo) {
@@ -45,12 +59,14 @@ export function BookingForm({ runtime, row, demo, demoData, pending, initialValu
       if (stopped) return
       if (result.ok) {
         setSlots(result.slots); setMasters(result.masters)
-        if (restoreSlot.current) { setChosen(result.slots.find(slot => slot.start === restoreSlot.current!.start && slot.masterId === restoreSlot.current!.master) ?? null); restoreSlot.current = null }
+        const restore = restoreSlot.current ?? (previousChoice ? { start: previousChoice.start, master: previousChoice.masterId } : null)
+        if (restore) setChosen(result.slots.find(slot => slot.start === restore.start && slot.masterId === restore.master) ?? null)
+        restoreSlot.current = null
       } else setError(result.error)
-    }).catch(() => { if (!stopped) setError('Не удалось загрузить свободное время. Выберите дату ещё раз.') })
+    }).catch(() => { if (!stopped) setError('Не удалось загрузить свободное время. Проверьте соединение и попробуйте ещё раз.') })
       .finally(() => { if (!stopped) setLoading(false) })
     return () => { stopped = true }
-  }, [serviceId, day, masterId, runtime.app.slug, row?.id, demo, demoData, timeZone])
+  }, [serviceId, day, masterId, runtime.app.slug, row?.id, demo, demoData, timeZone, retry, availabilityRevision])
   const service = services.find(row => row.id === serviceId)
   const inputClass = 'w-full rounded-xl border border-sand-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-400'
   return <form className="mx-auto max-w-xl space-y-5 rounded-2xl border border-sand-200 bg-white p-5 shadow-soft" onSubmit={event => {
@@ -83,7 +99,7 @@ export function BookingForm({ runtime, row, demo, demoData, pending, initialValu
       <label className="space-y-1.5 text-sm font-medium">Телефон<input aria-label="Телефон" required type="tel" value={phone} onChange={event => setPhone(event.target.value)} className={inputClass} autoComplete="tel" disabled={pending} /></label>
     </div> : null}
     {!row && administrator ? <label className="block space-y-1.5 text-sm font-medium">Почта клиента для кабинета (необязательно)<input aria-label="Почта клиента для кабинета" type="email" value={customerEmail} onChange={event => setCustomerEmail(event.target.value)} className={inputClass} disabled={pending} /><span className="block text-xs font-normal text-ink-muted">Клиент увидит эту запись после входа с указанной почтой. Письмо автоматически не отправляется.</span></label> : null}
-    {error ? <p role="alert" className="text-sm text-red-700">{error}</p> : null}
+    {error ? <div className="space-y-2"><p role="alert" className="text-sm text-red-700">{error}</p><button type="button" disabled={loading || pending} onClick={() => setRetry(value => value + 1)} className="rounded-xl border border-sand-200 px-3 py-2 text-sm font-medium disabled:opacity-40">Повторить загрузку времени</button></div> : null}
     {!row ? <p className="text-xs text-ink-muted">Запись оформляется без онлайн-оплаты. После оформления сотрудник бизнеса свяжется с вами для согласования оплаты.</p> : null}
     {demo ? <p className="text-xs text-ink-muted">Это демонстрация: запись не сохранится.</p> : null}
     <button type="submit" disabled={!chosen || loading || pending} className={`w-full rounded-xl px-4 py-3 text-sm font-semibold text-white disabled:opacity-40 ${accent.solid}`}>{pending ? 'Сохраняем…' : row ? 'Сохранить новое время' : 'Подтвердить запись'}</button>

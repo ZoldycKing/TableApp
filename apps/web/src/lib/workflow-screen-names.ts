@@ -22,6 +22,17 @@ function workflowKind(app: App, workflow: CustomerWorkflow): ModuleKind {
     : workflow.logistics?.kind === 'delivery' ? 'delivery' : workflow.approval ? 'repair' : workflow.appointment ? 'property' : 'requests'
 }
 
+/** Shared customer copy follows the installed workflow, never a table title. */
+export function customerWorkflowNouns(app: App, workflow: CustomerWorkflow): { singular: string; genitivePlural: string; accusative: string } {
+  const copy: Partial<Record<ModuleKind, { singular: string; genitivePlural: string }>> = {
+    sales: { singular: 'заказ', genitivePlural: 'заказов' }, delivery: { singular: 'доставка', genitivePlural: 'доставок' },
+    repair: { singular: 'заявка на ремонт', genitivePlural: 'заявок на ремонт' }, property: { singular: 'заявка на просмотр', genitivePlural: 'заявок на просмотр' },
+    crm: { singular: 'сделка', genitivePlural: 'сделок' }, support: { singular: 'вопрос', genitivePlural: 'вопросов' },
+  }
+  const nouns = copy[workflowKind(app, workflow)] ?? { singular: 'заявка', genitivePlural: 'заявок' }
+  return { ...nouns, accusative: nouns.singular.replace(/^заявка/, 'заявку').replace(/^доставка$/, 'доставку').replace(/^сделка$/, 'сделку') }
+}
+
 function standardName(screen: Screen, label: string, copy: Names, tab = false): string {
   if (screen.type === 'list' || screen.type === 'tiles') {
     if (label === 'Все обращения' || label === 'Обращения клиентов') return tab ? copy.listTab ?? copy.list : copy.list

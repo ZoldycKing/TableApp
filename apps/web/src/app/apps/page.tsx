@@ -1,7 +1,7 @@
-import { apps, db, fields as fieldsTable, tables as tablesTable } from '@tableapp/db'
+import { appConfigVersions, apps, db, fields as fieldsTable, tables as tablesTable } from '@tableapp/db'
 import type { Field } from '@tableapp/schema'
 import { appSchema, byPosition, normalizeFieldOptions } from '@tableapp/schema'
-import { asc, eq, inArray } from 'drizzle-orm'
+import { and, asc, eq, inArray } from 'drizzle-orm'
 import { headers } from 'next/headers'
 import Link from 'next/link'
 import { AppsManager, type AppRow } from '@/components/apps-manager'
@@ -52,14 +52,18 @@ export default async function AppsPage() {
     fields: (fieldsByTable.get(table.id) ?? []).sort(byPosition),
   }))
   const host = (await headers()).get('host') ?? 'localhost:3000'
-  const origin = `http${host.startsWith('localhost') ? '' : 's'}://${host}`
+  const origin = `http${host.startsWith('localhost') || host.startsWith('127.0.0.1') ? '' : 's'}://${host}`
+  const publishedHistory = rows.length ? await db.select({ appId: appConfigVersions.appId }).from(appConfigVersions)
+    .where(and(inArray(appConfigVersions.appId, rows.map(row => row.id)), eq(appConfigVersions.kind, 'published'))) : []
+  const lockedAddresses = new Set(publishedHistory.map(row => row.appId))
 
   const list: AppRow[] = rows
     .map((row) => ({ parsed: appSchema.safeParse(row.draft), row }))
     .filter((item) => item.parsed.success)
     .map(({ parsed, row }) => ({
-      app: (parsed as { success: true; data: AppRow['app'] }).data,
+      app: { ...(parsed as { success: true; data: AppRow['app'] }).data, slug: row.slug },
       publishedAt: row.publishedAt ? row.publishedAt.toISOString() : null,
+      addressLocked: Boolean(row.published) || lockedAddresses.has(row.id),
       origin,
     }))
 
@@ -88,7 +92,7 @@ export default async function AppsPage() {
       </header>
 
       <BusinessSettings profile={await loadBusinessProfile(member.workspaceId)} canEdit={member.role !== 'viewer'} />
-      <AppsManager apps={list} tables={tables} />
+      <AppsManager apps={list} tables={tables} canEdit={member.role !== 'viewer'} />
     </main>
     </AppChrome>
   )

@@ -63,6 +63,7 @@ describe.skipIf(!process.env.DATABASE_URL)('salon scenarios with atomic PostgreS
     expect(loaded!.tables[config.tables.visits]!.rows).toHaveLength(1)
     const row = loaded!.tables[config.tables.visits]!.rows[0]!
     ownId = row.id
+    expect(result.rowId).toBe(ownId)
     expect(row.data).toMatchObject({ [config.visit.price]: 2500, [config.visit.minutes]: 60, [config.visit.status]: config.statuses.booked })
     expect((await stored(ownId)).data).toMatchObject({ [config.visit.email]: email, [config.visit.masterEmail]: 'olga@example.com' })
     expect((await actions.bookingAvailabilityAction(example.app.slug, serviceId, day, masterId)).ok).toBe(true)

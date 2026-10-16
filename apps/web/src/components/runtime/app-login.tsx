@@ -35,6 +35,7 @@ export function AppLogin({
   const [verified, setVerified] = useState(false)
   const styles = accentClasses(accent)
   const question = purpose === 'question'
+  const networkError = 'Не удалось связаться с сервером. Проверьте соединение и попробуйте ещё раз.'
   const request = () => demo
     ? Promise.resolve({ ok: true as const, hint: 'Это пример: письмо не отправляется. Для продолжения введите код 123456.' })
     : question ? requestAppLoginAction(slug, email, 'question') : requestAppLoginAction(slug, email)
@@ -50,12 +51,14 @@ export function AppLogin({
           if (pending) return
           setError(null)
           startTransition(async () => {
-            const result = demo ? { ok: code === '123456', error: 'В примере используйте код 123456' } : await consumeAppCodeAction(slug, code)
-            if (result.ok) {
-              if (onDone) { setVerified(true); onDone() }
-              else router.push(`/a/${slug}`)
-            }
-            else setError(result.error ?? 'Не удалось войти')
+            try {
+              const result = demo ? { ok: code === '123456', error: 'В примере используйте код 123456' } : await consumeAppCodeAction(slug, code)
+              if (result.ok) {
+                if (onDone) { setVerified(true); onDone() }
+                else router.push(`/a/${slug}`)
+              }
+              else setError(result.error ?? 'Не удалось войти')
+            } catch { setError(networkError) }
           })
         }}
       >
@@ -99,14 +102,13 @@ export function AppLogin({
         <ResendCode
           busy={pending}
           onResend={async () => {
-            const again = await request()
-            if (!again.ok) {
-              setError(again.error)
-              return null
-            }
-            setError(null)
-            setCode('')
-            return 'Если для этого адреса разрешён вход, новый код отправлен'
+            try {
+              const again = await request()
+              if (!again.ok) { setError(again.error); return null }
+              setError(null)
+              setCode('')
+              return 'Если для этого адреса разрешён вход, новый код отправлен'
+            } catch { setError(networkError); return null }
           }}
         />
 
@@ -134,9 +136,11 @@ export function AppLogin({
         if (pending) return
         setError(null)
         startTransition(async () => {
-          const result = await request()
-          if (result.ok) setSent({ hint: result.hint })
-          else setError(result.error)
+          try {
+            const result = await request()
+            if (result.ok) setSent({ hint: result.hint })
+            else setError(result.error)
+          } catch { setError(networkError) }
         })
       }}
     >

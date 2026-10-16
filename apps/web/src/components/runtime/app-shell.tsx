@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from
 import { signOutAppAction } from '@/app/auth-actions'
 import { saveMovementAction, saveProductionAction } from '@/app/production-actions'
 import { InventoryReceipt } from './inventory-receipt'
-import { BookingForm } from './booking-form'
+import { BookingForm, type BookingFormDraft } from './booking-form'
 import { BookingSetup } from './booking-setup'
 import { cancelBookingAction } from '@/app/booking-actions'
 import { customerDecisionAction } from '@/app/customer-actions'
@@ -28,7 +28,8 @@ import { formatCell } from '@/lib/format'
 import { Icon } from './icons'
 import { EmptyState } from './ui'
 import { accentTones, Avatar, greeting, viewerName } from './ui'
-import { ScreenView } from './screen-view'
+import { ScreenView, type RuntimeFormDraft } from './screen-view'
+import { clearFormDraftsForActor, useFormDrafts } from './form-drafts'
 import { useEnterMotion } from '@/components/motion/enter-motion'
 import {
   EMPTY_LIST_STATE as EMPTY_LIST,
@@ -58,7 +59,7 @@ import { orderDeliveryPair } from '@/lib/order-delivery-config'
 import { AppLogin } from './app-login'
 import { customerCheckoutIds, parseCheckoutIntent, type CheckoutIntent } from '@/lib/customer-checkout'
 import { acceptsModuleIntake, moduleForTable } from '@/lib/module-access'
-import { withWorkflowScreenNames } from '@/lib/workflow-screen-names'
+import { customerWorkflowNouns, withWorkflowScreenNames } from '@/lib/workflow-screen-names'
 import { buildRuntimeNavigation } from '@/lib/runtime-navigation'
 import { RuntimeNavigationView } from './runtime-navigation-view'
 import {
@@ -73,6 +74,23 @@ import {
 
 /** Показ на сайте: экраны настоящие, записи не идут. Ответ один на все действия. */
 const DEMO_NOTE = 'Это демонстрация: изменения не сохраняются. В своём приложении кнопка сработает.'
+
+type FormDraftEntry = { form?: RuntimeFormDraft; booking?: BookingFormDraft }
+function validFormDraft(value: unknown): value is FormDraftEntry {
+  const object = (item: unknown): item is Record<string, unknown> => Boolean(item && typeof item === 'object' && !Array.isArray(item))
+  if (!object(value) || !value.form && !value.booking) return false
+  if (value.form !== undefined && (!object(value.form) || !object(value.form.values)
+    || value.form.baseVersion !== undefined && (!Number.isSafeInteger(value.form.baseVersion) || Number(value.form.baseVersion) < 0))) return false
+  if (value.booking !== undefined) {
+    const booking = value.booking
+    if (!object(booking) || !['serviceId', 'masterId', 'day', 'name', 'phone', 'customerEmail'].every(key => typeof booking[key] === 'string')
+      || !/^\d{4}-\d{2}-\d{2}$/.test(String(booking.day)) || !Number.isFinite(Date.parse(`${booking.day}T12:00:00Z`))) return false
+    if (booking.baseVersion !== undefined && (!Number.isSafeInteger(booking.baseVersion) || Number(booking.baseVersion) < 0)) return false
+    if (booking.chosen !== null && (!object(booking.chosen) || !['start', 'time', 'masterId', 'masterName'].every(key => typeof (booking.chosen as Record<string, unknown>)[key] === 'string')
+      || !Number.isFinite(Date.parse(String(booking.chosen.start))))) return false
+  }
+  return true
+}
 
 /**
  * «Отправлено».
@@ -190,6 +208,12 @@ export function AppShell({
   const [checkout, setCheckout] = useState<CheckoutIntent | null>(null)
   const [savedNotice, setSavedNotice] = useState<string | null>(null)
   const { app } = initialRuntime
+  const draftScope = !demo && !editing && viewer ? `${app.workspaceId}:${app.id}:${viewer.id}` : null
+  const formDrafts = useFormDrafts<FormDraftEntry>(draftScope, validFormDraft)
+  const [bookingAvailabilityRevision, setBookingAvailabilityRevision] = useState(0)
+  const [draftResetRevision, setDraftResetRevision] = useState(0)
+  const draftGeneration = useRef(0)
+  const [accountOpen, setAccountOpen] = useState(false)
   const questionKey = `tableapp:question:${app.workspaceId}:${app.id}`
   const questionActor = `${questionKey}:${viewer?.id ?? ''}`
   const questionContext = useRef(questionActor)
@@ -273,7 +297,17 @@ export function AppShell({
   const router = useRouter()
 
   const current = stack[stack.length - 1]!
-  useEffect(() => { setConfirmCancellation(false) }, [current.screenId, current.rowId])
+  const formDraftId = `${current.screenId}:${current.rowId ?? 'new'}`
+  const activeDraft = formDrafts.drafts[formDraftId]
+  const saveActiveDraft = (draft: FormDraftEntry) => {
+    if (draftGeneration.current === draftResetRevision) formDrafts.save(formDraftId, draft)
+  }
+  const clearActiveDraft = () => {
+    draftGeneration.current += 1
+    setDraftResetRevision(draftGeneration.current)
+    formDrafts.remove(formDraftId)
+  }
+  useEffect(() => { setConfirmCancellation(false); setAccountOpen(false) }, [current.screenId, current.rowId, viewer?.id])
   const contentRef = useEnterMotion(`${current.screenId}:${current.rowId ?? ''}:${sent === null ? 'screen' : 'sent'}:${checkout ? 'login' : intake === null ? 'form' : 'verify'}`)
   const screen = screens.get(current.screenId)
   const contactConfig = screen?.type === 'detail' ? crmForTable(app, screen.tableId)?.crm : undefined
@@ -289,6 +323,7 @@ export function AppShell({
     return parent ?? origin
   })()
   const customer = customerWorkflows(app).find(config => [config.formScreenId, config.detailScreenId, config.listScreenId].includes(current.screenId))
+  const customerNoun = customer ? customerWorkflowNouns(app, customer).accusative : 'заявку'
   const catalogCustomer = customerWorkflows(app).find(config => config.catalog?.detailScreenId === current.screenId)
   const accent = accentTones(app.theme.accent)
 
@@ -306,6 +341,8 @@ export function AppShell({
   const tableId = tableOf(screen)
   const table = tableId ? runtime.tables[tableId] : undefined
   const row = current.rowId ? (table?.rows.find((item) => item.id === current.rowId) ?? null) : null
+  const draftVersion = activeDraft?.form?.baseVersion ?? activeDraft?.booking?.baseVersion
+  const draftConflict = Boolean(row && draftVersion !== undefined && draftVersion !== row.version)
   const crm = !demo && !editing && tableId ? crmForTable(app, tableId)?.crm : undefined
   const profileDetail = crm && screen?.id === crm.detailScreenId && current.rowId?.startsWith(CRM_PROFILE_PREFIX)
   const bookingDateField = app.booking ? table?.fields.find(field => field.id === app.booking!.visit.start) : undefined
@@ -370,6 +407,15 @@ export function AppShell({
       ? { ...listStates, [screenId]: { ...EMPTY_LIST, ...filter } }
       : listStates
     go({ stack: [{ screenId, rowId: null }], lists }, 'push')
+  }
+
+  const openCreated = (detailId: string | undefined, rowId: string | undefined, listId: string) => {
+    if (detailId && rowId && screens.has(detailId)) {
+      const parent = screens.has(listId) ? [{ screenId: listId, rowId: null }] : []
+      // Replace the submitted form so browser Back and the header return to the list.
+      if (parent.length) go({ stack: parent, lists: listStates }, 'replace')
+      go({ stack: [...parent, { screenId: detailId, rowId }], lists: listStates }, 'push')
+    } else openTab(screens.has(listId) ? listId : home)
   }
 
   /**
@@ -540,17 +586,25 @@ export function AppShell({
     window.history.replaceState(withNav(null, { stack, lists: listStates }), '', `${window.location.pathname}${navSearch(current, home)}`)
   }, [runtime, browserHistory, screens, home, current, stack, listStates])
 
-  const runMutation = (work: () => Promise<{ ok: boolean; error?: string }>, after?: () => void) => {
+  const runMutation = <T extends { ok: boolean; error?: string }>(work: () => Promise<T>, after?: (result: T) => void) => {
     setError(null)
     if (demo || editing) {
       setError(DEMO_NOTE)
       return
     }
     startTransition(async () => {
-      const result = await work()
-      if (!result.ok) return setError(result.error ?? 'Не удалось выполнить действие')
-      router.refresh()
-      after?.()
+      try {
+        const result = await work()
+        if (!result.ok) {
+          setBookingAvailabilityRevision(value => value + 1)
+          return setError(result.error ?? 'Не удалось выполнить действие')
+        }
+        router.refresh()
+        after?.(result)
+      } catch {
+        setBookingAvailabilityRevision(value => value + 1)
+        setError('Не удалось получить ответ сервера. Введённые данные сохранены. Проверьте результат перед повторной отправкой.')
+      }
     })
   }
 
@@ -575,6 +629,10 @@ export function AppShell({
           }
           const child = customerWorkflows(app).find(config => config.formScreenId === target.id && config.parent?.tableId === tableId)
           if (child?.parent && row) initial[child.parent.relationFieldId] = [row.id]
+          const draftId = `${target.id}:new`, saved = formDrafts.drafts[draftId]
+          if (saved?.form && Object.keys(initial).length) formDrafts.save(draftId, { form: { ...saved.form, values: { ...saved.form.values, ...initial } } })
+          if (saved?.booking && app.booking && target.id === app.booking.formScreenId && screen?.type === 'detail' && screen.tableId === app.booking.tables.services && row && saved.booking.serviceId !== row.id)
+            formDrafts.save(draftId, { booking: { ...saved.booking, serviceId: row.id, masterId: '', chosen: null } })
           setFormDraft({ screenId: target.id, values: initial })
           if (target.id === app.booking?.formScreenId) {
             setBookingDraft(screen?.type === 'detail' && screen.tableId === app.booking.tables.services && row
@@ -763,9 +821,13 @@ export function AppShell({
       type="button"
       disabled={pending}
       onClick={() =>
+        demo || editing ? setError(DEMO_NOTE) :
         startTransition(async () => {
-          await signOutAppAction()
-          window.location.reload()
+          try {
+            await signOutAppAction()
+            clearFormDraftsForActor(viewer.id)
+            window.location.reload()
+          } catch { setError('Не удалось выйти. Проверьте соединение и попробуйте ещё раз.') }
         })
       }
       className="rounded-lg px-2 py-1 text-xs text-ink-muted transition-colors hover:bg-sand-100 hover:text-ink disabled:opacity-40"
@@ -867,9 +929,15 @@ export function AppShell({
               <span className="size-4 shrink-0 animate-spin rounded-full border-2 border-sand-300 border-t-ink/60" />
             ) : null}
             {viewer ? (
-              <span className="shrink-0 @min-[860px]:hidden">
-                <Avatar name={viewer.name} email={viewer.email} size="s" />
-              </span>
+              <div className="relative shrink-0 @min-[860px]:hidden" onKeyDown={event => { if (event.key === 'Escape') setAccountOpen(false) }}>
+                <button type="button" aria-label="Мой аккаунт" aria-expanded={accountOpen} onClick={() => setAccountOpen(open => !open)} className="rounded-full outline-none focus-visible:ring-2 focus-visible:ring-sage-400">
+                  <Avatar name={viewer.name} email={viewer.email} size="s" />
+                </button>
+                {accountOpen ? <div className="absolute right-0 top-full z-30 mt-3 w-64 max-w-[80vw] space-y-3 rounded-xl border border-sand-200 bg-white p-4 shadow-soft" role="region" aria-label="Мой аккаунт">
+                  <p className="text-sm font-medium">{viewerName(viewer.name, viewer.email)}</p><p className="break-all text-xs text-ink-muted">{viewer.email}</p>
+                  {signOut}<button type="button" onClick={() => setAccountOpen(false)} className="ml-2 text-xs text-ink-muted">Закрыть</button>
+                </div> : null}
+              </div>
             ) : null}
             {signIn ? <span className="shrink-0 @min-[860px]:hidden">{signIn}</span> : null}
           </div>
@@ -880,7 +948,7 @@ export function AppShell({
           <nav className="flex flex-wrap gap-2 py-3">{runtime.businessApps.map(item => <a key={item.slug} href={`/a/${item.slug}`} aria-current={item.slug === app.slug ? 'page' : undefined} className="rounded-lg border border-sand-200 px-3 py-2 font-medium hover:bg-sand-50">{item.name}</a>)}</nav>
         </details> : null}
         {error ? (
-          <p className="border-b border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-900 sm:px-6">
+          <p role="alert" className="border-b border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-900 sm:px-6">
             {error}
           </p>
         ) : null}
@@ -892,6 +960,10 @@ export function AppShell({
          */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden">
           <div ref={contentRef} className="mx-auto w-full max-w-5xl px-4 py-5 sm:px-6 sm:py-6">
+            {screen.type === 'form' && draftConflict && !checkout && !intake ? <div className="mb-4 space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-ink-soft">
+              <p>Запись изменилась после начала заполнения. Ваш ввод сохранён. Загрузка актуальных данных сбросит незавершённые правки.</p>
+              <button type="button" onClick={() => { clearActiveDraft(); setError(null) }} className="rounded-lg border border-sand-200 bg-white px-3 py-2 text-sm font-medium">Загрузить актуальные данные</button>
+            </div> : null}
             {!editing && sent === null && checkout === null && intake === null && (screen.type === 'list' || screen.type === 'tiles') && navigation.actionsByScreen[screen.id]?.length ?
               <div className="mb-4 flex flex-wrap justify-end gap-2">{navigation.actionsByScreen[screen.id]!.map(action => <button key={action.id} type="button" disabled={pending || screenLoading}
                 onClick={() => navigate(action.id, null)} className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium text-white transition-colors disabled:opacity-50 ${accent.solid}`}>
@@ -911,10 +983,14 @@ export function AppShell({
                   setQuestionDraft({ key: questionKey, body: '', requestId: crypto.randomUUID(), ownerId: viewer?.id ?? null, active: false, login: false })
                   try { sessionStorage.removeItem(questionKey) } catch { /* Storage is optional. */ }
                   navigate(MESSAGES_SCREEN, JSON.stringify(target))
-                }} /> : current.screenId === MESSAGES_SCREEN ? <ConversationInbox key={`${app.id}:${viewer?.id}`} slug={app.slug} initialTarget={parseConversationTarget(current.rowId)} onAskQuestion={questionAvailable ? startQuestion : undefined} onOpenRecord={item => {
+                }} /> : current.screenId === MESSAGES_SCREEN ? <ConversationInbox key={`${app.id}:${viewer?.id}`} slug={app.slug} operator={Boolean(navigation.work)} initialTarget={parseConversationTarget(current.rowId)} onAskQuestion={questionAvailable ? startQuestion : undefined} onOpenRecord={item => {
               if (item.slug === app.slug && screens.has(item.detailScreenId)) navigate(item.detailScreenId, item.rowId)
               else window.location.assign(`/a/${encodeURIComponent(item.slug)}?e=${encodeURIComponent(item.detailScreenId)}&r=${encodeURIComponent(item.rowId)}`)
-            }} /> : screenLoadError ? <div className="space-y-3 p-6 text-sm"><p role="alert">{screenLoadError}</p><button type="button" onClick={retryScreen} className="rounded-lg border border-sand-200 px-3 py-2">Попробовать ещё раз</button></div> : screenLoading ? <p role="status" className="p-6 text-sm text-ink-soft">Загружаем раздел…</p> : sent !== null ? (
+            }} /> : checkout !== null ? (
+              viewer ? <p role="status" className="p-6 text-sm text-ink-soft">Открываем форму…</p> :
+              <AppLogin key={checkout.screenId} slug={app.slug} appName={runtime.business?.name ?? app.name} accent={app.theme.accent} initialError={null}
+                demo={demo} onCancel={clearCheckout} onDone={() => { if (demo) { if (onDemoSignIn) onDemoSignIn(); else { clearCheckout(); setError(DEMO_NOTE) } } else router.refresh() }} />
+            ) : screenLoadError ? <div className="space-y-3 p-6 text-sm"><p role="alert">{screenLoadError}</p><button type="button" onClick={retryScreen} className="rounded-lg border border-sand-200 px-3 py-2">Попробовать ещё раз</button></div> : screenLoading || screen.type === 'form' && !formDrafts.ready ? <p role="status" className="p-6 text-sm text-ink-soft">Загружаем раздел…</p> : sent !== null ? (
               <Sent
                 text={sent}
                 accent={accent}
@@ -924,10 +1000,6 @@ export function AppShell({
                   setFormValues({})
                 }}
               />
-            ) : checkout !== null ? (
-              viewer ? <p role="status" className="p-6 text-sm text-ink-soft">Открываем форму…</p> :
-              <AppLogin key={checkout.screenId} slug={app.slug} appName={runtime.business?.name ?? app.name} accent={app.theme.accent} initialError={null}
-                demo={demo} onCancel={clearCheckout} onDone={() => { if (demo) { if (onDemoSignIn) onDemoSignIn(); else { clearCheckout(); setError(DEMO_NOTE) } } else router.refresh() }} />
             ) : intake !== null ? (
               <IntakeVerify
                 slug={app.slug}
@@ -957,17 +1029,25 @@ export function AppShell({
             }} onOpenMessage={item => navigate(MESSAGES_SCREEN, JSON.stringify({ slug: item.slug, tableId: item.tableId, rowId: item.rowId }))} /> : crm && screen.id === crm.listScreenId ? <CustomerDirectory key={`${app.id}:${tableId}`} tableId={tableId!} slug={app.slug} onOpen={id => navigate(crm.detailScreenId!, id)} onCreate={app.screens.some(candidate => candidate.type === 'form' && candidate.mode === 'create' && candidate.tableId === crm.clientsTableId) ? () => navigate(app.screens.find(candidate => candidate.type === 'form' && candidate.mode === 'create' && candidate.tableId === crm.clientsTableId)!.id, null) : undefined} /> :
             app.booking && screen.id === app.booking.rescheduleScreenId && !row ? <EmptyState title="Запись недоступна" hint="Откройте предстоящую запись из своего списка и выберите «Перенести запись»." /> :
             app.booking && screen.id === app.booking.setupScreenId ? <BookingSetup runtime={runtime} demo={demo || editing} onSaved={() => router.refresh()} /> :
-            app.booking && [app.booking.formScreenId, app.booking.rescheduleScreenId].includes(screen.id) ? <BookingForm key={`${screen.id}:${row?.id ?? ''}`} runtime={runtime}
+            app.booking && [app.booking.formScreenId, app.booking.rescheduleScreenId].includes(screen.id) ? <BookingForm key={`${draftScope}:${screen.id}:${row?.id ?? ''}:${draftResetRevision}`} runtime={runtime}
+              initialDraft={activeDraft?.booking} onDraftChange={booking => saveActiveDraft({ booking })} availabilityRevision={bookingAvailabilityRevision}
               row={screen.id === app.booking.rescheduleScreenId ? row : null} demo={demo || editing} demoData={demo ? demoBookingData : undefined} pending={pending} initialValues={screen.id === app.booking.rescheduleScreenId ? bookingDraft : { [app.booking.visit.client]: runtime.customerProfile?.name ?? viewer?.name ?? '', [app.booking.visit.phone]: runtime.customerProfile?.phone ?? '', ...bookingDraft }} onSubmit={values => {
                 if (screen.id === app.booking!.rescheduleScreenId && row) {
-                  runMutation(() => appUpdateRowAction(app.slug, app.booking!.tables.visits, row.id, values, row.version), goBack)
+                  runMutation(() => appUpdateRowAction(app.slug, app.booking!.tables.visits, row.id, values, activeDraft?.booking?.baseVersion ?? row.version), () => { clearActiveDraft(); goBack() })
                 } else if (viewer === null && !demo && !editing) { setBookingDraft(values); setError(null); setIntake({ screenId: screen.id, values }) }
-                else runMutation(() => appCreateRowAction(app.slug, app.booking!.tables.visits, values), () => { setBookingDraft(null); setSavedNotice('Запись оформлена. Оплата онлайн не требуется; порядок оплаты согласует сотрудник бизнеса.'); openTab(home) })
+                else runMutation(() => appCreateRowAction(app.slug, app.booking!.tables.visits, values), result => {
+                  clearActiveDraft(); setBookingDraft(null)
+                  setSavedNotice('Запись оформлена. Дата, время и условия сохранены в этой карточке. Оплату согласует сотрудник бизнеса.')
+                  const listId = app.booking!.listScreenId ?? home, list = screens.get(listId)
+                  const detailId = list && (list.type === 'list' || list.type === 'tiles') ? list.onTapScreenId ?? undefined : [...screens.values()].find(item => item.type === 'detail' && item.tableId === app.booking!.tables.visits)?.id
+                  openCreated(detailId, result.rowId, listId)
+                })
               }} /> :
             app.inventory && inventoryOperation(app.inventory, screen.id) ? <InventoryReceipt key={`${screen.id}:${current.rowId}`} runtime={runtime}
               operation={inventoryOperation(app.inventory, screen.id)!} itemId={current.rowId} config={app.inventory} demo={demo || editing}
               confirmation={current.receipt} onSaved={receipt => go({ stack: [...stack.slice(0, -1), { ...current, receipt }], lists: listStates }, 'replace')}
               onBack={() => openTab(app.homeScreenId ?? home)} /> : <ScreenView
+              key={`${draftScope}:${screen.id}:${current.rowId ?? ''}:${draftResetRevision}`}
               screen={screen}
               table={table}
               row={row}
@@ -979,6 +1059,12 @@ export function AppShell({
               pending={pending}
               editing={editing}
               initialValues={{ ...(customer?.profile && runtime.customerProfile ? { [customer.profile.nameFieldId]: runtime.customerProfile.name ?? '', [customer.profile.phoneFieldId]: runtime.customerProfile.phone ?? '' } : {}), ...(formDraft?.screenId === screen.id ? formDraft.values : {}) }}
+              draft={activeDraft?.form}
+              onDraftChange={form => {
+                const fieldId = customer?.submissionFieldId
+                const token = customer && fieldId ? submissionIds.current.get(customer.tableId) ?? activeDraft?.form?.values[fieldId] : undefined
+                saveActiveDraft({ form: { ...form, values: fieldId && token ? { ...form.values, [fieldId]: token } : form.values } })
+              }}
               now={now}
               listState={listStates[screen.id] ?? EMPTY_LIST}
               onListState={(next) => setListState(screen.id, next)}
@@ -990,7 +1076,7 @@ export function AppShell({
                * или чужие, и файл с ними был бы обманом.
                */
               exportHref={
-                demo || editing || !viewer
+                demo || editing || !viewer || screen.access.public
                   ? null
                   : `/a/${app.slug}/export?e=${encodeURIComponent(screen.id)}`
               }
@@ -1025,7 +1111,9 @@ export function AppShell({
                 if (!tableId) return
                 if (mode === 'create') {
                   if (customer?.submissionFieldId && screen.id === customer.formScreenId) {
-                    const requestId = customer.cart ? cart.requestId : submissionIds.current.get(customer.tableId) ?? crypto.randomUUID()
+                    const prior = values[customer.submissionFieldId]
+                    const savedRequest = typeof prior === 'string' && /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(prior) ? prior : undefined
+                    const requestId = customer.cart ? cart.requestId : savedRequest ?? submissionIds.current.get(customer.tableId) ?? crypto.randomUUID()
                     if (!customer.cart) submissionIds.current.set(customer.tableId, requestId)
                     values = { ...values, [customer.submissionFieldId]: requestId }
                   }
@@ -1033,6 +1121,7 @@ export function AppShell({
                     if (!cart.items.length) return setError('Добавьте хотя бы один товар в корзину')
                     values = { ...values, [sales.cart.fieldId]: JSON.stringify(cart) }
                   }
+                  if (viewer && !demo && !editing) formDrafts.save(formDraftId, { form: { values, baseVersion } })
                   /*
                    * Не вошедший не пишет напрямую: сначала он подтверждает
                    * почту, и только после этого заявка ложится строкой — уже
@@ -1044,10 +1133,13 @@ export function AppShell({
                     setIntake({ screenId: screen.id, values })
                     return
                   }
-                  runMutation(() => appCreateRowAction(app.slug, tableId, values), () => {
+                  runMutation(() => appCreateRowAction(app.slug, tableId, values), result => {
+                    clearActiveDraft()
+                    setFormDraft(null)
                     if (customer && screen.id === customer.formScreenId) setSavedNotice('Оформлено. Ответственный сотрудник свяжется с вами для согласования условий и оплаты. Онлайн-оплаты нет.')
                     if (customer && screen.id === customer.formScreenId) submissionIds.current.delete(customer.tableId)
                     if (sales && screen.id === sales.formScreenId) setCart({ requestId: crypto.randomUUID(), items: [] })
+                    if (customer && screen.id === customer.formScreenId && result.rowId) return openCreated(customer.detailScreenId, result.rowId, customer.listScreenId)
                     if (screen.type === 'form' && screen.successScreenId) {
                       openTab(screen.successScreenId)
                     } else if (stack.length > 1) {
@@ -1061,7 +1153,7 @@ export function AppShell({
                     }
                   })
                 } else if (row) {
-                  runMutation(() => appUpdateRowAction(app.slug, tableId, row.id, values, baseVersion), goBack)
+                  runMutation(() => appUpdateRowAction(app.slug, tableId, row.id, values, baseVersion), () => { clearActiveDraft(); goBack() })
                 }
               }}
             />
@@ -1079,10 +1171,10 @@ export function AppShell({
                 <button type="button" disabled={pending} onClick={() => runMutation(() => customerDecisionAction(app.slug, row.id, row.version ?? 0, 'decline', customer.tableId), () => openTab(customer.listScreenId))} className="ml-2 rounded-xl px-3 py-2.5 text-sm text-red-700">Отказаться от ремонта</button>
               </> : null}
               {customer.cancellableStatuses.includes(String(row.data[customer.statusFieldId])) ? confirmCancellation ? <>
-                <p className="text-sm text-ink-soft">Отменить обращение? Оно сохранится в истории.</p>
+                <p className="text-sm text-ink-soft">Отменить {customerNoun}? Отмена сохранится в истории.</p>
                 <button type="button" disabled={pending} onClick={() => runMutation(() => customerDecisionAction(app.slug, row.id, row.version ?? 0, 'cancel', customer.tableId), () => { setConfirmCancellation(false); openTab(customer.listScreenId) })} className="rounded-xl bg-red-50 px-3 py-2.5 text-sm text-red-700">Да, отменить</button>
-                <button type="button" onClick={() => setConfirmCancellation(false)} className="ml-2 text-sm">Оставить обращение</button>
-              </> : <button type="button" onClick={() => setConfirmCancellation(true)} className="text-sm text-red-700">Отменить обращение</button> : <p className="text-xs text-ink-muted">Если нужно уточнить или изменить условия, свяжитесь с бизнесом{runtime.business?.phone ? `: ${runtime.business.phone}` : '.'}</p>}
+                <button type="button" onClick={() => setConfirmCancellation(false)} className="ml-2 text-sm">Не отменять</button>
+              </> : <button type="button" onClick={() => setConfirmCancellation(true)} className="text-sm text-red-700">Отменить {customerNoun}</button> : <p className="text-xs text-ink-muted">Если нужно уточнить или изменить условия, свяжитесь с бизнесом{runtime.business?.phone ? `: ${runtime.business.phone}` : '.'}</p>}
             </div> : null}
             {!demo && !editing && viewer && sent === null && intake === null && checkout === null && screen.type === 'detail' && row && orderStockPair(app)?.order.tableId === screen.tableId ? <OrderStockPanel tableId={screen.tableId} rowId={row.id} version={row.version ?? 0} slug={app.slug} /> : null}
             {!demo && !editing && viewer && sent === null && intake === null && checkout === null && screen.type === 'detail' && row && app.inventory?.tables.items === screen.tableId && app.modules?.some(module => module.kind === 'inventory' && module.screenIds?.includes(screen.id)) ? <InventoryBalancePanel tableId={screen.tableId} rowId={row.id} version={row.version ?? 0} slug={app.slug} /> : null}
@@ -1108,7 +1200,7 @@ export function AppShell({
               <div className="mx-auto mt-5 flex max-w-xl flex-wrap items-center gap-3 rounded-2xl border border-sand-200 bg-white p-4">
                 {app.screens.some(s => s.id === app.booking!.rescheduleScreenId) ? <button type="button" disabled={pending} onClick={() => navigate(app.booking!.rescheduleScreenId, row.id)} className="rounded-xl border border-sand-200 px-4 py-2.5 text-sm font-medium">Перенести запись</button> : null}
                 {confirmCancellation ? <><p className="w-full text-sm text-ink-muted">Отменить запись? Это время станет доступно другим клиентам.</p>
-                  <button type="button" disabled={pending} onClick={() => runMutation(() => cancelBookingAction(app.slug, row.id, row.version ?? 0), () => { setConfirmCancellation(false); openTab(home) })} className="rounded-xl bg-red-50 px-4 py-2.5 text-sm font-medium text-red-700">Да, отменить запись</button>
+                  <button type="button" disabled={pending} onClick={() => runMutation(() => cancelBookingAction(app.slug, row.id, row.version ?? 0), () => { setConfirmCancellation(false); openTab(app.booking?.listScreenId && screens.has(app.booking.listScreenId) ? app.booking.listScreenId : home, { bookingSection: 'history' }) })} className="rounded-xl bg-red-50 px-4 py-2.5 text-sm font-medium text-red-700">Да, отменить запись</button>
                   <button type="button" onClick={() => setConfirmCancellation(false)} className="px-3 py-2.5 text-sm">Оставить запись</button></> :
                   <button type="button" disabled={pending} onClick={() => setConfirmCancellation(true)} className="rounded-xl px-4 py-2.5 text-sm text-red-700">Отменить запись</button>}
               </div> : null}

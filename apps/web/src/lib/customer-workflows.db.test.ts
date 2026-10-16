@@ -80,9 +80,14 @@ describe.skipIf(!process.env.DATABASE_URL)('all customer template workflows in P
     customerCookie = state.jar.get(STAFF_SESSION_COOKIE)!
     expect(await own(first)).toHaveLength(0)
     for (const { example } of fixtures) {
-      expect(await actions.appCreateRowAction(example.app.slug, example.app.customer!.tableId, input(example))).toEqual({ ok: true })
+      const created = await actions.appCreateRowAction(example.app.slug, example.app.customer!.tableId, input(example))
+      expect(created).toMatchObject({ ok: true, rowId: expect.any(String) })
       const records = await own(example)
       expect(records).toHaveLength(1); ids.set(example.template.id, records[0]!.id)
+      expect(created.rowId).toBe(records[0]!.id)
+      const saved = await stored(created.rowId!)
+      expect(saved.tableId).toBe(example.app.customer!.tableId)
+      expect((saved.data as Record<string, unknown>)[example.app.customer!.emailFieldId]).toBe(email)
       const access = await sessions.currentAppAccess(example.app), loaded = (await runtime.loadPublishedApp(example.app.slug, access.visitor))!
       expect(loaded.business?.name).toBe(`Бизнес ${example.template.id}`)
       expect(JSON.stringify(loaded)).not.toContain('PRIVATE_WORKSPACE_NAME')
@@ -96,10 +101,16 @@ describe.skipIf(!process.env.DATABASE_URL)('all customer template workflows in P
       const config = example.app.customer!, cart = config.cart!, values = input(example)
       const countBefore = (await own(example)).length
       const results = await Promise.all([actions.appCreateRowAction(example.app.slug, config.tableId, values), actions.appCreateRowAction(example.app.slug, config.tableId, values)])
-      expect(results).toEqual([{ ok: true }, { ok: true }]); expect(await own(example)).toHaveLength(countBefore + 1)
+      expect(results).toMatchObject([{ ok: true, rowId: expect.any(String) }, { ok: true, rowId: expect.any(String) }]); expect(await own(example)).toHaveLength(countBefore + 1)
       const row = (await database.db.select().from(database.rows).where(eq(database.rows.tableId, config.tableId)))
         .find(row => (row.data as Record<string, unknown>)[config.submissionFieldId!] === JSON.parse(String(values[cart.fieldId])).requestId)!
       const original = (await stored(row.id)).data as Record<string, unknown>, positions = original[cart.positionsFieldId] as string[]
+      expect(results.map(result => result.rowId)).toEqual([row.id, row.id])
+      const firstCreatedAt = original[config.createdFieldId!]
+      expect(firstCreatedAt).toEqual(expect.any(String))
+      expect(await actions.appCreateRowAction(example.app.slug, config.tableId, { ...values, [config.createdFieldId!]: '2000-01-01T00:00:00.000Z' })).toMatchObject({ ok: true, rowId: row.id })
+      expect(((await stored(row.id)).data as Record<string, unknown>)[config.createdFieldId!]).toBe(firstCreatedAt)
+      expect(original[config.emailFieldId]).toBe(email)
       expect(positions).toHaveLength(1)
       const item = (await stored(positions[0]!)).data as Record<string, unknown>
       expect(item[cart.quantityFieldId]).toBe(2); expect(item[cart.itemEmailFieldId]).toBe(email)
@@ -159,11 +170,14 @@ describe.skipIf(!process.env.DATABASE_URL)('all customer template workflows in P
     const example = fixtures.find(fixture => fixture.example.template.id === 'portal')!.example, support = example.app.customerSections![0]!, parent = support.parent!, orderId = ids.get('portal')!
     state.jar.set(STAFF_SESSION_COOKIE, customerCookie)
     const value = { [parent.relationFieldId]: [orderId], [example.field('tickets', 'subject').id]: 'Уточнить выдачу', [example.field('tickets', 'text').id]: 'Можно забрать завтра?', [support.submissionFieldId!]: randomUUID() }
-    expect(await actions.appCreateRowAction(example.app.slug, support.tableId, value)).toEqual({ ok: true })
-    expect(await actions.appCreateRowAction(example.app.slug, support.tableId, value)).toEqual({ ok: true })
+    const created = await actions.appCreateRowAction(example.app.slug, support.tableId, value)
+    const repeated = await actions.appCreateRowAction(example.app.slug, support.tableId, value)
+    expect(created).toMatchObject({ ok: true, rowId: expect.any(String) })
+    expect(repeated).toEqual(created)
     const ownRuntime = (await runtime.loadPublishedApp(example.app.slug, (await sessions.currentAppAccess(example.app)).visitor))!
     expect(ownRuntime.tables[support.tableId]!.rows).toHaveLength(1)
     const ticket = ownRuntime.tables[support.tableId]!.rows[0]!
+    expect(created.rowId).toBe(ticket.id)
     expect(ticket.data[parent.relationFieldId]).toEqual([orderId])
     const foreignOrder = example.rows.find(row => row.tableId === parent.tableId && row.data[parent.emailFieldId] !== email)!
     expect((await actions.appCreateRowAction(example.app.slug, support.tableId, { ...value, [parent.relationFieldId]: [foreignOrder.id], [support.submissionFieldId!]: randomUUID() })).ok).toBe(false)
@@ -186,8 +200,10 @@ describe.skipIf(!process.env.DATABASE_URL)('all customer template workflows in P
     const example = fixtures.find(fixture => fixture.example.template.id === 'nedvizhimost')!.example, config = example.app.customer!, appointment = config.appointment!, id = ids.get('nedvizhimost')!
     const start = new Date(Date.now() + 5 * 86_400_000).toISOString()
     state.jar.set(STAFF_SESSION_COOKIE, customerCookie)
-    expect(await actions.appCreateRowAction(example.app.slug, config.tableId, input(example))).toEqual({ ok: true })
+    const created = await actions.appCreateRowAction(example.app.slug, config.tableId, input(example))
+    expect(created).toMatchObject({ ok: true, rowId: expect.any(String) })
     const otherId = (await own(example)).find(row => row.id !== id)!.id
+    expect(created.rowId).toBe(otherId)
     const patch = { [config.assignmentFieldId!]: worker, [appointment.fieldId]: start, [config.statusFieldId]: appointment.confirmedStatus }
     await mutation.writeRows(example.app.workspaceId, context => mutation.updateRow(context, config.tableId, id, patch, { id: null, kind: 'member' }))
     await expect(mutation.writeRows(example.app.workspaceId, context => mutation.updateRow(context, config.tableId, otherId, patch, { id: null, kind: 'member' }))).rejects.toThrow('уже назначен просмотр')
@@ -235,5 +251,21 @@ describe.skipIf(!process.env.DATABASE_URL)('all customer template workflows in P
     expect((await action.saveBusinessProfileAction({ name: 'Не разрешено' })).ok).toBe(false)
     expect((await profile.loadBusinessProfile(fixture.workspaceId))!.name).toBe('Мой салон')
     state.jar.delete(MEMBER_SESSION_COOKIE); state.jar.delete(ACTIVE_WORKSPACE_COOKIE)
+  })
+  it('stamps the creation time on manual staff orders without exposing a generated form field', async () => {
+    const example = fixtures.find(fixture => fixture.example.template.id === 'zakazy')!.example, config = example.app.customer!
+    const updated = { ...example.app, allowlist: [{ email: worker, roleId: 'manager', company: '' }] }
+    await database.db.update(database.apps).set({ published: updated }).where(eq(database.apps.id, example.app.id))
+    await signIn(worker)
+    const before = Date.now()
+    const result = await actions.appCreateRowAction(example.app.slug, config.tableId, {
+      [config.profile!.nameFieldId]: 'Ручной заказ клиента', [config.profile!.phoneFieldId]: '+7 900 000-00-00',
+      [config.createdFieldId!]: '2000-01-01T00:00:00.000Z',
+    })
+    expect(result).toMatchObject({ ok: true, rowId: expect.any(String) })
+    const data = (await stored(result.rowId!)).data as Record<string, unknown>, created = Date.parse(String(data[config.createdFieldId!]))
+    expect(created).toBeGreaterThanOrEqual(before)
+    expect(created).toBeLessThanOrEqual(Date.now())
+    expect(data[config.profile!.nameFieldId]).toBe('Ручной заказ клиента')
   })
 })

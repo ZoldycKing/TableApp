@@ -50,6 +50,24 @@ describe('server collection query semantics', () => {
     expect(runtimeCollectionText(choice, 'status_code', {})).toBe('Готово')
   })
 
+  it('finds the displayed customer subtitle when only the repetitive order title was configured for search', () => {
+    const f = fixture(true), visitor = asRole('client', 'client@example.invalid', '', true)
+    f.screen.subtitleFieldId = f.config.profile!.nameFieldId
+    f.screen.source.searchFieldIds = [f.screen.titleFieldId!]
+    const plan = runtimeCollectionPlan(f.app, visitor, f.screen, f.view, f.fields, f.views, { query: 'Ирина' }, 1)
+    expect(plan.queryAllowed(row('irina', { [f.screen.titleFieldId!]: 'Заказ · 1 поз.', [f.config.profile!.nameFieldId]: 'Ирина Проверкина' }), {})).toBe(true)
+    expect(plan.queryAllowed(row('maria', { [f.screen.titleFieldId!]: 'Заказ · 1 поз.', [f.config.profile!.nameFieldId]: 'Мария' }), {})).toBe(false)
+  })
+
+  it('does not search a display field that the current visitor cannot read', () => {
+    const f = fixture(), hidden = 'field_private_subtitle'
+    f.fields.push({ id: hidden, tableId: f.view.tableId, name: 'Private customer', type: 'text', options: {}, position: 'z', description: null })
+    f.screen.subtitleFieldId = hidden
+    const plan = runtimeCollectionPlan(f.app, ANONYMOUS, f.screen, f.view, f.fields, f.views, { query: 'Secret customer' }, 1)
+    expect(plan.policy.fields.has(hidden)).toBe(false)
+    expect(plan.queryAllowed(row('item', { [f.screen.titleFieldId!]: 'Ordinary item', [hidden]: 'Secret customer' }), {})).toBe(false)
+  })
+
   it('keeps configured numeric ordering, empty values last and an ID tie breaker', () => {
     const f = fixture(), price = f.config.cart!.priceFieldId
     f.view.config.sorts = [{ fieldId: price, direction: 'desc' }]

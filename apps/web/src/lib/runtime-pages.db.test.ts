@@ -191,6 +191,22 @@ describe.skipIf(!process.env.DATABASE_URL)('public catalogues and personal histo
     expect(await actions.loadRuntimePageAction(space.app.slug, space.catalogueId, latest.lazy!.revision)).toMatchObject({ ok: false, reload: true })
   })
 
+  it('searches displayed customer names across personal order pages while keeping other customers private', async () => {
+    const space = await business(), screen = space.app.screens.find(screen => screen.id === space.config.listScreenId)!
+    if (screen.type !== 'list' && screen.type !== 'tiles') throw new Error('Expected an order list')
+    screen.subtitleFieldId = space.config.profile!.nameFieldId
+    screen.source.searchFieldIds = [screen.titleFieldId!]
+    await database.db.update(database.apps).set({ published: space.app }).where(eq(database.apps.id, space.app.id))
+    await signIn(client)
+    const found = await page(space, screen.id, { query: 'Ирина', customerSection: 'active' })
+    expect(found.screens[screen.id]!.page).toMatchObject({ total: count, matched: count })
+    expect((await walk(space, screen.id, { query: 'ирина', customerSection: 'active' })).sort()).toEqual([...space.ownActive].sort())
+    expectSafe(space, found)
+    const foreign = await page(space, screen.id, { query: 'FOREIGN_CLIENT_MARKER', customerSection: 'active' })
+    expect(foreign.screens[screen.id]!.rowIds).toEqual([])
+    expect(foreign.screens[screen.id]!.page!.matched).toBe(0)
+  }, 15000)
+
   it('loads allowed off-page catalogue and detail rows without widening list IDs or accepting hidden and foreign rows', async () => {
     const space = await business(), first = await initial(space), chosen = space.products.at(-1)!, revision = first.lazy!.revision
     expect(first.screens[space.catalogueId]!.rowIds).not.toContain(chosen.id)

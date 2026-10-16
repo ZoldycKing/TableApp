@@ -80,7 +80,7 @@ export async function appCreateRowAction(
   slug: string,
   tableId: string,
   values: Record<string, unknown>,
-): Promise<ActionResult> {
+): Promise<ActionResult & { rowId?: string }> {
   const access = await allow(slug, tableId, 'create')
   if (!access.ok) return access
   const { app, viewer, visitor } = access
@@ -96,8 +96,9 @@ export async function appCreateRowAction(
   const attachmentError = await validateRowAttachments(tableId, fields, clean)
   if (attachmentError) return { ok: false, error: attachmentError }
 
+  let created: { id: string }
   try {
-    await insertRow(app, tableId, clean, { viewer, visitor, ip: null }, fields)
+    created = await insertRow(app, tableId, clean, { viewer, visitor, ip: null }, fields)
   } catch (error) {
     /*
      * Про чужой тариф человеку не говорят: это не его дела и не его деньги.
@@ -110,7 +111,7 @@ export async function appCreateRowAction(
   }
 
   revalidatePath(`/a/${slug}`)
-  return { ok: true }
+  return { ok: true, rowId: created.id }
 }
 
 export async function appUpdateRowAction(

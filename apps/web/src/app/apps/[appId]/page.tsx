@@ -30,7 +30,7 @@ export default async function AppEditorPage({ params }: { params: Promise<{ appI
   // Чужое приложение не должно открываться даже по прямой ссылке.
   if (!record || record.workspaceId !== member.workspaceId) notFound()
 
-  const parsed = appSchema.safeParse(record.draft)
+  const parsed = appSchema.safeParse({ ...(record.draft as Record<string, unknown>), slug: record.slug })
   if (!parsed.success) notFound()
 
   const runtime = await loadWorkspaceRuntime(member.workspaceId)
@@ -97,17 +97,21 @@ export default async function AppEditorPage({ params }: { params: Promise<{ appI
       */}
       {record.publishedAt ? null : (
         <p className="mb-4 rounded-xl border border-sand-200 bg-sand-100/60 px-4 py-3 text-sm leading-relaxed text-ink-soft">
-          {parsed.data.customer || parsed.data.booking ? <>Клиентский кабинет и рабочие экраны уже настроены. Укажите <Link href="/apps" className="underline underline-offset-2">название бизнеса</Link>, замените примеры своими товарами или услугами и пригласите сотрудников в разделе «Доступ». Назначайте работу по почте приглашённого сотрудника. Затем опубликуйте приложение и отправьте клиентам ссылку. Общий вход используется повторно, а обращения и права остаются у этого бизнеса.</> : <>Экраны собраны по вашей таблице: список записей, карточка одной записи
+          {parsed.data.customer || parsed.data.booking ? <>Клиентский кабинет и рабочие экраны уже настроены. Укажите <Link href="/apps" className="underline underline-offset-2">название бизнеса</Link>, замените примеры своими товарами или услугами. В <Link href="/apps" className="underline underline-offset-2">настройках приложения</Link> укажите почты сотрудников и их рабочие роли. Назначайте работу по этим почтам. Затем опубликуйте приложение и отправьте клиентам ссылку. Общий вход используется повторно, а обращения и права остаются у этого бизнеса.</> : <>Экраны собраны по вашей таблице: список записей, карточка одной записи
           и форма для новой. Слева — экраны, посередине — настройки выбранного,
           справа — как он выглядит на телефоне. Когда всё устроит, нажмите
           «Опубликовать» — появится ссылка, которую можно дать сотрудникам.</>}
         </p>
       )}
 
-      <ModuleManager key={`modules:${record.updatedAt.toISOString()}`} app={parsed.data} primary={primary?.appId === appId} sources={sources} owner={member.role === 'owner'} />
+      {member.role === 'viewer' ? <p role="status" className="mb-4 rounded-lg bg-sand-50 px-4 py-3 text-sm text-ink-muted">Доступ только для просмотра. Настройки и предпросмотр доступны, изменение и публикация отключены.</p> : null}
+      <fieldset disabled={member.role === 'viewer'}>
+        <ModuleManager key={`modules:${record.updatedAt.toISOString()}`} app={parsed.data} primary={primary?.appId === appId} sources={sources} owner={member.role === 'owner'} />
+      </fieldset>
       <AppVersionHistory key={`history-${appId}`} appId={appId} canRestore={member.role !== 'viewer'} revision={`${record.updatedAt.toISOString()}:${record.publishedAt?.toISOString() ?? ''}`} />
       <AppEditor
-        key={record.updatedAt.toISOString()}
+        key={appId}
+        canEdit={member.role !== 'viewer'}
         business={await loadBusinessProfile(member.workspaceId)}
         portalUpgradeTableId={itemTable?.templateId === 'portal' ? itemTableId : null}
         dispatchUpgradeTableId={itemTable?.templateId === 'zayavki' ? itemTableId : null}

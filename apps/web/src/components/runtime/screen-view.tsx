@@ -21,6 +21,10 @@ import { useUnsaved } from '@/lib/unsaved'
 import { bookingVisitSection } from '@/lib/booking-lifecycle'
 import { CatalogHub } from './catalog-hub'
 import type { RuntimePageControls } from '@/lib/use-screen-runtime'
+import { customerFormPresentation } from '@/lib/customer-form-presentation'
+import { catalogFieldUnits } from '@/lib/catalog-field-units'
+
+export type RuntimeFormDraft = { values: Record<string, unknown>; baseVersion?: number }
 
 type Props = {
   screen: Screen
@@ -36,6 +40,8 @@ type Props = {
   pending?: boolean
   /** Editable create-form values supplied by an action on another card. */
   initialValues?: Record<string, unknown>
+  draft?: RuntimeFormDraft | null
+  onDraftChange?: (draft: RuntimeFormDraft) => void
   now?: number
   /** Отбор списка: хранится в оболочке, чтобы пережить открытие карточки. */
   listState?: ListState
@@ -113,7 +119,7 @@ export function ScreenView(props: Props) {
     const customer = customerWorkflows(runtime.app).find(config => screen.id === config.listScreenId)
     if (customer && screen.id === customer.listScreenId) {
       const catalog = runtime.app.screens.find(candidate => 'source' in candidate && runtime.views[candidate.source.viewId]?.tableId === customer.catalog?.tableId)
-      return <div className="space-y-4">{customer.parent ? <button type="button" onClick={() => props.onOpenScreen(customer.formScreenId)} className="rounded-xl border border-sand-200 bg-white px-4 py-2.5 text-sm font-medium">Задать вопрос по заказу</button> : null}<CustomerRecords config={customer} screen={screen} rows={collection?.rows ?? []} fields={fields} relatedTitles={relatedTitles} state={props.listState ?? EMPTY_LIST_STATE}
+      return <div className="space-y-4">{customer.parent ? <button type="button" onClick={() => props.onOpenScreen(customer.formScreenId)} className="rounded-xl border border-sand-200 bg-white px-4 py-2.5 text-sm font-medium">Задать вопрос по заказу</button> : null}<CustomerRecords app={runtime.app} config={customer} screen={screen} rows={collection?.rows ?? []} fields={fields} relatedTitles={relatedTitles} state={props.listState ?? EMPTY_LIST_STATE}
         onState={props.onListState ?? (() => {})} accent={accent} onCatalog={catalog ? () => props.onOpenScreen(runtime.app.catalogScreenIds ? runtime.app.homeScreenId! : catalog.id) : null}
         onOpenRow={screen.onTapScreenId ? id => props.onOpenRow(screen.onTapScreenId!, id) : null} page={runtime.screens[screen.id]?.page} pageControls={props.pageControls?.[screen.id]} /></div>
     }
@@ -133,6 +139,7 @@ export function ScreenView(props: Props) {
         rows={collection?.rows ?? []}
         fields={fields}
         relatedTitles={relatedTitles}
+        fieldUnits={catalogFieldUnits(runtime.app, table?.id)}
         state={props.listState ?? EMPTY_LIST_STATE}
         onState={props.onListState ?? (() => {})}
         exportHref={props.exportHref ?? null}
@@ -145,7 +152,7 @@ export function ScreenView(props: Props) {
     )
   }
 
-  if (runtime.lazy?.paged && !row && (screen.type === 'detail' || screen.type === 'form' && screen.mode === 'edit')) return <div className="rounded-2xl border border-sand-200 bg-white shadow-soft"><EmptyState icon="file" title="Запись недоступна" hint="Откройте другую запись из своего списка." /></div>
+  if (!row && (screen.type === 'detail' || screen.type === 'form' && screen.mode === 'edit')) return <div className="rounded-2xl border border-sand-200 bg-white shadow-soft"><EmptyState icon="file" title="Запись недоступна" hint="Откройте другую запись из своего списка." /></div>
   if (screen.type === 'detail') {
     const booking = runtime.app.booking
     const bookingDate = booking ? fields.find(field => field.id === booking.visit.start) : undefined
@@ -250,26 +257,28 @@ function FormScreen({
   formSlot,
   formNotice,
   initialValues,
+  draft,
+  onDraftChange,
   pending,
 }: Props & { fields: Field[] }) {
   const mode = screen.type === 'form' ? screen.mode : 'create'
-  const [values, setValues] = useState<Record<string, unknown>>(mode === 'edit' && row ? { ...row.data } : { ...initialValues })
-  const [dirty, setDirty] = useState(false)
+  const [values, setValues] = useState<Record<string, unknown>>(draft ? { ...draft.values } : mode === 'edit' && row ? { ...row.data } : { ...initialValues })
+  const [dirty, setDirty] = useState(Boolean(draft))
   const sourceKey = `${screen.id}:${mode}:${row?.id ?? 'new'}`
   const source = useRef(sourceKey)
-  const edited = useRef(false)
-  const baseVersion = useRef(row?.version)
+  const edited = useRef(Boolean(draft))
+  const baseVersion = useRef(draft?.baseVersion ?? row?.version)
   useUnsaved(`runtime-form:${sourceKey}`, dirty)
 
   // При открытии формы редактирования поля заполняются текущими значениями строки.
   useEffect(() => {
     if (source.current === sourceKey && edited.current) return
     source.current = sourceKey
-    edited.current = false
-    setDirty(false)
-    baseVersion.current = row?.version
-    setValues(mode === 'edit' && row ? { ...row.data } : { ...initialValues })
-  }, [sourceKey, mode, row, initialValues])
+    edited.current = Boolean(draft)
+    setDirty(Boolean(draft))
+    baseVersion.current = draft?.baseVersion ?? row?.version
+    setValues(draft ? { ...draft.values } : mode === 'edit' && row ? { ...row.data } : { ...initialValues })
+  }, [sourceKey, mode, row, initialValues, draft])
 
   /*
    * О введённом сообщаем наружу через ссылку на обработчик, а не зависимостью
@@ -288,6 +297,7 @@ function FormScreen({
 
   const accentStyle = accentClasses(accent)
   const components = [...screen.components].sort(byPosition)
+  const presentation = customerFormPresentation(runtime.app, screen, fields)
 
   return (
     <form
@@ -304,8 +314,7 @@ function FormScreen({
           return <ComponentViewInForm key={component.id} component={component} fields={fields} row={row} accent={accent} />
         }
         const field = fields.find((candidate) => candidate.id === component.fieldId)
-        const customer = customerWorkflows(runtime.app).find(config => config.formScreenId === screen.id)
-        if (customer?.cart?.fieldId === component.fieldId || customer?.submissionFieldId === component.fieldId) return null
+        if (presentation.hidden.has(component.fieldId)) return null
         // Вычисляемые поля в форме не редактируются — их значения выводятся.
         if (!field || isComputed(field.type)) return null
 
@@ -315,7 +324,7 @@ function FormScreen({
         return (
           <label key={component.id} className="block space-y-1.5">
             <span className="block text-[13px] font-medium text-ink-soft">
-              {component.label ?? field.name}
+              {component.label && component.label !== field.name ? component.label : presentation.labels.get(field.id) ?? field.name}
               {component.required ? <span className="text-red-600"> *</span> : null}
             </span>
             <FormFieldInput
@@ -328,9 +337,12 @@ function FormScreen({
               onChange={(value) => {
                 edited.current = true
                 setDirty(true)
-                setValues((current) => ({ ...current, [field.id]: value }))
+                const next = { ...values, [field.id]: value }
+                setValues(next)
+                onDraftChange?.({ values: next, baseVersion: baseVersion.current })
               }}
             />
+            {presentation.hints.has(field.id) ? <span className="block text-xs leading-relaxed text-ink-muted">{presentation.hints.get(field.id)}</span> : null}
           </label>
         )
       })}

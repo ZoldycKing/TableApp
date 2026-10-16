@@ -10,6 +10,7 @@ import { enableRepeatRequestsAction } from '@/app/portal-setup-actions'
 import { hasDispatchPreset } from '@/lib/templates/dispatch-app'
 import { useRouter } from 'next/navigation'
 import { useUnsaved } from '@/lib/unsaved'
+import { createDraftSaveQueue } from '@/lib/draft-save-queue'
 import {
   ANONYMOUS,
   ANONYMOUS_NAME,
@@ -96,6 +97,7 @@ const ADDABLE: Component['type'][] = [
 ]
 
 type Props = {
+  canEdit?: boolean
   business?: import('@tableapp/schema').BusinessProfile | null
   portalUpgradeTableId?: string | null
   inventoryUpgradeTableId?: string | null
@@ -133,12 +135,14 @@ function PreviewChip({
   )
 }
 
-export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTitles, publishedAt, inventoryUpgradeTableId, dispatchUpgradeTableId, portalUpgradeTableId, business }: Props) {
+export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTitles, publishedAt, inventoryUpgradeTableId, dispatchUpgradeTableId, portalUpgradeTableId, business, canEdit = true }: Props) {
   const router = useRouter()
   const [app, setApp] = useState<App>(initialApp)
   const [screenId, setScreenId] = useState(initialApp.screens[0]?.id ?? '')
   const [componentId, setComponentId] = useState<string | null>(null)
   const [save, setSave] = useState<SaveState>({ kind: 'idle' })
+  const [draftQueue] = useState(() => createDraftSaveQueue(initialApp, (next: App) => updateAppDraftAction(next.id, next)))
+  const [publishing, setPublishing] = useState(false)
   useUnsaved(`app-editor:${initialApp.id}`, save.kind === 'dirty' || save.kind === 'saving' || save.kind === 'error')
   const [pending, startTransition] = useTransition()
 
@@ -149,16 +153,34 @@ export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTit
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current) }, [])
 
+  // Revalidation must not remount the editor or replace edits newer than its response.
+  const incoming = JSON.stringify(initialApp)
+  const previousIncoming = useRef(incoming)
+  useEffect(() => {
+    if (previousIncoming.current === incoming) return
+    previousIncoming.current = incoming
+    if (draftQueue.dirty()) return
+    draftQueue.reset(initialApp)
+    setApp(initialApp)
+  }, [incoming, initialApp, draftQueue])
+
+  const resetSavedApp = (next: App) => { draftQueue.reset(next); setApp(next) }
+  const saveDraft = async () => {
+    setSave({ kind: 'saving' })
+    const result = await draftQueue.flush()
+    setSave(result.ok ? { kind: 'saved' } : { kind: 'error', text: result.error })
+    return result
+  }
+
   const update = (next: App) => {
+    if (!canEdit || publishing) return
     setApp(next)
+    draftQueue.set(next)
     setSave({ kind: 'dirty' })
     if (timer.current) clearTimeout(timer.current)
     timer.current = setTimeout(() => {
-      setSave({ kind: 'saving' })
-      startTransition(async () => {
-        const result = await updateAppDraftAction(next.id, next)
-        setSave(result.ok ? { kind: 'saved' } : { kind: 'error', text: result.error })
-      })
+      timer.current = null
+      startTransition(async () => { await saveDraft() })
     }, SAVE_DELAY_MS)
   }
 
@@ -167,7 +189,7 @@ export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTit
    * её молча нельзя: человек потеряет работу и не узнает об этом.
    */
   useEffect(() => {
-    if (save.kind !== 'dirty' && save.kind !== 'saving') return
+    if (save.kind !== 'dirty' && save.kind !== 'saving' && save.kind !== 'error') return
     const warn = (event: BeforeUnloadEvent) => event.preventDefault()
     window.addEventListener('beforeunload', warn)
     return () => window.removeEventListener('beforeunload', warn)
@@ -372,7 +394,7 @@ export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTit
           ))}
         </div>
 
-        <div className="flex flex-wrap gap-1 pt-1">
+        <fieldset disabled={!canEdit || publishing} className="flex flex-wrap gap-1 pt-1">
           {(Object.keys(SCREEN_TYPE_LABELS) as ScreenType[]).map((type) => (
             <button
               key={type}
@@ -383,10 +405,10 @@ export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTit
               + {SCREEN_TYPE_LABELS[type]}
             </button>
           ))}
-        </div>
+        </fieldset>
 
         {screen ? (
-          <div className="space-y-1 pt-2">
+          <fieldset disabled={!canEdit || publishing} className="space-y-1 pt-2">
             <label className="flex items-center gap-2 text-xs">
               <input
                 type="checkbox"
@@ -404,11 +426,11 @@ export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTit
             >
               Удалить экран
             </button>
-          </div>
+          </fieldset>
         ) : null}
       </aside>
 
-      <section className="space-y-4">
+      <fieldset disabled={!canEdit || publishing} aria-label="Настройки выбранного экрана" className="min-w-0 space-y-4">
         {screen ? (
           <>
             <div className="rounded-xl border border-[var(--color-border-subtle)] p-3">
@@ -532,7 +554,7 @@ export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTit
             )}
           </>
         ) : null}
-      </section>
+      </fieldset>
 
       <aside className="space-y-2">
         <div className="flex items-center justify-between gap-2">
@@ -639,57 +661,65 @@ export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTit
 
         {portalUpgradeTableId && app.screens.some(screen => screen.type === 'form' && screen.mode === 'create' && screen.tableId === portalUpgradeTableId && screen.access.public && screen.access.roles.length === 0) && <div className="space-y-2 rounded-xl border border-sand-200 p-3">
           <p className="text-xs leading-relaxed text-ink-soft">Клиент сможет оставлять повторные заявки после входа. Почта подтверждается один раз, новые заявки получают статус «Принят». Изменения появятся после публикации черновика.</p>
-          <button type="button" disabled={pending || save.kind === 'dirty' || save.kind === 'saving' || save.kind === 'error'}
+          <button type="button" disabled={!canEdit || pending || save.kind === 'dirty' || save.kind === 'saving' || save.kind === 'error'}
             onClick={() => startTransition(async () => {
               const result = await enableRepeatRequestsAction(app.id, portalUpgradeTableId, app)
               if (!result.ok) { setSave({ kind: 'error', text: result.error }); return }
-              setApp(result.app); setSave({ kind: 'note', text: 'Форма клиента обновлена. Проверьте предпросмотр и опубликуйте черновик.' }); router.refresh()
+              resetSavedApp(result.app); setSave({ kind: 'note', text: 'Форма клиента обновлена. Проверьте предпросмотр и опубликуйте черновик.' }); router.refresh()
             })} className="w-full rounded-lg border border-sand-200 px-3 py-2 text-sm font-medium hover:bg-sand-100 disabled:opacity-40">Обновить форму клиента</button>
         </div>}
         {dispatchUpgradeTableId && <div className="space-y-2 rounded-xl border border-sand-200 p-3">
           {hasDispatchPreset(app, dispatchUpgradeTableId) ? <p className="text-xs leading-relaxed text-ink-soft">Мастер видит заявки, где «Почта мастера» совпадает с почтой входа. Добавьте мастеров и диспетчеров в список доступа. В старых заявках заполните почту вручную; в примерах замените адреса настоящими. Проверьте роли в предпросмотре перед публикацией.</p> : <>
             <p className="text-xs leading-relaxed text-ink-soft">Диспетчер увидит все заявки, мастер — только назначенные ему по почте. Мастер сможет менять статус, фото и комментарий. Настройка добавит два поля и разделит права в черновике. Старые заявки нужно назначить вручную; опубликованная версия продолжит работать до публикации.</p>
-            <button type="button" disabled={pending || save.kind === 'dirty' || save.kind === 'saving' || save.kind === 'error'}
+            <button type="button" disabled={!canEdit || pending || save.kind === 'dirty' || save.kind === 'saving' || save.kind === 'error'}
               onClick={() => startTransition(async () => {
                 const result = await enableDispatchAction(app.id, dispatchUpgradeTableId, app)
                 if (!result.ok) { setSave({ kind: 'error', text: result.error }); return }
-                setApp(result.app); setSave({ kind: 'note', text: 'Роли настроены в черновике. Заполните почту мастеров и проверьте предпросмотр перед публикацией.' }); router.refresh()
+                resetSavedApp(result.app); setSave({ kind: 'note', text: 'Роли настроены в черновике. Заполните почту мастеров и проверьте предпросмотр перед публикацией.' }); router.refresh()
               })}
               className="w-full rounded-lg border border-sand-200 px-3 py-2 text-sm font-medium hover:bg-sand-100 disabled:opacity-40">Настроить роли заявок</button>
           </>}
         </div>}
         {inventoryUpgradeTableId && !app.inventory && <div className="space-y-2 rounded-xl border border-sand-200 p-3">
           <p className="text-xs leading-relaxed text-ink-soft">Подключите приёмку, выдачу, списания, возвраты и инвентаризацию. Текущие остатки сохранятся как начальные. После настройки проверьте роли и опубликуйте черновик.</p>
-          <button type="button" disabled={pending || save.kind === 'dirty' || save.kind === 'saving' || save.kind === 'error'}
+          <button type="button" disabled={!canEdit || pending || save.kind === 'dirty' || save.kind === 'saving' || save.kind === 'error'}
             onClick={() => startTransition(async () => {
               const result = await enableInventoryAction(app.id, inventoryUpgradeTableId)
               if (!result.ok) { setSave({ kind: 'error', text: result.error }); return }
-              setApp(result.app); setSave({ kind: 'note', text: 'Складской учёт настроен. Проверьте предпросмотр и опубликуйте черновик.' }); router.refresh()
+              resetSavedApp(result.app); setSave({ kind: 'note', text: 'Складской учёт настроен. Проверьте предпросмотр и опубликуйте черновик.' }); router.refresh()
             })}
             className="w-full rounded-lg border border-sand-200 px-3 py-2 text-sm font-medium hover:bg-sand-100 disabled:opacity-40">Подключить складской учёт</button>
         </div>}
         {app.inventory && !app.inventory.operations && <div className="space-y-2 rounded-xl border border-sand-200 p-3">
           <p className="text-xs leading-relaxed text-ink-soft">Добавьте выдачу, списания, возвраты и инвентаризацию. Остатки и приёмки сохранятся. Новые действия появятся после публикации черновика.</p>
-          <button type="button" disabled={pending || save.kind === 'dirty' || save.kind === 'saving' || save.kind === 'error'}
+          <button type="button" disabled={!canEdit || pending || save.kind === 'dirty' || save.kind === 'saving' || save.kind === 'error'}
             onClick={() => startTransition(async () => {
               const result = await enableStockOperationsAction(app.id, app)
               if (!result.ok) { setSave({ kind: 'error', text: result.error }); return }
-              setApp(result.app); setSave({ kind: 'note', text: 'Операции добавлены в черновик. Проверьте роли и опубликуйте его.' }); router.refresh()
+              resetSavedApp(result.app); setSave({ kind: 'note', text: 'Операции добавлены в черновик. Проверьте роли и опубликуйте его.' }); router.refresh()
             })} className="w-full rounded-lg border border-sand-200 px-3 py-2 text-sm font-medium hover:bg-sand-100 disabled:opacity-40">Подключить складские операции</button>
         </div>}
         <button
           type="button"
-          disabled={pending}
+          disabled={!canEdit || pending}
           onClick={() =>
             startTransition(async () => {
-              const result = await publishAppAction(app.id)
-              setSave(result.ok ? { kind: 'note', text: 'Опубликовано' } : { kind: 'error', text: result.error })
+              setPublishing(true)
+              if (timer.current) { clearTimeout(timer.current); timer.current = null }
+              try {
+                const saved = await saveDraft()
+                if (!saved.ok) return
+                const result = await publishAppAction(app.id, draftQueue.current())
+                setSave(result.ok ? { kind: 'note', text: 'Опубликовано' } : { kind: 'error', text: result.error })
+              } catch { setSave({ kind: 'error', text: 'Не удалось подтвердить публикацию. Проверьте соединение и повторите публикацию.' }) }
+              finally { setPublishing(false) }
             })
           }
           className="w-full rounded-lg bg-ink px-3 py-2 text-sm font-medium text-white hover:bg-ink/90 disabled:opacity-40"
         >
-          {publishedAt ? 'Опубликовать заново' : 'Опубликовать'}
+          {publishing ? 'Сохраняем и публикуем…' : publishedAt ? 'Опубликовать заново' : 'Опубликовать'}
         </button>
+        {canEdit && save.kind === 'error' ? <button type="button" disabled={pending} onClick={() => startTransition(async () => { await saveDraft() })} className="w-full rounded-lg border border-sand-200 px-3 py-2 text-sm disabled:opacity-40">Повторить сохранение черновика</button> : null}
         <p className="text-xs text-[var(--color-ink-muted)]">
           Предпросмотр показывает черновик. Пользователи увидят изменения после публикации.
         </p>

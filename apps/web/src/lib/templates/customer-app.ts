@@ -79,7 +79,9 @@ function customerAppSection(app: App, built: BuiltTemplate): App {
       label: component.fieldId === config.profile?.nameFieldId ? d.table === 'deliveries' ? 'Имя получателя' : 'Ваше имя' : component.fieldId === config.profile?.phoneFieldId ? d.table === 'deliveries' ? 'Телефон получателя' : 'Ваш телефон' : component.fieldId === f.title ? 'Что нужно сделать' : null })
     request.components.unshift({ id: newId('component'), position: '0', type: 'text', source: { kind: 'literal', value: `${d.intro.replace('Онлайн-оплаты нет.', '').trim()} Оплаты онлайн нет. После оформления сотрудник бизнеса свяжется с вами и согласует оплату.` }, style: 'body', roles: null, visibleWhen: null })
   }
-  const managerFields = fields.filter(field => !['formula', 'lookup', 'rollup', 'count'].includes(field.type) && field.id !== f.cart && field.id !== f.submissionId && field.id !== config.approval?.approvedPriceFieldId).map(field => field.id)
+  const managerHidden = new Set([f.cart, f.submissionId, config.createdFieldId, config.approval?.approvedPriceFieldId,
+    ...(d.cart && config.profile ? [f.customer, f.phone] : [])].filter(Boolean))
+  const managerFields = fields.filter(field => !['formula', 'lookup', 'rollup', 'count'].includes(field.type) && !managerHidden.has(field.id)).map(field => field.id)
   const workerShown = Array.from(new Set([...shown, config.profile?.nameFieldId!, config.profile?.phoneFieldId!, f.requestAddress!].filter(Boolean))).filter(id => !(d.table === 'zayavki' && id === f.price))
   const screens: Screen[] = [collection(listId, d.title, ['client'], detailId), request, customerDetail,
     collection(staffListId, d.parent ? 'Назначенные обращения' : 'Назначенные мне', ['staff'], staffDetailId),
@@ -119,5 +121,10 @@ function customerAppSection(app: App, built: BuiltTemplate): App {
       if (itemDetail.type === 'detail') screens.push({ ...itemDetail, access: access(['client', 'staff', 'manager']), components: [...componentFields([items[cart.name]!, items[cart.qty]!, items[cart.itemPrice]!]), ...(items.product ? componentFields([items.product]).map(component => ({ ...component, roles: ['manager'] })) : [])] })
     }
   }
+  for (const screen of screens) if (screen.type === 'form' && screen.id !== formId) screen.components = screen.components.map(component => component.type !== 'form_field' ? component : {
+    ...component, label: component.fieldId === config.emailFieldId ? 'Почта клиента для кабинета'
+      : component.fieldId === config.assignmentFieldId ? 'Почта ответственного сотрудника'
+      : component.fieldId === config.cart?.positionsFieldId ? 'Состав заказа' : component.label,
+  })
   return appSchema.parse({ ...app, accessMode: 'public', roles: [{ id: 'client', name: 'Клиент', isDefault: true }, { id: 'staff', name: d.workerName, isDefault: false }, { id: 'manager', name: d.managerName, isDefault: false }], rowAccessRules, homeScreenId: listId, customer: config, screens: screens.map((screen, i) => ({ ...screen, position: positionSequence(screens.length)[i]!, ...('components' in screen ? { components: screen.components.map((component, n) => ({ ...component, position: positionSequence(screen.components.length)[n]! })) } : {}) })) })
 }

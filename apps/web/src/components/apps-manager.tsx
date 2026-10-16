@@ -2,19 +2,20 @@
 
 import type { App } from '@tableapp/schema'
 import { useRouter } from 'next/navigation'
-import { useState, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import { AppAccessSettings } from './app-access-settings'
 import type { TableSummary } from '@/lib/queries'
 import {
   deleteAppAction,
+  changeAppSlugAction,
   publishAppAction,
   unpublishAppAction,
   updateAppDraftAction,
 } from '@/app/app-actions'
 
-export type AppRow = { app: App; publishedAt: string | null; origin: string }
+export type AppRow = { app: App; publishedAt: string | null; origin: string; addressLocked?: boolean }
 
-export function AppsManager({ apps, tables }: { apps: AppRow[]; tables: TableSummary[] }) {
+export function AppsManager({ apps, tables, canEdit = true }: { apps: AppRow[]; tables: TableSummary[]; canEdit?: boolean }) {
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
   const router = useRouter()
@@ -22,9 +23,11 @@ export function AppsManager({ apps, tables }: { apps: AppRow[]; tables: TableSum
   const run = (work: () => Promise<{ ok: boolean; error?: string }>) => {
     setError(null)
     startTransition(async () => {
-      const result = await work()
-      if (!result.ok) return setError(result.error ?? 'Не удалось выполнить действие')
-      router.refresh()
+      try {
+        const result = await work()
+        if (!result.ok) return setError(result.error ?? 'Не удалось выполнить действие')
+        router.refresh()
+      } catch { setError('Не удалось связаться с сервером. Проверьте соединение и повторите действие.') }
     })
   }
 
@@ -42,7 +45,8 @@ export function AppsManager({ apps, tables }: { apps: AppRow[]; tables: TableSum
         <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800">{error}</p>
       ) : null}
 
-      {apps.map(({ app, publishedAt, origin }) => {
+      {!canEdit ? <p role="status" className="text-sm text-[var(--color-ink-muted)]">У вас доступ только для просмотра. Изменение настроек и публикация недоступны.</p> : null}
+      {apps.map(({ app, publishedAt, origin, addressLocked }) => {
         const url = `${origin}/a/${app.slug}`
         return (
           <article
@@ -73,12 +77,12 @@ export function AppsManager({ apps, tables }: { apps: AppRow[]; tables: TableSum
                   href={`/apps/${app.id}`}
                   className="rounded-lg border border-[var(--color-border-subtle)] px-3 py-1.5 text-sm font-medium hover:bg-[var(--color-surface-muted)]"
                 >
-                  Редактировать
+                  {canEdit ? 'Редактировать' : 'Просмотреть настройки'}
                 </a>
-                <button
+                {canEdit ? <><button
                   type="button"
                   disabled={pending}
-                  onClick={() => run(() => publishAppAction(app.id))}
+                  onClick={() => run(() => publishAppAction(app.id, app))}
                   className="rounded-lg bg-ink px-3 py-1.5 text-sm font-medium text-white hover:bg-ink/90 disabled:opacity-40"
                 >
                   {publishedAt ? 'Опубликовать заново' : 'Опубликовать'}
@@ -103,7 +107,7 @@ export function AppsManager({ apps, tables }: { apps: AppRow[]; tables: TableSum
                   className="rounded-lg px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 disabled:opacity-40"
                 >
                   Удалить
-                </button>
+                </button></> : null}
               </div>
             </div>
 
@@ -111,6 +115,7 @@ export function AppsManager({ apps, tables }: { apps: AppRow[]; tables: TableSum
               <label className="space-y-1">
                 <span className="block text-xs text-[var(--color-ink-muted)]">Название</span>
                 <input
+                  disabled={!canEdit || pending}
                   defaultValue={app.name}
                   onBlur={(event) => {
                     if (event.target.value.trim() === app.name) return
@@ -119,24 +124,16 @@ export function AppsManager({ apps, tables }: { apps: AppRow[]; tables: TableSum
                   className="w-full rounded border border-[var(--color-border-subtle)] px-2 py-1.5 text-sm outline-none focus:border-sage-400"
                 />
               </label>
-              <label className="space-y-1">
-                <span className="block text-xs text-[var(--color-ink-muted)]">Адрес</span>
-                <input
-                  defaultValue={app.slug}
-                  onBlur={(event) => {
-                    if (event.target.value.trim() === app.slug) return
-                    run(() => updateAppDraftAction(app.id, { ...app, slug: event.target.value.trim() }))
-                  }}
-                  className="w-full rounded border border-[var(--color-border-subtle)] px-2 py-1.5 font-mono text-sm outline-none focus:border-sage-400"
-                />
-              </label>
+              <AppAddress app={app} origin={origin} locked={addressLocked ?? Boolean(publishedAt)} disabled={!canEdit || pending} onSave={slug => run(() => changeAppSlugAction(app.id, slug, app.slug))} />
             </div>
 
+            <fieldset disabled={!canEdit || pending}>
             <AppAccessSettings
               app={app}
               tables={tables}
               onChange={(next) => run(() => updateAppDraftAction(app.id, next))}
             />
+            </fieldset>
 
             <p className="mt-2 text-xs text-[var(--color-ink-muted)]">
               Публикация делает снимок: правки видны пользователям только после следующей публикации.
@@ -146,4 +143,19 @@ export function AppsManager({ apps, tables }: { apps: AppRow[]; tables: TableSum
       })}
     </div>
   )
+}
+
+function AppAddress({ app, origin, locked, disabled, onSave }: { app: App; origin: string; locked: boolean; disabled: boolean; onSave: (slug: string) => void }) {
+  const [slug, setSlug] = useState(app.slug)
+  useEffect(() => setSlug(app.slug), [app.slug])
+  return <div className="space-y-1">
+    <label className="block space-y-1"><span className="block text-xs text-[var(--color-ink-muted)]">Адрес</span>
+      <input value={slug} disabled={disabled || locked} onChange={event => setSlug(event.target.value)} className="w-full rounded border border-[var(--color-border-subtle)] px-2 py-1.5 font-mono text-sm outline-none focus:border-sage-400 disabled:bg-sand-50" />
+    </label>
+    {locked ? <p className="text-xs text-[var(--color-ink-muted)]">Адрес закреплён после первой публикации, чтобы ссылки клиентов продолжали работать.</p> : <>
+      <p className="break-all text-xs text-[var(--color-ink-muted)]">После публикации: {origin}/a/{slug}</p>
+      <button type="button" disabled={disabled || slug === app.slug} onClick={() => onSave(slug.trim())} className="rounded border border-sand-200 px-2 py-1 text-xs disabled:opacity-40">Сохранить адрес</button>
+      <p className="text-xs text-[var(--color-ink-muted)]">Адрес можно выбрать до первой публикации. После неё он останется постоянным.</p>
+    </>}
+  </div>
 }

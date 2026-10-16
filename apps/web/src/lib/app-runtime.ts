@@ -118,10 +118,10 @@ export type AppMeta = {
   app: App
 }
 
-async function definition(record: { id: string; workspaceId: string }, value: unknown): Promise<App | null> {
+async function definition(record: { id: string; workspaceId: string; slug: string }, value: unknown): Promise<App | null> {
   const parsed = appSchema.safeParse(value)
   if (!parsed.success) return null
-  const app = { ...parsed.data, id: record.id, workspaceId: record.workspaceId }
+  const app = { ...parsed.data, id: record.id, workspaceId: record.workspaceId, slug: record.slug }
   return await validateAppReferences(app) ? null : app
 }
 

@@ -114,15 +114,16 @@ describe('browser audit runtime integration regressions', () => {
     expect(sessionStorage.getItem(key)).toBeNull()
   })
 
-  it('opens the created record and returns to its list with header and browser Back without reopening the submitted form', async () => {
+  it('waits for the created record to refresh and returns to its list with header and browser Back without reopening the submitted form', async () => {
     const example = templateExample('service'), config = example.app.customer!
     const { runtime, viewer } = templateAppPreview(example, 'client', 'irina@example.com', 'Ирина')
     const product = runtime.tables[config.catalog!.tableId]!.rows[0]!, productName = String(product.data[config.catalog!.titleFieldId])
     const catalog = runtime.app.screens.find(screen => (screen.type === 'list' || screen.type === 'tiles') && runtime.views[screen.source.viewId]?.tableId === config.catalog!.tableId)!
     const createdId = 'row_created_by_audit_test', table = runtime.tables[config.tableId]!
+    let refreshed = runtime
     mocks.create.mockImplementation(async (_slug, _tableId, values) => {
       const newRow = { ...table.rows[0]!, id: createdId, version: 0, data: { ...table.rows[0]!.data, ...values, [config.statusFieldId]: config.initialStatus, [config.emailFieldId]: viewer!.email } }
-      mocks.runtime = { ...runtime, tables: { ...runtime.tables, [config.tableId]: { ...table, rows: [...table.rows, newRow] } } }
+      refreshed = { ...runtime, tables: { ...runtime.tables, [config.tableId]: { ...table, rows: [...table.rows, newRow] } } }
       return { ok: true, rowId: createdId }
     })
     window.history.replaceState(null, '', `/a/review?e=${catalog.id}`)
@@ -134,6 +135,10 @@ describe('browser audit runtime integration regressions', () => {
     fireEvent.change(ui.getByLabelText(exactField(example.field('repairs', 'device').name)), { target: { value: 'Ноутбук аудита' } })
     fireEvent.change(ui.getByLabelText(/^Неисправность со слов клиента/), { target: { value: 'Не включается' } })
     fireEvent.click(ui.getByRole('button', { name: 'Отправить заявку на ремонт' }))
+    await ui.findByText('Загружаем карточку…')
+    expect(ui.queryByText('Запись недоступна')).toBeNull()
+    expect(new URLSearchParams(window.location.search).get('r')).toBe(createdId)
+    ui.rerender(<AppShell runtime={refreshed} viewer={viewer} browserHistory />)
     await ui.findByRole('heading', { name: 'Ноутбук аудита' })
     expect(new URLSearchParams(window.location.search).get('r')).toBe(createdId)
     expect(new URLSearchParams(window.location.search).get('e')).toBe(config.detailScreenId)
@@ -156,6 +161,40 @@ describe('browser audit runtime integration regressions', () => {
     await act(async () => { window.history.back() })
     await expectList()
     expect(mocks.create).toHaveBeenCalledOnce()
+  })
+
+  it.each(['fresh snapshot', 'timeout and retry'])('ends creation loading with %s instead of waiting forever for an unavailable record', async path => {
+    const example = templateExample('service'), config = example.app.customer!
+    const { runtime, viewer } = templateAppPreview(example, 'client', 'irina@example.com', 'Ирина')
+    const product = runtime.tables[config.catalog!.tableId]!.rows[0]!, productName = String(product.data[config.catalog!.titleFieldId])
+    const catalog = runtime.app.screens.find(screen => (screen.type === 'list' || screen.type === 'tiles') && runtime.views[screen.source.viewId]?.tableId === config.catalog!.tableId)!
+    mocks.create.mockResolvedValue({ ok: true, rowId: 'row_created_then_unavailable' })
+    window.history.replaceState(null, '', `/a/review?e=${catalog.id}`)
+    const ui = render(<AppShell runtime={runtime} viewer={viewer} browserHistory />)
+    fireEvent.click(await ui.findByRole('button', { name: text => text.includes(productName) }))
+    fireEvent.click(ui.getByRole('button', { name: 'Отправить заявку на ремонт' }))
+    fireEvent.change(ui.getByLabelText(/^Ваше имя/), { target: { value: 'Ирина' } })
+    fireEvent.change(ui.getByLabelText(/^Ваш телефон/), { target: { value: '+7 900 000-00-00' } })
+    fireEvent.change(ui.getByLabelText(exactField(example.field('repairs', 'device').name)), { target: { value: 'Ноутбук аудита' } })
+    fireEvent.change(ui.getByLabelText(/^Неисправность со слов клиента/), { target: { value: 'Не включается' } })
+    if (path === 'timeout and retry') vi.useFakeTimers()
+    try {
+      await act(async () => { fireEvent.click(ui.getByRole('button', { name: 'Отправить заявку на ремонт' })) })
+      expect(ui.getByText('Загружаем карточку…')).toBeTruthy()
+      expect(ui.queryByText('Запись недоступна')).toBeNull()
+      if (path === 'timeout and retry') {
+        await act(async () => { await vi.advanceTimersByTimeAsync(15_000) })
+        expect(ui.getByRole('alert').textContent).toBe('Запись оформлена, но карточку пока не удалось загрузить.')
+        expect(ui.queryByText('Загружаем карточку…')).toBeNull()
+        fireEvent.click(ui.getByRole('button', { name: 'Обновить карточку' }))
+        expect(mocks.refresh).toHaveBeenCalledTimes(2)
+        expect(ui.getByText('Загружаем карточку…')).toBeTruthy()
+      }
+      ui.rerender(<AppShell runtime={structuredClone(runtime)} viewer={viewer} browserHistory />)
+      expect(ui.getByText('Запись недоступна')).toBeTruthy()
+      expect(ui.queryByText('Загружаем карточку…')).toBeNull()
+      expect(mocks.create).toHaveBeenCalledOnce()
+    } finally { vi.useRealTimers() }
   })
 
   it('reuses the original non-cart submission key after an unknown response, an edit and a full remount', async () => {

@@ -207,6 +207,9 @@ export function AppShell({
   const [pendingCabinet, setPendingCabinet] = useState(false)
   const [checkout, setCheckout] = useState<CheckoutIntent | null>(null)
   const [savedNotice, setSavedNotice] = useState<string | null>(null)
+  const [createdRecordWait, setCreatedRecordWait] = useState<{
+    screenId: string; rowId: string; base: RuntimeApp; actorId: string | null; timedOut: boolean
+  } | null>(null)
   const { app } = initialRuntime
   const draftScope = !demo && !editing && viewer ? `${app.workspaceId}:${app.id}:${viewer.id}` : null
   const formDrafts = useFormDrafts<FormDraftEntry>(draftScope, validFormDraft)
@@ -341,6 +344,17 @@ export function AppShell({
   const tableId = tableOf(screen)
   const table = tableId ? runtime.tables[tableId] : undefined
   const row = current.rowId ? (table?.rows.find((item) => item.id === current.rowId) ?? null) : null
+  const awaitingCreatedRow = Boolean(createdRecordWait && createdRecordWait.screenId === current.screenId
+    && createdRecordWait.rowId === current.rowId && createdRecordWait.actorId === (viewer?.id ?? null)
+    && createdRecordWait.base === initialRuntime && !row
+    && !runtime.lazy?.loadedRows?.[current.screenId]?.includes(createdRecordWait.rowId))
+  useEffect(() => {
+    if (!createdRecordWait) return
+    if (!awaitingCreatedRow) { setCreatedRecordWait(null); return }
+    if (createdRecordWait.timedOut) return
+    const timer = setTimeout(() => setCreatedRecordWait(current => current === createdRecordWait ? { ...current, timedOut: true } : current), 15_000)
+    return () => clearTimeout(timer)
+  }, [createdRecordWait, awaitingCreatedRow])
   const draftVersion = activeDraft?.form?.baseVersion ?? activeDraft?.booking?.baseVersion
   const draftConflict = Boolean(row && draftVersion !== undefined && draftVersion !== row.version)
   const crm = !demo && !editing && tableId ? crmForTable(app, tableId)?.crm : undefined
@@ -411,6 +425,7 @@ export function AppShell({
 
   const openCreated = (detailId: string | undefined, rowId: string | undefined, listId: string) => {
     if (detailId && rowId && screens.has(detailId)) {
+      setCreatedRecordWait({ screenId: detailId, rowId, base: initialRuntime, actorId: viewer?.id ?? null, timedOut: false })
       const parent = screens.has(listId) ? [{ screenId: listId, rowId: null }] : []
       // Replace the submitted form so browser Back and the header return to the list.
       if (parent.length) go({ stack: parent, lists: listStates }, 'replace')
@@ -990,7 +1005,13 @@ export function AppShell({
               viewer ? <p role="status" className="p-6 text-sm text-ink-soft">Открываем форму…</p> :
               <AppLogin key={checkout.screenId} slug={app.slug} appName={runtime.business?.name ?? app.name} accent={app.theme.accent} initialError={null}
                 demo={demo} onCancel={clearCheckout} onDone={() => { if (demo) { if (onDemoSignIn) onDemoSignIn(); else { clearCheckout(); setError(DEMO_NOTE) } } else router.refresh() }} />
-            ) : screenLoadError ? <div className="space-y-3 p-6 text-sm"><p role="alert">{screenLoadError}</p><button type="button" onClick={retryScreen} className="rounded-lg border border-sand-200 px-3 py-2">Попробовать ещё раз</button></div> : screenLoading || screen.type === 'form' && !formDrafts.ready ? <p role="status" className="p-6 text-sm text-ink-soft">Загружаем раздел…</p> : sent !== null ? (
+            ) : screenLoadError ? <div className="space-y-3 p-6 text-sm"><p role="alert">{screenLoadError}</p><button type="button" onClick={retryScreen} className="rounded-lg border border-sand-200 px-3 py-2">Попробовать ещё раз</button></div> : awaitingCreatedRow ? createdRecordWait?.timedOut ?
+              <div className="space-y-3 p-6 text-sm"><p role="alert">Запись оформлена, но карточку пока не удалось загрузить.</p><button type="button" onClick={() => {
+                setCreatedRecordWait(current => current ? { ...current, base: initialRuntime, timedOut: false } : current)
+                retryScreen(); router.refresh()
+              }} className="rounded-lg border border-sand-200 px-3 py-2">Обновить карточку</button></div> :
+              <p role="status" className="p-6 text-sm text-ink-soft">Загружаем карточку…</p>
+            : screenLoading || screen.type === 'form' && !formDrafts.ready ? <p role="status" className="p-6 text-sm text-ink-soft">Загружаем раздел…</p> : sent !== null ? (
               <Sent
                 text={sent}
                 accent={accent}

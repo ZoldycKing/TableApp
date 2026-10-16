@@ -76,8 +76,8 @@ export function withCustomerScenario(original: TemplateDef): TemplateDef {
       main.fields.push({ key: 'approvedPrice', name: 'Согласованная стоимость', type: 'number', options: { format: 'currency', currency: 'RUB', precision: 2 }, help: 'Фиксируется сервером при согласии клиента. Изменение сметы требует нового согласования.' })
       scenario = { ...common, table: 'repairs', title: 'Мои ремонты', submitLabel: 'Отправить заявку на ремонт', intro: 'Укажите устройство и неисправность. После приёмки и диагностики мастер предложит стоимость; вы сможете согласовать её в кабинете.',
         formFields: ['selectedService', 'requestName', 'requestPhone', 'device', 'problem'], requiredFields: ['requestName', 'requestPhone', 'device', 'problem'], customerFields: ['ticket', 'status', 'problem', 'ready', 'price', 'approvedPrice', 'note', 'clientSummary'], workerFields: ['status', 'price', 'ready', 'note', 'clientSummary'], workerName: 'Мастер',
-        status: 'status', initial: 'Принято', terminal: ['Выдано', 'Отменён', 'Отказ от ремонта'], cancel: 'Отменён', cancellable: ['Принято'], catalog: catalog('Услуги сервиса'),
-        approval: { price: 'price', agreed: 'approvedPrice', waiting: 'Ждём согласования', approved: 'В ремонте', declined: 'Отказ от ремонта', consentRequired: ['В ремонте', 'Готово', 'Выдано'] } }
+        status: 'status', initial: 'Принято', terminal: ['Выполнено', 'Отменён', 'Отказ от ремонта'], cancel: 'Отменён', cancellable: ['Принято'], catalog: catalog('Услуги сервиса'),
+        approval: { price: 'price', agreed: 'approvedPrice', waiting: 'Ждём согласования', approved: 'В ремонте', declined: 'Отказ от ремонта', consentRequired: ['В ремонте', 'Готово', 'Выполнено'] } }
       break
     case 'nedvizhimost': {
       const objects = main

@@ -429,6 +429,22 @@ describe('разворот по наведению', () => {
     vi.useRealTimers()
   })
 
+  it.each(['ожидание наведения', 'ожидание сворачивания', 'открытое меню'] as const)('не оставляет таймеры после удаления оболочки: %s', state => {
+    vi.useFakeTimers({ shouldAdvanceTime: false })
+    const ui = show(), sidebar = panel()
+    if (state === 'ожидание наведения') fireEvent.mouseEnter(sidebar)
+    else {
+      fireEvent.mouseEnter(sidebar)
+      act(() => void vi.advanceTimersByTime(300))
+      if (state === 'открытое меню') fireEvent.click(within(sidebar).getByRole('button', { name: /Учётная запись/ }))
+      else fireEvent.mouseLeave(sidebar)
+    }
+    ui.unmount()
+    expect(vi.getTimerCount()).toBe(0)
+    act(() => void vi.advanceTimersByTime(1000))
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
   it('курсор на полоске разворачивает её поверх содержимого', () => {
     show()
     fireEvent.mouseEnter(panel())

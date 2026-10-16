@@ -38,8 +38,11 @@ describe('editor publication and server refresh', () => {
     expect(await ui.findByText(/Не удалось сохранить черновик/)).toBeTruthy()
     expect(mocks.publish).not.toHaveBeenCalled()
     expect((ui.getByRole('textbox', { name: 'Название экрана' }) as HTMLInputElement).value).toBe('Keep this edit')
-    fireEvent.click(ui.getByRole('button', { name: 'Повторить сохранение черновика' }))
+    const retry = ui.getByRole('button', { name: 'Повторить сохранение черновика' })
+    await waitFor(() => expect(retry.matches(':disabled')).toBe(false))
+    fireEvent.click(retry)
     await waitFor(() => expect(mocks.update).toHaveBeenCalledTimes(2))
+    expect((mocks.update.mock.calls[1]![1] as App).screens[0]!.name).toBe('Keep this edit')
   })
   it('keeps newer local edits during a stale RSC refresh and applies a clean external change', async () => {
     const ui = render(<AppEditor {...props} />)

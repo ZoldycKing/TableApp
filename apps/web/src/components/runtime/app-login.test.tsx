@@ -19,6 +19,7 @@ async function requestCode() {
   fireEvent.change(screen.getByRole('textbox', { name: 'Ваша почта' }), { target: { value: 'new@example.invalid' } })
   fireEvent.click(screen.getByRole('button', { name: 'Получить код' }))
   await screen.findByRole('textbox', { name: 'Код из письма' })
+  await waitFor(() => expect(screen.getByRole('button', { name: /^Подтвердить и (?:написать|продолжить)$/ }).matches(':disabled')).toBe(false))
 }
 
 describe('question login copy and explicit purpose', () => {
@@ -81,6 +82,7 @@ describe('login transport failures', () => {
     expect((screen.getByRole('textbox', { name: 'Код из письма' }) as HTMLInputElement).value).toBe('123456')
     expect(screen.getByText(/new@example.invalid/)).toBeTruthy()
     expect(onDone).not.toHaveBeenCalled()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Подтвердить и продолжить' }).matches(':disabled')).toBe(false))
     fireEvent.click(screen.getByRole('button', { name: 'Подтвердить и продолжить' }))
     await screen.findByRole('status')
     expect(onDone).toHaveBeenCalledOnce()

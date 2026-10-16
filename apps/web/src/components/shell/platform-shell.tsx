@@ -76,11 +76,25 @@ export function PlatformShell({
   /** Открытое меню придерживает уборку: см. `menu.tsx`. */
   const locked = useRef(false)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const mounted = useRef(false)
   const panel = useRef<HTMLDivElement>(null)
 
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+      if (timer.current !== null) clearTimeout(timer.current)
+      timer.current = null
+    }
+  }, [])
+
   const later = (fn: () => void, ms: number) => {
+    if (!mounted.current) return
     if (timer.current) clearTimeout(timer.current)
-    timer.current = setTimeout(fn, ms)
+    timer.current = setTimeout(() => {
+      timer.current = null
+      if (mounted.current) fn()
+    }, ms)
   }
 
   const remember = (next: SidebarMode) => {
@@ -162,12 +176,15 @@ export function PlatformShell({
    * который должен был её удержать.
    */
   const setLock = useCallback((on: boolean) => {
+    // A child menu releases its lock during cleanup, after the shell may already be gone.
+    if (!mounted.current) return
     locked.current = on
     if (on) return
     // Меню закрылось, а курсор мог уйти ещё раньше: проверяем, не пора ли.
     if (timer.current) clearTimeout(timer.current)
     timer.current = setTimeout(() => {
-      if (!locked.current) setPeek(false)
+      timer.current = null
+      if (mounted.current && !locked.current) setPeek(false)
     }, CLOSE_AFTER)
   }, [])
 

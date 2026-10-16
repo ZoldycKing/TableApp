@@ -43,7 +43,6 @@ import {
 } from './nav-history'
 import { IntakeVerify } from './intake-verify'
 import { ConversationInbox, MESSAGES_SCREEN, parseConversationTarget } from './conversation-inbox'
-import { conversationResource } from '@/lib/conversation-resource'
 import { GeneralQuestion } from './general-question'
 import { generalChatAvailableApp } from '@/lib/general-conversation-config'
 import { GENERAL_QUESTION_SCREEN, parseGeneralQuestionDraft, type GeneralQuestionDraft } from '@/lib/general-question-draft'
@@ -225,7 +224,10 @@ export function AppShell({
   const [resumeQuestion, setResumeQuestion] = useState(false)
   const workflowScreens = useMemo(() => editing ? app.screens : withWorkflowScreenNames(app, initialRuntime.views).screens, [app, initialRuntime.views, editing])
   const navigation = useMemo(() => buildRuntimeNavigation({ ...app, screens: workflowScreens }, initialRuntime.views), [app, workflowScreens, initialRuntime.views])
-  const questionAvailable = !demo && !editing && !navigation.work && generalChatAvailableApp(app) && Boolean(app.communications?.enabled)
+  // Screens are already filtered for this viewer; invitation addresses are removed from the client runtime.
+  const messagesOperator = Boolean(viewer) && app.screens.some(screen => !screen.access.public && screen.access.roles.length > 0
+    && screen.access.roles.every(roleId => app.roles.some(role => role.id === roleId && !role.isDefault)))
+  const questionAvailable = !demo && !editing && !messagesOperator && generalChatAvailableApp(app) && Boolean(app.communications?.enabled)
   const namedScreens = useMemo(() => {
     if (editing) return workflowScreens
     const displayed = new Map([...navigation.tabs, ...Object.values(navigation.actionsByScreen).flat()].map(screen => [screen.id, screen]))
@@ -998,7 +1000,7 @@ export function AppShell({
                   setQuestionDraft({ key: questionKey, body: '', requestId: crypto.randomUUID(), ownerId: viewer?.id ?? null, active: false, login: false })
                   try { sessionStorage.removeItem(questionKey) } catch { /* Storage is optional. */ }
                   navigate(MESSAGES_SCREEN, JSON.stringify(target))
-                }} /> : current.screenId === MESSAGES_SCREEN ? <ConversationInbox key={`${app.id}:${viewer?.id}`} slug={app.slug} operator={Boolean(navigation.work)} initialTarget={parseConversationTarget(current.rowId)} onAskQuestion={questionAvailable ? startQuestion : undefined} onOpenRecord={item => {
+                }} /> : current.screenId === MESSAGES_SCREEN ? <ConversationInbox key={`${app.id}:${viewer?.id}`} slug={app.slug} operator={messagesOperator} initialTarget={parseConversationTarget(current.rowId)} onAskQuestion={questionAvailable ? startQuestion : undefined} onOpenRecord={item => {
               if (item.slug === app.slug && screens.has(item.detailScreenId)) navigate(item.detailScreenId, item.rowId)
               else window.location.assign(`/a/${encodeURIComponent(item.slug)}?e=${encodeURIComponent(item.detailScreenId)}&r=${encodeURIComponent(item.rowId)}`)
             }} /> : checkout !== null ? (
@@ -1188,12 +1190,12 @@ export function AppShell({
             {sent === null && intake === null && customer && screen.id === customer.detailScreenId && row ? <div className="mt-4 space-y-3 rounded-2xl border border-sand-200 bg-white p-4">
               {customer.approval && row.data[customer.statusFieldId] === customer.approval.waitingStatus ? <>
                 <p className="text-sm text-ink-soft">Мастер предложил стоимость ремонта. Согласуйте её перед началом работ.</p>
-                <button type="button" disabled={pending} onClick={() => runMutation(() => customerDecisionAction(app.slug, row.id, row.version ?? 0, 'approve', customer.tableId), () => openTab(customer.listScreenId))} className={`rounded-xl px-4 py-2.5 text-sm font-medium text-white ${accent.solid}`}>Согласовать стоимость</button>
-                <button type="button" disabled={pending} onClick={() => runMutation(() => customerDecisionAction(app.slug, row.id, row.version ?? 0, 'decline', customer.tableId), () => openTab(customer.listScreenId))} className="ml-2 rounded-xl px-3 py-2.5 text-sm text-red-700">Отказаться от ремонта</button>
+                <button type="button" disabled={pending} onClick={() => runMutation(() => customerDecisionAction(app.slug, row.id, row.version ?? 0, 'approve', customer.tableId), () => openTab(customer.listScreenId, { customerSection: 'active' }))} className={`rounded-xl px-4 py-2.5 text-sm font-medium text-white ${accent.solid}`}>Согласовать стоимость</button>
+                <button type="button" disabled={pending} onClick={() => runMutation(() => customerDecisionAction(app.slug, row.id, row.version ?? 0, 'decline', customer.tableId), () => openTab(customer.listScreenId, { customerSection: 'history' }))} className="ml-2 rounded-xl px-3 py-2.5 text-sm text-red-700">Отказаться от ремонта</button>
               </> : null}
               {customer.cancellableStatuses.includes(String(row.data[customer.statusFieldId])) ? confirmCancellation ? <>
                 <p className="text-sm text-ink-soft">Отменить {customerNoun}? Отмена сохранится в истории.</p>
-                <button type="button" disabled={pending} onClick={() => runMutation(() => customerDecisionAction(app.slug, row.id, row.version ?? 0, 'cancel', customer.tableId), () => { setConfirmCancellation(false); openTab(customer.listScreenId) })} className="rounded-xl bg-red-50 px-3 py-2.5 text-sm text-red-700">Да, отменить</button>
+                <button type="button" disabled={pending} onClick={() => runMutation(() => customerDecisionAction(app.slug, row.id, row.version ?? 0, 'cancel', customer.tableId), () => { setConfirmCancellation(false); openTab(customer.listScreenId, { customerSection: 'history' }) })} className="rounded-xl bg-red-50 px-3 py-2.5 text-sm text-red-700">Да, отменить</button>
                 <button type="button" onClick={() => setConfirmCancellation(false)} className="ml-2 text-sm">Не отменять</button>
               </> : <button type="button" onClick={() => setConfirmCancellation(true)} className="text-sm text-red-700">Отменить {customerNoun}</button> : <p className="text-xs text-ink-muted">Если нужно уточнить или изменить условия, свяжитесь с бизнесом{runtime.business?.phone ? `: ${runtime.business.phone}` : '.'}</p>}
             </div> : null}
@@ -1204,7 +1206,7 @@ export function AppShell({
               if (item.slug === app.slug && screens.has(item.screenId)) navigate(item.screenId, item.id)
               else window.location.assign(`/a/${encodeURIComponent(item.slug)}?e=${encodeURIComponent(item.screenId)}&r=${encodeURIComponent(item.id)}`)
             }} /> : null}
-            {messagesAvailable && current.screenId !== MESSAGES_SCREEN && sent === null && intake === null && checkout === null && screen.type === 'detail' && row && conversationResource(app, screen.tableId) ?
+            {messagesAvailable && current.screenId !== MESSAGES_SCREEN && sent === null && intake === null && checkout === null && screen.type === 'detail' && row && (app.booking?.tables.visits === screen.tableId || customerWorkflows(app).some(config => config.tableId === screen.tableId)) ?
               <div className="mx-auto mt-5 max-w-xl"><button type="button" onClick={() => navigate(MESSAGES_SCREEN, JSON.stringify({ slug: app.slug, tableId: screen.tableId, rowId: row.id }))} className="inline-flex items-center gap-2 rounded-xl border border-sand-200 bg-white px-4 py-2.5 text-sm font-medium text-sage-700 hover:bg-sand-50"><Icon name="chat" className="size-5" />Открыть переписку</button></div> : null}
             {sent === null && intake === null && app.booking && screen.type === 'detail' && screen.tableId === app.booking.tables.visits && row &&
               app.screens.some(candidate => candidate.type === 'form' && candidate.mode === 'edit' && candidate.tableId === app.booking!.tables.visits &&

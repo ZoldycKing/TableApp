@@ -168,6 +168,33 @@ describe.skipIf(!process.env.DATABASE_URL)('general business conversations in Po
     expect((await read(first, profile.id)).messages[0]!.files).toEqual([])
   })
 
+  it('stages a client attachment in a closed general question without reopening it until the message is sent', async () => {
+    const first = await business(); await signIn(); await send(first, 'Первый вопрос')
+    const profile = await customer(first)
+    member(first)
+    await service.closeConversation(first.app.slug, GENERAL, profile.id, true, true)
+    await expect(service.prepareConversationUpload(first.app.slug, GENERAL, profile.id, true)).rejects.toThrow('закрыта')
+    await signIn()
+    const prepared = await service.prepareConversationUpload(first.app.slug, GENERAL, SELF), fileId = newId('attachment')
+    await database.db.insert(database.attachments).values({ id: fileId, workspaceId: first.workspaceId, key: `${first.workspaceId}/${fileId}.txt`, name: 'Уточнение.txt', mime: 'text/plain', size: 1,
+      uploadedBy: prepared.uploadedBy, conversationId: prepared.conversationId, state: 'ready' })
+    const [pending] = await database.db.select().from(database.attachments).where(eq(database.attachments.id, fileId))
+    expect(await service.canReadConversationFile(pending!)).toBe(true)
+    expect((await read(first)).closed).toBe(true)
+    expect((await read(first)).messages).toHaveLength(1)
+    member(first)
+    expect(await service.canReadConversationFile(pending!, true)).toBe(false)
+    await signIn('other-customer@example.invalid')
+    expect(await service.canReadConversationFile(pending!)).toBe(false)
+    await expect(service.prepareConversationUpload(first.app.slug, GENERAL, profile.id)).rejects.toThrow('недоступ')
+    await signIn()
+    await send(first, '', SELF, false, randomUUID(), false, [fileId])
+    const opened = await read(first)
+    expect(opened.closed).toBe(false)
+    expect(opened.messages).toHaveLength(2)
+    expect(opened.messages[1]!.files.map(file => file.id)).toEqual([fileId])
+  })
+
   it('blocks new general sends and uploads when disabled while keeping existing history readable', async () => {
     const first = await business(); await signIn(); await send(first, 'Сохранённый вопрос')
     const disabled = { ...first.app, communications: { enabled: false } }

@@ -8,7 +8,7 @@ import { AppShell } from './app-shell'
 
 const mocks = vi.hoisted(() => ({
   request: vi.fn(), consume: vi.fn(), signOut: vi.fn(), create: vi.fn(), update: vi.fn(), refresh: vi.fn(),
-  availability: vi.fn(),
+  availability: vi.fn(), decision: vi.fn(),
   loading: false, runtime: null as RuntimeApp | null,
 }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: mocks.refresh }) }))
@@ -21,7 +21,7 @@ vi.mock('@/app/question-auth-actions', () => ({ beginGeneralQuestionAction: vi.f
 vi.mock('@/app/conversation-actions', () => ({ sendConversationAction: vi.fn(), listConversationInboxAction: vi.fn() }))
 vi.mock('@/app/production-actions', () => ({ saveMovementAction: vi.fn(), saveProductionAction: vi.fn() }))
 vi.mock('@/app/booking-actions', () => ({ bookingAvailabilityAction: mocks.availability, cancelBookingAction: vi.fn(), setupBookingMasterAction: vi.fn(), setBookingDayOffAction: vi.fn() }))
-vi.mock('@/app/customer-actions', () => ({ customerDecisionAction: vi.fn() }))
+vi.mock('@/app/customer-actions', () => ({ customerDecisionAction: mocks.decision }))
 vi.mock('@/app/inventory-actions', () => ({ receiveStockAction: vi.fn(), saveStockOperationAction: vi.fn() }))
 vi.mock('./order-stock-panel', () => ({ OrderStockPanel: () => null, InventoryBalancePanel: () => null }))
 vi.mock('./order-delivery-panel', () => ({ OrderDeliveryPanel: () => null }))
@@ -37,6 +37,7 @@ beforeEach(() => {
   mocks.request.mockResolvedValue({ ok: true, delivered: true, via: 'sent', hint: null })
   mocks.consume.mockResolvedValue({ ok: true })
   mocks.update.mockResolvedValue({ ok: true })
+  mocks.decision.mockResolvedValue({ ok: true })
   window.history.replaceState(null, '', '/')
   sessionStorage.clear()
 })
@@ -45,6 +46,29 @@ afterEach(() => { cleanup(); sessionStorage.clear(); window.history.replaceState
 const exactField = (name: string) => new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:\\s|$)`)
 
 describe('browser audit runtime integration regressions', () => {
+  it.each(['decline', 'cancel'] as const)('opens history after a successful repair %s and keeps the resulting record visible after refresh', async decision => {
+    const example = templateExample('service'), config = example.app.customer!
+    const { runtime, viewer } = templateAppPreview(example, 'client', 'irina@example.com', 'Ирина')
+    const row = runtime.tables[config.tableId]!.rows[0]!
+    row.data[config.statusFieldId] = decision === 'decline' ? config.approval!.waitingStatus : config.initialStatus
+    const title = String(row.data[runtime.tables[config.tableId]!.primaryFieldId!])
+    window.history.replaceState(null, '', `/a/review?e=${config.detailScreenId}&r=${row.id}`)
+    const ui = render(<AppShell runtime={runtime} viewer={viewer} browserHistory />)
+    await ui.findByRole('heading', { name: title })
+    if (decision === 'decline') fireEvent.click(ui.getByRole('button', { name: 'Отказаться от ремонта' }))
+    else {
+      fireEvent.click(ui.getByRole('button', { name: 'Отменить заявку на ремонт' }))
+      fireEvent.click(ui.getByRole('button', { name: 'Да, отменить' }))
+    }
+    await waitFor(() => expect(mocks.decision).toHaveBeenCalledExactlyOnceWith(runtime.app.slug, row.id, row.version, decision, config.tableId))
+    await waitFor(() => expect(ui.getByRole('button', { name: /^История/ }).getAttribute('aria-pressed')).toBe('true'))
+    const refreshed = structuredClone(runtime)
+    refreshed.tables[config.tableId]!.rows.find(item => item.id === row.id)!.data[config.statusFieldId] = decision === 'decline' ? config.approval!.declinedStatus : config.cancelStatus
+    ui.rerender(<AppShell runtime={refreshed} viewer={viewer} browserHistory />)
+    expect(ui.getByRole('button', { name: text => text.includes(title) })).toBeTruthy()
+    expect(ui.queryByText('Активных заявок на ремонт пока нет')).toBeNull()
+  })
+
   it.each(['zakazy', 'service'])('%s: retains the guest email/code form through a runtime refresh, then resumes the selected purchase', async templateId => {
     const example = templateExample(templateId), config = example.app.customer!
     const guest = templateAppPreview(example, 'guest'), client = templateAppPreview(example, 'client', 'new@example.invalid', 'Анна')

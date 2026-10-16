@@ -69,7 +69,7 @@ export function withCustomerScenario(original: TemplateDef): TemplateDef {
     }
     case 'dostavka':
       scenario = { ...common, table: 'deliveries', title: 'Мои доставки', submitLabel: 'Заказать доставку', intro: 'Укажите адрес, содержимое и желаемое время. Диспетчер согласует стоимость и интервал; после этого доставка появится у назначенного курьера.',
-        formFields: ['selectedService', 'requestName', 'requestPhone', 'address', 'what', 'window', 'note'], customerFields: ['what', 'status', 'date', 'window', 'price', 'address', 'clientSummary'], workerFields: ['status', 'photo', 'clientSummary'], workerName: 'Курьер', managerName: 'Диспетчер',
+        formFields: ['selectedService', 'requestName', 'requestPhone', 'address', 'what', 'window', 'note'], customerFields: ['what', 'status', 'date', 'window', 'price', 'address', 'note', 'clientSummary'], workerFields: ['status', 'photo', 'clientSummary'], workerReadFields: ['pay', 'photo'], workerName: 'Курьер', managerName: 'Диспетчер',
         status: 'status', initial: 'Принята', terminal: ['Доставлена', 'Возврат', 'Отменена'], cancel: 'Отменена', cancellable: ['Принята'], catalog: catalog('Услуги доставки') }
       break
     case 'service':

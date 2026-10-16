@@ -244,6 +244,7 @@ export type TemplateDef = {
 export type TemplateCustomer = {
   table: string; title: string; submitLabel: string; intro: string
   formFields: string[]; requiredFields: string[]; customerFields: string[]; workerFields: string[]
+  workerReadFields?: string[]
   status: string; initial: string; terminal: string[]; cancel: string; cancellable: string[]
   email: string; assignment: string | null; workerName: string; managerName: string
   catalog: { table: string; view: string; fields: string[]; active: string; selection: string | null; title: string } | null

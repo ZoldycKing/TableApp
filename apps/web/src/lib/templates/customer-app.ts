@@ -82,7 +82,7 @@ function customerAppSection(app: App, built: BuiltTemplate): App {
   const managerHidden = new Set([f.cart, f.submissionId, config.createdFieldId, config.approval?.approvedPriceFieldId,
     ...(d.cart && config.profile ? [f.customer, f.phone] : [])].filter(Boolean))
   const managerFields = fields.filter(field => !['formula', 'lookup', 'rollup', 'count'].includes(field.type) && !managerHidden.has(field.id)).map(field => field.id)
-  const workerShown = Array.from(new Set([...shown, config.profile?.nameFieldId!, config.profile?.phoneFieldId!, f.requestAddress!].filter(Boolean))).filter(id => !(d.table === 'zayavki' && id === f.price))
+  const workerShown = Array.from(new Set([...shown, ...fieldKeys(d.workerReadFields ?? []), config.profile?.nameFieldId!, config.profile?.phoneFieldId!, f.requestAddress!].filter(Boolean))).filter(id => !(d.table === 'zayavki' && id === f.price))
   const screens: Screen[] = [collection(listId, d.title, ['client'], detailId), request, customerDetail,
     collection(staffListId, d.parent ? 'Назначенные обращения' : 'Назначенные мне', ['staff'], staffDetailId),
     { id: staffDetailId, appId: app.id, position: 'a', name: 'Рабочая карточка', type: 'detail', tableId, tab: null, access: access(['staff', 'manager']), components: [...componentFields(workerShown).map(component => ({ ...component, roles: ['staff'] })), ...componentFields(fields.map(field => field.id).filter(id => id !== f.cart && id !== f.submissionId)).map(component => ({ ...component, roles: ['manager'] })), button('Изменить', workerEditId, ['staff']), button('Изменить', adminEditId, ['manager'])] },

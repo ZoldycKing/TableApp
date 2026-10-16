@@ -234,6 +234,7 @@ describe.skipIf(!process.env.DATABASE_URL)('conversation persistence and access 
     await expectDenied(() => service.closeConversation(first.app.slug, first.tableId, first.rowId, true))
     await signIn(managerEmail); await service.closeConversation(first.app.slug, first.tableId, first.rowId, true)
     await signIn(clientEmail); expect((await read(first)).closed).toBe(true); await expect(send(first)).rejects.toThrow('закрыта')
+    await expect(service.prepareConversationUpload(first.app.slug, first.tableId, first.rowId)).rejects.toThrow('закрыта')
     await signIn(managerEmail); await service.closeConversation(first.app.slug, first.tableId, first.rowId, false)
     await signIn(clientEmail); await send(first, 'После возобновления')
   })

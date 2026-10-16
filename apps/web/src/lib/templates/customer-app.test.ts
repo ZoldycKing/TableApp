@@ -3,10 +3,43 @@ import { TEMPLATES } from './catalog'
 import { templateExample } from './presentation'
 import { templateAppPreview } from './app-preview'
 import { checkAppReferences } from '../app-references'
-import { ANONYMOUS, canOpenScreen, visitorFor, writableFields } from '../app-roles'
+import { ANONYMOUS, asRole, canOpenScreen, visitorFor, writableFields } from '../app-roles'
 import { draftFromAnonymous, revalidatePending } from '../pending-submission'
 
 describe('ready customer scenarios across templates', () => {
+  it('dostavka: gives couriers delivery instructions, payment terms and proof only for assigned deliveries', () => {
+    const example = templateExample('dostavka'), config = example.app.customer!
+    const note = example.field('deliveries', 'note').id, pay = example.field('deliveries', 'pay').id, photo = example.field('deliveries', 'photo').id
+    const own = example.rows.find(row => row.tableId === config.tableId)!
+    const proof = [{ id: 'delivery-proof', key: 'marketing-example/proof.jpg', name: 'proof.jpg', mime: 'image/jpeg', size: 1, width: null, height: null }]
+    example.rows = example.rows.map(row => row.tableId !== config.tableId ? row : { ...row, data: { ...row.data,
+      [config.assignmentFieldId!]: row.id === own.id ? 'worker@example.invalid' : 'second-worker@example.invalid',
+      [note]: row.id === own.id ? 'Домофон 42, вход со двора.' : 'Инструкция другой доставки', [photo]: proof } })
+
+    const worker = templateAppPreview(example, 'staff', 'worker@example.invalid').runtime
+    expect(worker.tables[config.tableId]!.rows.map(row => row.id)).toEqual([own.id])
+    const delivery = worker.tables[config.tableId]!.rows[0]!
+    expect(delivery.data[note]).toBe('Домофон 42, вход со двора.')
+    expect(delivery.data[pay]).toBe(own.data[pay])
+    expect(delivery.data[photo]).toEqual(proof)
+    expect(delivery.data).not.toHaveProperty(config.emailFieldId)
+    expect(delivery.data).not.toHaveProperty(config.assignmentFieldId!)
+    const detail = worker.app.screens.find(screen => screen.type === 'detail' && screen.tableId === config.tableId)!
+    if (detail.type !== 'detail') throw new Error('worker detail')
+    expect(detail.components.some(component => component.type === 'field' && component.fieldId === photo)).toBe(true)
+
+    const other = templateAppPreview(example, 'staff', 'second-worker@example.invalid').runtime
+    expect(other.tables[config.tableId]!.rows.length).toBeGreaterThan(0)
+    expect(other.tables[config.tableId]!.rows.some(row => row.id === own.id)).toBe(false)
+    const client = templateAppPreview(example, 'client', 'irina@example.com').runtime
+    expect(client.tables[config.tableId]!.rows).toHaveLength(2)
+    expect(client.tables[config.tableId]!.rows.find(row => row.id === own.id)!.data[note]).toBe('Домофон 42, вход со двора.')
+    expect(client.tables[config.tableId]!.rows.some(row => Object.hasOwn(row.data, pay) || Object.hasOwn(row.data, photo))).toBe(false)
+    const writable = writableFields(example.app, config.tableId, asRole('staff', 'worker@example.invalid'), 'update')
+    expect(writable.has(photo)).toBe(true)
+    for (const field of [note, pay, config.emailFieldId, config.assignmentFieldId!]) expect(writable.has(field)).toBe(false)
+  })
+
   it.each(['zakazy', 'katalog'])('%s: uses a separate terminal return status and validates its binding', id => {
     const example = templateExample(id), config = example.app.customer!, returned = config.stock!.returnedStatus!
     const catalog = { tableIds: new Set(example.built.tables.map(table => table.id)), fields: new Map(example.fields.map(field => [field.id, field])), views: new Map(example.views.map(view => [view.id, view])) }

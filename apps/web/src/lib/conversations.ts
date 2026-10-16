@@ -205,7 +205,8 @@ export async function prepareConversationUpload(slug: string, tableId: string, r
   return writeRows(initial.app.workspaceId, async ({ tx }) => {
     const access = await conversationAccess(slug, tableId, rowId, tx, business), thread = await threadFor(access, tx, true)
     if (access.kind === 'general' && !access.app.communications?.enabled) throw new RowWriteError('invalid', 'Новые сообщения временно отключены. Свяжитесь с бизнесом другим способом.')
-    if (thread!.closedAt) throw new RowWriteError('invalid', 'Переписка закрыта')
+    // A client's next general message reopens the question; staging its file must not do so.
+    if (thread!.closedAt && (access.kind !== 'general' || access.staff)) throw new RowWriteError('invalid', 'Переписка закрыта')
     await limits(access, thread!.id, tx)
     return { workspaceId: access.app.workspaceId, conversationId: thread!.id, uploadedBy: access.uploadId, origin: access.owner ? 'manual' as const : 'runtime' as const }
   })

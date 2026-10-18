@@ -205,7 +205,9 @@ export function AppShell({
   }, [cart, demo, initialRuntime.app.id, initialCartWorkflow?.cart])
   const [pendingCabinet, setPendingCabinet] = useState(false)
   const [checkout, setCheckout] = useState<CheckoutIntent | null>(null)
-  const [savedNotice, setSavedNotice] = useState<string | null>(null)
+  const [savedNotice, setSavedNotice] = useState<{
+    text: string; appId: string; screenId: string; rowId: string | null; actorId: string | null
+  } | null>(null)
   const [createdRecordWait, setCreatedRecordWait] = useState<{
     screenId: string; rowId: string; base: RuntimeApp; actorId: string | null; timedOut: boolean
   } | null>(null)
@@ -302,6 +304,11 @@ export function AppShell({
   const router = useRouter()
 
   const current = stack[stack.length - 1]!
+  const currentSavedNotice = savedNotice?.appId === app.id && savedNotice.screenId === current.screenId
+    && savedNotice.rowId === current.rowId && savedNotice.actorId === (viewer?.id ?? null) ? savedNotice.text : null
+  useEffect(() => {
+    if (savedNotice && !currentSavedNotice) setSavedNotice(null)
+  }, [savedNotice, currentSavedNotice])
   const formDraftId = `${current.screenId}:${current.rowId ?? 'new'}`
   const activeDraft = formDrafts.drafts[formDraftId]
   const saveActiveDraft = (draft: FormDraftEntry) => {
@@ -425,8 +432,11 @@ export function AppShell({
     go({ stack: [{ screenId, rowId: null }], lists }, 'push')
   }
 
-  const openCreated = (detailId: string | undefined, rowId: string | undefined, listId: string) => {
-    if (detailId && rowId && screens.has(detailId)) {
+  const openCreated = (detailId: string | undefined, rowId: string | undefined, listId: string, notice: string) => {
+    const detailAvailable = Boolean(detailId && rowId && screens.has(detailId))
+    setSavedNotice({ text: notice, appId: app.id, actorId: viewer?.id ?? null,
+      screenId: detailAvailable ? detailId! : screens.has(listId) ? listId : home, rowId: detailAvailable ? rowId! : null })
+    if (detailAvailable && detailId && rowId) {
       setCreatedRecordWait({ screenId: detailId, rowId, base: initialRuntime, actorId: viewer?.id ?? null, timedOut: false })
       const parent = screens.has(listId) ? [{ screenId: listId, rowId: null }] : []
       // Replace the submitted form so browser Back and the header return to the list.
@@ -616,6 +626,7 @@ export function AppShell({
           setBookingAvailabilityRevision(value => value + 1)
           return setError(result.error ?? 'Не удалось выполнить действие')
         }
+        setSavedNotice(null)
         router.refresh()
         after?.(result)
       } catch {
@@ -969,7 +980,7 @@ export function AppShell({
             {error}
           </p>
         ) : null}
-        {savedNotice ? <p role="status" className="border-b border-sage-200 bg-sage-50 px-4 py-3 text-sm text-ink-soft sm:px-6">{savedNotice}</p> : null}
+        {currentSavedNotice ? <p role="status" className="border-b border-sage-200 bg-sage-50 px-4 py-3 text-sm text-ink-soft sm:px-6">{currentSavedNotice}</p> : null}
 
         {/*
          * Прокрутка только вдоль: поперёк приложению разъезжаться нечем, и
@@ -1060,10 +1071,9 @@ export function AppShell({
                 } else if (viewer === null && !demo && !editing) { setBookingDraft(values); setError(null); setIntake({ screenId: screen.id, values }) }
                 else runMutation(() => appCreateRowAction(app.slug, app.booking!.tables.visits, values), result => {
                   clearActiveDraft(); setBookingDraft(null)
-                  setSavedNotice('Запись оформлена. Дата, время и условия сохранены в этой карточке. Оплату согласует сотрудник бизнеса.')
                   const listId = app.booking!.listScreenId ?? home, list = screens.get(listId)
                   const detailId = list && (list.type === 'list' || list.type === 'tiles') ? list.onTapScreenId ?? undefined : [...screens.values()].find(item => item.type === 'detail' && item.tableId === app.booking!.tables.visits)?.id
-                  openCreated(detailId, result.rowId, listId)
+                  openCreated(detailId, result.rowId, listId, 'Запись оформлена. Дата, время и условия сохранены в этой карточке. Оплату согласует сотрудник бизнеса.')
                 })
               }} /> :
             app.inventory && inventoryOperation(app.inventory, screen.id) ? <InventoryReceipt key={`${screen.id}:${current.rowId}`} runtime={runtime}
@@ -1159,10 +1169,9 @@ export function AppShell({
                   runMutation(() => appCreateRowAction(app.slug, tableId, values), result => {
                     clearActiveDraft()
                     setFormDraft(null)
-                    if (customer && screen.id === customer.formScreenId) setSavedNotice('Оформлено. Ответственный сотрудник свяжется с вами для согласования условий и оплаты. Онлайн-оплаты нет.')
                     if (customer && screen.id === customer.formScreenId) submissionIds.current.delete(customer.tableId)
                     if (sales && screen.id === sales.formScreenId) setCart({ requestId: crypto.randomUUID(), items: [] })
-                    if (customer && screen.id === customer.formScreenId && result.rowId) return openCreated(customer.detailScreenId, result.rowId, customer.listScreenId)
+                    if (customer && screen.id === customer.formScreenId) return openCreated(customer.detailScreenId, result.rowId, customer.listScreenId, 'Оформлено. Ответственный сотрудник свяжется с вами для согласования условий и оплаты. Онлайн-оплаты нет.')
                     if (screen.type === 'form' && screen.successScreenId) {
                       openTab(screen.successScreenId)
                     } else if (stack.length > 1) {

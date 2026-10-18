@@ -25,7 +25,9 @@ export function FormFieldInput({
   placeholder,
   relatedOptions,
   appId,
+  disabled,
   onChange,
+  onBusyChange,
 }: {
   field: Field
   value: unknown
@@ -34,7 +36,9 @@ export function FormFieldInput({
   relatedOptions: { id: string; title: string }[]
   /** Нужен, чтобы загрузка файла от пользователя приложения попала в нужный воркспейс. */
   appId?: string
+  disabled?: boolean
   onChange: (value: unknown) => void
+  onBusyChange?: (busy: boolean) => void
 }) {
   switch (field.type) {
     case 'attachment':
@@ -44,7 +48,9 @@ export function FormFieldInput({
           value={Array.isArray(value) ? (value as Attachment[]) : []}
           maxCount={field.options.maxCount}
           appId={appId}
+          disabled={disabled}
           onChange={onChange}
+          onBusyChange={onBusyChange}
         />
       )
 

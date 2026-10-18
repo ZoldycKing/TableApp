@@ -99,9 +99,10 @@ export function withCustomerScenario(original: TemplateDef): TemplateDef {
     }
     case 'zayavki':
       scenario = { ...common, table: template.appTable, title: 'Мои заявки', submitLabel: 'Отправить заявку', intro: 'Опишите работы и адрес. Диспетчер назначит мастера и согласует дату; результат появится в вашем кабинете.',
-        formFields: ['selectedService', 'requestName', 'requestPhone', 'what', 'requestAddress', 'comment'], customerFields: ['status', 'date', 'price', 'requestAddress', 'clientSummary'], workerFields: ['status', 'photo', 'comment', 'clientSummary'], workerName: 'Мастер', managerName: 'Диспетчер',
+        formFields: ['selectedService', 'requestName', 'requestPhone', 'what', 'requestAddress', 'requestNote'], customerFields: ['status', 'date', 'price', 'requestAddress', 'requestNote', 'clientSummary'], workerFields: ['status', 'photo', 'comment', 'clientSummary'], workerReadFields: ['comment', 'photo', 'clientName', 'phone', 'address'], workerName: 'Мастер', managerName: 'Диспетчер',
         status: 'status', initial: 'Новая', terminal: ['Готово', 'Отменена'], cancel: 'Отменена', cancellable: ['Новая'], assignment: 'masterEmail', catalog: catalog('Услуги и выезды') }
-      main.fields.push({ key: 'requestAddress', name: 'Адрес клиента', type: 'text' })
+      main.fields.push({ key: 'requestAddress', name: 'Адрес клиента', type: 'text' },
+        { key: 'requestNote', name: 'Пожелания клиента', type: 'long_text', help: 'Инструкции и пожелания при оформлении. Видны клиенту и назначенному мастеру; внутренние заметки о работах храните в «Комментарий».' })
       break
     case 'crm':
       scenario = { ...common, table: 'deals', title: 'Мои обращения', submitLabel: 'Оставить обращение', intro: 'Опишите, что вас интересует. Менеджер свяжется с вами и сообщит результат в кабинете. Внутренние переговоры и сведения о других клиентах сюда не попадают.',

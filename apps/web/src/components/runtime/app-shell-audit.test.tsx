@@ -69,6 +69,49 @@ describe('browser audit runtime integration regressions', () => {
     expect(ui.queryByText('Активных заявок на ремонт пока нет')).toBeNull()
   })
 
+  it('keeps a new delivery confirmation on its refreshed card, then removes it after cancellation and from history', async () => {
+    const example = templateExample('dostavka'), config = example.app.customer!
+    const { runtime, viewer } = templateAppPreview(example, 'client', 'irina@example.com', 'Ирина')
+    const table = runtime.tables[config.tableId]!, createdId = 'row_delivery_confirmation_test'
+    const created = { ...table.rows[0]!, id: createdId, version: 0, data: { ...table.rows[0]!.data, [config.statusFieldId]: config.initialStatus } }
+    mocks.create.mockImplementation(async (_slug, _tableId, values) => {
+      created.data = { ...created.data, ...values }
+      return { ok: true, rowId: createdId }
+    })
+    window.history.replaceState(null, '', `/a/review?e=${config.formScreenId}`)
+    const ui = render(<AppShell runtime={runtime} viewer={viewer} browserHistory />)
+    fireEvent.change(await ui.findByLabelText(/^Имя получателя/), { target: { value: 'Ирина' } })
+    fireEvent.change(ui.getByLabelText(/^Телефон получателя/), { target: { value: '+7 900 000-00-00' } })
+    fireEvent.change(ui.getByLabelText(exactField(example.field('deliveries', 'address').name)), { target: { value: 'Адрес новой доставки' } })
+    fireEvent.change(ui.getByLabelText(exactField(example.field('deliveries', 'what').name)), { target: { value: 'Тестовая посылка' } })
+    fireEvent.click(ui.getByRole('button', { name: 'Заказать доставку' }))
+    await ui.findByText('Загружаем карточку…')
+    const refreshed = { ...runtime, tables: { ...runtime.tables, [config.tableId]: { ...table, rows: [...table.rows, created] } },
+      screens: { ...runtime.screens, [config.listScreenId]: { ...runtime.screens[config.listScreenId]!, rowIds: [...runtime.screens[config.listScreenId]!.rowIds, createdId] } } }
+    ui.rerender(<AppShell runtime={refreshed} viewer={viewer} browserHistory />)
+    await ui.findByRole('heading', { name: 'Адрес новой доставки' })
+    expect(ui.getByText(/Оформлено. Ответственный сотрудник/)).toBeTruthy()
+    ui.rerender(<AppShell runtime={structuredClone(refreshed)} viewer={viewer} browserHistory />)
+    expect(ui.getByText(/Оформлено. Ответственный сотрудник/)).toBeTruthy()
+
+    mocks.decision.mockResolvedValueOnce({ ok: false, error: 'Не удалось отменить доставку' })
+    fireEvent.click(ui.getByRole('button', { name: 'Отменить доставку' }))
+    fireEvent.click(ui.getByRole('button', { name: 'Да, отменить' }))
+    await ui.findByText('Не удалось отменить доставку')
+    expect(ui.getByText(/Оформлено. Ответственный сотрудник/)).toBeTruthy()
+    await waitFor(() => expect(ui.getByRole('button', { name: 'Да, отменить' }).hasAttribute('disabled')).toBe(false))
+    fireEvent.click(ui.getByRole('button', { name: 'Да, отменить' }))
+    await waitFor(() => expect(ui.getByRole('button', { name: /^История/ }).getAttribute('aria-pressed')).toBe('true'))
+    const cancelled = structuredClone(refreshed)
+    cancelled.tables[config.tableId]!.rows.find(row => row.id === createdId)!.data[config.statusFieldId] = config.cancelStatus
+    ui.rerender(<AppShell runtime={cancelled} viewer={viewer} browserHistory />)
+    expect(ui.getByRole('button', { name: text => text.includes('Адрес новой доставки') })).toBeTruthy()
+    expect(ui.queryByText(/Оформлено. Ответственный сотрудник/)).toBeNull()
+    fireEvent.click(ui.getByRole('button', { name: text => text.includes('Адрес новой доставки') }))
+    await ui.findByRole('heading', { name: 'Адрес новой доставки' })
+    expect(ui.queryByText(/Оформлено. Ответственный сотрудник/)).toBeNull()
+  })
+
   it.each(['zakazy', 'service'])('%s: retains the guest email/code form through a runtime refresh, then resumes the selected purchase', async templateId => {
     const example = templateExample(templateId), config = example.app.customer!
     const guest = templateAppPreview(example, 'guest'), client = templateAppPreview(example, 'client', 'new@example.invalid', 'Анна')
@@ -177,11 +220,13 @@ describe('browser audit runtime integration regressions', () => {
       })
       expect(ui.queryByLabelText(/^Неисправность со слов клиента/)).toBeNull()
       expect(ui.queryByRole('heading', { name: 'Ноутбук аудита' })).toBeNull()
+      expect(ui.queryByText(/Оформлено. Ответственный сотрудник/)).toBeNull()
     }
     fireEvent.click(ui.getByRole('button', { name: 'Назад' }))
     await expectList()
     await act(async () => { window.history.forward() })
     await ui.findByRole('heading', { name: 'Ноутбук аудита' })
+    expect(ui.queryByText(/Оформлено. Ответственный сотрудник/)).toBeNull()
     await act(async () => { window.history.back() })
     await expectList()
     expect(mocks.create).toHaveBeenCalledOnce()

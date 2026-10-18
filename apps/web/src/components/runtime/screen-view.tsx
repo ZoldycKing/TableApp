@@ -242,7 +242,7 @@ export function ScreenView(props: Props) {
     )
   }
 
-  return <FormScreen {...props} fields={fields} />
+  return <FormScreen key={`${runtime.app.id}:${screen.id}:${screen.mode}:${row?.id ?? 'new'}`} {...props} fields={fields} />
 }
 
 function FormScreen({
@@ -263,6 +263,10 @@ function FormScreen({
 }: Props & { fields: Field[] }) {
   const mode = screen.type === 'form' ? screen.mode : 'create'
   const [values, setValues] = useState<Record<string, unknown>>(draft ? { ...draft.values } : mode === 'edit' && row ? { ...row.data } : { ...initialValues })
+  const currentValues = useRef(values)
+  currentValues.current = values
+  const uploadingFields = useRef(new Set<string>())
+  const [uploading, setUploading] = useState(false)
   const [dirty, setDirty] = useState(Boolean(draft))
   const sourceKey = `${screen.id}:${mode}:${row?.id ?? 'new'}`
   const source = useRef(sourceKey)
@@ -277,7 +281,9 @@ function FormScreen({
     edited.current = Boolean(draft)
     setDirty(Boolean(draft))
     baseVersion.current = draft?.baseVersion ?? row?.version
-    setValues(draft ? { ...draft.values } : mode === 'edit' && row ? { ...row.data } : { ...initialValues })
+    const next = draft ? { ...draft.values } : mode === 'edit' && row ? { ...row.data } : { ...initialValues }
+    currentValues.current = next
+    setValues(next)
   }, [sourceKey, mode, row, initialValues, draft])
 
   /*
@@ -304,7 +310,8 @@ function FormScreen({
       className="space-y-5 rounded-2xl border border-sand-200 bg-white p-5 shadow-soft sm:p-6"
       onSubmit={(event) => {
         event.preventDefault()
-        onSubmit(values, mode, baseVersion.current)
+        if (pending || uploadingFields.current.size > 0) return
+        onSubmit(currentValues.current, mode, baseVersion.current)
       }}
     >
       {formNotice}
@@ -334,10 +341,17 @@ function FormScreen({
               placeholder={component.placeholder}
               relatedOptions={options}
               appId={runtime.app.id}
+              disabled={pending}
+              onBusyChange={(busy) => {
+                if (busy) uploadingFields.current.add(component.id)
+                else uploadingFields.current.delete(component.id)
+                setUploading(uploadingFields.current.size > 0)
+              }}
               onChange={(value) => {
                 edited.current = true
                 setDirty(true)
-                const next = { ...values, [field.id]: value }
+                const next = { ...currentValues.current, [field.id]: value }
+                currentValues.current = next
                 setValues(next)
                 onDraftChange?.({ values: next, baseVersion: baseVersion.current })
               }}
@@ -349,9 +363,11 @@ function FormScreen({
 
       {formSlot}
 
+      {uploading ? <p role="status" className="text-xs text-ink-muted">Загружаем файлы. Дождитесь завершения перед сохранением.</p> : null}
+
       <button
         type="submit"
-        disabled={pending}
+        disabled={pending || uploading}
         className={`w-full rounded-xl px-4 py-3 text-sm font-semibold text-white shadow-soft transition-all hover:-translate-y-px hover:shadow-lift disabled:opacity-40 ${accentStyle.bg}`}
       >
         {screen.submitLabel}

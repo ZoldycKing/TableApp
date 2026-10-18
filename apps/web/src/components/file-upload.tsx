@@ -128,9 +128,10 @@ function FileUploadInput({
             <button
               type="button"
               title="Убрать файл"
+              aria-label={`Убрать файл ${item.name}`}
               disabled={disabled}
               onClick={() => { if (!current.current.disabled) change(current.current.value.filter((candidate) => candidate.key !== item.key)) }}
-              className="absolute -right-1.5 -top-1.5 hidden h-4 w-4 items-center justify-center rounded-full bg-red-600 text-[10px] text-white group-hover:flex"
+              className="absolute -right-1.5 -top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-red-600 text-xs text-white md:hidden md:h-4 md:w-4 md:text-[10px] md:group-hover:flex md:group-focus-within:flex [@media(hover:none)]:flex"
             >
               ×
             </button>

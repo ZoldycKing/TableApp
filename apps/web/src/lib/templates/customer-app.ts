@@ -124,6 +124,7 @@ function customerAppSection(app: App, built: BuiltTemplate): App {
   for (const screen of screens) if (screen.type === 'form' && screen.id !== formId) screen.components = screen.components.map(component => component.type !== 'form_field' ? component : {
     ...component, label: component.fieldId === config.emailFieldId ? 'Почта клиента для кабинета'
       : component.fieldId === config.assignmentFieldId ? 'Почта ответственного сотрудника'
+      : d.table === 'zayavki' && component.fieldId === f.comment ? 'Внутренние заметки'
       : component.fieldId === config.cart?.positionsFieldId ? 'Состав заказа' : component.label,
   })
   return appSchema.parse({ ...app, accessMode: 'public', roles: [{ id: 'client', name: 'Клиент', isDefault: true }, { id: 'staff', name: d.workerName, isDefault: false }, { id: 'manager', name: d.managerName, isDefault: false }], rowAccessRules, homeScreenId: listId, customer: config, screens: screens.map((screen, i) => ({ ...screen, position: positionSequence(screens.length)[i]!, ...('components' in screen ? { components: screen.components.map((component, n) => ({ ...component, position: positionSequence(screen.components.length)[n]! })) } : {}) })) })

@@ -7,6 +7,77 @@ import { ANONYMOUS, asRole, canOpenScreen, visitorFor, writableFields } from '..
 import { draftFromAnonymous, revalidatePending } from '../pending-submission'
 
 describe('ready customer scenarios across templates', () => {
+  it('zayavki: preserves client instructions separately from internal notes and shows assigned masters their work details', () => {
+    const example = templateExample('zayavki'), config = example.app.customer!
+    const field = (key: string) => example.field('zayavki', key).id
+    const requestNote = field('requestNote'), comment = field('comment'), photo = field('photo')
+    const own = example.rows.find(row => row.tableId === config.tableId)!
+    const proof = [{ id: 'visit-proof', key: 'marketing-example/visit.jpg', name: 'visit.jpg', mime: 'image/jpeg', size: 1, width: null, height: null }]
+    example.rows = example.rows.map(row => row.tableId !== config.tableId ? row : { ...row, data: { ...row.data,
+      [config.assignmentFieldId!]: row.id === own.id ? 'worker@example.invalid' : 'second-worker@example.invalid',
+      ...(row.id === own.id ? { [field('client')]: [], [requestNote]: 'Домофон 42, предварительно позвоните.',
+        [field('requestAddress')]: 'Адрес онлайн-заявки', [comment]: 'Внутренняя диагностика: нужен переходник.', [photo]: proof } : {}) } })
+
+    const client = templateAppPreview(example, 'client', 'irina@example.com').runtime
+    const request = client.tables[config.tableId]!.rows.find(row => row.id === own.id)!
+    expect(request.data[requestNote]).toBe('Домофон 42, предварительно позвоните.')
+    expect(request.data[field('requestAddress')]).toBe('Адрес онлайн-заявки')
+    expect(request.data[field('price')]).toBe(own.data[field('price')])
+    for (const key of ['comment', 'photo', 'clientName', 'phone', 'address', 'paid']) expect(request.data).not.toHaveProperty(field(key))
+    const create = writableFields(example.app, config.tableId, asRole('client', 'irina@example.com', '', true), 'create')
+    expect(create.has(requestNote)).toBe(true)
+    expect(create.has(comment)).toBe(false)
+    const form = client.app.screens.find(screen => screen.id === config.formScreenId)!
+    if (form.type !== 'form') throw new Error('client form')
+    expect(form.components.some(component => component.type === 'form_field' && component.fieldId === requestNote)).toBe(true)
+    expect(form.components.some(component => component.type === 'form_field' && component.fieldId === comment)).toBe(false)
+
+    const worker = templateAppPreview(example, 'staff', 'worker@example.invalid').runtime
+    expect(worker.tables[config.tableId]!.rows.map(row => row.id)).toEqual([own.id])
+    const work = worker.tables[config.tableId]!.rows[0]!
+    expect(work.data[requestNote]).toBe(request.data[requestNote])
+    expect(work.data[field('requestAddress')]).toBe(request.data[field('requestAddress')])
+    expect(work.data[comment]).toBe('Внутренняя диагностика: нужен переходник.')
+    expect(work.data[photo]).toEqual(proof)
+    for (const key of ['price', 'paid', 'customerEmail', 'masterEmail']) expect(work.data).not.toHaveProperty(field(key))
+    const writable = writableFields(example.app, config.tableId, asRole('staff', 'worker@example.invalid'), 'update')
+    expect(writable.has(requestNote)).toBe(false)
+    expect(writable.has(comment)).toBe(true)
+    expect(writable.has(photo)).toBe(true)
+    const edit = worker.app.screens.find(screen => screen.type === 'form' && screen.mode === 'edit' && screen.tableId === config.tableId)!
+    if (edit.type !== 'form') throw new Error('worker form')
+    expect(edit.components.find(component => component.type === 'form_field' && component.fieldId === comment)).toMatchObject({ label: 'Внутренние заметки' })
+    expect(edit.components.some(component => component.type === 'form_field' && component.fieldId === requestNote)).toBe(false)
+  })
+
+  it('zayavki: exposes manual request lookup contacts only to its assigned master without opening the client directory or finances', () => {
+    const example = templateExample('zayavki'), config = example.app.customer!
+    const own = example.rows.find(row => row.tableId === config.tableId)!, field = (key: string) => example.field('zayavki', key).id
+    const contacts = ['clientName', 'phone', 'address'].map(field)
+    const clientId = (own.data[field('client')] as string[])[0]!
+    const client = example.rows.find(row => row.id === clientId)!
+    const secret = 'Закрытая заметка справочника клиентов'
+    example.rows = example.rows.map(row => row.id === clientId ? { ...row, data: { ...row.data, [example.field('clients', 'note').id]: secret } }
+      : row.tableId !== config.tableId ? row : { ...row, data: { ...row.data,
+        [config.assignmentFieldId!]: row.id === own.id ? 'worker@example.invalid' : 'second-worker@example.invalid',
+        ...(row.id === own.id ? { [config.emailFieldId]: '', [field('requestName')]: '', [field('requestPhone')]: '', [field('requestAddress')]: '' } : {}) } })
+    const worker = templateAppPreview(example, 'staff', 'worker@example.invalid').runtime
+    expect(worker.tables[config.tableId]!.rows.map(row => row.id)).toEqual([own.id])
+    const request = worker.tables[config.tableId]!.rows[0]!
+    for (const [index, key] of ['name', 'phone', 'address'].entries()) {
+      expect(request.data[contacts[index]!]).toEqual([client.data[example.field('clients', key).id]])
+    }
+    expect(worker.tables[example.table('clients').id]?.rows ?? []).toHaveLength(0)
+    expect(JSON.stringify(worker)).not.toContain(secret)
+    for (const key of ['price', 'paid', 'customerEmail', 'masterEmail', 'client']) expect(request.data).not.toHaveProperty(field(key))
+    const writable = writableFields(example.app, config.tableId, asRole('staff', 'worker@example.invalid'), 'update')
+    for (const id of contacts) expect(writable.has(id)).toBe(false)
+    const other = templateAppPreview(example, 'staff', 'second-worker@example.invalid').runtime
+    expect(other.tables[config.tableId]!.rows.some(row => row.id === own.id)).toBe(false)
+    const customer = templateAppPreview(example, 'client', 'irina@example.com').runtime
+    expect(customer.tables[config.tableId]!.rows.some(row => row.id === own.id)).toBe(false)
+  })
+
   it('dostavka: gives couriers delivery instructions, payment terms and proof only for assigned deliveries', () => {
     const example = templateExample('dostavka'), config = example.app.customer!
     const note = example.field('deliveries', 'note').id, pay = example.field('deliveries', 'pay').id, photo = example.field('deliveries', 'photo').id

@@ -46,6 +46,19 @@ afterEach(() => { cleanup(); sessionStorage.clear(); window.history.replaceState
 const exactField = (name: string) => new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:\\s|$)`)
 
 describe('browser audit runtime integration regressions', () => {
+  it.each(['single catalog', 'multiple public tabs'])('keeps one returning-user login entry in the header with %s', async navigation => {
+    const { runtime } = templateAppPreview(templateExample('zayavki'), 'guest')
+    if (navigation === 'multiple public tabs') {
+      const catalog = runtime.app.screens.find(screen => screen.tab)!
+      runtime.app.screens.push({ ...catalog, id: 'screen_second_public_catalog', name: 'Другие услуги', tab: { label: 'Другие услуги', icon: 'grid' } })
+    }
+    const ui = render(<AppShell runtime={runtime} viewer={null} canSignIn />)
+    const login = within(ui.getByRole('banner')).getByRole('link', { name: 'Войти' })
+    expect(login.getAttribute('href')).toBe('?login=1')
+    expect(ui.getAllByRole('link', { name: 'Войти' })).toEqual([login])
+    expect(ui.queryByRole('textbox', { name: 'Ваша почта' })).toBeNull()
+  })
+
   it.each(['decline', 'cancel'] as const)('opens history after a successful repair %s and keeps the resulting record visible after refresh', async decision => {
     const example = templateExample('service'), config = example.app.customer!
     const { runtime, viewer } = templateAppPreview(example, 'client', 'irina@example.com', 'Ирина')

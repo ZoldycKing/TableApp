@@ -910,7 +910,6 @@ export function AppShell({
               {signOut}
             </div>
           ) : null}
-          {signIn ? <div className="border-t border-sand-200 p-3">{signIn}</div> : null}
         </aside>
       ) : null}
 
@@ -967,7 +966,7 @@ export function AppShell({
                 </div> : null}
               </div>
             ) : null}
-            {signIn ? <span className="shrink-0 @min-[860px]:hidden">{signIn}</span> : null}
+            {signIn ? <span className="shrink-0">{signIn}</span> : null}
           </div>
         </header>
 

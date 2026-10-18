@@ -131,7 +131,7 @@ function FileUploadInput({
               aria-label={`Убрать файл ${item.name}`}
               disabled={disabled}
               onClick={() => { if (!current.current.disabled) change(current.current.value.filter((candidate) => candidate.key !== item.key)) }}
-              className="absolute -right-1.5 -top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-red-600 text-xs text-white md:hidden md:h-4 md:w-4 md:text-[10px] md:group-hover:flex md:group-focus-within:flex [@media(hover:none)]:flex"
+              className="absolute -right-1.5 -top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-red-600 text-xs text-white md:h-4 md:w-4 md:text-[10px] md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 [@media(hover:none)]:opacity-100"
             >
               ×
             </button>

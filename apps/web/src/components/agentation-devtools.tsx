@@ -1,0 +1,23 @@
+'use client'
+
+import dynamic from 'next/dynamic'
+import { usePathname } from 'next/navigation'
+
+const Toolbar = process.env.NODE_ENV === 'development'
+  ? dynamic(() => import('agentation').then(module => module.Agentation), { ssr: false })
+  : null
+
+export function AgentationDevtools() {
+  const pathname = usePathname()
+  if (!Toolbar) return null
+
+  return (
+    <Toolbar
+      key={pathname}
+      appName="TableApp"
+      endpoint="http://127.0.0.1:4747"
+      enableKeyboardShortcuts={false}
+      className="hidden md:block"
+    />
+  )
+}

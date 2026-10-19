@@ -4,6 +4,7 @@ import localFont from 'next/font/local'
 import type { ReactNode } from 'react'
 import './globals.css'
 import { SITE_URL } from '@/lib/site-url'
+import { AgentationDevtools } from '@/components/agentation-devtools'
 
 // Файлы и лицензии включены в репозиторий: сборка не обращается к Google Fonts.
 const inter = localFont({
@@ -79,6 +80,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body>
         {children}
         <Metrika />
+        {process.env.NODE_ENV === 'development' ? <AgentationDevtools /> : null}
       </body>
     </html>
   )

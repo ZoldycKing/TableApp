@@ -72,6 +72,7 @@ function Popover({
 }
 
 type ViewBarProps = {
+  readOnly?: boolean
   views: View[]
   activeView: View
   fields: Field[]
@@ -86,6 +87,7 @@ type ViewBarProps = {
 }
 
 export function ViewBar({
+  readOnly = false,
   views,
   activeView,
   fields,
@@ -122,7 +124,7 @@ export function ViewBar({
           </button>
         ))}
 
-        <div className="relative">
+        {!readOnly ? <div className="relative">
           <button
             type="button"
             onClick={() => setAdding((value) => !value)}
@@ -151,13 +153,15 @@ export function ViewBar({
               </div>
             </>
           ) : null}
-        </div>
+        </div> : null}
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
         <input
           value={activeView.name}
-          onChange={(event) => onRenameView(event.target.value)}
+          readOnly={readOnly}
+          aria-label="Название представления"
+          onChange={(event) => { if (!readOnly) onRenameView(event.target.value) }}
           className="min-w-32 max-w-56 rounded-lg border border-transparent px-2 py-1.5 text-sm font-medium outline-none hover:border-[var(--color-border-subtle)] focus:border-sage-400"
         />
 
@@ -208,7 +212,7 @@ export function ViewBar({
           <span className="text-sm text-[var(--color-ink-muted)]">скрыто строк: {hiddenCount}</span>
         ) : null}
 
-        {views.length > 1 ? (
+        {!readOnly && views.length > 1 ? (
           <button
             type="button"
             onClick={onDeleteView}

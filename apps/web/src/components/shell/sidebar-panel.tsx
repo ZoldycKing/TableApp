@@ -96,7 +96,7 @@ export function SidebarPanel({
         <div className="flex items-center gap-1">
           <Link
             href="/app"
-            aria-label="TableApp — к таблицам"
+            aria-label="TableApp — обзор бизнеса"
             className={`flex h-9 min-w-0 flex-1 items-center rounded-xl outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-sage-400 ${ROW[variant]}`}
           >
             <Logo wordClassName={`${LABEL[variant]} ${LABEL_MOTION}`} />

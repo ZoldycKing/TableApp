@@ -1,7 +1,7 @@
 import { appConfigVersions, apps, db, fields as fieldsTable, tables as tablesTable } from '@tableapp/db'
 import type { Field } from '@tableapp/schema'
 import { appSchema, byPosition, normalizeFieldOptions } from '@tableapp/schema'
-import { and, asc, eq, inArray } from 'drizzle-orm'
+import { and, asc, eq, getTableColumns, inArray, sql } from 'drizzle-orm'
 import { headers } from 'next/headers'
 import Link from 'next/link'
 import { AppsManager, type AppRow } from '@/components/apps-manager'
@@ -24,7 +24,7 @@ export const dynamic = 'force-dynamic'
 export default async function AppsPage() {
   const member = await requireMember()
   const rows = await db
-    .select()
+    .select({ ...getTableColumns(apps), hasUnpublishedChanges: sql<boolean>`${apps.draft} is distinct from ${apps.published}` })
     .from(apps)
     .where(eq(apps.workspaceId, member.workspaceId))
     .orderBy(asc(apps.createdAt))
@@ -63,7 +63,9 @@ export default async function AppsPage() {
     .map(({ parsed, row }) => ({
       app: { ...(parsed as { success: true; data: AppRow['app'] }).data, slug: row.slug },
       publishedAt: row.publishedAt ? row.publishedAt.toISOString() : null,
+      published: Boolean(row.published),
       addressLocked: Boolean(row.published) || lockedAddresses.has(row.id),
+      hasUnpublishedChanges: Boolean(row.published) && row.hasUnpublishedChanges,
       origin,
     }))
 
@@ -75,23 +77,26 @@ export default async function AppsPage() {
 
   return (
     <AppChrome {...chrome}>
-    <main className="mx-auto w-full max-w-4xl px-6 py-10">
-      <header className="mb-6 flex items-center justify-between gap-4">
+    <main className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-6 sm:py-10">
+      <header className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Приложения</h1>
           <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
-            Мобильные приложения поверх таблиц воркспейса.
+            Рабочие и клиентские экраны на основе таблиц вашего бизнеса.
           </p>
         </div>
         <Link
-          href="/app"
+          href="/tables"
           className="rounded-lg border border-[var(--color-border-subtle)] px-3 py-2 text-sm font-medium hover:bg-[var(--color-surface-muted)]"
         >
           К таблицам
         </Link>
       </header>
 
-      <BusinessSettings profile={await loadBusinessProfile(member.workspaceId)} canEdit={member.role !== 'viewer'} />
+      <details className="mb-6">
+        <summary className="cursor-pointer text-sm font-medium text-ink outline-none focus-visible:ring-2 focus-visible:ring-sage-400">Название и контакты бизнеса</summary>
+        <div className="mt-4"><BusinessSettings profile={await loadBusinessProfile(member.workspaceId)} canEdit={member.role !== 'viewer'} /></div>
+      </details>
       <AppsManager apps={list} tables={tables} canEdit={member.role !== 'viewer'} />
     </main>
     </AppChrome>

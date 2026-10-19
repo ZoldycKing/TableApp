@@ -31,7 +31,7 @@ function show(overrides: Partial<Parameters<typeof BusinessTree>[0]> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  actions.navigate.mockResolvedValue({ ok: true, href: '/t/tbl_services' })
+  actions.navigate.mockResolvedValue({ ok: true, href: '/tables/tbl_services' })
   actions.create.mockResolvedValue({ ok: true, href: '/app', workspaceId: 'wsp_new' })
   // jsdom's Location is not replaceable; keep the real browser surface except for navigation.
   vi.stubGlobal('window', new Proxy(originalWindow, {
@@ -50,8 +50,8 @@ afterEach(() => {
 describe('owner business tree', () => {
   it('opens the current business first and lets other branches expand without switching context', () => {
     show({ activeWorkspaceId: 'wsp_salon', pathname: '/apps/app_salon/settings' })
-    const headers = screen.getAllByRole('button', { name: /^Бизнес:/ })
-    expect(headers[0]!.getAttribute('aria-label')).toBe('Бизнес: ИП Иванов')
+    const headers = screen.getAllByRole('button', { name: /^(Свернуть|Развернуть) разделы:/ })
+    expect(headers[0]!.getAttribute('aria-label')).toBe('Свернуть разделы: ИП Иванов')
     expect(headers[0]!.getAttribute('aria-expanded')).toBe('true')
     expect(headers[1]!.getAttribute('aria-expanded')).toBe('false')
     expect(screen.queryByRole('button', { name: 'Товары' })).toBeNull()
@@ -63,12 +63,21 @@ describe('owner business tree', () => {
     expect(screen.getByRole('button', { current: 'page' }).textContent).toContain('Салон Иванова')
   })
 
+  it('switches business by its name independently from branch expansion', async () => {
+    actions.navigate.mockResolvedValue({ ok: true, href: '/app' })
+    show()
+    expect(screen.getByRole('button', { name: 'Развернуть разделы: ИП Иванов' }).getAttribute('aria-expanded')).toBe('false')
+    fireEvent.click(screen.getByRole('button', { name: 'Бизнес: ИП Иванов' }))
+    await waitFor(() => expect(assign).toHaveBeenCalledWith('/app'))
+    expect(actions.navigate).toHaveBeenCalledWith('wsp_salon', { kind: 'home' })
+  })
+
   it('navigates through the server action for the exact business and closes the drawer only on success', async () => {
     const onNavigate = vi.fn()
     show({ onNavigate })
-    fireEvent.click(screen.getByRole('button', { name: 'Бизнес: ИП Иванов' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Развернуть разделы: ИП Иванов' }))
     fireEvent.click(screen.getByRole('button', { name: 'Услуги' }))
-    await waitFor(() => expect(assign).toHaveBeenCalledWith('/t/tbl_services'))
+    await waitFor(() => expect(assign).toHaveBeenCalledWith('/tables/tbl_services'))
     expect(actions.navigate).toHaveBeenCalledWith('wsp_salon', { kind: 'table', id: 'tbl_services' })
     expect(onNavigate).toHaveBeenCalledOnce()
   })
@@ -88,7 +97,7 @@ describe('owner business tree', () => {
   it('matches resource paths at their boundary and only within the active business', () => {
     const duplicate: BusinessNavigation = { ...BUSINESSES[1]!, apps: [{ id: 'app_shop', name: 'Другой магазин', published: true }] }
     const ui = show({ businesses: [BUSINESSES[0]!, duplicate], pathname: '/apps/app_shop/settings' })
-    fireEvent.click(screen.getByRole('button', { name: 'Бизнес: ИП Иванов' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Развернуть разделы: ИП Иванов' }))
     expect(screen.getAllByRole('button', { current: 'page' }).map(item => item.textContent)).toEqual(['Магазин «Ромашка»'])
     ui.rerender(<BusinessTree businesses={BUSINESSES} activeWorkspaceId="wsp_shop" pathname="/apps/app_shop_extra" variant="wide" />)
     expect(screen.queryByRole('button', { current: 'page' })).toBeNull()

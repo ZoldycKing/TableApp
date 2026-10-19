@@ -19,8 +19,8 @@ const FOCUS = 'outline-none focus-visible:ring-2 focus-visible:ring-sage-400'
 const ROW = `flex min-h-9 w-full min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm transition-colors disabled:cursor-wait disabled:opacity-50 ${FOCUS}`
 
 function resourceIsActive(pathname: string, kind: 'table' | 'app', id: string) {
-  const prefix = `/${kind === 'table' ? 't' : 'apps'}/${encodeURIComponent(id)}`
-  return pathname === prefix || pathname.startsWith(`${prefix}/`)
+  const prefixes = kind === 'table' ? [`/t/${encodeURIComponent(id)}`, `/tables/${encodeURIComponent(id)}`] : [`/apps/${encodeURIComponent(id)}`]
+  return prefixes.some(prefix => pathname === prefix || pathname.startsWith(`${prefix}/`))
 }
 
 /** The owner sees actual resources grouped by business; expanding a branch does not switch it. */
@@ -207,23 +207,33 @@ export function BusinessTree({ businesses, activeWorkspaceId, pathname, variant,
               const branchId = `${treeId}-${business.workspaceId}`
               return (
                 <div key={business.workspaceId}>
+                  <div className={`mb-1 flex min-w-0 items-center gap-0.5 rounded-lg ${active ? 'bg-sand-50' : ''}`}>
+                  <button
+                    type="button"
+                    disabled={pending}
+                    aria-label={`${isOpen ? 'Свернуть' : 'Развернуть'} разделы: ${business.businessName}`}
+                    aria-expanded={isOpen}
+                    aria-controls={branchId}
+                    onClick={() => setExpanded(previous => ({ ...previous, [business.workspaceId]: !isOpen }))}
+                    className={`flex min-h-10 w-8 shrink-0 items-center justify-center rounded-lg text-ink-muted hover:bg-sand-100 ${FOCUS}`}
+                  >
+                    <ShellIcon name="chevron" className={`size-3.5 transition-transform ${isOpen ? '' : '-rotate-90'}`} />
+                  </button>
                   <button
                     type="button"
                     disabled={pending}
                     aria-label={`Бизнес: ${business.businessName}`}
-                    aria-current={active ? 'true' : undefined}
-                    aria-expanded={isOpen}
-                    aria-controls={branchId}
-                    title={business.businessName}
-                    onClick={() => setExpanded(previous => ({ ...previous, [business.workspaceId]: !isOpen }))}
-                    className={`${ROW} mb-1 font-medium ${active ? 'text-ink' : 'text-ink-soft'} hover:bg-sand-100`}
+                    aria-current={active && pathname === '/app' ? 'page' : undefined}
+                    title={`Открыть обзор: ${business.businessName}`}
+                    onClick={() => void go(business.workspaceId, { kind: 'home' })}
+                    className={`${ROW} min-h-10 flex-1 font-medium ${active ? 'text-ink' : 'text-ink-soft'} hover:bg-sand-100`}
                   >
                     <span aria-hidden="true" className={`flex size-7 shrink-0 items-center justify-center rounded-lg text-xs font-semibold ${active ? 'bg-sage-50 text-sage-700' : 'bg-sand-100 text-ink-muted'}`}>
                       {(business.businessName.trim()[0] ?? 'Б').toUpperCase()}
                     </span>
                     <span className="min-w-0 flex-1 truncate">{business.businessName}</span>
-                    <ShellIcon name="chevron" className={`size-3.5 shrink-0 text-ink-muted transition-transform ${isOpen ? '' : '-rotate-90'}`} />
                   </button>
+                  </div>
                   {isOpen ? <div id={branchId}>{resourceGroups(business)}</div> : null}
                 </div>
               )

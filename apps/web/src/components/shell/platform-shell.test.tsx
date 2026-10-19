@@ -113,7 +113,7 @@ describe('боковая панель', () => {
   it('показывает все разделы и содержимое страницы', () => {
     show()
     const nav = screen.getAllByRole('navigation', { name: 'Разделы платформы' })[0]!
-    for (const label of ['Данные', 'Шаблоны', 'Приложения', 'Команда', 'Использование']) {
+    for (const label of ['Таблицы', 'Шаблоны', 'Приложения', 'Команда и доступ', 'Использование']) {
       expect(within(nav).getByRole('link', { name: label })).toBeTruthy()
     }
     expect(screen.getByText('Содержимое страницы')).toBeTruthy()
@@ -172,10 +172,10 @@ describe('ресурсы нескольких бизнесов', () => {
     expect(within(tree).getByRole('button', { name: 'Товары', current: 'page' })).toBeTruthy()
     expect(within(tree).getByRole('button', { name: 'Бизнес: ИП Иванов' })).toBeTruthy()
     expect(within(panel).queryByRole('button', { name: /Рабочее пространство/ })).toBeNull()
-    expect(within(panel).queryByRole('link', { name: 'Данные' })).toBeNull()
+    expect(within(panel).queryByRole('link', { name: 'Таблицы' })).toBeNull()
     expect(within(panel).queryByRole('link', { name: 'Приложения' })).toBeNull()
     expect(within(panel).getByText('Бизнес: ООО «Ромашка»')).toBeTruthy()
-    expect(within(panel).getByRole('link', { name: 'Команда' })).toBeTruthy()
+    expect(within(panel).getByRole('link', { name: 'Команда и доступ' })).toBeTruthy()
   })
 
   it('на телефоне показывает выбор бизнеса и только его ресурсы', () => {
@@ -185,7 +185,7 @@ describe('ресурсы нескольких бизнесов', () => {
     expect(within(drawer).getByRole('combobox', { name: 'Бизнес' })).toBeTruthy()
     expect(within(drawer).getByRole('button', { name: 'Товары' })).toBeTruthy()
     expect(within(drawer).queryByRole('button', { name: 'Услуги' })).toBeNull()
-    expect(within(drawer).queryByRole('link', { name: 'Данные' })).toBeNull()
+    expect(within(drawer).queryByRole('link', { name: 'Таблицы' })).toBeNull()
     expect(within(drawer).getByRole('link', { name: 'Шаблоны' })).toBeTruthy()
     fireEvent.keyDown(document, { key: 'Escape' })
     expect(screen.queryByRole('dialog')).toBeNull()
@@ -235,7 +235,7 @@ describe('выдвижная панель на телефоне', () => {
   it('открывается по нажатию и содержит те же разделы', () => {
     show()
     const drawer = open()
-    for (const label of ['Данные', 'Шаблоны', 'Приложения', 'Команда', 'Использование']) {
+    for (const label of ['Таблицы', 'Шаблоны', 'Приложения', 'Команда и доступ', 'Использование']) {
       expect(within(drawer).getByRole('link', { name: label })).toBeTruthy()
     }
     expect(within(drawer).getByRole('link', { current: 'page' })).toBeTruthy()
@@ -268,7 +268,7 @@ describe('выдвижная панель на телефоне', () => {
     // Иначе она перекрывает ровно то, ради чего её открыли.
     show()
     const drawer = open()
-    fireEvent.click(within(drawer).getByRole('link', { name: 'Команда' }))
+    fireEvent.click(within(drawer).getByRole('link', { name: 'Команда и доступ' }))
     expect(screen.queryByRole('dialog')).toBe(null)
   })
 
@@ -321,7 +321,7 @@ describe('полоска и разворот', () => {
     // Читающим с экрана подпись нужна в любом виде панели.
     show()
     const nav = screen.getAllByRole('navigation', { name: 'Разделы платформы' })[0]!
-    const link = within(nav).getByRole('link', { name: 'Данные' })
+    const link = within(nav).getByRole('link', { name: 'Таблицы' })
     expect(link.querySelector('span')!.className).toContain('max-w-0')
 
     fireEvent.click(expand())

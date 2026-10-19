@@ -62,7 +62,7 @@ export default async function UsagePage() {
             href="/app"
             className="rounded-lg border border-[var(--color-border-subtle)] px-3 py-2 text-sm font-medium hover:bg-[var(--color-surface-muted)]"
           >
-            К таблицам
+            К обзору бизнеса
           </Link>
         </header>
 

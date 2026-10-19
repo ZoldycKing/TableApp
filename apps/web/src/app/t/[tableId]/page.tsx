@@ -13,12 +13,13 @@ import { hasCustomerHistoryTable } from '@/lib/customer-history'
  */
 export const metadata = PRIVATE_PAGE
 
-export default async function TablePage({ params, searchParams }: { params: Promise<{ tableId: string }>; searchParams: Promise<{ r?: string }> }) {
+export default async function TablePage({ params, searchParams }: { params: Promise<{ tableId: string }>; searchParams: Promise<{ r?: string; mode?: string; readonly?: string }> }) {
   const member = await requireMember()
   const { tableId } = await params
   const table = await loadTable(tableId, member.workspaceId)
   if (!table) notFound()
-  const selected = (await searchParams).r
+  const query = await searchParams
+  const selected = query.r
   const initialRowId = selected && table.rows.some(row => row.id === selected) ? selected : null
   return (
     <AppChrome
@@ -27,7 +28,7 @@ export default async function TablePage({ params, searchParams }: { params: Prom
       memberships={await listMemberships(member.userId)}
       activeWorkspaceId={member.workspaceId}
     >
-      <TableScreen key={`${table.id}:${initialRowId ?? ''}`} table={table} member={{ role: member.role }} initialRowId={initialRowId} customerHistoryAvailable={await hasCustomerHistoryTable(member.workspaceId, table.id)} />
+      <TableScreen key={`${table.id}:${query.readonly === '1' ? 'readonly' : 'edit'}`} table={table} member={{ role: member.role }} initialRowId={initialRowId} initialMode={query.mode === 'records' ? 'records' : 'grid'} viewOnly={query.readonly === '1'} customerHistoryAvailable={await hasCustomerHistoryTable(member.workspaceId, table.id)} />
     </AppChrome>
   )
 }

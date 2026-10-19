@@ -57,13 +57,21 @@ export type NavItem = {
 
 export const NAV_ITEMS: NavItem[] = [
   {
+    id: 'overview',
+    label: 'Обзор бизнеса',
+    href: '/app',
+    icon: 'home',
+    group: 'work',
+    match: ['/app', '/setup'],
+  },
+  {
     id: 'data',
-    label: 'Данные',
+    label: 'Таблицы',
     href: '/tables',
     icon: 'table',
     group: 'work',
     // Загрузка файла — тоже про данные: подсветка не должна пропадать.
-    match: ['/app', '/tables', '/t', '/import'],
+    match: ['/tables', '/t', '/import'],
   },
   {
     id: 'templates',
@@ -91,7 +99,7 @@ export const NAV_ITEMS: NavItem[] = [
   },
   {
     id: 'team',
-    label: 'Команда',
+    label: 'Команда и доступ',
     href: '/team',
     icon: 'users',
     group: 'workspace',

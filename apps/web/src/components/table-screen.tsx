@@ -2,7 +2,8 @@
 
 import type { Field, View, ViewType } from '@tableapp/schema'
 import { defaultViewConfig, newId, positionBetween } from '@tableapp/schema'
-import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import {
   addRowAction,
@@ -30,6 +31,8 @@ import { VIEW_TYPE_LABELS } from '@/lib/field-labels'
 import type { LoadedTable } from '@/lib/queries'
 import { useTable } from '@/lib/table-store'
 import { useLiveTable } from '@/lib/use-live-table'
+import { cellText } from '@/lib/table-export'
+import { CELL_CONFLICT } from '@/lib/cell-conflict'
 import { FieldEditor } from './fields/field-editor'
 import { TableSwitcher } from './table-switcher'
 import { DataGrid } from './grid/data-grid'
@@ -37,11 +40,12 @@ import { CalendarView } from './views/calendar-view'
 import { GalleryView } from './views/gallery-view'
 import { KanbanView } from './views/kanban-view'
 import { ViewBar } from './views/view-bar'
+import { TableRecordsEditor } from './table-records-editor'
 
 const SAVE_DELAY_MS = 600
 
-export function TableScreen({ table, member, initialRowId = null, customerHistoryAvailable = false }: { table: LoadedTable; member: { role: string }; initialRowId?: string | null; customerHistoryAvailable?: boolean }) {
-  const readOnly = member.role === 'viewer'
+export function TableScreen({ table, member, initialRowId = null, initialMode = 'grid', viewOnly = false, customerHistoryAvailable = false }: { table: LoadedTable; member: { role: string }; initialRowId?: string | null; initialMode?: 'grid' | 'records'; viewOnly?: boolean; customerHistoryAvailable?: boolean }) {
+  const readOnly = member.role === 'viewer' || viewOnly
 
   const store = useTable({
     id: table.id,
@@ -56,10 +60,74 @@ export function TableScreen({ table, member, initialRowId = null, customerHistor
   const [historyOpen, setHistoryOpen] = useState(false)
   const [keepVisible, setKeepVisible] = useState<string[]>([])
   const [openRowId, setOpenRowId] = useState<string | null>(() => table.rows.some(row => row.id === initialRowId) ? initialRowId : null)
+  const [selectedRowId, setSelectedRowId] = useState<string | null>(initialRowId)
+  const [mode, setMode] = useState(initialMode)
+  const [recordDirty, setRecordDirty] = useState(false)
+  const recordDirtyRef = useRef(false)
+  recordDirtyRef.current = recordDirty
+  const recordLeaveGuard = useRef<(() => Promise<boolean>) | null>(null)
+  const registerRecordGuard = useCallback((guard: (() => Promise<boolean>) | null) => { recordLeaveGuard.current = guard }, [])
+  const [addingRecord, setAddingRecord] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [editingField, setEditingField] = useState<Field | null | 'new'>(null)
   const [pending, startTransition] = useTransition()
   const router = useRouter()
+  const query = useSearchParams().toString()
+
+  useEffect(() => {
+    if (!recordDirty) return
+    const unload = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = '' }
+    const leave = (event: MouseEvent) => {
+      const link = (event.target as Element | null)?.closest<HTMLAnchorElement>('a[href]')
+      if (!link || link.hasAttribute('download') || link.target === '_blank' || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return
+      event.preventDefault(); event.stopPropagation()
+      void canLeaveRecord().then(allowed => { if (allowed) window.location.assign(link.href) })
+    }
+    window.addEventListener('beforeunload', unload)
+    document.addEventListener('click', leave, true)
+    return () => { window.removeEventListener('beforeunload', unload); document.removeEventListener('click', leave, true) }
+  }, [recordDirty])
+
+  const canLeaveRecord = async () => {
+    if (!recordDirtyRef.current) return true
+    if (recordLeaveGuard.current && await recordLeaveGuard.current()) return true
+    return window.confirm('Есть несохранённые изменения. Отменить их и продолжить?')
+  }
+  const writeEditorQuery = (nextMode: 'grid' | 'records', id: string | null) => {
+    const params = new URLSearchParams(window.location.search)
+    params.set('mode', nextMode)
+    if (id) params.set('r', id)
+    else params.delete('r')
+    window.history.replaceState(null, '', `/t/${encodeURIComponent(table.id)}?${params}`)
+  }
+  const selectRecord = async (id: string | null) => {
+    if (id === selectedRowId || await canLeaveRecord()) { setSelectedRowId(id); writeEditorQuery(mode, id) }
+  }
+  const changeMode = async (next: 'grid' | 'records') => {
+    if (next === mode || !await canLeaveRecord()) return
+    setMode(next)
+    setOpenRowId(null)
+    writeEditorQuery(next, selectedRowId)
+  }
+
+  // Search-only navigation and browser history can reuse this Client Component.
+  // Read the URL too, rather than treating initial props as permanent state.
+  useEffect(() => {
+    const params = new URLSearchParams(query)
+    const nextMode = params.get('mode') === 'records' ? 'records' : 'grid'
+    const requested = params.get('r')
+    const nextRow = requested && (requested === selectedRowId || store.table.rows.some(row => row.id === requested)) ? requested : null
+    if (nextMode === mode && nextRow === selectedRowId) return
+    let live = true
+    void canLeaveRecord().then(allowed => {
+      if (!live) return
+      if (!allowed) { writeEditorQuery(mode, selectedRowId); return }
+      setMode(nextMode); setSelectedRowId(nextRow); setOpenRowId(nextMode === 'grid' ? nextRow : null)
+    })
+    return () => { live = false }
+    // Local changes write the URL in the same event; only a changed URL should replay navigation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query])
 
   const activeView = views.find((view) => view.id === activeViewId) ?? views[0]
 
@@ -100,6 +168,7 @@ export function TableScreen({ table, member, initialRowId = null, customerHistor
     setViews((current) =>
       current.map((view) => (view.id === activeView.id ? ({ ...view, config } as View) : view)),
     )
+    if (readOnly) return
     if (saveTimer.current) clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(() => {
       run(() => updateViewConfigAction(table.id, activeView.id, activeView.type, config))
@@ -107,7 +176,7 @@ export function TableScreen({ table, member, initialRowId = null, customerHistor
   }
 
   const renameView = (name: string) => {
-    if (!activeView) return
+    if (readOnly || !activeView) return
     setViews((current) =>
       current.map((view) => (view.id === activeView.id ? { ...view, name } : view)),
     )
@@ -118,6 +187,7 @@ export function TableScreen({ table, member, initialRowId = null, customerHistor
   }
 
   const createView = (type: ViewType) => {
+    if (readOnly) return
     startTransition(async () => {
       const result = await createViewAction(table.id, type)
       if (!result.ok) return setError(result.error)
@@ -137,7 +207,7 @@ export function TableScreen({ table, member, initialRowId = null, customerHistor
   }
 
   const removeView = () => {
-    if (!activeView) return
+    if (readOnly || !activeView) return
     startTransition(async () => {
       const result = await deleteViewAction(table.id, activeView.id)
       if (!result.ok) return setError(result.error)
@@ -156,6 +226,7 @@ export function TableScreen({ table, member, initialRowId = null, customerHistor
    * чтобы человек увидел свежее значение, а не своё отклонённое.
    */
   const setCell = (rowId: string, fieldId: string, value: unknown, base?: unknown) => {
+    if (readOnly) return
     store.setCell(rowId, fieldId, value)
     startTransition(async () => {
       const result = await setCellAction(table.id, rowId, fieldId, value, base)
@@ -168,6 +239,18 @@ export function TableScreen({ table, member, initialRowId = null, customerHistor
     })
   }
 
+  const saveRecordCell = async (rowId: string, fieldId: string, value: unknown, base: unknown): Promise<ActionResult> => {
+    if (readOnly) return { ok: false, error: 'Таблица открыта только для просмотра.' }
+    const result = await setCellAction(table.id, rowId, fieldId, value, base)
+    if (result.ok) { store.setCell(rowId, fieldId, value); setError(null) }
+    else {
+      const error = result.error === CELL_CONFLICT ? 'Это поле изменил другой сотрудник. Ваш ввод остался в форме. Верните сохранённое значение, чтобы увидеть его правку и продолжить.' : result.error
+      setError(error); router.refresh()
+      return { ok: false, error }
+    }
+    return result
+  }
+
   /*
    * Новая строка почти никогда не подходит под фильтр представления: она
    * пустая. Раньше она создавалась и тут же исчезала — счётчик рос, а вписать
@@ -175,19 +258,39 @@ export function TableScreen({ table, member, initialRowId = null, customerHistor
    * пока человек не перезагрузит страницу.
    */
   const addRow = (afterRowId?: string) => {
+    if (readOnly) return
     const rowId = newId('row')
     setKeepVisible((current) => [...current, rowId])
     store.addRow(afterRowId, rowId)
     run(() => addRowAction(table.id, afterRowId, rowId))
   }
 
+  const addRecord = async () => {
+    if (readOnly || addingRecord || !await canLeaveRecord()) return
+    const rowId = newId('row')
+    const previous = selectedRowId
+    setAddingRecord(true)
+    store.addRow(undefined, rowId)
+    setKeepVisible(current => [...current, rowId])
+    setSelectedRowId(rowId)
+    writeEditorQuery(mode, rowId)
+    try {
+      const result = await addRowAction(table.id, undefined, rowId)
+      if (!result.ok) { store.deleteRow(rowId); setSelectedRowId(previous); writeEditorQuery(mode, previous); setError(result.error); return }
+      setError(null)
+    } catch { store.deleteRow(rowId); setSelectedRowId(previous); writeEditorQuery(mode, previous); setError('Не удалось добавить запись. Попробуйте ещё раз.') }
+    finally { setAddingRecord(false) }
+  }
+
   const deleteRow = (rowId: string) => {
+    if (readOnly) return
     const version = store.table.rows.find((row) => row.id === rowId)?.version
     store.deleteRow(rowId)
     run(() => deleteRowAction(table.id, rowId, version))
   }
 
   const renameField = (fieldId: string, name: string) => {
+    if (readOnly) return
     store.renameField(fieldId, name)
     run(() => renameFieldAction(table.id, fieldId, name))
   }
@@ -243,9 +346,19 @@ export function TableScreen({ table, member, initialRowId = null, customerHistor
 
   const hiddenByFilter = shown.rows.length - applied.rows.length
 
+  const recordRows = useMemo(() => {
+    const query = search.trim().toLocaleLowerCase('ru-RU')
+    if (!query) return store.table.rows
+    return store.table.rows.filter(row => store.table.fields.some(field =>
+      cellText(field, row.data[field.id], table.relatedTitles).toLocaleLowerCase('ru-RU').includes(query),
+    ))
+  }, [search, store.table.rows, store.table.fields, table.relatedTitles])
+
   const groupField = activeView?.config.groupBy[0]
     ? store.fieldIndex.get(activeView.config.groupBy[0].fieldId)
     : undefined
+
+  const rowActions = (row: (typeof store.table.rows)[number]) => readOnly ? undefined : <><OrderStockPanel key={`stock:${table.id}:${row.id}`} tableId={table.id} rowId={row.id} version={row.version ?? 0} business /><InventoryBalancePanel key={`balance:${table.id}:${row.id}`} tableId={table.id} rowId={row.id} version={row.version ?? 0} business /><OrderDeliveryPanel key={`${table.id}:${row.id}`} tableId={table.id} rowId={row.id} version={row.version ?? 0} business />{customerHistoryAvailable ? <CustomerHistoryPanel key={`history:${table.id}:${row.id}`} tableId={table.id} rowId={row.id} business /> : null}</>
 
   if (!activeView) {
     return (
@@ -256,33 +369,35 @@ export function TableScreen({ table, member, initialRowId = null, customerHistor
   }
 
   return (
-    <main className="mx-auto w-full max-w-[1400px] px-6 py-8">
+    <main className="mx-auto w-full min-w-0 max-w-[1400px] px-4 py-6 sm:px-6 sm:py-8">
+      <nav aria-label="Путь к таблице" className="mb-4 flex flex-wrap items-center gap-2 text-sm text-ink-muted"><Link href="/tables" className="hover:text-ink">Таблицы</Link><span aria-hidden> / </span><Link href={`/tables/${table.id}`} className="hover:text-ink">{store.table.name}</Link><span aria-hidden> / </span><span>{readOnly ? 'Просмотр' : 'Редактирование'}</span></nav>
       <TableSwitcher
         tables={table.workspaceTables}
         activeTableId={table.id}
         onError={setError}
         compact
-        canCreate={!readOnly}
+        canCreate={!readOnly && !recordDirty}
       />
 
-      {table.templateId && table.sampleCount > 0 ? (
+      {!readOnly && table.templateId && table.sampleCount > 0 ? (
         <TemplateNotice tableId={table.id} sampleCount={table.sampleCount} />
       ) : null}
 
-      <header className="mb-4 flex items-center justify-between gap-4">
+      <header className="mb-4 flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">{store.table.name}</h1>
           <p className="text-sm text-[var(--color-ink-muted)]">
-            {shown.rows.length} из {store.table.rows.length} строк
+            {mode === 'records' ? recordRows.length : shown.rows.length} из {store.table.rows.length} строк
             {pending ? ' · сохранение…' : ''}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button
+          {!readOnly ? <button
             type="button"
             disabled={pending}
             onClick={() =>
               startTransition(async () => {
+                if (!await canLeaveRecord()) return
                 const result = await createAppAction(table.id)
                 // Ведём в редактор созданного приложения, а не в список настроек:
                 // человек должен сначала увидеть, что получилось, и только потом
@@ -294,19 +409,19 @@ export function TableScreen({ table, member, initialRowId = null, customerHistor
             className="rounded-xl bg-ink px-3.5 py-2 text-sm font-medium text-sand-50 transition-all hover:-translate-y-px hover:bg-ink/90 disabled:translate-y-0 disabled:opacity-40"
           >
             Создать приложение
-          </button>
+          </button> : null}
           <a
             href="/apps"
             className="rounded-lg border border-[var(--color-border-subtle)] px-3 py-2 text-sm font-medium hover:bg-[var(--color-surface-muted)]"
           >
             Приложения
           </a>
-          <a
+          {!readOnly ? <a
             href="/import"
             className="rounded-lg border border-[var(--color-border-subtle)] px-3 py-2 text-sm font-medium hover:bg-[var(--color-surface-muted)]"
           >
             Импорт
-          </a>
+          </a> : null}
           <button
             type="button"
             onClick={() => setHistoryOpen(true)}
@@ -336,7 +451,15 @@ export function TableScreen({ table, member, initialRowId = null, customerHistor
         </div>
       </header>
 
-      <ViewBar
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div aria-label="Способ работы с таблицей" className="inline-flex rounded-xl border border-sand-200 bg-sand-50 p-1">
+          {([['grid', 'Таблица'], ['records', 'По записям']] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={mode === value} onClick={() => changeMode(value)} className={`rounded-lg px-3 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-sage-500 ${mode === value ? 'bg-white text-ink shadow-soft' : 'text-ink-muted hover:bg-white/70'}`}>{label}</button>)}
+        </div>
+        {readOnly ? <span className="text-sm text-ink-muted">Только просмотр{viewOnly && member.role !== 'viewer' ? <> · <Link href={`/t/${table.id}?mode=${mode}${selectedRowId ? `&r=${encodeURIComponent(selectedRowId)}` : ''}`} className="underline">Перейти к редактированию</Link></> : null}</span> : <span className="text-xs text-ink-muted">Одни данные, два способа редактирования</span>}
+      </div>
+
+      {mode === 'grid' ? <ViewBar
+        readOnly={readOnly}
         views={views}
         activeView={activeView}
         fields={store.table.fields}
@@ -348,15 +471,15 @@ export function TableScreen({ table, member, initialRowId = null, customerHistor
         onDeleteView={removeView}
         onConfigChange={changeConfig}
         onSearch={setSearch}
-      />
+      /> : <label className="mb-4 flex max-w-md items-center gap-3 text-sm"><span>Поиск записей</span><input aria-label="Поиск записей" value={search} onChange={event => setSearch(event.target.value)} placeholder="Название или значение поля" className="min-w-0 flex-1 rounded-lg border border-sand-300 bg-white px-3 py-2 outline-none focus:border-sage-400" /></label>}
 
       {error ? (
-        <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800">
+        <p role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800">
           {error}
         </p>
       ) : null}
 
-      {hiddenByFilter > 0 ? (
+      {mode === 'grid' && hiddenByFilter > 0 ? (
         <p className="mb-2 flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
           <span>
             Новых строк, не подходящих под фильтр представления: {hiddenByFilter}. Они видны, пока
@@ -372,12 +495,17 @@ export function TableScreen({ table, member, initialRowId = null, customerHistor
         </p>
       ) : null}
 
-      {activeView.type === 'grid' ? (
+      {mode === 'records' ? <TableRecordsEditor rows={recordRows} allRows={store.table.rows} fields={store.table.fields} titleField={titleField} selectedRowId={selectedRowId} relatedTitles={table.relatedTitles} readOnly={readOnly} adding={addingRecord} onSelect={selectRecord} onAdd={() => { void addRecord() }} onSave={saveRecordCell} onDirtyChange={setRecordDirty} registerLeaveGuard={registerRecordGuard} actions={rowActions} /> : null}
+
+      {mode === 'grid' && activeView.type === 'grid' ? (
         <DataGrid
+          readOnly={readOnly}
+          selectedRowId={selectedRowId}
+          onSelectRow={id => { void selectRecord(id) }}
           fields={shownFields}
           groups={shown.groups}
           isGrouped={shown.isGrouped}
-          onOpenRow={setOpenRowId}
+          onOpenRow={id => { void selectRecord(id); setOpenRowId(id) }}
           groupField={groupField}
           relatedTitles={table.relatedTitles}
           onEditField={readOnly ? undefined : (field) => setEditingField(field)}
@@ -389,8 +517,9 @@ export function TableScreen({ table, member, initialRowId = null, customerHistor
         />
       ) : null}
 
-      {activeView.type === 'kanban' ? (
+      {mode === 'grid' && activeView.type === 'kanban' ? (
         <KanbanView
+          readOnly={readOnly}
           view={activeView}
           fields={store.table.fields}
           shownFields={shownFields}
@@ -402,8 +531,9 @@ export function TableScreen({ table, member, initialRowId = null, customerHistor
         />
       ) : null}
 
-      {activeView.type === 'calendar' ? (
+      {mode === 'grid' && activeView.type === 'calendar' ? (
         <CalendarView
+          readOnly={readOnly}
           view={activeView}
           fields={store.table.fields}
           rows={shown.rows}
@@ -412,8 +542,9 @@ export function TableScreen({ table, member, initialRowId = null, customerHistor
         />
       ) : null}
 
-      {activeView.type === 'gallery' ? (
+      {mode === 'grid' && activeView.type === 'gallery' ? (
         <GalleryView
+          readOnly={readOnly}
           view={activeView}
           fields={store.table.fields}
           shownFields={shownFields}
@@ -424,7 +555,7 @@ export function TableScreen({ table, member, initialRowId = null, customerHistor
         />
       ) : null}
 
-      {editingField ? (
+      {!readOnly && editingField ? (
         <FieldEditor
           tableId={table.id}
           field={editingField === 'new' ? null : editingField}
@@ -440,14 +571,14 @@ export function TableScreen({ table, member, initialRowId = null, customerHistor
         />
       ) : null}
 
-      {openRowId ? (() => {
+      {mode === 'grid' && openRowId ? (() => {
         const index = shown.rows.findIndex((row) => row.id === openRowId)
         const row = shown.rows[index] ?? store.table.rows.find(row => row.id === openRowId)
         if (!row) return null
         return (
           <RowCard
             row={row}
-            actions={<><OrderStockPanel key={`stock:${table.id}:${row.id}`} tableId={table.id} rowId={row.id} version={row.version ?? 0} business /><InventoryBalancePanel key={`balance:${table.id}:${row.id}`} tableId={table.id} rowId={row.id} version={row.version ?? 0} business /><OrderDeliveryPanel key={`${table.id}:${row.id}`} tableId={table.id} rowId={row.id} version={row.version ?? 0} business />{customerHistoryAvailable ? <CustomerHistoryPanel key={`history:${table.id}:${row.id}`} tableId={table.id} rowId={row.id} business /> : null}</>}
+            actions={rowActions(row)}
             fields={store.table.fields}
             relatedTitles={table.relatedTitles}
             relatedTables={Object.fromEntries(
@@ -457,9 +588,9 @@ export function TableScreen({ table, member, initialRowId = null, customerHistor
             position={index >= 0 ? index + 1 : 1}
             total={index >= 0 ? shown.rows.length : 1}
             onSetCell={setCell}
-            onPrev={index > 0 ? () => setOpenRowId(shown.rows[index - 1]!.id) : undefined}
+            onPrev={index > 0 ? () => { const id = shown.rows[index - 1]!.id; setOpenRowId(id); void selectRecord(id) } : undefined}
             onNext={
-              index >= 0 && index < shown.rows.length - 1 ? () => setOpenRowId(shown.rows[index + 1]!.id) : undefined
+              index >= 0 && index < shown.rows.length - 1 ? () => { const id = shown.rows[index + 1]!.id; setOpenRowId(id); void selectRecord(id) } : undefined
             }
             onClose={() => setOpenRowId(null)}
           />

@@ -56,7 +56,7 @@ export function RowCard({
           <div>
             <h2 className="text-base font-semibold">Строка {position}</h2>
             <p className="text-xs text-[var(--color-ink-muted)]">
-              из {total} · правки сохраняются сразу
+              из {total} · {readOnly ? 'только просмотр' : 'правки сохраняются сразу'}
             </p>
           </div>
           <div className="flex items-center gap-1.5">

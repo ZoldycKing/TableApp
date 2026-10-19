@@ -89,7 +89,7 @@ describe.skipIf(!process.env.DATABASE_URL)('owner business navigation against Po
   })
 
   it('opens a resource in another accessible business after validating membership and ownership', async () => {
-    expect(await actions.navigateBusinessResourceAction(ids.second, { kind: 'table', id: ids.secondTable })).toEqual({ ok: true, href: `/t/${ids.secondTable}` })
+    expect(await actions.navigateBusinessResourceAction(ids.second, { kind: 'table', id: ids.secondTable })).toEqual({ ok: true, href: `/tables/${ids.secondTable}` })
     expect(state.setCookie).toHaveBeenLastCalledWith('tableapp_workspace', ids.second, expect.objectContaining({ httpOnly: true, path: '/' }))
     expect(await actions.navigateBusinessResourceAction(ids.second, { kind: 'app', id: ids.secondApp })).toEqual({ ok: true, href: `/apps/${ids.secondApp}` })
   })

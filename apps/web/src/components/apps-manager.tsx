@@ -1,6 +1,7 @@
 'use client'
 
 import type { App } from '@tableapp/schema'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState, useTransition } from 'react'
 import { AppAccessSettings } from './app-access-settings'
@@ -13,7 +14,7 @@ import {
   updateAppDraftAction,
 } from '@/app/app-actions'
 
-export type AppRow = { app: App; publishedAt: string | null; origin: string; addressLocked?: boolean }
+export type AppRow = { app: App; publishedAt: string | null; published?: boolean; origin: string; addressLocked?: boolean; hasUnpublishedChanges?: boolean }
 
 export function AppsManager({ apps, tables, canEdit = true }: { apps: AppRow[]; tables: TableSummary[]; canEdit?: boolean }) {
   const [error, setError] = useState<string | null>(null)
@@ -33,34 +34,38 @@ export function AppsManager({ apps, tables, canEdit = true }: { apps: AppRow[]; 
 
   if (apps.length === 0) {
     return (
-      <p className="rounded-xl border border-[var(--color-border-subtle)] px-4 py-10 text-center text-sm text-[var(--color-ink-muted)]">
-        Приложений пока нет. Откройте таблицу и нажмите «Создать приложение» — экраны соберутся сами.
-      </p>
+      <section className="rounded-2xl border border-sand-200 bg-white px-5 py-8">
+        <h2 className="font-semibold text-ink">В этом бизнесе пока нет приложений</h2>
+        <p className="mt-2 max-w-xl text-sm leading-6 text-ink-soft">{canEdit ? 'Начните с таблицы: выберите данные, подготовьте экраны и доступ, затем опубликуйте приложение.' : 'Когда владелец подготовит приложение, оно появится здесь.'}</p>
+        {canEdit ? <div className="mt-5 flex flex-wrap gap-3"><Link href="/tables" className="rounded-lg bg-ink px-4 py-2.5 text-sm font-medium text-white">Выбрать таблицу</Link><Link href="/templates" className="rounded-lg border border-sand-200 px-4 py-2.5 text-sm font-medium text-ink">Начать с шаблона</Link></div> : null}
+      </section>
     )
   }
 
   return (
     <div className="space-y-3">
       {error ? (
-        <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800">{error}</p>
+        <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800">{error}</p>
       ) : null}
 
       {!canEdit ? <p role="status" className="text-sm text-[var(--color-ink-muted)]">У вас доступ только для просмотра. Изменение настроек и публикация недоступны.</p> : null}
-      {apps.map(({ app, publishedAt, origin, addressLocked }) => {
+      {apps.map(({ app, publishedAt, published, origin, addressLocked, hasUnpublishedChanges }) => {
         const url = `${origin}/a/${app.slug}`
+        const isPublished = published ?? Boolean(publishedAt)
         return (
           <article
             key={app.id}
-            className="rounded-xl border border-[var(--color-border-subtle)] p-4"
+            className="rounded-2xl border border-sand-200 bg-white p-4 sm:p-5"
           >
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
-                <h2 className="text-sm font-semibold">{app.name}</h2>
+                <div className="flex flex-wrap items-center gap-2"><h2 className="text-base font-semibold">{app.name}</h2><span className={`rounded-md px-2 py-1 text-xs font-medium ${isPublished ? 'bg-sage-50 text-sage-700' : 'bg-sand-100 text-ink-soft'}`}>{isPublished ? 'Опубликовано' : 'Черновик'}</span></div>
                 <p className="mt-0.5 text-xs text-[var(--color-ink-muted)]">
                   {app.screens.length} экранов ·{' '}
-                  {publishedAt ? `опубликовано ${new Date(publishedAt).toLocaleString('ru-RU')}` : 'не опубликовано'}
+                  {isPublished ? publishedAt ? `опубликовано ${new Date(publishedAt).toLocaleString('ru-RU')}` : 'опубликовано' : 'не опубликовано'}
                 </p>
-                {publishedAt ? (
+                {hasUnpublishedChanges ? <p className="mt-2 text-xs text-ink-soft">Есть сохранённые изменения, которые ещё не опубликованы.</p> : null}
+                {isPublished ? (
                   <a
                     href={`/a/${app.slug}`}
                     target="_blank"
@@ -77,17 +82,25 @@ export function AppsManager({ apps, tables, canEdit = true }: { apps: AppRow[]; 
                   href={`/apps/${app.id}`}
                   className="rounded-lg border border-[var(--color-border-subtle)] px-3 py-1.5 text-sm font-medium hover:bg-[var(--color-surface-muted)]"
                 >
-                  {canEdit ? 'Редактировать' : 'Просмотреть настройки'}
+                  {canEdit ? 'Настроить приложение' : 'Просмотреть настройки'}
                 </a>
+                {isPublished ? <Link href={`/a/${app.slug}`} className="rounded-lg bg-ink px-3 py-1.5 text-sm font-medium text-white hover:bg-ink/90">Открыть приложение</Link> : null}
+              </div>
+            </div>
+
+            <details className="mt-4 border-t border-sand-200 pt-4">
+              <summary className="cursor-pointer text-sm font-medium text-ink-soft outline-none focus-visible:ring-2 focus-visible:ring-sage-400">Публикация, ссылка и доступ</summary>
+              <p className="mt-3 text-sm leading-6 text-ink-soft">Настройки сохраняются в черновике. Пользователи увидят их после публикации.</p>
+              <div className="mt-3 flex flex-wrap gap-2">
                 {canEdit ? <><button
                   type="button"
                   disabled={pending}
                   onClick={() => run(() => publishAppAction(app.id, app))}
                   className="rounded-lg bg-ink px-3 py-1.5 text-sm font-medium text-white hover:bg-ink/90 disabled:opacity-40"
                 >
-                  {publishedAt ? 'Опубликовать заново' : 'Опубликовать'}
+                  {isPublished ? 'Опубликовать заново' : 'Опубликовать'}
                 </button>
-                {publishedAt ? (
+                {isPublished ? (
                   <button
                     type="button"
                     disabled={pending}
@@ -109,8 +122,6 @@ export function AppsManager({ apps, tables, canEdit = true }: { apps: AppRow[]; 
                   Удалить
                 </button></> : null}
               </div>
-            </div>
-
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
               <label className="space-y-1">
                 <span className="block text-xs text-[var(--color-ink-muted)]">Название</span>
@@ -124,7 +135,7 @@ export function AppsManager({ apps, tables, canEdit = true }: { apps: AppRow[]; 
                   className="w-full rounded border border-[var(--color-border-subtle)] px-2 py-1.5 text-sm outline-none focus:border-sage-400"
                 />
               </label>
-              <AppAddress app={app} origin={origin} locked={addressLocked ?? Boolean(publishedAt)} disabled={!canEdit || pending} onSave={slug => run(() => changeAppSlugAction(app.id, slug, app.slug))} />
+              <AppAddress app={app} origin={origin} locked={addressLocked ?? isPublished} disabled={!canEdit || pending} onSave={slug => run(() => changeAppSlugAction(app.id, slug, app.slug))} />
             </div>
 
             <fieldset disabled={!canEdit || pending}>
@@ -138,6 +149,7 @@ export function AppsManager({ apps, tables, canEdit = true }: { apps: AppRow[]; 
             <p className="mt-2 text-xs text-[var(--color-ink-muted)]">
               Публикация делает снимок: правки видны пользователям только после следующей публикации.
             </p>
+            </details>
           </article>
         )
       })}

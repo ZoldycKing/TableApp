@@ -3,7 +3,7 @@
 import type { Field, RowGroup } from '@tableapp/schema'
 import { isComputed } from '@tableapp/schema'
 import type { KeyboardEvent } from 'react'
-import { Fragment, useCallback, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { groupLabel } from '@/lib/apply-view'
 import { AttachmentPreview } from '@/components/file-upload'
 import { FIELD_LABELS } from '@/lib/field-labels'
@@ -14,6 +14,9 @@ import { CellEditor } from './cell-editor'
 type Selection = { rowIndex: number; columnIndex: number }
 
 type GridProps = {
+  readOnly?: boolean
+  selectedRowId?: string | null
+  onSelectRow?: (rowId: string) => void
   fields: Field[]
   groups: RowGroup<TableRow>[]
   isGrouped: boolean
@@ -128,6 +131,9 @@ function CellContent({
 }
 
 export function DataGrid({
+  readOnly = false,
+  selectedRowId,
+  onSelectRow,
   fields,
   groups,
   isGrouped,
@@ -154,16 +160,25 @@ export function DataGrid({
     [flatRows],
   )
 
+  useEffect(() => {
+    if (!selectedRowId) return
+    const rowIndex = indexByRowId.get(selectedRowId)
+    if (rowIndex === undefined) setSelection(null)
+    else setSelection((current) => ({ rowIndex, columnIndex: Math.min(current?.columnIndex ?? 0, Math.max(0, fields.length - 1)) }))
+  }, [selectedRowId, indexByRowId, fields.length])
+
+  useEffect(() => { if (readOnly) setEditing(null) }, [readOnly])
+
   const move = useCallback(
     (rowDelta: number, columnDelta: number) => {
-      setSelection((current) => {
-        if (!current) return current
-        const rowIndex = Math.min(Math.max(current.rowIndex + rowDelta, 0), flatRows.length - 1)
-        const columnIndex = Math.min(Math.max(current.columnIndex + columnDelta, 0), fields.length - 1)
-        return { rowIndex, columnIndex }
-      })
+      if (!selection) return
+      const rowIndex = Math.min(Math.max(selection.rowIndex + rowDelta, 0), flatRows.length - 1)
+      const columnIndex = Math.min(Math.max(selection.columnIndex + columnDelta, 0), fields.length - 1)
+      setSelection({ rowIndex, columnIndex })
+      const row = flatRows[rowIndex]
+      if (row) onSelectRow?.(row.id)
     },
-    [flatRows.length, fields.length],
+    [selection, flatRows, fields.length, onSelectRow],
   )
 
   const handleKey = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -183,16 +198,16 @@ export function DataGrid({
       case 'Enter':
       case 'F2':
         event.preventDefault()
-        if (isComputed(field.type)) return
+        if (readOnly || isComputed(field.type)) return
         if (field.type === 'checkbox') return onSetCell(row.id, field.id, !row.data[field.id])
         return setEditing(selection)
       case 'Delete':
       case 'Backspace':
         event.preventDefault()
-        if (isComputed(field.type)) return
+        if (readOnly || isComputed(field.type)) return
         return onSetCell(row.id, field.id, field.type === 'checkbox' ? false : null)
       case ' ':
-        if (field.type === 'checkbox') {
+        if (!readOnly && field.type === 'checkbox') {
           event.preventDefault()
           return onSetCell(row.id, field.id, !row.data[field.id])
         }
@@ -220,15 +235,15 @@ export function DataGrid({
             только при наведении — оно необратимое и не должно быть под рукой.
           */}
           <span className="flex items-center justify-center gap-0.5">
-            <span className="w-4 tabular-nums group-hover:hidden">{rowIndex + 1}</span>
-            <button
+            <span className={`w-4 tabular-nums ${readOnly ? '' : 'group-hover:hidden'}`}>{rowIndex + 1}</span>
+            {!readOnly ? <button
               type="button"
               onClick={() => onDeleteRow(row.id)}
               title="Удалить строку"
               className="hidden h-6 w-4 rounded text-red-600 hover:bg-red-50 group-hover:block"
             >
               ×
-            </button>
+            </button> : null}
             {onOpenRow ? (
               <button
                 type="button"
@@ -249,9 +264,9 @@ export function DataGrid({
           return (
             <td
               key={field.id}
-              onClick={() => setSelection({ rowIndex, columnIndex })}
+              onClick={() => { setSelection({ rowIndex, columnIndex }); onSelectRow?.(row.id) }}
               onDoubleClick={() => {
-                if (computed) return
+                if (readOnly || computed) return
                 if (field.type === 'checkbox') {
                   return onSetCell(row.id, field.id, !row.data[field.id], row.data[field.id])
                 }
@@ -263,7 +278,7 @@ export function DataGrid({
                 columnIndex === 0 ? 'sticky left-16 z-10 bg-white' : ''
               }`}
             >
-              {isEditing ? (
+              {isEditing && !readOnly ? (
                 <CellEditor
                   field={field}
                   value={row.data[field.id]}
@@ -282,7 +297,7 @@ export function DataGrid({
             </td>
           )
         })}
-        {onAddField ? (
+        {!readOnly && onAddField ? (
           <td className="border-b border-r border-[var(--color-border-subtle)]" />
         ) : null}
       </tr>
@@ -311,7 +326,9 @@ export function DataGrid({
                 <div className="flex items-center gap-1">
                   <input
                     value={field.name}
-                    onChange={(event) => onRenameField(field.id, event.target.value)}
+                    readOnly={readOnly}
+                    aria-label={`Название поля «${field.name}»`}
+                    onChange={(event) => { if (!readOnly) onRenameField(field.id, event.target.value) }}
                     className="w-full min-w-0 truncate bg-transparent text-sm font-medium outline-none focus:underline"
                   />
                   {/*
@@ -319,7 +336,7 @@ export function DataGrid({
                     поля — обычное действие, а не спрятанное. Скрытую кнопку
                     человек просто не находит.
                   */}
-                  {onEditField ? (
+                  {!readOnly && onEditField ? (
                     <button
                       type="button"
                       onClick={() => onEditField(field)}
@@ -336,7 +353,7 @@ export function DataGrid({
                 </span>
               </th>
             ))}
-            {onAddField ? (
+            {!readOnly && onAddField ? (
               <th className="w-28 border-b border-r border-[var(--color-border-subtle)] p-0 text-left">
                 <button
                   type="button"
@@ -389,7 +406,7 @@ export function DataGrid({
             </tr>
           ) : null}
 
-          <tr>
+          {!readOnly ? <tr>
             <td colSpan={fields.length + (onAddField ? 2 : 1)} className="border-b border-[var(--color-border-subtle)] p-0">
               <button
                 type="button"
@@ -399,7 +416,7 @@ export function DataGrid({
                 + Строка
               </button>
             </td>
-          </tr>
+          </tr> : null}
         </tbody>
       </table>
     </div>

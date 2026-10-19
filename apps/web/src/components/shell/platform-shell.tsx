@@ -218,7 +218,7 @@ export function PlatformShell({
             колонку, и страница получает боковую прокрутку целиком вместо
             прокрутки одной таблицы.
           */}
-          <main className="min-w-0 flex-1">{children}</main>
+          <div className="min-w-0 flex-1">{children}</div>
         </div>
 
         {/*

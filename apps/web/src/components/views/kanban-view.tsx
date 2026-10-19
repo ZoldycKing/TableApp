@@ -14,6 +14,7 @@ import type { TableRow } from '@/lib/table-store'
 import { CHOICE_COLORS, RowCard } from './card'
 
 type KanbanProps = {
+  readOnly?: boolean
   view: ViewOf<'kanban'>
   fields: Field[]
   shownFields: Field[]
@@ -25,6 +26,7 @@ type KanbanProps = {
 }
 
 export function KanbanView({
+  readOnly = false,
   view,
   fields,
   shownFields,
@@ -54,7 +56,7 @@ export function KanbanView({
   }
 
   const drop = (column: KanbanColumn) => {
-    if (!dragging) return
+    if (readOnly || !dragging) return
     setOverColumn(null)
     const row = rows.find((candidate) => candidate.id === dragging)
     setDragging(null)
@@ -69,8 +71,9 @@ export function KanbanView({
       <div className="flex items-center gap-2 text-sm">
         <span className="text-[var(--color-ink-muted)]">Колонки по полю</span>
         <select
+          disabled={readOnly}
           value={stackField.id}
-          onChange={(event) => onConfigChange({ ...view.config, stackFieldId: event.target.value })}
+          onChange={(event) => { if (!readOnly) onConfigChange({ ...view.config, stackFieldId: event.target.value }) }}
           className="rounded border border-[var(--color-border-subtle)] bg-white px-2 py-1 text-sm outline-none focus:border-sage-400"
         >
           {candidates.map((field) => (
@@ -113,14 +116,15 @@ export function KanbanView({
                   row={row}
                   titleField={titleField}
                   detailFields={detailFields}
-                  draggable
-                  onDragStart={() => setDragging(row.id)}
+                  draggable={!readOnly}
+                  onDragStart={() => { if (!readOnly) setDragging(row.id) }}
                   footer={
                     // Перетаскивание недоступно с клавиатуры, поэтому у колонки
                     // всегда есть явный выбор — он же работает на телефоне.
-                    <select
+                    readOnly ? undefined : <select
                       value={columnKeyOf(stackField, row)}
                       onChange={(event) => {
+                        if (readOnly) return
                         const target = columns.find((candidate) => candidate.key === event.target.value)
                         if (!target) return
                         onSetCell(row.id, stackField.id, target.key === EMPTY_COLUMN_KEY ? null : target.value)
@@ -144,13 +148,13 @@ export function KanbanView({
           </section>
         ))}
 
-        <button
+        {!readOnly ? <button
           type="button"
           onClick={onAddRow}
           className="h-10 w-40 shrink-0 rounded-xl border border-dashed border-[var(--color-border-subtle)] text-sm text-[var(--color-ink-muted)] hover:border-sage-400 hover:text-sage-700"
         >
           + Строка
-        </button>
+        </button> : null}
       </div>
     </div>
   )

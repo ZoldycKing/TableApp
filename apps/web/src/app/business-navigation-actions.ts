@@ -46,7 +46,7 @@ export async function navigateBusinessResourceAction(
     const [table] = await db.select({ id: tables.id }).from(tables)
       .where(and(eq(tables.workspaceId, workspaceId), eq(tables.id, target.id))).limit(1)
     if (!table) return { ok: false, error: 'Таблица не найдена в этом бизнесе' }
-    href = `/t/${encodeURIComponent(table.id)}`
+    href = `/tables/${encodeURIComponent(table.id)}`
   } else if (target.kind === 'app') {
     const [app] = await db.select({ id: apps.id }).from(apps)
       .where(and(eq(apps.workspaceId, workspaceId), eq(apps.id, target.id))).limit(1)

@@ -3,27 +3,19 @@
 import { useRouter } from 'next/navigation'
 import { useRef, useState, useTransition } from 'react'
 import { applyTemplateAction } from '@/app/template-actions'
+import { templateCardCopy } from '@/lib/templates/card-copy'
 import { STARTER_GROUPS } from '@/lib/templates/starter-groups'
 import type { TemplateDef } from '@/lib/templates/types'
 import { TemplateIcon } from './template-icon'
+import { ownerPrimary } from './owner-ui'
 
 /**
  * Витрина шаблонов.
  *
- * Главный вопрос человека здесь не «какие бывают шаблоны», а «что со мной
- * произойдёт, если я нажму». Поэтому на карточке написано ровно то, что
- * появится в его рабочем пространстве: какие таблицы, сколько колонок,
- * какие представления и что будет в приложении.
+ * Назначение и конкретные возможности помогают выбрать задачу.
+ * Инструкции появляются в настройке после выбора; технический состав
+ * не мешает знакомству с продуктом.
  */
-
-function plural(count: number, one: string, few: string, many: string): string {
-  const mod100 = count % 100
-  const mod10 = count % 10
-  if (mod100 >= 11 && mod100 <= 14) return `${count} ${many}`
-  if (mod10 === 1) return `${count} ${one}`
-  if (mod10 >= 2 && mod10 <= 4) return `${count} ${few}`
-  return `${count} ${many}`
-}
 
 export function TemplateGallery({
   templates,
@@ -46,7 +38,7 @@ export function TemplateGallery({
   // Состояние приходит следующим кадром, а второй щелчок — раньше: без этой
   // защёлки двойное нажатие разворачивает шаблон дважды.
   const running = useRef(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<{ templateId: string; message: string } | null>(null)
   const [, startTransition] = useTransition()
   const router = useRouter()
 
@@ -59,14 +51,14 @@ export function TemplateGallery({
       try {
         const result = await applyTemplateAction(templateId)
         if (!result.ok) {
-          setError(result.error)
+          setError({ templateId, message: result.error })
           setBusy(null)
           running.current = false
           return
         }
         router.push(`/setup?app=${encodeURIComponent(result.appId)}&step=business`)
       } catch {
-        setError('Не удалось создать сценарий. Проверьте соединение и повторите попытку.')
+        setError({ templateId, message: 'Не удалось подготовить шаблон. Проверьте соединение и попробуйте ещё раз.' })
         setBusy(null)
         running.current = false
       }
@@ -78,106 +70,75 @@ export function TemplateGallery({
   const visible = templates.filter(template => group.templateIds.some(id => id === template.id))
 
   return (
-    <div className="space-y-6">
+    <div className="@container space-y-5" aria-busy={busy !== null}>
       {compatibilityTemplate ? <p className="rounded-xl border border-sand-200 bg-sand-50 px-5 py-4 text-sm text-ink-soft">
         Вы открыли прежний набор «Клиентский портал». Он сохранён для совместимости. В новых клиентских наборах кабинет уже включён — отдельно устанавливать его не нужно.
       </p> : null}
       {picked ? (
         <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-sage-300 bg-sage-50 px-5 py-4">
-          <p className="text-sm text-ink">
-            Вы выбрали набор <span className="font-semibold">«{picked.name}»</span>. Поставить его
-            в это пространство?
-          </p>
+          <p className="text-sm text-ink">Ваш выбор — <span className="font-semibold">«{picked.name}»</span>.</p>
           <button
             type="button"
             onClick={() => take(picked.id)}
             disabled={busy !== null}
-            className="rounded-xl bg-ink px-5 py-2.5 text-sm font-medium text-sand-50 transition-opacity hover:opacity-90 disabled:opacity-40"
+            className={ownerPrimary}
           >
-            {busy === picked.id ? 'Создаём…' : `Поставить «${picked.name}»`}
+            {busy === picked.id ? 'Подготавливаем…' : `Продолжить с «${picked.name}»`}
           </button>
         </div>
       ) : null}
 
-      {error ? (
-        <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
+      {error && !visible.some(template => template.id === error.templateId) ? (
+        <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error.message}</p>
       ) : null}
 
-      <div className="flex flex-wrap gap-2" aria-label="Назначение приложения">
+      <div className="flex flex-wrap gap-2" role="group" aria-label="Кому нужно приложение">
         {STARTER_GROUPS.map(item => <button key={item.id} type="button" aria-pressed={groupId === item.id}
+          disabled={busy !== null}
           onClick={() => setGroupId(item.id)}
-          className={`rounded-xl border px-4 py-2.5 text-sm font-medium transition-colors ${groupId === item.id ? 'border-ink bg-ink text-sand-50' : 'border-sand-200 bg-white text-ink-soft hover:border-sage-300'}`}>
-          {item.name}
+          className={`min-h-11 rounded-xl border px-4 py-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sage-400 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40 ${groupId === item.id ? 'border-ink bg-ink text-sand-50' : 'border-sand-200 bg-white text-ink-soft hover:border-sage-300'}`}>
+          {item.id === 'client-apps' ? 'Для клиентов' : 'Для команды'}
         </button>)}
       </div>
-      <div>
-        <h2 className="text-lg font-semibold text-ink">{group.name}</h2>
-        <p className="mt-2 max-w-3xl text-sm leading-relaxed text-ink-soft">{group.description}</p>
-        {groupId === 'client-apps' ? <p className="mt-2 text-sm text-ink-muted">Каталог доступен без входа. При оформлении клиент подтверждает почту; затем видит свои обращения и историю. Оплату согласует бизнес.</p> : null}
-      </div>
+      <p className="max-w-3xl text-sm leading-6 text-ink-soft">{groupId === 'client-apps'
+        ? 'С каталогом, оформлением и личным кабинетом клиента.'
+        : 'Для учёта внутри команды. Без клиентского каталога.'}</p>
 
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid items-start gap-5 @min-[780px]:grid-cols-2">
         {visible.map((template) => {
-          const rowCount = template.tables.reduce((total, table) => total + table.rows.length, 0)
+          const copy = templateCardCopy(template)
           return (
             <article
               key={template.id}
               id={`template-${template.id}`}
-              className={`flex flex-col rounded-2xl border bg-white p-6 shadow-soft ${
+              aria-labelledby={`template-title-${template.id}`}
+              className={`flex h-full min-w-0 flex-col rounded-2xl border bg-white p-5 sm:p-6 ${
                 template.id === chosen ? 'border-sage-400 ring-2 ring-sage-200' : 'border-sand-200'
               }`}
             >
-              <div className="flex items-start gap-4">
-                <TemplateIcon id={template.id} />
-                <div className="min-w-0">
-                  <h3 className="text-lg font-semibold text-ink">{template.name}</h3>
-                  <p className="mt-1 text-sm text-ink-soft">{template.tagline}</p>
-                </div>
+              <div className="flex items-center gap-4">
+                <TemplateIcon id={template.id} className="size-12" />
+                <h2 id={`template-title-${template.id}`} className="min-w-0 text-lg font-semibold tracking-tight text-ink">{template.name}</h2>
               </div>
-
-              <p className="mt-4 text-xs text-ink-muted">{template.audience}</p>
-
-              <ul className="mt-4 space-y-1.5 text-sm text-ink-soft">
-                {template.gives.slice(0, 2).map((line) => (
-                  <li key={line} className="flex gap-2">
-                    <span aria-hidden className="mt-2 size-1.5 shrink-0 rounded-full bg-sage-400" />
-                    <span>{line}</span>
-                  </li>
-                ))}
+              <p className="mt-4 text-sm leading-6 text-ink-soft">{copy.description}</p>
+              <ul className="my-5 space-y-2.5 text-sm leading-6 text-ink-soft">
+                {copy.features.map(feature => <li key={feature.name || feature.description}>
+                  {feature.name ? <><span className="font-medium text-ink">{feature.name}</span> — </> : null}{feature.description}
+                </li>)}
               </ul>
-
-              <details className="mt-5 rounded-xl bg-sand-50 p-4 text-sm text-ink-soft">
-                <summary className="cursor-pointer font-medium text-ink">Что входит и как начать</summary>
-                <div className="mt-3 space-y-2">
-                <p>После выбора: название бизнеса → свои данные → условия работы → проверка и публикация. Полный конструктор открывается отдельно.</p>
-                {template.gives.slice(2).map(line => <p key={line}>{line}</p>)}
-                {template.tables.map((table) => (
-                  <p key={table.key}>
-                    Таблица «{table.name}» — {plural(table.fields.length, 'колонка', 'колонки', 'колонок')}.
-                    Представления: {table.views.map((view) => view.name.toLowerCase()).join(', ')}
-                  </p>
-                ))}
-                <p>
-                  Черновик приложения «{template.appName}» и {plural(rowCount, 'учебная запись', 'учебные записи', 'учебных записей')}. Неизменённые примеры можно удалить отдельно в каждой таблице.
-                </p>
-                <p>Всё создаётся в этом бизнесе. Приложение останется черновиком до публикации.</p>
-                {template.limits?.map(line => <p key={line}>{line}</p>)}
-                {!template.customer && template.id !== 'salon' && !template.portal && !template.inventory && !template.production && template.id !== 'zayavki' ? <p>Роли пока видят одинаковые экраны и записи. Ограничение по сотруднику или клиенту нужно настроить.</p> : null}
-                </div>
-              </details>
-
-              <button
-                type="button"
-                onClick={() => take(template.id)}
-                disabled={busy !== null}
-                className="mt-5 self-start rounded-xl bg-ink px-5 py-2.5 text-sm font-medium text-sand-50 transition-opacity hover:opacity-90 disabled:opacity-40"
-              >
-                {busy === template.id ? 'Создаём…' : 'Выбрать сценарий'}
-              </button>
+              <div className="mt-auto border-t border-sand-200 pt-4">
+                {copy.note ? <p className="mb-4 text-xs leading-5 text-ink-soft">{copy.note}</p> : null}
+                {error?.templateId === template.id ? <p role="alert" className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm leading-6 text-red-700">{error.message}</p> : null}
+                <button type="button" onClick={() => take(template.id)} disabled={busy !== null}
+                  aria-label={`Использовать шаблон «${template.name}»`} className={ownerPrimary}>
+                  {busy === template.id ? 'Подготавливаем…' : 'Использовать шаблон'}
+                </button>
+              </div>
             </article>
           )
         })}
       </div>
+      <p className="text-xs leading-5 text-ink-soft">Создадим черновик с примерами в этом пространстве. Затем вы добавите свои данные и опубликуете приложение.</p>
     </div>
   )
 }

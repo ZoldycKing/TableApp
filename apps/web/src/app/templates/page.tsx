@@ -77,21 +77,17 @@ export default async function TemplatesPage({
         memberships={await listMemberships(member.userId)}
         activeWorkspaceId={member.workspaceId}
       >
-        <main className="mx-auto w-full max-w-6xl px-5 py-10 sm:px-6">
-          <h1 className="text-2xl font-semibold tracking-tight text-ink">С чего начать вашему бизнесу</h1>
+        <main className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-6 sm:py-10">
+          <h1 className="text-2xl font-semibold tracking-tight text-ink">Выберите шаблон</h1>
           <p className="mt-2 max-w-2xl text-sm text-ink-soft">
-            Выберите задачу бизнеса. Таблицы и основные экраны уже подготовлены. Дальше добавим ваши данные и проверим результат по шагам.
+            Выберите задачу — затем добавьте свои данные.
           </p>
 
-          <div className="mt-8">
-            <details className="mb-6 text-sm leading-relaxed text-ink-soft"><summary className="cursor-pointer underline decoration-sand-300 underline-offset-4">Уже есть приложение бизнеса?</summary><p className="mt-3">
-              Уже есть приложение бизнеса? Подключите новую возможность в его настройках, чтобы сохранить одну ссылку и кабинет бизнеса.
-              {' '}<Link href="/apps" className="font-medium text-sage-700 underline underline-offset-4">Открыть мои приложения</Link>
-            </p></details>
+          <div className="mt-6">
             <TemplateGallery key={chosen ?? compatibilityTemplate?.id ?? 'default'} templates={[...STARTER_TEMPLATES]} chosen={chosen} compatibilityTemplate={compatibilityTemplate} />
           </div>
-
-          <details className="mt-10 border-t border-sand-200 pt-6"><summary className="cursor-pointer text-sm font-medium">Вопросы о сценариях</summary><section className="mt-6 grid gap-5 md:grid-cols-3">
+          <p className="mt-6 text-sm leading-6 text-ink-soft">Уже есть приложение? <Link href="/apps" className="rounded font-medium text-sage-700 underline underline-offset-4 focus-visible:ring-2 focus-visible:ring-sage-400">Добавить возможность в его настройках</Link></p>
+          <details className="mt-8 border-t border-sand-200 pt-6"><summary className="min-h-11 cursor-pointer rounded text-sm font-medium focus-visible:ring-2 focus-visible:ring-sage-400">Вопросы о шаблонах</summary><section className="mt-6 grid gap-5 md:grid-cols-3">
             {QUESTIONS.map((item) => (
               <div key={item.question}>
                 <h2 className="text-sm font-semibold text-ink">{item.question}</h2>

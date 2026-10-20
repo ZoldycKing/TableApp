@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { NAV_GROUPS, activeNavId, navItemsFor, type NavItem } from '@/lib/platform-nav'
 import { ShellIcon } from './icons'
+import { OWNER_HELP_EVENT } from '@/lib/owner-help'
 import { LABEL, LABEL_MOTION, ONLY_WIDE_BLOCK, ROW, type ShellVariant } from './variant'
 
 /**
@@ -67,6 +68,7 @@ export function NavList({
           </div>
         )
       })}
+      <button type="button" title="Помощь" aria-label="Помощь" onClick={() => { onNavigate?.(); window.dispatchEvent(new Event(OWNER_HELP_EVENT)) }} className={`flex min-h-11 w-full items-center gap-2.5 rounded-xl text-sm text-ink-soft outline-none transition-colors hover:bg-sand-100 focus-visible:ring-2 focus-visible:ring-sage-400 ${ROW[variant]}`}><ShellIcon name="help" className="size-[18px] shrink-0" /><span className={`${LABEL_MOTION} ${LABEL[variant]}`}>Помощь</span></button>
     </nav>
   )
 }

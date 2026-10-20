@@ -11,12 +11,12 @@ const base: BusinessOverviewData = {
 describe('business overview next steps', () => {
   it('starts with actual data instead of manufacturing progress', () => {
     expect(overviewNextAction({ ...base, tables: [] }).href).toBe('/setup')
-    expect(overviewNextAction({ ...base, profile: null }).href).toBe('/setup#business')
+    expect(overviewNextAction({ ...base, profile: null }).href).toBe('/setup?step=business')
     expect(overviewNextAction(base).href).toBe('/tables/table_own')
   })
   it('links unpublished and changed applications to their real editor', () => {
     const unpublished = overviewNextAction({ ...base, apps: [{ ...app, published: false }] })
-    expect(unpublished.href).toBe('/apps/app_own')
+    expect(unpublished.href).toBe('/setup?app=app_own&step=review')
     expect(unpublished.title).toBe('Приложение ещё не опубликовано')
     const changed = overviewNextAction({ ...base, apps: [app, { ...app, id: 'app_changed', hasUnpublishedChanges: true }] })
     expect(changed.href).toBe('/apps/app_changed')
@@ -24,7 +24,7 @@ describe('business overview next steps', () => {
   })
   it('opens published version only when there is no pending configuration', () => {
     expect(overviewNextAction({ ...base, apps: [app] }).href).toBe('/a/shop')
-    expect(overviewNextAction({ ...base, apps: [app, { ...app, id: 'draft', published: false }] }).href).toBe('/apps/draft')
+    expect(overviewNextAction({ ...base, apps: [app, { ...app, id: 'draft', published: false }] }).href).toBe('/setup?app=draft&step=review')
   })
   it('viewers get inspection destinations and never setup or publication actions', () => {
     for (const apps of [[], [app], [{ ...app, published: false }]]) {

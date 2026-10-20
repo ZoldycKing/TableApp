@@ -5,6 +5,7 @@ import { useRef, useState, useTransition } from 'react'
 import { applyTemplateAction } from '@/app/template-actions'
 import { STARTER_GROUPS } from '@/lib/templates/starter-groups'
 import type { TemplateDef } from '@/lib/templates/types'
+import { TemplateIcon } from './template-icon'
 
 /**
  * Витрина шаблонов.
@@ -55,14 +56,20 @@ export function TemplateGallery({
     setBusy(templateId)
     setError(null)
     startTransition(async () => {
-      const result = await applyTemplateAction(templateId)
-      if (!result.ok) {
-        setError(result.error)
+      try {
+        const result = await applyTemplateAction(templateId)
+        if (!result.ok) {
+          setError(result.error)
+          setBusy(null)
+          running.current = false
+          return
+        }
+        router.push(`/setup?app=${encodeURIComponent(result.appId)}&step=business`)
+      } catch {
+        setError('Не удалось создать сценарий. Проверьте соединение и повторите попытку.')
         setBusy(null)
         running.current = false
-        return
       }
-      router.push(`/apps/${result.appId}`)
     })
   }
 
@@ -78,7 +85,6 @@ export function TemplateGallery({
       {picked ? (
         <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-sage-300 bg-sage-50 px-5 py-4">
           <p className="text-sm text-ink">
-            <span aria-hidden className="mr-1.5">{picked.emoji}</span>
             Вы выбрали набор <span className="font-semibold">«{picked.name}»</span>. Поставить его
             в это пространство?
           </p>
@@ -94,7 +100,7 @@ export function TemplateGallery({
       ) : null}
 
       {error ? (
-        <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
+        <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
       ) : null}
 
       <div className="flex flex-wrap gap-2" aria-label="Назначение приложения">
@@ -122,7 +128,7 @@ export function TemplateGallery({
               }`}
             >
               <div className="flex items-start gap-4">
-                <span aria-hidden className="text-3xl leading-none">{template.emoji}</span>
+                <TemplateIcon id={template.id} />
                 <div className="min-w-0">
                   <h3 className="text-lg font-semibold text-ink">{template.name}</h3>
                   <p className="mt-1 text-sm text-ink-soft">{template.tagline}</p>
@@ -132,7 +138,7 @@ export function TemplateGallery({
               <p className="mt-4 text-xs text-ink-muted">{template.audience}</p>
 
               <ul className="mt-4 space-y-1.5 text-sm text-ink-soft">
-                {template.gives.map((line) => (
+                {template.gives.slice(0, 2).map((line) => (
                   <li key={line} className="flex gap-2">
                     <span aria-hidden className="mt-2 size-1.5 shrink-0 rounded-full bg-sage-400" />
                     <span>{line}</span>
@@ -140,9 +146,11 @@ export function TemplateGallery({
                 ))}
               </ul>
 
-              <details className="mt-5 rounded-xl bg-sand-50 p-4 text-xs text-ink-soft">
-                <summary className="cursor-pointer font-medium text-ink">Таблицы и настройки набора</summary>
+              <details className="mt-5 rounded-xl bg-sand-50 p-4 text-sm text-ink-soft">
+                <summary className="cursor-pointer font-medium text-ink">Что входит и как начать</summary>
                 <div className="mt-3 space-y-2">
+                <p>После выбора: название бизнеса → свои данные → условия работы → проверка и публикация. Полный конструктор открывается отдельно.</p>
+                {template.gives.slice(2).map(line => <p key={line}>{line}</p>)}
                 {template.tables.map((table) => (
                   <p key={table.key}>
                     Таблица «{table.name}» — {plural(table.fields.length, 'колонка', 'колонки', 'колонок')}.
@@ -152,7 +160,8 @@ export function TemplateGallery({
                 <p>
                   Черновик приложения «{template.appName}» и {plural(rowCount, 'учебная запись', 'учебные записи', 'учебных записей')}. Неизменённые примеры можно удалить отдельно в каждой таблице.
                 </p>
-                <p>После установки откроется настройка приложения. Замените примеры, проверьте доступ и опубликуйте черновик.</p>
+                <p>Всё создаётся в этом бизнесе. Приложение останется черновиком до публикации.</p>
+                {template.limits?.map(line => <p key={line}>{line}</p>)}
                 {!template.customer && template.id !== 'salon' && !template.portal && !template.inventory && !template.production && template.id !== 'zayavki' ? <p>Роли пока видят одинаковые экраны и записи. Ограничение по сотруднику или клиенту нужно настроить.</p> : null}
                 </div>
               </details>
@@ -163,7 +172,7 @@ export function TemplateGallery({
                 disabled={busy !== null}
                 className="mt-5 self-start rounded-xl bg-ink px-5 py-2.5 text-sm font-medium text-sand-50 transition-opacity hover:opacity-90 disabled:opacity-40"
               >
-                {busy === template.id ? 'Создаём…' : 'Начать с этого набора'}
+                {busy === template.id ? 'Создаём…' : 'Выбрать сценарий'}
               </button>
             </article>
           )

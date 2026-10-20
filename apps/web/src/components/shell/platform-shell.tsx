@@ -22,6 +22,7 @@ import {
 } from './variant'
 import { WorkspaceSwitcher, type ShellWorkspace } from './workspace-switcher'
 import { BusinessTree } from './business-tree'
+import { OWNER_HELP_EVENT } from '@/lib/owner-help'
 import type { BusinessNavigation } from '@/lib/business-navigation-types'
 
 /**
@@ -295,9 +296,10 @@ function MobileBar({ email, onOpen }: { email: string; onOpen: () => void }) {
         <Logo />
       </Link>
 
+      <button type="button" aria-label="Помощь" onClick={() => window.dispatchEvent(new Event(OWNER_HELP_EVENT))} className="ml-auto flex size-11 shrink-0 items-center justify-center rounded-lg text-ink-soft outline-none hover:bg-sand-100 focus-visible:ring-2 focus-visible:ring-sage-400"><ShellIcon name="help" className="size-5" /></button>
       <span
         aria-hidden="true"
-        className="ml-auto flex size-8 items-center justify-center rounded-full bg-sage-100 text-sm font-semibold text-ink"
+        className="flex size-8 shrink-0 items-center justify-center rounded-full bg-sage-100 text-sm font-semibold text-ink"
       >
         {initialsOf(email)}
       </span>

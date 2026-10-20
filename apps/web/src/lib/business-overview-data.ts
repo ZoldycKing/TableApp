@@ -48,7 +48,7 @@ export function overviewNextAction(data: BusinessOverviewData): OverviewAction {
   if (!data.profile) return {
     title: 'Укажите, какой бизнес увидят клиенты',
     description: 'Название бизнеса будет видно в каталоге, личном кабинете и переписке. Данные таблиц уже доступны для работы.',
-    label: 'Заполнить данные бизнеса', href: '/setup#business', icon: 'gear',
+    label: 'Заполнить данные бизнеса', href: '/setup?step=business', icon: 'gear',
   }
   if (!data.apps.length) return {
     title: 'Данные есть — подготовьте приложение',
@@ -62,7 +62,7 @@ export function overviewNextAction(data: BusinessOverviewData): OverviewAction {
       ? `В приложении «${pending.name}» сохранён новый черновик. Пользователи продолжают видеть опубликованную версию. Проверьте правки перед публикацией.`
       : `Проверьте экраны и доступ в приложении «${pending.name}». После публикации появится рабочая ссылка для пользователей.`,
     label: pending.published ? 'Проверить изменения' : 'Проверить и опубликовать',
-    href: `/apps/${encodeURIComponent(pending.id)}`, icon: 'apps',
+    href: pending.published ? `/apps/${encodeURIComponent(pending.id)}` : `/setup?app=${encodeURIComponent(pending.id)}&step=review`, icon: 'apps',
   }
   return {
     title: 'Приложение опубликовано',

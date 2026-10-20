@@ -34,7 +34,7 @@ export const salon: TemplateDef = {
         { key: 'description', name: 'Описание услуги', type: 'long_text', help: 'Что входит в услугу и что клиенту нужно знать перед записью. Видно в карточке услуги.' },
         { key: 'active', name: 'Доступна для записи', type: 'checkbox', help: 'Снимите отметку, чтобы временно убрать услугу из записи. Существующие посещения сохранятся.' },
       ],
-      views: [{ name: 'Прайс', type: 'grid' }, { name: 'Для записи', type: 'grid', filter: { field: 'active', op: 'is', value: true } }],
+      views: [{ name: 'Все услуги', type: 'grid' }, { name: 'Доступны для записи', type: 'grid', filter: { field: 'active', op: 'is', value: true } }],
       rows: [
         { key: 's1', values: { name: 'Женская стрижка', description: 'Подберём форму и длину, вымоем волосы и сделаем укладку. Если хотите сохранить длину, обсудите это с мастером перед началом.', price: 2500, minutes: 60, active: true } },
         { key: 's2', values: { name: 'Мужская стрижка', description: 'Стрижка ножницами или машинкой и оформление контура. Покажите мастеру пример или расскажите, какую форму хотите.', price: 1500, minutes: 40, active: true } },

@@ -416,10 +416,10 @@ export function Results({
               </span>
               {ok && outcome?.tableId ? (
                 <Link
-                  href={`/t/${outcome.tableId}`}
+                  href={`/tables/${outcome.tableId}`}
                   className="shrink-0 rounded-lg border border-[var(--color-border-subtle)] bg-white px-3 py-1.5 font-medium hover:bg-[var(--color-surface-muted)]"
                 >
-                  Открыть таблицу
+                  Проверить данные
                 </Link>
               ) : null}
             </li>
@@ -428,6 +428,7 @@ export function Results({
       </ul>
 
       <div className="mt-4 flex flex-wrap gap-2">
+        {setups.some(setup => setup.outcome?.status === 'done' || setup.outcome?.status === 'repeat') ? <Link href="/setup?step=data" className="rounded-xl bg-ink px-4 py-2.5 text-sm font-medium text-white hover:bg-ink/90">Продолжить подготовку приложения →</Link> : null}
         {failed.length > 0 ? (
           <button
             type="button"

@@ -11,6 +11,7 @@ import {
 } from '@/components/marketing/blocks'
 import { ScreenFrame, ScreenTable } from '@/components/marketing/screens'
 import { TemplateDemo } from '@/components/marketing/template-demo'
+import { TemplateIcon } from '@/components/template-icon'
 import { Reveal } from '@/components/marketing/reveal'
 import { pageMetadata } from '@/lib/seo'
 import { currentMember } from '@/lib/session'
@@ -136,7 +137,7 @@ export default async function TemplatePage({ params }: { params: Promise<{ slug:
           { href: '/templates', label: 'Шаблоны' },
           { label: template.name },
         ]}
-        emoji={template.emoji}
+        icon={<TemplateIcon id={template.id} className="size-16" />}
         title={
           <>
             {/*

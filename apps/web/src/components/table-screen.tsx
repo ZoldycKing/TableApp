@@ -73,6 +73,9 @@ export function TableScreen({ table, member, initialRowId = null, initialMode = 
   const [pending, startTransition] = useTransition()
   const router = useRouter()
   const query = useSearchParams().toString()
+  const setupReturn = new URLSearchParams(query).get('setup')
+  const returnToSetup = setupReturn?.startsWith('/setup?') ? setupReturn : null
+  const [newGridRowId, setNewGridRowId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!recordDirty) return
@@ -260,6 +263,7 @@ export function TableScreen({ table, member, initialRowId = null, initialMode = 
   const addRow = (afterRowId?: string) => {
     if (readOnly) return
     const rowId = newId('row')
+    setNewGridRowId(rowId)
     setKeepVisible((current) => [...current, rowId])
     store.addRow(afterRowId, rowId)
     run(() => addRowAction(table.id, afterRowId, rowId))
@@ -370,6 +374,7 @@ export function TableScreen({ table, member, initialRowId = null, initialMode = 
 
   return (
     <main className="mx-auto w-full min-w-0 max-w-[1400px] px-4 py-6 sm:px-6 sm:py-8">
+      {returnToSetup ? <Link href={returnToSetup} className="mb-5 inline-block rounded text-sm font-medium text-sage-700 underline underline-offset-4">← Вернуться к подготовке приложения</Link> : null}
       <nav aria-label="Путь к таблице" className="mb-4 flex flex-wrap items-center gap-2 text-sm text-ink-muted"><Link href="/tables" className="hover:text-ink">Таблицы</Link><span aria-hidden> / </span><Link href={`/tables/${table.id}`} className="hover:text-ink">{store.table.name}</Link><span aria-hidden> / </span><span>{readOnly ? 'Просмотр' : 'Редактирование'}</span></nav>
       <TableSwitcher
         tables={table.workspaceTables}
@@ -391,7 +396,7 @@ export function TableScreen({ table, member, initialRowId = null, initialMode = 
             {pending ? ' · сохранение…' : ''}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <details className="min-w-0 max-w-full"><summary className="cursor-pointer rounded-lg border border-sand-200 bg-white px-3 py-2.5 text-sm font-medium focus-visible:ring-2 focus-visible:ring-sage-400">Действия с таблицей</summary><div className="mt-3 flex flex-wrap gap-2">
           {!readOnly ? <button
             type="button"
             disabled={pending}
@@ -448,10 +453,10 @@ export function TableScreen({ table, member, initialRowId = null, initialMode = 
               CSV
             </a>
           </span>
-        </div>
+        </div></details>
       </header>
 
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <div data-guide="table-mode" className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div aria-label="Способ работы с таблицей" className="inline-flex rounded-xl border border-sand-200 bg-sand-50 p-1">
           {([['grid', 'Таблица'], ['records', 'По записям']] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={mode === value} onClick={() => changeMode(value)} className={`rounded-lg px-3 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-sage-500 ${mode === value ? 'bg-white text-ink shadow-soft' : 'text-ink-muted hover:bg-white/70'}`}>{label}</button>)}
         </div>
@@ -498,7 +503,10 @@ export function TableScreen({ table, member, initialRowId = null, initialMode = 
       {mode === 'records' ? <TableRecordsEditor rows={recordRows} allRows={store.table.rows} fields={store.table.fields} titleField={titleField} selectedRowId={selectedRowId} relatedTitles={table.relatedTitles} readOnly={readOnly} adding={addingRecord} onSelect={selectRecord} onAdd={() => { void addRecord() }} onSave={saveRecordCell} onDirtyChange={setRecordDirty} registerLeaveGuard={registerRecordGuard} actions={rowActions} /> : null}
 
       {mode === 'grid' && activeView.type === 'grid' ? (
+        <div data-guide="table-data" className="min-w-0">
+        {!readOnly ? <div className="mb-3 flex flex-wrap items-center justify-between gap-3"><button type="button" disabled={pending} onClick={() => addRow()} className="min-h-11 rounded-xl bg-ink px-4 py-2.5 text-sm font-medium text-white disabled:opacity-40">Добавить строку</button><p className="text-xs leading-5 text-ink-soft">Enter или двойной щелчок — изменить ячейку. Длинный текст целиком — в форме записи.</p></div> : null}
         <DataGrid
+          autoEditRowId={newGridRowId}
           readOnly={readOnly}
           selectedRowId={selectedRowId}
           onSelectRow={id => { void selectRecord(id) }}
@@ -515,6 +523,7 @@ export function TableScreen({ table, member, initialRowId = null, initialMode = 
           onDeleteRow={deleteRow}
           onRenameField={renameField}
         />
+        </div>
       ) : null}
 
       {mode === 'grid' && activeView.type === 'kanban' ? (

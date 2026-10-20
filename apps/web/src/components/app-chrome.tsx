@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { PlatformShell } from '@/components/shell/platform-shell'
 import { modeFromCookie, SIDEBAR_COOKIE } from '@/components/shell/variant'
 import { loadBusinessNavigation } from '@/lib/business-navigation'
+import { OwnerHelp } from './owner-help'
 
 export type ChromeMember = { email: string; workspaceName: string; role: string }
 export type ChromeWorkspace = { workspaceId: string; workspaceName: string }
@@ -56,6 +57,7 @@ export async function AppChrome({
       initialMode={mode}
     >
       {children}
+      <OwnerHelp />
     </PlatformShell>
   )
 }

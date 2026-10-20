@@ -22,9 +22,10 @@ export const metadata = PRIVATE_PAGE
 
 export const dynamic = 'force-dynamic'
 
-export default async function AppEditorPage({ params }: { params: Promise<{ appId: string }> }) {
+export default async function AppEditorPage({ params, searchParams }: { params: Promise<{ appId: string }>; searchParams: Promise<{ advanced?: string }> }) {
   const member = await requireMember()
   const { appId } = await params
+  const advanced = (await searchParams).advanced === '1'
 
   const [record] = await db.select().from(apps).where(eq(apps.id, appId)).limit(1)
   // Чужое приложение не должно открываться даже по прямой ссылке.
@@ -60,17 +61,22 @@ export default async function AppEditorPage({ params }: { params: Promise<{ appI
 
   return (
     <AppChrome {...chrome} wide>
-    <main className="mx-auto w-full max-w-[1500px] px-6 py-8">
+    <main className="mx-auto w-full max-w-[1500px] px-5 py-4 sm:px-8 xl:py-8">
+      <Link href={`/setup?app=${appId}&step=review`} className="mb-5 hidden rounded text-sm text-ink-soft underline decoration-sand-300 underline-offset-4 xl:inline-block">← К подготовке приложения</Link>
       <header className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">{parsed.data.name}</h1>
-          <p className="text-sm text-[var(--color-ink-muted)]">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-xl font-semibold tracking-tight xl:text-2xl">{advanced ? 'Полный конструктор' : 'Настройка приложения'}</h1>
+          <div className="mt-1 flex flex-wrap gap-x-2 text-sm xl:mt-2 xl:block">
+          <p className="text-ink-soft">{parsed.data.name}</p>
+          <p className="text-[var(--color-ink-muted)]">
             {record.publishedAt
               ? `опубликовано ${record.publishedAt.toLocaleString('ru-RU')} · /a/${parsed.data.slug}`
               : 'ещё не опубликовано'}
           </p>
+          </div>
         </div>
-        <div className="flex gap-2">
+        <details className="relative self-start xl:hidden"><summary className="min-h-11 cursor-pointer rounded-lg border border-sand-200 px-3 py-3 text-sm">Ещё</summary><nav aria-label="Переходы приложения" className="absolute right-0 z-20 mt-2 w-60 rounded-xl border border-sand-200 bg-white p-2 shadow-lift"><Link href={`/setup?app=${appId}&step=review`} className="block rounded-lg px-3 py-3 text-sm hover:bg-sand-100">Подготовка приложения</Link>{record.publishedAt ? <a href={`/a/${parsed.data.slug}`} target="_blank" rel="noreferrer" className="block rounded-lg px-3 py-3 text-sm hover:bg-sand-100">Открыть приложение ↗</a> : null}<Link href="/apps" className="block rounded-lg px-3 py-3 text-sm hover:bg-sand-100">Все приложения</Link></nav></details>
+        <div className="hidden gap-2 xl:flex">
           {record.publishedAt ? (
             <a
               href={`/a/${parsed.data.slug}`}
@@ -95,7 +101,7 @@ export default async function AppEditorPage({ params }: { params: Promise<{ appI
         у человека — «что это вообще и откуда взялось». Объясняем прямо здесь,
         один раз: пока приложение не опубликовано, подсказка висит.
       */}
-      {record.publishedAt ? null : (
+      {!advanced || record.publishedAt ? null : (
         <p className="mb-4 rounded-xl border border-sand-200 bg-sand-100/60 px-4 py-3 text-sm leading-relaxed text-ink-soft">
           {parsed.data.customer || parsed.data.booking ? <>Клиентский кабинет и рабочие экраны уже настроены. Укажите <Link href="/apps" className="underline underline-offset-2">название бизнеса</Link>, замените примеры своими товарами или услугами. В <Link href="/apps" className="underline underline-offset-2">настройках приложения</Link> укажите почты сотрудников и их рабочие роли. Назначайте работу по этим почтам. Затем опубликуйте приложение и отправьте клиентам ссылку. Общий вход используется повторно, а обращения и права остаются у этого бизнеса.</> : <>Экраны собраны по вашей таблице: список записей, карточка одной записи
           и форма для новой. Слева — экраны, посередине — настройки выбранного,
@@ -105,12 +111,14 @@ export default async function AppEditorPage({ params }: { params: Promise<{ appI
       )}
 
       {member.role === 'viewer' ? <p role="status" className="mb-4 rounded-lg bg-sand-50 px-4 py-3 text-sm text-ink-muted">Доступ только для просмотра. Настройки и предпросмотр доступны, изменение и публикация отключены.</p> : null}
-      <fieldset disabled={member.role === 'viewer'}>
+      {advanced ? <><Link href={`/apps/${appId}`} className="mb-5 inline-block rounded text-sm text-sage-700 underline underline-offset-4">Вернуться к простым настройкам →</Link><fieldset disabled={member.role === 'viewer'}>
         <ModuleManager key={`modules:${record.updatedAt.toISOString()}`} app={parsed.data} primary={primary?.appId === appId} sources={sources} owner={member.role === 'owner'} />
       </fieldset>
       <AppVersionHistory key={`history-${appId}`} appId={appId} canRestore={member.role !== 'viewer'} revision={`${record.updatedAt.toISOString()}:${record.publishedAt?.toISOString() ?? ''}`} />
+      </> : null}
       <AppEditor
-        key={appId}
+        key={`${appId}:${advanced}`}
+        advanced={advanced}
         canEdit={member.role !== 'viewer'}
         business={await loadBusinessProfile(member.workspaceId)}
         portalUpgradeTableId={itemTable?.templateId === 'portal' ? itemTableId : null}
@@ -123,6 +131,7 @@ export default async function AppEditorPage({ params }: { params: Promise<{ appI
         relatedTitles={runtime.relatedTitles}
         publishedAt={record.publishedAt ? record.publishedAt.toISOString() : null}
       />
+      {!advanced ? <details className="mt-8 rounded-xl border border-sand-200 bg-white p-4"><summary className="cursor-pointer text-sm font-medium">Возможности приложения и история версий</summary><fieldset disabled={member.role === 'viewer'} className="mt-4"><ModuleManager key={`modules:${record.updatedAt.toISOString()}`} app={parsed.data} primary={primary?.appId === appId} sources={sources} owner={member.role === 'owner'} /></fieldset><AppVersionHistory key={`history-${appId}`} appId={appId} canRestore={member.role !== 'viewer'} revision={`${record.updatedAt.toISOString()}:${record.publishedAt?.toISOString() ?? ''}`} /></details> : null}
     </main>
     </AppChrome>
   )

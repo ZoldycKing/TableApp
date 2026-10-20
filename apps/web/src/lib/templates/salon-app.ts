@@ -35,7 +35,7 @@ export function asSalon(app: App, built: BuiltTemplate): App {
   const publicServices = [config.service.name, field('services', 'description'), config.service.price, config.service.minutes, config.service.active]
   const serviceApp = generateApp({ appId: app.id, workspaceId: app.workspaceId, name: app.name, slug: app.slug,
     table: table('services'), fields: built.fields.filter(f => f.tableId === config.tables.services) as unknown as Field[],
-    view: built.views.find(v => v.tableId === config.tables.services && v.name === 'Для записи') as unknown as View })
+    view: built.views.find(v => v.tableId === config.tables.services && (v.name === 'Доступны для записи' || v.name === 'Для записи')) as unknown as View })
   const ownerScreens: Screen[] = []
   for (const key of ['masters', 'schedule']) {
     const generated = generateApp({ appId: app.id, workspaceId: app.workspaceId, name: app.name, slug: app.slug,
@@ -73,8 +73,8 @@ export function asSalon(app: App, built: BuiltTemplate): App {
         { id: newId('component'), position: 'zz', type: 'button' as const, label: 'Записаться', style: 'primary' as const, roles: null, visibleWhen: null,
           action: { id: newId('action'), type: 'open_screen' as const, screenId: formId } }] } : {}) })),
     setup, ...ownerScreens,
-    ...serviceApp.screens.filter(s => s.type === 'list').map(s => ({ ...s, id: newId('screen'), name: 'Прайс', tab: { icon: 'tag', label: 'Прайс' },
-      access: access(['manager']), ...(s.type === 'list' ? { source: { ...s.source, viewId: built.views.find(v => v.tableId === config.tables.services && v.name === 'Прайс')!.id } } : {}) })),
+    ...serviceApp.screens.filter(s => s.type === 'list').map(s => ({ ...s, id: newId('screen'), name: 'Услуги и цены', tab: { icon: 'tag', label: 'Услуги и цены' },
+      access: access(['manager']), ...(s.type === 'list' ? { source: { ...s.source, viewId: built.views.find(v => v.tableId === config.tables.services && (v.name === 'Все услуги' || v.name === 'Прайс'))!.id } } : {}) })),
     { id: newId('screen'), appId: app.id, position: 'a', name: 'Имена мастеров', tab: null, type: 'list',
       // Master names are already shown by booking availability. This narrow public
       // source also lets enrolled clients resolve the master of a past visit.

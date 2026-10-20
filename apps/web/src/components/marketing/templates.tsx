@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { SOLUTIONS } from '@/lib/solutions'
 import { STARTER_TEMPLATES } from '@/lib/templates/catalog'
+import { TemplateIcon } from '@/components/template-icon'
 
 /**
  * Решения на главной.
@@ -19,7 +20,7 @@ export function Templates() {
             href={`/solutions/${item.slug}`}
             className="group flex h-full gap-4 rounded-2xl border border-sand-200 bg-white p-5 shadow-soft transition-all duration-300 hover:-translate-y-1 hover:border-sage-300 hover:shadow-lift"
           >
-            <span aria-hidden className="h-fit shrink-0 text-2xl">{item.emoji}</span>
+            <TemplateIcon id={item.templateId ?? 'portal'} className="size-11" />
             <span className="min-w-0">
               <span className="block font-display text-base font-bold">
                 {item.name}

@@ -55,6 +55,8 @@
   color-scheme: light;
 }
 
+.owner-guide-target { outline: 2px solid var(--color-sage-500); outline-offset: 6px; scroll-margin-bottom: 20rem; }
+
 html {
   scroll-behavior: smooth;
   -webkit-text-size-adjust: 100%;

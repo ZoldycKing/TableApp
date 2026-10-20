@@ -8,7 +8,7 @@ import { saveBusinessProfileAction } from '@/app/business-actions'
 const emptyProfile: BusinessProfile = { name: '', location: '', phone: '' }
 const profileKey = (profile: BusinessProfile) => JSON.stringify([profile.name, profile.location, profile.phone])
 
-export function BusinessSettings({ profile, canEdit = true }: { profile: BusinessProfile | null; canEdit?: boolean }) {
+export function BusinessSettings({ profile, canEdit = true, nextHref }: { profile: BusinessProfile | null; canEdit?: boolean; nextHref?: string }) {
   const [value, setValue] = useState(profile ?? emptyProfile)
   const [saved, setSaved] = useState(profile ?? emptyProfile)
   const [message, setMessage] = useState<{ kind: 'error' | 'success'; text: string } | null>(null)
@@ -62,7 +62,8 @@ export function BusinessSettings({ profile, canEdit = true }: { profile: Busines
 
   return <form aria-busy={pending} className="mb-6 space-y-3 rounded-xl border border-sand-200 bg-white p-4" onSubmit={event => {
     event.preventDefault()
-    if (!canEdit || !dirty || saving.current) return
+    if (!canEdit || saving.current) return
+    if (!dirty) { if (nextHref && saved.name.trim()) router.push(nextHref); return }
     saving.current = true
     setMessage(null)
     const snapshot = { name: value.name.trim(), location: value.location.trim(), phone: value.phone.trim() }
@@ -77,6 +78,7 @@ export function BusinessSettings({ profile, canEdit = true }: { profile: Busines
         setSaved(snapshot)
         dirtyRef.current = false
         setMessage({ kind: 'success', text: 'Данные бизнеса сохранены' })
+        if (nextHref) router.push(nextHref)
         router.refresh()
       } catch {
         setMessage({ kind: 'error', text: 'Не удалось сохранить данные бизнеса. Проверьте соединение и повторите попытку. Введённые данные остались в форме.' })
@@ -85,10 +87,10 @@ export function BusinessSettings({ profile, canEdit = true }: { profile: Busines
       }
     })
   }}>
-    <h2 className="text-sm font-semibold">Ваш бизнес в приложениях</h2>
+    <h2 className="text-sm font-semibold">Данные бизнеса</h2>
     <p className="text-xs text-ink-muted">Эти данные видят клиенты во всех приложениях этого бизнеса. Название рабочего пространства остаётся внутренним. Изменения вступают в силу сразу.</p>
     {!canEdit ? <p className="text-xs text-ink-muted">Изменить данные может владелец или редактор рабочего пространства.</p> : null}
-    <div className="grid gap-3 sm:grid-cols-3">
+    <div className={`grid gap-4 ${nextHref ? '' : 'sm:grid-cols-3'}`}>
       {(['name', 'location', 'phone'] as const).map(key => <label key={key} className="space-y-1 text-xs text-ink-muted">
         <span>{key === 'name' ? 'Название бизнеса' : key === 'location' ? 'Адрес или филиал (необязательно)' : 'Телефон бизнеса (необязательно)'}</span>
         <input disabled={!canEdit || pending} required={key === 'name'} maxLength={key === 'name' ? 100 : key === 'location' ? 160 : 40} value={value[key]} onChange={event => {
@@ -99,6 +101,6 @@ export function BusinessSettings({ profile, canEdit = true }: { profile: Busines
       </label>)}
     </div>
     {message ? <p role={message.kind === 'error' ? 'alert' : 'status'} className={`text-sm ${message.kind === 'error' ? 'text-red-700' : 'text-ink-soft'}`}>{message.text}</p> : dirty ? <p role="status" className="text-xs text-ink-muted">Есть несохранённые изменения</p> : null}
-    {canEdit ? <button disabled={pending || !dirty} className="rounded-lg bg-ink px-3 py-2 text-sm font-medium text-white disabled:opacity-40">{pending ? 'Сохраняем…' : 'Сохранить данные бизнеса'}</button> : null}
+    {canEdit ? <button disabled={pending || (!dirty && !nextHref)} className="min-h-11 rounded-lg bg-ink px-4 py-2.5 text-sm font-medium text-white disabled:opacity-40">{pending ? 'Сохраняем…' : nextHref ? 'Сохранить и продолжить' : 'Сохранить данные бизнеса'}</button> : null}
   </form>
 }

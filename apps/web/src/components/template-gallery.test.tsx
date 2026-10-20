@@ -30,7 +30,7 @@ describe('starter choice', () => {
     expect(mocks.apply).toHaveBeenCalledOnce()
     expect(mocks.apply).toHaveBeenCalledWith('zakazy')
     resolve({ ok: true, tableId: 'table-new', appId: 'app-new' })
-    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith('/apps/app-new'))
+    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith('/setup?app=app-new&step=business'))
   })
 
   it('preserves an explicitly selected old portal outside the main choice', () => {
@@ -38,5 +38,14 @@ describe('starter choice', () => {
     expect(ui.getByText(/Вы открыли прежний набор/)).toBeTruthy()
     expect(ui.getByRole('button', { name: 'Поставить «Клиентский портал»' })).toBeTruthy()
     expect(ui.queryByRole('heading', { name: 'Клиентский портал' })).toBeNull()
+  })
+
+  it('keeps the scenario available after a failed request instead of leaving every button locked', async () => {
+    mocks.apply.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce({ ok: true, appId: 'retry-app' })
+    const ui = render(<TemplateGallery templates={[...STARTER_TEMPLATES]} chosen="salon" />)
+    fireEvent.click(ui.getByRole('button', { name: 'Поставить «Салон красоты»' }))
+    await ui.findByText(/Не удалось создать сценарий/)
+    fireEvent.click(ui.getByRole('button', { name: 'Поставить «Салон красоты»' }))
+    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith('/setup?app=retry-app&step=business'))
   })
 })

@@ -14,6 +14,7 @@ import {
   Workflow,
 } from '@/components/marketing/blocks'
 import { SolutionDemo } from '@/components/marketing/solution-demo'
+import { TemplateIcon } from '@/components/template-icon'
 import { Reveal } from '@/components/marketing/reveal'
 import { pageMetadata } from '@/lib/seo'
 import { currentMember } from '@/lib/session'
@@ -119,9 +120,7 @@ export default async function SolutionPage({ params }: { params: Promise<{ slug:
         <Section title="Шаблон, с которого начинают" width="narrow">
           <Reveal>
             <div className="rounded-2xl border border-sand-200 bg-white p-7 shadow-soft">
-              <span aria-hidden className="text-3xl">
-                {template.emoji}
-              </span>
+              <TemplateIcon id={template.id} />
               <h3 className="mt-4 font-display text-lg font-bold">{template.name}</h3>
               <p className="mt-2 text-sm text-ink-muted">{template.tagline}</p>
               <ul className="mt-5 space-y-2">

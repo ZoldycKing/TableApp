@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { appSchema, type App } from '@tableapp/schema'
 import { AppEditor } from './app-editor'
 
-const mocks = vi.hoisted(() => ({ update: vi.fn(), publish: vi.fn(), refresh: vi.fn() }))
+const mocks = vi.hoisted(() => ({ update: vi.fn(), publish: vi.fn(), refresh: vi.fn(), push: vi.fn() }))
 vi.mock('@/app/app-actions', () => ({ updateAppDraftAction: mocks.update, publishAppAction: mocks.publish }))
 vi.mock('@/app/inventory-setup-actions', () => ({ enableInventoryAction: vi.fn(), enableStockOperationsAction: vi.fn() }))
 vi.mock('@/app/dispatch-setup-actions', () => ({ enableDispatchAction: vi.fn() }))
@@ -17,9 +17,65 @@ vi.mock('./component-access', () => ({ ComponentAccess: () => null }))
 beforeEach(() => { vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} }); mocks.update.mockResolvedValue({ ok: true }); mocks.publish.mockResolvedValue({ ok: true }) })
 afterEach(() => { cleanup(); vi.resetAllMocks(); vi.unstubAllGlobals() })
 const app = appSchema.parse({ id: 'app-1', workspaceId: 'space', name: 'Shop', slug: 'shop', theme: {}, screens: [{ id: 'screen-1', appId: 'app-1', name: 'Initial screen', position: 'a0', type: 'dashboard', blocks: [] }] })
-const props = { initialApp: app, tables: [], views: [], runtimeTables: {}, relatedTitles: {}, publishedAt: null }
+const props = { initialApp: app, tables: [], views: [], runtimeTables: {}, relatedTitles: {}, publishedAt: null, advanced: true }
 
 describe('editor publication and server refresh', () => {
+  it('focuses the visible inspector immediately when narrow-screen settings change', () => {
+    vi.stubGlobal('matchMedia', () => ({ matches: true }))
+    const ui = render(<AppEditor {...props} advanced={false} />)
+    fireEvent.change(ui.getByRole('combobox', { name: 'Раздел настройки' }), { target: { value: 'appearance' } })
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('Параметры выбранного раздела')
+    expect(ui.getByRole('textbox', { name: 'Название приложения' })).toBeTruthy()
+    fireEvent.change(ui.getByRole('combobox', { name: 'Раздел настройки' }), { target: { value: 'access' } })
+    expect(ui.getByText('Что видит каждая роль')).toBeTruthy()
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('Параметры выбранного раздела')
+  })
+  it('starts an imported internal app with a role that actually has screens', () => {
+    const internal = appSchema.parse({ ...app, screens: app.screens.map(screen => ({ ...screen, access: { public: false, publicFields: [], roles: ['staff'], allowDelete: false } })) })
+    const ui = render(<AppEditor {...props} initialApp={internal} advanced={false} />)
+    expect(ui.getByRole('button', { name: 'Сотрудник' }).getAttribute('aria-pressed')).toBe('true')
+    expect(ui.queryByText(/Этой роли не открыт/)).toBeNull()
+    expect(ui.getByRole('textbox', { name: 'Название экрана' })).toBeTruthy()
+  })
+  it('keeps an unsaved draft on a failed save before switching to the full constructor', async () => {
+    mocks.update.mockResolvedValueOnce({ ok: false, error: 'Сохранение отклонено' }).mockResolvedValueOnce({ ok: true })
+    const ui = render(<AppEditor {...props} advanced={false} />)
+    fireEvent.click(ui.getByRole('button', { name: 'Автор' }))
+    fireEvent.change(ui.getByRole('textbox', { name: 'Название экрана' }), { target: { value: 'Keep across routes' } })
+    fireEvent.click(ui.getByRole('link', { name: /Полный конструктор/ }))
+    expect((await ui.findByRole('alert')).textContent).toBe('Сохранение отклонено')
+    expect(mocks.push).not.toHaveBeenCalled()
+    expect((ui.getByRole('textbox', { name: 'Название экрана' }) as HTMLInputElement).value).toBe('Keep across routes')
+    fireEvent.click(ui.getByRole('link', { name: /Полный конструктор/ }))
+    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith('/apps/app-1?advanced=1'))
+    expect((mocks.update.mock.calls[1]![1] as App).screens[0]!.name).toBe('Keep across routes')
+  })
+  it('requires review in the guided route and publishes the latest draft only once', async () => {
+    const ui = render(<AppEditor {...props} advanced={false} />)
+    fireEvent.click(ui.getByRole('button', { name: 'Автор' }))
+    expect(ui.queryByRole('button', { name: 'Удалить экран' })).toBeNull()
+    expect(ui.getByRole('link', { name: /Полный конструктор/ }).getAttribute('href')).toBe('/apps/app-1?advanced=1')
+    fireEvent.change(ui.getByRole('textbox', { name: 'Название экрана' }), { target: { value: 'Guided latest' } })
+    fireEvent.click(ui.getByRole('button', { name: /Проверить и опубликовать/ }))
+    const publish = ui.getByRole('button', { name: 'Опубликовать приложение' })
+    expect(publish.matches(':disabled')).toBe(true)
+    expect(mocks.publish).not.toHaveBeenCalled()
+    fireEvent.click(ui.getByRole('checkbox', { name: 'Я проверил данные и доступ пользователей' }))
+    fireEvent.click(publish); fireEvent.click(publish)
+    await waitFor(() => expect(mocks.publish).toHaveBeenCalledOnce())
+    expect((mocks.publish.mock.calls[0]![1] as App).screens[0]!.name).toBe('Guided latest')
+    expect(ui.getByRole('link', { name: /Открыть рабочее приложение/ }).getAttribute('href')).toBe('/a/shop')
+  })
+
+  it('keeps guided preview usable for a viewer and prevents saving or publication', () => {
+    const ui = render(<AppEditor {...props} advanced={false} canEdit={false} />)
+    fireEvent.click(ui.getByRole('button', { name: 'Автор' }))
+    expect(ui.getByRole('textbox', { name: 'Название экрана' }).matches(':disabled')).toBe(true)
+    expect(ui.getByRole('button', { name: /Проверить и опубликовать/ }).matches(':disabled')).toBe(true)
+    expect(ui.getByRole('button', { name: 'Сохранить черновик' }).matches(':disabled')).toBe(true)
+    expect(ui.getByRole('button', { name: 'Телефон' }).matches(':disabled')).toBe(false)
+    expect(mocks.update).not.toHaveBeenCalled()
+  })
   it('saves the latest edit before an immediate publish click', async () => {
     const ui = render(<AppEditor {...props} />)
     fireEvent.change(ui.getByRole('textbox', { name: 'Название экрана' }), { target: { value: 'Latest screen' } })

@@ -3,7 +3,7 @@
 import type { Field, RowGroup } from '@tableapp/schema'
 import { isComputed } from '@tableapp/schema'
 import type { KeyboardEvent } from 'react'
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { groupLabel } from '@/lib/apply-view'
 import { AttachmentPreview } from '@/components/file-upload'
 import { FIELD_LABELS } from '@/lib/field-labels'
@@ -14,6 +14,7 @@ import { CellEditor } from './cell-editor'
 type Selection = { rowIndex: number; columnIndex: number }
 
 type GridProps = {
+  autoEditRowId?: string | null
   readOnly?: boolean
   selectedRowId?: string | null
   onSelectRow?: (rowId: string) => void
@@ -127,10 +128,11 @@ function CellContent({
   if (!text) return null
 
   const numeric = field.type === 'number' || field.type === 'rollup' || field.type === 'count'
-  return <span className={numeric ? 'block text-right tabular-nums' : 'block truncate'}>{text}</span>
+  return <span title={text} className={numeric ? 'block truncate text-right tabular-nums' : 'block truncate'}>{text}</span>
 }
 
 export function DataGrid({
+  autoEditRowId,
   readOnly = false,
   selectedRowId,
   onSelectRow,
@@ -151,10 +153,19 @@ export function DataGrid({
   const [selection, setSelection] = useState<Selection | null>(null)
   const [editing, setEditing] = useState<Selection | null>(null)
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set())
+  const editedNewRow = useRef<string | null>(null)
 
   // Навигация ходит по плоскому списку: группировка меняет отрисовку, но не
   // порядок обхода строк стрелками.
   const flatRows = useMemo(() => groups.flatMap((group) => group.rows), [groups])
+  useEffect(() => {
+    if (!autoEditRowId || readOnly || editedNewRow.current === autoEditRowId) return
+    const rowIndex = flatRows.findIndex(row => row.id === autoEditRowId)
+    const columnIndex = fields.findIndex(field => !isComputed(field.type) && field.type !== 'checkbox')
+    if (rowIndex < 0 || columnIndex < 0) return
+    editedNewRow.current = autoEditRowId
+    setSelection({ rowIndex, columnIndex }); setEditing({ rowIndex, columnIndex })
+  }, [autoEditRowId, flatRows, fields, readOnly])
   const indexByRowId = useMemo(
     () => new Map(flatRows.map((row, index) => [row.id, index])),
     [flatRows],
@@ -307,10 +318,12 @@ export function DataGrid({
   return (
     <div
       tabIndex={0}
+      aria-label="Данные таблицы"
       onKeyDown={handleKey}
       className="overflow-auto rounded-2xl border border-sand-200 bg-white shadow-soft outline-none transition-shadow focus:ring-2 focus:ring-sage-200"
     >
-      <table className="w-max min-w-full border-collapse text-sm">
+      <table className="min-w-full table-fixed border-collapse text-sm" style={{ width: 64 + fields.reduce((sum, field) => sum + (field.type === 'long_text' ? 280 : field.type === 'number' || field.type === 'checkbox' ? 144 : 208), 0) + (!readOnly && onAddField ? 112 : 0) }}>
+        <colgroup><col style={{ width: 64 }} />{fields.map(field => <col key={field.id} style={{ width: field.type === 'long_text' ? 280 : field.type === 'number' || field.type === 'checkbox' ? 144 : 208 }} />)}{!readOnly && onAddField ? <col style={{ width: 112 }} /> : null}</colgroup>
         <thead>
           <tr className="bg-sand-100/80">
             <th className="sticky left-0 z-20 w-16 border-b border-r border-sand-200 bg-sand-100 px-2 py-2 text-xs font-normal text-ink-muted">
@@ -319,7 +332,7 @@ export function DataGrid({
             {fields.map((field, index) => (
               <th
                 key={field.id}
-                className={`group/th min-w-48 border-b border-r border-sand-200 px-3 py-2 text-left ${
+                className={`group/th border-b border-r border-sand-200 px-3 py-2 text-left ${
                   index === 0 ? 'sticky left-16 z-20 bg-sand-100' : ''
                 }`}
               >
@@ -413,7 +426,7 @@ export function DataGrid({
                 onClick={() => onAddRow()}
                 className="w-full px-3 py-2 text-left text-sm text-[var(--color-ink-muted)] hover:bg-[var(--color-surface-muted)]"
               >
-                + Строка
+                + Добавить строку
               </button>
             </td>
           </tr> : null}

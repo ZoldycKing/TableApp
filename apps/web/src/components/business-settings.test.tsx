@@ -2,15 +2,16 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const mocks = vi.hoisted(() => ({ save: vi.fn(), refresh: vi.fn() }))
+const mocks = vi.hoisted(() => ({ save: vi.fn(), refresh: vi.fn(), push: vi.fn() }))
 vi.mock('@/app/business-actions', () => ({ saveBusinessProfileAction: mocks.save }))
-vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: mocks.refresh }) }))
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: mocks.refresh, push: mocks.push }) }))
 const { BusinessSettings } = await import('./business-settings')
 const profile = { name: 'Магазин', location: 'Москва', phone: '+7 900 000-00-00' }
 
 beforeEach(() => {
   mocks.save.mockReset()
   mocks.refresh.mockReset()
+  mocks.push.mockReset()
 })
 afterEach(() => { cleanup(); vi.restoreAllMocks() })
 
@@ -27,6 +28,18 @@ function renderSettings(canEdit = true) {
 }
 
 describe('business profile explicit save and navigation', () => {
+  it('continues only after the business profile is saved and preserves input after rejection', async () => {
+    mocks.save.mockResolvedValueOnce({ ok: false, error: 'Не удалось сохранить бизнес' }).mockResolvedValueOnce({ ok: true })
+    render(<BusinessSettings profile={profile} nextHref="/setup?step=data&app=app-salon" />)
+    fireEvent.change(screen.getByLabelText('Название бизнеса'), { target: { value: 'Студия' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Сохранить и продолжить' }))
+    expect((await screen.findByRole('alert')).textContent).toBe('Не удалось сохранить бизнес')
+    expect((screen.getByLabelText('Название бизнеса') as HTMLInputElement).value).toBe('Студия')
+    expect(mocks.push).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Сохранить и продолжить' }))
+    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith('/setup?step=data&app=app-salon'))
+    expect(mocks.save).toHaveBeenLastCalledWith({ ...profile, name: 'Студия' })
+  })
   it('blocks a same-tab link when the user declines losing unsaved data', () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
     const { visit } = renderSettings()

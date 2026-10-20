@@ -3,6 +3,7 @@ import type { BusinessOverviewData } from '@/lib/business-overview-data'
 import { overviewNextAction, overviewPermissions } from '@/lib/business-overview-data'
 import { ROLE_LABELS } from '@/lib/roles'
 import { ShellIcon } from './shell/icons'
+import { FirstEntry } from './first-entry'
 
 const PRIMARY = 'inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-ink px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-ink/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sage-400 focus-visible:ring-offset-2'
 const SECONDARY = 'inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-sand-200 bg-white px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-sand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sage-400'
@@ -15,6 +16,7 @@ function updatedDate(value: string) {
 export function BusinessOverview({ data }: { data: BusinessOverviewData }) {
   const next = overviewNextAction(data)
   const permissions = overviewPermissions(data.role)
+  if (permissions.edit && data.tables.length === 0 && data.apps.length === 0) return <FirstEntry />
   const published = data.apps.filter(app => app.published).length
   const pending = data.apps.filter(app => !app.published || app.hasUnpublishedChanges).length
   const totals = [

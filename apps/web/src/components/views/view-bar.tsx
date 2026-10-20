@@ -156,6 +156,7 @@ export function ViewBar({
         </div> : null}
       </div>
 
+      <p className="text-xs leading-5 text-ink-soft">Вкладки — разные виды одной таблицы. Меняются отбор и видимые поля, данные остаются общими.</p>
       <div className="flex flex-wrap items-center gap-2">
         <input
           value={activeView.name}

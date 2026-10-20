@@ -81,6 +81,7 @@ export function Breadcrumbs({ trail }: { trail: { href?: string; label: string }
 export function PageHero({
   trail,
   emoji,
+  icon,
   title,
   lead,
   note,
@@ -88,6 +89,7 @@ export function PageHero({
 }: {
   trail?: { href?: string; label: string }[]
   emoji?: string
+  icon?: ReactNode
   title: ReactNode
   lead: string
   note?: string
@@ -103,7 +105,7 @@ export function PageHero({
       <div className="mx-auto w-full max-w-4xl px-5 py-20 sm:px-8">
         {trail ? <Breadcrumbs trail={trail} /> : null}
 
-        {emoji ? (
+        {icon ? <div className="mt-8">{icon}</div> : emoji ? (
           <p className="mt-8 text-4xl" aria-hidden>
             {emoji}
           </p>

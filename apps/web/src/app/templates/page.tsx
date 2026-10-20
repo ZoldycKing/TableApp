@@ -10,6 +10,7 @@ import {
 } from '@/components/marketing/blocks'
 import { Reveal } from '@/components/marketing/reveal'
 import { TemplateGallery } from '@/components/template-gallery'
+import { TemplateIcon } from '@/components/template-icon'
 import { pageMetadata } from '@/lib/seo'
 import { currentMember, listMemberships } from '@/lib/session'
 import { SOLUTIONS } from '@/lib/solutions'
@@ -79,25 +80,25 @@ export default async function TemplatesPage({
         <main className="mx-auto w-full max-w-6xl px-5 py-10 sm:px-6">
           <h1 className="text-2xl font-semibold tracking-tight text-ink">С чего начать вашему бизнесу</h1>
           <p className="mt-2 max-w-2xl text-sm text-ink-soft">
-            Выберите задачу — получите таблицы и черновик приложения. Кабинет клиента входит в клиентские наборы. Замените примеры, добавьте сотрудников и проверьте доступ перед публикацией.
+            Выберите задачу бизнеса. Таблицы и основные экраны уже подготовлены. Дальше добавим ваши данные и проверим результат по шагам.
           </p>
 
           <div className="mt-8">
-            <p className="mb-6 rounded-xl border border-sand-200 bg-sand-50 px-5 py-4 text-sm leading-relaxed text-ink-soft">
+            <details className="mb-6 text-sm leading-relaxed text-ink-soft"><summary className="cursor-pointer underline decoration-sand-300 underline-offset-4">Уже есть приложение бизнеса?</summary><p className="mt-3">
               Уже есть приложение бизнеса? Подключите новую возможность в его настройках, чтобы сохранить одну ссылку и кабинет бизнеса.
               {' '}<Link href="/apps" className="font-medium text-sage-700 underline underline-offset-4">Открыть мои приложения</Link>
-            </p>
+            </p></details>
             <TemplateGallery key={chosen ?? compatibilityTemplate?.id ?? 'default'} templates={[...STARTER_TEMPLATES]} chosen={chosen} compatibilityTemplate={compatibilityTemplate} />
           </div>
 
-          <section className="mt-12 grid gap-5 border-t border-sand-200 pt-8 md:grid-cols-3">
+          <details className="mt-10 border-t border-sand-200 pt-6"><summary className="cursor-pointer text-sm font-medium">Вопросы о сценариях</summary><section className="mt-6 grid gap-5 md:grid-cols-3">
             {QUESTIONS.map((item) => (
               <div key={item.question}>
                 <h2 className="text-sm font-semibold text-ink">{item.question}</h2>
                 <p className="mt-2 text-sm leading-relaxed text-ink-soft">{item.answer}</p>
               </div>
             ))}
-          </section>
+          </section></details>
         </main>
       </AppChrome>
     )
@@ -136,9 +137,7 @@ export default async function TemplatesPage({
                   href={`/templates/${template.id}`}
                   className="group flex h-full flex-col rounded-2xl border border-sand-200 bg-white p-7 shadow-soft transition-all duration-300 hover:-translate-y-1.5 hover:border-sage-300 hover:shadow-lift"
                 >
-                  <span aria-hidden className="text-3xl">
-                    {template.emoji}
-                  </span>
+                  <TemplateIcon id={template.id} />
                   <h3 className="mt-4 font-display text-base font-bold">{template.name}</h3>
                   <p className="mt-2 text-sm text-ink-muted">{template.tagline}</p>
                   <p className="mt-3 text-xs leading-relaxed text-ink-muted">{template.audience}</p>

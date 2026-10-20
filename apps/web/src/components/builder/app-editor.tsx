@@ -27,6 +27,8 @@ import { COMPONENT_LABELS, ComponentSettings, describeComponent, makeComponent }
 import { ComponentAccess } from './component-access'
 import { DashboardEditor } from './dashboard-editor'
 import { ScreenSettings } from './screen-settings'
+import { GuidedEditor } from './guided-editor'
+import { ShellIcon } from '@/components/shell/icons'
 
 const SAVE_DELAY_MS = 700
 
@@ -97,6 +99,7 @@ const ADDABLE: Component['type'][] = [
 ]
 
 type Props = {
+  advanced?: boolean
   canEdit?: boolean
   business?: import('@tableapp/schema').BusinessProfile | null
   portalUpgradeTableId?: string | null
@@ -114,17 +117,21 @@ function PreviewChip({
   active,
   onClick,
   children,
+  label,
 }: {
   active: boolean
   onClick: () => void
   children: React.ReactNode
+  label?: string
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`rounded-lg px-2.5 py-1 text-xs transition-colors ${
+      aria-label={label}
+      title={label}
+      className={`min-h-11 rounded-lg px-3 py-2 text-sm transition-colors focus-visible:ring-2 focus-visible:ring-sage-400 ${
         active
           ? 'bg-ink text-sand-50'
           : 'border border-[var(--color-border-subtle)] hover:bg-[var(--color-surface-muted)]'
@@ -135,14 +142,16 @@ function PreviewChip({
   )
 }
 
-export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTitles, publishedAt, inventoryUpgradeTableId, dispatchUpgradeTableId, portalUpgradeTableId, business, canEdit = true }: Props) {
+export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTitles, publishedAt, inventoryUpgradeTableId, dispatchUpgradeTableId, portalUpgradeTableId, business, canEdit = true, advanced = false }: Props) {
   const router = useRouter()
   const [app, setApp] = useState<App>(initialApp)
-  const [screenId, setScreenId] = useState(initialApp.screens[0]?.id ?? '')
+  const [screenId, setScreenId] = useState(initialApp.homeScreenId ?? initialApp.screens[0]?.id ?? '')
   const [componentId, setComponentId] = useState<string | null>(null)
   const [save, setSave] = useState<SaveState>({ kind: 'idle' })
   const [draftQueue] = useState(() => createDraftSaveQueue(initialApp, (next: App) => updateAppDraftAction(next.id, next)))
   const [publishing, setPublishing] = useState(false)
+  const publicationLock = useRef(false)
+  const [publishedHere, setPublishedHere] = useState(false)
   useUnsaved(`app-editor:${initialApp.id}`, save.kind === 'dirty' || save.kind === 'saving' || save.kind === 'error')
   const [pending, startTransition] = useTransition()
 
@@ -194,6 +203,32 @@ export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTit
     window.addEventListener('beforeunload', warn)
     return () => window.removeEventListener('beforeunload', warn)
   }, [save.kind])
+
+  // Flush a pending autosave before leaving through any internal link. A failed
+  // save keeps the editor and its input visible instead of discarding the draft.
+  useEffect(() => {
+    let navigating = false
+    const leave = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || !draftQueue.dirty()) return
+      const link = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>('a[href]') : null
+      if (!link || link.hasAttribute('download') || (link.target && link.target !== '_self')) return
+      const url = new URL(link.href, window.location.href)
+      if (url.origin !== window.location.origin || (url.pathname === window.location.pathname && url.search === window.location.search)) return
+      event.preventDefault(); event.stopPropagation()
+      if (navigating) return
+      navigating = true
+      if (timer.current) { clearTimeout(timer.current); timer.current = null }
+      startTransition(async () => {
+        setSave({ kind: 'saving' })
+        const result = await draftQueue.flush()
+        if (result.ok) { setSave({ kind: 'saved' }); router.push(`${url.pathname}${url.search}${url.hash}`) }
+        else setSave({ kind: 'error', text: result.error })
+        navigating = false
+      })
+    }
+    document.addEventListener('click', leave, true)
+    return () => document.removeEventListener('click', leave, true)
+  }, [draftQueue, router])
 
   const replaceScreen = (next: Screen) =>
     update({ ...app, screens: app.screens.map((item) => (item.id === next.id ? next : item)) })
@@ -322,7 +357,7 @@ export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTit
    * отдельно потому, что это не роль: у человека нет ни имени, ни почты,
    * и поставить её ему в списке доступа нельзя.
    */
-  const [previewAs, setPreviewAs] = useState<'editor' | 'anonymous' | RoleId>('editor')
+  const [previewAs, setPreviewAs] = useState<'editor' | 'anonymous' | RoleId>(() => advanced ? 'editor' : initialApp.screens.some(item => item.access.public) ? 'anonymous' : initialApp.roles.find(role => visibleScreensFor(initialApp, asRole(role.id)).length > 0)?.id ?? 'editor')
   const [previewEmail, setPreviewEmail] = useState('')
   const [previewCompany, setPreviewCompany] = useState('')
 
@@ -335,7 +370,7 @@ export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTit
    * Разметка приложения зависит от ширины контейнера, поэтому достаточно
    * сузить рамку — никаких отдельных раскладок под телефон нет.
    */
-  const [device, setDevice] = useState<Device>('desktop')
+  const [device, setDevice] = useState<Device>(advanced ? 'desktop' : 'mobile')
 
   /*
    * Ширину рамки меряем, а не предполагаем: колонка конструктора зависит
@@ -371,6 +406,36 @@ export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTit
   // Открытый в редакторе экран может быть закрыт выбранной роли: тогда
   // предпросмотр начинается с того, что ей доступно, а не с ошибки.
   const previewScreenId = shown.some((item) => item.id === screen?.id) ? screen?.id : shown[0]?.id
+
+  const publish = () => {
+    if (!canEdit || publicationLock.current) return
+    publicationLock.current = true
+    setPublishing(true)
+    if (timer.current) { clearTimeout(timer.current); timer.current = null }
+    startTransition(async () => {
+      try {
+        const saved = await saveDraft()
+        if (!saved.ok) return
+        const result = await publishAppAction(app.id, draftQueue.current())
+        setSave(result.ok ? { kind: 'note', text: 'Опубликовано. Рабочая ссылка доступна пользователям с настроенными правами.' } : { kind: 'error', text: result.error })
+        if (result.ok) { setPublishedHere(true); router.refresh() }
+      } catch { setSave({ kind: 'error', text: 'Не удалось подтвердить публикацию. Проверьте соединение и повторите публикацию.' }) }
+      finally { publicationLock.current = false; setPublishing(false) }
+    })
+  }
+
+  if (!advanced) return <GuidedEditor
+    app={app} tables={tables} screens={shown} screen={shown.find(item => item.id === screenId) ?? shown.find(item => item.tab) ?? shown[0]}
+    fields={(() => { const current = shown.find(item => item.id === screenId) ?? shown.find(item => item.tab) ?? shown[0]; return tables.find(table => table.id === tableOfScreen(current))?.fields ?? [] })()}
+    canEdit={canEdit} publishing={publishing} pending={pending} published={Boolean(publishedAt) || publishedHere}
+    status={save.kind === 'error' || save.kind === 'note' ? save.text : SAVE_WORDS[save.kind]} error={save.kind === 'error'}
+    onScreen={setScreenId} onUpdate={update} onSave={() => startTransition(async () => { try { await saveDraft() } catch { setSave({ kind: 'error', text: 'Не удалось сохранить черновик. Повторите сохранение.' }) } })} onPublish={publish}
+    roleControls={<div className="space-y-3"><label className="block text-sm text-ink-soft lg:hidden"><span className="sr-only">Смотреть как</span><select aria-label="Роль в предпросмотре" value={previewAs} onChange={event => setPreviewAs(event.target.value as typeof previewAs)} className="min-h-11 w-full rounded-lg border border-sand-300 bg-white px-3 py-2"><option value="anonymous">Посетитель</option>{app.roles.map(role => <option key={role.id} value={role.id}>{role.name}</option>)}<option value="editor">Автор</option></select></label><div className="hidden flex-wrap items-center gap-1 lg:flex"><span className="mr-2 text-sm text-ink-soft">Смотреть как</span><PreviewChip active={previewAs === 'anonymous'} onClick={() => setPreviewAs('anonymous')}>Посетитель</PreviewChip>{app.roles.map(role => <PreviewChip key={role.id} active={previewAs === role.id} onClick={() => setPreviewAs(role.id)}>{role.name}</PreviewChip>)}<PreviewChip active={previewAs === 'editor'} onClick={() => setPreviewAs('editor')}>Автор</PreviewChip></div>{previewAs !== 'anonymous' && previewAs !== 'editor' ? <details className="max-w-sm text-sm"><summary className="cursor-pointer text-ink-soft">Проверить личные записи по почте</summary><label className="mt-3 block text-sm text-ink-soft">Почта пользователя<input type="email" value={previewEmail} onChange={event => setPreviewEmail(event.target.value)} className="mt-1 w-full rounded-lg border border-sand-300 px-3 py-2" /></label><label className="mt-3 block text-sm text-ink-soft">Организация (если используется в правилах)<input value={previewCompany} onChange={event => setPreviewCompany(event.target.value)} className="mt-1 w-full rounded-lg border border-sand-300 px-3 py-2" /></label><p className="mt-2 text-xs leading-5 text-ink-muted">Без почты личные записи не отображаются. Используются действующие ограничения роли.</p></details> : null}</div>}
+    deviceControls={<div className="flex flex-wrap gap-1">{DEVICES.filter(item => item !== 'tablet').map(item => <PreviewChip key={item} label={DEVICE_WORDS[item]} active={device === item} onClick={() => setDevice(item)}><span className="flex items-center lg:hidden"><ShellIcon name={item === 'mobile' ? 'phone' : 'desktop'} /></span><span className="hidden lg:inline">{DEVICE_WORDS[item]}</span></PreviewChip>)}</div>}
+    preview={<div ref={frame} className="mx-auto h-[36rem] w-full max-w-full overflow-hidden rounded-2xl border border-sand-300 bg-white" style={{ maxWidth: deviceWidth }}>
+      {shown.length ? <div className="origin-top-left overflow-hidden" style={{ width: deviceWidth, height: FRAME_HEIGHT / scale, transform: `scale(${scale})` }}><AppShell key={`${previewAs}-${previewScreenId}-${device}`} runtime={preview} viewer={null} initialScreenId={previewScreenId} editing /></div> : <p className="p-6 text-sm leading-6 text-ink-soft">Этой роли не открыт ни один экран. Выберите другую роль или настройте доступ.</p>}
+    </div>}
+  />
 
   return (
     <div className="grid gap-4 lg:grid-cols-[14rem_1fr_24rem]">

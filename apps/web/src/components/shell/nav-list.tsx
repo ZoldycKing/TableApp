@@ -50,7 +50,7 @@ export function NavList({
               title={contextName && group.id === 'work' ? contextName : undefined}
               className={`mb-1 truncate px-3 text-[11px] font-medium text-ink-muted ${contextName ? '' : 'uppercase tracking-wide'} ${ONLY_WIDE_BLOCK[variant]}`}
             >
-              {contextName ? group.id === 'work' ? `Бизнес: ${contextName}` : 'Настройки бизнеса' : group.label}
+              {contextName ? group.id === 'work' ? `Пространство: ${contextName}` : 'Настройки пространства' : group.label}
             </p>
 
             <ul className="space-y-0.5">

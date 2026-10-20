@@ -67,13 +67,14 @@ export async function createBusinessAction(
   if (!member) return { ok: false, error: 'Нужно войти в систему' }
   const parsed = businessProfileSchema.shape.name.safeParse(name)
   if (!parsed.success || /[\u0000-\u001f\u007f]/.test(parsed.data)) {
-    return { ok: false, error: 'Укажите название бизнеса от 1 до 100 символов' }
+    return { ok: false, error: 'Укажите название рабочего пространства от 1 до 100 символов' }
   }
   const workspaceId = newId('workspace')
   await db.transaction(async tx => {
     await tx.insert(workspaces).values({
       id: workspaceId, name: parsed.data, slug: `business-${workspaceId}`, ownerId: member.userId,
-      businessProfile: { name: parsed.data, location: '', phone: '' },
+      // Internal workspace identity must not become the public company name.
+      businessProfile: null,
     })
     await tx.insert(workspaceMembers).values({ workspaceId, userId: member.userId, role: 'owner', acceptedAt: new Date() })
   })

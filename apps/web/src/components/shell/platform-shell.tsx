@@ -426,7 +426,7 @@ function Drawer({
           {businesses !== undefined ? <BusinessTree businesses={businesses} activeWorkspaceId={activeWorkspaceId} pathname={pathname} variant="wide" mobile onNavigate={onClose} /> : null}
           <NavList pathname={pathname} role={role} onNavigate={onClose}
             omitIds={businesses !== undefined ? ['data', 'apps'] : []}
-            contextName={businesses !== undefined ? businesses.find(business => business.workspaceId === activeWorkspaceId)?.businessName ?? workspaceName : undefined} />
+            contextName={businesses !== undefined ? businesses.find(business => business.workspaceId === activeWorkspaceId)?.workspaceName ?? workspaceName : undefined} />
         </div>
 
         <div className="border-t border-sand-200 px-3 py-2.5">

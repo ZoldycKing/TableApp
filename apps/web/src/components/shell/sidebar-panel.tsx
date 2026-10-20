@@ -96,7 +96,7 @@ export function SidebarPanel({
         <div className="flex items-center gap-1">
           <Link
             href="/app"
-            aria-label="TableApp — обзор бизнеса"
+            aria-label="TableApp — обзор пространства"
             className={`flex h-9 min-w-0 flex-1 items-center rounded-xl outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-sage-400 ${ROW[variant]}`}
           >
             <Logo wordClassName={`${LABEL[variant]} ${LABEL_MOTION}`} />
@@ -117,7 +117,7 @@ export function SidebarPanel({
         {businesses !== undefined ? <BusinessTree businesses={businesses} activeWorkspaceId={activeWorkspaceId} pathname={pathname} variant={variant} /> : null}
         <NavList pathname={pathname} role={role} variant={variant}
           omitIds={businesses !== undefined && variant === 'wide' ? ['data', 'apps'] : []}
-          contextName={businesses !== undefined ? businesses.find(business => business.workspaceId === activeWorkspaceId)?.businessName ?? workspaceName : undefined} />
+          contextName={businesses !== undefined ? businesses.find(business => business.workspaceId === activeWorkspaceId)?.workspaceName ?? workspaceName : undefined} />
       </div>
 
       <div className="px-3 py-2.5">

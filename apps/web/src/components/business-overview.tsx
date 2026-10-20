@@ -27,13 +27,13 @@ export function BusinessOverview({ data }: { data: BusinessOverviewData }) {
   return <main className="mx-auto w-full max-w-6xl px-5 py-7 sm:px-8 sm:py-10">
     <header className="flex flex-wrap items-start justify-between gap-4">
       <div className="min-w-0">
-        <p className="mb-1 break-words text-sm text-ink-muted">{data.businessName}</p>
-        <h1 className="text-2xl font-semibold tracking-tight text-ink sm:text-3xl">Обзор бизнеса</h1>
+        <p className="mb-1 break-words text-sm text-ink-muted">{data.workspaceName}</p>
+        <h1 className="text-2xl font-semibold tracking-tight text-ink sm:text-3xl">Обзор пространства</h1>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-soft">Таблицы, приложения и следующие действия в одном месте.</p>
       </div>
       <div className="flex flex-wrap items-center gap-3">
         <span className="rounded-lg bg-sand-100 px-3 py-2 text-xs font-medium text-ink-soft">{ROLE_LABELS[data.role]}</span>
-        {permissions.edit ? <Link href="/setup" className={SECONDARY}><ShellIcon name="gear" className="size-4" />Настройка бизнеса</Link> : null}
+        {permissions.edit ? <Link href="/setup" className={SECONDARY}><ShellIcon name="gear" className="size-4" />Подготовить приложение</Link> : null}
       </div>
     </header>
 
@@ -69,7 +69,7 @@ export function BusinessOverview({ data }: { data: BusinessOverviewData }) {
       </section>
 
       <section aria-labelledby="overview-apps" className="min-w-0">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><h2 id="overview-apps" className="text-lg font-semibold text-ink">Приложения бизнеса</h2><Link href="/apps" className={TEXT_LINK}>Все приложения</Link></div>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><h2 id="overview-apps" className="text-lg font-semibold text-ink">Приложения пространства</h2><Link href="/apps" className={TEXT_LINK}>Все приложения</Link></div>
         {data.apps.length ? <>
           <p className="mb-3 text-xs leading-relaxed text-ink-muted">Опубликовано: {published}{pending ? ` · Требуют проверки: ${pending}` : ''}</p>
           <ul className="space-y-3">{data.apps.slice(0, 3).map(app => <li key={app.id} className="rounded-2xl border border-sand-200 bg-white p-4">
@@ -81,7 +81,7 @@ export function BusinessOverview({ data }: { data: BusinessOverviewData }) {
       </section>
     </div>
 
-    <section aria-label="Другие разделы бизнеса" className="mt-9 flex flex-wrap items-center gap-x-6 gap-y-3 border-t border-sand-200 pt-5">
+    <section aria-label="Другие разделы пространства" className="mt-9 flex flex-wrap items-center gap-x-6 gap-y-3 border-t border-sand-200 pt-5">
       <Link href="/messages" className={`${TEXT_LINK} inline-flex items-center gap-2`}><ShellIcon name="chat" className="size-4" />Сообщения клиентов</Link>
       {permissions.manageTeam ? <Link href="/team" className={`${TEXT_LINK} inline-flex items-center gap-2`}><ShellIcon name="users" className="size-4" />Команда и доступ</Link> : null}
       <Link href="/usage" className={TEXT_LINK}>Тариф и использование</Link>

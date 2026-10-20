@@ -145,7 +145,7 @@ describe.skipIf(!process.env.DATABASE_URL)('owner business navigation against Po
     expect(result.href).toBe('/app')
     const { db, workspaces, workspaceMembers, tables, apps } = database
     const [workspace] = await db.select().from(workspaces).where(eq(workspaces.id, result.workspaceId))
-    expect(workspace).toMatchObject({ name: 'Новая мастерская', ownerId: ids.user, plan: 'free', businessProfile: { name: 'Новая мастерская', location: '', phone: '' } })
+    expect(workspace).toMatchObject({ name: 'Новая мастерская', ownerId: ids.user, plan: 'free', businessProfile: null })
     const [membership] = await db.select().from(workspaceMembers).where(eq(workspaceMembers.workspaceId, result.workspaceId))
     expect(membership).toMatchObject({ userId: ids.user, role: 'owner' })
     expect(membership!.acceptedAt).toBeInstanceOf(Date)

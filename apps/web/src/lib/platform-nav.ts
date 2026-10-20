@@ -58,7 +58,7 @@ export type NavItem = {
 export const NAV_ITEMS: NavItem[] = [
   {
     id: 'overview',
-    label: 'Обзор бизнеса',
+    label: 'Обзор пространства',
     href: '/app',
     icon: 'home',
     group: 'work',

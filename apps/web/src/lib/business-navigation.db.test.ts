@@ -4,12 +4,12 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { eq, inArray } from 'drizzle-orm'
 import { newId } from '@tableapp/schema'
 import type { BusinessResourceDestination } from './business-navigation-types'
-import type { Member } from './session'
+import type { Account, Member } from './session'
 
 const envFile = resolve(import.meta.dirname, '../../../../.env')
 if (!process.env.DATABASE_URL && existsSync(envFile)) process.loadEnvFile(envFile)
-const state = vi.hoisted(() => ({ member: null as Member | null, setCookie: vi.fn() }))
-vi.mock('@/lib/session', async original => ({ ...await original<typeof import('./session')>(), currentMember: async () => state.member }))
+const state = vi.hoisted(() => ({ member: null as Member | null, account: null as Account | null, setCookie: vi.fn() }))
+vi.mock('@/lib/session', async original => ({ ...await original<typeof import('./session')>(), currentMember: async () => state.member, currentAccount: async () => state.account }))
 vi.mock('next/headers', () => ({ cookies: async () => ({ set: state.setCookie }) }))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 
@@ -59,7 +59,7 @@ describe.skipIf(!process.env.DATABASE_URL)('owner business navigation against Po
     member = { userId: ids.user, email: `${stamp}@example.invalid`, name: null, workspaceId: ids.first, workspaceName: 'Внутреннее название', role: 'owner' }
   })
 
-  beforeEach(() => { state.member = member; state.setCookie.mockClear() })
+  beforeEach(() => { state.member = member; state.account = null; state.setCookie.mockClear() })
   afterAll(async () => {
     if (!database) return
     const { db, workspaces, users, sql } = database
@@ -121,6 +121,21 @@ describe.skipIf(!process.env.DATABASE_URL)('owner business navigation against Po
     const after = await database.db.select({ id: database.workspaces.id }).from(database.workspaces).where(eq(database.workspaces.ownerId, ids.user))
     expect(after).toEqual(before)
     expect(state.setCookie).not.toHaveBeenCalled()
+  })
+
+  it('allows an authenticated account without a current business to create one, but cannot switch to a foreign business', async () => {
+    state.member = null
+    state.account = { userId: member.userId, email: member.email, name: null }
+    const { switchWorkspaceAction } = await import('@/app/team-actions')
+    expect((await switchWorkspaceAction(ids.foreign)).ok).toBe(false)
+    expect(state.setCookie).not.toHaveBeenCalled()
+    const result = await actions.createBusinessAction('Первый бизнес после очистки')
+    if (!result.ok || !('workspaceId' in result)) throw new Error('Business creation failed')
+    created.push(result.workspaceId)
+    expect(result.href).toBe('/app')
+    const [membership] = await database.db.select().from(database.workspaceMembers).where(eq(database.workspaceMembers.workspaceId, result.workspaceId))
+    expect(membership).toMatchObject({ userId: member.userId, role: 'owner' })
+    expect(state.setCookie).toHaveBeenLastCalledWith('tableapp_workspace', result.workspaceId, expect.any(Object))
   })
 
   it('creates an empty independent free business with an accepted owner and makes it active', async () => {

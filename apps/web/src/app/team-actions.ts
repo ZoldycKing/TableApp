@@ -15,7 +15,7 @@ import {
 } from '@/lib/auth'
 import { sendMagicLink } from '@/lib/mailer'
 import { canAdminister, isKnownRole, type MemberRole } from '@/lib/roles'
-import { currentMember, listMemberships } from '@/lib/session'
+import { currentAccount, currentMember, listMemberships } from '@/lib/session'
 import type { ActionResult } from './actions'
 
 const NOT_OWNER = 'Управлять командой может только владелец'
@@ -160,7 +160,7 @@ export async function removeMemberAction(userId: string): Promise<ActionResult> 
 
 /** Переключение активного воркспейса: право проверяется по списку участий. */
 export async function switchWorkspaceAction(workspaceId: string): Promise<ActionResult> {
-  const member = await currentMember()
+  const member = await currentMember() ?? await currentAccount()
   if (!member) return { ok: false, error: 'Нужно войти в систему' }
 
   const memberships = await listMemberships(member.userId)

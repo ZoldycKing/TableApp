@@ -4,7 +4,7 @@ import { apps, db, tables, workspaceMembers, workspaces } from '@tableapp/db'
 import { businessProfileSchema, newId } from '@tableapp/schema'
 import { and, eq } from 'drizzle-orm'
 import { isKnownRole } from '@/lib/roles'
-import { currentMember } from '@/lib/session'
+import { currentAccount, currentMember } from '@/lib/session'
 import type { BusinessNavigationResult, BusinessResourceDestination } from '@/lib/business-navigation-types'
 import { switchWorkspaceAction } from './team-actions'
 
@@ -63,7 +63,7 @@ export async function navigateBusinessResourceAction(
 export async function createBusinessAction(
   name: string,
 ): Promise<BusinessNavigationResult | { ok: true; href: string; workspaceId: string }> {
-  const member = await currentMember()
+  const member = await currentMember() ?? await currentAccount()
   if (!member) return { ok: false, error: 'Нужно войти в систему' }
   const parsed = businessProfileSchema.shape.name.safeParse(name)
   if (!parsed.success || /[\u0000-\u001f\u007f]/.test(parsed.data)) {

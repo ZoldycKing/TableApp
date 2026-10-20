@@ -17,6 +17,7 @@ export type Member = {
 }
 
 export type Membership = { workspaceId: string; workspaceName: string; role: MemberRole }
+export type Account = Pick<Member, 'userId' | 'email' | 'name'>
 
 /** Идентификатор текущей сессии: нужен, чтобы отличить её в списке устройств. */
 export async function currentSessionId(): Promise<string | null> {
@@ -36,6 +37,15 @@ async function userIdFromSession(): Promise<string | null> {
     .limit(1)
 
   return row?.userId ?? null
+}
+
+/** A signed-in account can exist before its first business or after its last one is removed. */
+export async function currentAccount(): Promise<Account | null> {
+  const userId = await userIdFromSession()
+  if (!userId) return null
+  const [account] = await db.select({ userId: users.id, email: users.email, name: users.name })
+    .from(users).where(eq(users.id, userId)).limit(1)
+  return account ?? null
 }
 
 /** Все воркспейсы пользователя: свой и те, куда его пригласили. */

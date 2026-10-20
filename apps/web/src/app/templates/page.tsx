@@ -79,11 +79,7 @@ export default async function TemplatesPage({
       >
         <main className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-6 sm:py-10">
           <h1 className="text-2xl font-semibold tracking-tight text-ink">Выберите шаблон</h1>
-          <p className="mt-2 max-w-2xl text-sm text-ink-soft">
-            Выберите задачу — затем добавьте свои данные.
-          </p>
-
-          <div className="mt-6">
+          <div className="mt-5">
             <TemplateGallery key={chosen ?? compatibilityTemplate?.id ?? 'default'} templates={[...STARTER_TEMPLATES]} chosen={chosen} compatibilityTemplate={compatibilityTemplate} />
           </div>
           <p className="mt-6 text-sm leading-6 text-ink-soft">Уже есть приложение? <Link href="/apps" className="rounded font-medium text-sage-700 underline underline-offset-4 focus-visible:ring-2 focus-visible:ring-sage-400">Добавить возможность в его настройках</Link></p>

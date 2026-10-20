@@ -8,7 +8,7 @@ import { saveBusinessProfileAction } from '@/app/business-actions'
 const emptyProfile: BusinessProfile = { name: '', location: '', phone: '' }
 const profileKey = (profile: BusinessProfile) => JSON.stringify([profile.name, profile.location, profile.phone])
 
-export function BusinessSettings({ profile, canEdit = true, nextHref }: { profile: BusinessProfile | null; canEdit?: boolean; nextHref?: string }) {
+export function BusinessSettings({ profile, canEdit = true, nextHref, setup = false }: { profile: BusinessProfile | null; canEdit?: boolean; nextHref?: string; setup?: boolean }) {
   const [value, setValue] = useState(profile ?? emptyProfile)
   const [saved, setSaved] = useState(profile ?? emptyProfile)
   const [message, setMessage] = useState<{ kind: 'error' | 'success'; text: string } | null>(null)
@@ -60,7 +60,15 @@ export function BusinessSettings({ profile, canEdit = true, nextHref }: { profil
     }
   }, [dirty])
 
-  return <form aria-busy={pending} className="mb-6 space-y-3 rounded-xl border border-sand-200 bg-white p-4" onSubmit={event => {
+  const field = (key: 'name' | 'location' | 'phone') => <label key={key} className={`block space-y-1 ${setup ? 'text-sm text-ink-soft' : 'text-xs text-ink-muted'}`}>
+    <span>{key === 'name' ? setup ? 'Название компании' : 'Название бизнеса' : key === 'location' ? 'Адрес или филиал (необязательно)' : 'Телефон бизнеса (необязательно)'}</span>
+    <input disabled={!canEdit || pending} required={key === 'name'} maxLength={key === 'name' ? 100 : key === 'location' ? 160 : 40} value={value[key]} onChange={event => {
+      if (!canEdit || pending) return
+      setValue({ ...value, [key]: event.target.value })
+      setMessage(null)
+    }} className={`min-h-11 w-full rounded-lg border border-sand-300 px-3 py-2 text-ink outline-none focus:border-sage-400 focus:ring-2 focus:ring-sage-100 disabled:bg-sand-50 ${setup ? 'text-base' : 'text-sm'}`} />
+  </label>
+  return <form aria-busy={pending} className={`mb-6 rounded-2xl border border-sand-200 bg-white ${setup ? 'space-y-5 p-5 sm:p-6' : 'space-y-3 p-4'}`} onSubmit={event => {
     event.preventDefault()
     if (!canEdit || saving.current) return
     if (!dirty) { if (nextHref && saved.name.trim()) router.push(nextHref); return }
@@ -87,19 +95,9 @@ export function BusinessSettings({ profile, canEdit = true, nextHref }: { profil
       }
     })
   }}>
-    <h2 className="text-sm font-semibold">Данные бизнеса</h2>
-    <p className="text-xs text-ink-muted">Эти данные видят клиенты во всех приложениях этого бизнеса. Название рабочего пространства остаётся внутренним. Изменения вступают в силу сразу.</p>
+    {!setup ? <><h2 className="text-sm font-semibold">Данные бизнеса</h2><p className="text-xs text-ink-muted">Эти данные видят клиенты во всех приложениях этого бизнеса. Название рабочего пространства остаётся внутренним. Изменения вступают в силу сразу.</p></> : null}
     {!canEdit ? <p className="text-xs text-ink-muted">Изменить данные может владелец или редактор рабочего пространства.</p> : null}
-    <div className={`grid gap-4 ${nextHref ? '' : 'sm:grid-cols-3'}`}>
-      {(['name', 'location', 'phone'] as const).map(key => <label key={key} className="space-y-1 text-xs text-ink-muted">
-        <span>{key === 'name' ? 'Название бизнеса' : key === 'location' ? 'Адрес или филиал (необязательно)' : 'Телефон бизнеса (необязательно)'}</span>
-        <input disabled={!canEdit || pending} required={key === 'name'} maxLength={key === 'name' ? 100 : key === 'location' ? 160 : 40} value={value[key]} onChange={event => {
-          if (!canEdit || pending) return
-          setValue({ ...value, [key]: event.target.value })
-          setMessage(null)
-        }} className="w-full rounded-lg border border-sand-300 px-3 py-2 text-sm text-ink outline-none focus:border-sage-400 disabled:bg-sand-50" />
-      </label>)}
-    </div>
+    {setup ? <>{field('name')}<p className="text-xs leading-5 text-ink-soft">Название общее для приложений этой компании. Имя рабочего пространства останется прежним. Сохранённые изменения видны сразу.</p><details open={profile?.location || profile?.phone ? true : undefined}><summary className="cursor-pointer rounded text-sm text-ink-soft focus-visible:ring-2 focus-visible:ring-sage-400">Адрес и телефон — необязательно</summary><div className="mt-4 space-y-4">{field('location')}{field('phone')}</div></details></> : <div className={`grid gap-4 ${nextHref ? '' : 'sm:grid-cols-3'}`}>{(['name', 'location', 'phone'] as const).map(field)}</div>}
     {message ? <p role={message.kind === 'error' ? 'alert' : 'status'} className={`text-sm ${message.kind === 'error' ? 'text-red-700' : 'text-ink-soft'}`}>{message.text}</p> : dirty ? <p role="status" className="text-xs text-ink-muted">Есть несохранённые изменения</p> : null}
     {canEdit ? <button disabled={pending || (!dirty && !nextHref)} className="min-h-11 rounded-lg bg-ink px-4 py-2.5 text-sm font-medium text-white disabled:opacity-40">{pending ? 'Сохраняем…' : nextHref ? 'Сохранить и продолжить' : 'Сохранить данные бизнеса'}</button> : null}
   </form>

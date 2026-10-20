@@ -100,6 +100,9 @@ const ADDABLE: Component['type'][] = [
 
 type Props = {
   advanced?: boolean
+  initialSection?: 'content' | 'access'
+  previewInstruction?: string
+  helpLinks?: Record<'content' | 'appearance' | 'access', string>
   canEdit?: boolean
   business?: import('@tableapp/schema').BusinessProfile | null
   portalUpgradeTableId?: string | null
@@ -142,7 +145,7 @@ function PreviewChip({
   )
 }
 
-export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTitles, publishedAt, inventoryUpgradeTableId, dispatchUpgradeTableId, portalUpgradeTableId, business, canEdit = true, advanced = false }: Props) {
+export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTitles, publishedAt, inventoryUpgradeTableId, dispatchUpgradeTableId, portalUpgradeTableId, business, canEdit = true, advanced = false, initialSection = 'content', previewInstruction, helpLinks }: Props) {
   const router = useRouter()
   const [app, setApp] = useState<App>(initialApp)
   const [screenId, setScreenId] = useState(initialApp.homeScreenId ?? initialApp.screens[0]?.id ?? '')
@@ -425,6 +428,9 @@ export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTit
   }
 
   if (!advanced) return <GuidedEditor
+    initialSection={initialSection}
+    previewInstruction={previewInstruction}
+    helpLinks={helpLinks}
     app={app} tables={tables} screens={shown} screen={shown.find(item => item.id === screenId) ?? shown.find(item => item.tab) ?? shown[0]}
     fields={(() => { const current = shown.find(item => item.id === screenId) ?? shown.find(item => item.tab) ?? shown[0]; return tables.find(table => table.id === tableOfScreen(current))?.fields ?? [] })()}
     canEdit={canEdit} publishing={publishing} pending={pending} published={Boolean(publishedAt) || publishedHere}

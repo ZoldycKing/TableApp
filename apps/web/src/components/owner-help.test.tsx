@@ -7,6 +7,15 @@ import { ownerHelpAppId, OWNER_HELP_EVENT } from '@/lib/owner-help'
 vi.mock('next/navigation', () => ({ usePathname: () => '/apps/app-a', useSearchParams: () => new URLSearchParams() }))
 afterEach(() => { cleanup(); vi.restoreAllMocks() })
 describe('task knowledge base', () => {
+  it('opens the requested help article first while keeping the rest available', () => {
+    const ui = render(<OwnerKnowledgeBase context="/setup" appId="chosen-app" articleId="tables" />)
+    const articles = ui.container.querySelectorAll('details')
+    expect(articles[0]?.open).toBe(true)
+    expect(articles[0]?.textContent).toContain('Таблица и форма записи')
+    expect(articles.length).toBe(10)
+    fireEvent.change(ui.getByRole('searchbox'), { target: { value: 'занятые интервалы' } })
+    expect(ui.getByRole('link', { name: /Открыть рабочие условия/ }).getAttribute('href')).toContain('app=chosen-app')
+  })
   it('skips hidden guide targets and explains the current task instead', () => {
     Object.defineProperty(HTMLDialogElement.prototype, 'showModal', { configurable: true, value: vi.fn() })
     Object.defineProperty(HTMLDialogElement.prototype, 'close', { configurable: true, value: vi.fn() })

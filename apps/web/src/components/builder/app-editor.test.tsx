@@ -20,6 +20,22 @@ const app = appSchema.parse({ id: 'app-1', workspaceId: 'space', name: 'Shop', s
 const props = { initialApp: app, tables: [], views: [], runtimeTables: {}, relatedTitles: {}, publishedAt: null, advanced: true }
 
 describe('editor publication and server refresh', () => {
+  it('opens employee access directly from preparation without editing the draft', () => {
+    const ui = render(<AppEditor {...props} advanced={false} initialSection="access" previewInstruction="Проверьте корзину магазина." helpLinks={{ content: '/help?article=publish', appearance: '/help?article=publish', access: '/help?article=access' }} />)
+    expect((ui.getByRole('combobox', { name: 'Раздел настройки' }) as HTMLSelectElement).value).toBe('access')
+    expect(ui.getByRole('textbox', { name: 'Почта сотрудника' })).toBeTruthy()
+    expect(ui.getByText('Дополнительные настройки доступа').closest('details')?.open).toBe(false)
+    expect(ui.queryByText('Проверьте корзину магазина.')).toBeNull()
+    expect(ui.getByRole('link', { name: 'Помощь с этим шагом' }).getAttribute('href')).toBe('/help?article=access')
+    fireEvent.change(ui.getByRole('combobox', { name: 'Раздел настройки' }), { target: { value: 'content' } })
+    expect(ui.getByText('Проверьте корзину магазина.')).toBeTruthy()
+    expect(ui.getByRole('link', { name: 'Помощь с этим шагом' }).getAttribute('href')).toBe('/help?article=publish')
+    fireEvent.change(ui.getByRole('combobox', { name: 'Раздел настройки' }), { target: { value: 'access' } })
+    expect(ui.queryByText('Проверьте корзину магазина.')).toBeNull()
+    expect(ui.getByRole('link', { name: 'Помощь с этим шагом' }).getAttribute('href')).toBe('/help?article=access')
+    expect(mocks.update).not.toHaveBeenCalled()
+    expect(mocks.publish).not.toHaveBeenCalled()
+  })
   it('focuses the visible inspector immediately when narrow-screen settings change', () => {
     vi.stubGlobal('matchMedia', () => ({ matches: true }))
     const ui = render(<AppEditor {...props} advanced={false} />)
@@ -28,7 +44,7 @@ describe('editor publication and server refresh', () => {
     expect(ui.getByRole('textbox', { name: 'Название приложения' })).toBeTruthy()
     fireEvent.change(ui.getByRole('combobox', { name: 'Раздел настройки' }), { target: { value: 'access' } })
     expect(ui.getByText('Что видит каждая роль')).toBeTruthy()
-    expect(document.activeElement?.getAttribute('aria-label')).toBe('Параметры выбранного раздела')
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('Сотрудники приложения')
   })
   it('starts an imported internal app with a role that actually has screens', () => {
     const internal = appSchema.parse({ ...app, screens: app.screens.map(screen => ({ ...screen, access: { public: false, publicFields: [], roles: ['staff'], allowDelete: false } })) })

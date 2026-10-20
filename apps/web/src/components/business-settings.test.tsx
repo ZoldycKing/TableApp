@@ -28,6 +28,14 @@ function renderSettings(canEdit = true) {
 }
 
 describe('business profile explicit save and navigation', () => {
+  it('keeps optional setup contacts and their values while saving the name and continuing', async () => {
+    mocks.save.mockResolvedValue({ ok: true })
+    render(<BusinessSettings profile={profile} setup nextHref="/setup?step=data&app=chosen-app" />)
+    fireEvent.change(screen.getByLabelText('Название компании'), { target: { value: 'Новое название' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Сохранить и продолжить' }))
+    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith('/setup?step=data&app=chosen-app'))
+    expect(mocks.save).toHaveBeenCalledWith({ ...profile, name: 'Новое название' })
+  })
   it('continues only after the business profile is saved and preserves input after rejection', async () => {
     mocks.save.mockResolvedValueOnce({ ok: false, error: 'Не удалось сохранить бизнес' }).mockResolvedValueOnce({ ok: true })
     render(<BusinessSettings profile={profile} nextHref="/setup?step=data&app=app-salon" />)

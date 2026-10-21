@@ -46,6 +46,14 @@ afterEach(() => { cleanup(); sessionStorage.clear(); window.history.replaceState
 const exactField = (name: string) => new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:\\s|$)`)
 
 describe('browser audit runtime integration regressions', () => {
+  it('keeps the account menu available without a desktop sidebar in a single-tab staff app', () => {
+    const { runtime, viewer } = templateAppPreview(templateExample('crm'), 'staff', 'worker@example.invalid')
+    const ui = render(<AppShell runtime={runtime} viewer={viewer} />)
+    const account = ui.getByRole('button', { name: 'Мой аккаунт' })
+    expect(account.parentElement!.className).not.toContain('@min-[860px]:hidden')
+    fireEvent.click(account)
+    expect(ui.getByRole('button', { name: /^Выйти$/ })).toBeTruthy()
+  })
   it('keeps a single page heading when confirming email for a property request', async () => {
     const example = templateExample('nedvizhimost'), config = example.app.customer!
     const { runtime } = templateAppPreview(example, 'guest')

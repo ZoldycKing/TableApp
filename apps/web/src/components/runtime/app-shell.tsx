@@ -956,7 +956,7 @@ export function AppShell({
               <span className="size-4 shrink-0 animate-spin rounded-full border-2 border-sand-300 border-t-ink/60" />
             ) : null}
             {viewer ? (
-              <div className="relative shrink-0 @min-[860px]:hidden" onKeyDown={event => { if (event.key === 'Escape') setAccountOpen(false) }}>
+              <div className={`relative shrink-0${hasNavigation ? ' @min-[860px]:hidden' : ''}`} onKeyDown={event => { if (event.key === 'Escape') setAccountOpen(false) }}>
                 <button type="button" aria-label="Мой аккаунт" aria-expanded={accountOpen} onClick={() => setAccountOpen(open => !open)} className="rounded-full outline-none focus-visible:ring-2 focus-visible:ring-sage-400">
                   <Avatar name={viewer.name} email={viewer.email} size="s" />
                 </button>

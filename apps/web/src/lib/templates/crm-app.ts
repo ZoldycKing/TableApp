@@ -16,10 +16,21 @@ export function asCRM(ready: App, built: BuiltTemplate): App {
   }))
   crm.listScreenId = contactScreens.find(screen => screen.type === 'list')!.id
   crm.detailScreenId = contactScreens.find(screen => screen.type === 'detail')!.id
+  const dealFields = built.customer!.fieldIds.deals!
+  const internalFields = new Set([dealFields.owner, ready.customer!.emailFieldId])
+  const allDealsId = ready.screens.find(screen => screen.type === 'list' && screen.access.roles.includes('manager'))!.id
   const screens = ready.screens.map(screen => {
     const hidden = screen.access.public || !screen.access.roles.some(role => role === 'staff' || role === 'manager')
     const names: Record<string, string> = { 'Назначенные мне': 'Мои сделки', 'Все обращения': 'Все сделки', 'Работа с обращением': 'Работа со сделкой', 'Управление обращением': 'Управление сделкой', 'Добавить обращение': 'Добавить сделку' }
-    return { ...screen, name: names[screen.name] ?? screen.name,
+    const workScreen = screen.type === 'form' && screen.tableId === ready.customer!.tableId
+      ? { ...screen, submitLabel: screen.mode === 'create' ? 'Создать сделку' : 'Сохранить', successText: 'Сделка создана.', successScreenId: allDealsId }
+      : screen
+    return { ...workScreen, name: names[screen.name] ?? screen.name,
+      ...('components' in screen && 'tableId' in screen && screen.tableId === ready.customer!.tableId ? { components: screen.components.filter(component =>
+        !((component.type === 'form_field' || component.type === 'field') && (internalFields.has(component.fieldId)
+          || component.fieldId === dealFields.clientName && component.roles?.includes('manager')))).map(component =>
+        component.type === 'field' && component.fieldId === crm.relationFieldId && component.roles?.includes('staff')
+          ? { ...component, fieldId: dealFields.clientName!, label: 'Клиент' } : component) } : {}),
       tab: hidden ? null : screen.tab ? { ...screen.tab, label: names[screen.tab.label] ?? screen.tab.label } : null,
       access: { ...screen.access, public: false, publicFields: [], roles: hidden ? [] : screen.access.roles.filter(role => role !== 'client') } }
   })

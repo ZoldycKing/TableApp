@@ -105,9 +105,9 @@ export function withCustomerScenario(original: TemplateDef): TemplateDef {
         { key: 'requestNote', name: 'Пожелания клиента', type: 'long_text', help: 'Инструкции и пожелания при оформлении. Видны клиенту и назначенному мастеру; внутренние заметки о работах храните в «Комментарий».' })
       break
     case 'crm':
-      scenario = { ...common, table: 'deals', title: 'Мои обращения', submitLabel: 'Оставить обращение', intro: 'Опишите, что вас интересует. Менеджер свяжется с вами и сообщит результат в кабинете. Внутренние переговоры и сведения о других клиентах сюда не попадают.',
-        formFields: ['selectedService', 'requestName', 'requestPhone', 'what'], customerFields: ['stage', 'due', 'clientSummary'], workerFields: ['stage', 'due', 'sum', 'note', 'clientSummary'], workerName: 'Менеджер', managerName: 'Руководитель',
-        status: 'stage', initial: 'Новая', terminal: ['Оплачено', 'Отказ', 'Отменено'], cancel: 'Отменено', cancellable: ['Новая'], catalog: catalog('Обращения в отдел продаж') }
+      scenario = { ...common, table: 'deals', title: 'Мои сделки', submitLabel: 'Создать сделку', intro: 'Выберите клиента и заполните условия сделки.',
+        formFields: ['what', 'client', 'stage', 'sum', 'due', 'note'], requiredFields: ['what', 'client'], customerFields: ['client', 'phone', 'stage', 'sum', 'due', 'note'], workerFields: ['stage', 'due', 'sum', 'note'], workerName: 'Менеджер', managerName: 'Руководитель',
+        status: 'stage', initial: 'Новая', terminal: ['Оплачено', 'Отказ', 'Отменено'], cancel: 'Отменено', cancellable: ['Новая'], catalog: null }
       break
     case 'portal':
       scenario = { ...common, table: 'orders', title: 'Мои заказы', submitLabel: 'Отправить заявку', intro: 'Опишите задачу. Мы свяжемся с вами для согласования условий; заявка и её статус появятся в кабинете.',
@@ -130,7 +130,7 @@ export function withCustomerScenario(original: TemplateDef): TemplateDef {
     scenario.formFields = scenario.formFields.map(recipient)
     scenario.requiredFields = scenario.requiredFields.map(recipient)
   }
-  main.fields.push(...(template.id === 'dostavka' ? [] : structuredClone(contact)), structuredClone(summary))
+  if (template.id !== 'crm') main.fields.push(...(template.id === 'dostavka' ? [] : structuredClone(contact)), structuredClone(summary))
   main.fields.push({ key: 'requestDate', name: 'Создано', type: 'datetime', options: { timeZone: 'Europe/Moscow' }, help: 'Дата оформления. При онлайн-заявке фиксируется сервером и видна в истории клиента.' },
     { key: 'submissionId', name: 'Ключ оформления', type: 'text', help: 'Служебный ключ, защищающий оформление от повторной отправки. Клиенту не показывается.' })
   scenario.formFields.push('submissionId'); scenario.customerFields.push('requestDate')
@@ -140,9 +140,9 @@ export function withCustomerScenario(original: TemplateDef): TemplateDef {
   }
   // Demonstrate one fictional customer's active and historical records; others stay isolated.
   main.rows = main.rows.map((row, index) => ({ ...row, values: { ...row.values,
-    [scenario.email]: index < 2 ? 'irina@example.com' : `other${index}@example.invalid`, requestName: index < 2 ? 'Ирина' : 'Другой клиент', requestPhone: '+7 900 000-00-00',
+    ...(template.id === 'crm' ? {} : { [scenario.email]: index < 2 ? 'irina@example.com' : `other${index}@example.invalid`, requestName: index < 2 ? 'Ирина' : 'Другой клиент', requestPhone: '+7 900 000-00-00' }),
     requestDate: inDays(-index * 3),
-    ...(index === 1 ? { [scenario.status]: scenario.terminal[0]! } : {}),
+    ...(index === 1 && template.id !== 'crm' ? { [scenario.status]: scenario.terminal[0]! } : {}),
     ...(scenario.assignment ? { [scenario.assignment]: 'worker@example.invalid' } : {}),
   } }))
   if (!main.rows.length) main.rows = [
@@ -200,7 +200,6 @@ export function withCustomerScenario(original: TemplateDef): TemplateDef {
   }
   if (template.id === 'dostavka') scenario.requiredFields.push('address', 'what')
   if (template.id === 'zayavki') scenario.requiredFields.push('what', 'requestAddress')
-  if (template.id === 'crm') scenario.requiredFields.push('what')
   if (template.id === 'portal') scenario.requiredFields.push('title')
   if (scenario.catalog?.selection) scenario.requiredFields.push(scenario.catalog.selection)
   const help: Record<string, string> = {

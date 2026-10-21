@@ -52,6 +52,7 @@ export const crm: TemplateDef = {
         { key: 'what', name: 'О чём сделка', type: 'text', help: 'Одна строка по делу: «Поставка 20 кондиционеров», «Годовое обслуживание».' },
         { key: 'client', name: 'Клиент', type: 'relation', relationTable: 'clients', allowMultiple: false, help: 'Выберите из справочника — телефон подставится сам. Нового заведите в таблице «Клиенты».' },
         { key: 'phone', name: 'Телефон', type: 'lookup', through: 'client', target: 'phone', help: 'Берётся из карточки клиента. Здесь не правят: поменяйте в «Клиентах» — поменяется везде.' },
+        { key: 'clientName', name: 'Имя клиента', type: 'lookup', through: 'client', target: 'name', help: 'Название выбранного клиента для назначенного менеджера. Меняется в карточке клиента.' },
         {
           key: 'stage',
           name: 'Этап',

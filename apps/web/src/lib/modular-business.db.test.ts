@@ -68,6 +68,20 @@ describe.skipIf(!process.env.DATABASE_URL)('modular business scenarios in Postgr
     expect(canEnter(app, ANONYMOUS)).toBe(false)
     expect(canEnter(app, asRole('client', clientEmail))).toBe(false)
     expect(canEnter(app, asRole('manager', ownerEmail))).toBe(true)
+    await session(ownerEmail)
+    const runtimeActions = await import('@/app/runtime-actions'), config = app.customer!, crm = config.crm!
+    const createdClient = await runtimeActions.appCreateRowAction(first.slug, crm.clientsTableId, {
+      [crm.nameFieldId]: 'Synthetic CRM contact', [crm.emailFieldId]: 'crm-contact@example.invalid', [crm.phoneFieldId]: '+79000002102',
+    })
+    expect(createdClient).toMatchObject({ ok: true })
+    const fields = await database.db.select().from(database.fields).where(eq(database.fields.tableId, config.tableId))
+    const title = fields.find(field => field.name === 'О чём сделка')!, sum = fields.find(field => field.name === 'Сумма')!
+    const createdDeal = await runtimeActions.appCreateRowAction(first.slug, config.tableId, {
+      [title.id]: 'Synthetic internal deal', [crm.relationFieldId]: [createdClient.rowId!], [sum.id]: 42000, [config.statusFieldId]: config.initialStatus,
+    })
+    expect(createdDeal).toMatchObject({ ok: true })
+    const [stored] = await database.db.select().from(database.rows).where(eq(database.rows.id, createdDeal.rowId!))
+    expect(stored!.data).toMatchObject({ [crm.relationFieldId]: [createdClient.rowId!], [sum.id]: 42000 })
   })
   async function session(email: string) {
     const id = newId('session'); sessions.push(id)

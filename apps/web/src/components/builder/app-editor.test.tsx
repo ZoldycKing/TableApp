@@ -20,21 +20,41 @@ const app = appSchema.parse({ id: 'app-1', workspaceId: 'space', name: 'Shop', s
 const props = { initialApp: app, tables: [], views: [], runtimeTables: {}, relatedTitles: {}, publishedAt: null, advanced: true }
 
 describe('editor publication and server refresh', () => {
+  it('measures a preview mounted after entering directly on Access', async () => {
+    const observe = vi.fn()
+    vi.stubGlobal('ResizeObserver', class {
+      constructor(private callback: ResizeObserverCallback) {}
+      observe(element: Element) { observe(element); this.callback([{ contentRect: { width: 280 } } as ResizeObserverEntry], this as unknown as ResizeObserver) }
+      disconnect() {}
+    })
+    const ui = render(<AppEditor {...props} advanced={false} initialSection="access" />)
+    expect(observe).not.toHaveBeenCalled()
+    fireEvent.change(ui.getByRole('combobox', { name: 'Раздел настройки' }), { target: { value: 'appearance' } })
+    await waitFor(() => expect(observe).toHaveBeenCalledOnce())
+    const preview = ui.getByText('App preview').parentElement!
+    expect(preview.style.transform).not.toBe('scale(1)')
+    expect(preview.style.transform).toMatch(/^scale\(0\./)
+  })
   it('opens employee access directly from preparation without editing the draft', () => {
+    const helpEvent = vi.fn(); window.addEventListener('tableapp:owner-help', helpEvent)
     const ui = render(<AppEditor {...props} advanced={false} initialSection="access" previewInstruction="Проверьте корзину магазина." helpLinks={{ content: '/help?article=publish', appearance: '/help?article=publish', access: '/help?article=access' }} />)
     expect((ui.getByRole('combobox', { name: 'Раздел настройки' }) as HTMLSelectElement).value).toBe('access')
     expect(ui.getByRole('textbox', { name: 'Почта сотрудника' })).toBeTruthy()
-    expect(ui.getByText('Дополнительные настройки доступа').closest('details')?.open).toBe(false)
+    expect(ui.queryByText('Дополнительные настройки доступа')).toBeNull()
     expect(ui.queryByText('Проверьте корзину магазина.')).toBeNull()
-    expect(ui.getByRole('link', { name: 'Помощь с этим шагом' }).getAttribute('href')).toBe('/help?article=access')
+    fireEvent.click(ui.getByRole('button', { name: 'Помощь с этим шагом' }))
+    expect(helpEvent.mock.calls.at(-1)?.[0].detail.articleId).toBe('access')
     fireEvent.change(ui.getByRole('combobox', { name: 'Раздел настройки' }), { target: { value: 'content' } })
     expect(ui.getByText('Проверьте корзину магазина.')).toBeTruthy()
-    expect(ui.getByRole('link', { name: 'Помощь с этим шагом' }).getAttribute('href')).toBe('/help?article=publish')
+    fireEvent.click(ui.getByRole('button', { name: 'Помощь с этим шагом' }))
+    expect(helpEvent.mock.calls.at(-1)?.[0].detail.articleId).toBe('publish')
     fireEvent.change(ui.getByRole('combobox', { name: 'Раздел настройки' }), { target: { value: 'access' } })
     expect(ui.queryByText('Проверьте корзину магазина.')).toBeNull()
-    expect(ui.getByRole('link', { name: 'Помощь с этим шагом' }).getAttribute('href')).toBe('/help?article=access')
+    fireEvent.click(ui.getByRole('button', { name: 'Помощь с этим шагом' }))
+    expect(helpEvent.mock.calls.at(-1)?.[0].detail.articleId).toBe('access')
     expect(mocks.update).not.toHaveBeenCalled()
     expect(mocks.publish).not.toHaveBeenCalled()
+    window.removeEventListener('tableapp:owner-help', helpEvent)
   })
   it('focuses the visible inspector immediately when narrow-screen settings change', () => {
     vi.stubGlobal('matchMedia', () => ({ matches: true }))
@@ -50,13 +70,22 @@ describe('editor publication and server refresh', () => {
     const internal = appSchema.parse({ ...app, screens: app.screens.map(screen => ({ ...screen, access: { public: false, publicFields: [], roles: ['staff'], allowDelete: false } })) })
     const ui = render(<AppEditor {...props} initialApp={internal} advanced={false} />)
     expect(ui.getByRole('button', { name: 'Сотрудник' }).getAttribute('aria-pressed')).toBe('true')
+    expect(ui.queryByRole('button', { name: 'Автор' })).toBeNull()
+    expect(ui.queryByRole('button', { name: 'Посетитель' })).toBeNull()
+    expect(ui.queryByLabelText('Почта для проверки личных записей')).toBeNull()
     expect(ui.queryByText(/Этой роли не открыт/)).toBeNull()
     expect(ui.getByRole('textbox', { name: 'Название экрана' })).toBeTruthy()
+  })
+  it('asks for preview identity only when the selected role has personal row rules', () => {
+    const internal = appSchema.parse({ ...app, rowAccessRules: [{ tableId: 'table', fieldId: 'email', match: 'email', appliesTo: ['staff'] }], screens: app.screens.map(screen => ({ ...screen, access: { public: false, publicFields: [], roles: ['staff'], allowDelete: false } })) })
+    const ui = render(<AppEditor {...props} initialApp={internal} advanced={false} />)
+    expect(ui.getByLabelText('Почта для проверки личных записей')).toBeTruthy()
+    expect(ui.queryByLabelText('Организация пользователя')).toBeNull()
+    expect(ui.container.querySelector('details')).toBeNull()
   })
   it('keeps an unsaved draft on a failed save before switching to the full constructor', async () => {
     mocks.update.mockResolvedValueOnce({ ok: false, error: 'Сохранение отклонено' }).mockResolvedValueOnce({ ok: true })
     const ui = render(<AppEditor {...props} advanced={false} />)
-    fireEvent.click(ui.getByRole('button', { name: 'Автор' }))
     fireEvent.change(ui.getByRole('textbox', { name: 'Название экрана' }), { target: { value: 'Keep across routes' } })
     fireEvent.click(ui.getByRole('link', { name: /Полный конструктор/ }))
     expect((await ui.findByRole('alert')).textContent).toBe('Сохранение отклонено')
@@ -68,7 +97,6 @@ describe('editor publication and server refresh', () => {
   })
   it('requires review in the guided route and publishes the latest draft only once', async () => {
     const ui = render(<AppEditor {...props} advanced={false} />)
-    fireEvent.click(ui.getByRole('button', { name: 'Автор' }))
     expect(ui.queryByRole('button', { name: 'Удалить экран' })).toBeNull()
     expect(ui.getByRole('link', { name: /Полный конструктор/ }).getAttribute('href')).toBe('/apps/app-1?advanced=1')
     fireEvent.change(ui.getByRole('textbox', { name: 'Название экрана' }), { target: { value: 'Guided latest' } })
@@ -85,7 +113,6 @@ describe('editor publication and server refresh', () => {
 
   it('keeps guided preview usable for a viewer and prevents saving or publication', () => {
     const ui = render(<AppEditor {...props} advanced={false} canEdit={false} />)
-    fireEvent.click(ui.getByRole('button', { name: 'Автор' }))
     expect(ui.getByRole('textbox', { name: 'Название экрана' }).matches(':disabled')).toBe(true)
     expect(ui.getByRole('button', { name: /Проверить и опубликовать/ }).matches(':disabled')).toBe(true)
     expect(ui.getByRole('button', { name: 'Сохранить черновик' }).matches(':disabled')).toBe(true)

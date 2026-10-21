@@ -6,6 +6,16 @@ import { GuidedTeamAccess } from './guided-team-access'
 
 afterEach(cleanup)
 describe('guided employee draft access', () => {
+  it('changes an existing employee role without replacing company or row rules', () => {
+    const example = templateExample('proizvodstvo').app, change = vi.fn()
+    const app = { ...example, allowlist: [{ email: 'worker@example.invalid', roleId: example.roles[0]!.id, company: 'Existing' }] }
+    const ui = render(<GuidedTeamAccess app={app} onChange={change} />)
+    const nextRole = example.roles.find(role => role.id !== app.allowlist[0]!.roleId && example.screens.some(screen => !screen.access.public && screen.access.roles.includes(role.id)))!
+    fireEvent.change(ui.getByRole('combobox', { name: 'Роль worker@example.invalid' }), { target: { value: nextRole.id } })
+    const next = change.mock.calls[0]![0]
+    expect(next.allowlist[0]).toEqual({ ...app.allowlist[0], roleId: nextRole.id })
+    expect(next.rowAccessRules).toBe(app.rowAccessRules)
+  })
   it('adds a normalized email with an existing work role while preserving the application rules', () => {
     const { app } = templateExample('zakazy'), change = vi.fn()
     const ui = render(<GuidedTeamAccess app={app} onChange={change} />)

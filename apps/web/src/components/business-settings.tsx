@@ -61,7 +61,7 @@ export function BusinessSettings({ profile, canEdit = true, nextHref, setup = fa
   }, [dirty])
 
   const field = (key: 'name' | 'location' | 'phone') => <label key={key} className={`block space-y-1 ${setup ? 'text-sm text-ink-soft' : 'text-xs text-ink-muted'}`}>
-    <span>{key === 'name' ? setup ? 'Название компании' : 'Название бизнеса' : key === 'location' ? 'Адрес или филиал (необязательно)' : 'Телефон бизнеса (необязательно)'}</span>
+    <span>{key === 'name' ? setup ? 'Название компании' : 'Название бизнеса' : key === 'location' ? setup ? 'Адрес или филиал' : 'Адрес или филиал (необязательно)' : setup ? 'Телефон' : 'Телефон бизнеса (необязательно)'}</span>
     <input disabled={!canEdit || pending} required={key === 'name'} maxLength={key === 'name' ? 100 : key === 'location' ? 160 : 40} value={value[key]} onChange={event => {
       if (!canEdit || pending) return
       setValue({ ...value, [key]: event.target.value })
@@ -97,7 +97,7 @@ export function BusinessSettings({ profile, canEdit = true, nextHref, setup = fa
   }}>
     {!setup ? <><h2 className="text-sm font-semibold">Данные бизнеса</h2><p className="text-xs text-ink-muted">Эти данные видят клиенты во всех приложениях этого бизнеса. Название рабочего пространства остаётся внутренним. Изменения вступают в силу сразу.</p></> : null}
     {!canEdit ? <p className="text-xs text-ink-muted">Изменить данные может владелец или редактор рабочего пространства.</p> : null}
-    {setup ? <>{field('name')}<p className="text-xs leading-5 text-ink-soft">Название общее для приложений этой компании. Имя рабочего пространства останется прежним. Сохранённые изменения видны сразу.</p><details open={profile?.location || profile?.phone ? true : undefined}><summary className="cursor-pointer rounded text-sm text-ink-soft focus-visible:ring-2 focus-visible:ring-sage-400">Адрес и телефон — необязательно</summary><div className="mt-4 space-y-4">{field('location')}{field('phone')}</div></details></> : <div className={`grid gap-4 ${nextHref ? '' : 'sm:grid-cols-3'}`}>{(['name', 'location', 'phone'] as const).map(field)}</div>}
+    {setup ? <>{field('name')}<fieldset className="space-y-4 border-t border-sand-200 pt-4"><legend className="pr-3 text-xs text-ink-muted">Контакты — необязательно</legend>{field('location')}{field('phone')}</fieldset></> : <div className={`grid gap-4 ${nextHref ? '' : 'sm:grid-cols-3'}`}>{(['name', 'location', 'phone'] as const).map(field)}</div>}
     {message ? <p role={message.kind === 'error' ? 'alert' : 'status'} className={`text-sm ${message.kind === 'error' ? 'text-red-700' : 'text-ink-soft'}`}>{message.text}</p> : dirty ? <p role="status" className="text-xs text-ink-muted">Есть несохранённые изменения</p> : null}
     {canEdit ? <button disabled={pending || (!dirty && !nextHref)} className="min-h-11 rounded-lg bg-ink px-4 py-2.5 text-sm font-medium text-white disabled:opacity-40">{pending ? 'Сохраняем…' : nextHref ? 'Сохранить и продолжить' : 'Сохранить данные бизнеса'}</button> : null}
   </form>

@@ -73,6 +73,16 @@ function workshopPreview() {
 }
 
 describe('runtime navigation during live refresh', () => {
+  it.each([true, false])('shows a changed app name beside company identity with editing=%s', (editing) => {
+    const example = templateExample('proizvodstvo')
+    example.app.name = 'Цех Север'
+    example.app.theme.accent = 'orange'
+    const preview = templateAppPreview(example, example.app.roles[0]!.id)
+    const runtime = { ...preview.runtime, business: { name: 'Мастерская Север', location: '', phone: '' } }
+    const ui = render(<AppShell runtime={runtime} viewer={null} editing={editing} />)
+    expect(ui.getByText('Мастерская Север · Цех Север')).toBeTruthy()
+    expect(ui.container.querySelector('.text-orange-700')).toBeTruthy()
+  })
   it('keeps a general question through email verification and sends it only after explicit confirmation, without creating a booking', async () => {
     const example = templateExample('salon')
     example.app.communications = { enabled: true }

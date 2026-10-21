@@ -31,6 +31,9 @@ describe('business profile explicit save and navigation', () => {
   it('keeps optional setup contacts and their values while saving the name and continuing', async () => {
     mocks.save.mockResolvedValue({ ok: true })
     render(<BusinessSettings profile={profile} setup nextHref="/setup?step=data&app=chosen-app" />)
+    expect(screen.getByLabelText('Адрес или филиал')).toHaveProperty('value', profile.location)
+    expect(screen.getByLabelText('Телефон')).toHaveProperty('value', profile.phone)
+    expect(screen.queryAllByText(/необязательно/)).toHaveLength(1)
     fireEvent.change(screen.getByLabelText('Название компании'), { target: { value: 'Новое название' } })
     fireEvent.click(screen.getByRole('button', { name: 'Сохранить и продолжить' }))
     await waitFor(() => expect(mocks.push).toHaveBeenCalledWith('/setup?step=data&app=chosen-app'))

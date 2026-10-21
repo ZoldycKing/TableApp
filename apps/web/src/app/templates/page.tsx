@@ -83,14 +83,7 @@ export default async function TemplatesPage({
             <TemplateGallery key={chosen ?? compatibilityTemplate?.id ?? 'default'} templates={[...STARTER_TEMPLATES]} chosen={chosen} compatibilityTemplate={compatibilityTemplate} />
           </div>
           <p className="mt-6 text-sm leading-6 text-ink-soft">Уже есть приложение? <Link href="/apps" className="rounded font-medium text-sage-700 underline underline-offset-4 focus-visible:ring-2 focus-visible:ring-sage-400">Добавить возможность в его настройках</Link></p>
-          <details className="mt-8 border-t border-sand-200 pt-6"><summary className="min-h-11 cursor-pointer rounded text-sm font-medium focus-visible:ring-2 focus-visible:ring-sage-400">Вопросы о шаблонах</summary><section className="mt-6 grid gap-5 md:grid-cols-3">
-            {QUESTIONS.map((item) => (
-              <div key={item.question}>
-                <h2 className="text-sm font-semibold text-ink">{item.question}</h2>
-                <p className="mt-2 text-sm leading-relaxed text-ink-soft">{item.answer}</p>
-              </div>
-            ))}
-          </section></details>
+
         </main>
       </AppChrome>
     )

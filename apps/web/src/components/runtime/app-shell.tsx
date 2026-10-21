@@ -888,7 +888,7 @@ export function AppShell({
             </span>
             <span className="min-w-0">
               <span className="block font-display text-sm font-bold tracking-tight">{runtime.business?.name ?? app.name}</span>
-              {!editing && navigation.work ? (
+              {runtime.business?.name && runtime.business.name !== app.name ? (
                 <span className="block truncate text-[11px] text-ink-muted" title={app.name}>{app.name}</span>
               ) : viewer ? (
                 <span className="block truncate text-[11px] text-ink-muted">{viewer.email}</span>
@@ -928,7 +928,7 @@ export function AppShell({
             ) : null}
 
             <div className="min-w-0 flex-1">
-              <p className="break-words text-xs font-semibold text-ink-soft">{runtime.business?.name ?? app.name}</p>
+              <p className="break-words text-xs font-semibold text-ink-soft">{runtime.business?.name && runtime.business.name !== app.name ? `${runtime.business.name} · ${app.name}` : app.name}</p>
               {runtime.business?.location ? <p className="truncate text-[11px] text-ink-muted" title={runtime.business.location}>{runtime.business.location}</p> : null}
               {/*
                * На домашнем экране здороваемся по имени: приложение открывают

@@ -360,7 +360,7 @@ export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTit
    * отдельно потому, что это не роль: у человека нет ни имени, ни почты,
    * и поставить её ему в списке доступа нельзя.
    */
-  const [previewAs, setPreviewAs] = useState<'editor' | 'anonymous' | RoleId>(() => advanced ? 'editor' : initialApp.screens.some(item => item.access.public) ? 'anonymous' : initialApp.roles.find(role => visibleScreensFor(initialApp, asRole(role.id)).length > 0)?.id ?? 'editor')
+  const [previewAs, setPreviewAs] = useState<'editor' | 'anonymous' | RoleId>(() => advanced ? 'editor' : initialApp.screens.some(item => item.access.public) ? 'anonymous' : initialApp.roles.find(role => visibleScreensFor(initialApp, asRole(role.id)).length > 0)?.id ?? 'anonymous')
   const [previewEmail, setPreviewEmail] = useState('')
   const [previewCompany, setPreviewCompany] = useState('')
 
@@ -379,15 +379,15 @@ export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTit
    * Ширину рамки меряем, а не предполагаем: колонка конструктора зависит
    * от окна, и коэффициент уменьшения должен считаться от того, что есть.
    */
-  const frame = useRef<HTMLDivElement | null>(null)
+  const [frame, setFrame] = useState<HTMLDivElement | null>(null)
   const [frameWidth, setFrameWidth] = useState(0)
   useEffect(() => {
-    const node = frame.current
+    const node = frame
     if (!node) return
     const observer = new ResizeObserver(([entry]) => setFrameWidth(entry?.contentRect.width ?? 0))
     observer.observe(node)
     return () => observer.disconnect()
-  }, [])
+  }, [frame])
 
   const deviceWidth = DEVICE_WIDTHS[device]
   const scale = frameWidth > 0 ? Math.min(1, frameWidth / deviceWidth) : 1
@@ -436,9 +436,14 @@ export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTit
     canEdit={canEdit} publishing={publishing} pending={pending} published={Boolean(publishedAt) || publishedHere}
     status={save.kind === 'error' || save.kind === 'note' ? save.text : SAVE_WORDS[save.kind]} error={save.kind === 'error'}
     onScreen={setScreenId} onUpdate={update} onSave={() => startTransition(async () => { try { await saveDraft() } catch { setSave({ kind: 'error', text: 'Не удалось сохранить черновик. Повторите сохранение.' }) } })} onPublish={publish}
-    roleControls={<div className="space-y-3"><label className="block text-sm text-ink-soft lg:hidden"><span className="sr-only">Смотреть как</span><select aria-label="Роль в предпросмотре" value={previewAs} onChange={event => setPreviewAs(event.target.value as typeof previewAs)} className="min-h-11 w-full rounded-lg border border-sand-300 bg-white px-3 py-2"><option value="anonymous">Посетитель</option>{app.roles.map(role => <option key={role.id} value={role.id}>{role.name}</option>)}<option value="editor">Автор</option></select></label><div className="hidden flex-wrap items-center gap-1 lg:flex"><span className="mr-2 text-sm text-ink-soft">Смотреть как</span><PreviewChip active={previewAs === 'anonymous'} onClick={() => setPreviewAs('anonymous')}>Посетитель</PreviewChip>{app.roles.map(role => <PreviewChip key={role.id} active={previewAs === role.id} onClick={() => setPreviewAs(role.id)}>{role.name}</PreviewChip>)}<PreviewChip active={previewAs === 'editor'} onClick={() => setPreviewAs('editor')}>Автор</PreviewChip></div>{previewAs !== 'anonymous' && previewAs !== 'editor' ? <details className="max-w-sm text-sm"><summary className="cursor-pointer text-ink-soft">Проверить личные записи по почте</summary><label className="mt-3 block text-sm text-ink-soft">Почта пользователя<input type="email" value={previewEmail} onChange={event => setPreviewEmail(event.target.value)} className="mt-1 w-full rounded-lg border border-sand-300 px-3 py-2" /></label><label className="mt-3 block text-sm text-ink-soft">Организация (если используется в правилах)<input value={previewCompany} onChange={event => setPreviewCompany(event.target.value)} className="mt-1 w-full rounded-lg border border-sand-300 px-3 py-2" /></label><p className="mt-2 text-xs leading-5 text-ink-muted">Без почты личные записи не отображаются. Используются действующие ограничения роли.</p></details> : null}</div>}
+    roleControls={<div className="space-y-3">
+      <label className="block text-sm text-ink-soft lg:hidden"><span className="sr-only">Смотреть как</span><select aria-label="Роль в предпросмотре" value={previewAs} onChange={event => setPreviewAs(event.target.value as typeof previewAs)} className="min-h-11 w-full rounded-lg border border-sand-300 bg-white px-3 py-2">{app.screens.some(item => item.access.public) ? <option value="anonymous">Посетитель</option> : null}{app.roles.filter(role => visibleScreensFor(app, asRole(role.id)).length > 0).map(role => <option key={role.id} value={role.id}>{role.name}</option>)}</select></label>
+      <div className="hidden flex-wrap items-center gap-1 lg:flex"><span className="mr-2 text-sm text-ink-soft">Смотреть как</span>{app.screens.some(item => item.access.public) ? <PreviewChip active={previewAs === 'anonymous'} onClick={() => setPreviewAs('anonymous')}>Посетитель</PreviewChip> : null}{app.roles.filter(role => visibleScreensFor(app, asRole(role.id)).length > 0).map(role => <PreviewChip key={role.id} active={previewAs === role.id} onClick={() => setPreviewAs(role.id)}>{role.name}</PreviewChip>)}</div>
+      {previewAs !== 'anonymous' && previewAs !== 'editor' && app.rowAccessRules.some(rule => rule.appliesTo.includes(previewAs) && rule.match === 'email') ? <label className="block max-w-sm text-sm text-ink-soft">Почта для проверки личных записей<input type="email" value={previewEmail} onChange={event => setPreviewEmail(event.target.value)} className="mt-1 min-h-11 w-full rounded-lg border border-sand-300 px-3 py-2 text-base" /></label> : null}
+      {previewAs !== 'anonymous' && previewAs !== 'editor' && app.rowAccessRules.some(rule => rule.appliesTo.includes(previewAs) && rule.match === 'company') ? <label className="block max-w-sm text-sm text-ink-soft">Организация пользователя<input value={previewCompany} onChange={event => setPreviewCompany(event.target.value)} className="mt-1 min-h-11 w-full rounded-lg border border-sand-300 px-3 py-2 text-base" /></label> : null}
+    </div>}
     deviceControls={<div className="flex flex-wrap gap-1">{DEVICES.filter(item => item !== 'tablet').map(item => <PreviewChip key={item} label={DEVICE_WORDS[item]} active={device === item} onClick={() => setDevice(item)}><span className="flex items-center lg:hidden"><ShellIcon name={item === 'mobile' ? 'phone' : 'desktop'} /></span><span className="hidden lg:inline">{DEVICE_WORDS[item]}</span></PreviewChip>)}</div>}
-    preview={<div ref={frame} className="mx-auto h-[36rem] w-full max-w-full overflow-hidden rounded-2xl border border-sand-300 bg-white" style={{ maxWidth: deviceWidth }}>
+    preview={<div ref={setFrame} className="mx-auto h-[36rem] w-full max-w-full overflow-hidden rounded-2xl border border-sand-300 bg-white" style={{ maxWidth: deviceWidth }}>
       {shown.length ? <div className="origin-top-left overflow-hidden" style={{ width: deviceWidth, height: FRAME_HEIGHT / scale, transform: `scale(${scale})` }}><AppShell key={`${previewAs}-${previewScreenId}-${device}`} runtime={preview} viewer={null} initialScreenId={previewScreenId} editing /></div> : <p className="p-6 text-sm leading-6 text-ink-soft">Этой роли не открыт ни один экран. Выберите другую роль или настройте доступ.</p>}
     </div>}
   />
@@ -699,7 +704,7 @@ export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTit
         </div>
 
         <div
-          ref={frame}
+          ref={setFrame}
           className="h-[36rem] overflow-hidden rounded-2xl border border-[var(--color-border-subtle)]"
         >
           {shown.length === 0 ? (

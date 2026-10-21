@@ -2,19 +2,45 @@
 
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { helpForPath, ownerHelpAction, ownerHelpAppId, OWNER_HELP, OWNER_HELP_EVENT } from '@/lib/owner-help'
 import { ShellIcon } from './shell/icons'
 import { ownerInput, ownerPrimary, ownerSecondary } from './owner-ui'
 
-export function OwnerKnowledgeBase({ context = '', appId, articleId, onNavigate }: { context?: string; appId?: string; articleId?: string; onNavigate?: () => void }) {
+export function OwnerHelpButton({ href, children = 'Помощь с этим шагом', className = 'mt-6 inline-block rounded text-sm text-ink-soft underline underline-offset-4 focus-visible:ring-2 focus-visible:ring-sage-400' }: { href?: string; children?: ReactNode; className?: string }) {
+  return <button type="button" className={className} onClick={() => {
+    const query = new URL(href ?? '/help', 'https://tableapp.local').searchParams
+    window.dispatchEvent(new CustomEvent(OWNER_HELP_EVENT, { detail: { articleId: query.get('article'), appId: query.get('app') } }))
+  }}>{children}</button>
+}
+
+export function OwnerKnowledgeBase({ context = '', appId, articleId, onNavigate, compact = false }: { context?: string; appId?: string; articleId?: string; onNavigate?: () => void; compact?: boolean }) {
+  const headingId = useId()
   const [query, setQuery] = useState('')
+  const [selectedId, setSelectedId] = useState(articleId ?? helpForPath(context)[0] ?? 'start')
+  const [showList, setShowList] = useState(!articleId)
+  useEffect(() => { setSelectedId(articleId ?? helpForPath(context)[0] ?? 'start'); setShowList(!articleId) }, [articleId, context])
   const recommended = helpForPath(context)
   const normalized = query.trim().toLocaleLowerCase('ru-RU')
   const articles = OWNER_HELP.filter(article => !normalized || [article.title, article.summary, ...article.steps].join(' ').toLocaleLowerCase('ru-RU').includes(normalized))
     .sort((a, b) => (Number(b.id === articleId) * 2 + Number(recommended.includes(b.id))) - (Number(a.id === articleId) * 2 + Number(recommended.includes(a.id))))
-  return <div><label className="block text-sm text-ink-soft">Найти ответ<input type="search" className={ownerInput} value={query} onChange={event => setQuery(event.target.value)} placeholder="Например: связь, Excel, расписание" /></label><p role="status" className="mt-3 text-xs text-ink-muted">Найдено статей: {articles.length}</p><div className="mt-5 divide-y divide-sand-200">{articles.map(article => <details key={article.id} open={article.id === articleId ? true : undefined} className="py-4"><summary className="cursor-pointer rounded text-sm font-medium leading-6 focus-visible:ring-2 focus-visible:ring-sage-400">{article.title}<span className="mt-1 block font-normal text-ink-soft">{article.summary}</span></summary><ol className="ml-5 mt-5 list-decimal space-y-4 text-sm leading-6 text-ink-soft">{article.steps.map(step => <li key={step}>{step}</li>)}</ol><Link href={ownerHelpAction(article, appId).href} onClick={onNavigate} className="mt-5 inline-block rounded text-sm font-medium text-sage-700 underline underline-offset-4">{ownerHelpAction(article, appId).label} →</Link></details>)}</div>{!articles.length ? <p className="mt-5 text-sm leading-6 text-ink-soft">Попробуйте другое слово: «таблица», «доступ» или «публикация».</p> : null}</div>
+  const selected = OWNER_HELP.find(article => article.id === selectedId) ?? OWNER_HELP[0]!
+  return <div className={`grid min-w-0 gap-7 ${compact ? '' : 'md:grid-cols-[220px_minmax(0,1fr)]'}`}>
+    <div className={`${showList ? 'block' : compact ? 'hidden' : 'hidden md:block'} min-w-0`}>
+      <label className="block text-sm text-ink-soft">Найти ответ<input type="search" className={`${ownerInput} text-base!`} value={query} onChange={event => setQuery(event.target.value)} placeholder="Таблицы, доступ, импорт…" /></label>
+      <p role="status" className="sr-only">Найдено статей: {articles.length}</p>
+      <nav aria-label="Инструкции" className={`mt-4 ${compact ? 'grid gap-1 sm:grid-cols-2' : 'space-y-1'}`}>{articles.map(article => <button type="button" key={article.id} aria-current={article.id === selected.id ? 'page' : undefined} onClick={() => { setSelectedId(article.id); setShowList(false) }} className={`flex min-h-11 w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left text-sm leading-5 focus-visible:ring-2 focus-visible:ring-sage-400 ${selected.id === article.id ? 'bg-sage-100 font-medium text-sage-900' : 'text-ink-soft hover:bg-sand-100'}`}><span>{article.title}</span><ShellIcon name="chevron" className={`size-4 shrink-0 -rotate-90 ${compact ? '' : 'md:hidden'}`} /></button>)}</nav>
+      {!articles.length ? <p className="mt-5 text-sm leading-6 text-ink-soft">Попробуйте другое слово: «таблица», «доступ» или «публикация».</p> : null}
+    </div>
+    <article aria-labelledby={headingId} className={`${showList ? compact ? 'hidden' : 'hidden md:block' : 'block'} min-w-0`}>
+      <button type="button" onClick={() => setShowList(true)} className={`mb-5 inline-flex min-h-11 items-center gap-2 rounded text-sm text-sage-700 focus-visible:ring-2 focus-visible:ring-sage-400 ${compact ? '' : 'md:hidden'}`}><ShellIcon name="chevron" className="size-4 rotate-90" />Все инструкции</button>
+      <h3 id={headingId} className="text-xl font-semibold leading-7 tracking-tight text-ink">{selected.title}</h3>
+      <p className="mt-2 text-sm leading-6 text-ink-soft">{selected.summary}</p>
+      <ol className="mt-6 space-y-5">{selected.steps.map((step, index) => <li key={step} className="flex gap-3"><span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-sand-100 text-xs font-medium tabular-nums text-ink-soft">{index + 1}</span><p className="min-w-0 text-sm leading-6 text-ink-soft">{step}</p></li>)}</ol>
+      <Link href={ownerHelpAction(selected, appId).href} onClick={onNavigate} className="mt-6 inline-flex min-h-11 items-center rounded text-sm font-medium text-sage-700 underline underline-offset-4">{ownerHelpAction(selected, appId).label}</Link>
+    </article>
+  </div>
 }
 
 const TOURS = [
@@ -43,13 +69,18 @@ export function OwnerHelp() {
   const trigger = useRef<HTMLElement | null>(null)
   const guidePanel = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState(false)
+  const [request, setRequest] = useState<{ articleId?: string; appId?: string }>({})
   const [tour, setTour] = useState<(typeof TOURS[number])[]>([])
   const [index, setIndex] = useState(0)
   const [mounted, setMounted] = useState(false)
   useEffect(() => setMounted(true), [])
   const close = (restoreFocus = true) => { dialog.current?.close(); setOpen(false); if (restoreFocus && trigger.current?.isConnected) trigger.current.focus() }
   useEffect(() => {
-    const showHelp = () => { trigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; setTour([]); setOpen(true) }
+    const showHelp = (event: Event) => {
+      const detail = event instanceof CustomEvent ? event.detail : null
+      setRequest({ articleId: typeof detail?.articleId === 'string' ? detail.articleId : undefined, appId: typeof detail?.appId === 'string' ? detail.appId : undefined })
+      trigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; setTour([]); setOpen(true)
+    }
     window.addEventListener(OWNER_HELP_EVENT, showHelp)
     return () => window.removeEventListener(OWNER_HELP_EVENT, showHelp)
   }, [])
@@ -75,9 +106,9 @@ export function OwnerHelp() {
     close(); setIndex(0); setTour(available)
   }
   return <>
-    <dialog ref={dialog} onCancel={event => { event.preventDefault(); close() }} onClick={event => { if (event.target === dialog.current) close() }} className="fixed inset-0 m-auto max-h-[90dvh] w-[min(46rem,calc(100vw-2rem))] overflow-y-auto rounded-2xl border border-sand-200 bg-white p-0 text-ink shadow-lift backdrop:bg-ink/30" aria-labelledby="owner-help-title">
+    <dialog ref={dialog} onCancel={event => { event.preventDefault(); close() }} onClick={event => { if (event.target === dialog.current) close() }} className="fixed inset-0 m-auto max-h-[90dvh] w-[min(42rem,calc(100vw-2rem))] overflow-y-auto rounded-2xl bg-white p-0 text-ink shadow-lift backdrop:bg-ink/30" aria-labelledby="owner-help-title">
       <div className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-sand-200 bg-white px-5 py-4"><h2 id="owner-help-title" className="text-lg font-semibold">Помощь в TableApp</h2><button type="button" onClick={() => close()} aria-label="Закрыть помощь" className="flex size-11 items-center justify-center rounded-lg hover:bg-sand-100 focus-visible:ring-2 focus-visible:ring-sage-400"><ShellIcon name="close" /></button></div>
-      <div className="p-5 sm:p-7"><p className="mb-5 text-sm leading-6 text-ink-soft">Сначала показаны статьи для текущего раздела. Гайд необязательный: его можно закрыть и запустить снова.</p><div className="mb-6 flex flex-wrap gap-3"><button type="button" onClick={start} className={ownerSecondary}>Объяснить текущий экран</button><Link href="/help" onClick={() => close()} className={ownerSecondary}>Вся база знаний</Link></div><OwnerKnowledgeBase appId={appId} context={pathname} onNavigate={close} /></div>
+      <div className="p-5 sm:p-7">{open ? <OwnerKnowledgeBase compact appId={request.appId ?? appId} articleId={request.articleId} context={pathname} onNavigate={close} /> : null}<div className="mt-7 flex flex-wrap gap-5 border-t border-sand-200 pt-4"><button type="button" onClick={start} className="min-h-11 rounded text-sm text-sage-700 underline underline-offset-4 focus-visible:ring-2 focus-visible:ring-sage-400">Показать подсказки на экране</button><Link href="/help" onClick={() => close()} className="inline-flex min-h-11 items-center rounded text-sm text-ink-soft underline underline-offset-4">Открыть базу знаний отдельно</Link></div></div>
     </dialog>
     {mounted && tour[index] ? createPortal(<div ref={guidePanel} role="region" aria-label="Подсказка по экрану" className="fixed bottom-4 right-4 z-50 w-[calc(100%_-_2rem)] max-w-[25rem] rounded-2xl border border-sage-300 bg-white p-5 shadow-lift"><div className="flex items-center justify-between gap-3"><p className="text-xs text-ink-muted">Подсказка {index + 1} из {tour.length}</p><button type="button" onClick={() => setTour([])} aria-label="Закрыть гайд" className="flex size-9 items-center justify-center rounded-lg hover:bg-sand-100"><ShellIcon name="close" /></button></div><h2 className="mt-1 font-semibold">{tour[index]!.title}</h2><p className="mt-3 text-sm leading-6 text-ink-soft">{tour[index]!.text}</p><div className="mt-5 flex flex-wrap gap-2">{index ? <button type="button" className={ownerSecondary} onClick={() => setIndex(index - 1)}>Назад</button> : null}<button type="button" className={ownerPrimary} onClick={() => index + 1 < tour.length ? setIndex(index + 1) : setTour([])}>{index + 1 < tour.length ? 'Дальше' : 'Понятно'}</button><button type="button" className={ownerSecondary} onClick={() => setTour([])}>Пропустить</button></div></div>, document.body) : null}
   </>

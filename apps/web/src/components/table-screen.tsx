@@ -3,6 +3,7 @@
 import type { Field, View, ViewType } from '@tableapp/schema'
 import { defaultViewConfig, newId, positionBetween } from '@tableapp/schema'
 import Link from 'next/link'
+import { TableActionsMenu } from './table-actions-menu'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import {
@@ -396,7 +397,7 @@ export function TableScreen({ table, member, initialRowId = null, initialMode = 
             {pending ? ' · сохранение…' : ''}
           </p>
         </div>
-        <details className="min-w-0 max-w-full"><summary className="cursor-pointer rounded-lg border border-sand-200 bg-white px-3 py-2.5 text-sm font-medium focus-visible:ring-2 focus-visible:ring-sage-400">Действия с таблицей</summary><div className="mt-3 flex flex-wrap gap-2">
+        <TableActionsMenu>
           {!readOnly ? <button
             type="button"
             disabled={pending}
@@ -422,7 +423,7 @@ export function TableScreen({ table, member, initialRowId = null, initialMode = 
             Приложения
           </a>
           {!readOnly ? <a
-            href="/import"
+            href={`/import?table=${encodeURIComponent(table.id)}`}
             className="rounded-lg border border-[var(--color-border-subtle)] px-3 py-2 text-sm font-medium hover:bg-[var(--color-surface-muted)]"
           >
             Импорт
@@ -453,7 +454,7 @@ export function TableScreen({ table, member, initialRowId = null, initialMode = 
               CSV
             </a>
           </span>
-        </div></details>
+        </TableActionsMenu>
       </header>
 
       <div data-guide="table-mode" className="mb-4 flex flex-wrap items-center justify-between gap-3">

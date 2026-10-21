@@ -7,6 +7,14 @@ import { ANONYMOUS, asRole, canOpenScreen, visitorFor, writableFields } from '..
 import { draftFromAnonymous, revalidatePending } from '../pending-submission'
 
 describe('ready customer scenarios across templates', () => {
+  it('property requests explain time agreement without checkout or payment instructions', () => {
+    const example = templateExample('nedvizhimost')
+    const form = example.app.screens.find(screen => screen.id === example.app.customer!.formScreenId)!
+    if (form.type !== 'form') throw new Error('Missing viewing form')
+    const text = form.components.flatMap(component => component.type === 'text' && component.source.kind === 'literal' ? [component.source.value] : []).join(' ')
+    expect(text).toContain('точное время появится в кабинете после согласования')
+    expect(text).not.toMatch(/оплат|заказ/i)
+  })
   it('zayavki: preserves client instructions separately from internal notes and shows assigned masters their work details', () => {
     const example = templateExample('zayavki'), config = example.app.customer!
     const field = (key: string) => example.field('zayavki', key).id

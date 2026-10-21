@@ -999,7 +999,7 @@ export function AppShell({
             {questionAvailable && current.screenId !== GENERAL_QUESTION_SCREEN && current.screenId !== MESSAGES_SCREEN && sent === null && checkout === null && intake === null && screen.access.public && (screen.type === 'list' || screen.type === 'tiles' || screen.type === 'detail') ?
               <div className="mb-4 flex justify-end"><button type="button" disabled={pending} onClick={startQuestion} className="inline-flex items-center gap-2 rounded-xl border border-sand-200 bg-white px-3 py-2 text-sm font-medium text-sage-700 outline-none hover:bg-sand-50 focus-visible:ring-2 focus-visible:ring-sage-400 disabled:opacity-50"><Icon name="chat" className="size-4" />Задать вопрос</button></div> : null}
             {current.screenId === GENERAL_QUESTION_SCREEN ? questionDraft.login && !viewer ?
-              <AppLogin purpose="question" slug={app.slug} appName={runtime.business?.name ?? app.name} accent={app.theme.accent} initialError={null}
+              <AppLogin embedded purpose="question" slug={app.slug} appName={runtime.business?.name ?? app.name} accent={app.theme.accent} initialError={null}
                 onCancel={() => setQuestionDraft(draft => ({ ...draft, login: false }))} onDone={() => router.refresh()} /> :
               <GeneralQuestion key={questionActor} slug={app.slug} businessName={runtime.business?.name ?? app.name} authenticated={Boolean(viewer)}
                 body={questionDraft.key === questionKey && (!questionDraft.ownerId || questionDraft.ownerId === viewer?.id) ? questionDraft.body : ''}
@@ -1015,7 +1015,7 @@ export function AppShell({
               else window.location.assign(`/a/${encodeURIComponent(item.slug)}?e=${encodeURIComponent(item.detailScreenId)}&r=${encodeURIComponent(item.rowId)}`)
             }} /> : checkout !== null ? (
               viewer ? <p role="status" className="p-6 text-sm text-ink-soft">Открываем форму…</p> :
-              <AppLogin key={checkout.screenId} slug={app.slug} appName={runtime.business?.name ?? app.name} accent={app.theme.accent} initialError={null}
+              <AppLogin embedded key={checkout.screenId} slug={app.slug} appName={runtime.business?.name ?? app.name} accent={app.theme.accent} initialError={null}
                 demo={demo} onCancel={clearCheckout} onDone={() => { if (demo) { if (onDemoSignIn) onDemoSignIn(); else { clearCheckout(); setError(DEMO_NOTE) } } else router.refresh() }} />
             ) : screenLoadError ? <div className="space-y-3 p-6 text-sm"><p role="alert">{screenLoadError}</p><button type="button" onClick={retryScreen} className="rounded-lg border border-sand-200 px-3 py-2">Попробовать ещё раз</button></div> : awaitingCreatedRow ? createdRecordWait?.timedOut ?
               <div className="space-y-3 p-6 text-sm"><p role="alert">Запись оформлена, но карточку пока не удалось загрузить.</p><button type="button" onClick={() => {
@@ -1170,7 +1170,7 @@ export function AppShell({
                     setFormDraft(null)
                     if (customer && screen.id === customer.formScreenId) submissionIds.current.delete(customer.tableId)
                     if (sales && screen.id === sales.formScreenId) setCart({ requestId: crypto.randomUUID(), items: [] })
-                    if (customer && screen.id === customer.formScreenId) return openCreated(customer.detailScreenId, result.rowId, customer.listScreenId, 'Оформлено. Ответственный сотрудник свяжется с вами для согласования условий и оплаты. Онлайн-оплаты нет.')
+                    if (customer && screen.id === customer.formScreenId) return openCreated(customer.detailScreenId, result.rowId, customer.listScreenId, customer.appointment ? 'Заявка на просмотр отправлена. Агент согласует с вами время.' : 'Оформлено. Ответственный сотрудник свяжется с вами для согласования условий и оплаты. Онлайн-оплаты нет.')
                     if (screen.type === 'form' && screen.successScreenId) {
                       openTab(screen.successScreenId)
                     } else if (stack.length > 1) {

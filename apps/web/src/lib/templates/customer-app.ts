@@ -77,7 +77,7 @@ function customerAppSection(app: App, built: BuiltTemplate): App {
   if (request.type === 'form') {
     request.components = request.components.map(component => component.type !== 'form_field' ? component : { ...component,
       label: component.fieldId === config.profile?.nameFieldId ? d.table === 'deliveries' ? 'Имя получателя' : 'Ваше имя' : component.fieldId === config.profile?.phoneFieldId ? d.table === 'deliveries' ? 'Телефон получателя' : 'Ваш телефон' : component.fieldId === f.title ? 'Что нужно сделать' : null })
-    request.components.unshift({ id: newId('component'), position: '0', type: 'text', source: { kind: 'literal', value: `${d.intro.replace('Онлайн-оплаты нет.', '').trim()} Оплаты онлайн нет. После оформления сотрудник бизнеса свяжется с вами и согласует оплату.` }, style: 'body', roles: null, visibleWhen: null })
+    request.components.unshift({ id: newId('component'), position: '0', type: 'text', source: { kind: 'literal', value: d.table === 'viewings' ? d.intro : `${d.intro.replace('Онлайн-оплаты нет.', '').trim()} Оплаты онлайн нет. После оформления сотрудник бизнеса свяжется с вами и согласует оплату.` }, style: 'body', roles: null, visibleWhen: null })
   }
   const managerHidden = new Set([f.cart, f.submissionId, config.createdFieldId, config.approval?.approvedPriceFieldId,
     ...(d.cart && config.profile ? [f.customer, f.phone] : [])].filter(Boolean))

@@ -46,6 +46,22 @@ afterEach(() => { cleanup(); sessionStorage.clear(); window.history.replaceState
 const exactField = (name: string) => new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:\\s|$)`)
 
 describe('browser audit runtime integration regressions', () => {
+  it('keeps a single page heading when confirming email for a property request', async () => {
+    const example = templateExample('nedvizhimost'), config = example.app.customer!
+    const { runtime } = templateAppPreview(example, 'guest')
+    const property = runtime.tables[config.catalog!.tableId]!.rows[0]!
+    const name = String(property.data[config.catalog!.titleFieldId])
+    const ui = render(<AppShell runtime={runtime} viewer={null} />)
+    fireEvent.click(ui.getByRole('button', { name: text => text.includes(name) }))
+    fireEvent.click(ui.getByRole('button', { name: 'Запросить просмотр' }))
+    expect(ui.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+    expect(ui.queryByText(/заказа или записи/)).toBeNull()
+    fireEvent.change(ui.getByRole('textbox', { name: 'Ваша почта' }), { target: { value: 'viewing@example.invalid' } })
+    fireEvent.click(ui.getByRole('button', { name: 'Получить код' }))
+    await ui.findByRole('textbox', { name: 'Код из письма' })
+    expect(ui.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+    expect(mocks.create).not.toHaveBeenCalled()
+  })
   it.each(['single catalog', 'multiple public tabs'])('keeps one returning-user login entry in the header with %s', async navigation => {
     const { runtime } = templateAppPreview(templateExample('zayavki'), 'guest')
     if (navigation === 'multiple public tabs') {

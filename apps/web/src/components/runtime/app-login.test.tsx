@@ -51,7 +51,7 @@ describe('question login copy and explicit purpose', () => {
     expect(screen.getByRole('button', { name: 'Вернуться к выбору' })).toBeTruthy()
     await requestCode()
     expect(actions.request).toHaveBeenCalledExactlyOnceWith('shop', 'new@example.invalid')
-    expect(screen.getByText(/Заказ пока не создан/)).toBeTruthy()
+    expect(screen.getByText(/После подтверждения заполните и отправьте форму/)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Подтвердить и продолжить' })).toBeTruthy()
   })
 })

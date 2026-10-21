@@ -16,6 +16,7 @@ export function AppLogin({
   onCancel,
   demo = false,
   purpose = 'checkout',
+  embedded = false,
 }: {
   slug: string
   appName: string
@@ -25,6 +26,7 @@ export function AppLogin({
   onCancel?: () => void
   demo?: boolean
   purpose?: 'checkout' | 'question'
+  embedded?: boolean
 }) {
   const router = useRouter()
   const [email, setEmail] = useState('')
@@ -62,10 +64,10 @@ export function AppLogin({
           })
         }}
       >
-        <h1 className="text-lg font-semibold">Введите код</h1>
+        {!embedded ? <h1 className="text-lg font-semibold">Введите код</h1> : null}
         <p className="text-sm text-[var(--color-ink-muted)]">
           {question ? `Введите одноразовый код для ${email}.` : `Если для адреса ${email} разрешён вход, код отправлен на почту.`} Он действует {LOGIN_CODE_TTL_MINUTES} минут.
-          {question ? ' После подтверждения сможете написать вопрос бизнесу.' : onDone ? ' После подтверждения заполните данные для оформления. Заказ пока не создан.' : ' В письме есть и ссылка.'}
+          {question ? ' После подтверждения сможете написать вопрос бизнесу.' : onDone ? ' После подтверждения заполните и отправьте форму.' : ' В письме есть и ссылка.'}
         </p>
 
         {sent.hint ? (
@@ -144,9 +146,9 @@ export function AppLogin({
         })
       }}
     >
-      <h1 className="text-lg font-semibold">{question ? 'Написать бизнесу' : onDone ? 'Подтвердите почту' : appName}</h1>
+      {!embedded ? <h1 className="text-lg font-semibold">{question ? 'Написать бизнесу' : onDone ? 'Подтвердите почту' : appName}</h1> : null}
       <p className="text-sm text-[var(--color-ink-muted)]">
-        {question ? 'Подтвердите почту одноразовым кодом, чтобы написать вопрос бизнесу. Пароль не нужен; повторно создавать аккаунт у другого бизнеса не потребуется.' : onDone ? 'Сначала подтвердите почту одноразовым кодом. Затем заполните данные для заказа или записи. Пароль не нужен; повторно создавать аккаунт у другого бизнеса не потребуется.' : 'Введите почту — пришлём код для входа. Пароль не нужен.'}
+        {question ? 'Подтвердите почту одноразовым кодом, чтобы написать вопрос бизнесу. Пароль не нужен; повторно создавать аккаунт у другого бизнеса не потребуется.' : onDone ? 'Подтвердите почту, затем заполните форму. Пароль не нужен.' : 'Введите почту — пришлём код для входа. Пароль не нужен.'}
       </p>
 
       <input

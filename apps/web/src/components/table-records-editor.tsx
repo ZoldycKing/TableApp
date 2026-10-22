@@ -185,11 +185,11 @@ function RecordForm({ row, fields, titleField, relatedTitles, readOnly, creating
     <button type="button" onClick={onBack} className={`${BUTTON} mb-4 lg:hidden`}>← Все записи</button>
     <header className="mb-5 flex flex-wrap items-start justify-between gap-3 border-b border-[var(--color-border-subtle)] pb-4">
       <div className="min-w-0"><h2 ref={heading} tabIndex={-1} className="scroll-mt-20 rounded break-words text-lg font-semibold focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-sage-400">{titleField ? cellText(titleField, row.data[titleField.id], relatedTitles) || 'Новая запись' : 'Запись'}</h2><p role="status" aria-live="polite" className="mt-1 text-xs text-ink-muted">{readOnly ? 'Только просмотр' : creating ? 'Создание записи…' : saving.size || uploading ? 'Сохранение…' : Object.keys(errors).length ? 'Есть несохранённые поля. Исправьте ошибку или верните сохранённые значения.' : changed.size ? 'Есть изменения. Сохраняются при выходе из поля.' : 'Все изменения сохранены'}</p></div>
-      {!readOnly ? <div className="flex flex-wrap gap-2"><button type="submit" form={formId} disabled={unavailable || creating || !changed.size || saving.size > 0 || uploading} className="rounded-lg bg-ink px-3 py-2 text-sm font-medium text-sand-50 disabled:opacity-40">Сохранить изменения</button><button type="button" onClick={discard} disabled={creating || !changed.size || saving.size > 0 || uploading} className={BUTTON}>Отменить изменения</button></div> : null}
+      {!readOnly ? <div className="flex flex-wrap gap-2"><button type="submit" form={formId} disabled={unavailable || creating || !changed.size || uploading} className="rounded-lg bg-ink px-3 py-2 text-sm font-medium text-sand-50 disabled:opacity-40">Сохранить изменения</button><button type="button" onClick={discard} disabled={creating || !changed.size || saving.size > 0 || uploading} className={BUTTON}>Отменить изменения</button></div> : null}
     </header>
     {unavailable ? <p role="alert" className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">Эта запись удалена или больше недоступна. Ваш ввод остался здесь. Скопируйте нужные значения перед выходом; сохранить их в эту запись уже нельзя.</p> : null}
     {actions}
-    <form id={formId} onSubmit={event => { event.preventDefault(); void (async () => { for (const field of fields) await save(field) })() }}>
+    <form id={formId} onSubmit={event => { event.preventDefault(); void flush.current() }}>
     <div className="grid min-w-0 gap-4 xl:grid-cols-2">
       {fields.map(field => {
         const locked = readOnly || isComputed(field.type)

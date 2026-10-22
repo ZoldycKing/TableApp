@@ -131,6 +131,23 @@ describe('record editor shares real row and field identities', () => {
     await waitFor(() => expect(hasUnsaved()).toBe(false))
   })
 
+  it('saves the remaining fields when clicked during a blur save', async () => {
+    let release!: (value: { ok: true }) => void
+    const pending = new Promise<{ ok: true }>(resolve => { release = resolve })
+    const save = vi.fn().mockReturnValueOnce(pending).mockResolvedValue({ ok: true })
+    const view = render(<TableRecordsEditor {...props} onSave={save} />)
+    fireEvent.change(view.getByRole('textbox', { name: 'Цена' }), { target: { value: '1500' } })
+    const name = view.getByRole('textbox', { name: 'Название' })
+    fireEvent.change(name, { target: { value: 'Новая полка' } })
+    fireEvent.blur(name)
+    fireEvent.click(view.getByRole('button', { name: 'Сохранить изменения' }))
+    await waitFor(() => expect(save).toHaveBeenCalledWith('r1', 'price', 1500, 1200))
+    expect(save.mock.calls.filter(call => call[1] === 'name')).toHaveLength(1)
+    release({ ok: true })
+    await waitFor(() => expect(view.getByRole('status').textContent).toBe('Все изменения сохранены'))
+    expect(hasUnsaved()).toBe(false)
+  })
+
   it('keeps the current form when a list search hides the selected record', () => {
     const view = render(<TableRecordsEditor {...props} allRows={rows} />)
     fireEvent.change(view.getByRole('textbox', { name: 'Название' }), { target: { value: 'Несохранённая правка' } })

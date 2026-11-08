@@ -89,8 +89,8 @@ export function buildCrmV2App(built: BuiltTemplate, meta: { id: string; workspac
     input(note, 'Что обсудили', true),
     input(sum, 'Сумма', false),
   ]
-  const dealFieldIds = [title, clientRelation, clientName, stage, sum, due, note, assignment]
-  const clientFieldIds = ['name', 'contact', 'phone', 'email', 'city', 'note'].map(key => field('clients', key))
+  const dealFieldIds = [title, clientRelation, stage, sum, due, note, assignment]
+  const clientFieldIds = ['contact', 'phone', 'email', 'city', 'note'].map(key => field('clients', key))
 
   const crm: NonNullable<AppV2['crm']> = {
     dealsTableId, clientsTableId, contactsTableId,
@@ -152,9 +152,9 @@ export function buildCrmV2App(built: BuiltTemplate, meta: { id: string; workspac
       { id: boardSource, tableId: dealsTableId, viewId: null, filter: null, sorts: [{ fieldId: due, direction: 'asc' }], searchFieldIds: [title, clientName], pageSize: 50 },
       { id: calendarSource, tableId: dealsTableId, viewId: null, filter: null, sorts: [{ fieldId: due, direction: 'asc' }], searchFieldIds: [title], pageSize: 50 },
       { id: clientsSource, tableId: clientsTableId, viewId: null, filter: null, sorts: [], searchFieldIds: [crm.clientTitleFieldId, crm.clientPhoneFieldId, crm.clientEmailFieldId], pageSize: 30 },
-      { id: relatedSource, tableId: dealsTableId, screenTableId: clientsTableId, viewId: null, filter: { op: 'includes', left: { kind: 'row', fieldId: clientRelation }, right: { kind: 'screen_row_id' } }, sorts: [{ fieldId: due, direction: 'desc' }], searchFieldIds: [title], pageSize: 30 },
-      { id: dealContactsSource, tableId: contactsTableId, screenTableId: dealsTableId, viewId: null, filter: { op: 'includes', left: { kind: 'row', fieldId: contactDeal }, right: { kind: 'screen_row_id' } }, sorts: [{ fieldId: contactLoggedAt, direction: 'desc' }], searchFieldIds: [contactSummary], pageSize: 30 },
-      { id: clientContactsSource, tableId: contactsTableId, screenTableId: clientsTableId, viewId: null, filter: { op: 'includes', left: { kind: 'row', fieldId: contactClient }, right: { kind: 'screen_row_id' } }, sorts: [{ fieldId: contactLoggedAt, direction: 'desc' }], searchFieldIds: [contactSummary], pageSize: 30 },
+      { id: relatedSource, tableId: dealsTableId, screenTableId: clientsTableId, viewId: null, filter: { op: 'includes', left: { kind: 'row', fieldId: clientRelation }, right: { kind: 'screen_row_id' } }, sorts: [{ fieldId: due, direction: 'desc' }], searchFieldIds: [], pageSize: 30 },
+      { id: dealContactsSource, tableId: contactsTableId, screenTableId: dealsTableId, viewId: null, filter: { op: 'includes', left: { kind: 'row', fieldId: contactDeal }, right: { kind: 'screen_row_id' } }, sorts: [{ fieldId: contactLoggedAt, direction: 'desc' }], searchFieldIds: [], pageSize: 30 },
+      { id: clientContactsSource, tableId: contactsTableId, screenTableId: clientsTableId, viewId: null, filter: { op: 'includes', left: { kind: 'row', fieldId: contactClient }, right: { kind: 'screen_row_id' } }, sorts: [{ fieldId: contactLoggedAt, direction: 'desc' }], searchFieldIds: [], pageSize: 30 },
     ],
     workflows: [
       { id: openDeal, name: 'Открыть сделку', input: { rowTableId: dealsTableId, formId: null, screenTableId: null }, steps: [{ id: newId('action'), type: 'open_screen', screenId: dealScreenId, record: { kind: 'current' } }] },

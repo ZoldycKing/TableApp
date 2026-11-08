@@ -33,8 +33,8 @@ export function BuilderV2OrderIdentity({
         {status && !manage && <p className={ui.orderStatusLead} data-tone={builderV2StatusTone(status)}>{status}</p>}
       </div>}
       {showMeta && <div className={ui.orderIdentityMeta}>
-        {status && manage && <span className={ui.heroStatus} data-tone={builderV2StatusTone(status)}><ProtoIcon name="box" size={18} />{status}</span>}
         {amount && <div className={ui.heroAmount}><span>{scoped ? 'Сумма доступных позиций' : 'Итого'}</span><strong>{amount}</strong></div>}
+        {status && manage && <span className={ui.heroStatus} data-tone={builderV2StatusTone(status)}><ProtoIcon name="box" size={18} />{status}</span>}
       </div>}
     </div>
     {progress && progress.length > 1 && <ol className={ui.orderProgress} aria-label="Статус заказа">

@@ -307,9 +307,10 @@ export function AppV2Renderer(props: AppV2RendererProps) {
     const deliveryFacts = factItems.filter(item => item.kind !== 'reply')
     const replyFacts = factItems.filter(item => item.kind === 'reply')
     return <div className={`${styles.canvasBlocks} ${ui.screenBlocks} ${ui.businessDetail} ${ui.orderDetail}`} data-manage={manage || undefined}>
-      <BuilderV2OrderIdentity title={manage ? undefined : (title || undefined)} status={status} amount={manage ? amount : undefined} scoped={summary?.scoped} progress={progress} manage={manage} />
+      {!manage && <BuilderV2OrderIdentity title={title || undefined} status={status} amount={undefined} scoped={summary?.scoped} progress={progress} manage={false} />}
       <div className={ui.orderDetailBody}>
         <div className={ui.orderDetailMain}>
+          {manage && <BuilderV2OrderIdentity status={status} amount={amount} scoped={summary?.scoped} manage />}
           {linesBlock}
           {manage && <BuilderV2OrderFacts items={deliveryFacts} title="Клиент и доставка" />}
           {manage && render([...parts.buttonIds, ...parts.otherIds])}

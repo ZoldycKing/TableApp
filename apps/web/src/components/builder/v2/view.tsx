@@ -18,6 +18,7 @@ import { BuilderV2FormPreview, BuilderV2FormInput, type WorkingFormOptions } fro
 import { BuilderV2DataNode } from './data-node'
 import type { BuilderV2DataPage, BuilderV2DataRecord, BuilderV2OrderSummary } from '@/lib/builder-v2-data-types'
 import { builderV2OrderLineFields, builderV2StatusColumn } from '@/lib/builder-v2-order-summary'
+import { builderV2OrderDetailParts, builderV2OrderFactKind, builderV2StatusProgress } from '@/lib/builder-v2-order-detail'
 import { builderV2StatusForm } from '@/lib/builder-v2-status-form'
 import {usePublishedV2} from './published-context'
 import {PublishedV2Delete} from './published-delete'
@@ -33,6 +34,7 @@ import { ShopAddToBasket, ShopBasketPanel } from './shop-basket'
 import { builderV2ContactHref, isBuilderV2ContactProfile, isBuilderV2ContactTable, isBuilderV2OrderTable } from './record-presentation'
 import { RecordFieldLabel } from '@/components/runtime/record-field-label'
 import { BuilderV2OrderHero, BuilderV2RecordAvatar } from './record-visuals'
+import { BuilderV2OrderActionPanel, BuilderV2OrderFacts, BuilderV2OrderIdentity, BuilderV2OrderSummaryCard, BuilderV2ShopOrderLines, builderV2BlankFact, builderV2OrderStatusChoices } from './order-detail'
 
 const cell = (row: AppV2Record, fieldId: string) => (row as Partial<BuilderV2DataRecord>).display?.[fieldId] ?? String(row.values[fieldId] ?? '')
 
@@ -271,6 +273,57 @@ export function AppV2Renderer(props: AppV2RendererProps) {
         {!props.editing && props.app.shop?.detailScreenId === screen.id && props.record && <ShopAddToBasket app={props.app} productId={props.record.id} actor={props.actor} />}
       </BuilderV2CatalogDetail>
       {render(blocks)}
+    </div>
+  }
+  if (order && !props.editing && props.record) {
+    const titleFieldId = screen?.recordTitleFieldId ?? recordTable?.primaryFieldId
+    const title = titleFieldId ? cell(props.record, titleFieldId) : screen?.name
+    const parts = builderV2OrderDetailParts({
+      app: props.app, rootIds, nodes, recordTable, statusFieldId: statusColumn?.id, amountFieldId: amountColumn?.id,
+      positionsFieldId: props.app.shop?.positionsFieldId, statusFormId,
+    })
+    const manage = Boolean(parts.processingFormId)
+    const statusValue = statusColumn && props.record.values[statusColumn.id]
+    const choices = builderV2OrderStatusChoices(recordTable, statusColumn?.id)
+    const progress = !manage && choices.length ? builderV2StatusProgress(choices, typeof statusValue === 'string' ? statusValue : null, props.app.shop?.terminalStatuses ?? []) : undefined
+    const factItems = parts.factIds.flatMap(id => {
+      const node = nodes.get(id)
+      if (!node || node.type !== 'field' || !visible(node)) return []
+      const fieldId = 'fieldId' in node.value ? node.value.fieldId : undefined
+      const field = recordTable?.fields.find(item => item.id === fieldId)
+      const rawValue = fieldId ? props.record!.values[fieldId] : null
+      if (published && fieldId && !Object.hasOwn(props.record!.values, fieldId)) return []
+      const value = resolve(node.value, props.record)
+      const href = builderV2ContactHref(field?.type, rawValue)
+      const label = node.label || field?.name || node.name
+      return [{
+        id, label, kind: builderV2OrderFactKind(label), blank: builderV2BlankFact(rawValue) && !value,
+        value: href ? <a className={ui.contactLink} href={href}>{value}</a> : value || '—',
+      }]
+    })
+    const linesBlock = props.app.shop?.positionsFieldId
+      ? <BuilderV2ShopOrderLines app={props.app} record={props.record} amount={manage ? amount : undefined} />
+      : parts.collectionIds.length ? render(parts.collectionIds) : null
+    const deliveryFacts = factItems.filter(item => item.kind !== 'reply')
+    const replyFacts = factItems.filter(item => item.kind === 'reply')
+    return <div className={`${styles.canvasBlocks} ${ui.screenBlocks} ${ui.businessDetail} ${ui.orderDetail}`} data-manage={manage || undefined}>
+      {!manage && <BuilderV2OrderIdentity title={title || undefined} status={status} amount={undefined} scoped={summary?.scoped} progress={progress} manage={false} />}
+      <div className={ui.orderDetailBody}>
+        <div className={ui.orderDetailMain}>
+          {manage && <BuilderV2OrderIdentity status={status} amount={amount} scoped={summary?.scoped} manage />}
+          {linesBlock}
+          {manage && <BuilderV2OrderFacts items={deliveryFacts} title="Клиент и доставка" />}
+          {manage && render([...parts.buttonIds, ...parts.otherIds])}
+        </div>
+        {manage && parts.processingFormId
+          ? <BuilderV2OrderActionPanel>{render([parts.processingFormId])}</BuilderV2OrderActionPanel>
+          : <div className={ui.orderDetailSide}>
+            <BuilderV2OrderSummaryCard amount={amount} scoped={summary?.scoped} />
+            <BuilderV2OrderFacts items={deliveryFacts} title="Доставка" />
+            <BuilderV2OrderFacts items={replyFacts} title="Сообщение магазина" />
+            {render([...parts.buttonIds, ...parts.otherIds])}
+          </div>}
+      </div>
     </div>
   }
   return <div className={`${styles.canvasBlocks} ${ui.screenBlocks} ${screen?.contextTableId ? ui.businessDetail : ''}`} data-profile={profile || undefined}>

@@ -317,11 +317,13 @@ export function AppV2Renderer(props: AppV2RendererProps) {
     const deliveryFacts = factItems.filter(item => item.kind !== 'reply')
     const replyFacts = factItems.filter(item => item.kind === 'reply')
     const crmClient = Boolean(crm && screen?.id === crm.clientScreenId)
-    const factsTitle = crm ? (crmClient ? 'О клиенте' : 'Клиент и условия') : 'Клиент и доставка'
-    const sideFactsTitle = crm ? (crmClient ? 'О клиенте' : 'Сделка') : 'Доставка'
-    const actionTitle = crm ? 'Записать контакт' : 'Обработка заказа'
+    const factsTitle = crm ? (crmClient ? 'О клиенте' : 'Клиент') : 'Клиент и доставка'
+    const sideFactsTitle = crm ? (crmClient ? 'О клиенте' : 'Клиент') : 'Доставка'
+    const actionTitle = crm ? 'Добавить запись' : 'Обработка заказа'
+    // Shop manage identity is amount/status only (title stays in the frame). Skip a title-only plate.
+    const showCustomerIdentity = Boolean(status || amount || (progress && progress.length > 1))
     return <div className={`${styles.canvasBlocks} ${ui.screenBlocks} ${ui.businessDetail} ${ui.orderDetail}`} data-manage={manage || undefined}>
-      {!manage && <BuilderV2OrderIdentity title={title || undefined} status={status} amount={undefined} scoped={summary?.scoped} progress={progress} manage={false} />}
+      {!manage && showCustomerIdentity && <BuilderV2OrderIdentity title={title || undefined} status={status} amount={undefined} scoped={summary?.scoped} progress={progress} manage={false} />}
       <div className={ui.orderDetailBody}>
         <div className={ui.orderDetailMain}>
           {manage && <BuilderV2OrderIdentity status={status} amount={amount} scoped={summary?.scoped} manage />}
@@ -333,7 +335,6 @@ export function AppV2Renderer(props: AppV2RendererProps) {
           ? <BuilderV2OrderActionPanel title={actionTitle}>{render([parts.processingFormId])}</BuilderV2OrderActionPanel>
           : <div className={ui.orderDetailSide}>
             {!crm && <BuilderV2OrderSummaryCard amount={amount} scoped={summary?.scoped} />}
-            {crm && amount && <BuilderV2OrderSummaryCard amount={amount} scoped={summary?.scoped} />}
             <BuilderV2OrderFacts items={deliveryFacts} title={sideFactsTitle} />
             {!crm && <BuilderV2OrderFacts items={replyFacts} title="Сообщение магазина" />}
             {render([...parts.buttonIds, ...parts.otherIds])}

@@ -16,7 +16,7 @@ describe('private CRM contacts', () => {
     expect(required).toEqual(['О чём сделка', 'Клиент'])
     const names = inputs.map(component => example.fields.find(field => field.id === component.fieldId)!.name)
     for (const name of ['Выбранная услуга', 'Имя клиента', 'Телефон клиента', 'Ответственный', 'Почта клиента']) expect(names).not.toContain(name)
-    expect(example.built.tables.map(table => table.name)).toEqual(['Клиенты', 'Сделки', 'Контакты по сделкам'])
+    expect(example.built.tables.map(table => table.name)).toEqual(['Клиенты', 'Сделки', 'История общения'])
     expect(create.submitLabel).toBe('Создать сделку')
     const destination = example.app.screens.find(screen => screen.id === create.successScreenId)!
     expect(canOpenScreen(destination, asRole('manager', 'owner@example.invalid'))).toBe(true)

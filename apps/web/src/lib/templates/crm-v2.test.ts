@@ -53,14 +53,18 @@ describe('crm template v2 installation', () => {
     const dealContacts = app.sources.find(source => source.tableId === app.crm!.contactsTableId && source.screenTableId === app.crm!.dealsTableId)!
     expect(dealContacts.filter).toMatchObject({ op: 'includes', left: { fieldId: app.crm!.contactDealFieldId }, right: { kind: 'screen_row_id' } })
     const contact = app.nodes.find(node => node.type === 'form' && node.id === app.crm!.contactFormId)
-    expect(contact).toMatchObject({ type: 'form', mode: 'edit' })
+    expect(contact).toMatchObject({ type: 'form', mode: 'edit', name: 'Добавить запись', submitLabel: 'Сохранить запись' })
     const save = app.workflows.find(flow => flow.id === (contact && contact.type === 'form' ? contact.events.submit : null))!
     expect(save.steps.some(step => step.type === 'create_row' && step.tableId === app.crm!.contactsTableId)).toBe(true)
     expect(save.steps.some(step => step.type === 'update_row' && step.tableId === app.crm!.dealsTableId)).toBe(true)
+    expect(save.steps.some(step => step.type === 'notify' && step.message.kind === 'literal' && String(step.message.value).includes('историю общения'))).toBe(true)
+    expect(app.nodes.filter(node => node.type === 'collection' && node.name === 'История общения')).toHaveLength(2)
     expect(app.screens.find(screen => screen.id === app.crm!.clientScreenId)!.rootIds.some(id => {
       const node = app.nodes.find(item => item.id === id)
       return node?.type === 'collection' && node.name === 'Сделки'
     })).toBe(true)
+    const dealRoots = app.screens.find(screen => screen.id === app.crm!.dealScreenId)!.rootIds
+    expect(dealRoots.some(id => id === `deal_${app.crm!.noteFieldId}` || id === `deal_${app.crm!.dueFieldId}`)).toBe(false)
   })
 
   it('keeps crm private and isolates staff deals by assignment', () => {

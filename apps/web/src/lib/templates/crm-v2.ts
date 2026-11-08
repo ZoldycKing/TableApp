@@ -86,10 +86,11 @@ export function buildCrmV2App(built: BuiltTemplate, meta: { id: string; workspac
   const contactInputs = [
     input(stage, 'Этап', true),
     input(due, 'Вернуться к разговору', true),
-    input(note, 'Что обсудили', true),
+    input(note, 'Новая запись', true),
     input(sum, 'Сумма', false),
   ]
-  const dealFieldIds = [title, clientRelation, stage, sum, due, note, assignment]
+  // Read-only facts: context not edited in the action form (shop: delivery facts ≠ status form fields).
+  const dealFieldIds = [clientRelation, assignment]
   const clientFieldIds = ['contact', 'phone', 'email', 'city', 'note'].map(key => field('clients', key))
 
   const crm: NonNullable<AppV2['crm']> = {
@@ -141,12 +142,12 @@ export function buildCrmV2App(built: BuiltTemplate, meta: { id: string; workspac
       ...createClientInputs,
       { id: clientsNode, name: 'Клиенты', type: 'collection', visibleTo: null, visibleWhen: null, sourceId: clientsSource, layout: 'list', titleFieldId: crm.clientTitleFieldId, subtitleFieldId: crm.clientPhoneFieldId, itemIds: [], events: { itemPress: openClient } },
       ...dealFieldIds.map(fieldId => node(`deal_${fieldId}`, columns(dealsTableId).find(item => item.id === fieldId)!.name, fieldId)),
-      { id: dealContactsNode, name: 'История контактов', type: 'collection', visibleTo: null, visibleWhen: null, sourceId: dealContactsSource, layout: 'list', titleFieldId: contactSummary, subtitleFieldId: contactLoggedAt, cardDetailFieldId: contactNextDue, itemIds: [], events: { itemPress: null } },
-      { id: contactFormId, name: 'Записать контакт', type: 'form', visibleTo: team, visibleWhen: null, tableId: dealsTableId, mode: 'edit', childIds: contactInputs.map(item => item.id), events: { submit: saveContact }, submitLabel: 'Сохранить контакт' },
+      { id: dealContactsNode, name: 'История общения', type: 'collection', visibleTo: null, visibleWhen: null, sourceId: dealContactsSource, layout: 'list', titleFieldId: contactSummary, subtitleFieldId: contactLoggedAt, cardDetailFieldId: contactNextDue, itemIds: [], events: { itemPress: null } },
+      { id: contactFormId, name: 'Добавить запись', type: 'form', visibleTo: team, visibleWhen: null, tableId: dealsTableId, mode: 'edit', childIds: contactInputs.map(item => item.id), events: { submit: saveContact }, submitLabel: 'Сохранить запись' },
       ...contactInputs,
       ...clientFieldIds.map(fieldId => node(`client_${fieldId}`, columns(clientsTableId).find(item => item.id === fieldId)!.name, fieldId)),
       { id: relatedDealsNode, name: 'Сделки', type: 'collection', visibleTo: null, visibleWhen: null, sourceId: relatedSource, layout: 'list', titleFieldId: title, subtitleFieldId: stage, cardDetailFieldId: due, itemIds: [], events: { itemPress: openRelatedDeal } },
-      { id: clientContactsNode, name: 'Контакты', type: 'collection', visibleTo: null, visibleWhen: null, sourceId: clientContactsSource, layout: 'list', titleFieldId: contactSummary, subtitleFieldId: contactLoggedAt, cardDetailFieldId: contactNextDue, itemIds: [], events: { itemPress: null } },
+      { id: clientContactsNode, name: 'История общения', type: 'collection', visibleTo: null, visibleWhen: null, sourceId: clientContactsSource, layout: 'list', titleFieldId: contactSummary, subtitleFieldId: contactLoggedAt, cardDetailFieldId: contactNextDue, itemIds: [], events: { itemPress: null } },
     ],
     sources: [
       { id: boardSource, tableId: dealsTableId, viewId: null, filter: null, sorts: [{ fieldId: due, direction: 'asc' }], searchFieldIds: [title, clientName], pageSize: 50 },
@@ -172,7 +173,7 @@ export function buildCrmV2App(built: BuiltTemplate, meta: { id: string; workspac
         { id: newId('action'), type: 'notify', message: { kind: 'literal', value: 'Клиент сохранён.' } },
         { id: newId('action'), type: 'open_screen', screenId: clientScreenId, record: { kind: 'result', stepId: createClientStep } },
       ] },
-      { id: saveContact, name: 'Записать контакт', input: { rowTableId: dealsTableId, formId: contactFormId, screenTableId: dealsTableId }, steps: [
+      { id: saveContact, name: 'Добавить запись', input: { rowTableId: dealsTableId, formId: contactFormId, screenTableId: dealsTableId }, steps: [
         { id: newId('action'), type: 'update_row', tableId: dealsTableId, target: { kind: 'current' }, values: Object.fromEntries(contactUpdateFields.map(fieldId => [fieldId, { kind: 'form' as const, formId: contactFormId, fieldId }])) },
         { id: logContactStep, type: 'create_row', tableId: contactsTableId, values: {
           [contactSummary]: { kind: 'form', formId: contactFormId, fieldId: note },
@@ -180,7 +181,9 @@ export function buildCrmV2App(built: BuiltTemplate, meta: { id: string; workspac
           [contactClient]: { kind: 'row', fieldId: clientRelation },
           [contactNextDue]: { kind: 'form', formId: contactFormId, fieldId: due },
         } },
-        { id: newId('action'), type: 'notify', message: { kind: 'literal', value: 'Контакт добавлен в историю, этап и дата следующего шага сохранены.' } },
+        // Clear draft text so the next open starts a new entry (history already kept the line).
+        { id: newId('action'), type: 'update_row', tableId: dealsTableId, target: { kind: 'current' }, values: { [note]: { kind: 'literal', value: '' } } },
+        { id: newId('action'), type: 'notify', message: { kind: 'literal', value: 'Запись добавлена в историю общения.' } },
       ] },
     ],
     policy: {

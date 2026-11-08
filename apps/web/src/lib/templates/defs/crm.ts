@@ -87,17 +87,17 @@ export const crm: TemplateDef = {
     },
     {
       key: 'contacts',
-      name: 'Контакты по сделкам',
+      name: 'История общения',
       icon: 'clipboard',
       primary: 'summary',
       fields: [
         { key: 'summary', name: 'Что обсудили', type: 'long_text', help: 'Короткая запись после разговора. Каждая отправка добавляет строку — прошлые не затираются.' },
-        { key: 'deal', name: 'Сделка', type: 'relation', relationTable: 'deals', allowMultiple: false, help: 'К какой сделке относится этот контакт.' },
+        { key: 'deal', name: 'Сделка', type: 'relation', relationTable: 'deals', allowMultiple: false, help: 'К какой сделке относится эта запись.' },
         { key: 'client', name: 'Клиент', type: 'relation', relationTable: 'clients', allowMultiple: false, help: 'Клиент сделки — чтобы история была видна и в его карточке.' },
-        { key: 'loggedAt', name: 'Дата контакта', type: 'date', options: { defaultToday: true }, help: 'Когда состоялся разговор. Для новой записи подставляется сегодня.' },
-        { key: 'nextDue', name: 'Вернуться к разговору', type: 'date', help: 'Какую дату следующего шага зафиксировали в этом контакте.' },
+        { key: 'loggedAt', name: 'Дата записи', type: 'date', options: { defaultToday: true }, help: 'Когда состоялся разговор. Для новой записи подставляется сегодня.' },
+        { key: 'nextDue', name: 'Вернуться к разговору', type: 'date', help: 'Какую дату следующего шага зафиксировали в этой записи.' },
       ],
-      views: [{ name: 'Все контакты', type: 'grid' }],
+      views: [{ name: 'Все записи', type: 'grid' }],
       rows: [
         { key: 'c1', values: { summary: 'Согласовали спецификацию, ждут счёт у директора.', deal: { rowKey: 'd1' }, client: { rowKey: 'vektor' }, loggedAt: inDays(-4), nextDue: inDays(3) } },
         { key: 'c2', values: { summary: 'Отправили счёт на 778 000 ₽.', deal: { rowKey: 'd1' }, client: { rowKey: 'vektor' }, loggedAt: inDays(-1), nextDue: inDays(3) } },

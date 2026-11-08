@@ -1,6 +1,6 @@
 import {rows} from '@tableapp/db'
 import {emptyValue,fieldTimeZone,isComputed} from '@tableapp/schema'
-import {authorizeAppV2Write,canInvokeAppV2Workflow,resolveAppV2Binding,type AppV2Context,type AppV2Json} from '@tableapp/schema/app-v2'
+import {authorizeAppV2Write,canInvokeAppV2Workflow,readableAppV2Fields,resolveAppV2Binding,type AppV2Context,type AppV2Json} from '@tableapp/schema/app-v2'
 import {and,asc,eq,gt,isNull} from 'drizzle-orm'
 import {builderV2SaveFormAction} from './builder-v2-form-action'
 import {BUILDER_V2_FORM_TYPES,builderV2FormInputs,type BuilderV2FormRequest,type BuilderV2FormState} from './builder-v2-form-types'
@@ -29,7 +29,11 @@ export async function inspectPublishedV2Form(current:Awaited<ReturnType<typeof p
   if(!permission.ok)throw new RowWriteError('denied',permission.error)
   const inputs=builderV2FormInputs(app,form),fields=inputs.map(input=>meta.fieldsByTable.get(form.tableId)?.find(field=>field.id===input.fieldId)!)
   if(!inputs.length||fields.some(field=>!field||isComputed(field.type)||!BUILDER_V2_FORM_TYPES.includes(field.type)))throw new RowWriteError('invalid','Настройки формы требуют проверки владельцем')
-  if(form.mode==='edit'&&fields.some(field=>!Object.hasOwn(selected?.record.values??{},field.id)))throw new RowWriteError('denied','Одно из полей формы недоступно для чтения')
+  // Absent stored keys are empty values, not denials: only policy-readable fields may seed an edit form.
+  if(form.mode==='edit'){
+    const readable=readableAppV2Fields(app,actor,{id:selected!.record.id,tableId:selected!.record.tableId,values:selected!.stored.data as Record<string,AppV2Json>})
+    if(fields.some(field=>!readable.has(field.id)))throw new RowWriteError('denied','Одно из полей формы недоступно для чтения')
+  }
   const context:AppV2Context={actor,row:selected?.record,screenRow:selected?.record},initial:Record<string,unknown>={}
   for(const input of inputs){const field=fields.find(field=>field.id===input.fieldId)!;if(form.mode==='edit')initial[field.id]=selected?.record.values[field.id]??emptyValue(field.type);else if(input.initialValue){const value=resolveAppV2Binding(input.initialValue,context);if(!value.ok)throw new RowWriteError('denied','Начальное значение поля недоступно');initial[field.id]=value.value}else initial[field.id]=emptyValue(field.type)}
   const now=new Date(),defaults=await withInitialValues(fields,initial,async(tableId,rowId,fieldId)=>{const loaded=await publishedV2Row(meta,app,actor,tableId,rowId);const value=loaded.record.values[fieldId];return typeof value==='number'?value:undefined},{creating:form.mode==='create',now})

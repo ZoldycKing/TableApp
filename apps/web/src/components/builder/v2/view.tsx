@@ -326,10 +326,18 @@ export function AppV2Renderer(props: AppV2RendererProps) {
       </div>
     </div>
   }
-  return <div className={`${styles.canvasBlocks} ${ui.screenBlocks} ${screen?.contextTableId ? ui.businessDetail : ''}`} data-profile={profile || undefined}>
-    {!props.editing && props.app.shop?.basketScreenId === screen?.id && <ShopBasketPanel app={props.app} tables={props.tables} actor={props.actor} onCheckout={() => document.getElementById('shop-checkout')?.querySelector<HTMLElement>('input,textarea,select')?.focus()} />}
-    <BuilderV2OrderHero status={status} amount={amount} scoped={summary?.scoped} loading={Boolean(props.live && summaryKey && (summaryState.key !== summaryKey || summaryState.pending))} editor={statusFormId ? render([statusFormId]) : undefined} />
-    {render(statusFormId ? rootIds.filter(id => id !== statusFormId) : rootIds)}
+  const basketScreen = !props.editing && props.app.shop?.basketScreenId === screen?.id
+  return <div className={`${styles.canvasBlocks} ${ui.screenBlocks} ${screen?.contextTableId ? ui.businessDetail : ''} ${basketScreen ? ui.commerceScreen : ''}`} data-profile={profile || undefined} data-commerce={basketScreen ? 'basket' : undefined}>
+    {basketScreen ? <div className={ui.commerceLayout}>
+      <ShopBasketPanel app={props.app} tables={props.tables} actor={props.actor} onCheckout={() => document.getElementById('shop-checkout')?.querySelector<HTMLElement>('input,textarea,select')?.focus()} />
+      <div className={ui.commerceCheckout}>
+        <BuilderV2OrderHero status={status} amount={amount} scoped={summary?.scoped} loading={Boolean(props.live && summaryKey && (summaryState.key !== summaryKey || summaryState.pending))} editor={statusFormId ? render([statusFormId]) : undefined} />
+        {render(statusFormId ? rootIds.filter(id => id !== statusFormId) : rootIds)}
+      </div>
+    </div> : <>
+      <BuilderV2OrderHero status={status} amount={amount} scoped={summary?.scoped} loading={Boolean(props.live && summaryKey && (summaryState.key !== summaryKey || summaryState.pending))} editor={statusFormId ? render([statusFormId]) : undefined} />
+      {render(statusFormId ? rootIds.filter(id => id !== statusFormId) : rootIds)}
+    </>}
     {!rootIds.length && (props.editing ? <button type="button" className={styles.emptyCanvas} onClick={() => props.onAdd?.(null)}><ProtoIcon name="plus" size={24} /><strong>Добавьте первый элемент</strong><span>Текст, список или форму</span></button> : <p className={styles.empty}>На этом экране пока нет элементов</p>)}
   </div>
 }

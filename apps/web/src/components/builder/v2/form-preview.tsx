@@ -13,6 +13,7 @@ import ui from './view.module.css'
 import {WorkflowConfirmation} from './workflow-confirmation'
 import type {BuilderV2WorkflowConfirmation} from '@/lib/builder-v2-workflow-types'
 import { BuilderV2WorkflowFeedback } from './workflow-feedback'
+import { builderV2OrderFactKind } from '@/lib/builder-v2-order-detail'
 import { clearShopBasket, readShopBasket, shopBasketPayload } from '@/lib/shop-basket'
 import {usePublishedV2} from './published-context'
 import type { BuilderV2WorkflowEffect, BuilderV2WorkflowTrace } from '@/lib/builder-v2-workflow-types'
@@ -102,8 +103,9 @@ export function BuilderV2FormPreview({ app, form, screenId, recordId, enabled, e
     if(!parsed.success)throw new Error('Не удалось подтвердить загрузку файла. Повторите попытку.')
     return parsed.data
   }:undefined
-  return <Context.Provider value={{ app, scope, inspect, state: visible.state, values: visible.values, errors: visible.errors, disabled, key:key+':'+refresh,upload,onPending, change: (id, value) => { if (disabled) return; generation.current++; setData(old=>old.key===key?{...old,values:{...old.values,[id]:value},errors:{},error:'',success:false}:old) } }}><form ref={formRef} className={`${styles.formBlock} ${ui.form}`} noValidate onSubmit={event => { event.preventDefault(); void check() }} aria-label={formTitle} aria-busy={!editing && enabled && (visible.loading || visible.checking || pendingCount>0)}>
-    <h3 className={ui.formTitle} id={app.shop?.checkoutFormId === form.id ? 'shop-checkout' : undefined}>{formTitle}</h3>
+  const checkout = app.shop?.checkoutFormId === form.id
+  return <Context.Provider value={{ app, scope, inspect, state: visible.state, values: visible.values, errors: visible.errors, disabled, key:key+':'+refresh,upload,onPending, change: (id, value) => { if (disabled) return; generation.current++; setData(old=>old.key===key?{...old,values:{...old.values,[id]:value},errors:{},error:'',success:false}:old) } }}><form ref={formRef} className={`${styles.formBlock} ${ui.form} ${checkout ? ui.commerceForm : ''}`} data-commerce={checkout ? 'checkout' : undefined} noValidate onSubmit={event => { event.preventDefault(); void check() }} aria-label={formTitle} aria-busy={!editing && enabled && (visible.loading || visible.checking || pendingCount>0)}>
+    <h3 className={ui.formTitle} id={checkout ? 'shop-checkout' : undefined}>{checkout ? 'Оформление заказа' : formTitle}</h3>
     <ShopCheckoutSync />
     {!editing && enabled && visible.loading && <p role="status" className={ui.hint}>Подготавливаем форму…</p>}
     <div className={styles.canvasBlocks}>{children}</div>
@@ -166,5 +168,5 @@ export function BuilderV2FormInput({ node, table }: { node: BuilderV2Input; tabl
     : type === 'date' || type === 'datetime' ? <input {...common} type={type === 'date' ? 'date' : 'datetime-local'} value={typeof value === 'string' ? value.includes('T') && value.endsWith('Z') ? (() => { const wall = instantToWallClock(value, field?.timeZone ?? 'Europe/Moscow'); return wall ? type === 'date' ? wall.date : `${wall.date}T${wall.time}` : '' })() : value : ''} onChange={event => change(event.target.value || null)} />
     : type==='member' ? <span className={ui.hint}>Этот тип поля появится в форме позже.</span>
     : <input {...common} type={type === 'email' ? 'email' : type === 'phone' ? 'tel' : type === 'url' ? 'url' : 'text'} inputMode={type === 'number' ? 'decimal' : undefined} value={String(value ?? '')} maxLength={10000} onChange={event => change(event.target.value)} />
-  return <div className={`${ui.input} ${type === 'checkbox' ? ui.checkInput : ''}`}><label htmlFor={unique}>{label}{node.required ? ' *' : ''}</label>{control}{error && <span className={ui.dataError} id={errorId}>{error}</span>}</div>
+  return <div className={`${ui.input} ${type === 'checkbox' ? ui.checkInput : ''}`} data-kind={builderV2OrderFactKind(label)}><label htmlFor={unique}>{label}{node.required ? ' *' : ''}</label>{control}{error && <span className={ui.dataError} id={errorId}>{error}</span>}</div>
 }

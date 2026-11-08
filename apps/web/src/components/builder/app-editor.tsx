@@ -2,7 +2,7 @@
 
 import type { App, Device, RoleId, Component, Screen, ScreenType, View } from '@tableapp/schema'
 import { byPosition, DEVICES, newId, positionBetween, positionSequence } from '@tableapp/schema'
-import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, useTransition } from 'react'
 import { publishAppAction, updateAppDraftAction } from '@/app/app-actions'
 import { enableInventoryAction, enableStockOperationsAction } from '@/app/inventory-setup-actions'
 import { enableDispatchAction } from '@/app/dispatch-setup-actions'
@@ -20,7 +20,9 @@ import {
   type Visitor,
 } from '@/lib/app-roles'
 import type { RuntimeTable } from '@/lib/app-runtime'
-import { previewRuntime } from '@/lib/preview-runtime'
+import type { EditorPreview } from '@/lib/editor-preview'
+import { editorPreviewAction } from '@/app/editor-preview-actions'
+import { bookingPreviewData, defaultPreviewRole, previewCheckout, previewRuntime } from '@/lib/preview-runtime'
 import type { RelatedTitles, TableSummary } from '@/lib/queries'
 import { AppShell } from '@/components/runtime/app-shell'
 import { COMPONENT_LABELS, ComponentSettings, describeComponent, makeComponent } from './component-settings'
@@ -112,6 +114,7 @@ type Props = {
   tables: TableSummary[]
   views: View[]
   runtimeTables: Record<string, RuntimeTable>
+  remotePreview?: boolean
   relatedTitles: RelatedTitles
   publishedAt: string | null
 }
@@ -145,16 +148,19 @@ function PreviewChip({
   )
 }
 
-export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTitles, publishedAt, inventoryUpgradeTableId, dispatchUpgradeTableId, portalUpgradeTableId, business, canEdit = true, advanced = false, initialSection = 'content', previewInstruction, helpLinks }: Props) {
+export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTitles, remotePreview = false, publishedAt, inventoryUpgradeTableId, dispatchUpgradeTableId, portalUpgradeTableId, business, canEdit = true, advanced = false, initialSection = 'content', previewInstruction, helpLinks }: Props) {
   const router = useRouter()
   const [app, setApp] = useState<App>(initialApp)
   const [screenId, setScreenId] = useState(initialApp.homeScreenId ?? initialApp.screens[0]?.id ?? '')
   const [componentId, setComponentId] = useState<string | null>(null)
+  const [builderPanel, setBuilderPanel] = useState<'screens' | 'settings' | 'preview'>('screens')
+  const builderId = useId()
+  const settingsHeading = useRef<HTMLHeadingElement>(null)
   const [save, setSave] = useState<SaveState>({ kind: 'idle' })
   const [draftQueue] = useState(() => createDraftSaveQueue(initialApp, (next: App) => updateAppDraftAction(next.id, next)))
   const [publishing, setPublishing] = useState(false)
   const publicationLock = useRef(false)
-  const [publishedHere, setPublishedHere] = useState(false)
+  const [publicationVersion, setPublicationVersion] = useState(0)
   useUnsaved(`app-editor:${initialApp.id}`, save.kind === 'dirty' || save.kind === 'saving' || save.kind === 'error')
   const [pending, startTransition] = useTransition()
 
@@ -360,12 +366,35 @@ export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTit
    * отдельно потому, что это не роль: у человека нет ни имени, ни почты,
    * и поставить её ему в списке доступа нельзя.
    */
-  const [previewAs, setPreviewAs] = useState<'editor' | 'anonymous' | RoleId>(() => advanced ? 'editor' : initialApp.screens.some(item => item.access.public) ? 'anonymous' : initialApp.roles.find(role => visibleScreensFor(initialApp, asRole(role.id)).length > 0)?.id ?? 'anonymous')
+  const [previewAs, setPreviewAs] = useState<'editor' | 'anonymous' | RoleId>(() => advanced ? 'editor' : defaultPreviewRole(initialApp))
   const [previewEmail, setPreviewEmail] = useState('')
   const [previewCompany, setPreviewCompany] = useState('')
+  const [checkoutPreview, setCheckoutPreview] = useState<ReturnType<typeof previewCheckout>>(null)
+  const [remoteData, setRemoteData] = useState<EditorPreview | null>(null)
+  const [remoteError, setRemoteError] = useState<string | null>(null)
+  const [remoteKey, setRemoteKey] = useState('')
+  const [previewRetry, setPreviewRetry] = useState(0)
+  const previewRequest = JSON.stringify([app, previewAs, previewEmail, previewCompany, previewRetry])
+  const previewBusy = remotePreview && remoteKey !== previewRequest
+  useEffect(() => {
+    if (!remotePreview) return
+    let active = true
+    setRemoteError(null)
+    const timer = setTimeout(() => {
+      void editorPreviewAction(app.id, app, previewAs, previewEmail, previewCompany).then(result => {
+        if (!active) return
+        if (result.ok) { setRemoteData(result.preview); setRemoteKey(previewRequest) }
+        else setRemoteError(result.error)
+      }).catch(() => { if (active) setRemoteError('Не удалось обновить предпросмотр. Повторите попытку.') })
+    }, 250)
+    return () => { active = false; clearTimeout(timer) }
+    // The serialized request includes every draft and identity setting.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [remotePreview, previewRequest])
+  const bookingData = useMemo(() => remotePreview ? remoteData?.bookingData : bookingPreviewData(app, runtimeTables), [app, runtimeTables, remotePreview, remoteData])
 
   const previewVisitor: Visitor | null =
-    previewAs === 'editor' ? null : previewAs === 'anonymous' ? ANONYMOUS : asRole(previewAs, previewEmail.trim() || null, previewCompany.trim())
+    previewAs === 'editor' ? null : previewAs === 'anonymous' ? ANONYMOUS : asRole(previewAs, previewEmail.trim() || null, previewCompany.trim(), previewAs === 'client')
 
   /*
    * Размер места отдельно от роли: «как это увидит клиент с телефона» —
@@ -373,7 +402,7 @@ export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTit
    * Разметка приложения зависит от ширины контейнера, поэтому достаточно
    * сузить рамку — никаких отдельных раскладок под телефон нет.
    */
-  const [device, setDevice] = useState<Device>(advanced ? 'desktop' : 'mobile')
+  const [device, setDevice] = useState<Device>('mobile')
 
   /*
    * Ширину рамки меряем, а не предполагаем: колонка конструктора зависит
@@ -389,8 +418,8 @@ export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTit
     return () => observer.disconnect()
   }, [frame])
 
-  const deviceWidth = DEVICE_WIDTHS[device]
-  const scale = frameWidth > 0 ? Math.min(1, frameWidth / deviceWidth) : 1
+  const deviceWidth = device === 'mobile' && frameWidth > 0 ? Math.min(DEVICE_WIDTHS.mobile, frameWidth) : DEVICE_WIDTHS[device]
+  const scale = device === 'mobile' ? 1 : frameWidth > 0 ? Math.min(1, frameWidth / deviceWidth) : 1
 
   const shown = useMemo(
     () => (previewVisitor === null ? app.screens : visibleScreensFor(app, previewVisitor)),
@@ -403,12 +432,16 @@ export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTit
    * по полям тоже настоящие: владелец сразу узнает, что клиенту не посчитается
    * сумма по колонке, которой он не видит.
    */
-  const preview = useMemo(() => ({ ...previewRuntime({ ...app, screens: shown }, views, runtimeTables, relatedTitles, previewVisitor), business: business ?? null }),
-    [app, shown, views, runtimeTables, relatedTitles, previewVisitor, business])
+  const preview = useMemo(() => ({ ...(remotePreview && remoteData ? remoteData.runtime : previewRuntime({ ...app, screens: shown }, views, runtimeTables, relatedTitles, previewVisitor)), business: app.purpose === 'personal' ? null : business ?? null }),
+    [app, shown, views, runtimeTables, relatedTitles, previewVisitor, business, remotePreview, remoteData])
+  const previewNotice = remotePreview ? <div className="mb-3 text-sm leading-6 text-ink-soft" role="status">{remoteError ? <><p>{remoteError}</p><button type="button" className="mt-2 min-h-11 rounded-lg border border-sand-200 px-3 py-2" onClick={() => setPreviewRetry(value => value + 1)}>Повторить предпросмотр</button></> : previewBusy ? 'Обновляем предпросмотр…' : remoteData?.truncated ? 'В списках — до 100 строк. Итоги рассчитаны по всем данным.' : null}</div> : null
 
   // Открытый в редакторе экран может быть закрыт выбранной роли: тогда
   // предпросмотр начинается с того, что ей доступно, а не с ошибки.
   const previewScreenId = shown.some((item) => item.id === screen?.id) ? screen?.id : shown[0]?.id
+  // A newly added screen is absent from the previous server preview. Mounting
+  // it against that stale app makes AppShell keep the old fallback screen.
+  const previewScreenReady = !remotePreview || Boolean(remoteData && (!previewScreenId || remoteData.runtime.app.screens.some(item => item.id === previewScreenId)))
 
   const publish = () => {
     if (!canEdit || publicationLock.current) return
@@ -421,7 +454,7 @@ export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTit
         if (!saved.ok) return
         const result = await publishAppAction(app.id, draftQueue.current())
         setSave(result.ok ? { kind: 'note', text: 'Опубликовано. Рабочая ссылка доступна пользователям с настроенными правами.' } : { kind: 'error', text: result.error })
-        if (result.ok) { setPublishedHere(true); router.refresh() }
+        if (result.ok) { setPublicationVersion(value => value + 1); router.refresh() }
       } catch { setSave({ kind: 'error', text: 'Не удалось подтвердить публикацию. Проверьте соединение и повторите публикацию.' }) }
       finally { publicationLock.current = false; setPublishing(false) }
     })
@@ -431,33 +464,34 @@ export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTit
     initialSection={initialSection}
     previewInstruction={previewInstruction}
     helpLinks={helpLinks}
-    app={app} tables={tables} screens={shown} screen={shown.find(item => item.id === screenId) ?? shown.find(item => item.tab) ?? shown[0]}
+    app={app} tables={tables} views={views} screens={shown} screen={shown.find(item => item.id === screenId) ?? shown.find(item => item.tab) ?? shown[0]}
+    onSectionUpdate={(next, id) => { update(next); setScreenId(id); const target = next.screens.find(screen => screen.id === id); if (target && previewAs !== 'editor' && !target.access.roles.includes(previewAs)) setPreviewAs(target.access.roles[0] ?? 'anonymous') }}
     fields={(() => { const current = shown.find(item => item.id === screenId) ?? shown.find(item => item.tab) ?? shown[0]; return tables.find(table => table.id === tableOfScreen(current))?.fields ?? [] })()}
-    canEdit={canEdit} publishing={publishing} pending={pending} published={Boolean(publishedAt) || publishedHere}
+    canEdit={canEdit} publishing={publishing} pending={pending} published={Boolean(publishedAt) || publicationVersion > 0} publicationVersion={publicationVersion}
     status={save.kind === 'error' || save.kind === 'note' ? save.text : SAVE_WORDS[save.kind]} error={save.kind === 'error'}
     onScreen={setScreenId} onUpdate={update} onSave={() => startTransition(async () => { try { await saveDraft() } catch { setSave({ kind: 'error', text: 'Не удалось сохранить черновик. Повторите сохранение.' }) } })} onPublish={publish}
     roleControls={<div className="space-y-3">
-      <label className="block text-sm text-ink-soft lg:hidden"><span className="sr-only">Смотреть как</span><select aria-label="Роль в предпросмотре" value={previewAs} onChange={event => setPreviewAs(event.target.value as typeof previewAs)} className="min-h-11 w-full rounded-lg border border-sand-300 bg-white px-3 py-2">{app.screens.some(item => item.access.public) ? <option value="anonymous">Посетитель</option> : null}{app.roles.filter(role => visibleScreensFor(app, asRole(role.id)).length > 0).map(role => <option key={role.id} value={role.id}>{role.name}</option>)}</select></label>
-      <div className="hidden flex-wrap items-center gap-1 lg:flex"><span className="mr-2 text-sm text-ink-soft">Смотреть как</span>{app.screens.some(item => item.access.public) ? <PreviewChip active={previewAs === 'anonymous'} onClick={() => setPreviewAs('anonymous')}>Посетитель</PreviewChip> : null}{app.roles.filter(role => visibleScreensFor(app, asRole(role.id)).length > 0).map(role => <PreviewChip key={role.id} active={previewAs === role.id} onClick={() => setPreviewAs(role.id)}>{role.name}</PreviewChip>)}</div>
+      <label className="block max-w-sm text-sm text-ink-soft">Смотреть как<select aria-label="Роль в предпросмотре" value={previewAs} onChange={event => setPreviewAs(event.target.value as typeof previewAs)} className="mt-1 min-h-11 w-full rounded-lg border border-sand-300 bg-white px-3 py-2 text-base">{app.screens.some(item => item.access.public) ? <option value="anonymous">Посетитель</option> : null}{app.roles.filter(role => visibleScreensFor(app, asRole(role.id)).length > 0).map(role => <option key={role.id} value={role.id}>{role.name}</option>)}</select></label>
       {previewAs !== 'anonymous' && previewAs !== 'editor' && app.rowAccessRules.some(rule => rule.appliesTo.includes(previewAs) && rule.match === 'email') ? <label className="block max-w-sm text-sm text-ink-soft">Почта для проверки личных записей<input type="email" value={previewEmail} onChange={event => setPreviewEmail(event.target.value)} className="mt-1 min-h-11 w-full rounded-lg border border-sand-300 px-3 py-2 text-base" /></label> : null}
       {previewAs !== 'anonymous' && previewAs !== 'editor' && app.rowAccessRules.some(rule => rule.appliesTo.includes(previewAs) && rule.match === 'company') ? <label className="block max-w-sm text-sm text-ink-soft">Организация пользователя<input value={previewCompany} onChange={event => setPreviewCompany(event.target.value)} className="mt-1 min-h-11 w-full rounded-lg border border-sand-300 px-3 py-2 text-base" /></label> : null}
     </div>}
     deviceControls={<div className="flex flex-wrap gap-1">{DEVICES.filter(item => item !== 'tablet').map(item => <PreviewChip key={item} label={DEVICE_WORDS[item]} active={device === item} onClick={() => setDevice(item)}><span className="flex items-center lg:hidden"><ShellIcon name={item === 'mobile' ? 'phone' : 'desktop'} /></span><span className="hidden lg:inline">{DEVICE_WORDS[item]}</span></PreviewChip>)}</div>}
-    preview={<div ref={setFrame} className="mx-auto h-[36rem] w-full max-w-full overflow-hidden rounded-2xl border border-sand-300 bg-white" style={{ maxWidth: deviceWidth }}>
-      {shown.length ? <div className="origin-top-left overflow-hidden" style={{ width: deviceWidth, height: FRAME_HEIGHT / scale, transform: `scale(${scale})` }}><AppShell key={`${previewAs}-${previewScreenId}-${device}`} runtime={preview} viewer={null} initialScreenId={previewScreenId} editing /></div> : <p className="p-6 text-sm leading-6 text-ink-soft">Этой роли не открыт ни один экран. Выберите другую роль или настройте доступ.</p>}
-    </div>}
+    preview={<div>{previewNotice}<div ref={setFrame} inert={previewBusy || Boolean(remoteError)} aria-busy={previewBusy} className={`mx-auto h-[36rem] w-full max-w-full overflow-hidden rounded-2xl border border-sand-300 bg-white ${previewBusy ? 'opacity-60' : ''}`} style={{ maxWidth: DEVICE_WIDTHS[device] }}>
+      {remotePreview && !previewScreenReady ? <p className="p-6 text-sm text-ink-soft">Загружаем предпросмотр…</p> : shown.length ? <div className="origin-top-left overflow-hidden" style={{ width: deviceWidth, height: FRAME_HEIGHT / scale, transform: `scale(${scale})` }}><AppShell key={`${previewAs}-${previewScreenId}-${device}`} runtime={preview} viewer={null} initialScreenId={previewScreenId} editing demoBookingData={bookingData} initialFormValues={checkoutPreview && checkoutPreview.screenId === previewScreenId ? checkoutPreview.values : undefined} onPreviewCheckout={(id, rowId) => { const checkout = previewCheckout(app, id, rowId); if (checkout) { setCheckoutPreview(checkout); setPreviewAs(checkout.roleId); setScreenId(id) } }} /></div> : <p className="p-6 text-sm leading-6 text-ink-soft">Этой роли не открыт ни один экран. Выберите другую роль или настройте доступ.</p>}
+    </div></div>}
   />
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[14rem_1fr_24rem]">
-      <aside className="space-y-2">
+    <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-[14rem_minmax(0,1fr)_24rem]">
+      <div role="group" aria-label="Разделы полного конструктора" className="grid grid-cols-3 gap-1 rounded-full bg-sand-100 p-1 xl:hidden">{([['screens', 'Экраны'], ['settings', 'Настройки'], ['preview', 'Просмотр']] as const).map(([id, name]) => <button key={id} type="button" aria-pressed={builderPanel === id} aria-controls={`${builderId}-${id}`} onClick={() => setBuilderPanel(id)} className={`min-h-11 min-w-0 rounded-full px-2 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage-500 ${builderPanel === id ? 'bg-white text-sage-700 shadow-soft' : 'text-ink-soft hover:bg-white/70'}`}>{name}</button>)}</div>
+      <aside id={`${builderId}-screens`} aria-label="Экраны приложения" className={`${builderPanel === 'screens' ? 'block' : 'hidden'} min-w-0 space-y-2 xl:block`}>
         <h2 className="text-xs font-medium text-[var(--color-ink-muted)]">Экраны</h2>
         <div className="space-y-1">
           {screens.map((item) => (
             <button
               key={item.id}
               type="button"
-              onClick={() => { setScreenId(item.id); setComponentId(null) }}
+              onClick={() => { setScreenId(item.id); setComponentId(null); setBuilderPanel('settings'); if (window.matchMedia?.('(max-width: 1279px)').matches) requestAnimationFrame(() => settingsHeading.current?.focus()) }}
               className={`flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm ${
                 item.id === screen?.id ? 'bg-[var(--color-surface-muted)] font-medium' : 'hover:bg-[var(--color-surface-muted)]'
               }`}
@@ -475,7 +509,7 @@ export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTit
             <button
               key={type}
               type="button"
-              onClick={() => addScreen(type)}
+              onClick={() => { addScreen(type); setBuilderPanel('settings') }}
               className="rounded border border-[var(--color-border-subtle)] px-2 py-1 text-xs hover:bg-[var(--color-surface-muted)]"
             >
               + {SCREEN_TYPE_LABELS[type]}
@@ -506,7 +540,8 @@ export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTit
         ) : null}
       </aside>
 
-      <fieldset disabled={!canEdit || publishing} aria-label="Настройки выбранного экрана" className="min-w-0 space-y-4">
+      <fieldset id={`${builderId}-settings`} disabled={!canEdit || publishing} aria-label="Настройки выбранного экрана" className={`${builderPanel === 'settings' ? 'block' : 'hidden'} min-w-0 space-y-4 xl:block`}>
+        <div className="flex items-center justify-between gap-3"><h2 ref={settingsHeading} tabIndex={-1} className="rounded text-base font-semibold focus-visible:outline-2 focus-visible:outline-sage-400">{screen?.name ?? 'Настройки экрана'}</h2><button type="button" className="min-h-11 rounded-lg px-3 py-2 text-sm text-sage-700 underline underline-offset-4 xl:hidden" onClick={() => setBuilderPanel('screens')}>К экранам</button></div>
         {screen ? (
           <>
             <div className="rounded-xl border border-[var(--color-border-subtle)] p-3">
@@ -526,6 +561,7 @@ export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTit
               <div className="rounded-xl border border-[var(--color-border-subtle)] p-3">
                 <h2 className="mb-2 text-xs font-medium text-[var(--color-ink-muted)]">Блоки сводки</h2>
                 <DashboardEditor
+                  metadataOnly={remotePreview}
                   app={app}
                   screen={screen}
                   views={views}
@@ -632,7 +668,7 @@ export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTit
         ) : null}
       </fieldset>
 
-      <aside className="space-y-2">
+      <aside id={`${builderId}-preview`} aria-label="Предпросмотр приложения" className={`${builderPanel === 'preview' ? 'block' : 'hidden'} min-w-0 space-y-2 xl:block`}>
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-xs font-medium text-[var(--color-ink-muted)]">Предпросмотр</h2>
           <span
@@ -686,13 +722,14 @@ export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTit
           </div>
         ) : null}
 
-        <div className="flex flex-wrap gap-1">
+        <div role="group" aria-label="Устройство предпросмотра" className="flex flex-wrap gap-1">
           {DEVICES.map((item) => (
             <button
               key={item}
               type="button"
+              aria-pressed={device === item}
               onClick={() => setDevice(item)}
-              className={`rounded-lg px-2.5 py-1 text-xs transition-colors ${
+              className={`min-h-11 rounded-lg px-3 py-2 text-sm transition-colors ${
                 device === item
                   ? 'bg-[var(--color-surface-muted)] font-medium'
                   : 'text-[var(--color-ink-muted)] hover:bg-[var(--color-surface-muted)]'
@@ -705,9 +742,12 @@ export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTit
 
         <div
           ref={setFrame}
-          className="h-[36rem] overflow-hidden rounded-2xl border border-[var(--color-border-subtle)]"
+          inert={previewBusy || Boolean(remoteError)}
+          aria-busy={previewBusy}
+          className="mx-auto h-[36rem] w-full overflow-hidden rounded-2xl border border-[var(--color-border-subtle)]"
+          style={{ maxWidth: device === 'mobile' ? DEVICE_WIDTHS.mobile : undefined }}
         >
-          {shown.length === 0 ? (
+          {remotePreview && !previewScreenReady ? <p className="p-6 text-sm text-ink-soft">Загружаем предпросмотр…</p> : shown.length === 0 ? (
             <p className="p-6 text-sm text-[var(--color-ink-muted)]">
               Этой роли не открыт ни один экран — в приложение она не попадёт.
             </p>
@@ -726,13 +766,14 @@ export function AppEditor({ initialApp, tables, views, runtimeTables, relatedTit
                 viewer={null}
                 initialScreenId={previewScreenId}
                 editing
+                demoBookingData={bookingData}
               />
             </div>
           )}
         </div>
+        {previewNotice}
         <p className="text-xs text-[var(--color-ink-muted)]">
-          {DEVICE_WORDS[device]}: ширина {DEVICE_WIDTH_WORDS[device]}
-          {scale < 1 ? `, уменьшено до ${Math.round(scale * 100)}%` : ''}.
+          {device === 'mobile' ? 'Телефон: по ширине предпросмотра.' : `${DEVICE_WORDS[device]}: ширина ${DEVICE_WIDTH_WORDS[device]}${scale < 1 ? `, уменьшено до ${Math.round(scale * 100)}%` : ''}.`}
         </p>
 
         {portalUpgradeTableId && app.screens.some(screen => screen.type === 'form' && screen.mode === 'create' && screen.tableId === portalUpgradeTableId && screen.access.public && screen.access.roles.length === 0) && <div className="space-y-2 rounded-xl border border-sand-200 p-3">

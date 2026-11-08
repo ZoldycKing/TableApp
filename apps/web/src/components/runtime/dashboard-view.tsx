@@ -8,6 +8,7 @@ import type { BlockResult, ListResult, MetricResult, PipelineResult } from '@/li
 import { CHOICE_COLORS } from '@/components/views/card'
 import { Icon } from './icons'
 import { EmptyState } from './ui'
+import presentation from './app-presentation.module.css'
 
 /**
  * Сводка.
@@ -79,7 +80,7 @@ export function spanClass(span: BlockSpan): string {
   return `${MOBILE[clamp(span.mobile)]} ${TABLET[clamp(span.tablet)]} ${DESKTOP[clamp(span.desktop)]}`
 }
 
-const CARD = 'h-full rounded-2xl border border-sand-200 bg-white shadow-soft'
+const CARD = `h-full ${presentation.panel}`
 
 /**
  * Размер числа под его длину.
@@ -103,7 +104,7 @@ function MetricBlock({ block, result }: { block: Extract<Block, { type: 'metric'
         <span className={`flex size-7 shrink-0 items-center justify-center rounded-lg ${TONES[block.tone] ?? TONES.blue}`}>
           <Icon name={block.icon} className="size-4" />
         </span>
-        <p className="min-w-0 flex-1 truncate text-xs leading-snug text-ink-muted">{block.title}</p>
+        <p className="min-w-0 flex-1 break-words text-xs leading-snug text-ink-muted">{block.title}</p>
       </div>
 
       <p
@@ -120,7 +121,7 @@ function MetricBlock({ block, result }: { block: Extract<Block, { type: 'metric'
           <span className="truncate text-ink-muted">{result.caption}</span>
         </p>
       ) : (
-        <p className="mt-1.5 truncate text-[11px] text-ink-muted">{block.description || result.caption}</p>
+        <p className="mt-1.5 text-xs leading-relaxed text-ink-muted">{result.empty ? result.caption : block.description || result.caption}</p>
       )}
     </div>
   )

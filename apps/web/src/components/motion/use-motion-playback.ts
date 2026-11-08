@@ -3,7 +3,7 @@
 import { useEffect, useState, type RefObject } from 'react'
 
 /** Only run automatic demonstrations while someone can actually see them. */
-export function useMotionPlayback(ref: RefObject<HTMLElement | null>) {
+export function useMotionPlayback(ref: RefObject<HTMLElement | null>, threshold = 0.15, rootMargin = '0px') {
   const [state, setState] = useState({ playing: false, reduced: false })
 
   useEffect(() => {
@@ -18,10 +18,10 @@ export function useMotionPlayback(ref: RefObject<HTMLElement | null>) {
 
     const observer = typeof IntersectionObserver === 'undefined' ? null : new IntersectionObserver(
       ([entry]) => {
-        visible = Boolean(entry?.isIntersecting)
+        visible = Boolean(entry?.isIntersecting) && (entry?.intersectionRatio ?? 1) >= threshold
         update()
       },
-      { threshold: 0.15 },
+      { threshold, rootMargin },
     )
     if (observer) observer.observe(node)
     else visible = true
@@ -33,7 +33,7 @@ export function useMotionPlayback(ref: RefObject<HTMLElement | null>) {
       document.removeEventListener('visibilitychange', update)
       media.removeEventListener('change', update)
     }
-  }, [ref])
+  }, [ref, threshold, rootMargin])
 
   return state
 }

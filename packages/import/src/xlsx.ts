@@ -65,8 +65,9 @@ export type SheetGrid = {
 }
 
 async function openWorkbook(bytes: Uint8Array): Promise<Workbook> {
-  const { Workbook } = await import('exceljs')
-  const workbook: Workbook = new Workbook()
+  const excel = await import('exceljs')
+  const WorkbookConstructor = excel.Workbook ?? excel.default.Workbook
+  const workbook = new WorkbookConstructor()
   await workbook.xlsx.load(toArrayBuffer(bytes))
   return workbook
 }

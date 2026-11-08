@@ -32,6 +32,7 @@ export const salon: TemplateDef = {
         { key: 'price', name: 'Цена', type: 'number', options: { format: 'currency', precision: 0, currency: 'RUB' }, help: 'Текущий прайс услуги. Новая запись получает эту цену; уже принятые посещения сохраняют согласованную сумму.' },
         { key: 'minutes', name: 'Длительность, мин', type: 'number', options: { format: 'plain', precision: 0 }, help: 'Сколько занимает. Нужно, чтобы не поставить две записи внахлёст.' },
         { key: 'description', name: 'Описание услуги', type: 'long_text', help: 'Что входит в услугу и что клиенту нужно знать перед записью. Видно в карточке услуги.' },
+        { key: 'photo', name: 'Фото услуги', type: 'image', help: 'Фото для витрины и карточки услуги.' },
         { key: 'active', name: 'Доступна для записи', type: 'checkbox', help: 'Снимите отметку, чтобы временно убрать услугу из записи. Существующие посещения сохранятся.' },
       ],
       views: [{ name: 'Все услуги', type: 'grid' }, { name: 'Доступны для записи', type: 'grid', filter: { field: 'active', op: 'is', value: true } }],

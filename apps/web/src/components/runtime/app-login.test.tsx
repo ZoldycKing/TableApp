@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {renderToString} from 'react-dom/server'
 
 const actions = vi.hoisted(() => ({ request: vi.fn(), consume: vi.fn(), push: vi.fn() }))
 vi.mock('@/app/auth-actions', () => ({ requestAppLoginAction: actions.request, consumeAppCodeAction: actions.consume }))
@@ -14,6 +15,14 @@ beforeEach(() => {
   actions.push.mockReset()
 })
 afterEach(cleanup)
+it('waits for the published app login to become interactive before allowing a native form submission',()=>{
+  const html=renderToString(<AppLogin slug="app" appName="Моё приложение" accent="sage" initialError={null} purpose="app"/>)
+  const wrapper=document.createElement('div');wrapper.innerHTML=html
+  expect(wrapper.querySelector('input[type="email"]')?.hasAttribute('disabled')).toBe(true)
+  expect(wrapper.querySelector('button[type="submit"]')?.hasAttribute('disabled')).toBe(true)
+  render(<AppLogin slug="app" appName="Моё приложение" accent="sage" initialError={null} purpose="app"/>)
+  expect(screen.getByRole('button',{name:'Получить код'}).hasAttribute('disabled')).toBe(false)
+})
 
 async function requestCode() {
   fireEvent.change(screen.getByRole('textbox', { name: 'Ваша почта' }), { target: { value: 'new@example.invalid' } })

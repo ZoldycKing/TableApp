@@ -25,7 +25,7 @@ export function StartChoices({ onChoose, disabled = false }: { onChoose?: (path:
         <div aria-hidden="true" className="mb-6 hidden h-[176px] grid-cols-3 items-center gap-2 rounded-xl bg-sand-50 px-2 py-5 @min-[720px]:grid">
           {[['zakazy', 'Магазин'], ['salon', 'Салон'], ['sklad', 'Склад']].map(([id, name]) => <div key={id} className="flex min-w-0 flex-col items-center gap-3 text-sm text-ink-soft"><TemplateIcon id={id!} className="size-16" /><span>{name}</span></div>)}
         </div>
-        <h2 className="flex items-center gap-3 text-xl font-semibold tracking-tight"><ShellIcon name="template" className="size-7 shrink-0 text-sage-700 @min-[720px]:hidden" />Готовый сценарий</h2>
+        <h2 className="flex items-center gap-3 text-xl font-semibold tracking-tight"><ShellIcon name="template" className="size-7 shrink-0 text-sage-700 @min-[720px]:hidden" />Готовый шаблон</h2>
         <p className="mb-6 mt-3 flex-1 text-sm leading-6 text-ink-soft">Таблицы и экраны для вашей задачи.</p>
         {action('templates', `${ownerSecondary} w-full`)}
       </section>

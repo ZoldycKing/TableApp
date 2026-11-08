@@ -1,6 +1,6 @@
 'use client'
 
-import type { Attachment, Field, ScreenOf } from '@tableapp/schema'
+import type { Attachment, CustomerWorkflow, Field, ScreenOf } from '@tableapp/schema'
 import { useMemo, type ReactNode } from 'react'
 import { formatCell } from '@/lib/format'
 import type { TableRow } from '@/lib/table-store'
@@ -13,6 +13,9 @@ import { fileUrl, isImage } from '@/components/file-upload'
 import type { CollectionPage } from '@/lib/runtime-page-types'
 import type { RuntimePageControls } from '@/lib/use-screen-runtime'
 import { collectionSearchFields } from '@/lib/collection-search-fields'
+import { orderAmount } from './order-detail'
+import { DemoCatalogPhoto, useDemoCatalogPhoto } from './demo-catalog-media'
+import presentation from './app-presentation.module.css'
 
 /**
  * Список записей.
@@ -74,6 +77,8 @@ export function CollectionView({
   pageControls,
   emptyState,
   fieldUnits,
+  order,
+  orderPriceField,
 }: {
   screen: Collection
   rows: TableRow[]
@@ -100,6 +105,8 @@ export function CollectionView({
   emptyState?: ReactNode
   /** Units supplied by an explicit product binding, e.g. booking duration in minutes. */
   fieldUnits?: Readonly<Record<string, string>>
+  order?: CustomerWorkflow
+  orderPriceField?: Field
 }) {
   const { query, choiceId } = state
   const setQuery = (next: string) => onState({ ...state, query: next })
@@ -108,7 +115,7 @@ export function CollectionView({
   const byId = (id: string | null | undefined) => (id ? fields.find((item) => item.id === id) : undefined)
   const titleField = byId(screen.titleFieldId)
   const subtitleField = byId(screen.subtitleFieldId)
-  const metaField = byId(screen.metaFieldId)
+  const metaField = byId(screen.metaFieldId) ?? (order?.cart ? fields.find(field => field.type === 'rollup' && field.options.relationFieldId === order.cart!.positionsFieldId && field.options.fn === 'sum') : undefined)
   const imageField = byId(screen.imageFieldId)
   const statusField = byId(screen.statusFieldId)
 
@@ -230,7 +237,7 @@ export function CollectionView({
             </div>
           </div>
 
-          {tabs.length > 0 ? (
+          {tabs.length > 0 && order ? <label className="flex min-h-11 items-center gap-3 text-sm"><span className="text-ink-muted">Статус</span><select value={choiceId ?? ''} onChange={event => setChoiceId(event.target.value || null)} className="min-h-11 min-w-0 flex-1 rounded-xl border border-sand-200 bg-white px-3 outline-none focus:border-sage-600 @min-[560px]:max-w-xs"><option value="">Все · {page?.total ?? rows.length}</option>{tabs.map(choice => <option key={choice.id} value={choice.id}>{choice.name} · {choice.count}</option>)}</select></label> : tabs.length > 0 ? (
             /*
              * Вкладки переносятся, а не прокручиваются вбок. Боковая прокрутка
              * дешевле по высоте, но прячет статусы за краем — а полосы
@@ -300,6 +307,8 @@ export function CollectionView({
               statusField={statusField}
               relatedTitles={relatedTitles}
               fieldUnits={fieldUnits}
+              order={Boolean(order)}
+              orderPriceField={orderPriceField}
               onOpen={onOpenRow ? () => onOpenRow(row.id) : null}
             />
           ))}
@@ -352,10 +361,29 @@ function Row({
   statusField,
   relatedTitles,
   fieldUnits,
-}: Parts & { row: TableRow; onOpen: (() => void) | null }) {
+  order = false,
+  orderPriceField,
+}: Parts & { row: TableRow; onOpen: (() => void) | null; order?: boolean; orderPriceField?: Field }) {
   const title = titleField ? collectionText(titleField, row.data[titleField.id], relatedTitles, fieldUnits) : ''
   const subtitle = subtitleField ? collectionText(subtitleField, row.data[subtitleField.id], relatedTitles, fieldUnits) : ''
-  const meta = metaField ? collectionText(metaField, row.data[metaField.id], relatedTitles, fieldUnits) : ''
+  const meta = metaField ? order ? orderAmount(metaField, row.data[metaField.id], orderPriceField) : collectionText(metaField, row.data[metaField.id], relatedTitles, fieldUnits) : ''
+  const demoPhoto = useDemoCatalogPhoto(row.id)
+
+  if (order) {
+    const dated = subtitleField?.type === 'date' || subtitleField?.type === 'datetime'
+    return <button type="button" onClick={onOpen ?? undefined} disabled={!onOpen} className="group flex w-full items-center gap-3 border-b border-sand-200 px-4 py-4 text-left transition-colors last:border-0 hover:bg-sand-50 disabled:cursor-default disabled:hover:bg-transparent focus-visible:relative focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-sage-600 sm:px-5">
+      <span className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(0,auto)] items-baseline gap-x-3">
+        <span className="min-w-0 text-[15px] font-semibold leading-relaxed [overflow-wrap:anywhere]">{title || 'Без названия'}</span>
+        <span className="text-right text-[15px] font-semibold tabular-nums [overflow-wrap:anywhere]">{meta}</span>
+        <span className="mt-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 [&_span]:whitespace-normal">
+          {statusField ? <StatusPill field={statusField} value={row.data[statusField.id]} /> : null}
+          {subtitle && !dated ? <span className="min-w-0 text-xs leading-relaxed text-ink-muted [overflow-wrap:anywhere]">{subtitle}</span> : null}
+        </span>
+        {subtitle && dated ? <span className="mt-2 text-right text-xs leading-relaxed text-ink-muted tabular-nums">{subtitle}</span> : null}
+      </span>
+    {onOpen ? <Icon name="back" className="size-4 shrink-0 rotate-180 text-ink-muted" /> : null}
+    </button>
+  }
 
   return (
     <button
@@ -364,7 +392,7 @@ function Row({
       disabled={!onOpen}
       className="group flex w-full items-start gap-3 border-b border-sand-200 px-4 py-3.5 text-left transition-colors last:border-0 hover:bg-sand-50 disabled:cursor-default disabled:hover:bg-transparent @min-[480px]:items-center"
     >
-      {imageField ? <Thumb value={row.data[imageField.id]} /> : null}
+      {demoPhoto !== undefined ? <span className="size-10 shrink-0 overflow-hidden rounded-lg"><DemoCatalogPhoto index={demoPhoto} /></span> : imageField ? <Thumb value={row.data[imageField.id]} /> : null}
 
       <span className="flex min-w-0 flex-1 flex-col gap-1.5 @min-[480px]:flex-row @min-[480px]:items-center @min-[480px]:gap-3">
         <span className="min-w-0 flex-1">
@@ -417,20 +445,20 @@ function Tiles({
   const описание = subtitleField?.type === 'long_text'
 
   return (
-    <div className="grid grid-cols-1 gap-3 @min-[420px]:grid-cols-2 @min-[720px]:grid-cols-3 @min-[1000px]:grid-cols-4">
+    <div className={presentation.catalog}><div className={presentation.catalogGrid}>
       {rows.map((row) => (
         <button
           key={row.id}
           type="button"
           onClick={() => onOpenRow?.(row.id)}
           disabled={!onOpenRow}
-          className="group flex flex-col overflow-hidden rounded-2xl border border-sand-200 bg-white text-left shadow-soft transition-all hover:-translate-y-0.5 hover:border-sand-300 hover:shadow-lift disabled:translate-y-0 disabled:cursor-default"
+          className={`${presentation.catalogCard} flex flex-col text-left transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-sage-600 disabled:cursor-default`}
         >
-          {imageField ? <TileImage value={row.data[imageField.id]} /> : null}
+          <TileImage rowId={row.id} value={imageField ? row.data[imageField.id] : undefined} showPlaceholder={Boolean(imageField)} />
 
           <span className="flex flex-1 flex-col gap-1 p-3.5">
             {subtitleField && !описание ? (
-              <span className="truncate text-[11px] uppercase tracking-wide text-ink-muted">
+              <span className="truncate text-xs text-ink-muted">
                 {collectionText(subtitleField, row.data[subtitleField.id], relatedTitles, fieldUnits)}
               </span>
             ) : null}
@@ -439,7 +467,7 @@ function Tiles({
               {titleField ? collectionText(titleField, row.data[titleField.id], relatedTitles, fieldUnits) || 'Без названия' : ''}
             </span>
 
-            {subtitleField && описание ? (
+            {subtitleField && описание && !imageField ? (
               <span className="line-clamp-3 text-xs leading-relaxed text-ink-muted">
                 {collectionText(subtitleField, row.data[subtitleField.id], relatedTitles, fieldUnits)}
               </span>
@@ -456,7 +484,7 @@ function Tiles({
           </span>
         </button>
       ))}
-    </div>
+    </div></div>
   )
 }
 
@@ -522,37 +550,10 @@ function Thumb({ value }: { value: unknown }) {
   )
 }
 
-/**
- * Картинка товара в плитке.
- *
- * Товарные фото снимают на белом и обрезать их нельзя — у объектива
- * и так поля. Поэтому вписываем целиком в квадрат, а не заполняем его:
- * лучше поля по бокам, чем срезанный край изделия.
- */
-function TileImage({ value }: { value: unknown }) {
-  const files = Array.isArray(value) ? (value as Attachment[]) : []
-  const image = files.find((file) => isImage(file.mime))
-
-  if (!image) {
-    return (
-      <span className="flex aspect-square items-center justify-center bg-[var(--color-surface-muted)] text-[var(--color-ink-muted)]">
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden>
-          <rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" strokeWidth="1.5" />
-          <circle cx="9" cy="10" r="1.6" stroke="currentColor" strokeWidth="1.5" />
-          <path d="m4 17 5-4 4 3 3-2 4 3" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-        </svg>
-      </span>
-    )
-  }
-
-  return (
-    <span className="block aspect-square overflow-hidden bg-white p-2">
-      <img
-        src={fileUrl(image.key)}
-        alt={image.name}
-        loading="lazy"
-        className="h-full w-full object-contain transition-transform duration-300 group-hover:scale-[1.03]"
-      />
-    </span>
-  )
+function TileImage({ rowId, value, showPlaceholder }: { rowId: string; value: unknown; showPlaceholder: boolean }) {
+  const demoPhoto = useDemoCatalogPhoto(rowId)
+  const image = firstImage(value)
+  if (demoPhoto !== undefined) return <DemoCatalogPhoto index={demoPhoto} />
+  if (image) return <span className={presentation.photo}><img src={fileUrl(image.key)} alt="" loading="lazy" /></span>
+  return showPlaceholder ? <span aria-hidden="true" className={presentation.photo}><Icon name="image" className="size-6" /></span> : null
 }

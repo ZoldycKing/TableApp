@@ -73,6 +73,17 @@ describe('module contracts and legacy compatibility', () => {
     if (field.type === 'relation') field.options.tableId = app.production!.tables.materials
     expect(checkAppModules(app, catalog)).toMatch(/один каталог/)
   })
+  it('keeps production summary fields outside its write contract', () => {
+    const { app, catalog } = fixture('proizvodstvo')
+    const module = app.modules!.find(item => item.kind === 'production')!
+    const current = moduleContract(app, module)
+    const legacy = structuredClone(app)
+    delete legacy.production!.material.stock
+    delete legacy.production!.material.min
+    expect(moduleContract(legacy, module)).toEqual(current)
+    expect(checkAppModules(app, catalog)).toBeNull()
+    expect(checkAppReferences(app, catalog)).toBeNull()
+  })
   it('allows legacy reads and explicit adoption but rejects dropping a saved manifest', () => {
     const { app } = fixture('salon'), legacy = { ...app, modules: undefined }
     expect(checkModuleModelTransition(legacy, legacy)).toBeNull()

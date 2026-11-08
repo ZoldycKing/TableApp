@@ -18,11 +18,11 @@ export function Templates() {
           <Link
             key={item.slug}
             href={`/solutions/${item.slug}`}
-            className="group flex h-full gap-4 rounded-2xl border border-sand-200 bg-white p-5 shadow-soft transition-all duration-300 hover:-translate-y-1 hover:border-sage-300 hover:shadow-lift"
+            className="group flex h-full min-w-0 gap-4 rounded-2xl border border-sand-200 bg-white p-5 shadow-soft transition-all duration-300 hover:-translate-y-1 hover:border-sage-300 hover:shadow-lift"
           >
             <TemplateIcon id={item.templateId ?? 'portal'} className="size-11" />
             <span className="min-w-0">
-              <span className="block font-display text-base font-bold">
+              <span className="block font-display text-base font-bold [overflow-wrap:anywhere]">
                 {item.name}
                 <span
                   aria-hidden

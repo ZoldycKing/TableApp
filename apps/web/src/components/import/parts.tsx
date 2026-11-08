@@ -3,7 +3,10 @@
 import type { ImportPreview, SheetInfo } from '@tableapp/import'
 import type { Field, FieldType } from '@tableapp/schema'
 import Link from 'next/link'
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
+import { tableWorkLink } from '@/lib/table-work-link'
+import { ownerPrimary, ownerSecondary } from '@/components/owner-ui'
+import { PrepareApp } from '@/components/prepare-app'
 import { FIELD_LABELS, IMPORTABLE_TYPES } from '@/lib/field-labels'
 import { formatCell } from '@/lib/format'
 import {
@@ -180,8 +183,8 @@ export function Destination({
   const mapped = Object.keys(setup.mapping).length
 
   return (
-    <div className="grid gap-3 rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface-muted)] p-4 sm:grid-cols-2">
-      <label className="block">
+    <div className={`grid gap-3 rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface-muted)] p-4 ${tables.length ? 'sm:grid-cols-2' : ''}`}>
+      {tables.length ? <label className="block">
         <span className="text-sm font-medium">Куда</span>
         <select
           value={setup.destination.kind === 'new' ? 'new' : setup.destination.tableId}
@@ -196,7 +199,7 @@ export function Destination({
             </option>
           ))}
         </select>
-      </label>
+      </label> : null}
 
       {setup.destination.kind === 'new' ? (
         <label className="block">
@@ -233,6 +236,7 @@ export function PreviewTable({
   onName,
   onType,
   onMap,
+  editing = false,
 }: {
   preview: ImportPreview
   setup: SheetSetup
@@ -241,12 +245,13 @@ export function PreviewTable({
   onName: (index: number, value: string) => void
   onType: (index: number, value: FieldType) => void
   onMap: (column: number, targetId: string) => void
+  editing?: boolean
 }) {
   const append = setup.destination.kind === 'existing'
 
   return (
     <div className="overflow-x-auto rounded-xl border border-[var(--color-border-subtle)]">
-      <table className="w-full border-collapse text-sm">
+      <table aria-label="Предпросмотр данных" className="w-full border-collapse text-sm">
         <thead>
           <tr className="bg-[var(--color-surface-muted)]">
             {preview.fields.map((field, index) => (
@@ -260,6 +265,7 @@ export function PreviewTable({
                       {field.name}
                     </p>
                     <select
+                      aria-label={`Колонка TableApp для «${field.name}»`}
                       value={setup.mapping[index] ?? ''}
                       disabled={busy}
                       onChange={(event) => onMap(index, event.target.value)}
@@ -277,15 +283,17 @@ export function PreviewTable({
                       ))}
                     </select>
                   </>
-                ) : (
+                ) : editing ? (
                   <>
                     <input
+                      aria-label={`Название колонки ${index + 1}`}
                       value={setup.nameOverrides[index] ?? field.name}
                       disabled={busy}
                       onChange={(event) => onName(index, event.target.value)}
                       className="w-full bg-transparent font-medium outline-none focus:underline"
                     />
                     <select
+                      aria-label={`Тип колонки «${field.name}»`}
                       value={field.type}
                       disabled={busy}
                       onChange={(event) => onType(index, event.target.value as FieldType)}
@@ -298,7 +306,7 @@ export function PreviewTable({
                       ))}
                     </select>
                   </>
-                )}
+                ) : <span className="font-medium">{field.name}</span>}
               </th>
             ))}
           </tr>
@@ -367,9 +375,7 @@ export function Summary({
         перенесённую книгу целиком, должен узнать правду здесь.
       */}
       <p className="mt-3 text-xs leading-relaxed text-[var(--color-ink-muted)]">
-        Импортируются значения ячеек. Формулы Excel и связи между листами
-        автоматически не переносятся: после импорта таблицы независимы, связь
-        между ними можно настроить полем «Связь с таблицей».
+        Переносятся значения ячеек. Формулы Excel и связи нужно будет настроить в TableApp.
       </p>
     </div>
   )
@@ -382,18 +388,27 @@ export function Results({
   onMore,
   busy,
   more,
+  returnAppId,
+  automaticApp = false,
+  appHref,
 }: {
   setups: readonly SheetSetup[]
   onRetry: () => void
   onMore: () => void
   busy: boolean
   more: number
+  returnAppId?: string
+  automaticApp?: boolean
+  appHref?: string
 }) {
   const failed = setups.filter((setup) => setup.outcome?.status === 'failed')
+  const [preparing, setPreparing] = useState(false)
+  const ready = [...new Map(setups.flatMap(setup => setup.outcome?.tableId && ['done', 'repeat'].includes(setup.outcome.status)
+    ? [[setup.outcome.tableId, { id: setup.outcome.tableId, name: setup.destination.kind === 'new' ? setup.destination.name : setup.name }] as const] : [])).values()]
 
   return (
     <section className="mt-6">
-      <h2 className="text-lg font-medium">Результат импорта</h2>
+      <h2 className="text-lg font-medium">{failed.length ? 'Проверьте результат загрузки' : 'Данные в TableApp'}</h2>
 
       <ul className="mt-3 space-y-2">
         {setups.map((setup) => {
@@ -416,10 +431,11 @@ export function Results({
               </span>
               {ok && outcome?.tableId ? (
                 <Link
-                  href={`/tables/${outcome.tableId}`}
+                  href={tableWorkLink(outcome.tableId, true)}
+                  aria-label={`Открыть таблицу «${setup.destination.kind === 'new' ? setup.destination.name : setup.name}»`}
                   className="shrink-0 rounded-lg border border-[var(--color-border-subtle)] bg-white px-3 py-1.5 font-medium hover:bg-[var(--color-surface-muted)]"
                 >
-                  Проверить данные
+                  Открыть таблицу
                 </Link>
               ) : null}
             </li>
@@ -427,26 +443,27 @@ export function Results({
         })}
       </ul>
 
+      {ready.length ? <fieldset disabled={busy} className="mt-6 min-w-0">{automaticApp ? appHref ? <Link href={appHref} className={ownerPrimary}>Открыть приложение</Link> : null : returnAppId ? <div className="rounded-2xl border border-sand-200 bg-white p-5 sm:p-6"><h3 className="text-lg font-semibold">Продолжите настройку приложения</h3><p className="mt-2 max-w-xl text-sm leading-6 text-ink-soft">Данные загружены. Вернитесь к настройке и проверьте разделы приложения.</p><Link href={`/setup?app=${encodeURIComponent(returnAppId)}&step=data`} className={`${ownerPrimary} mt-4`}>Вернуться к настройке приложения</Link></div> : <PrepareApp tables={ready} onPendingChange={setPreparing} />}</fieldset> : null}
+
       <div className="mt-4 flex flex-wrap gap-2">
-        {setups.some(setup => setup.outcome?.status === 'done' || setup.outcome?.status === 'repeat') ? <Link href="/setup?step=data" className="rounded-xl bg-ink px-4 py-2.5 text-sm font-medium text-white hover:bg-ink/90">Продолжить подготовку приложения →</Link> : null}
         {failed.length > 0 ? (
           <button
             type="button"
             onClick={onRetry}
-            disabled={busy}
-            className="rounded-lg bg-ink px-3 py-2 text-sm font-medium text-white hover:bg-ink/90 disabled:opacity-40"
+            disabled={busy || preparing}
+            className={ownerSecondary}
           >
-            {busy ? 'Повторяем…' : `Повторить неудавшиеся: ${failed.length}`}
+            {busy ? 'Повторяем…' : `Повторить загрузку: ${failed.length}`}
           </button>
         ) : null}
         {more > 0 ? (
           <button
             type="button"
             onClick={onMore}
-            disabled={busy}
+            disabled={busy || preparing}
             className="rounded-lg border border-[var(--color-border-subtle)] px-3 py-2 text-sm font-medium hover:bg-[var(--color-surface-muted)] disabled:opacity-40"
           >
-            Импортировать оставшиеся листы: {more}
+            Загрузить остальные листы: {more}
           </button>
         ) : null}
       </div>

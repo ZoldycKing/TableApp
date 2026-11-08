@@ -4,183 +4,80 @@ import type { App, Field, RowMatch } from '@tableapp/schema'
 import { GUEST_ROLE } from '@tableapp/schema'
 import { rolesForRowRules } from '@/lib/app-roles'
 import type { TableSummary } from '@/lib/queries'
-
-/**
- * Правила «видит только свои строки».
- *
- * Их может быть несколько на одну таблицу, и они складываются: строка видна,
- * если подошло хотя бы одно. Так «свои заказы и заказы своей фирмы» получается
- * двумя правилами, а добавление правила только расширяет доступ — рассуждать
- * об этом можно, не держа в голове всю таблицу.
- */
-
-const MATCH_WORDS: Record<RowMatch, string> = {
-  email: 'почтой вошедшего',
-  company: 'его организацией',
-}
+import { ownerInput, ownerSecondary } from '../owner-ui'
+import { ShellIcon } from '../shell/icons'
 
 const TEXTUAL = new Set(['email', 'text'])
 
-export function RowRules({
-  app,
-  tables,
-  onChange,
-}: {
-  app: App
-  tables: TableSummary[]
-  onChange: (next: App) => void
+export function RowRules({ app, tables, onChange }: {
+  app: App; tables: TableSummary[]; onChange: (next: App) => void
 }) {
   const rules = app.rowAccessRules
   const setRules = (next: App['rowAccessRules']) => onChange({ ...app, rowAccessRules: next })
-
   const fieldsOf = (tableId: string): Field[] =>
-    (tables.find((table) => table.id === tableId)?.fields ?? []).filter((field) =>
-      TEXTUAL.has(field.type),
-    )
-
+    (tables.find(table => table.id === tableId)?.fields ?? []).filter(field => TEXTUAL.has(field.type))
   const add = () => {
     const table = tables[0]
     if (!table) return
     const candidates = fieldsOf(table.id)
-    const chosen = candidates.find((field) => field.type === 'email') ?? candidates[0]
-    setRules([
-      ...rules,
-      {
-        tableId: table.id,
-        fieldId: chosen?.id ?? '',
-        match: 'email',
-        appliesTo: [GUEST_ROLE, ...app.roles.filter((role) => role.isDefault).map((role) => role.id)],
-      },
-    ])
+    const chosen = candidates.find(field => field.type === 'email') ?? candidates[0]
+    setRules([...rules, { tableId: table.id, fieldId: chosen?.id ?? '', match: 'email',
+      appliesTo: [GUEST_ROLE, ...app.roles.filter(role => role.isDefault).map(role => role.id)] }])
   }
-
   const patch = (index: number, changes: Partial<App['rowAccessRules'][number]>) =>
-    setRules(rules.map((rule, at) => (at === index ? { ...rule, ...changes } : rule)))
+    setRules(rules.map((rule, at) => at === index ? { ...rule, ...changes } : rule))
 
-  return (
-    <div className="space-y-2">
-      <div>
-        <span className="block text-xs font-medium text-[var(--color-ink-muted)]">
-          Кто какие строки видит
-        </span>
-        <p className="mt-1 text-xs text-[var(--color-ink-muted)]">
-          Без правил человек видит все строки таблицы. Правило сужает: он увидит только те,
-          где поле совпало с ним самим.
-        </p>
-      </div>
-
-      {rules.map((rule, index) => {
-        const fields = fieldsOf(rule.tableId)
-        const companyKnown = app.allowlist.some((entry) => entry.company.trim() !== '')
-
-        return (
-          <div key={index} className="space-y-1.5 rounded-lg border border-[var(--color-border-subtle)] p-2.5">
-            <div className="flex flex-wrap items-center gap-1.5 text-sm">
-              <span className="text-[var(--color-ink-muted)]">В таблице</span>
-              <select
-                value={rule.tableId}
-                onChange={(event) => {
-                  const tableId = event.target.value
-                  const candidates = fieldsOf(tableId)
-                  const chosen = candidates.find((field) => field.type === 'email') ?? candidates[0]
-                  patch(index, { tableId, fieldId: chosen?.id ?? '' })
-                }}
-                className="rounded border border-[var(--color-border-subtle)] px-2 py-1 text-sm"
-              >
-                {tables.map((table) => (
-                  <option key={table.id} value={table.id}>
-                    {table.name}
-                  </option>
-                ))}
-              </select>
-
-              <span className="text-[var(--color-ink-muted)]">поле</span>
-              <select
-                value={rule.fieldId}
-                onChange={(event) => patch(index, { fieldId: event.target.value })}
-                className="rounded border border-[var(--color-border-subtle)] px-2 py-1 text-sm"
-              >
-                <option value="">— не выбрано —</option>
-                {fields.map((field) => (
-                  <option key={field.id} value={field.id}>
-                    {field.name}
-                  </option>
-                ))}
-              </select>
-
-              <span className="text-[var(--color-ink-muted)]">совпадает с</span>
-              <select
-                value={rule.match}
-                onChange={(event) => patch(index, { match: event.target.value as RowMatch })}
-                className="rounded border border-[var(--color-border-subtle)] px-2 py-1 text-sm"
-              >
-                {(['email', 'company'] as RowMatch[]).map((match) => (
-                  <option key={match} value={match}>
-                    {MATCH_WORDS[match]}
-                  </option>
-                ))}
-              </select>
-
-              <button
-                type="button"
-                onClick={() => setRules(rules.filter((_, at) => at !== index))}
-                className="ml-auto rounded border border-[var(--color-border-subtle)] px-2 py-1 text-xs text-[var(--color-ink-muted)] hover:bg-[var(--color-surface-muted)]"
-              >
-                ✕
-              </button>
-            </div>
-
-            {rule.match === 'company' && !companyKnown ? (
-              <p className="rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-900">
-                Организация ни у кого не указана — правило не пропустит ни одной строки. Впишите
-                организацию рядом с адресами в списке доступа.
-              </p>
-            ) : null}
-
-            <div className="space-y-1">
-              <span className="block text-xs font-medium text-[var(--color-ink-muted)]">
-                К кому применять
-              </span>
-              {rolesForRowRules(app).map((role: { id: string; name: string }) => (
-                <label key={role.id} className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={rule.appliesTo.includes(role.id)}
-                    onChange={() =>
-                      patch(index, {
-                        appliesTo: rule.appliesTo.includes(role.id)
-                          ? rule.appliesTo.filter((item) => item !== role.id)
-                          : [...rule.appliesTo, role.id],
-                      })
-                    }
-                  />
-                  <span>{role.name}</span>
-                  {role.id === GUEST_ROLE ? (
-                    <span className="text-xs text-[var(--color-ink-muted)]">
-                      — не увидит ни одной строки
-                    </span>
-                  ) : null}
-                </label>
-              ))}
-            </div>
-          </div>
-        )
-      })}
-
-      <button
-        type="button"
-        onClick={add}
-        disabled={tables.length === 0}
-        className="rounded border border-[var(--color-border-subtle)] px-2 py-1 text-xs hover:bg-[var(--color-surface-muted)] disabled:opacity-40"
-      >
-        + Правило
-      </button>
-
-      {rules.length > 1 ? (
-        <p className="text-xs text-[var(--color-ink-muted)]">
-          Правила складываются: строка видна, если подошло хотя бы одно.
-        </p>
-      ) : null}
+  return <section className="space-y-4" aria-label="Ограничения по строкам">
+    <div>
+      <h3 className="text-base font-semibold">Какие строки видит человек</h3>
+      <p className="mt-2 text-sm leading-6 text-ink-soft">Показывайте строки с почтой или организацией человека. Сотрудники без таких ограничений видят все доступные им строки.</p>
     </div>
-  )
+    {rules.map((rule, index) => {
+      const fields = fieldsOf(rule.tableId)
+      const companyKnown = app.allowlist.some(entry => entry.company.trim() !== '')
+      return <fieldset key={index} className="min-w-0 space-y-4 rounded-xl border border-sand-200 p-3">
+        <legend className="px-1 text-sm font-semibold">Ограничение {index + 1}</legend>
+        <div className="grid min-w-0 gap-4 @min-[640px]:grid-cols-2">
+          <label className="min-w-0 text-sm text-ink-soft">Таблица
+            <select value={rule.tableId} className={ownerInput} onChange={event => {
+              const tableId = event.target.value, candidates = fieldsOf(tableId)
+              const chosen = candidates.find(field => field.type === 'email') ?? candidates[0]
+              patch(index, { tableId, fieldId: chosen?.id ?? '' })
+            }}>{tables.map(table => <option key={table.id} value={table.id}>{table.name}</option>)}</select>
+          </label>
+          <label className="min-w-0 text-sm text-ink-soft">Колонка для сравнения
+            <select value={rule.fieldId} className={ownerInput} onChange={event => patch(index, { fieldId: event.target.value })}>
+              <option value="">Выберите колонку</option>
+              {fields.map(field => <option key={field.id} value={field.id}>{field.name}</option>)}
+            </select>
+          </label>
+          <label className="min-w-0 text-sm text-ink-soft @min-[640px]:col-span-2">Значение должно совпадать с
+            <select value={rule.match} className={ownerInput} onChange={event => patch(index, { match: event.target.value as RowMatch })}>
+              <option value="email">Почтой человека</option>
+              <option value="company">Организацией человека</option>
+            </select>
+          </label>
+        </div>
+        {!fields.length ? <p className="text-sm leading-6 text-amber-900">В этой таблице нет подходящих колонок. Добавьте колонку с почтой или текстом либо выберите другую таблицу.</p> : null}
+        {rule.match === 'company' && !companyKnown ? <p className="rounded-lg bg-amber-50 p-3 text-sm leading-6 text-amber-900">Сначала укажите организацию человека в списке доступа. Без неё он не увидит строки по этому ограничению.</p> : null}
+        <fieldset className="space-y-1">
+          <legend className="mb-2 text-sm font-medium">Для каких ролей</legend>
+          {rolesForRowRules(app).map(role => <label key={role.id} className="flex min-h-11 items-start gap-3 py-2 text-sm leading-6">
+            <input type="checkbox" className="mt-1 size-4 shrink-0 accent-sage-700 focus-visible:ring-2 focus-visible:ring-sage-400"
+              checked={rule.appliesTo.includes(role.id)} onChange={() => patch(index, {
+                appliesTo: rule.appliesTo.includes(role.id) ? rule.appliesTo.filter(item => item !== role.id) : [...rule.appliesTo, role.id],
+              })} />
+            <span>{role.name}{role.id === GUEST_ROLE ? <span className="block text-xs leading-5 text-ink-soft">Это ограничение скрывает строки до входа.</span> : null}</span>
+          </label>)}
+        </fieldset>
+        <button type="button" aria-label={`Удалить ограничение ${index + 1}`}
+          onClick={() => setRules(rules.filter((_, at) => at !== index))}
+          className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm text-ink-soft hover:bg-sand-100 focus-visible:ring-2 focus-visible:ring-sage-400">
+          <ShellIcon name="close" />Удалить ограничение
+        </button>
+      </fieldset>
+    })}
+    <button type="button" onClick={add} disabled={tables.length === 0} className={ownerSecondary}>Добавить ограничение</button>
+    {rules.length > 1 ? <p className="text-sm leading-6 text-ink-soft">Если для одной роли и таблицы добавлено несколько ограничений, достаточно совпадения по любому из них.</p> : null}
+  </section>
 }

@@ -32,7 +32,8 @@ export function asSalon(app: App, built: BuiltTemplate): App {
       { ...formFields([visitFields.email], false)[0]!, roles: ['manager'] }] }
   const reschedule: Screen = { ...create, id: rescheduleId, name: 'Перенести запись', tab: null, mode: 'edit', submitLabel: 'Сохранить новое время',
     access: access(['client', 'manager']), components: formFields([visitFields.master, visitFields.start]) }
-  const publicServices = [config.service.name, field('services', 'description'), config.service.price, config.service.minutes, config.service.active]
+  const servicePhoto = field('services', 'photo')
+  const publicServices = [config.service.name, field('services', 'description'), servicePhoto, config.service.price, config.service.minutes, config.service.active]
   const serviceApp = generateApp({ appId: app.id, workspaceId: app.workspaceId, name: app.name, slug: app.slug,
     table: table('services'), fields: built.fields.filter(f => f.tableId === config.tables.services) as unknown as Field[],
     view: built.views.find(v => v.tableId === config.tables.services && (v.name === 'Доступны для записи' || v.name === 'Для записи')) as unknown as View })
@@ -61,9 +62,11 @@ export function asSalon(app: App, built: BuiltTemplate): App {
     ...app.screens.filter(s => s.type === 'form' && s.mode === 'edit').map(s => ({ ...s, access: access(['staff', 'manager']),
       ...(s.type === 'form' ? { components: s.components.filter(c => c.type !== 'form_field' || [visitFields.status, visitFields.note].includes(c.fieldId)) } : {}) })),
     reschedule,
-    ...serviceApp.screens.filter(s => s.type !== 'dashboard').map(s => ({ ...s,
+    ...serviceApp.screens.filter(s => s.type !== 'dashboard').map((s): Screen => {
+      if (s.type === 'list') return { ...s, type: 'tiles', columns: 2, access: access(['client', 'staff', 'manager'], publicServices, true),
+        name: 'Услуги и цены', tab: { icon: 'tag', label: 'Услуги' }, imageFieldId: servicePhoto, subtitleFieldId: config.service.minutes, metaFieldId: config.service.price }
+      return { ...s,
       access: s.type === 'form' ? access(['manager']) : access(['client', 'staff', 'manager'], publicServices, true),
-      ...(s.type === 'list' ? { name: 'Услуги и цены', tab: { icon: 'tag', label: 'Услуги' }, subtitleFieldId: config.service.minutes, metaFieldId: config.service.price } : {}),
       ...(s.type === 'form' && s.mode === 'create' ? { name: 'Добавить услугу', tab: { icon: 'plus', label: 'Добавить услугу' },
         components: s.components.map(c => c.type === 'form_field' && [config.service.name, config.service.price, config.service.minutes].includes(c.fieldId) ? { ...c, required: true } : c) } : {}),
       ...(s.type === 'detail' ? { components: [...s.components.map(c => c.type === 'button' ? { ...c, roles: ['manager'] }
@@ -71,7 +74,8 @@ export function asSalon(app: App, built: BuiltTemplate): App {
           type: 'text' as const, source: { kind: 'field' as const, fieldId: c.fieldId }, style: 'body' as const }
         : c.type === 'field' && c.fieldId === config.service.active ? { ...c, roles: ['manager'] } : c),
         { id: newId('component'), position: 'zz', type: 'button' as const, label: 'Записаться', style: 'primary' as const, roles: null, visibleWhen: null,
-          action: { id: newId('action'), type: 'open_screen' as const, screenId: formId } }] } : {}) })),
+          action: { id: newId('action'), type: 'open_screen' as const, screenId: formId } }] } : {}) }
+    }),
     setup, ...ownerScreens,
     ...serviceApp.screens.filter(s => s.type === 'list').map(s => ({ ...s, id: newId('screen'), name: 'Услуги и цены', tab: { icon: 'tag', label: 'Услуги и цены' },
       access: access(['manager']), ...(s.type === 'list' ? { source: { ...s.source, viewId: built.views.find(v => v.tableId === config.tables.services && (v.name === 'Все услуги' || v.name === 'Прайс'))!.id } } : {}) })),

@@ -12,7 +12,7 @@ type Item = typeof orderStockItems.$inferSelect
 const keyOf = (tableId: string, rowId: string) => `${tableId}:${rowId}`
 const frozen = () => new RowWriteError('invalid', 'Заказ подтверждён. Его товары, количества и цены зафиксированы. Для изменения состава отмените заказ и оформите новый.')
 
-export async function stockBalance(context: RowTransaction, config: InventoryConfig, itemId: string, data?: Record<string, unknown>, override?: { id: string; data: Record<string, unknown> | null }) {
+export async function inventoryStock(context: RowTransaction, config: InventoryConfig, itemId: string, data?: Record<string, unknown>, override?: { id: string; data: Record<string, unknown> | null }) {
   await mutationFields(context, config.tables.items); await mutationFields(context, config.tables.movements)
   if (!data) { const item = await lockedRow(context, config.tables.items, itemId); checkRow(item); data = item.data as Record<string, unknown> }
   const ids = data[config.item.movements]
@@ -29,11 +29,17 @@ export async function stockBalance(context: RowTransaction, config: InventoryCon
     const values = override?.id === movement.id ? override.data : movement.data as Record<string, unknown>
     return sum + Number(values?.[config.movement.qty] ?? 0)
   }, 0)
+  if (!Number.isSafeInteger(stock) || stock < 0) throw new RowWriteError('invalid', 'Остаток некорректен. Проверьте начальный запас и журнал движений.')
+  return stock
+}
+
+export async function stockBalance(context: RowTransaction, config: InventoryConfig, itemId: string, data?: Record<string, unknown>, override?: { id: string; data: Record<string, unknown> | null }) {
+  const stock = await inventoryStock(context, config, itemId, data, override)
   const [held] = await context.tx.select({ amount: sql<number>`coalesce(sum(${orderStockItems.quantity}),0)` }).from(orderStockItems)
     .innerJoin(orderStockReservations, and(eq(orderStockReservations.workspaceId, orderStockItems.workspaceId), eq(orderStockReservations.orderTableId, orderStockItems.orderTableId), eq(orderStockReservations.orderRowId, orderStockItems.orderRowId)))
     .where(and(eq(orderStockItems.workspaceId, context.workspaceId), eq(orderStockItems.productTableId, config.tables.items), eq(orderStockItems.productRowId, itemId), eq(orderStockReservations.state, 'reserved')))
   const reserved = Number(held?.amount ?? 0)
-  if (!Number.isSafeInteger(stock) || stock < 0 || !Number.isSafeInteger(reserved)) throw new RowWriteError('invalid', 'Остаток некорректен. Проверьте начальный запас и журнал движений.')
+  if (!Number.isSafeInteger(reserved)) throw new RowWriteError('invalid', 'Остаток некорректен. Проверьте начальный запас и журнал движений.')
   return { stock, reserved, available: stock - reserved }
 }
 

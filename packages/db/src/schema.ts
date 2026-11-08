@@ -49,6 +49,8 @@ export const workspaceMembers = pgTable('workspace_members', {
   workspaceId: text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   role: text('role').notNull().default('editor'),
+  /** null inherits the workspace role; an explicit map is a table allowlist. */
+  tableAccess: jsonb('table_access').$type<Record<string,'none'|'view'|'edit'> | null>(),
   invitedEmail: text('invited_email'),
   acceptedAt: timestamp('accepted_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -374,6 +376,45 @@ export const workspaceClientApps = pgTable('workspace_client_apps', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [foreignKey({ name: 'workspace_client_apps_owned_app_fk', columns: [t.workspaceId, t.appId], foreignColumns: [apps.workspaceId, apps.id] }).onDelete('cascade')])
 
+export const stockAutomations = pgTable('stock_automations', {
+  workspaceId: text('workspace_id').notNull(),
+  appId: text('app_id').primaryKey(),
+  itemTableId: text('item_table_id').notNull(),
+  minimumFieldId: text('minimum_field_id').notNull(),
+  taskTableId: text('task_table_id').notNull(),
+  taskFields: jsonb('task_fields').$type<{ title: string; item: string; stock: string; minimum: string; done: string }>().notNull(),
+  localTime: text('local_time').notNull(),
+  timeZone: text('time_zone').notNull(),
+  nextRunAt: timestamp('next_run_at', { withTimezone: true }),
+}, t => [
+  uniqueIndex('stock_automations_owned_key').on(t.workspaceId, t.appId),
+  uniqueIndex('stock_automations_items_key').on(t.workspaceId, t.itemTableId),
+  index('stock_automations_due_idx').on(t.nextRunAt).where(sql`${t.nextRunAt} is not null`),
+  foreignKey({ name: 'stock_automations_app_fk', columns: [t.workspaceId, t.appId], foreignColumns: [apps.workspaceId, apps.id] }).onDelete('cascade'),
+])
+
+export const stockAutomationRuns = pgTable('stock_automation_runs', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull(),
+  appId: text('app_id').notNull(),
+  scheduledFor: timestamp('scheduled_for', { withTimezone: true }).notNull(),
+  trigger: text('trigger', { enum: ['schedule', 'manual'] }).notNull(),
+  status: text('status', { enum: ['queued', 'succeeded', 'failed', 'cancelled'] }).notNull().default('queued'),
+  readyAt: timestamp('ready_at', { withTimezone: true }).notNull(),
+  attempts: integer('attempts').notNull().default(0),
+  checked: integer('checked').notNull().default(0),
+  createdTasks: integer('created_tasks').notNull().default(0),
+  error: text('error'),
+  finishedAt: timestamp('finished_at', { withTimezone: true }),
+}, t => [
+  index('stock_automation_runs_history_idx').on(t.appId, t.scheduledFor.desc()),
+  index('stock_automation_runs_queue_idx').on(t.readyAt).where(sql`${t.status} = 'queued'`),
+  uniqueIndex('stock_automation_runs_occurrence_key').on(t.appId, t.scheduledFor).where(sql`${t.trigger} = 'schedule'`),
+  foreignKey({ name: 'stock_automation_runs_schedule_fk', columns: [t.workspaceId, t.appId], foreignColumns: [stockAutomations.workspaceId, stockAutomations.appId] }).onDelete('cascade'),
+  check('stock_automation_runs_status_check', sql`${t.status} in ('queued', 'succeeded', 'failed', 'cancelled')`),
+  check('stock_automation_runs_trigger_check', sql`${t.trigger} in ('schedule', 'manual')`),
+])
+
 /** Configuration checkpoints only. Business rows and attachments are never part of a restore. */
 export const appConfigVersions = pgTable('app_config_versions', {
   id: text('id').primaryKey(),
@@ -388,6 +429,78 @@ export const appConfigVersions = pgTable('app_config_versions', {
 }, (t) => [
   uniqueIndex('app_config_versions_number_key').on(t.appId, t.number),
   foreignKey({ name: 'app_config_versions_owned_app_fk', columns: [t.workspaceId, t.appId], foreignColumns: [apps.workspaceId, apps.id] }).onDelete('cascade'),
+])
+
+/** A committed action receipt makes retries safe even after its row is edited or deleted. */
+export const builderActionRuns = pgTable('builder_action_runs', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull(),
+  appId: text('app_id').notNull(),
+  userId: text('user_id').notNull(),
+  requestId: text('request_id').notNull(),
+  definitionRevision: text('definition_revision').notNull(),
+  workflowId: text('workflow_id').notNull(),
+  eventNodeId: text('event_node_id').notNull(),
+  payloadHash: text('payload_hash').notNull(),
+  tableId: text('table_id'),
+  rowId: text('row_id'),
+  outcome: jsonb('outcome'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, t => [
+  uniqueIndex('builder_action_runs_retry_key').on(t.appId, t.userId, t.requestId),
+  foreignKey({ name: 'builder_action_runs_app_fk', columns: [t.workspaceId, t.appId], foreignColumns: [apps.workspaceId, apps.id] }).onDelete('cascade'),
+  foreignKey({ name: 'builder_action_runs_member_fk', columns: [t.workspaceId, t.userId], foreignColumns: [workspaceMembers.workspaceId, workspaceMembers.userId] }).onDelete('cascade'),
+])
+
+/** Execution attempts contain no posted form values. Failed writes are rolled back before logging. */
+export const builderWorkflowRuns = pgTable('builder_workflow_runs', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull(),
+  appId: text('app_id').notNull(),
+  userId: text('user_id').notNull(),
+  requestId: text('request_id').notNull(),
+  workflowId: text('workflow_id').notNull(),
+  workflowName: text('workflow_name').notNull(),
+  eventNodeId: text('event_node_id').notNull(),
+  definitionRevision: text('definition_revision').notNull(),
+  status: text('status', { enum: ['succeeded', 'failed'] }).notNull(),
+  error: text('error'),
+  trace: jsonb('trace').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, t => [
+  index('builder_workflow_runs_history_idx').on(t.appId, t.userId, t.createdAt, t.id),
+  foreignKey({ name: 'builder_workflow_runs_app_fk', columns: [t.workspaceId, t.appId], foreignColumns: [apps.workspaceId, apps.id] }).onDelete('cascade'),
+  foreignKey({ name: 'builder_workflow_runs_member_fk', columns: [t.workspaceId, t.userId], foreignColumns: [workspaceMembers.workspaceId, workspaceMembers.userId] }).onDelete('cascade'),
+  check('builder_workflow_runs_status_check', sql`${t.status} in ('succeeded', 'failed')`),
+])
+
+/** Personal learning progress is separate from the shared and published app definition. */
+export const builderLearning = pgTable('builder_learning', {
+  workspaceId: text('workspace_id').notNull(),
+  appId: text('app_id').notNull(),
+  userId: text('user_id').notNull(),
+  version: integer('version').notNull().default(1),
+  targetNodeId: text('target_node_id').notNull(),
+  baseline: text('baseline').notNull(),
+  listDone: boolean('list_done').notNull().default(false),
+  listSkipped: boolean('list_skipped').notNull().default(false),
+  recordDone: boolean('record_done').notNull().default(false),
+  recordSkipped: boolean('record_skipped').notNull().default(false),
+  saveDone: boolean('save_done').notNull().default(false),
+  saveSkipped: boolean('save_skipped').notNull().default(false),
+  accessDone: boolean('access_done').notNull().default(false),
+  accessSkipped: boolean('access_skipped').notNull().default(false),
+  publishDone: boolean('publish_done').notNull().default(false),
+  publishSkipped: boolean('publish_skipped').notNull().default(false),
+  paused: boolean('paused').notNull().default(false),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, t => [
+  primaryKey({ columns: [t.appId, t.userId] }),
+  foreignKey({ name: 'builder_learning_app_fk', columns: [t.workspaceId, t.appId], foreignColumns: [apps.workspaceId, apps.id] }).onDelete('cascade'),
+  foreignKey({ name: 'builder_learning_member_fk', columns: [t.workspaceId, t.userId], foreignColumns: [workspaceMembers.workspaceId, workspaceMembers.userId] }).onDelete('cascade'),
+  check('builder_learning_steps_check', sql`NOT (${t.listDone} AND ${t.listSkipped}) AND NOT (${t.recordDone} AND ${t.recordSkipped})`),
+  check('builder_learning_publication_steps_check', sql`NOT (${t.accessDone} AND ${t.accessSkipped}) AND NOT (${t.publishDone} AND ${t.publishSkipped})`),
+  check('builder_learning_save_step_check', sql`NOT (${t.saveDone} AND ${t.saveSkipped})`),
 ])
 
 /** Verified identity is shared; the profile and contact data belong to one business. */
@@ -432,7 +545,25 @@ export const appUsers = pgTable('app_users', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   uniqueIndex('app_users_app_email_key').on(t.appId, t.email),
+  uniqueIndex('app_users_app_id_key').on(t.appId,t.id),
   index('app_users_email_idx').on(t.email),
+])
+
+/** Published app executions belong to app users, never workspace memberships. */
+export const appActionRuns=pgTable('app_action_runs',{
+  id:text('id').primaryKey(),workspaceId:text('workspace_id').notNull(),appId:text('app_id').notNull(),userId:text('user_id').notNull(),requestId:text('request_id').notNull(),definitionRevision:text('definition_revision').notNull(),workflowId:text('workflow_id').notNull(),eventNodeId:text('event_node_id').notNull(),payloadHash:text('payload_hash').notNull(),tableId:text('table_id'),rowId:text('row_id'),outcome:jsonb('outcome'),createdAt:timestamp('created_at',{withTimezone:true}).notNull().defaultNow(),
+},t=>[
+  uniqueIndex('app_action_runs_retry_key').on(t.appId,t.userId,t.requestId),
+  foreignKey({name:'app_action_runs_app_fk',columns:[t.workspaceId,t.appId],foreignColumns:[apps.workspaceId,apps.id]}).onDelete('cascade'),
+  foreignKey({name:'app_action_runs_user_fk',columns:[t.appId,t.userId],foreignColumns:[appUsers.appId,appUsers.id]}).onDelete('cascade'),
+])
+export const appWorkflowRuns=pgTable('app_workflow_runs',{
+  id:text('id').primaryKey(),workspaceId:text('workspace_id').notNull(),appId:text('app_id').notNull(),userId:text('user_id').notNull(),requestId:text('request_id').notNull(),workflowId:text('workflow_id').notNull(),workflowName:text('workflow_name').notNull(),eventNodeId:text('event_node_id').notNull(),definitionRevision:text('definition_revision').notNull(),status:text('status',{enum:['succeeded','failed']}).notNull(),error:text('error'),trace:jsonb('trace').notNull(),createdAt:timestamp('created_at',{withTimezone:true}).notNull().defaultNow(),
+},t=>[
+  index('app_workflow_runs_history_idx').on(t.appId,t.userId,t.createdAt,t.id),
+  foreignKey({name:'app_workflow_runs_app_fk',columns:[t.workspaceId,t.appId],foreignColumns:[apps.workspaceId,apps.id]}).onDelete('cascade'),
+  foreignKey({name:'app_workflow_runs_user_fk',columns:[t.appId,t.userId],foreignColumns:[appUsers.appId,appUsers.id]}).onDelete('cascade'),
+  check('app_workflow_runs_status_check',sql`${t.status} in ('succeeded', 'failed')`),
 ])
 
 /**

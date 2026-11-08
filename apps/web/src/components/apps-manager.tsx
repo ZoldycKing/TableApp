@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useState, useTransition } from 'react'
 import { AppAccessSettings } from './app-access-settings'
 import type { TableSummary } from '@/lib/queries'
+import { PublicationStatus } from './publication-status'
+import { ownerPrimary, ownerSecondary } from './owner-ui'
 import {
   deleteAppAction,
   changeAppSlugAction,
@@ -14,7 +16,7 @@ import {
   updateAppDraftAction,
 } from '@/app/app-actions'
 
-export type AppRow = { app: App; publishedAt: string | null; published?: boolean; origin: string; addressLocked?: boolean; hasUnpublishedChanges?: boolean }
+export type AppRow = { app: App; publishedAt: string | null; published?: boolean; origin: string; addressLocked?: boolean; hasUnpublishedChanges?: boolean; stockAutomation?: boolean }
 
 export function AppsManager({ apps, tables, canEdit = true }: { apps: AppRow[]; tables: TableSummary[]; canEdit?: boolean }) {
   const [error, setError] = useState<string | null>(null)
@@ -35,7 +37,7 @@ export function AppsManager({ apps, tables, canEdit = true }: { apps: AppRow[]; 
   if (apps.length === 0) {
     return (
       <section className="rounded-2xl border border-sand-200 bg-white px-5 py-8">
-        <h2 className="font-semibold text-ink">В этом бизнесе пока нет приложений</h2>
+        <h2 className="font-semibold text-ink">Приложений пока нет</h2>
         <p className="mt-2 max-w-xl text-sm leading-6 text-ink-soft">{canEdit ? 'Начните с таблицы: выберите данные, подготовьте экраны и доступ, затем опубликуйте приложение.' : 'Когда владелец подготовит приложение, оно появится здесь.'}</p>
         {canEdit ? <div className="mt-5 flex flex-wrap gap-3"><Link href="/tables" className="rounded-lg bg-ink px-4 py-2.5 text-sm font-medium text-white">Выбрать таблицу</Link><Link href="/templates" className="rounded-lg border border-sand-200 px-4 py-2.5 text-sm font-medium text-ink">Начать с шаблона</Link></div> : null}
       </section>
@@ -49,7 +51,7 @@ export function AppsManager({ apps, tables, canEdit = true }: { apps: AppRow[]; 
       ) : null}
 
       {!canEdit ? <p role="status" className="text-sm text-[var(--color-ink-muted)]">У вас доступ только для просмотра. Изменение настроек и публикация недоступны.</p> : null}
-      {apps.map(({ app, publishedAt, published, origin, addressLocked, hasUnpublishedChanges }) => {
+      {apps.map(({ app, publishedAt, published, origin, addressLocked, hasUnpublishedChanges, stockAutomation }) => {
         const url = `${origin}/a/${app.slug}`
         const isPublished = published ?? Boolean(publishedAt)
         return (
@@ -59,12 +61,8 @@ export function AppsManager({ apps, tables, canEdit = true }: { apps: AppRow[]; 
           >
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2"><h2 className="text-base font-semibold">{app.name}</h2><span className={`rounded-md px-2 py-1 text-xs font-medium ${isPublished ? 'bg-sage-50 text-sage-700' : 'bg-sand-100 text-ink-soft'}`}>{isPublished ? 'Опубликовано' : 'Черновик'}</span></div>
-                <p className="mt-0.5 text-xs text-[var(--color-ink-muted)]">
-                  {app.screens.length} экранов ·{' '}
-                  {isPublished ? publishedAt ? `опубликовано ${new Date(publishedAt).toLocaleString('ru-RU')}` : 'опубликовано' : 'не опубликовано'}
-                </p>
-                {hasUnpublishedChanges ? <p className="mt-2 text-xs text-ink-soft">Есть сохранённые изменения, которые ещё не опубликованы.</p> : null}
+                <div className="flex flex-wrap items-center gap-2"><h2 className="text-lg font-semibold">{app.name}</h2><PublicationStatus published={isPublished} hasChanges={hasUnpublishedChanges} /></div>
+                <p className="mt-2 text-sm text-ink-soft">{!isPublished ? 'Рабочая ссылка появится после публикации.' : hasUnpublishedChanges ? 'Пользователи видят предыдущую опубликованную версию.' : 'Приложение доступно по рабочей ссылке.'}</p>
                 {isPublished ? (
                   <a
                     href={`/a/${app.slug}`}
@@ -80,11 +78,12 @@ export function AppsManager({ apps, tables, canEdit = true }: { apps: AppRow[]; 
               <div className="flex flex-wrap gap-2">
                 <a
                   href={`/apps/${app.id}`}
-                  className="rounded-lg border border-[var(--color-border-subtle)] px-3 py-1.5 text-sm font-medium hover:bg-[var(--color-surface-muted)]"
+                  className={hasUnpublishedChanges || !isPublished ? ownerPrimary : ownerSecondary}
                 >
-                  {canEdit ? 'Настроить приложение' : 'Просмотреть настройки'}
+                  {canEdit ? hasUnpublishedChanges ? 'Проверить изменения' : 'Настроить приложение' : 'Просмотреть настройки'}
                 </a>
-                {isPublished ? <Link href={`/a/${app.slug}`} className="rounded-lg bg-ink px-3 py-1.5 text-sm font-medium text-white hover:bg-ink/90">Открыть приложение</Link> : null}
+                {isPublished ? <Link href={`/a/${app.slug}`} className={hasUnpublishedChanges ? ownerSecondary : ownerPrimary}>Открыть приложение</Link> : null}
+                {stockAutomation ? <Link href={`/apps/${encodeURIComponent(app.id)}/automations`} className={ownerSecondary}>Автоматизация</Link> : null}
               </div>
             </div>
 

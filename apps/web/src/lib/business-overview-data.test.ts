@@ -9,6 +9,12 @@ const base: BusinessOverviewData = {
 }
 
 describe('business overview next steps', () => {
+  it('returns to the new builder without asking for a business profile or another app', () => {
+    const next = overviewNextAction({ ...base, profile: null, apps: [{ ...app, published: false, formatVersion: 2 }] })
+    expect(next.href).toBe('/apps/app_own')
+    expect(next.label).toBe('Открыть конструктор')
+    expect(overviewNextAction({ ...base, role: 'viewer', profile: null, apps: [{ ...app, published: false, formatVersion: 2 }] }).href).toBe('/tables')
+  })
   it('starts with actual data instead of manufacturing progress', () => {
     expect(overviewNextAction({ ...base, tables: [] }).href).toBe('/setup')
     expect(overviewNextAction({ ...base, profile: null }).href).toBe('/setup?step=business')

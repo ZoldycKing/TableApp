@@ -10,6 +10,7 @@ import { explainToCustomer } from '@tableapp/schema'
 import { storeAttachment } from '@/lib/file-upload'
 import { validateFileContent, validateFileMetadata } from '@/lib/file-policy'
 import { validateAppReferences } from '@/lib/app-references'
+import { tablePermission } from '@/lib/table-permissions'
 
 /**
  * Загрузка файла. Работает для двух контуров: участник команды грузит в свой
@@ -69,7 +70,7 @@ export async function POST(request: Request) {
   } else {
     const member = await currentMember()
     if (member) {
-      if (!canEdit(member)) {
+      if (!canEdit(member)&&!Object.keys(member.tableAccess??{}).some(id=>tablePermission(member,id)==='edit')) {
         return NextResponse.json({ ok: false, error: 'У вас права только на просмотр' }, { status: 403 })
       }
       workspaceId = member.workspaceId

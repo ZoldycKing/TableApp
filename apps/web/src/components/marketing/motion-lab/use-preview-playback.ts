@@ -5,7 +5,7 @@ import { useMotionPlayback } from '@/components/motion/use-motion-playback'
 import { useViewTransition } from '@/components/motion/use-view-transition'
 
 /** One visible preview owns the clock; pauses preserve the remaining scene time. */
-export function usePreviewPlayback(durations: readonly number[], { loop = true } = {}) {
+export function usePreviewPlayback(durations: readonly number[], { loop = true, nativeTransition = true } = {}) {
   const root = useRef<HTMLDivElement>(null)
   const [step, setStep] = useState(0)
   const currentStep = useRef(0)
@@ -21,6 +21,10 @@ export function usePreviewPlayback(durations: readonly number[], { loop = true }
     currentStep.current = next
     setStep(next)
   }, [])
+  const move = useCallback((next: number) => {
+    if (nativeTransition) change(() => apply(next))
+    else apply(next)
+  }, [nativeTransition, change, apply])
 
   useEffect(() => {
     if (!playing || reduced) skip()
@@ -39,7 +43,7 @@ export function usePreviewPlayback(durations: readonly number[], { loop = true }
       }
       const next = (step + 1) % durations.length
       remaining.current = durations[next]!
-      change(() => apply(next))
+      move(next)
     }, remaining.current)
     return () => {
       window.clearTimeout(timer)
@@ -47,7 +51,7 @@ export function usePreviewPlayback(durations: readonly number[], { loop = true }
         remaining.current = Math.max(0, remaining.current - (performance.now() - started))
       }
     }
-  }, [running, step, durations, change, apply, clockRevision, loop])
+  }, [running, step, durations, move, clockRevision, loop])
 
   const resetClock = (next: number) => {
     clockVersion.current += 1
@@ -61,7 +65,7 @@ export function usePreviewPlayback(durations: readonly number[], { loop = true }
     resetClock(next)
     setComplete(false)
     setPaused(true)
-    if (currentStep.current !== next) change(() => apply(next))
+    if (currentStep.current !== next) move(next)
   }
 
   const toggle = () => {

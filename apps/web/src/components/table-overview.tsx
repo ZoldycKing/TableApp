@@ -7,6 +7,8 @@ import { APP_TIME_ZONE } from '@tableapp/schema'
 import { createAppAction } from '@/app/app-actions'
 import type { DirectoryRelation, DirectoryTable } from '@/lib/table-directory-data'
 import { ShellIcon } from './shell/icons'
+import { tableWorkLink } from '@/lib/table-work-link'
+import { ownerPrimary } from './owner-ui'
 
 const FIELD_TYPES: Record<string, string> = { text: 'Текст', long_text: 'Длинный текст', number: 'Число', checkbox: 'Да / нет', email: 'Почта', phone: 'Телефон', url: 'Ссылка', member: 'Участник команды', date: 'Дата', datetime: 'Дата и время', single_select: 'Выбор из списка', multi_select: 'Несколько вариантов', relation: 'Связь с таблицей', attachment: 'Файлы', image: 'Изображение', formula: 'Формула', lookup: 'Данные по связи', rollup: 'Расчёт по связи', count: 'Количество по связи', created_time: 'Дата создания', updated_time: 'Дата изменения', created_by: 'Автор записи', updated_by: 'Автор изменения', row_id: 'Идентификатор записи' }
 const date = (value: string) => new Date(value).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric', timeZone: APP_TIME_ZONE })
@@ -28,8 +30,7 @@ function RelationGroup({ sourceId, links, tableId }: { sourceId: string; links: 
   </article>
 }
 
-export function TableOverview({ table, businessName, canEdit }: { table: DirectoryTable; businessName: string; canEdit: boolean }) {
-  const [editing, setEditing] = useState(false)
+export function TableOverview({ table, canEdit,canConfigure=canEdit }: { table: DirectoryTable; canEdit: boolean;canConfigure?:boolean }) {
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
   const router = useRouter()
@@ -49,18 +50,12 @@ export function TableOverview({ table, businessName, canEdit }: { table: Directo
   return <main className="mx-auto w-full max-w-5xl px-5 py-8 sm:px-6 sm:py-10">
     <Link href="/tables" className={`inline-flex items-center gap-2 rounded text-sm text-ink-muted hover:text-ink ${focus}`}><span aria-hidden="true">←</span> Все таблицы</Link>
     <header className="mt-6">
-      <p className="mb-1 break-words text-sm text-ink-muted">{businessName}</p>
       <h1 className="break-words text-2xl font-semibold tracking-tight text-ink">{table.name}</h1>
-      <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-soft">{table.fields.length ? `Данные таблицы: ${table.fields.slice(0, 5).map(field => field.name).join(', ')}${table.fields.length > 5 ? ' и другие поля' : ''}.` : 'Пока здесь нет полей. Добавьте их в редакторе, чтобы начать работу с данными.'}</p>
+      <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-soft">Сведения о таблице, её полях и связях.</p>
       <div className="mt-5 flex flex-wrap gap-3">
-        <Link href={`/t/${table.id}?mode=grid&readonly=1`} className={`inline-flex items-center gap-2 rounded-xl bg-ink px-4 py-2.5 text-sm font-medium text-white hover:bg-ink/90 ${focus}`}><ShellIcon name="table" className="size-4" />Посмотреть таблицу</Link>
-        {canEdit ? <button type="button" aria-expanded={editing} aria-controls="table-edit-options" onClick={() => setEditing(!editing)} className={`inline-flex items-center gap-2 rounded-xl border border-sand-200 bg-white px-4 py-2.5 text-sm font-medium text-ink hover:bg-sand-100 ${focus}`}>Редактировать<ShellIcon name="chevron" className={`size-4 transition-transform ${editing ? 'rotate-180' : ''}`} /></button> : <span className="self-center text-sm text-ink-muted">У вас доступ только для просмотра</span>}
+        <Link href={tableWorkLink(table.id, canEdit)} className={ownerPrimary}><ShellIcon name="table" className="size-4" />Открыть таблицу</Link>
+        {!canEdit ? <span className="self-center text-sm text-ink-muted">У вас доступ только для просмотра</span> : null}
       </div>
-      {canEdit && editing ? <div id="table-edit-options" className="mt-4 grid gap-3 rounded-2xl border border-sand-200 bg-white p-4 sm:grid-cols-2">
-        <Link href={`/t/${table.id}?mode=grid`} className={`rounded-xl p-3 hover:bg-sand-50 ${focus}`}><span className="font-medium text-ink">Таблицей →</span><p className="mt-1 text-sm leading-6 text-ink-soft">Работайте с ячейками и строками, копируйте и вставляйте данные.</p></Link>
-        <Link href={`/t/${table.id}?mode=records`} className={`rounded-xl p-3 hover:bg-sand-50 ${focus}`}><span className="font-medium text-ink">По записям →</span><p className="mt-1 text-sm leading-6 text-ink-soft">Выберите запись и заполните её поля в форме.</p></Link>
-        <p className="text-xs text-ink-muted sm:col-span-2">Оба способа изменяют одни и те же данные.</p>
-      </div> : null}
     </header>
 
     <dl className="mt-8 grid grid-cols-2 gap-x-6 gap-y-5 rounded-2xl border border-sand-200 bg-white px-5 py-5 sm:grid-cols-4">
@@ -72,7 +67,7 @@ export function TableOverview({ table, businessName, canEdit }: { table: Directo
 
     <section className="mt-9" aria-labelledby="table-apps-heading">
       <div className="flex flex-wrap items-center justify-between gap-3"><h2 id="table-apps-heading" className="text-lg font-semibold text-ink">Приложения на этих данных</h2>
-        {canEdit ? <button type="button" onClick={createApp} disabled={pending} className={`inline-flex items-center gap-2 rounded-xl border border-sand-200 bg-white px-3.5 py-2 text-sm font-medium hover:bg-sand-100 disabled:opacity-50 ${focus}`}><ShellIcon name="plus" className="size-4" />{pending ? 'Подготавливаем…' : 'Подготовить приложение'}</button> : null}</div>
+        {canConfigure ? <button type="button" onClick={createApp} disabled={pending} className={`inline-flex items-center gap-2 rounded-xl border border-sand-200 bg-white px-3.5 py-2 text-sm font-medium hover:bg-sand-100 disabled:opacity-50 ${focus}`}><ShellIcon name="plus" className="size-4" />{pending ? 'Подготавливаем…' : 'Подготовить приложение'}</button> : null}</div>
       <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-soft">{table.apps.length ? 'Приложение работает с теми же записями. Изменения данных будут доступны в его экранах.' : 'Подготовьте экраны для работы с данными, настройте доступ и проверьте результат перед публикацией.'}</p>
       {error ? <p role="alert" className="mt-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
       {table.apps.length ? <ul className="mt-4 divide-y divide-sand-200 rounded-2xl border border-sand-200 bg-white px-4 sm:px-5">{table.apps.map(app => <li key={app.id} className="flex flex-wrap items-center justify-between gap-3 py-4"><div className="min-w-0"><p className="break-words text-sm font-medium text-ink">{app.name}</p><p className="mt-1 text-xs text-ink-muted">{app.inPublished ? 'Используется в опубликованной версии' : 'Используется в черновике'}{app.inPublished && !app.inDraft ? ' · убрана из черновика' : ''}</p></div><Link href={`/apps/${app.id}`} className={`rounded-lg border border-sand-200 px-3 py-2 text-sm text-ink-soft hover:bg-sand-100 ${focus}`}>{canEdit ? 'Открыть настройки' : 'Посмотреть настройки'} →</Link></li>)}</ul> : null}
@@ -81,8 +76,8 @@ export function TableOverview({ table, businessName, canEdit }: { table: Directo
     <section className="mt-9" aria-labelledby="table-relations-heading">
       <h2 id="table-relations-heading" className="text-lg font-semibold text-ink">Связи этой таблицы</h2>
       <p className="mt-2 text-sm leading-6 text-ink-soft">Откуда берут данные и где используют записи этой таблицы.</p>
-      {groups.size ? <div className="mt-4 space-y-3">{[...groups].map(([sourceId, links]) => <RelationGroup key={sourceId} sourceId={sourceId} links={links} tableId={table.id} />)}</div> : <p className="mt-4 rounded-2xl border border-sand-200 bg-white px-5 py-5 text-sm leading-6 text-ink-soft">Связей пока нет. Поле со связью позволяет выбирать запись из другой таблицы этого бизнеса — например, клиента в заказе.</p>}
-      {canEdit ? <Link href={`/t/${table.id}?mode=grid`} className={`mt-3 inline-block rounded text-sm text-ink-soft underline decoration-sand-300 underline-offset-4 hover:text-ink ${focus}`}>Настроить поля и связи в редакторе →</Link> : null}
+      {groups.size ? <div className="mt-4 space-y-3">{[...groups].map(([sourceId, links]) => <RelationGroup key={sourceId} sourceId={sourceId} links={links} tableId={table.id} />)}</div> : <p className="mt-4 rounded-2xl border border-sand-200 bg-white px-5 py-5 text-sm leading-6 text-ink-soft">Связей пока нет. Поле со связью позволяет выбирать запись из другой таблицы пространства, например клиента в заказе.</p>}
+      {canConfigure ? <Link href={`/t/${table.id}?mode=grid`} className={`mt-3 inline-block rounded text-sm text-ink-soft underline decoration-sand-300 underline-offset-4 hover:text-ink ${focus}`}>Настроить поля и связи в редакторе →</Link> : null}
     </section>
     <details className="mt-9 rounded-2xl border border-sand-200 bg-white px-5 py-4"><summary className={`cursor-pointer rounded text-sm font-medium text-ink ${focus}`}>Поля таблицы · {table.fieldCount}</summary><ul className="mt-4 divide-y divide-sand-200">{table.fields.map(field => <li key={field.id} className="flex flex-wrap items-start justify-between gap-x-5 gap-y-1 py-3 first:pt-0 last:pb-0"><div className="min-w-0"><p className="break-words text-sm text-ink">{field.name}</p>{field.description ? <p className="mt-1 max-w-prose break-words text-xs leading-5 text-ink-muted">{field.description}</p> : null}</div><span className="text-xs text-ink-muted">{FIELD_TYPES[field.type] ?? field.type}</span></li>)}</ul>{!table.fields.length ? <p className="mt-3 text-sm text-ink-muted">Полей пока нет.</p> : null}</details>
   </main>

@@ -54,16 +54,16 @@ export function EmptyAccount({ email }: { email: string }) {
     } catch { setError('Не удалось создать рабочее пространство. Проверьте соединение и попробуйте ещё раз.'); input.current?.focus() }
     finally { inFlight.current = false; setPending(false) }
   }
-  return <div className="min-h-dvh bg-sand-50">
+  return <div className="platform-surface">
     <header className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-5 py-5 sm:px-8">
       <Link href="/app" aria-label="TableApp — личный кабинет"><Logo /></Link>
       <div className="flex min-w-0 items-center gap-2 text-sm"><span className="max-w-[60vw] truncate text-ink-soft" title={email}>{email}</span><button type="button" disabled={pending} className="min-h-11 rounded-lg px-3 text-ink-soft hover:bg-sand-100 focus-visible:ring-2 focus-visible:ring-sage-400" onClick={async () => { if (inFlight.current) return; inFlight.current = true; setPending(true); try { await signOutMemberAction(); window.location.assign('/login') } catch { inFlight.current = false; setPending(false); setError('Не удалось выйти. Попробуйте ещё раз.') } }}>Выйти</button></div>
     </header>
     <main className="mx-auto max-w-5xl px-5 pb-12 pt-7 sm:px-8 sm:pt-10">
       {!path ? <><h1 className="max-w-2xl text-3xl font-semibold tracking-tight sm:text-4xl">С чего начнём?</h1><StartChoices onChoose={choose} disabled={!ready || pending} /></> : <div className="max-w-xl">
-        <button type="button" onClick={back} disabled={pending} className="mb-5 inline-flex min-h-11 items-center gap-2 rounded-lg text-sm text-ink-soft underline decoration-sand-300 underline-offset-4 focus-visible:ring-2 focus-visible:ring-sage-400"><ShellIcon name="expand" className="size-4 rotate-180" />К выбору способа старта</button>
+        <button type="button" onClick={back} disabled={pending} className="mb-5 inline-flex min-h-11 items-center gap-2 rounded-lg text-sm text-ink-soft underline decoration-sand-300 underline-offset-4 focus-visible:ring-2 focus-visible:ring-sage-400"><ShellIcon name="expand" className="size-4 rotate-180" />Выбрать другой способ</button>
         <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Назовите рабочее пространство</h1>
-        <p className="mt-4 text-sm leading-6 text-ink-soft">Здесь будут ваши таблицы, приложения и команда. Это название внутри кабинета. Название компании для клиентов задаётся отдельно.</p>
+        <p className="mt-4 text-sm leading-6 text-ink-soft">Здесь будут ваши таблицы и приложения. Название используется внутри кабинета.</p>
         <form aria-busy={pending} className="mt-7 space-y-5" onSubmit={event => { event.preventDefault(); void create() }}>
           <OwnerField label="Название рабочего пространства"><input ref={input} value={name} onChange={event => setName(event.target.value)} required maxLength={100} placeholder="Например, «Моя команда» или «Проекты Анны»" className={ownerInput} disabled={pending} aria-invalid={Boolean(error)} aria-describedby={error ? 'start-error start-next' : 'start-next'} /></OwnerField>
           <p id="start-next" className="flex items-start gap-2 text-sm leading-6 text-ink-soft"><ShellIcon name={path === 'import' ? 'table' : path === 'templates' ? 'template' : 'plus'} className="mt-1 size-4 shrink-0 text-sage-700" />{OWNER_START_PATHS[path].description}</p>

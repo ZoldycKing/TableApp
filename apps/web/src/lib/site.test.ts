@@ -5,6 +5,7 @@ import {
   FOOTER_COLUMNS,
   FOOTER_LEGAL,
   LEGACY_REDIRECTS,
+  NAV_HEADER,
   NAV_MAIN,
   NAV_PRODUCT,
   NAV_SOLUTIONS,
@@ -53,6 +54,7 @@ function routeExists(path: string): boolean {
 }
 
 const ALL_LINKS = [
+  ...NAV_HEADER,
   ...NAV_PRODUCT,
   ...NAV_SOLUTIONS,
   ...NAV_MAIN,

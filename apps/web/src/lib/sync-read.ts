@@ -5,7 +5,7 @@ import { decodeCursor, encodeCursor } from './sync-protocol'
 import type { RowMetadata } from '@tableapp/schema'
 import type { Transaction } from './db-transaction'
 
-type Policy = { fingerprint: string; canRead: (data: Record<string, unknown>, row?: RowMetadata) => boolean;
+type Policy = { readable?:{fields:Set<string>};fingerprint: string; canRead: (data: Record<string, unknown>, row?: RowMetadata) => boolean;
   project: (data: Record<string, unknown>, row?: RowMetadata) => Record<string, unknown> }
 
 function scopedCursor(scope: string, since?: string | null) {

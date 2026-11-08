@@ -1,16 +1,18 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { appSchema, type App } from '@tableapp/schema'
+import { appSchema, defaultViewConfig, type App, type View } from '@tableapp/schema'
+import { personalApp, type SectionSource } from '@/lib/app-sections'
 import { AppEditor } from './app-editor'
 
-const mocks = vi.hoisted(() => ({ update: vi.fn(), publish: vi.fn(), refresh: vi.fn(), push: vi.fn() }))
+const mocks = vi.hoisted(() => ({ update: vi.fn(), publish: vi.fn(), refresh: vi.fn(), push: vi.fn(), preview: vi.fn(), shell: vi.fn() }))
 vi.mock('@/app/app-actions', () => ({ updateAppDraftAction: mocks.update, publishAppAction: mocks.publish }))
+vi.mock('@/app/editor-preview-actions', () => ({ editorPreviewAction: mocks.preview }))
 vi.mock('@/app/inventory-setup-actions', () => ({ enableInventoryAction: vi.fn(), enableStockOperationsAction: vi.fn() }))
 vi.mock('@/app/dispatch-setup-actions', () => ({ enableDispatchAction: vi.fn() }))
 vi.mock('@/app/portal-setup-actions', () => ({ enableRepeatRequestsAction: vi.fn() }))
 vi.mock('next/navigation', () => ({ useRouter: () => mocks }))
-vi.mock('@/components/runtime/app-shell', () => ({ AppShell: () => <div>App preview</div> }))
+vi.mock('@/components/runtime/app-shell', () => ({ AppShell: (input: unknown) => { mocks.shell(input); return <div>App preview</div> } }))
 vi.mock('./component-settings', () => ({ COMPONENT_LABELS: {}, ComponentSettings: () => null, describeComponent: () => '', makeComponent: vi.fn() }))
 vi.mock('./dashboard-editor', () => ({ DashboardEditor: () => null }))
 vi.mock('./component-access', () => ({ ComponentAccess: () => null }))
@@ -20,6 +22,58 @@ const app = appSchema.parse({ id: 'app-1', workspaceId: 'space', name: 'Shop', s
 const props = { initialApp: app, tables: [], views: [], runtimeTables: {}, relatedTitles: {}, publishedAt: null, advanced: true }
 
 describe('editor publication and server refresh', () => {
+  it('shows the role empty state after a remote preview with no accessible screens', async () => {
+    const closed = appSchema.parse({...app,screens:app.screens.map(screen=>({...screen,access:{...screen.access,public:false,roles:[]}}))})
+    mocks.preview.mockResolvedValue({ok:true,preview:{runtime:{app:{...closed,screens:[]},tables:{},views:[],relatedTitles:{},screens:{}}}})
+    const ui = render(<AppEditor {...props} initialApp={closed} advanced={false} remotePreview />)
+    await ui.findByText('Этой роли не открыт ни один экран. Выберите другую роль или настройте доступ.')
+    expect(ui.queryByText('Загружаем предпросмотр…')).toBeNull()
+    expect(mocks.shell).not.toHaveBeenCalled()
+  })
+  it('waits for a newly added section to reach the server preview before mounting its runtime', async () => {
+    HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', '') }
+    const source: SectionSource = { table: { id: 'expenses', name: 'Расходы', primaryFieldId: 'name', fields: [
+      { id: 'name', tableId: 'expenses', name: 'Название', type: 'text', options: {}, description: null, position: 'a0' },
+    ] }, view: { id: 'expenses-view', tableId: 'expenses', name: 'Все записи', position: 'a0', type: 'grid', config: defaultViewConfig('grid', 'filter') } as View }
+    const personal = personalApp({ id: 'personal', workspaceId: 'space', name: 'Мои дела', slug: 'moi-dela', email: 'me@example.invalid', sources: [source] })
+    const runtime = (definition: App) => ({ app: definition, tables: {}, views: [source.view], relatedTitles: {}, screens: {} })
+    let resolvePreview: ((value: unknown) => void) | undefined
+    mocks.preview.mockResolvedValueOnce({ ok: true, preview: { runtime: runtime(personal) } })
+      .mockImplementation(() => new Promise(resolve => { resolvePreview = resolve }))
+    const ui = render(<AppEditor {...props} initialApp={personal} tables={[source.table]} views={[source.view]} advanced={false} remotePreview />)
+    await ui.findByText('App preview')
+    fireEvent.click(ui.getByRole('button', { name: 'Добавить раздел' }))
+    const dialog = within(ui.getByRole('dialog', { name: 'Добавить раздел' }))
+    fireEvent.change(dialog.getByRole('textbox', { name: 'Название раздела' }), { target: { value: 'Итого' } })
+    fireEvent.click(dialog.getByRole('button', { name: 'Сводка' }))
+    fireEvent.click(dialog.getByRole('button', { name: 'Добавить раздел' }))
+    expect(ui.queryByText('App preview')).toBeNull()
+    expect(ui.getByText('Загружаем предпросмотр…')).toBeTruthy()
+    await waitFor(() => expect(mocks.preview).toHaveBeenCalledTimes(2))
+    const updated = mocks.preview.mock.calls[1]![1] as App
+    const added = updated.screens.find(screen => screen.name === 'Итого')!
+    expect(mocks.shell.mock.calls.some(([input]) => (input as {initialScreenId?: string}).initialScreenId === added.id)).toBe(false)
+    await act(async () => { resolvePreview!({ ok: true, preview: { runtime: runtime(updated) } }) })
+    await ui.findByText('App preview')
+    expect(mocks.shell.mock.calls.at(-1)?.[0]).toMatchObject({ initialScreenId: added.id, runtime: { app: { screens: expect.arrayContaining([expect.objectContaining({id: added.id})]) } } })
+  })
+  it('keeps draft edits and the chosen device while moving between compact builder panels', async () => {
+    const ui = render(<AppEditor {...props} />)
+    const panels = within(ui.getByRole('group', { name: 'Разделы полного конструктора' }))
+    expect(panels.getByRole('button', { name: 'Экраны' }).getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(ui.getByRole('button', { name: /Initial screen/ }))
+    expect(panels.getByRole('button', { name: 'Настройки' }).getAttribute('aria-pressed')).toBe('true')
+    fireEvent.change(ui.getByRole('textbox', { name: 'Название экрана' }), { target: { value: 'Мой экран' } })
+    fireEvent.click(panels.getByRole('button', { name: 'Просмотр' }))
+    const devices = within(ui.getByRole('group', { name: 'Устройство предпросмотра' }))
+    expect(devices.getByRole('button', { name: 'Телефон' }).getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(devices.getByRole('button', { name: 'Компьютер' }))
+    fireEvent.click(panels.getByRole('button', { name: 'Настройки' }))
+    expect((ui.getByRole('textbox', { name: 'Название экрана' }) as HTMLInputElement).value).toBe('Мой экран')
+    fireEvent.click(panels.getByRole('button', { name: 'Просмотр' }))
+    expect(devices.getByRole('button', { name: 'Компьютер' }).getAttribute('aria-pressed')).toBe('true')
+    expect(mocks.publish).not.toHaveBeenCalled()
+  })
   it('measures a preview mounted after entering directly on Access', async () => {
     const observe = vi.fn()
     vi.stubGlobal('ResizeObserver', class {
@@ -32,8 +86,8 @@ describe('editor publication and server refresh', () => {
     fireEvent.change(ui.getByRole('combobox', { name: 'Раздел настройки' }), { target: { value: 'appearance' } })
     await waitFor(() => expect(observe).toHaveBeenCalledOnce())
     const preview = ui.getByText('App preview').parentElement!
-    expect(preview.style.transform).not.toBe('scale(1)')
-    expect(preview.style.transform).toMatch(/^scale\(0\./)
+    expect(preview.style.transform).toBe('scale(1)')
+    expect(preview.style.width).toBe('280px')
   })
   it('opens employee access directly from preparation without editing the draft', () => {
     const helpEvent = vi.fn(); window.addEventListener('tableapp:owner-help', helpEvent)
@@ -69,11 +123,13 @@ describe('editor publication and server refresh', () => {
   it('starts an imported internal app with a role that actually has screens', () => {
     const internal = appSchema.parse({ ...app, screens: app.screens.map(screen => ({ ...screen, access: { public: false, publicFields: [], roles: ['staff'], allowDelete: false } })) })
     const ui = render(<AppEditor {...props} initialApp={internal} advanced={false} />)
-    expect(ui.getByRole('button', { name: 'Сотрудник' }).getAttribute('aria-pressed')).toBe('true')
-    expect(ui.queryByRole('button', { name: 'Автор' })).toBeNull()
-    expect(ui.queryByRole('button', { name: 'Посетитель' })).toBeNull()
+    expect((ui.getByRole('combobox', { name: 'Роль в предпросмотре' }) as HTMLSelectElement).value).toBe('staff')
+    expect(ui.queryByRole('option', { name: 'Автор' })).toBeNull()
+    expect(ui.queryByRole('option', { name: 'Посетитель' })).toBeNull()
     expect(ui.queryByLabelText('Почта для проверки личных записей')).toBeNull()
     expect(ui.queryByText(/Этой роли не открыт/)).toBeNull()
+    expect(ui.queryByRole('textbox', { name: 'Название экрана' })).toBeNull()
+    fireEvent.click(ui.getByRole('button', { name: 'Изменить экран' }))
     expect(ui.getByRole('textbox', { name: 'Название экрана' })).toBeTruthy()
   })
   it('asks for preview identity only when the selected role has personal row rules', () => {
@@ -86,6 +142,7 @@ describe('editor publication and server refresh', () => {
   it('keeps an unsaved draft on a failed save before switching to the full constructor', async () => {
     mocks.update.mockResolvedValueOnce({ ok: false, error: 'Сохранение отклонено' }).mockResolvedValueOnce({ ok: true })
     const ui = render(<AppEditor {...props} advanced={false} />)
+    fireEvent.click(ui.getByRole('button', { name: 'Изменить экран' }))
     fireEvent.change(ui.getByRole('textbox', { name: 'Название экрана' }), { target: { value: 'Keep across routes' } })
     fireEvent.click(ui.getByRole('link', { name: /Полный конструктор/ }))
     expect((await ui.findByRole('alert')).textContent).toBe('Сохранение отклонено')
@@ -99,6 +156,7 @@ describe('editor publication and server refresh', () => {
     const ui = render(<AppEditor {...props} advanced={false} />)
     expect(ui.queryByRole('button', { name: 'Удалить экран' })).toBeNull()
     expect(ui.getByRole('link', { name: /Полный конструктор/ }).getAttribute('href')).toBe('/apps/app-1?advanced=1')
+    fireEvent.click(ui.getByRole('button', { name: 'Изменить экран' }))
     fireEvent.change(ui.getByRole('textbox', { name: 'Название экрана' }), { target: { value: 'Guided latest' } })
     fireEvent.click(ui.getByRole('button', { name: /Проверить и опубликовать/ }))
     const publish = ui.getByRole('button', { name: 'Опубликовать приложение' })
@@ -108,11 +166,17 @@ describe('editor publication and server refresh', () => {
     fireEvent.click(publish); fireEvent.click(publish)
     await waitFor(() => expect(mocks.publish).toHaveBeenCalledOnce())
     expect((mocks.publish.mock.calls[0]![1] as App).screens[0]!.name).toBe('Guided latest')
-    expect(ui.getByRole('link', { name: /Открыть рабочее приложение/ }).getAttribute('href')).toBe('/a/shop')
+    expect(ui.getByRole('link', { name: 'Открыть приложение' }).getAttribute('href')).toBe('/a/shop')
+    await waitFor(() => expect(document.activeElement).toBe(ui.getByRole('region', { name: 'Приложение опубликовано' })))
+    await waitFor(() => expect(ui.getByRole('button', { name: 'Проверить и опубликовать' }).matches(':disabled')).toBe(false))
+    fireEvent.click(ui.getByRole('button', { name: 'Проверить и опубликовать' }))
+    expect((ui.getByRole('checkbox', { name: 'Я проверил данные и доступ пользователей' }) as HTMLInputElement).checked).toBe(false)
   })
 
   it('keeps guided preview usable for a viewer and prevents saving or publication', () => {
     const ui = render(<AppEditor {...props} advanced={false} canEdit={false} />)
+    expect(ui.queryByRole('textbox', { name: 'Название экрана' })).toBeNull()
+    fireEvent.click(ui.getByRole('button', { name: 'Изменить экран' }))
     expect(ui.getByRole('textbox', { name: 'Название экрана' }).matches(':disabled')).toBe(true)
     expect(ui.getByRole('button', { name: /Проверить и опубликовать/ }).matches(':disabled')).toBe(true)
     expect(ui.getByRole('button', { name: 'Сохранить черновик' }).matches(':disabled')).toBe(true)

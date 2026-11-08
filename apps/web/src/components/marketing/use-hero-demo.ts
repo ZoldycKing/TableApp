@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import { useMotionPlayback } from '@/components/motion/use-motion-playback'
 import { useViewTransition } from '@/components/motion/use-view-transition'
-import { PRODUCTS } from './catalog-data'
+import { PRODUCTS, type Product } from './catalog-data'
 
 type Phase = 'table' | 'builder' | 'mobile' | 'receipt' | 'detail' | 'result'
 const SEQUENCE = [
@@ -15,11 +15,11 @@ const SEQUENCE = [
 ] as const
 
 /** Local sample: build an employee screen, receive stock, see the source update. */
-export function useHeroDemo(root: RefObject<HTMLElement | null>) {
-  const [phase, setPhase] = useState<Phase>('table')
+export function useHeroDemo(root: RefObject<HTMLElement | null>, { interactive = false, onProductsChange }: { interactive?: boolean; onProductsChange?: (products: Product[]) => void } = {}) {
+  const [phase, setPhase] = useState<Phase>(interactive ? 'mobile' : 'table')
   const [pick, setPick] = useState(0)
   const [step, setStep] = useState(0)
-  const [automatic, setAutomatic] = useState(true)
+  const [automatic, setAutomatic] = useState(!interactive)
   const [paused, setPaused] = useState(false)
   const [clockRevision, setClockRevision] = useState(0)
   const clockVersion = useRef(0)
@@ -40,9 +40,10 @@ export function useHeroDemo(root: RefObject<HTMLElement | null>) {
     const after = before + amount
     source.current = source.current.map((product, index) => index === position ? { ...product, stock: after } : product)
     setProducts(source.current)
+    onProductsChange?.(source.current)
     setReceipt({ index: position, before, quantity: amount, after })
     setPhase('result')
-  }, [])
+  }, [onProductsChange])
 
   useEffect(() => {
     if (!reduced) return
@@ -126,10 +127,11 @@ export function useHeroDemo(root: RefObject<HTMLElement | null>) {
     receiptPending.current = false
     source.current = PRODUCTS
     setProducts(PRODUCTS)
+    onProductsChange?.(PRODUCTS)
     setReceipt(null)
     setError('')
     setQuantity('4')
-    if (reduced) { setPhase('mobile'); return }
+    if (reduced || interactive) { setPick(0); setPhase('mobile'); setAutomatic(false); return }
     clockVersion.current += 1
     setClockRevision(clockVersion.current)
     remaining.current = SEQUENCE[0].delay

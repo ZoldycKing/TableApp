@@ -10,10 +10,11 @@ import type { CollectionPage } from '@/lib/runtime-page-types'
 import type { RuntimePageControls } from '@/lib/use-screen-runtime'
 import { customerWorkflowNouns } from '@/lib/workflow-screen-names'
 
-export function CustomerRecords({ app, config, screen, rows, fields, relatedTitles, state, onState, onOpenRow, onCatalog, accent, page, pageControls }: {
+export function CustomerRecords({ app, config, screen, rows, fields, relatedTitles, state, onState, onOpenRow, onCatalog, accent, page, pageControls, orderPriceField }: {
   app: App; config: CustomerWorkflow; screen: ScreenOf<'list'> | ScreenOf<'tiles'>; rows: TableRow[]; fields: Field[]; relatedTitles: RelatedTitles
   state: ListState; onState: (state: ListState) => void; onOpenRow: ((id: string) => void) | null; onCatalog: (() => void) | null; accent: string
   page?: CollectionPage; pageControls?: RuntimePageControls
+  orderPriceField?: Field
 }) {
   const section = state.customerSection ?? 'active'
   const history = (row: TableRow) => config.terminalStatuses.includes(String(row.data[config.statusFieldId]))
@@ -26,6 +27,6 @@ export function CustomerRecords({ app, config, screen, rows, fields, relatedTitl
       {([['active', 'Активные', page ? page.sectionCounts.active ?? 0 : active.length], ['history', 'История', page ? page.sectionCounts.history ?? 0 : past.length]] as const).map(([key, label, count]) => <button type="button" key={key} aria-pressed={section === key}
         onClick={() => onState({ ...state, choiceId: null, customerSection: key })} className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium ${section === key ? 'bg-white text-ink shadow-soft' : 'text-ink-muted hover:text-ink'}`}>{label} <span className="ml-1 text-xs text-ink-muted">{count}</span></button>)}
     </div>
-    {selected.length || page ? <CollectionView screen={screen} rows={selected} fields={fields} relatedTitles={relatedTitles} state={{ ...state, choiceId: null }} onState={onState} onOpenRow={onOpenRow} exportHref={null} showStatusFilters={false} page={page} pageControls={pageControls} emptyState={empty} /> : empty}
+    {selected.length || page ? <CollectionView screen={screen} rows={selected} fields={fields} relatedTitles={relatedTitles} state={{ ...state, choiceId: null }} onState={onState} onOpenRow={onOpenRow} exportHref={null} showStatusFilters={false} page={page} pageControls={pageControls} emptyState={empty} order={config.cart && config.logistics?.kind === 'sales' ? config : undefined} orderPriceField={orderPriceField} /> : empty}
   </div>
 }

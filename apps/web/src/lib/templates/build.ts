@@ -252,6 +252,11 @@ export function buildTemplate(input: {
     for (const view of table.views) {
       viewPosition = positionBetween(viewPosition, null)
       const config = defaultViewConfig(view.type, newId('filter')) as Record<string, unknown>
+      if (view.hiddenFields) config.hiddenFieldIds = view.hiddenFields.map(fieldKey => {
+        const fieldId = fieldIds.get(key(table.key, fieldKey))
+        if (!fieldId) throw new Error(`Шаблон ${template.id}: нет скрываемого поля «${fieldKey}»`)
+        return fieldId
+      })
 
       if (view.stackBy) config.stackFieldId = fieldIds.get(key(table.key, view.stackBy))!
       if (view.coverBy) config.coverFieldId = fieldIds.get(key(table.key, view.coverBy))!

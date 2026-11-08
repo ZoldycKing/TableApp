@@ -44,6 +44,7 @@ export async function conversationAccess(slug: string, tableId: string, rowId: s
     .where(and(eq(rows.id, rowId), eq(rows.tableId, tableId), eq(tables.workspaceId, app.workspaceId), isNull(rows.deletedAt))).limit(1)
   if (!parent) throw denied()
   const member = business ? await currentMember() : null
+  if(member&&member.role!=='owner'&&member.tableAccess!=null)throw denied()
   const [space] = await runner.select({ ownerId: workspaces.ownerId }).from(workspaces).where(eq(workspaces.id, app.workspaceId))
   const owner = Boolean(member && member.workspaceId === app.workspaceId && member.role === 'owner' && space?.ownerId === member.userId)
   if (business && (!member || member.workspaceId !== app.workspaceId)) throw denied()

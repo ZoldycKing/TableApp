@@ -1,11 +1,11 @@
 import { apps, db } from '@tableapp/db'
 import { and, eq } from 'drizzle-orm'
 import { notFound, redirect } from 'next/navigation'
-import { requireMember } from '@/lib/session'
+import { requireWorkspaceMember as requireMember } from '@/lib/session'
 import { PRIVATE_PAGE } from '@/lib/seo'
 
 export const dynamic = 'force-dynamic'
-export const metadata = PRIVATE_PAGE
+export const metadata = { ...PRIVATE_PAGE, title: 'Сообщения приложения' }
 /** Keep bookmarked per-app links working after moving the inbox to the workspace menu. */
 export default async function BusinessConversations({ params, searchParams }: {
   params: Promise<{ appId: string }>; searchParams: Promise<{ table?: string; row?: string }>

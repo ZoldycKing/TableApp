@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, waitFor, within } from '@testing-library/react'
 import { normalizeFieldOptions, type Field } from '@tableapp/schema'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { useState } from 'react'
 import { TableRecordsEditor } from './table-records-editor'
 import { hasUnsaved } from '@/lib/unsaved'
@@ -13,8 +13,76 @@ const relation = { ...text, id: 'product', name: 'Товар', type: 'relation',
 const rows = [{ id: 'r1', position: 'a1', version: 3, data: { name: 'Заказ 104', price: 1200, product: ['p1'] } }, { id: 'r2', position: 'a2', version: 2, data: { name: 'Заказ 103', price: 680 } }]
 const props = { rows, fields: [text, number, relation], titleField: text, selectedRowId: 'r1', relatedTitles: { products: [{ id: 'p1', title: 'Ежедневник A5' }, { id: 'p2', title: 'Планер' }] }, readOnly: false, onSelect: vi.fn(), onAdd: vi.fn(), onSave: vi.fn(async () => ({ ok: true as const })), onDirtyChange: vi.fn() }
 afterEach(() => { cleanup(); vi.clearAllMocks() })
+beforeAll(()=>{
+  HTMLDialogElement.prototype.showModal=function(){this.setAttribute('open','')}
+  HTMLDialogElement.prototype.close=function(){this.removeAttribute('open')}
+})
 
 describe('record editor shares real row and field identities', () => {
+  it('shows current material stock and the threshold with units, including zero stock', () => {
+    const unit = { ...text, id: 'unit', name: 'Единица измерения' }
+    const opening = { ...number, id: 'opening', name: 'Начальный остаток' }
+    const stock = { ...number, id: 'stock', name: 'Текущий остаток' }
+    const minimum = { ...number, id: 'minimum', name: 'Минимальный остаток' }
+    const material = { id: 'material', position: 'a0', version: 0, data: { name: 'Пластик', unit: 'кг', opening: 1500, stock: 1538, minimum: 300 } }
+    const settings = { ...props, selectedRowId: null, fields: [text, unit, opening, stock, minimum], rows: [material], recordSummary: { fieldIds: ['stock', 'minimum'], unitFieldId: 'unit' } }
+    const ui = render(<TableRecordsEditor {...settings} />)
+    const label = () => ui.getByRole('button', { name: /Пластик/ }).textContent!.replace(/\s/g, '')
+    expect(label()).toContain('Текущийостаток:1538кг')
+    expect(label()).toContain('Минимальныйостаток:300кг')
+    expect(label()).not.toContain('1500')
+    ui.rerender(<TableRecordsEditor {...settings} rows={[{ ...material, data: { ...material.data, stock: 0 } }]} />)
+    expect(label()).toContain('Текущийостаток:0кг')
+    expect(props.onSave).not.toHaveBeenCalled()
+  })
+  it('opens field explanations on demand without leaving or saving the record',()=>{
+    const description='Укажите название, которое увидят сотрудники.'
+    const view=render(<TableRecordsEditor {...props} fields={[{...text,description}]}/>)
+    expect(view.queryByText(description)).toBeNull()
+    fireEvent.click(view.getByRole('button',{name:'Подсказка к полю «Название»'}))
+    expect(view.getByRole('dialog',{name:'Название'}).textContent).toContain(description)
+    fireEvent.click(view.getByRole('button',{name:'Понятно'}))
+    expect(view.queryByRole('dialog')).toBeNull();expect(props.onSave).not.toHaveBeenCalled()
+  })
+  it('searches multiple related records and stages their IDs until record save',async()=>{
+    const saveRow=vi.fn(async()=>({ok:true as const})),multiple={...relation,options:normalizeFieldOptions('relation',{tableId:'products',allowMultiple:true})} as Field
+    const view=render(<TableRecordsEditor {...props} fields={[text,multiple]} onSaveRow={saveRow}/>)
+    fireEvent.click(view.getByRole('button',{name:'Выбрать: Товар'}))
+    fireEvent.change(view.getByRole('searchbox',{name:'Поиск: Товар'}),{target:{value:'Планер'}})
+    fireEvent.click(view.getByRole('checkbox',{name:'Планер'}))
+    expect(saveRow).not.toHaveBeenCalled()
+    fireEvent.click(view.getByRole('button',{name:'Готово'}))
+    fireEvent.click(view.getByRole('button',{name:'Сохранить изменения'}))
+    await waitFor(()=>expect(saveRow).toHaveBeenCalledWith('r1',{product:['p1','p2']},{product:['p1']}))
+  })
+  it('saves a record as one patch only after explicit confirmation',async()=>{
+    const saveRow=vi.fn(async()=>({ok:true as const}))
+    const view=render(<TableRecordsEditor {...props} onSaveRow={saveRow}/>)
+    fireEvent.change(view.getByRole('textbox',{name:'Название'}),{target:{value:'Новое название'}})
+    fireEvent.blur(view.getByRole('textbox',{name:'Название'}))
+    fireEvent.change(view.getByRole('textbox',{name:'Цена'}),{target:{value:'1 250,50'}})
+    expect(saveRow).not.toHaveBeenCalled();expect(props.onSave).not.toHaveBeenCalled()
+    fireEvent.click(view.getByRole('button',{name:'Сохранить изменения'}))
+    await waitFor(()=>expect(saveRow).toHaveBeenCalledWith('r1',{name:'Новое название',price:1250.5},{name:'Заказ 104',price:1200}))
+  })
+  it('validates every changed field before sending an atomic record patch',async()=>{
+    const saveRow=vi.fn(),view=render(<TableRecordsEditor {...props} onSaveRow={saveRow}/>)
+    fireEvent.change(view.getByRole('textbox',{name:'Название'}),{target:{value:'Не терять'}})
+    fireEvent.change(view.getByRole('textbox',{name:'Цена'}),{target:{value:'ошибка'}})
+    fireEvent.click(view.getByRole('button',{name:'Сохранить изменения'}))
+    await waitFor(()=>expect(view.getByRole('alert').textContent).toContain('число'))
+    expect(saveRow).not.toHaveBeenCalled();expect((view.getByRole('textbox',{name:'Название'}) as HTMLInputElement).value).toBe('Не терять')
+  })
+  it('keeps all record edits when an atomic save is rejected',async()=>{
+    const saveRow=vi.fn(async()=>({ok:false as const,error:'Запись изменил коллега'}))
+    const view=render(<TableRecordsEditor {...props} onSaveRow={saveRow}/>)
+    fireEvent.change(view.getByRole('textbox',{name:'Название'}),{target:{value:'Моя запись'}})
+    fireEvent.change(view.getByRole('textbox',{name:'Цена'}),{target:{value:'2000'}})
+    fireEvent.click(view.getByRole('button',{name:'Сохранить изменения'}))
+    await waitFor(()=>expect(view.getByRole('alert').textContent).toContain('коллега'))
+    expect((view.getByRole('textbox',{name:'Название'}) as HTMLInputElement).value).toBe('Моя запись')
+    expect((view.getByRole('textbox',{name:'Цена'}) as HTMLInputElement).value).toBe('2000')
+  })
   it.each([false, true])('moves focus into the opened record and restores its list button (readonly=%s)', readOnly => {
     function Harness() {
       const [selected, setSelected] = useState<string | null>(null)
@@ -79,7 +147,7 @@ describe('record editor shares real row and field identities', () => {
     expect(view.queryAllByRole('textbox')).toHaveLength(0)
     expect(view.queryByRole('button', { name: '+ Запись' })).toBeNull()
     expect(view.queryByRole('button', { name: 'Сохранить изменения' })).toBeNull()
-    expect(view.getByText('Ежедневник A5')).toBeTruthy()
+    expect(within(view.container.querySelector('[id="record-form-r1"]')!).getByText('Ежедневник A5')).toBeTruthy()
     expect(props.onSave).not.toHaveBeenCalled()
   })
 
@@ -145,7 +213,7 @@ describe('record editor shares real row and field identities', () => {
     expect(save.mock.calls.filter(call => call[1] === 'name')).toHaveLength(1)
     release({ ok: true })
     await waitFor(() => expect(view.getByRole('status').textContent).toBe('Все изменения сохранены'))
-    expect(hasUnsaved()).toBe(false)
+    await waitFor(() => expect(hasUnsaved()).toBe(false))
   })
 
   it('keeps the current form when a list search hides the selected record', () => {

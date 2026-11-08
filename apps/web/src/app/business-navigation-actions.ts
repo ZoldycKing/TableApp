@@ -7,6 +7,7 @@ import { isKnownRole } from '@/lib/roles'
 import { currentAccount, currentMember } from '@/lib/session'
 import type { BusinessNavigationResult, BusinessResourceDestination } from '@/lib/business-navigation-types'
 import { switchWorkspaceAction } from './team-actions'
+import { restrictedTables,tablePermission } from '@/lib/table-permissions'
 
 const IDENTIFIER = /^[a-zA-Z0-9_-]{1,200}$/
 const COLLECTION_PATHS = {
@@ -37,9 +38,10 @@ export async function navigateBusinessResourceAction(
   if (typeof workspaceId !== 'string' || !IDENTIFIER.test(workspaceId) || !target) {
     return { ok: false, error: 'Неизвестный раздел бизнеса' }
   }
-  const [membership] = await db.select({ role: workspaceMembers.role }).from(workspaceMembers)
+  const [membership] = await db.select({ role: workspaceMembers.role,tableAccess:workspaceMembers.tableAccess }).from(workspaceMembers)
     .where(and(eq(workspaceMembers.workspaceId, workspaceId), eq(workspaceMembers.userId, member.userId))).limit(1)
   if (!membership || !isKnownRole(membership.role)) return { ok: false, error: 'У вас нет доступа к этому бизнесу' }
+  if(target.kind==='table'&&tablePermission(membership,target.id)==='none'||restrictedTables(membership)&&!['table','tables','home'].includes(target.kind))return {ok:false,error:'Этот раздел недоступен'}
 
   let href: string
   if (target.kind === 'table') {
@@ -53,7 +55,7 @@ export async function navigateBusinessResourceAction(
     if (!app) return { ok: false, error: 'Приложение не найдено в этом бизнесе' }
     href = `/apps/${encodeURIComponent(app.id)}`
   } else {
-    href = COLLECTION_PATHS[target.kind]
+    href = restrictedTables(membership)?'/tables':COLLECTION_PATHS[target.kind]
   }
   const switched = await switchWorkspaceAction(workspaceId)
   return switched.ok ? { ok: true, href } : switched

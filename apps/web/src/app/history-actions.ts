@@ -3,6 +3,8 @@
 import { appUsers, db, rowChanges, users } from '@tableapp/db'
 import { and, desc, eq, inArray } from 'drizzle-orm'
 import { authorizeTable } from '@/lib/authorize'
+import { loadTable } from '@/lib/queries'
+import { projectMemberData } from '@/lib/table-permissions'
 
 export type HistoryEntry = {
   id: string
@@ -25,8 +27,10 @@ export async function loadTableHistoryAction(
   tableId: string,
   rowId?: string,
 ): Promise<{ ok: true; entries: HistoryEntry[] } | { ok: false; error: string }> {
-  const auth = await authorizeTable(tableId)
+  const auth = await authorizeTable(tableId,false)
   if (!auth.ok) return { ok: false, error: auth.error }
+  const table=await loadTable(tableId,auth.member.workspaceId,auth.member)
+  if(!table)return {ok:false,error:'Таблица недоступна'}
 
   const rows = await db
     .select()
@@ -43,8 +47,8 @@ export async function loadTableHistoryAction(
       id: row.id,
       rowId: row.rowId,
       op: row.op as HistoryEntry['op'],
-      before: (row.before as Record<string, unknown> | null) ?? null,
-      after: (row.after as Record<string, unknown> | null) ?? null,
+      before: row.before?projectMemberData(row.before as Record<string,unknown>,table.fields):null,
+      after: row.after?projectMemberData(row.after as Record<string,unknown>,table.fields):null,
       // Автор мог быть удалён вместе с доступом — тогда честнее сказать,
       // что это был сотрудник, чем показать пустоту.
       actor: row.actorId

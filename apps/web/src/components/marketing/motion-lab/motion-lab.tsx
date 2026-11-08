@@ -1,6 +1,6 @@
 'use client'
 
-import { useId, useState, type CSSProperties } from 'react'
+import { useId, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import { Icon } from '@/components/runtime/icons'
 import { PRODUCTS, type Product } from '../catalog-data'
 import { ProductGlyph } from '../product-glyph'
@@ -39,7 +39,7 @@ export function MotionStory({ variantId }: { variantId: 'sync' | 'workflow' }) {
 }
 
 function Preview({ variant, embedded = false }: { variant: Variant; embedded?: boolean }) {
-  const { root, step, paused, running, reduced, complete, select, toggle, replay } = usePreviewPlayback(variant.durations, { loop: !embedded })
+  const { root, step, paused, running, reduced, complete, select, toggle, replay } = usePreviewPlayback(variant.durations, { loop: !embedded, nativeTransition: variant.id !== 'sync' })
   const prefix = `tableapp-lab-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`
   const shared: Shared = (key) => ({ viewTransitionName: `${prefix}-${key}` })
   const headingId = `${prefix}-title`
@@ -51,7 +51,7 @@ function Preview({ variant, embedded = false }: { variant: Variant; embedded?: b
       </div>}
       <div className={`${styles.player} ${embedded ? styles.embedded : ''}`}>
         <div className={styles.playerTop}>
-          <span><i className={styles.dot} data-running={running} />{reduced ? 'Без автоматического движения' : complete ? 'Показ завершён' : paused ? 'Показ на паузе' : 'Автопоказ'}</span>
+          <span>{variant.id !== 'sync' && <i className={styles.dot} data-running={running} />}{reduced ? 'Без автоматического движения' : complete ? 'Показ завершён' : paused ? 'Показ на паузе' : 'Автопоказ'}</span>
           <span>Пример на тестовых данных</span>
         </div>
         <div className={styles.controls}>
@@ -89,31 +89,57 @@ function ViewsScene({ step, shared }: SceneProps) {
 }
 
 function SyncScene({ step, shared }: SceneProps) {
+  const layout = useRef<HTMLDivElement>(null)
+  const previous = useRef<{ width: number; tops: number[] } | null>(null)
+  useLayoutEffect(() => {
+    const node = layout.current!
+    const panels = Array.from(node.querySelectorAll<HTMLElement>('[data-sync-source], [data-product-view="catalog"], [data-sync-total]'))
+    const box = node.getBoundingClientRect()
+    const tops = panels.map(panel => panel.getBoundingClientRect().top - box.top)
+    const before = previous.current
+    previous.current = { width: box.width, tops }
+    if (!box.width || !before || Math.abs(before.width - box.width) > 1 || window.innerWidth > 767 || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    const animations = panels.flatMap((panel, index) => {
+      const distance = before.tops[index]! - tops[index]!
+      if (Math.abs(distance) < 1 || !panel.animate) return []
+      return [panel.animate([{ translate: `0 ${distance}px` }, { translate: '0 0' }], { duration: 700, easing: 'cubic-bezier(.22,1,.36,1)' })]
+    })
+    return () => animations.forEach(animation => animation.cancel())
+  }, [step])
   const updated = step >= 2
   const products = PRODUCTS.map((product, index) => index === 1 && updated ? { ...product, price: '8 490' } : product)
-  const total = products.reduce((sum, product) => sum + numericPrice(product) * product.stock, 0)
-  const product = products[1]!
+  const product = { ...PRODUCTS[1]!, price: step >= 1 ? '8 490' : PRODUCTS[1]!.price }
+  const initialTotal = PRODUCTS.reduce((sum, item) => sum + numericPrice(item) * item.stock, 0)
+  const newTotal = initialTotal + (8490 - numericPrice(PRODUCTS[1]!)) * product.stock
+  const total = step >= 3 ? newTotal : initialTotal
+  const focus = ['all', 'source', 'catalog', 'total'][step]
+  const titles = ['Одна запись для всех экранов', 'Меняем цену одного товара', 'Новая цена уже в каталоге', 'Стоимость остатков выросла на 1 500 ₽']
   return (
-    <div className={styles.syncLayout}>
-      <div className={styles.syncSource}>
+    <div className={styles.syncStory} data-sync-focus={focus} data-ui>
+      <h3 className={styles.syncHeading}>{titles[step]}</h3>
+      <div ref={layout} className={styles.syncLayout}>
+      <div className={styles.syncSource} data-sync-source>
         <div className={styles.miniTitle}><Icon name="list" className="size-4" />Общая запись</div>
         <div className={styles.sourceRecord}>
           <span className={`${styles.sourcePhoto} ${product.tint} ${product.ink}`}><ProductGlyph kind={product.glyph} className="size-12" /></span>
           <strong>{product.short}</strong><small>{product.code}</small>
-          <div className={styles.editCell} data-active={step === 1 || updated}>
-            <span>Цена, ₽</span><strong style={shared('source-price')}>{product.price}</strong>
+          <div className={styles.editCell} data-active={step >= 1}>
+            <span>Цена, ₽</span>
+            {step >= 1 && <del className={styles.previousPrice}>7 990</del>}
+            <strong data-source-price style={shared('source-price')}>{product.price}</strong>
             <small>{step === 1 ? 'Меняем 7 990 → 8 490' : updated ? 'Изменение сохранено' : 'Значение в таблице'}</small>
           </div>
           <span className={styles.dataLink}><Icon name="check" className="size-4" />{updated ? 'Обновлено из общей записи' : 'Один источник данных'}</span>
         </div>
       </div>
       <div className={styles.syncDestinations}>
-        <ProductView mode="catalog" shared={shared} scope="synced" products={products} highlight={updated} />
-        <div className={styles.total} data-active={step === 3}>
+        <ProductView mode="catalog" shared={shared} scope="synced" products={products} highlight={updated} previousPrice={updated ? '7 990' : undefined} />
+        <div className={styles.total} data-sync-total data-active={step === 3}>
           <span><Icon name="chart" className="size-4" />Стоимость остатков<small>Цена × количество на складе</small></span>
-          <strong style={shared('stock-total')}>{money(total)} ₽</strong>
-          <small>{updated ? '+1 500 ₽ · 3 шт × 500 ₽' : 'Все четыре товара'}</small>
+          <div className={styles.totalValue}>{step >= 3 && <del className={styles.previousPrice}>{money(initialTotal)} ₽</del>}<strong style={shared('stock-total')}>{money(total)} ₽</strong></div>
+          <small>{step >= 3 ? '3 шт × 500 ₽ = +1 500 ₽' : 'Все четыре товара'}</small>
         </div>
+      </div>
       </div>
     </div>
   )

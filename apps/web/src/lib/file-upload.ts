@@ -8,9 +8,9 @@ import { recountFileBytes } from './usage'
 
 /** Keep metadata and quota durable while S3 is accessed outside DB locks. */
 export async function storeAttachment(workspaceId: string, uploadedBy: string, origin: Origin,
-  file: { name: string; type: string; bytes: Uint8Array }, conversationId?: string) {
+  file: { name: string; type: string; bytes: Uint8Array }, conversationId?: string, reservedKey?: string) {
   const id = newId('attachment')
-  const key = fileKey(workspaceId, file.name)
+  const key = reservedKey ?? fileKey(workspaceId, file.name)
   await db.transaction(async (tx) => {
     await lockRowUsage({ tx, workspaceId, changed: new Set() })
     if (conversationId) {

@@ -20,7 +20,7 @@ export function BookingForm({ runtime, row, demo, demoData, pending, initialValu
   const fields = runtime.tables[config.tables.visits]?.fields ?? []
   const startField = fields.find(field => field.id === visit.start)
   const timeZone = startField ? fieldTimeZone(startField) : 'Europe/Moscow'
-  const services = (runtime.tables[config.tables.services]?.rows ?? []).filter(row => row.data[config.service.active] === true)
+  const services = (demo && demoData ? demoData.services : runtime.tables[config.tables.services]?.rows ?? []).filter(row => row.data[config.service.active] === true)
   const seed = row?.data ?? initialValues
   const baseVersion = useRef(initialDraft?.baseVersion ?? row?.version)
   const restoreSlot = useRef(initialDraft?.chosen ? { start: initialDraft.chosen.start, master: initialDraft.chosen.masterId }

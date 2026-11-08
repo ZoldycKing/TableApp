@@ -77,7 +77,7 @@ describe.skipIf(!process.env.DATABASE_URL)('verified question signup before an o
 
   it('creates no client, profile, order or session before OTP and then enrolls only a verified client', async () => {
     const fixture = await business(), email = address()
-    const beforeRows = await database.db.select({ id: database.rows.id }).from(database.rows).where(inArray(database.rows.tableId, fixture.tableIds))
+    const beforeRows = await database.db.select({ id: database.rows.id }).from(database.rows).where(inArray(database.rows.tableId, fixture.tableIds)).orderBy(database.rows.id)
     expect(await question.beginGeneralQuestionAction(fixture.app.slug)).toEqual({ ok: true, authenticated: false })
     expect(await auth.requestAppLoginAction(fixture.app.slug, email, 'question')).toMatchObject({ ok: true, delivered: true })
     expect(state.letters).toBe(1)
@@ -95,7 +95,7 @@ describe.skipIf(!process.env.DATABASE_URL)('verified question signup before an o
     expect(await profiles(email)).toEqual([expect.objectContaining({ workspaceId: fixture.workspaceId, email, name: null, phone: null })])
     expect((await session.currentAppAccess(fixture.app)).visitor).toMatchObject({ authenticated: true, roleId: 'client', enrolled: true, email })
     expect(await database.db.select().from(database.users).where(eq(database.users.email, email))).toEqual([])
-    expect(await database.db.select({ id: database.rows.id }).from(database.rows).where(inArray(database.rows.tableId, fixture.tableIds))).toEqual(beforeRows)
+    expect(await database.db.select({ id: database.rows.id }).from(database.rows).where(inArray(database.rows.tableId, fixture.tableIds)).orderBy(database.rows.id)).toEqual(beforeRows)
     const [stored] = await database.db.select().from(database.apps).where(eq(database.apps.id, fixture.app.id))
     expect((stored!.published as App).allowlist).toEqual(fixture.app.allowlist)
     const token = new URL(state.lastLink).searchParams.get('token')!

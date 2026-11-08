@@ -83,14 +83,14 @@ export function ConversationInbox({ slug, business = false, operator = false, ap
   const general = selected?.tableId === GENERAL_CONVERSATION_TABLE
   return <div className="@container min-w-0 space-y-4 [overflow-wrap:anywhere]">
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <p className="max-w-lg text-sm text-ink-muted">{business ? 'Вопросы клиентов и переписка по заказам и записям во всех приложениях этого бизнеса.' : operator ? 'Вопросы клиентов и переписка по заказам и записям, к которым у вас есть доступ.' : 'Вопросы бизнесу и переписка по вашим заказам и записям.'}</p>
+      <p className="max-w-lg text-sm text-ink-muted">{business ? 'Вопросы клиентов и переписка по заказам во всех приложениях пространства.' : operator ? 'Вопросы клиентов и переписка по заказам и записям, к которым у вас есть доступ.' : 'Вопросы бизнесу и переписка по вашим заказам и записям.'}</p>
       <div className="flex flex-wrap items-center gap-3">
         {customer && onAskQuestion ? <button type="button" onClick={onAskQuestion} className="rounded-xl bg-sage-700 px-4 py-2.5 text-sm font-medium text-white">Задать вопрос</button> : null}
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={unreadOnly} onChange={event => setUnreadOnly(event.target.checked)} />Только непрочитанные</label>
       </div>
     </div>
     {error ? <div className="space-y-2"><p role="alert" className="text-sm text-red-700">{error}</p><button type="button" onClick={() => void load()} className="text-sm text-sage-700 underline">Попробовать ещё раз</button></div> : null}
-    <div className="grid min-w-0 grid-cols-1 items-start gap-5 @min-[740px]:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+    <div className={`grid min-w-0 grid-cols-1 items-start gap-6 ${page.items.length || selected ? '@min-[740px]:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]' : ''}`}>
       <nav aria-label="Диалоги" className={`min-w-0 space-y-2 ${selected ? 'hidden @min-[740px]:block' : ''}`}>
         {page.items.map(thread => <button key={thread.id} type="button" onClick={() => setSelected(thread)} aria-current={thread.id === item?.id ? 'true' : undefined}
           className={`block w-full min-w-0 rounded-xl border p-3 text-left transition-colors ${thread.id === item?.id ? 'border-sage-300 bg-sage-50' : 'border-sand-200 bg-white hover:bg-sand-50'}`}>
@@ -99,7 +99,7 @@ export function ConversationInbox({ slug, business = false, operator = false, ap
           <p className="mt-2 truncate text-xs text-ink-muted">{thread.preview}</p>
           <p className="mt-2 text-[11px] text-ink-muted">{thread.appName} · {time(thread.lastAt)}{thread.closed ? ' · Завершено' : ''}</p>
         </button>)}
-        {busy && !page.items.length ? <p role="status" className="p-4 text-sm text-ink-muted">Загружаем диалоги…</p> : !page.items.length && !error ? <p className="rounded-xl bg-sand-50 p-4 text-sm text-ink-muted">{page.next ? 'На этой странице доступных диалогов нет. Откройте следующие диалоги.' : unreadOnly ? 'Непрочитанных сообщений нет.' : !customer ? 'Диалогов пока нет. Они появятся, когда клиент задаст вопрос или начнётся переписка по заказу или записи.' : onAskQuestion ? 'Диалогов пока нет. Вы можете задать вопрос бизнесу — оформлять заказ или запись для этого не нужно.' : 'Диалогов пока нет. Здесь появятся ваши переписки.'}</p> : null}
+        {busy && !page.items.length ? <div role="status" className="space-y-3"><span className="sr-only">Загружаем диалоги…</span>{[0,1,2].map(index => <div key={index} aria-hidden className="space-y-3 rounded-2xl border border-sand-200 bg-white p-4 motion-safe:animate-pulse"><div className="h-4 w-32 rounded bg-sand-100" /><div className="h-3 w-3/4 rounded bg-sand-100" /></div>)}</div> : !page.items.length && !error ? <p className="rounded-2xl border border-sand-200 bg-white p-6 text-sm text-ink-muted">{page.next ? 'На этой странице доступных диалогов нет. Откройте следующие диалоги.' : unreadOnly ? 'Непрочитанных сообщений нет.' : !customer ? 'Диалогов пока нет. Они появятся, когда клиент задаст вопрос или начнётся переписка по заказу или записи.' : onAskQuestion ? 'Диалогов пока нет. Вы можете задать вопрос бизнесу — оформлять заказ или запись для этого не нужно.' : 'Диалогов пока нет. Здесь появятся ваши переписки.'}</p> : null}
         {page.next ? <button type="button" disabled={busy} onClick={() => void load(page.next!)} className="text-sm text-sage-700 underline">Следующие диалоги</button> : null}
       </nav>
       <div className={`min-w-0 ${selected ? '' : 'hidden @min-[740px]:block'}`}>{selected ? <>
@@ -108,7 +108,7 @@ export function ConversationInbox({ slug, business = false, operator = false, ap
           {item ? <><p className="mt-1 text-xs text-ink-muted">{item.customer} · {item.appName}</p>
             {!general ? onOpenRecord ? <button type="button" onClick={() => onOpenRecord(item)} className="mt-2 text-sm text-sage-700 underline">Открыть запись</button> : <a href={`/t/${encodeURIComponent(item.tableId)}?r=${encodeURIComponent(item.rowId)}`} className="mt-2 inline-block text-sm text-sage-700 underline">Открыть запись</a> : null}</> : null}</div> : null}
         <ConversationPanel key={`${selected.slug}:${selected.tableId}:${selected.rowId}:${business}`} {...selected} configured business={business} showContext={!item} />
-      </> : <p className="rounded-xl bg-sand-50 p-5 text-sm text-ink-muted">Выберите диалог, чтобы прочитать сообщения или ответить.</p>}</div>
+      </> : page.items.length ? <p className="rounded-2xl border border-sand-200 bg-white p-6 text-sm text-ink-muted">Выберите диалог, чтобы прочитать сообщения или ответить.</p> : null}</div>
     </div>
   </div>
 }

@@ -15,8 +15,8 @@ afterEach(() => { cleanup(); vi.clearAllMocks() })
 describe('readonly grid and stable selection', () => {
   it('blocks keyboard, double click, checkbox and schema mutations in readonly mode', () => {
     const view = render(<DataGrid {...props} readOnly />)
-    const cells = view.getAllByRole('cell')
-    const grid = view.container.firstElementChild!
+    const cells = view.getAllByRole('gridcell')
+    const grid = view.getByRole('grid')
     fireEvent.click(cells[1]!)
     for (const key of ['Enter', 'F2', 'Delete', 'Backspace']) fireEvent.keyDown(grid, { key })
     fireEvent.doubleClick(cells[1]!)
@@ -36,7 +36,7 @@ describe('readonly grid and stable selection', () => {
     expect(view.getByText('Вторая').closest('td')!.className).toContain('ring-sage-400')
     view.rerender(<DataGrid {...props} selectedRowId="r2" onSelectRow={select} groups={[{ key: '', value: null, rows: [row2, row1] }]} />)
     expect(view.getByText('Вторая').closest('td')!.className).toContain('ring-sage-400')
-    fireEvent.keyDown(view.container.firstElementChild!, { key: 'ArrowDown' })
+    fireEvent.keyDown(view.getByRole('grid'), { key: 'ArrowDown' })
     expect(select).toHaveBeenCalledWith('r1')
   })
 })

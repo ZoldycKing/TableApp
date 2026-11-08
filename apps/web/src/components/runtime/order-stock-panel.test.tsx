@@ -11,6 +11,16 @@ const waiting = { state: 'waiting' as const, canConfirm: true, canIssue: false, 
 const issued = { state: 'issued' as const, canConfirm: false, canIssue: false, canReturn: true }
 const returned = { state: 'returned' as const, canConfirm: false, canIssue: false, canReturn: false }
 describe('stock runtime controls', () => {
+  it('names pickup explicitly when delivery is available and does not repeat its stock explanation', async () => {
+    vi.mocked(readOrderStockAction).mockResolvedValueOnce({ ok: true, state: { state: 'reserved', canConfirm: false, canIssue: true, canReturn: false } })
+      .mockResolvedValue({ ok: true, state: { state: 'reserved', canConfirm: false, canIssue: false, canReturn: false, reason: 'Товар спишется со склада при передаче курьеру.' } })
+    const ui = render(<OrderStockPanel tableId="orders" rowId="order" version={7} slug="shop" pickup />)
+    await ui.findByRole('button', { name: 'Выдать самовывозом' })
+    ui.rerender(<OrderStockPanel tableId="orders" rowId="order" version={8} slug="shop" pickup />)
+    await ui.findByText('Товар спишется со склада при передаче курьеру.')
+    expect(ui.queryByText('При выдаче товары спишутся со склада.')).toBeNull()
+    expect(ui.queryByRole('button', { name: 'Выдать самовывозом' })).toBeNull()
+  })
   it('shows a rejected initial stock read and retries before exposing order actions', async () => {
     vi.mocked(readOrderStockAction).mockRejectedValueOnce(new Error('offline')).mockResolvedValue({ ok: true, state: waiting })
     const ui = render(<OrderStockPanel tableId="orders" rowId="order" version={7} slug="shop" />)
@@ -47,6 +57,20 @@ describe('stock runtime controls', () => {
     await ui.findByRole('button', { name: 'Выдать заказ' })
     expect(confirmOrderStockAction).toHaveBeenCalledWith('orders', 'order', 7, 'shop', false)
     expect(mocks.refresh).toHaveBeenCalled()
+  })
+  it('keeps the accepted result through a version refresh and never carries it to another order', async () => {
+    const reserved = { state: 'reserved' as const, canConfirm: false, canIssue: true, canReturn: false }
+    vi.mocked(readOrderStockAction).mockResolvedValueOnce({ ok: true, state: waiting }).mockResolvedValue({ ok: true, state: reserved })
+    vi.mocked(confirmOrderStockAction).mockResolvedValue({ ok: true, value: { state: 'reserved', repeated: false } })
+    const ui = render(<OrderStockPanel tableId="orders" rowId="first" version={7} slug="shop" embedded accent="orange" />)
+    fireEvent.click(await ui.findByRole('button', { name: 'Подтвердить заказ' }))
+    await ui.findByText('Заказ подтверждён. Товары закреплены за ним.')
+    ui.rerender(<OrderStockPanel tableId="orders" rowId="first" version={8} slug="shop" embedded accent="orange" />)
+    expect((await ui.findByText('Заказ подтверждён. Товары закреплены за ним.')).getAttribute('role')).toBe('status')
+    expect(ui.getByRole('button', { name: 'Выдать заказ' }).className).toContain('bg-orange-700')
+    ui.rerender(<OrderStockPanel tableId="orders" rowId="second" version={8} slug="shop" embedded accent="orange" />)
+    await ui.findByRole('button', { name: 'Выдать заказ' })
+    expect(ui.queryByText('Заказ подтверждён. Товары закреплены за ним.')).toBeNull()
   })
   it('shows a failed or lost response without pretending the order was confirmed', async () => {
     vi.mocked(readOrderStockAction).mockResolvedValue({ ok: true, state: waiting })

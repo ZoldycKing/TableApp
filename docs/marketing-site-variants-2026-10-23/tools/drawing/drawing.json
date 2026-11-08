@@ -1,0 +1,12 @@
+{
+  "dependencies": "node_modules",
+  "modelScripts": ["model.js"],
+  "drawings": [{
+    "id": "notebook",
+    "title": "Ежедневник",
+    "description": "Иллюстративная модель закрытого ежедневника: бумажный блок и обложка. Пропорции условные, NTS. Не производственный чертёж.",
+    "initialView": "assembled",
+    "parts": [{"id":"cover","name":"Обложка"},{"id":"paper","name":"Бумажный блок"}],
+    "parameters": []
+  }]
+}

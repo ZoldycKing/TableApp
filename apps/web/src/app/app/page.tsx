@@ -5,6 +5,7 @@ import { loadBusinessOverview } from '@/lib/business-overview-data'
 import { currentAccount, currentMember, listMemberships } from '@/lib/session'
 import { EmptyAccount } from '@/components/empty-account'
 import { PRIVATE_PAGE } from '@/lib/seo'
+import { restrictedTables } from '@/lib/table-permissions'
 
 /*
  * В поиске этой странице делать нечего: за ней рабочее пространство.
@@ -23,6 +24,7 @@ export default async function WorkspaceHomePage() {
     if (!account) redirect('/login')
     return <EmptyAccount email={account.email} />
   }
+  if(restrictedTables(member))redirect('/tables')
   const [overview, memberships] = await Promise.all([
     loadBusinessOverview(),
     listMemberships(member.userId),

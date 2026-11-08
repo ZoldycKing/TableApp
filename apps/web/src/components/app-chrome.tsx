@@ -1,4 +1,5 @@
 import { cookies } from 'next/headers'
+import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { PlatformShell } from '@/components/shell/platform-shell'
 import { modeFromCookie, SIDEBAR_COOKIE } from '@/components/shell/variant'
@@ -23,6 +24,7 @@ export async function AppChrome({
   member,
   memberships,
   activeWorkspaceId,
+  wide = false,
   children,
 }: {
   member: ChromeMember
@@ -32,9 +34,8 @@ export async function AppChrome({
   /**
    * Осталось от верхней полосы, где оно задавало ширину ряда.
    *
-   * Сейчас содержимое и так занимает всё место справа от панели, и ширину
-   * решает сама страница. Свойство принимаем молча, чтобы не править девять
-   * вызовов ради ничего.
+   * Содержимое задаёт свою ширину. Контекст пространства выравнивается
+   * по обычной странице или по широкому редактору таблицы.
    */
   wide?: boolean
 }) {
@@ -56,6 +57,10 @@ export async function AppChrome({
       businesses={businesses}
       initialMode={mode}
     >
+      <nav aria-label="Текущее пространство" className={`mx-auto flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1 px-5 pt-5 text-sm sm:px-6 ${wide ? '' : 'w-full max-w-6xl'}`}>
+        <span className="text-ink-muted">Пространство</span>
+        <Link href="/app" className="min-w-0 break-words font-medium text-sage-700 underline-offset-4 hover:underline">{member.workspaceName}</Link>
+      </nav>
       {children}
       <OwnerHelp />
     </PlatformShell>

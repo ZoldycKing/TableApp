@@ -15,7 +15,7 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
 describe('first workspace start', () => {
-  it.each([['Загрузить таблицу', 'Продолжить к загрузке', '/import'], ['Выбрать сценарий', 'Продолжить к сценариям', '/templates'], ['Создать пустую таблицу', 'Продолжить к таблицам', '/tables']])('keeps the selected route: %s', async (choice, submit, href) => {
+  it.each([['Загрузить таблицу', 'Продолжить к загрузке', '/import'], ['Выбрать шаблон', 'Продолжить к шаблонам', '/templates'], ['Создать пустую таблицу', 'Продолжить к таблицам', '/tables']])('keeps the selected route: %s', async (choice, submit, href) => {
     const ui = render(<EmptyAccount email="owner@example.invalid" />)
     expect(ui.queryByRole('textbox')).toBeNull()
     fireEvent.click(ui.getByRole('button', { name: choice }))
@@ -34,11 +34,11 @@ describe('first workspace start', () => {
     fireEvent.change(ui.getByRole('textbox'), { target: { value: 'Личные проекты' } })
     fireEvent.click(ui.getByRole('button', { name: 'Назад' }))
     expect(document.activeElement?.textContent).toBe('Загрузить таблицу')
-    fireEvent.click(ui.getByRole('button', { name: 'Выбрать сценарий' }))
+    fireEvent.click(ui.getByRole('button', { name: 'Выбрать шаблон' }))
     ui.unmount()
     const restored = render(<EmptyAccount email="owner@example.invalid" />)
     expect((restored.getByRole('textbox') as HTMLInputElement).value).toBe('Личные проекты')
-    expect(restored.getByRole('button', { name: 'Продолжить к сценариям' })).toBeTruthy()
+    expect(restored.getByRole('button', { name: 'Продолжить к шаблонам' })).toBeTruthy()
     restored.unmount()
     const other = render(<EmptyAccount email="other@example.invalid" />)
     expect(other.queryByRole('textbox')).toBeNull()
@@ -47,13 +47,13 @@ describe('first workspace start', () => {
   it('retains input and intent after a server rejection, then retries the same route', async () => {
     mocks.create.mockResolvedValueOnce({ ok: false, error: 'Соединение прервано' })
     const ui = render(<EmptyAccount email="owner@example.invalid" />)
-    fireEvent.click(ui.getByRole('button', { name: 'Выбрать сценарий' }))
+    fireEvent.click(ui.getByRole('button', { name: 'Выбрать шаблон' }))
     fireEvent.change(ui.getByRole('textbox'), { target: { value: 'Проекты' } })
-    fireEvent.click(ui.getByRole('button', { name: 'Продолжить к сценариям' }))
+    fireEvent.click(ui.getByRole('button', { name: 'Продолжить к шаблонам' }))
     expect((await ui.findByRole('alert')).textContent).toBe('Соединение прервано')
     expect((ui.getByRole('textbox') as HTMLInputElement).value).toBe('Проекты')
     expect(mocks.navigate).not.toHaveBeenCalled()
-    fireEvent.click(ui.getByRole('button', { name: 'Продолжить к сценариям' }))
+    fireEvent.click(ui.getByRole('button', { name: 'Продолжить к шаблонам' }))
     await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/templates'))
   })
   it('allows only one creation while a request is pending', async () => {

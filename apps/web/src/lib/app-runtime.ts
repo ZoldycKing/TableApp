@@ -134,7 +134,7 @@ export async function loadAppMeta(slug: string): Promise<AppMeta | null> {
   return {
     id: record.id,
     name: app.name,
-    business: await loadBusinessProfile(app.workspaceId),
+    business: app.purpose === 'personal' ? null : await loadBusinessProfile(app.workspaceId),
     slug: app.slug,
     accent: app.theme.accent,
     accessMode: app.accessMode,
@@ -291,8 +291,8 @@ export async function loadRuntimeForApp(
     for (const table of Object.values(projected.tables)) if (!rowTables.has(table.id)) table.rows = []
     for (const screen of app.screens) if (!dataScreenIds.includes(screen.id)) delete projected.screens[screen.id]
   }
-  return { ...projected, business: await loadBusinessProfile(app.workspaceId),
-    businessApps: visitor.email ? (await listAccessibleApps(visitor.email, app.workspaceId)).map(item => ({ slug: item.slug, name: item.name })) : [] }
+  return { ...projected, business: app.purpose === 'personal' ? null : await loadBusinessProfile(app.workspaceId),
+    businessApps: visitor.email && app.purpose !== 'personal' ? (await listAccessibleApps(visitor.email, app.workspaceId)).map(item => ({ slug: item.slug, name: item.name })) : [] }
 }
 
 /**
@@ -300,7 +300,7 @@ export async function loadRuntimeForApp(
  * Предпросмотр должен работать и для экрана, который редактор только что
  * направил на другую таблицу, поэтому грузим всё, а не только задействованное.
  */
-export async function loadWorkspaceRuntime(workspaceId: string): Promise<{
+export async function loadWorkspaceRuntime(workspaceId: string, options?: { metadataOnly?: boolean; app?: App }): Promise<{
   tables: Record<string, RuntimeTable>
   views: View[]
   relatedTitles: RelatedTitles
@@ -309,15 +309,38 @@ export async function loadWorkspaceRuntime(workspaceId: string): Promise<{
   if (tableRows.length === 0) return { tables: {}, views: [], relatedTitles: {} }
 
   const ids = tableRows.map((table) => table.id)
-  const [fieldRows, viewRows, dataRows] = await Promise.all([
+  const [fieldRows, viewRows] = await Promise.all([
     db.select().from(fieldsTable).where(inArray(fieldsTable.tableId, ids)),
     db.select().from(viewsTable).where(inArray(viewsTable.tableId, ids)).orderBy(asc(viewsTable.position)),
-    db
-      .select()
-      .from(rowsTable)
-      .where(and(inArray(rowsTable.tableId, ids), isNull(rowsTable.deletedAt)))
-      .orderBy(asc(rowsTable.position)),
   ])
+
+  const needed = options?.app ? new Set(referencedTables(options.app, Object.fromEntries(viewRows.map(row => [row.id, normalizeView(row)])))) : new Set(ids)
+  if (options?.app) {
+    const walk = (value: unknown): void => {
+      if (!value || typeof value !== 'object') return
+      if (Array.isArray(value)) { value.forEach(walk); return }
+      const object = value as Record<string, unknown>
+      if (object.kind === 'literal') return
+      for (const [key, child] of Object.entries(object)) {
+        if ((key === 'tableId' || key.endsWith('TableId')) && typeof child === 'string' && ids.includes(child)) needed.add(child)
+        if (key === 'tables' && child && typeof child === 'object') for (const id of Object.values(child)) if (typeof id === 'string' && ids.includes(id)) needed.add(id)
+        walk(child)
+      }
+    }
+    walk(options.app)
+    // Lookup and rollup dependencies remain complete on the server.
+    let grew = true
+    while (grew) {
+      grew = false
+      for (const field of fieldRows) if (needed.has(field.tableId) && field.type === 'relation') {
+        const target = (field.options as { tableId?: string }).tableId
+        if (target && ids.includes(target) && !needed.has(target)) { needed.add(target); grew = true }
+      }
+    }
+  }
+  const selectedIds = [...needed].filter(id => ids.includes(id))
+  const dataRows = options?.metadataOnly || !selectedIds.length ? [] : await db.select().from(rowsTable)
+    .where(and(inArray(rowsTable.tableId, selectedIds), isNull(rowsTable.deletedAt))).orderBy(asc(rowsTable.position))
 
   const fieldsByTable = new Map<string, Field[]>()
   for (const row of fieldRows) {

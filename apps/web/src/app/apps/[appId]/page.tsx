@@ -1,40 +1,62 @@
 import { apps, db, tables as dbTables, workspaceClientApps } from '@tableapp/db'
 import { appSchema } from '@tableapp/schema'
-import { eq } from 'drizzle-orm'
+import { readAppDefinition } from '@tableapp/schema/app-definition'
+import { authorizeApp } from '@/lib/authorize'
+import { loadBuilderLearning } from '@/lib/builder-learning'
+import { builderV2Enabled, builderV2Revision, loadBuilderV2Catalog } from '@/lib/builder-v2'
+import { eq, getTableColumns, sql } from 'drizzle-orm'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { AppEditor } from '@/components/builder/app-editor'
 import { AppChrome } from '@/components/app-chrome'
 import { loadWorkspaceRuntime } from '@/lib/app-runtime'
 import type { TableSummary } from '@/lib/queries'
-import { listMemberships, requireMember } from '@/lib/session'
+import { listMemberships, requireWorkspaceMember as requireMember } from '@/lib/session'
 import { PRIVATE_PAGE } from '@/lib/seo'
 import { loadBusinessProfile } from '@/lib/business-profile'
 import { ModuleManager } from '@/components/module-manager'
 import { AppVersionHistory } from '@/components/app-version-history'
+import { PublicationStatus } from '@/components/publication-status'
+import { loadBuilderBusinessApps } from '@/lib/builder-v2-business'
 
 /*
  * В поиске этой странице делать нечего: за ней рабочее пространство.
  * Запрет в robots.txt обход закрывает, но не индексацию — адрес, на который
  * кто-то сослался, попадает в выдачу и без обхода. Отказ говорится здесь.
  */
-export const metadata = PRIVATE_PAGE
+export async function generateMetadata({ params }: { params: Promise<{ appId: string }> }) {
+  const { appId } = await params, auth = await authorizeApp(appId, false)
+  if (!auth.ok) return { title: 'Настройка приложения', ...PRIVATE_PAGE }
+  const [record] = await db.select({ name: apps.name, draft: apps.draft }).from(apps).where(sql`${apps.id} = ${appId} and ${apps.workspaceId} = ${auth.member.workspaceId}`).limit(1)
+  const definition = readAppDefinition(record?.draft)
+  return { title: definition.ok && definition.formatVersion === 2 ? `${record!.name} · Конструктор` : 'Настройка приложения', ...PRIVATE_PAGE }
+}
 
 export const dynamic = 'force-dynamic'
 
-export default async function AppEditorPage({ params, searchParams }: { params: Promise<{ appId: string }>; searchParams: Promise<{ advanced?: string }> }) {
+export default async function AppEditorPage({ params, searchParams }: { params: Promise<{ appId: string }>; searchParams: Promise<{ advanced?: string; screen?: string; row?: string; start?: string }> }) {
   const member = await requireMember()
   const { appId } = await params
-  const advanced = (await searchParams).advanced === '1'
+  const query = await searchParams
+  const advanced = query.advanced === '1'
 
-  const [record] = await db.select().from(apps).where(eq(apps.id, appId)).limit(1)
+  const [record] = await db.select({ ...getTableColumns(apps), hasUnpublishedChanges: sql<boolean>`${apps.draft} is distinct from ${apps.published}` }).from(apps).where(eq(apps.id, appId)).limit(1)
   // Чужое приложение не должно открываться даже по прямой ссылке.
   if (!record || record.workspaceId !== member.workspaceId) notFound()
+
+  const definition = readAppDefinition(record.draft)
+  if (definition.ok && definition.formatVersion === 2) {
+    const auth = await authorizeApp(appId, false)
+    if (!auth.ok || definition.app.id !== record.id || definition.app.workspaceId !== record.workspaceId) notFound()
+    const [{ AppV2Editor }, metadata, learning] = await Promise.all([import('@/components/builder/v2/editor'), loadBuilderV2Catalog(member.workspaceId), loadBuilderLearning(definition.app, member)])
+    const businessApps = await loadBuilderBusinessApps(member.workspaceId, metadata.catalog.views)
+    return <AppV2Editor key={record.id} initialApp={{ ...definition.app, slug: record.slug }} initialRevision={builderV2Revision(record.draft)} initialPublishedRevision={record.published ? builderV2Revision(record.published) : null} tables={metadata.tables} businessApps={businessApps} canEdit={builderV2Enabled() && member.role !== 'viewer'} initialScreen={query.screen} initialRecordId={query.row} fromImport={query.start === '1'} initialLearning={learning} actor={{ authenticated: true, roleIds: definition.app.authentication.members.find(entry => entry.email.toLowerCase() === member.email.toLowerCase())?.roleIds ?? [], id: member.userId, email: member.email, name: member.name, company: '' }} />
+  }
 
   const parsed = appSchema.safeParse({ ...(record.draft as Record<string, unknown>), slug: record.slug })
   if (!parsed.success) notFound()
 
-  const runtime = await loadWorkspaceRuntime(member.workspaceId)
+  const runtime = await loadWorkspaceRuntime(member.workspaceId, { metadataOnly: true })
   const list = parsed.data.screens.find(screen => screen.type === 'list')
   const itemTableId = list?.type === 'list' ? runtime.views.find(view => view.id === list.source.viewId)?.tableId : null
   const [itemTable] = itemTableId ? await db.select({ templateId: dbTables.templateId }).from(dbTables).where(eq(dbTables.id, itemTableId)).limit(1) : []
@@ -62,17 +84,13 @@ export default async function AppEditorPage({ params, searchParams }: { params: 
   return (
     <AppChrome {...chrome} wide>
     <main className="mx-auto w-full max-w-[1500px] px-5 py-4 sm:px-8 xl:py-8">
-      <Link href={`/setup?app=${appId}&step=review`} className="mb-5 hidden rounded text-sm text-ink-soft underline decoration-sand-300 underline-offset-4 xl:inline-block">← К подготовке приложения</Link>
+      <Link href={parsed.data.purpose === 'personal' ? '/apps' : `/setup?app=${appId}&step=review`} className="mb-5 hidden rounded text-sm text-ink-soft underline decoration-sand-300 underline-offset-4 xl:inline-block">{parsed.data.purpose === 'personal' ? '← Все приложения' : '← К подготовке приложения'}</Link>
       <header className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0 flex-1">
           <h1 className="text-xl font-semibold tracking-tight xl:text-2xl">{advanced ? 'Полный конструктор' : 'Настройка приложения'}</h1>
           <div className="mt-1 flex flex-wrap gap-x-2 text-sm xl:mt-2 xl:block">
           <p className="text-ink-soft">{parsed.data.name}</p>
-          <p className="text-[var(--color-ink-muted)]">
-            {record.publishedAt
-              ? `опубликовано ${record.publishedAt.toLocaleString('ru-RU')} · /a/${parsed.data.slug}`
-              : 'ещё не опубликовано'}
-          </p>
+          <PublicationStatus published={Boolean(record.published)} hasChanges={record.hasUnpublishedChanges} />
           </div>
         </div>
         <details className="relative self-start xl:hidden"><summary className="min-h-11 cursor-pointer rounded-lg border border-sand-200 px-3 py-3 text-sm">Ещё</summary><nav aria-label="Переходы приложения" className="absolute right-0 z-20 mt-2 w-60 rounded-xl border border-sand-200 bg-white p-2 shadow-lift"><Link href={`/setup?app=${appId}&step=review`} className="block rounded-lg px-3 py-3 text-sm hover:bg-sand-100">Подготовка приложения</Link>{record.publishedAt ? <a href={`/a/${parsed.data.slug}`} target="_blank" rel="noreferrer" className="block rounded-lg px-3 py-3 text-sm hover:bg-sand-100">Открыть приложение ↗</a> : null}<Link href="/apps" className="block rounded-lg px-3 py-3 text-sm hover:bg-sand-100">Все приложения</Link></nav></details>
@@ -101,7 +119,7 @@ export default async function AppEditorPage({ params, searchParams }: { params: 
         у человека — «что это вообще и откуда взялось». Объясняем прямо здесь,
         один раз: пока приложение не опубликовано, подсказка висит.
       */}
-      {!advanced || record.publishedAt ? null : (
+      {!advanced || record.publishedAt || parsed.data.purpose === 'personal' ? null : (
         <p className="mb-4 rounded-xl border border-sand-200 bg-sand-100/60 px-4 py-3 text-sm leading-relaxed text-ink-soft">
           {parsed.data.customer || parsed.data.booking ? <>Клиентский кабинет и рабочие экраны уже настроены. Укажите <Link href="/apps" className="underline underline-offset-2">название бизнеса</Link>, замените примеры своими товарами или услугами. В <Link href="/apps" className="underline underline-offset-2">настройках приложения</Link> укажите почты сотрудников и их рабочие роли. Назначайте работу по этим почтам. Затем опубликуйте приложение и отправьте клиентам ссылку. Общий вход используется повторно, а обращения и права остаются у этого бизнеса.</> : <>Экраны собраны по вашей таблице: список записей, карточка одной записи
           и форма для новой. Слева — экраны, посередине — настройки выбранного,
@@ -117,6 +135,7 @@ export default async function AppEditorPage({ params, searchParams }: { params: 
       <AppVersionHistory key={`history-${appId}`} appId={appId} canRestore={member.role !== 'viewer'} revision={`${record.updatedAt.toISOString()}:${record.publishedAt?.toISOString() ?? ''}`} />
       </> : null}
       <AppEditor
+        remotePreview
         key={`${appId}:${advanced}`}
         advanced={advanced}
         canEdit={member.role !== 'viewer'}
@@ -131,7 +150,7 @@ export default async function AppEditorPage({ params, searchParams }: { params: 
         relatedTitles={runtime.relatedTitles}
         publishedAt={record.publishedAt ? record.publishedAt.toISOString() : null}
       />
-      {!advanced ? <details className="mt-8 rounded-xl border border-sand-200 bg-white p-4"><summary className="cursor-pointer text-sm font-medium">Возможности приложения и история версий</summary><fieldset disabled={member.role === 'viewer'} className="mt-4"><ModuleManager key={`modules:${record.updatedAt.toISOString()}`} app={parsed.data} primary={primary?.appId === appId} sources={sources} owner={member.role === 'owner'} /></fieldset><AppVersionHistory key={`history-${appId}`} appId={appId} canRestore={member.role !== 'viewer'} revision={`${record.updatedAt.toISOString()}:${record.publishedAt?.toISOString() ?? ''}`} /></details> : null}
+      {!advanced && parsed.data.purpose !== 'personal' ? <details className="mt-8 rounded-xl border border-sand-200 bg-white p-4"><summary className="cursor-pointer text-sm font-medium">Возможности приложения и история версий</summary><fieldset disabled={member.role === 'viewer'} className="mt-4"><ModuleManager key={`modules:${record.updatedAt.toISOString()}`} app={parsed.data} primary={primary?.appId === appId} sources={sources} owner={member.role === 'owner'} /></fieldset><AppVersionHistory key={`history-${appId}`} appId={appId} canRestore={member.role !== 'viewer'} revision={`${record.updatedAt.toISOString()}:${record.publishedAt?.toISOString() ?? ''}`} /></details> : null}
     </main>
     </AppChrome>
   )

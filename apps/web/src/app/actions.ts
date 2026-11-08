@@ -12,7 +12,7 @@ import { and, asc, eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { publishTable } from '@/lib/live'
 import { assertCanIncreaseUsage, isPlanLimitError } from '@/lib/limits'
-import { authorizeTable, authorizeWorkspace } from '@/lib/authorize'
+import { authorizeTable,authorizeTableStructure, authorizeWorkspace } from '@/lib/authorize'
 import { createRow, deleteRow, lockRowUsage, mutationFields, RowWriteError, updateRow, writeRows } from '@/lib/row-mutations'
 import { renameInFormulas } from '@/lib/formula-rename'
 
@@ -111,7 +111,7 @@ export async function renameFieldAction(
   fieldId: string,
   name: string,
 ): Promise<ActionResult> {
-  const auth = await authorizeTable(tableId)
+  const auth = await authorizeTableStructure(tableId)
   if (!auth.ok) return auth
 
   const trimmed = name.trim()

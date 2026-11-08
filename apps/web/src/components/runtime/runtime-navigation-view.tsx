@@ -57,7 +57,7 @@ export function RuntimeNavigationView({ variant, groups, tabs, activeId, current
     : tabs.slice(0, tabs.length > 5 ? 4 : 5).map(screen => ({ id: screen.id, label: label(screen), icon: icon(screen), active: screen.id === activeId }))
   const more = groups.length ? tabs.some(screen => !main.some(item => item.id === screen.id)) : tabs.length > 5
   return <nav aria-label="Основные разделы" onKeyDown={event => { if (event.key === 'Escape') setExpanded(false) }}
-    className="relative flex shrink-0 border-t border-sand-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur @min-[860px]:hidden">
+    className="relative flex shrink-0 border-t border-sand-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur @min-[641px]:hidden">
     {main.map(item => <button key={item.id} type="button" aria-current={item.active ? 'page' : undefined} onClick={() => open(item.id)}
       className={`flex min-w-0 flex-1 flex-col items-center gap-1 px-1 py-2.5 transition-colors focus-visible:outline-2 focus-visible:outline-blue-500 ${item.active ? accent.text : 'text-ink-muted hover:text-ink'}`}>
       <Icon name={item.icon} className="size-5" /><span className={`max-w-full truncate text-[11px] ${item.active ? 'font-semibold' : ''}`}>{item.label}</span>

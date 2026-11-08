@@ -30,6 +30,7 @@ export async function listConversationInbox(input: InboxInput = {}, business = f
   const cursor = input.before?.split('~')
   if (input.before !== undefined && (typeof input.before !== 'string' || !cursor || cursor.length !== 2 || !/^\d{1,16}$/.test(cursor[0]!) || !Number.isSafeInteger(Number(cursor[0])) || !cursor[1] || cursor[1].length > 200)) throw denied()
   const member = business ? await currentMember() : null
+  if(member&&member.role!=='owner'&&member.tableAccess!=null)throw new RowWriteError('denied','Переписка недоступна')
   let workspaceId: string, actorEmail: string
   if (business) {
     if (!member) throw denied()

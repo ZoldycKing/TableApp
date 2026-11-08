@@ -1,3 +1,4 @@
+import {canReadBuilderV2File} from '@/lib/builder-v2-file-access'
 import { apps, attachments, db, rows } from '@tableapp/db'
 import { appSchema } from '@tableapp/schema'
 import { and, eq } from 'drizzle-orm'
@@ -10,14 +11,24 @@ import { getFile } from '@/lib/storage'
 import { validateAppReferences } from '@/lib/app-references'
 import { fileDeliveryHeaders } from '@/lib/file-policy'
 import { canReadConversationFile } from '@/lib/conversations'
+import { restrictedTables,tablePermission } from '@/lib/table-permissions'
+import { isBuilderV2LogoKey } from '@/lib/builder-v2-logo-types'
 
 export async function GET(_request: Request, { params }: { params: Promise<{ key: string[] }> }) {
   const { key: segments } = await params
   const key = segments.join('/')
+  if (isBuilderV2LogoKey(key)) return new NextResponse('Not found', { status: 404 })
   const [record] = await db.select().from(attachments).where(eq(attachments.key, key)).limit(1)
   if (!record || record.state !== 'ready') return new NextResponse('Not found', { status: 404 })
+  const v2App=new URL(_request.url).searchParams.get('v2App')
+  if(v2App!==null){
+    if(!await canReadBuilderV2File(v2App,record))return new NextResponse('Forbidden',{status:403})
+    const file=await getFile(key)
+    if(!file)return new NextResponse('Not found',{status:404})
+    return new NextResponse(file.body,{headers:fileDeliveryHeaders(record.name,file.mime,record.mime)})
+  }
   const member = await currentMember()
-  let allowed = record.conversationId || record.messageId ? await canReadConversationFile(record, new URL(_request.url).searchParams.get('business') === '1') : member?.workspaceId === record.workspaceId
+  let allowed = record.conversationId || record.messageId ? await canReadConversationFile(record, new URL(_request.url).searchParams.get('business') === '1') : Boolean(member?.workspaceId===record.workspaceId&&(!restrictedTables(member)||(record.tableId?tablePermission(member,record.tableId)!=='none':record.uploadedBy===member.userId)))
   if (!allowed && !record.conversationId && !record.messageId) {
     const published = await db.select().from(apps).where(eq(apps.workspaceId, record.workspaceId))
     for (const candidate of published) {

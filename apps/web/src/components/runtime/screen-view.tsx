@@ -23,6 +23,10 @@ import { CatalogHub } from './catalog-hub'
 import type { RuntimePageControls } from '@/lib/use-screen-runtime'
 import { customerFormPresentation } from '@/lib/customer-form-presentation'
 import { catalogFieldUnits } from '@/lib/catalog-field-units'
+import { sameCellValue } from '@/lib/cell-conflict'
+import { productionCancellationCopy } from '@/lib/production-copy'
+import { OrderDetail, usesOrderDetail } from './order-detail'
+import { RecordDetail, plainRecordDetail } from './record-detail'
 
 export type RuntimeFormDraft = { values: Record<string, unknown>; baseVersion?: number }
 
@@ -69,6 +73,9 @@ type Props = {
    * а не после него.
    */
   formNotice?: ReactNode
+  /** Server-authorized order operations, placed beside the order's state. */
+  detailActions?: ReactNode
+  catalogAction?: ReactNode
 }
 
 
@@ -77,6 +84,8 @@ export function ScreenView(props: Props) {
   const { screen, table, row, collection, viewer, accent, relatedTitles, runtime } = props
 
   const fields = table?.fields ?? []
+  const order = customerWorkflows(runtime.app).find(config => config.tableId === table?.id && config.cart && config.logistics?.kind === 'sales')
+  const orderPriceField = order?.cart ? runtime.tables[order.cart.itemsTableId]?.fields.find(field => field.id === order.cart!.itemPriceFieldId) : undefined
   const titleField = fields.find((field) => field.id === (table?.primaryFieldId ?? '')) ?? fields[0]
 
   const relatedRows: ComponentContext['relatedRows'] = (relationFieldId) => {
@@ -101,6 +110,14 @@ export function ScreenView(props: Props) {
     relatedRows,
     onAction: props.onAction,
     onOpenRow: props.onOpenRow,
+    lookupText: (field, value) => {
+      if (field.type !== 'lookup') return formatCell(field, value)
+      const relation = fields.find(candidate => candidate.id === field.options.relationFieldId)
+      const target = relation?.type === 'relation' ? runtime.tables[relation.options.tableId]?.fields.find(candidate => candidate.id === field.options.targetFieldId) : undefined
+      if (!target || target.type !== 'single_select' && target.type !== 'multi_select') return formatCell(field, value)
+      const values = Array.isArray(value) ? value.flat() : [value]
+      return target.type === 'multi_select' ? formatCell(target, values) : values.map(item => formatCell(target, item)).filter(Boolean).join(', ')
+    },
   }
 
   if (screen.type === 'dashboard') {
@@ -121,7 +138,7 @@ export function ScreenView(props: Props) {
       const catalog = runtime.app.screens.find(candidate => 'source' in candidate && runtime.views[candidate.source.viewId]?.tableId === customer.catalog?.tableId)
       return <div className="space-y-4">{customer.parent ? <button type="button" onClick={() => props.onOpenScreen(customer.formScreenId)} className="rounded-xl border border-sand-200 bg-white px-4 py-2.5 text-sm font-medium">Задать вопрос по заказу</button> : null}<CustomerRecords app={runtime.app} config={customer} screen={screen} rows={collection?.rows ?? []} fields={fields} relatedTitles={relatedTitles} state={props.listState ?? EMPTY_LIST_STATE}
         onState={props.onListState ?? (() => {})} accent={accent} onCatalog={catalog ? () => props.onOpenScreen(runtime.app.catalogScreenIds ? runtime.app.homeScreenId! : catalog.id) : null}
-        onOpenRow={screen.onTapScreenId ? id => props.onOpenRow(screen.onTapScreenId!, id) : null} page={runtime.screens[screen.id]?.page} pageControls={props.pageControls?.[screen.id]} /></div>
+        onOpenRow={screen.onTapScreenId ? id => props.onOpenRow(screen.onTapScreenId!, id) : null} page={runtime.screens[screen.id]?.page} pageControls={props.pageControls?.[screen.id]} orderPriceField={orderPriceField} /></div>
     }
     const booking = runtime.app.booking
     if (booking && screen.id === (booking.listScreenId ?? runtime.app.homeScreenId) && table?.id === booking.tables.visits) {
@@ -133,13 +150,16 @@ export function ScreenView(props: Props) {
         onChooseService={services ? () => props.onOpenScreen(runtime.app.catalogScreenIds ? runtime.app.homeScreenId! : services.id) : null}
         onOpenRow={screen.onTapScreenId ? id => props.onOpenRow(screen.onTapScreenId!, id) : null} page={runtime.screens[screen.id]?.page} pageControls={props.pageControls?.[screen.id]} />
     }
+    const create = screen.sectionId ? runtime.app.screens.find(candidate => candidate.sectionId === screen.sectionId && candidate.type === 'form' && candidate.mode === 'create') : undefined
     return (
-      <CollectionView
+      <div className="space-y-4">{create ? <div className="flex justify-end"><button type="button" onClick={() => props.onOpenScreen(create.id)} className={`inline-flex min-h-11 items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-white ${accentClasses(accent).bg}`}><Icon name="plus" className="size-4" />Добавить запись</button></div> : null}<CollectionView
         screen={screen}
         rows={collection?.rows ?? []}
         fields={fields}
         relatedTitles={relatedTitles}
         fieldUnits={catalogFieldUnits(runtime.app, table?.id)}
+        order={order}
+        orderPriceField={orderPriceField}
         state={props.listState ?? EMPTY_LIST_STATE}
         onState={props.onListState ?? (() => {})}
         exportHref={props.exportHref ?? null}
@@ -148,17 +168,19 @@ export function ScreenView(props: Props) {
         onOpenRow={
           screen.onTapScreenId ? (rowId) => props.onOpenRow(screen.onTapScreenId!, rowId) : null
         }
-      />
+      /></div>
     )
   }
 
   if (!row && (screen.type === 'detail' || screen.type === 'form' && screen.mode === 'edit')) return <div className="rounded-2xl border border-sand-200 bg-white shadow-soft"><EmptyState icon="file" title="Запись недоступна" hint="Откройте другую запись из своего списка." /></div>
   if (screen.type === 'detail') {
+    if (order && usesOrderDetail(screen, order)) return <OrderDetail screen={screen} config={order} runtime={runtime} ctx={ctx} actions={props.detailActions} />
     const booking = runtime.app.booking
     const bookingDate = booking ? fields.find(field => field.id === booking.visit.start) : undefined
     const outcomePending = booking && screen.tableId === booking.tables.visits && row &&
       [booking.statuses.booked, booking.statuses.arrived].includes(String(row.data[booking.visit.status])) &&
       bookingVisitSection(booking, row, bookingDate ? fieldTimeZone(bookingDate) : 'UTC', props.now ?? runtime.loadedAt ?? Date.now()) === 'history'
+    if (plainRecordDetail(screen, table?.primaryFieldId ?? null)) return <RecordDetail screen={screen} runtime={runtime} ctx={ctx} primaryFieldId={table?.primaryFieldId ?? null} actions={props.detailActions} catalogAction={props.catalogAction} notice={outcomePending ? <p className="text-sm leading-relaxed text-ink-soft">Результат посещения ещё не отмечен. Статус обновит мастер или администратор после оказания услуги.</p> : undefined} />
     const inventory = runtime.app.inventory
     const primaryTargets = inventory && screen.tableId === inventory.tables.items
       ? new Set([inventory.receiptScreenId, inventory.operations?.screens.issue].filter((id): id is string => Boolean(id)))
@@ -177,6 +199,8 @@ export function ScreenView(props: Props) {
      */
     const titleFieldId = table?.primaryFieldId ?? fields[0]?.id ?? null
     const components = [...screen.components]
+      .map(component => runtime.app.production?.tables.production === screen.tableId && component.type === 'text' && component.source.kind === 'literal'
+        ? { ...component, source: { ...component.source, value: productionCancellationCopy(component.source.value, Boolean(runtime.app.production.stock)) } } : component)
       .filter(
         (component) =>
           !extras.includes(component) && !(
@@ -190,6 +214,7 @@ export function ScreenView(props: Props) {
       return (
         <div className="rounded-2xl border border-sand-200 bg-white shadow-soft">
           <EmptyState icon="file" title="На карточке пока нечего показать" />
+          {props.catalogAction}
         </div>
       )
     }
@@ -232,6 +257,8 @@ export function ScreenView(props: Props) {
         )
     return (
       <div className="space-y-4 rounded-2xl border border-sand-200 bg-white p-5 shadow-soft sm:p-6">
+        {props.detailActions}
+        {props.catalogAction}
         {outcomePending && <p className="text-xs leading-relaxed text-ink-muted">Результат посещения ещё не отмечен. Статус обновит мастер или администратор после оказания услуги.</p>}
         {stockLayout ? <div className="space-y-4 @min-[860px]:grid @min-[860px]:grid-cols-[minmax(0,1fr)_auto] @min-[860px]:items-center @min-[860px]:gap-x-8 @min-[860px]:gap-y-4 @min-[860px]:space-y-0">{content}</div> : content}
         {extras.length > 0 && <details className="border-t border-sand-200 pt-3">
@@ -283,7 +310,7 @@ function FormScreen({
     baseVersion.current = draft?.baseVersion ?? row?.version
     const next = draft ? { ...draft.values } : mode === 'edit' && row ? { ...row.data } : { ...initialValues }
     currentValues.current = next
-    setValues(next)
+    setValues(current => sameCellValue(current, next) ? current : next)
   }, [sourceKey, mode, row, initialValues, draft])
 
   /*
@@ -304,10 +331,12 @@ function FormScreen({
   const accentStyle = accentClasses(accent)
   const components = [...screen.components].sort(byPosition)
   const presentation = customerFormPresentation(runtime.app, screen, fields)
+  const checkout = customerWorkflows(runtime.app).some(config => config.cart && config.formScreenId === screen.id)
+  const defaultCheckoutIntro = 'Проверьте состав и контакты. Мы свяжемся с вами для подтверждения и согласуем получение. Оплаты онлайн нет. После оформления сотрудник бизнеса свяжется с вами и согласует оплату.'
 
   return (
     <form
-      className="space-y-5 rounded-2xl border border-sand-200 bg-white p-5 shadow-soft sm:p-6"
+      className="@container space-y-5 rounded-2xl border border-sand-200 bg-white p-5 sm:p-6"
       onSubmit={(event) => {
         event.preventDefault()
         if (pending || uploadingFields.current.size > 0) return
@@ -315,10 +344,12 @@ function FormScreen({
       }}
     >
       {formNotice}
-
+      {checkout ? <><fieldset disabled={pending} className="min-w-0">{formSlot}</fieldset><h2 className="border-t border-sand-200 pt-5 text-base font-semibold">Ваши контакты</h2></> : null}
+      <fieldset disabled={pending} className="grid min-w-0 gap-5 @min-[640px]:grid-cols-2">
       {components.map((component) => {
         if (component.type !== 'form_field') {
-          return <ComponentViewInForm key={component.id} component={component} fields={fields} row={row} accent={accent} />
+          if (checkout && component.type === 'text' && component.source.kind === 'literal' && component.source.value === defaultCheckoutIntro) return null
+          return <div key={component.id} className="min-w-0 @min-[640px]:col-span-2"><ComponentViewInForm component={component} fields={fields} row={row} accent={accent} /></div>
         }
         const field = fields.find((candidate) => candidate.id === component.fieldId)
         if (presentation.hidden.has(component.fieldId)) return null
@@ -329,7 +360,7 @@ function FormScreen({
           field.type === 'relation' ? (relatedTitles[field.options.tableId] ?? []) : []
 
         return (
-          <label key={component.id} className="block space-y-1.5">
+          <label key={component.id} className={`block min-w-0 space-y-1.5 ${['long_text','attachment','image','relation','multi_select'].includes(field.type) ? '@min-[640px]:col-span-2' : ''}`}>
             <span className="block text-[13px] font-medium text-ink-soft">
               {component.label && component.label !== field.name ? component.label : presentation.labels.get(field.id) ?? field.name}
               {component.required ? <span className="text-red-600"> *</span> : null}
@@ -360,17 +391,17 @@ function FormScreen({
           </label>
         )
       })}
-
-      {formSlot}
+      </fieldset>
+      {!checkout ? formSlot : null}
 
       {uploading ? <p role="status" className="text-xs text-ink-muted">Загружаем файлы. Дождитесь завершения перед сохранением.</p> : null}
 
       <button
         type="submit"
         disabled={pending || uploading}
-        className={`w-full rounded-xl px-4 py-3 text-sm font-semibold text-white shadow-soft transition-all hover:-translate-y-px hover:shadow-lift disabled:opacity-40 ${accentStyle.bg}`}
+        className={`min-h-11 w-full rounded-xl px-4 py-3 text-sm font-semibold text-white transition-colors hover:brightness-95 disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink ${accentStyle.bg}`}
       >
-        {screen.submitLabel}
+        {pending ? 'Сохраняем…' : screen.submitLabel}
       </button>
     </form>
   )

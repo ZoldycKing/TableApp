@@ -19,6 +19,7 @@ import { needFor, shortagesOf, type Need, type Norm } from '@/lib/production'
 import { canAccessRow, rulesFor, stampOwner } from '@/lib/row-access'
 import { assertCurrentModuleState, createRow, updateRow, writeRows, RowWriteError } from '@/lib/row-mutations'
 import { previewConnectedProduction, saveConnectedMaterialMovement, saveConnectedProduction } from '@/lib/production-stock'
+import { formatCell } from '@/lib/format'
 
 /**
  * Сохранение выпуска.
@@ -496,13 +497,13 @@ async function write(args: {
 
 async function titleOf(app: App, productId: string): Promise<string> {
   const [row] = await db
-    .select({ data: rowsTable.data })
+    .select({ data: rowsTable.data, tableId: tables.id, primaryFieldId: tables.primaryFieldId })
     .from(rowsTable)
     .innerJoin(tables, eq(rowsTable.tableId, tables.id))
     .where(and(eq(rowsTable.id, productId), eq(tables.workspaceId, app.workspaceId), isNull(rowsTable.deletedAt)))
     .limit(1)
   if (!row) return 'Изделие'
   const data = row.data as Record<string, unknown>
-  const first = Object.values(data).find((value) => typeof value === 'string' && value.trim() !== '')
-  return typeof first === 'string' ? first : 'Изделие'
+  const primary = (await loadFields(row.tableId)).find(field => field.id === row.primaryFieldId)
+  return primary ? formatCell(primary, data[primary.id]) || 'Изделие' : 'Изделие'
 }

@@ -2,6 +2,8 @@
 
 import type { App, RoleId } from '@tableapp/schema'
 import { newId } from '@tableapp/schema'
+import { ownerInput, ownerSecondary } from '../owner-ui'
+import { ShellIcon } from '../shell/icons'
 
 /**
  * Роли приложения.
@@ -52,48 +54,37 @@ export function RolesSettings({
     setRoles(app.roles.map((role) => ({ ...role, isDefault: role.id === roleId })))
 
   return (
-    <div className="mt-3 space-y-2 rounded-lg border border-[var(--color-border-subtle)] p-3">
+    <section className="space-y-4" aria-label="Роли приложения">
       <div>
-        <span className="block text-xs font-medium text-[var(--color-ink-muted)]">Роли приложения</span>
-        <p className="mt-1 text-xs text-[var(--color-ink-muted)]">
-          Назовите их так, как называете людей у себя: мастер, диспетчер, пациент. От роли зависит,
-          какие экраны человек откроет и что сможет изменить.
+        <h3 className="text-base font-semibold">Роли приложения</h3>
+        <p className="mt-2 text-sm leading-6 text-ink-soft">
+          Роль определяет, какие разделы человек видит и что может менять.
         </p>
       </div>
 
-      <div className="space-y-1.5">
+      <div className="grid gap-3 @min-[640px]:grid-cols-2">
         {app.roles.map((role) => (
-          <div key={role.id} className="flex items-center gap-1.5">
+          <div key={role.id} className="flex items-end gap-2">
+            <label className="min-w-0 flex-1 text-sm text-ink-soft">Название роли
             <input
+              aria-label={`Название роли «${role.name}»`}
               defaultValue={role.name}
               onBlur={(event) => {
                 const name = event.target.value.trim()
                 if (!name) return
                 setRoles(app.roles.map((item) => (item.id === role.id ? { ...item, name } : item)))
               }}
-              className="min-w-0 flex-1 rounded border border-[var(--color-border-subtle)] px-2 py-1.5 text-sm outline-none focus:border-sage-400"
+              className={ownerInput}
             />
-
-            <button
-              type="button"
-              onClick={() => makeDefault(role.id)}
-              title="Эту роль получат все, кто вошёл и не указан в списке доступа"
-              className={`shrink-0 rounded border px-2 py-1.5 text-xs transition-colors ${
-                role.isDefault
-                  ? 'border-sage-400 bg-sage-50 text-sage-700'
-                  : 'border-[var(--color-border-subtle)] text-[var(--color-ink-muted)] hover:bg-[var(--color-surface-muted)]'
-              }`}
-            >
-              {role.isDefault ? 'по умолчанию' : 'сделать основной'}
-            </button>
+            </label>
 
             <button
               type="button"
               onClick={() => remove(role.id)}
-              title="Удалить роль"
-              className="shrink-0 rounded border border-[var(--color-border-subtle)] px-2 py-1.5 text-xs text-[var(--color-ink-muted)] hover:bg-[var(--color-surface-muted)]"
+              aria-label={`Удалить роль «${role.name}»`}
+              className="flex size-11 shrink-0 items-center justify-center rounded-lg text-ink-soft hover:bg-sand-100 focus-visible:ring-2 focus-visible:ring-sage-400"
             >
-              ✕
+              <ShellIcon name="close" />
             </button>
           </div>
         ))}
@@ -102,22 +93,20 @@ export function RolesSettings({
       <button
         type="button"
         onClick={add}
-        className="rounded border border-[var(--color-border-subtle)] px-2 py-1 text-xs hover:bg-[var(--color-surface-muted)]"
+        className={ownerSecondary}
       >
-        + Роль
+        Добавить роль
       </button>
 
-      {app.roles.every((role) => !role.isDefault) ? (
-        <p className="rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-900">
-          Ни одна роль не основная. Тогда человек, вошедший по коду, но не указанный в списке
-          доступа, останется гостем и увидит только то, что открыто всем.
-        </p>
-      ) : null}
-
-      <p className="text-xs text-[var(--color-ink-muted)]">
-        Тот, кто открыл ссылку и не входил, роли не получает вовсе — он никто. Что показать ему,
-        решается на каждом экране отдельно переключателем «Видно без входа».
-      </p>
-    </div>
+      <label className="block max-w-md text-sm text-ink-soft">Роль по умолчанию
+        <select aria-label="Роль по умолчанию" className={ownerInput} value={app.roles.find(role => role.isDefault)?.id ?? ''} onChange={event => makeDefault(event.target.value)}>
+          <option value="" disabled>Не выбрана</option>
+          {app.roles.map(role => <option key={role.id} value={role.id}>{role.name}</option>)}
+        </select>
+        <span className="mt-2 block text-sm leading-6">При открытом входе её получают люди, которых нет в списке.</span>
+      </label>
+      {app.accessMode === 'public' && app.roles.every(role => !role.isDefault) ? <p className="rounded-xl bg-amber-50 p-3 text-sm leading-6 text-amber-900">Роль по умолчанию не выбрана. Новым пользователям будут доступны только открытые экраны.</p> : null}
+      <p className="text-sm leading-6 text-ink-soft">Без входа видны только экраны с отметкой «Видно без входа».</p>
+    </section>
   )
 }

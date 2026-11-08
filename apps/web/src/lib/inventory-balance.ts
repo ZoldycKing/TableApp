@@ -14,6 +14,7 @@ import { assertCurrentModuleState, checkRow, lockedRow, writeRows } from './row-
 export async function readInventoryBalance(tableId: string, rowId: string, slug?: string, business = false) {
   if (typeof tableId !== 'string' || !tableId || typeof rowId !== 'string' || !rowId || tableId.length > 200 || rowId.length > 200 || slug !== undefined && (typeof slug !== 'string' || slug.length > 200) || typeof business !== 'boolean') return null
   const member = business ? await currentMember() : null
+  if(member&&member.role!=='owner'&&member.tableAccess!=null)return null
   if (business && !member || !business && !slug) return null
   const records = await db.select().from(apps).where(business ? and(eq(apps.workspaceId, member!.workspaceId), slug ? eq(apps.slug, slug) : undefined) : eq(apps.slug, slug!))
   for (const record of records) {

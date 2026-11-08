@@ -6,6 +6,7 @@ export type BusinessNavigation = {
   workspaceName: string
   businessName: string
   role: MemberRole
+  tableLimited?:boolean
   tables: { id: string; name: string; icon: string }[]
   apps: { id: string; name: string; published: boolean }[]
 }

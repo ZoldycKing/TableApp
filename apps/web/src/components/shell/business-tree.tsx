@@ -108,7 +108,7 @@ export function BusinessTree({ businesses, activeWorkspaceId, pathname, variant,
 
   const resourceGroups = (business: BusinessNavigation) => (
     <div className={mobile ? 'space-y-2' : 'ml-4 space-y-1 border-l border-sand-200 pl-2'}>
-      {(['tables', 'apps'] as const).map(kind => {
+      {(['tables', 'apps'] as const).filter(kind=>kind!=='apps'||!business.tableLimited).map(kind => {
         const tableGroup = kind === 'tables'
         const groupKey = `${business.workspaceId}-${kind}`
         const isOpen = groups[groupKey] !== false

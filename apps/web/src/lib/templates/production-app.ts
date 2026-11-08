@@ -1,6 +1,7 @@
 import type { App, AppRole, Block, Component, RoleId, Screen } from '@tableapp/schema'
 import { newBlock, newId, positionSequence } from '@tableapp/schema'
 import type { BuiltField, BuiltTemplate } from './build'
+import { PRODUCTION_CANCEL_WARNING } from '../production-copy'
 
 /**
  * Приложение производственного учёта поверх собранных таблиц.
@@ -433,10 +434,7 @@ export function asProduction(app: App, built: BuiltTemplate): App {
         type: 'text',
         source: {
           kind: 'literal',
-          value:
-            'Выпуск уйдёт вместе со своими списаниями, и материалы вернутся на склад. ' +
-            'Так исправляют ошибку ввода: менять количество в сохранённом выпуске нельзя — ' +
-            'списания уже записаны числами, и правка развела бы их с журналом.',
+          value: PRODUCTION_CANCEL_WARNING,
         },
         style: 'body',
       },
@@ -673,6 +671,8 @@ export function asProduction(app: App, built: BuiltTemplate): App {
         unit: production.material.unit,
         opening: production.material.opening,
         movements: production.material.movements,
+        stock: production.material.stock,
+        min: production.material.min,
       },
       movementKindId: production.movementKindId,
       formScreenId: runForm.id,

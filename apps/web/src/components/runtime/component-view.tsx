@@ -9,6 +9,7 @@ import { CardValue } from '@/components/views/card'
 import { fileUrl, isImage } from '@/components/file-upload'
 import { accentClasses, resolveBinding, type Viewer } from './bindings'
 import { CheckMark, StatusPill } from './ui'
+import { RecordFieldLabel } from './record-field-label'
 
 export type ComponentContext = {
   fields: Field[]
@@ -19,6 +20,7 @@ export type ComponentContext = {
   relatedRows: (relationFieldId: string) => { id: string; title: string; row: TableRow | null }[]
   onAction: (action: Action) => void
   onOpenRow?: (screenId: string, rowId: string) => void
+  lookupText?: (field: Field, value: unknown) => string
 }
 
 const HEADING_SIZES = { s: 'text-base', m: 'text-lg', l: 'text-2xl' } as const
@@ -177,7 +179,7 @@ export function ComponentView({ component, ctx, desktopButton, desktopEmphasis =
  * Галочка рисуется галочкой, а выбор — плашкой: словами «Нет» и «В работе»
  * карточка превращается в выписку из таблицы, по которой глаз не скользит.
  */
-function FieldValue({
+export function FieldValue({
   field,
   value,
   ctx,
@@ -187,6 +189,7 @@ function FieldValue({
   ctx: ComponentContext
 }) {
   if (field.type === 'checkbox') return <CheckMark value={value} />
+  if (field.type === 'lookup' && ctx.lookupText) return <span className="text-sm">{ctx.lookupText(field, value)}</span>
 
   if (field.type === 'single_select' || field.type === 'multi_select') {
     return (
@@ -209,4 +212,13 @@ function FieldValue({
       relatedTitles={field.type === 'relation' ? ctx.relatedTitles[field.options.tableId] : undefined}
     />
   )
+}
+
+/** A readable field in a task card, using the same values as the authored renderer. */
+export function RecordField({ component, ctx, emphasis = false, showIcon = true }: { component: Extract<Component, { type: 'field' }>; ctx: ComponentContext; emphasis?: boolean; showIcon?: boolean }) {
+  const field = ctx.fields.find(field => field.id === component.fieldId)
+  if (!field || !ctx.row || component.visibleWhen && !evalFilter(component.visibleWhen, ctx.row.data, indexFields(ctx.fields))) return null
+  const value = ctx.row.data[field.id]
+  if (!formatCell(field, value) && !component.showWhenEmpty && field.type !== 'checkbox') return null
+  return <dl className="min-w-0"><RecordFieldLabel label={component.label ?? field.name} field={field} showIcon={showIcon} /><dd className={`mt-1 leading-relaxed [overflow-wrap:anywhere] [&>span.flex]:justify-start ${emphasis ? 'text-2xl font-semibold tabular-nums [&>span]:text-2xl' : 'text-sm'}`}><FieldValue field={field} value={value} ctx={ctx} /></dd></dl>
 }

@@ -1,0 +1,43 @@
+.outcome { position: relative; height: 390px; margin-block: 48px 28px; isolation: isolate; overflow: clip; }
+.outcome[data-ui] :is(.table, .customer, .employee) { position: absolute; overflow: hidden; background: white; border: 1px solid var(--color-sand-300); box-shadow: 0 18px 35px -28px #302b2560; }
+.table { left: 0; width: 43%; top: 76px; height: 252px; border-radius: 12px; }
+.customer { left: 45%; width: 26%; top: 0; height: 352px; border-radius: 22px; }
+.employee { right: 0; width: 26%; top: 40px; height: 330px; border-radius: 22px; }
+.outcome[data-ui] .chrome { height: 44px; display: flex; align-items: center; gap: 7px; padding-inline: 14px; font-size: 12px; font-weight: 600; border-bottom: 1px solid var(--color-sand-200); }
+.chrome > svg { color: var(--color-sage-600); flex: none; }
+.chrome > span { margin-left: auto; font-size: 10px; font-weight: 400; color: var(--color-ink-soft); }
+.tableHead, .row { display: grid; grid-template-columns: minmax(0,1fr) 66px 60px; align-items: center; padding-inline: 16px; gap: 8px; }
+.tableHead { font-size: 10px; height: 32px; color: var(--color-ink-soft); background: var(--color-sand-50); }
+.row { font-size: 12px; height: 42px; }
+.row:nth-child(even) { background: #fafbf8; }
+.row > span:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row > :not(:first-child), .tableHead > :not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
+.row strong { color: var(--color-sage-700); font-weight: 500; }
+.product { height: 160px; background: #f4f3ef; margin: 12px 12px 0; border-radius: 10px; display: flex; align-items: center; justify-content: center; }
+.product svg { width: 92%; height: 94%; }
+.productInfo { display: flex; flex-direction: column; align-items: start; gap: 5px; padding: 14px 18px; }
+.productInfo strong { font-size: 14px; font-weight: 500; }.productInfo span { font-size: 10px; color: var(--color-ink-soft); }.productInfo b { font-size: 17px; margin-top: 3px; font-weight: 600; }
+.customerAction, .employeeAction { display: flex; justify-content: center; align-items: center; gap: 8px; position: absolute; bottom: 14px; left: 14px; right: 14px; min-height: 36px; border-radius: 7px; font-size: 11px; background: var(--color-sage-600); color: white; }
+.stockList { padding: 8px 14px; }
+.stockList > div { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 43px; font-size: 11px; }
+.stockList strong { font-weight: 500; }.stockList span { color: var(--color-sage-700); white-space: nowrap; }
+.employeeAction { bottom: 50px; background: var(--color-sage-50); color: var(--color-sage-700); }
+.bottomNav { display: flex; justify-content: space-around; align-items: center; height: 40px; position: absolute; bottom: 0; left: 0; right: 0; background: var(--color-sand-50); color: var(--color-ink-soft); }
+.bottomNav > svg:first-child { color: var(--color-sage-700); }
+@media (max-width: 1000px) and (min-width: 768px) {
+  .outcome[data-ui] .chrome { padding-inline: 10px; }.chrome > span { display: none; }
+  .row, .tableHead { padding-inline: 12px; grid-template-columns: minmax(0,1fr) 50px 40px; font-size: 10px; }
+  .productInfo strong { font-size: 12px; }
+}
+@media (max-width: 767px) {
+  .outcome { height: 535px; margin-block: 32px 24px; }
+  .table { width: 100%; top: 344px; height: 184px; }
+  .customer { width: 48%; left: 0; top: 0; height: 310px; border-radius: 16px; }
+  .employee { width: 48%; top: 32px; height: 294px; border-radius: 16px; }
+  .outcome[data-ui] .chrome { padding-inline: 10px; font-size: 11px; height: 40px; gap: 5px; }.chrome > span { display: none; }
+  .tableHead { height: 26px; }.row { height: 28px; font-size: 11px; }
+  .product { height: 124px; margin: 8px 8px 0; }
+  .productInfo { padding: 12px; }.productInfo strong { font-size: 12px; }.productInfo b { font-size: 15px; }
+  .customerAction, .employeeAction { left: 8px; right: 8px; font-size: 10px; gap: 4px; }
+  .stockList { padding-inline: 10px; }.stockList > div { font-size: 10px; min-height: 39px; gap: 5px; }
+}

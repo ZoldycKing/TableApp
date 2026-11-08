@@ -1,11 +1,12 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useState, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import { consumeAppCodeAction, requestAppLoginAction } from '@/app/auth-actions'
 import { ResendCode } from '@/components/resend-code'
 import { accentClasses } from './bindings'
 import { LOGIN_CODE_TTL_MINUTES } from '@/lib/auth-constants'
+import { appEntryPath, type AppEntry } from '@/lib/app-entry'
 
 export function AppLogin({
   slug,
@@ -17,6 +18,7 @@ export function AppLogin({
   demo = false,
   purpose = 'checkout',
   embedded = false,
+  entry,
 }: {
   slug: string
   appName: string
@@ -25,10 +27,13 @@ export function AppLogin({
   onDone?: () => void
   onCancel?: () => void
   demo?: boolean
-  purpose?: 'checkout' | 'question'
+  purpose?: 'checkout' | 'question' | 'app'
   embedded?: boolean
+  entry?: AppEntry
 }) {
   const router = useRouter()
+  const [ready,setReady]=useState(purpose!=='app')
+  useEffect(()=>setReady(true),[])
   const [email, setEmail] = useState('')
   const [code, setCode] = useState('')
   const [error, setError] = useState<string | null>(initialError)
@@ -40,9 +45,9 @@ export function AppLogin({
   const networkError = 'Не удалось связаться с сервером. Проверьте соединение и попробуйте ещё раз.'
   const request = () => demo
     ? Promise.resolve({ ok: true as const, hint: 'Это пример: письмо не отправляется. Для продолжения введите код 123456.' })
-    : question ? requestAppLoginAction(slug, email, 'question') : requestAppLoginAction(slug, email)
+    : question ? requestAppLoginAction(slug, email, 'question') : entry ? requestAppLoginAction(slug, email, 'default', entry) : requestAppLoginAction(slug, email)
 
-  if (verified) return <p role="status" className="mx-auto max-w-sm p-6 text-sm text-ink-soft">{question ? 'Почта подтверждена. Возвращаемся к вопросу…' : 'Почта подтверждена. Открываем форму…'}</p>
+  if (verified) return <p role="status" className="mx-auto max-w-sm p-6 text-sm text-ink-soft">{question ? 'Почта подтверждена. Возвращаемся к вопросу…' : purpose === 'app' ? 'Почта подтверждена. Открываем приложение…' : 'Почта подтверждена. Открываем форму…'}</p>
 
   if (sent) {
     return (
@@ -57,7 +62,7 @@ export function AppLogin({
               const result = demo ? { ok: code === '123456', error: 'В примере используйте код 123456' } : await consumeAppCodeAction(slug, code)
               if (result.ok) {
                 if (onDone) { setVerified(true); onDone() }
-                else router.push(`/a/${slug}`)
+                else router.push(appEntryPath(slug, entry))
               }
               else setError(result.error ?? 'Не удалось войти')
             } catch { setError(networkError) }
@@ -157,6 +162,7 @@ export function AppLogin({
         autoComplete="email"
         required
         value={email}
+        disabled={!ready||pending}
         onChange={(event) => setEmail(event.target.value)}
         placeholder="you@example.ru"
         className="w-full rounded-lg border border-[var(--color-border-subtle)] px-3 py-2 text-sm outline-none focus:border-sage-400"
@@ -168,7 +174,7 @@ export function AppLogin({
 
       <button
         type="submit"
-        disabled={pending}
+        disabled={pending||!ready}
         aria-busy={pending}
         className={`w-full rounded-xl px-4 py-2.5 text-sm font-medium text-white disabled:opacity-40 ${styles.bg}`}
       >

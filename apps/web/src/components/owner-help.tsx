@@ -44,15 +44,15 @@ export function OwnerKnowledgeBase({ context = '', appId, articleId, onNavigate,
 }
 
 const TOURS = [
-  { selector: '[data-guide="start-import"]', title: 'Есть своя таблица?', text: 'Этот путь загружает реальные данные из Excel или CSV. Перед сохранением вы проверите колонки и типы.' },
-  { selector: '[data-guide="start-template"]', title: 'Начать с примера', text: 'Выберите задачу бизнеса. Таблицы, связи и экраны уже подготовлены; дальше добавите своё по шагам.' },
-  { selector: '[data-guide="setup-task"]', title: 'Одна задача за раз', text: 'Здесь текущий шаг подготовки. Сохраните изменения перед переходом. К предыдущим шагам можно вернуться через полоску сверху.' },
+  { selector: '[data-guide="start-import"]', title: 'Есть своя таблица?', text: 'Загрузите Excel или CSV. Перед загрузкой проверьте данные и колонки.' },
+  { selector: '[data-guide="start-template"]', title: 'Готовый шаблон', text: 'Выберите подходящий шаблон. Таблицы и разделы уже готовы. Во время настройки добавите свои данные.' },
+  { selector: '[data-guide="setup-task"]', title: 'Одна задача за раз', text: 'Выполните текущий шаг и сохраните изменения. К предыдущим шагам можно вернуться по названиям сверху.' },
   { selector: '[data-guide="table-mode"]', title: 'Два способа ввода', text: 'Таблица — для ячеек и быстрого ввода. По записям — для формы и длинных описаний. Данные общие.' },
-  { selector: '[data-guide="table-data"]', title: 'Данные и новые строки', text: 'В сетке новая строка добавляется под таблицей. Двойной щелчок или Enter открывает ячейку. Изменения сохраняются после завершения ввода.' },
+  { selector: '[data-guide="table-data"]', title: 'Данные и новые строки', text: 'Откройте ячейку двойным щелчком или клавишей Enter. Новую строку заполните и сохраните кнопкой «Сохранить строку».' },
   { selector: '[data-guide="preview-roles"]', title: 'Посмотрите глазами пользователя', text: 'Переключайте роли и размер экрана. Для личных записей укажите почту пользователя. Это проверка интерфейса; она никому не выдаёт доступ.' },
-  { selector: '[data-guide="app-sections"]', title: 'Основные разделы', text: 'Здесь разделы меню выбранной роли. Карточки и формы открываются из самого приложения, как их откроет пользователь.' },
+  { selector: '[data-guide="app-sections"]', title: 'Основные разделы', text: 'Выберите раздел для проверки. Карточки и формы можно открывать внутри предпросмотра.' },
   { selector: '[data-guide="publish-check"]', title: 'Проверка и публикация', text: 'Публикуйте после проверки данных и доступа. Пользователи получат проверенную версию экранов, а таблицы останутся общими.' },
-  { selector: 'main', title: 'Помощь для вашей задачи', text: 'Откройте «Помощь»: сначала показаны статьи текущего раздела. Найдите задачу по слову — например, «импорт», «права» или «связь». В подготовке приложения, таблице и настройке доступны подсказки к конкретным элементам.' },
+  { selector: 'main', title: 'Помощь для вашей задачи', text: 'В «Помощи» собраны инструкции для этого раздела. Найдите ответ по слову, например «загрузка», «доступ» или «связь».' },
 ] as const
 
 function visibleGuideTarget(selector: string): HTMLElement | null {
@@ -84,7 +84,13 @@ export function OwnerHelp() {
     window.addEventListener(OWNER_HELP_EVENT, showHelp)
     return () => window.removeEventListener(OWNER_HELP_EVENT, showHelp)
   }, [])
-  useEffect(() => { if (open) dialog.current?.showModal() }, [open])
+  useEffect(() => {
+    if (!open) return
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    dialog.current?.showModal()
+    return () => { document.body.style.overflow = previousOverflow }
+  }, [open])
   useEffect(() => { close(false); setTour([]) }, [pathname, search])
   useEffect(() => {
     const current = tour[index]

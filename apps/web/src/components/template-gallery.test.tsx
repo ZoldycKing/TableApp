@@ -23,7 +23,7 @@ describe('starter choice', () => {
     expect(ui.getByRole('heading', { name: 'Склад и остатки' })).toBeTruthy()
   })
 
-  it('creates only one sales app on double click and opens its configuration', async () => {
+  it('creates only one sales app on double click and opens its preview', async () => {
     let resolve!: (result: unknown) => void
     mocks.apply.mockReturnValue(new Promise(result => { resolve = result }))
     const ui = render(<TemplateGallery templates={[...STARTER_TEMPLATES]} chosen="zakazy" />)
@@ -32,7 +32,7 @@ describe('starter choice', () => {
     expect(mocks.apply).toHaveBeenCalledOnce()
     expect(mocks.apply).toHaveBeenCalledWith('zakazy')
     resolve({ ok: true, tableId: 'table-new', appId: 'app-new' })
-    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith('/setup?app=app-new&step=business'))
+    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith('/setup?app=app-new&step=review'))
   })
 
   it('preserves an explicitly selected old portal outside the main choice', () => {

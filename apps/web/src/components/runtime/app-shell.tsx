@@ -1,5 +1,7 @@
 'use client'
 
+import presentation from './app-presentation.module.css'
+
 import type { Action, Screen } from '@tableapp/schema'
 import { visibleFields } from '@/lib/apply-view'
 import { useRouter } from 'next/navigation'
@@ -25,6 +27,7 @@ import type { RuntimeApp } from '@/lib/app-runtime'
 import type { TableRow } from '@/lib/table-store'
 import { resolveBindingValue, type Viewer } from './bindings'
 import { formatCell } from '@/lib/format'
+import { demoConsumption, type DemoProductionData } from '@/lib/demo-production'
 import { Icon } from './icons'
 import { EmptyState } from './ui'
 import { accentTones, Avatar, greeting, viewerName } from './ui'
@@ -48,6 +51,7 @@ import { generalChatAvailableApp } from '@/lib/general-conversation-config'
 import { GENERAL_QUESTION_SCREEN, parseGeneralQuestionDraft, type GeneralQuestionDraft } from '@/lib/general-question-draft'
 import { beginGeneralQuestionAction } from '@/app/question-auth-actions'
 import { OrderDeliveryPanel } from './order-delivery-panel'
+import { usesOrderDetail } from './order-detail'
 import { InventoryBalancePanel, OrderStockPanel } from './order-stock-panel'
 import { orderStockPair } from '@/lib/order-stock-config'
 import { CustomerHistoryPanel } from './customer-history-panel'
@@ -72,7 +76,7 @@ import {
 } from './production-form'
 
 /** Показ на сайте: экраны настоящие, записи не идут. Ответ один на все действия. */
-const DEMO_NOTE = 'Это демонстрация: изменения не сохраняются. В своём приложении кнопка сработает.'
+const DEMO_NOTE = 'В предпросмотре изменения не сохраняются. Для работы откройте приложение по рабочей ссылке.'
 
 type FormDraftEntry = { form?: RuntimeFormDraft; booking?: BookingFormDraft }
 function validFormDraft(value: unknown): value is FormDraftEntry {
@@ -101,11 +105,13 @@ function validFormDraft(value: unknown): value is FormDraftEntry {
 function Sent({
   text,
   label,
+  title = 'Отправлено',
   accent,
   onAgain,
 }: {
   text: string
   label: string
+  title?: string
   accent: { solid: string; text: string; soft: string; ring: string }
   onAgain: () => void
 }) {
@@ -116,7 +122,7 @@ function Sent({
       >
         <Icon name="check" className="size-6" />
       </span>
-      <h2 className="mt-4 font-display text-xl font-bold tracking-tight">Отправлено</h2>
+      <h2 className="mt-4 font-display text-xl font-bold tracking-tight">{title}</h2>
       <p className="mt-2 text-sm leading-relaxed text-ink-soft">{text}</p>
       <button
         type="button"
@@ -151,7 +157,13 @@ export function AppShell({
   editing = false,
   browserHistory = false,
   demoBookingData,
+  demoProductionData,
   onDemoSignIn,
+  onDemoUpdate,
+  initialRowId,
+  demoRoleLabel,
+  initialFormValues,
+  onPreviewCheckout,
 }: {
   runtime: RuntimeApp
   viewer: Viewer
@@ -177,10 +189,20 @@ export function AppShell({
    * витрину продукта, нажал бы его и остался на месте.
    */
   browserHistory?: boolean
-  /** Sanitized availability metadata for synthetic template previews only. */
+  /** Sanitized availability metadata for non-writing previews. */
   demoBookingData?: BookingData
+  /** Fictional norms only; real production previews are calculated on the server. */
+  demoProductionData?: DemoProductionData
+  initialFormValues?: Record<string, unknown>
+  /** Only the owner editor can switch a checkout preview to an allowed role. */
+  onPreviewCheckout?: (screenId: string, sourceRowId: string | null) => void
   /** Template examples can demonstrate login without sending mail or creating an account. */
   onDemoSignIn?: () => void
+  /** Only the synthetic marketing demo supplies this local edit handler. */
+  onDemoUpdate?: (edit: { tableId: string; rowId: string; values: Record<string, unknown> }) => { ok: true } | { ok: false; error: string }
+  initialRowId?: string
+  /** Clarifies the active perspective inside the synthetic marketing example. */
+  demoRoleLabel?: string
 }) {
   const [cart, setCart] = useState<CustomerCart>({ requestId: '', items: [] })
   const initialCartWorkflow = customerCartWorkflow(initialRuntime.app)
@@ -212,6 +234,7 @@ export function AppShell({
     screenId: string; rowId: string; base: RuntimeApp; actorId: string | null; timedOut: boolean
   } | null>(null)
   const { app } = initialRuntime
+  const demoContext = demo ? demoRoleLabel : undefined
   const draftScope = !demo && !editing && viewer ? `${app.workspaceId}:${app.id}:${viewer.id}` : null
   const formDrafts = useFormDrafts<FormDraftEntry>(draftScope, validFormDraft)
   const [bookingAvailabilityRevision, setBookingAvailabilityRevision] = useState(0)
@@ -262,7 +285,7 @@ export function AppShell({
    * что в адресе, разметка расходится, и React выбрасывает всё поддерево
    * и собирает заново. Один лишний кадр честнее сломанной гидрации.
    */
-  const [stack, setStack] = useState<NavEntryType[]>([{ screenId: home, rowId: null }])
+  const [stack, setStack] = useState<NavEntryType[]>([{ screenId: home, rowId: initialRowId ?? null }])
   /** Отбор по каждому списку отдельно: у заказов и у позиций он свой. */
   const [listStates, setListStates] = useState<Record<string, ListStateType>>({})
   const checkoutCatalog = checkout ? customerWorkflows(app).find(config => config.formScreenId === checkout.screenId)?.catalog?.detailScreenId
@@ -291,8 +314,8 @@ export function AppShell({
   )
   const [pending, startTransition] = useTransition()
   const [confirmCancellation, setConfirmCancellation] = useState(false)
-  const [bookingDraft, setBookingDraft] = useState<Record<string, unknown> | null>(null)
-  const [formDraft, setFormDraft] = useState<{ screenId: string; values: Record<string, unknown> } | null>(null)
+  const [bookingDraft, setBookingDraft] = useState<Record<string, unknown> | null>(editing ? initialFormValues ?? null : null)
+  const [formDraft, setFormDraft] = useState<{ screenId: string; values: Record<string, unknown> } | null>(editing && initialScreenId && initialFormValues ? { screenId: initialScreenId, values: initialFormValues } : null)
   const [now, setNow] = useState(() => runtime.loadedAt ?? Date.now())
   const hasBooking = Boolean(app.booking)
   useEffect(() => {
@@ -353,6 +376,8 @@ export function AppShell({
   const tableId = tableOf(screen)
   const table = tableId ? runtime.tables[tableId] : undefined
   const row = current.rowId ? (table?.rows.find((item) => item.id === current.rowId) ?? null) : null
+  const orderDetailScreen = screen?.type === 'detail' ? screen : null
+  const groupedOrderDetail = Boolean(orderDetailScreen && customerWorkflows(app).some(config => config.tableId === orderDetailScreen.tableId && usesOrderDetail(orderDetailScreen, config)))
   const awaitingCreatedRow = Boolean(createdRecordWait && createdRecordWait.screenId === current.screenId
     && createdRecordWait.rowId === current.rowId && createdRecordWait.actorId === (viewer?.id ?? null)
     && createdRecordWait.base === initialRuntime && !row
@@ -639,6 +664,10 @@ export function AppShell({
   const handleAction = (action: Action) => {
     switch (action.type) {
       case 'open_screen': {
+        if (editing && onPreviewCheckout && !screens.has(action.screenId) && customerCheckoutIds(app).has(action.screenId)) {
+          onPreviewCheckout(action.screenId, current.rowId)
+          return
+        }
         if (!viewer && !editing && customerCheckoutIds(app).has(action.screenId)) {
           setError(null); setSavedNotice(null)
           setCheckout({ screenId: action.screenId, rowId: current.rowId })
@@ -753,8 +782,11 @@ export function AppShell({
     app.slug,
     production,
     formValues,
-    isRunForm && !demo,
+    isRunForm && !demo && !editing,
   )
+  const demoRun = production ? runInputFrom(production, formValues, 'demo') : null
+  const consumptionPreview = demo && isRunForm && demoProductionData && demoRun
+    ? demoConsumption(demoProductionData, demoRun.productId, demoRun.quantity) : preview
   /*
    * Идентификатор строки выпуска выдаётся на устройстве и живёт до успешного
    * сохранения. Он же защита от двойного нажатия: второй запрос приходит
@@ -844,7 +876,7 @@ export function AppShell({
     </a>
   ) : null
 
-  const signOut = viewer ? (
+  const signOut = viewer?.workspaceSession ? <a href="/app" className="rounded-lg px-2 py-1 text-xs text-ink-muted hover:bg-sand-100">Моё пространство</a> : viewer ? (
     <button
       type="button"
       disabled={pending}
@@ -879,8 +911,8 @@ export function AppShell({
      */
     <div className="@container flex h-full bg-sand-50">
       {hasNavigation ? (
-        <aside className="hidden min-h-0 w-64 shrink-0 flex-col border-r border-sand-200 bg-white @min-[860px]:flex">
-          <div className="flex items-center gap-2.5 px-4 py-4">
+        <aside className="hidden min-h-0 w-[clamp(208px,15cqw,256px)] shrink-0 flex-col border-r border-sand-200 bg-white @min-[641px]:flex">
+          <div className="mx-3 mb-2 flex items-center gap-2.5 border-b border-sand-200 px-1 py-4">
             <span
               className={`flex size-9 shrink-0 items-center justify-center rounded-xl text-sm font-bold text-white ${accent.solid}`}
             >
@@ -888,7 +920,7 @@ export function AppShell({
             </span>
             <span className="min-w-0">
               <span className="block font-display text-sm font-bold tracking-tight">{runtime.business?.name ?? app.name}</span>
-              {runtime.business?.name && runtime.business.name !== app.name ? (
+              {demoContext ? <span className="block truncate text-[11px] text-ink-muted">{demoContext}</span> : runtime.business?.name && runtime.business.name !== app.name ? (
                 <span className="block truncate text-[11px] text-ink-muted" title={app.name}>{app.name}</span>
               ) : viewer ? (
                 <span className="block truncate text-[11px] text-ink-muted">{viewer.email}</span>
@@ -914,21 +946,21 @@ export function AppShell({
       ) : null}
 
       <div className="flex h-full min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-20 border-b border-sand-200 bg-white/90 px-4 py-3 backdrop-blur-md sm:px-6">
-          <div className="mx-auto flex w-full max-w-5xl items-center gap-3">
+        <header className="sticky top-0 z-20 border-b border-sand-200 bg-white/90 backdrop-blur-md">
+          <div className={`${presentation.contentWidth} flex min-h-16 items-center gap-3 py-3`}>
             {stack.length > 1 ? (
               <button
                 type="button"
                 onClick={goBack}
                 aria-label="Назад"
-                className="-ml-1 flex size-9 shrink-0 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-sand-100 hover:text-ink"
+                className={presentation.iconControl}
               >
                 <Icon name="back" className="size-5" />
               </button>
             ) : null}
 
             <div className="min-w-0 flex-1">
-              <p className="break-words text-xs font-semibold text-ink-soft">{runtime.business?.name && runtime.business.name !== app.name ? `${runtime.business.name} · ${app.name}` : app.name}</p>
+              <p className="break-words text-xs font-semibold text-ink-soft">{demoContext ? `${runtime.business?.name ?? app.name} · ${demoContext}` : runtime.business?.name && runtime.business.name !== app.name ? `${runtime.business.name} · ${app.name}` : app.name}</p>
               {runtime.business?.location ? <p className="truncate text-[11px] text-ink-muted" title={runtime.business.location}>{runtime.business.location}</p> : null}
               {/*
                * На домашнем экране здороваемся по имени: приложение открывают
@@ -946,9 +978,9 @@ export function AppShell({
                 заголовок становится подзаголовком.
               */}
               {demo || editing ? (
-                <h2 className="truncate font-display text-lg font-bold tracking-tight">{heading}</h2>
+                <h2 className={presentation.pageTitle}>{heading}</h2>
               ) : (
-                <h1 className="truncate font-display text-lg font-bold tracking-tight">{heading}</h1>
+                <h1 className={presentation.pageTitle}>{heading}</h1>
               )}
             </div>
 
@@ -956,7 +988,7 @@ export function AppShell({
               <span className="size-4 shrink-0 animate-spin rounded-full border-2 border-sand-300 border-t-ink/60" />
             ) : null}
             {viewer ? (
-              <div className={`relative shrink-0${hasNavigation ? ' @min-[860px]:hidden' : ''}`} onKeyDown={event => { if (event.key === 'Escape') setAccountOpen(false) }}>
+              <div className={`relative shrink-0${hasNavigation ? ' @min-[641px]:hidden' : ''}`} onKeyDown={event => { if (event.key === 'Escape') setAccountOpen(false) }}>
                 <button type="button" aria-label="Мой аккаунт" aria-expanded={accountOpen} onClick={() => setAccountOpen(open => !open)} className="rounded-full outline-none focus-visible:ring-2 focus-visible:ring-sage-400">
                   <Avatar name={viewer.name} email={viewer.email} size="s" />
                 </button>
@@ -986,7 +1018,7 @@ export function AppShell({
          * полоса внизу означала бы, что вылезла карточка, а не что так задумано.
          */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden">
-          <div ref={contentRef} className="mx-auto w-full max-w-5xl px-4 py-5 sm:px-6 sm:py-6">
+          <div ref={contentRef} className={`${presentation.contentWidth} py-5 sm:py-6 ${screen.type === 'tiles' ? '' : '[--app-content-width:1120px]'}`}>
             {screen.type === 'form' && draftConflict && !checkout && !intake ? <div className="mb-4 space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-ink-soft">
               <p>Запись изменилась после начала заполнения. Ваш ввод сохранён. Загрузка актуальных данных сбросит незавершённые правки.</p>
               <button type="button" onClick={() => { clearActiveDraft(); setError(null) }} className="rounded-lg border border-sand-200 bg-white px-3 py-2 text-sm font-medium">Загрузить актуальные данные</button>
@@ -1027,7 +1059,8 @@ export function AppShell({
               <Sent
                 text={sent}
                 accent={accent}
-                label="Заполнить ещё раз"
+                title={isRunForm ? 'Выпуск сохранён' : undefined}
+                label={isRunForm ? 'Новый выпуск' : 'Заполнить ещё раз'}
                 onAgain={() => {
                   setSent(null)
                   setFormValues({})
@@ -1064,7 +1097,7 @@ export function AppShell({
             app.booking && screen.id === app.booking.setupScreenId ? <BookingSetup runtime={runtime} demo={demo || editing} onSaved={() => router.refresh()} /> :
             app.booking && [app.booking.formScreenId, app.booking.rescheduleScreenId].includes(screen.id) ? <BookingForm key={`${draftScope}:${screen.id}:${row?.id ?? ''}:${draftResetRevision}`} runtime={runtime}
               initialDraft={activeDraft?.booking} onDraftChange={booking => saveActiveDraft({ booking })} availabilityRevision={bookingAvailabilityRevision}
-              row={screen.id === app.booking.rescheduleScreenId ? row : null} demo={demo || editing} demoData={demo ? demoBookingData : undefined} pending={pending} initialValues={screen.id === app.booking.rescheduleScreenId ? bookingDraft : { [app.booking.visit.client]: runtime.customerProfile?.name ?? viewer?.name ?? '', [app.booking.visit.phone]: runtime.customerProfile?.phone ?? '', ...bookingDraft }} onSubmit={values => {
+              row={screen.id === app.booking.rescheduleScreenId ? row : null} demo={demo || editing} demoData={demo || editing ? demoBookingData : undefined} pending={pending} initialValues={screen.id === app.booking.rescheduleScreenId ? bookingDraft : { [app.booking.visit.client]: runtime.customerProfile?.name ?? viewer?.name ?? '', [app.booking.visit.phone]: runtime.customerProfile?.phone ?? '', ...bookingDraft }} onSubmit={values => {
                 if (screen.id === app.booking!.rescheduleScreenId && row) {
                   runMutation(() => appUpdateRowAction(app.slug, app.booking!.tables.visits, row.id, values, activeDraft?.booking?.baseVersion ?? row.version), () => { clearActiveDraft(); goBack() })
                 } else if (viewer === null && !demo && !editing) { setBookingDraft(values); setError(null); setIntake({ screenId: screen.id, values }) }
@@ -1088,6 +1121,13 @@ export function AppShell({
               accent={app.theme.accent}
               relatedTitles={runtime.relatedTitles}
               runtime={runtime}
+              catalogAction={sales?.cart && acceptsModuleIntake(app, sales.tableId) && screen.id === sales.catalog?.detailScreenId && row ?
+                <button type="button" onClick={() => setCart(current => ({ ...current, items: current.items.some(item => item.id === row.id) ? current.items.map(item => item.id === row.id ? { ...item, qty: Math.min(1000, item.qty + 1) } : item) : [...current.items, { id: row.id, qty: 1 }].slice(0, 100) }))}
+                  className={`min-h-11 w-full rounded-xl px-4 py-3 text-sm font-semibold text-white ${accent.solid}`}>Добавить в заказ</button> : undefined}
+              detailActions={!demo && !editing && viewer && screen.type === 'detail' && row ? <>
+                {orderStockPair(app)?.order.tableId === screen.tableId ? <OrderStockPanel tableId={screen.tableId} rowId={row.id} version={row.version ?? 0} slug={app.slug} embedded accent={app.theme.accent} pickup={Boolean(orderDeliveryPair(app))} /> : null}
+                {groupedOrderDetail && orderDeliveryPair(app) ? <OrderDeliveryPanel key={`${app.id}:${screen.tableId}:${row.id}`} slug={app.slug} tableId={screen.tableId} rowId={row.id} version={row.version ?? 0} onOpen={navigate} embedded accent={app.theme.accent} /> : null}
+              </> : undefined}
               pending={pending}
               editing={editing}
               initialValues={{ ...(customer?.profile && runtime.customerProfile ? { [customer.profile.nameFieldId]: runtime.customerProfile.name ?? '', [customer.profile.phoneFieldId]: runtime.customerProfile.phone ?? '' } : {}), ...(formDraft?.screenId === screen.id ? formDraft.values : {}) }}
@@ -1117,7 +1157,7 @@ export function AppShell({
               onAction={handleAction}
               onValues={isRunForm ? onFormValues : undefined}
               formNotice={
-                demo ? (
+                demo && onDemoUpdate && screen.type === 'form' && screen.mode === 'edit' ? <p className="text-sm text-ink-soft">Измените заказ. Результат появится в учебной таблице и кабинете клиента.</p> : demo ? (
                   /*
                    * В показе на сайте форма обещает ответ на почту — он написан
                    * в самом приложении и там правдив. Здесь записи не создаются
@@ -1125,17 +1165,21 @@ export function AppShell({
                    * а не после.
                    */
                   <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs leading-relaxed text-amber-900">
-                    Это демонстрация. Поля можно заполнить и нажать кнопку, но заявка
-                    не сохранится и письмо не придёт — текст ниже описывает, как форма
-                    работает в вашем приложении.
+                    Учебный пример: форму можно заполнить и проверить.
+                    Изменения не сохраняются.
                   </p>
                 ) : null
               }
               formSlot={
-                sales?.cart && screen.id === sales.formScreenId ? <CustomerCartEditor runtime={runtime} cart={cart} onChange={setCart} /> : isRunForm ? <><p className="text-xs leading-relaxed text-ink-muted">В «Произведено» укажите только годные изделия. Брак записывается отдельно и не входит в это количество.</p><ConsumptionPanel preview={preview} loading={previewing} /></> : null
+                sales?.cart && screen.id === sales.formScreenId ? <CustomerCartEditor runtime={runtime} cart={cart} onChange={setCart} /> : isRunForm ? <><p className="text-xs leading-relaxed text-ink-muted">Укажите количество годных изделий. Брак записывается отдельно.</p><ConsumptionPanel preview={consumptionPreview} loading={previewing} /></> : null
               }
               onSubmit={(values, mode, baseVersion) => {
                 if (pending) return
+                if (demo && onDemoUpdate && mode === 'edit' && tableId && row) {
+                  const result = onDemoUpdate({ tableId, rowId: row.id, values })
+                  if (!result.ok) { setError(result.error); return }
+                  setError(null); clearActiveDraft(); goBack(); return
+                }
                 // Выпуск и движение склада пишутся своими действиями: одной
                 // транзакцией на несколько таблиц, чего общий путь не умеет.
                 if (mode === 'create' && isRunForm) return saveProduction(values)
@@ -1190,10 +1234,9 @@ export function AppShell({
             />
             )}
             {screen.type === 'detail' && ((catalogCustomer && !acceptsModuleIntake(app, catalogCustomer.tableId)) || (app.booking?.tables.services === screen.tableId && !acceptsModuleIntake(app, app.booking.tables.visits))) ? <p className="mt-4 rounded-xl bg-sand-50 p-3 text-sm text-ink-muted">Новые оформления в этом разделе временно приостановлены. Текущие обращения и история доступны в кабинете.</p> : null}
-            {sent === null && checkout === null && intake === null && sales?.cart && acceptsModuleIntake(app, sales.tableId) && sales.catalog && screen.type === 'detail' && screen.id === sales.catalog.detailScreenId && row ?
-              <button type="button" onClick={() => setCart(current => ({ ...current, items: current.items.some(item => item.id === row.id) ? current.items.map(item => item.id === row.id ? { ...item, qty: Math.min(1000, item.qty + 1) } : item) : [...current.items, { id: row.id, qty: 1 }].slice(0, 100) }))}
-                className={`mt-4 w-full rounded-xl px-4 py-3 text-sm font-semibold text-white ${accent.solid}`}>Добавить в заказ</button> : null}
-            {sent === null && checkout === null && intake === null && sales?.cart && acceptsModuleIntake(app, sales.tableId) && cart.items.length > 0 && screen.id !== sales.formScreenId && screen.type !== 'form' ?
+            {sent === null && checkout === null && intake === null && sales?.cart && acceptsModuleIntake(app, sales.tableId) && cart.items.length > 0 && (screen.type === 'list' || screen.type === 'tiles') && (runtime.views[screen.source.viewId]?.tableId === sales.catalog?.tableId || screen.id === app.homeScreenId && app.catalogScreenIds?.length) ?
+              <CustomerCartButton count={cart.items.length} accent={app.theme.accent} onClick={() => handleAction({ id: 'cart-checkout', type: 'open_screen', screenId: sales!.formScreenId })} /> : null}
+            {sent === null && checkout === null && intake === null && sales?.cart && acceptsModuleIntake(app, sales.tableId) && cart.items.length > 0 && screen.type === 'detail' && screen.id === sales.catalog?.detailScreenId ?
               <CustomerCartButton count={cart.items.length} accent={app.theme.accent} onClick={() => handleAction({ id: 'cart-checkout', type: 'open_screen', screenId: sales!.formScreenId })} /> : null}
             {sent === null && intake === null && customer && screen.id === customer.detailScreenId && row ? <div className="mt-4 space-y-3 rounded-2xl border border-sand-200 bg-white p-4">
               {customer.approval && row.data[customer.statusFieldId] === customer.approval.waitingStatus ? <>
@@ -1207,9 +1250,8 @@ export function AppShell({
                 <button type="button" onClick={() => setConfirmCancellation(false)} className="ml-2 text-sm">Не отменять</button>
               </> : <button type="button" onClick={() => setConfirmCancellation(true)} className="text-sm text-red-700">Отменить {customerNoun}</button> : <p className="text-xs text-ink-muted">Если нужно уточнить или изменить условия, свяжитесь с бизнесом{runtime.business?.phone ? `: ${runtime.business.phone}` : '.'}</p>}
             </div> : null}
-            {!demo && !editing && viewer && sent === null && intake === null && checkout === null && screen.type === 'detail' && row && orderStockPair(app)?.order.tableId === screen.tableId ? <OrderStockPanel tableId={screen.tableId} rowId={row.id} version={row.version ?? 0} slug={app.slug} /> : null}
             {!demo && !editing && viewer && sent === null && intake === null && checkout === null && screen.type === 'detail' && row && app.inventory?.tables.items === screen.tableId && app.modules?.some(module => module.kind === 'inventory' && module.screenIds?.includes(screen.id)) ? <InventoryBalancePanel tableId={screen.tableId} rowId={row.id} version={row.version ?? 0} slug={app.slug} /> : null}
-            {!demo && !editing && viewer && sent === null && intake === null && checkout === null && screen.type === 'detail' && row && orderDeliveryPair(app) && customerWorkflows(app).some(config => config.tableId === screen.tableId && config.logistics) ? <OrderDeliveryPanel key={`${app.id}:${screen.tableId}:${row.id}`} slug={app.slug} tableId={screen.tableId} rowId={row.id} version={row.version ?? 0} onOpen={navigate} /> : null}
+            {!demo && !editing && viewer && sent === null && intake === null && checkout === null && screen.type === 'detail' && row && !groupedOrderDetail && orderDeliveryPair(app) && customerWorkflows(app).some(config => config.tableId === screen.tableId && config.logistics) ? <OrderDeliveryPanel key={`${app.id}:${screen.tableId}:${row.id}`} slug={app.slug} tableId={screen.tableId} rowId={row.id} version={row.version ?? 0} onOpen={navigate} accent={app.theme.accent} /> : null}
             {!demo && !editing && viewer && sent === null && intake === null && checkout === null && screen.type === 'detail' && row && crmForTable(app, screen.tableId) ? <CustomerHistoryPanel key={`${app.id}:${screen.tableId}:${row.id}`} slug={app.slug} tableId={screen.tableId} rowId={row.id} onOpen={item => {
               if (item.slug === app.slug && screens.has(item.screenId)) navigate(item.screenId, item.id)
               else window.location.assign(`/a/${encodeURIComponent(item.slug)}?e=${encodeURIComponent(item.screenId)}&r=${encodeURIComponent(item.id)}`)

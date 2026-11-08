@@ -9,6 +9,9 @@ const rootEnv = resolve(import.meta.dirname, '../../.env')
 if (existsSync(rootEnv)) process.loadEnvFile(rootEnv)
 
 const config: NextConfig = {
+  // The dev server also opens from the in-app browser at this loopback address.
+  allowedDevOrigins: ['127.0.0.1'],
+
   // Пакеты монорепозитория поставляются исходниками на TypeScript.
   transpilePackages: ['@tableapp/schema', '@tableapp/formula', '@tableapp/import', '@tableapp/db'],
   // Типизированные маршруты требуют полной пересборки на каждый новый путь,

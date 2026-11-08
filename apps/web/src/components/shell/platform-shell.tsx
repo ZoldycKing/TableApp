@@ -203,7 +203,8 @@ export function PlatformShell({
 
   return (
     <HoverLockProvider value={setLock}>
-      <div className="min-h-dvh bg-sand-50">
+      <div className="platform-surface" data-platform>
+        <a className="platform-skip" href="#workspace-content">Перейти к содержимому</a>
         <MobileBar email={email} onOpen={() => setDrawer(true)} />
 
         <div className="flex">
@@ -219,7 +220,7 @@ export function PlatformShell({
             колонку, и страница получает боковую прокрутку целиком вместо
             прокрутки одной таблицы.
           */}
-          <div className="min-w-0 flex-1">{children}</div>
+          <div id="workspace-content" tabIndex={-1} className="min-w-0 flex-1 outline-none">{children}</div>
         </div>
 
         {/*
@@ -425,7 +426,7 @@ function Drawer({
         <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-3 py-4">
           {businesses !== undefined ? <BusinessTree businesses={businesses} activeWorkspaceId={activeWorkspaceId} pathname={pathname} variant="wide" mobile onNavigate={onClose} /> : null}
           <NavList pathname={pathname} role={role} onNavigate={onClose}
-            omitIds={businesses !== undefined ? ['data', 'apps'] : []}
+            omitIds={businesses?.find(business=>business.workspaceId===activeWorkspaceId)?.tableLimited?['overview','templates','apps','messages','team','usage','data']:businesses !== undefined ? ['data', 'apps'] : []}
             contextName={businesses !== undefined ? businesses.find(business => business.workspaceId === activeWorkspaceId)?.workspaceName ?? workspaceName : undefined} />
         </div>
 

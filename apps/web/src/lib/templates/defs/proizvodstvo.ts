@@ -258,8 +258,8 @@ export const proizvodstvo: TemplateDef = {
         },
       ],
       views: [
-        { name: 'Все нормы', type: 'grid' },
-        { name: 'Действующие', type: 'grid', filter: { field: 'active', op: 'is', value: true } },
+        { name: 'Все нормы', type: 'grid', hiddenFields: ['productName', 'materialName'] },
+        { name: 'Действующие', type: 'grid', hiddenFields: ['productName', 'materialName'], filter: { field: 'active', op: 'is', value: true } },
       ],
       rows: [
         { key: 'n1', values: { product: { rowKey: 'p1' }, material: { rowKey: 'm1' }, perUnit: 0.012, active: true } },
@@ -360,12 +360,12 @@ export const proizvodstvo: TemplateDef = {
         },
       ],
       views: [
-        { name: 'Все выпуски', type: 'grid' },
-        { name: 'По дням', type: 'calendar', dateBy: 'date' },
+        { name: 'Все выпуски', type: 'grid', hiddenFields: ['productName'] },
+        { name: 'По дням', type: 'calendar', dateBy: 'date', hiddenFields: ['productName'] },
       ],
       rows: [
         { key: 'pr1', values: { date: inDays(-2), product: { rowKey: 'p1' }, qty: 18500, defects: 210, shift: 'Дневная', note: 'Простой 40 минут — меняли нож.' } },
-        { key: 'pr2', values: { date: inDays(-1), product: { rowKey: 'p1' }, qty: 20000, defects: 320, shift: 'Дневная' } },
+        { key: 'pr2', values: { date: inDays(0), product: { rowKey: 'p1' }, qty: 20000, defects: 320, shift: 'Дневная' } },
       ],
     },
 
@@ -452,8 +452,8 @@ export const proizvodstvo: TemplateDef = {
         },
       ],
       views: [
-        { name: 'Все движения', type: 'grid' },
-        { name: 'Приходы', type: 'grid', filter: { field: 'qty', op: 'gt', value: 0 } },
+        { name: 'Все движения', type: 'grid', hiddenFields: ['materialName'] },
+        { name: 'Приходы', type: 'grid', hiddenFields: ['materialName'], filter: { field: 'qty', op: 'gt', value: 0 } },
       ],
       rows: [
         { key: 'mv0', values: { date: inDays(-3), material: { rowKey: 'm1' }, kind: 'Приход', qty: 500, reason: 'Поставка пластика' } },
@@ -463,10 +463,10 @@ export const proizvodstvo: TemplateDef = {
         { key: 'mv3', values: { date: inDays(-2), material: { rowKey: 'm3' }, kind: 'Производство', qty: -5.55, production: { rowKey: 'pr1' }, reason: 'Выпуск: Пивной пакет 1 л, 18 500 шт.' } },
         { key: 'mv4', values: { date: inDays(-2), material: { rowKey: 'm4' }, kind: 'Производство', qty: -1.85, production: { rowKey: 'pr1' }, reason: 'Выпуск: Пивной пакет 1 л, 18 500 шт.' } },
 
-        { key: 'mv5', values: { date: inDays(-1), material: { rowKey: 'm1' }, kind: 'Производство', qty: -240, production: { rowKey: 'pr2' }, reason: 'Выпуск: Пивной пакет 1 л, 20 000 шт.' } },
-        { key: 'mv6', values: { date: inDays(-1), material: { rowKey: 'm2' }, kind: 'Производство', qty: -200, production: { rowKey: 'pr2' }, reason: 'Выпуск: Пивной пакет 1 л, 20 000 шт.' } },
-        { key: 'mv7', values: { date: inDays(-1), material: { rowKey: 'm3' }, kind: 'Производство', qty: -6, production: { rowKey: 'pr2' }, reason: 'Выпуск: Пивной пакет 1 л, 20 000 шт.' } },
-        { key: 'mv8', values: { date: inDays(-1), material: { rowKey: 'm4' }, kind: 'Производство', qty: -2, production: { rowKey: 'pr2' }, reason: 'Выпуск: Пивной пакет 1 л, 20 000 шт.' } },
+        { key: 'mv5', values: { date: inDays(0), material: { rowKey: 'm1' }, kind: 'Производство', qty: -240, production: { rowKey: 'pr2' }, reason: 'Выпуск: Пивной пакет 1 л, 20 000 шт.' } },
+        { key: 'mv6', values: { date: inDays(0), material: { rowKey: 'm2' }, kind: 'Производство', qty: -200, production: { rowKey: 'pr2' }, reason: 'Выпуск: Пивной пакет 1 л, 20 000 шт.' } },
+        { key: 'mv7', values: { date: inDays(0), material: { rowKey: 'm3' }, kind: 'Производство', qty: -6, production: { rowKey: 'pr2' }, reason: 'Выпуск: Пивной пакет 1 л, 20 000 шт.' } },
+        { key: 'mv8', values: { date: inDays(0), material: { rowKey: 'm4' }, kind: 'Производство', qty: -2, production: { rowKey: 'pr2' }, reason: 'Выпуск: Пивной пакет 1 л, 20 000 шт.' } },
       ],
     },
   ],

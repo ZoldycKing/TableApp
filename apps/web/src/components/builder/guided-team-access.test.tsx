@@ -34,7 +34,7 @@ describe('guided employee draft access', () => {
     const ui = render(<GuidedTeamAccess app={app} onChange={change} />)
     fireEvent.change(ui.getByRole('textbox', { name: 'Почта сотрудника' }), { target: { value: 'MASTER@example.invalid' } })
     fireEvent.click(ui.getByRole('button', { name: 'Добавить сотрудника' }))
-    expect(ui.getByRole('alert').textContent).toContain('уже есть')
+    expect(ui.getByRole('alert').textContent).toContain('уже в списке')
     expect(change).not.toHaveBeenCalled()
   })
 })

@@ -107,7 +107,7 @@ export const NAV_ITEMS: NavItem[] = [
   },
   {
     id: 'usage',
-    label: 'Использование',
+    label: 'Тариф и лимиты',
     href: '/usage',
     icon: 'gauge',
     group: 'workspace',

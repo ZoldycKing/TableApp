@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 import { useRef, useState, useTransition } from 'react'
 import { applyTemplateAction } from '@/app/template-actions'
 import { templateCardCopy } from '@/lib/templates/card-copy'
-import { STARTER_GROUPS } from '@/lib/templates/starter-groups'
+import { installedTemplateHref, STARTER_GROUPS } from '@/lib/templates/starter-groups'
 import type { TemplateDef } from '@/lib/templates/types'
 import { TemplateIcon } from './template-icon'
 import { ownerInput, ownerPrimary } from './owner-ui'
@@ -59,7 +59,7 @@ export function TemplateGallery({
           running.current = false
           return
         }
-        router.push(`/setup?app=${encodeURIComponent(result.appId)}&step=business`)
+        router.push(installedTemplateHref(templateId, result.appId))
       } catch {
         setError({ templateId, message: 'Не удалось подготовить шаблон. Проверьте соединение и попробуйте ещё раз.' })
         setBusy(null)
@@ -144,7 +144,7 @@ export function TemplateGallery({
                 {busy === selected.id ? 'Подготавливаем…' : 'Начать настройку'}
                 {busy === null ? <ShellIcon name="chevron" className="size-4 -rotate-90" /> : null}
               </button>
-              <p className="text-xs leading-5 text-ink-soft">Создадим черновик с примерами.</p>
+              <p className="text-xs leading-5 text-ink-soft">Внутри будут учебные примеры. Их можно убрать при настройке.</p>
             </footer>
             {error?.templateId === selected.id ? <p role="alert" className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm leading-6 text-red-700">{error.message}</p> : null}
           </article>

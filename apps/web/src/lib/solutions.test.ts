@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 vi.mock('@/components/runtime/app-shell', () => ({ AppShell: () => null }))
 import { DEMO_SLUGS } from '@/components/marketing/solution-demo'
-import { findSolution, INDUSTRIES, SOLUTIONS } from './solutions'
+import { findSolution, INDUSTRIES, SOLUTIONS, solutionEntry } from './solutions'
 import { findTemplate, TEMPLATES } from './templates/catalog'
 
 /**
@@ -64,13 +64,28 @@ describe('страницы решений заполнены целиком', ()
 
   it('на каждой странице есть чем заполнить все блоки', () => {
     for (const solution of SOLUTIONS) {
-      expect(solution.pains.length, solution.slug).toBeGreaterThanOrEqual(3)
-      expect(solution.blocks, solution.slug).toHaveLength(4)
-      expect(solution.workflow.length, solution.slug).toBeGreaterThanOrEqual(3)
-      expect(solution.example.lines.length, solution.slug).toBeGreaterThanOrEqual(3)
+      expect(solution.task, solution.slug).not.toBe(solution.name)
+      expect(solution.workflow, solution.slug).toHaveLength(3)
+      expect(solution.outcome.title.length, solution.slug).toBeGreaterThan(10)
+      expect(solution.outcome.text.length, solution.slug).toBeGreaterThan(30)
+      expect(solution.example.instruction.length, solution.slug).toBeGreaterThan(30)
       expect(solution.faq.length, solution.slug).toBeGreaterThanOrEqual(3)
       expect(solution.limits.length, solution.slug).toBeGreaterThanOrEqual(1)
     }
+  })
+
+  it('ведёт к конкретному шаблону или честному пути без отдельного шаблона', () => {
+    for (const solution of SOLUTIONS) {
+      const entry = solutionEntry(solution)
+      if (solution.templateId) {
+        expect(entry.href).toBe(`/templates/${solution.templateId}`)
+        expect(entry.label).toBe('Открыть шаблон')
+      } else {
+        expect(entry.href).not.toMatch(/^\/templates\//)
+      }
+    }
+    expect(solutionEntry(findSolution('client-portal')!).href).toBe('/templates?preview=zakazy')
+    expect(solutionEntry(findSolution('employee-app')!).href).toBe('/import')
   })
 
   it('соседние решения существуют и не ведут на самих себя', () => {

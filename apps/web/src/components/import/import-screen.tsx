@@ -3,6 +3,7 @@
 import { buildFromRows, parseCsv, type ImportPreview, type SheetInfo } from '@tableapp/import'
 import { isComputed, newId, type Field, type FieldType } from '@tableapp/schema'
 import { useCallback, useMemo, useRef, useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   importSheetAction,
   inspectWorkbookAction,
@@ -17,7 +18,6 @@ import {
   columnsWord,
   defaultSelection,
   guessMapping,
-  importLabel,
   isImportable,
   planIssues,
   rowsWord,
@@ -37,6 +37,7 @@ import {
   SheetTabs,
   Summary,
 } from './parts'
+import { ImportGuideLink } from '@/components/marketing/import-guide'
 
 /**
  * Импорт файла.
@@ -63,7 +64,9 @@ function writableFields(table: ImportTarget | undefined): Field[] {
   return table ? table.fields.filter((field) => !isComputed(field.type)) : []
 }
 
-export function ImportScreen({ tables = [], target }: { tables?: ImportTarget[]; target?: ImportTarget }) {
+export function ImportScreen({ tables = [], target, returnAppId, automaticApp = false }: { tables?: ImportTarget[]; target?: ImportTarget; returnAppId?: string; automaticApp?: boolean }) {
+  const router = useRouter()
+  const [primarySheet, setPrimarySheet] = useState(''), [appHref, setAppHref] = useState('')
   const [file, setFile] = useState<File | null>(null)
   const [stage, setStage] = useState<'file' | 'sheets' | 'plan' | 'result'>('file')
   const [sheets, setSheets] = useState<SheetInfo[]>([])
@@ -73,28 +76,38 @@ export function ImportScreen({ tables = [], target }: { tables?: ImportTarget[];
   const [quota, setQuota] = useState<Quota | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [dragging, setDragging] = useState(false)
+  const [editingColumns, setEditingColumns] = useState(false)
   const [busy, startBusy] = useTransition()
   const inputRef = useRef<HTMLInputElement>(null)
   const runId = useRef<string>(newId('run'))
+  const operation = useRef(false)
+  const perform = (work: () => Promise<void>, message: string) => {
+    if (operation.current) return
+    operation.current = true; setError(null)
+    startBusy(async () => {
+      try { await work() } catch { setError(message) }
+      finally { operation.current = false }
+    })
+  }
 
   const tableById = useMemo(() => new Map(tables.map((table) => [table.id, table])), [tables])
   const setup = setups.find((item) => item.name === active) ?? setups[0] ?? null
 
   /** Предпросмотр считаем только для открытого листа: их бывает пять. */
-  const preview: ImportPreview | null = useMemo(() => {
-    if (!setup) return null
+  const previewState: { preview: ImportPreview | null; error: string | null } = useMemo(() => {
+    if (!setup) return { preview: null, error: null }
     try {
-      return buildFromRows(setup.grid, {
+      return { preview: buildFromRows(setup.grid, {
         typeOverrides: setup.typeOverrides,
         nameOverrides: setup.nameOverrides,
-      })
+      }), error: null }
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Не удалось разобрать лист')
-      return null
+      return { preview: null, error: cause instanceof Error ? cause.message : 'Не удалось разобрать лист' }
     }
     // Сопоставление в зависимостях не участвует намеренно: разбор от него
     // не меняется, а лишний пересчёт на файле в двадцать тысяч строк заметен.
   }, [setup?.name, setup?.grid, setup?.typeOverrides, setup?.nameOverrides])
+  const preview = previewState.preview
 
   const reset = () => {
     setFile(null)
@@ -104,6 +117,8 @@ export function ImportScreen({ tables = [], target }: { tables?: ImportTarget[];
     setSetups([])
     setActive('')
     setError(null)
+    setEditingColumns(false)
+    setPrimarySheet(''); setAppHref('')
     runId.current = newId('run')
     if (inputRef.current) inputRef.current.value = ''
   }
@@ -136,8 +151,7 @@ export function ImportScreen({ tables = [], target }: { tables?: ImportTarget[];
     [target],
   )
 
-  const readFile = useCallback(
-    async (chosen: File) => {
+  const readFile = async (chosen: File) => {
       setError(null)
       reset()
       setFile(chosen)
@@ -149,6 +163,9 @@ export function ImportScreen({ tables = [], target }: { tables?: ImportTarget[];
         setError('Формат .xls не читается. Сохраните файл как .xlsx или CSV.')
         setFile(null)
         return
+      }
+      if (!/\.(xlsx|xlsm|csv)$/i.test(chosen.name)) {
+        setError('Выберите файл Excel (.xlsx) или CSV.'); setFile(null); return
       }
 
       /*
@@ -176,6 +193,8 @@ export function ImportScreen({ tables = [], target }: { tables?: ImportTarget[];
         setQuota(result.quota)
         setSelected(defaultSelection(result.sheets))
         setStage('sheets')
+        const single = result.sheets.length === 1 ? result.sheets[0] : null
+        if (single && !single.hidden && isImportable(single)) await loadWorkbookSelection(chosen, [single.name])
         return
       }
 
@@ -220,17 +239,13 @@ export function ImportScreen({ tables = [], target }: { tables?: ImportTarget[];
         )
         setFile(null)
       }
-    },
-    [makeSetup],
-  )
+  }
 
   /** Загрузить строки выбранных листов и перейти к настройке. */
-  const loadSelected = () => {
-    if (!file || selected.length === 0) return
-    startBusy(async () => {
+  async function loadWorkbookSelection(book: File, names: string[]) {
       const form = new FormData()
-      form.set('file', file)
-      form.set('sheets', JSON.stringify(selected))
+      form.set('file', book)
+      form.set('sheets', JSON.stringify(names))
 
       let result: Awaited<ReturnType<typeof readSheetsAction>>
       try {
@@ -250,17 +265,14 @@ export function ImportScreen({ tables = [], target }: { tables?: ImportTarget[];
       }
       setQuota(result.quota)
 
-      const rejected: string[] = []
+      const accepted = result.sheets.filter(sheet => sheet.info.blockers.length === 0 && sheet.grid.length > 0)
+      const rejected = result.sheets.filter(sheet => !accepted.includes(sheet)).map(sheet => `${sheet.name}: ${sheet.info.blockers.map(blockerText).join('; ') || 'нет строк данных'}`)
       setSetups((previous) => {
         const kept = previous.filter((item) => item.outcome !== null)
         const taken = kept.map((item) => (item.destination.kind === 'new' ? item.destination.name : ''))
         const next = [...kept]
 
-        for (const sheet of result.sheets) {
-          if (sheet.info.blockers.length > 0 || sheet.grid.length === 0) {
-            rejected.push(`${sheet.name}: ${sheet.info.blockers.map(blockerText).join('; ')}`)
-            continue
-          }
+        for (const sheet of accepted) {
           // Лист, у которого уже есть итог, второй раз в список не попадает:
           // его судьба решена, и настраивать его заново не нужно.
           if (next.some((item) => item.name === sheet.name)) continue
@@ -279,10 +291,10 @@ export function ImportScreen({ tables = [], target }: { tables?: ImportTarget[];
       })
 
       setError(rejected.length > 0 ? `Эти листы импортировать нельзя — ${rejected.join(' · ')}` : null)
-      setActive(selected[0] ?? '')
-      setStage('plan')
-    })
+      setActive(accepted[0]?.name ?? '')
+      if (accepted.length) setStage('plan')
   }
+  const loadSelected = () => { if (file && selected.length) perform(() => loadWorkbookSelection(file, selected), 'Не удалось прочитать листы. Попробуйте ещё раз.') }
 
   const patch = (name: string, change: Partial<SheetSetup>) => {
     setSetups((previous) => previous.map((item) => (item.name === name ? { ...item, ...change } : item)))
@@ -351,7 +363,8 @@ export function ImportScreen({ tables = [], target }: { tables?: ImportTarget[];
    * строк, даже если ответ до нас не дошёл.
    */
   const run = (only?: readonly string[]) => {
-    startBusy(async () => {
+    perform(async () => {
+      const confirmed = new Map(setups.filter(item => item.outcome && ['done', 'repeat'].includes(item.outcome.status)).map(item => [item.name, item.outcome!.tableId]))
       for (const item of setups) {
         if (only && !only.includes(item.name)) continue
         if (item.outcome?.status === 'done' || item.outcome?.status === 'repeat') continue
@@ -361,7 +374,8 @@ export function ImportScreen({ tables = [], target }: { tables?: ImportTarget[];
           nameOverrides: item.nameOverrides,
         })
 
-        const result = await importSheetAction({
+        let result: Awaited<ReturnType<typeof importSheetAction>>
+        try { result = await importSheetAction({
           runId: runId.current,
           sheet: item.name,
           fields: built.fields,
@@ -374,7 +388,8 @@ export function ImportScreen({ tables = [], target }: { tables?: ImportTarget[];
                   tableId: item.destination.tableId,
                   mapping: byFieldId(item.mapping, built),
                 },
-        })
+        }) } catch { result = { ok: false, error: 'Не удалось получить ответ. Повторите загрузку: строки, уже сохранённые этим запуском, не добавятся второй раз.' } }
+        if (result.ok) confirmed.set(item.name, result.tableId)
 
         patch(
           item.name,
@@ -393,8 +408,14 @@ export function ImportScreen({ tables = [], target }: { tables?: ImportTarget[];
         )
       }
       setStage('result')
-      setQuota(await quotaAction())
-    })
+      if (automaticApp && setups.some(item => item.destination.kind === 'new') && setups.every(item => confirmed.get(item.name))) {
+        const main = setups.find(item => item.name === primarySheet) ?? setups[0]!
+        const href = `/import/${encodeURIComponent(runId.current)}?table=${encodeURIComponent(confirmed.get(main.name)!)}`
+        setAppHref(href)
+        router.push(href)
+      }
+      try { setQuota(await quotaAction()) } catch { /* The per-sheet result remains usable when the quota refresh fails. */ }
+    }, 'Не удалось завершить загрузку. Попробуйте ещё раз.')
   }
 
   const targetFields = setup?.destination.kind === 'existing'
@@ -412,12 +433,12 @@ export function ImportScreen({ tables = [], target }: { tables?: ImportTarget[];
     <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
       <header className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">
-          {target ? `Загрузка данных в таблицу «${target.name}»` : 'Импорт таблицы'}
+          {stage === 'result' ? 'Результат загрузки' : stage === 'plan' ? 'Проверьте данные' : stage === 'sheets' ? 'Выберите листы для загрузки' : target ? `Добавьте данные в «${target.name}»` : 'Загрузите свою таблицу'}
         </h1>
         <p className="mt-1 text-sm leading-relaxed text-[var(--color-ink-muted)]">
-          {target
-            ? 'Строки из файла добавятся к тем, что уже есть: то, что было в таблице, никуда не денется. Колонки с совпадающими названиями сопоставятся сами, остальные выберите руками.'
-            : 'Книга Excel (.xlsx) или CSV. В книге можно выбрать один лист или несколько — каждый станет своей таблицей. У CSV кодировка windows-1251 и точка с запятой определяются сами.'}
+          {stage === 'result' ? 'Ниже показан результат для каждого листа.' : target
+            ? 'Новые строки добавятся к существующим. Проверьте, в какие колонки попадут данные из файла.'
+            : stage === 'plan' ? 'Сравните с исходным файлом. Если всё верно, загрузите данные в TableApp.' : stage === 'sheets' ? 'Выберите только те листы, с которыми будете работать в TableApp.' : 'Подойдёт Excel (.xlsx) или CSV. Вы проверите данные перед загрузкой.'}
         </p>
       </header>
       {(target?.fields ?? targetFields).some(field => field.name === 'Начальный остаток') ? <p className="mb-4 text-sm text-ink-soft">При первом импорте перенесите количество на складе в «Начальный остаток». Вычисляемый «Остаток» напрямую не заполняется. Следующие поступления записывайте приёмками.</p> : null}
@@ -425,6 +446,7 @@ export function ImportScreen({ tables = [], target }: { tables?: ImportTarget[];
       {stage === 'file' ? (
         <button
           type="button"
+          disabled={busy}
           onClick={() => inputRef.current?.click()}
           onDragOver={(event) => {
             event.preventDefault()
@@ -435,7 +457,7 @@ export function ImportScreen({ tables = [], target }: { tables?: ImportTarget[];
             event.preventDefault()
             setDragging(false)
             const dropped = event.dataTransfer.files[0]
-            if (dropped) void readFile(dropped)
+            if (dropped) perform(() => readFile(dropped), 'Не удалось прочитать файл. Проверьте соединение и выберите его ещё раз.')
           }}
           className={`flex w-full flex-col items-center justify-center rounded-xl border-2 border-dashed px-6 py-16 transition sm:py-20 ${
             dragging
@@ -444,26 +466,29 @@ export function ImportScreen({ tables = [], target }: { tables?: ImportTarget[];
           }`}
         >
           <span className="text-center text-base font-medium">
-            {target ? `Перетащите файл с данными для «${target.name}»` : 'Перетащите файл Excel или CSV'}
+            {busy ? 'Читаем файл…' : target ? `Перетащите файл с данными для «${target.name}»` : 'Перетащите файл Excel или CSV'}
           </span>
-          <span className="mt-1 text-sm text-[var(--color-ink-muted)]">или нажмите, чтобы выбрать</span>
+          <span className="mt-1 text-sm text-[var(--color-ink-muted)]">{busy ? 'Подготавливаем предпросмотр' : 'или нажмите, чтобы выбрать'}</span>
         </button>
       ) : null}
+      {stage === 'file' ? <div className="mt-4 flex flex-wrap items-center justify-between gap-x-6 gap-y-2 text-sm text-ink-soft"><p>Исходный файл останется у вас и не изменится.</p><ImportGuideLink /></div> : null}
 
       <input
         ref={inputRef}
         type="file"
         accept=".csv,.xlsx,.xlsm,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         className="hidden"
+        aria-label="Файл Excel или CSV"
+        disabled={busy}
         onChange={(event) => {
           const chosen = event.target.files?.[0]
-          if (chosen) void readFile(chosen)
+          if (chosen) perform(() => readFile(chosen), 'Не удалось прочитать файл. Проверьте соединение и выберите его ещё раз.')
         }}
       />
 
-      {error ? (
-        <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm leading-relaxed text-red-800">
-          {error}
+      {error || previewState.error ? (
+        <p role="alert" className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm leading-relaxed text-red-800">
+          {error ?? previewState.error}
         </p>
       ) : null}
 
@@ -517,10 +542,10 @@ export function ImportScreen({ tables = [], target }: { tables?: ImportTarget[];
               onClick={loadSelected}
               className="rounded-lg bg-ink px-4 py-2.5 text-sm font-medium text-white hover:bg-ink/90 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {busy ? 'Читаем…' : selected.length === 0 ? 'Выберите лист' : `Настроить ${selected.length} ${sheetsWord(selected.length)}`}
+              {busy ? 'Читаем…' : selected.length === 0 ? 'Выберите лист' : 'Проверить выбранные данные'}
             </button>
             <p className="text-sm text-[var(--color-ink-muted)]">
-              Дальше — предпросмотр и выбор таблицы для каждого листа.
+              До проверки данные не сохраняются.
             </p>
           </div>
         </section>
@@ -532,7 +557,7 @@ export function ImportScreen({ tables = [], target }: { tables?: ImportTarget[];
             <div className="min-w-0">
               <p className="text-sm font-medium">
                 {file?.name}
-                <span className="text-[var(--color-ink-muted)]"> · лист «{setup.name}»</span>
+                {sheets.length > 0 ? <span className="text-[var(--color-ink-muted)]"> · лист «{setup.name}»</span> : null}
               </p>
               <p className="text-sm text-[var(--color-ink-muted)]">
                 {preview.fields.length} {columnsWord(preview.fields.length)}, {preview.rows.length} {rowsWord(preview.rows.length)}
@@ -540,7 +565,7 @@ export function ImportScreen({ tables = [], target }: { tables?: ImportTarget[];
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              {sheets.length > 0 ? (
+              {sheets.length > 1 ? (
                 <button
                   type="button"
                   onClick={() => setStage('sheets')}
@@ -582,17 +607,19 @@ export function ImportScreen({ tables = [], target }: { tables?: ImportTarget[];
           {setup.info.notes.length > 0 ? (
             <ul className="mt-4 space-y-1 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
               {setup.info.notes.map((note) => (
-                <li key={note.kind}>В листе есть ошибки вычисления: значения приедут как есть.</li>
+                <li key={note.kind}>В листе есть ошибки в формулах. Они загрузятся как значения и не будут пересчитаны.</li>
               ))}
             </ul>
           ) : null}
 
-          <div className="mt-4">
+          <div className="mt-5">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3"><h2 className="text-base font-medium">Ваши данные</h2>{setup.destination.kind === 'new' ? <button type="button" disabled={busy} aria-pressed={editingColumns} onClick={() => setEditingColumns(value => !value)} className="min-h-11 rounded-lg px-3 text-sm text-sage-700 hover:bg-sage-50 focus-visible:ring-2 focus-visible:ring-sage-400">{editingColumns ? 'Завершить настройку колонок' : 'Настроить колонки'}</button> : null}</div>
             <PreviewTable
               preview={preview}
               setup={setup}
               targetFields={targetFields}
               busy={busy}
+              editing={editingColumns}
               onName={(index, value) =>
                 patch(setup.name, { nameOverrides: { ...setup.nameOverrides, [index]: value } })
               }
@@ -603,6 +630,7 @@ export function ImportScreen({ tables = [], target }: { tables?: ImportTarget[];
             />
           </div>
 
+          {automaticApp && setups.some(item => item.destination.kind === 'new') ? <div className="mt-6 text-sm text-ink-soft">{setups.length > 1 ? <label className="block max-w-md">Первым откроется раздел<select disabled={busy} className="platform-input" value={setups.find(item => item.name === primarySheet)?.name ?? setups[0]!.name} onChange={event => setPrimarySheet(event.target.value)}>{setups.map(item => <option key={item.name} value={item.name}>{item.destination.kind === 'new' ? item.destination.name : tableById.get(item.destination.tableId)?.name ?? item.name}</option>)}</select></label> : <p>После загрузки откроется приложение со списком и карточками ваших данных.</p>}</div> : null}
           <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_auto] lg:items-start">
             <Summary lines={lines} issues={issues} />
             <button
@@ -611,7 +639,7 @@ export function ImportScreen({ tables = [], target }: { tables?: ImportTarget[];
               onClick={() => run()}
               className="h-fit w-full rounded-lg bg-ink px-5 py-3 text-sm font-medium text-white hover:bg-ink/90 disabled:cursor-not-allowed disabled:opacity-40 lg:w-auto"
             >
-              {busy ? 'Импортируем…' : importLabel(plans.length)}
+              {busy ? 'Загружаем…' : plans.length > 1 ? `Загрузить ${plans.length} ${sheetsWord(plans.length)}` : 'Загрузить данные'}
             </button>
           </div>
         </section>
@@ -622,6 +650,9 @@ export function ImportScreen({ tables = [], target }: { tables?: ImportTarget[];
           setups={setups}
           busy={busy}
           more={notImported}
+          returnAppId={returnAppId}
+          automaticApp={automaticApp && setups.some(item => item.destination.kind === 'new')}
+          appHref={appHref}
           onRetry={() => run(setups.filter((item) => item.outcome?.status === 'failed').map((item) => item.name))}
           onMore={() => {
             setSelected(

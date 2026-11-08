@@ -1,18 +1,19 @@
-import { db, fields as fieldsTable, tables } from '@tableapp/db'
+import { apps, db, fields as fieldsTable, tables } from '@tableapp/db'
 import type { Field } from '@tableapp/schema'
 import { byPosition, normalizeFieldOptions } from '@tableapp/schema'
-import { asc, eq } from 'drizzle-orm'
+import { and, asc, eq } from 'drizzle-orm'
 import { ImportScreen, type ImportTarget } from '@/components/import/import-screen'
 import { AppChrome } from '@/components/app-chrome'
-import { listMemberships, requireMember } from '@/lib/session'
+import { listMemberships, requireWorkspaceMember as requireMember } from '@/lib/session'
 import { PRIVATE_PAGE } from '@/lib/seo'
+import { builderV2Enabled } from '@/lib/builder-v2'
 
 /*
  * В поиске этой странице делать нечего: за ней рабочее пространство.
  * Запрет в robots.txt обход закрывает, но не индексацию — адрес, на который
  * кто-то сослался, попадает в выдачу и без обхода. Отказ говорится здесь.
  */
-export const metadata = PRIVATE_PAGE
+export const metadata = { title: 'Загрузка таблицы', ...PRIVATE_PAGE }
 
 export const dynamic = 'force-dynamic'
 
@@ -26,10 +27,11 @@ export const dynamic = 'force-dynamic'
 export default async function ImportPage({
   searchParams,
 }: {
-  searchParams: Promise<{ table?: string }>
+  searchParams: Promise<{ table?: string; app?: string }>
 }) {
   const member = await requireMember()
-  const { table: tableId } = await searchParams
+  const { table: tableId, app: appId } = await searchParams
+  const [returnApp] = appId ? await db.select({ id: apps.id }).from(apps).where(and(eq(apps.id, appId), eq(apps.workspaceId, member.workspaceId))).limit(1) : []
 
   /*
    * Все таблицы пространства с их колонками: книга из нескольких листов
@@ -73,7 +75,7 @@ export default async function ImportPage({
       memberships={await listMemberships(member.userId)}
       activeWorkspaceId={member.workspaceId}
     >
-      <ImportScreen tables={targets} target={target} />
+      <ImportScreen tables={targets} target={target} returnAppId={returnApp?.id} automaticApp={builderV2Enabled() && !target && !returnApp} />
     </AppChrome>
   )
 }

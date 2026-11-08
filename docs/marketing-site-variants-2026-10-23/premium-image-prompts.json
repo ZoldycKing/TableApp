@@ -1,0 +1,24 @@
+{
+  "tool": "Built-in ImageGen",
+  "date": "2026-10-23",
+  "assets": [
+    {
+      "file": "assets/premium-diary-v1.png",
+      "transparent_background": true,
+      "prompt": "Create one premium photorealistic studio product mockup for a fictional stationery shop inside a TableApp software demo. Isolated single product, genuinely transparent background, full object in frame with generous 12% margin, three-quarter front view slightly from above, centered, warm soft daylight from upper left, detailed paper and tactile material, calm Scandinavian editorial art direction, realistic proportions, subtle natural contact shadow only. No text, no logos, no hands, no props, no border, no UI, no collage. The product must fill around 75% of a square canvas. A closed A5 hardback daily journal with muted sage green woven linen cover, matching thin elastic closure near right edge, subtly visible ivory paper block and narrow ribbon bookmark. Upright portrait orientation.",
+      "purpose": "Fictional product imagery for TableApp marketing demo; not real merchandise"
+    },
+    {
+      "file": "assets/premium-notebook-v1.png",
+      "transparent_background": true,
+      "prompt": "Create one premium photorealistic studio product mockup for a fictional stationery shop inside a TableApp software demo. Isolated single product, genuinely transparent background, full object in frame with generous 12% margin, three-quarter front view slightly from above, centered, warm soft daylight from upper left, detailed paper and tactile material, calm Scandinavian editorial art direction, realistic proportions, subtle natural contact shadow only. No text, no logos, no hands, no props, no border, no UI, no collage. The product must fill around 75% of a square canvas. A sand beige softcover dot-grid notebook lying slightly open, visibly rounded corners, a warm ivory page with a delicate small dotted grid, slim stitched binding. Portrait A5 proportions. The front cover is partially folded open so it clearly differs from a closed hardback journal.",
+      "purpose": "Fictional product imagery for TableApp marketing demo; not real merchandise"
+    },
+    {
+      "file": "assets/premium-planner-v1.png",
+      "transparent_background": true,
+      "prompt": "Create one premium photorealistic studio product mockup for a fictional stationery shop inside a TableApp software demo. Isolated single product, genuinely transparent background, full object in frame with generous 12% margin, three-quarter front view slightly from above, centered, warm soft daylight from upper left, detailed paper and tactile material, calm Scandinavian editorial art direction, realistic proportions, subtle natural contact shadow only. No text, no logos, no hands, no props, no border, no UI, no collage. The product must fill around 75% of a square canvas. A landscape weekly planner desk pad, ivory heavy paper sheet, seven lightly ruled empty columns with tiny sage printed guide marks but no letters or numbers, dark forest green backing board visible at bottom edge, compact horizontal orientation. Entire pad seen from the same slightly elevated three-quarter front angle.",
+      "purpose": "Fictional product imagery for TableApp marketing demo; not real merchandise"
+    }
+  ]
+}

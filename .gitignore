@@ -27,3 +27,7 @@ Desktop.ini
 # Keep it on disk and publish curated documentation instead.
 /docs/audit/
 /docs/remediation/
+
+# Local browser checks and screenshots
+/.playwright-cli/
+/output/playwright/

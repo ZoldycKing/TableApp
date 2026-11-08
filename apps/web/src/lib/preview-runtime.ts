@@ -1,5 +1,6 @@
-import type { App, View } from '@tableapp/schema'
-import { asRole, canOpenScreen, fieldPolicy, onlyReadable, rowReach, type Visitor } from './app-roles'
+import { customerWorkflows, fieldTimeZone, type App, type View } from '@tableapp/schema'
+import type { BookingData } from './booking'
+import { asRole, canOpenScreen, fieldPolicy, formFields, onlyReadable, rowReach, visibleScreensFor, type Visitor } from './app-roles'
 import type { RuntimeTable, ScreenRows } from './app-runtime'
 import { applyView } from './apply-view'
 import { computeDashboards } from './dashboard-data'
@@ -7,6 +8,38 @@ import { canAccessRow, rulesFor } from './row-access'
 import { buildTitles } from './runtime-project'
 import type { RelatedTitles } from './queries'
 import { readingVisitor } from './customer-read-access'
+
+/** Private starters open with the broadest working perspective; no access is granted. */
+export function defaultPreviewRole(app: App) {
+  if (app.screens.some(screen => screen.access.public)) return 'anonymous'
+  return app.roles.map(role => ({ id: role.id, count: visibleScreensFor(app, asRole(role.id)).length }))
+    .sort((a, b) => b.count - a.count).find(role => role.count > 0)?.id ?? 'anonymous'
+}
+
+/** Owner-only availability calculation; never includes customer contacts or notes. */
+export function bookingPreviewData(app: App, tables: Record<string, RuntimeTable>): BookingData | undefined {
+  const config = app.booking
+  if (!config) return undefined
+  const of = (tableId: string, keys: string[]) => (tables[tableId]?.rows ?? []).map(row => ({ id: row.id, data: Object.fromEntries(keys.map(key => [key, row.data[key]])) }))
+  const date = tables[config.tables.visits]?.fields.find(field => field.id === config.visit.start)
+  return { services: of(config.tables.services, Object.values(config.service)),
+    masters: of(config.tables.masters, [config.master.name, config.master.services, config.master.active]),
+    schedule: of(config.tables.schedule, Object.values(config.schedule)),
+    visits: of(config.tables.visits, [config.visit.master, config.visit.start, config.visit.minutes, config.visit.status]),
+    timeZone: date ? fieldTimeZone(date) : 'Europe/Moscow' }
+}
+
+/** A preview can enter checkout as an allowed role without altering saved permissions. */
+export function previewCheckout(app: App, screenId: string, sourceRowId: string | null) {
+  const booking = app.booking?.formScreenId === screenId ? app.booking : undefined
+  const customer = customerWorkflows(app).find(flow => flow.formScreenId === screenId)
+  const screen = app.screens.find(screen => screen.id === screenId)
+  if (!screen || !booking && !customer || screen.type !== 'form' || screen.mode !== 'create') return null
+  const role = app.roles.find(role => role.isDefault && screen.access.roles.includes(role.id)) ?? app.roles.find(role => screen.access.roles.includes(role.id))
+  if (!role) return null
+  const selection = booking?.visit.service ?? customer?.catalog?.selectionFieldId
+  return { screenId, roleId: role.id, values: selection && sourceRowId ? { [selection]: [sourceRowId] } : {} }
+}
 
 /** The editor uses the same row rules and identity as the real application. Null means the author. */
 export function previewRuntime(app: App, views: View[], runtimeTables: Record<string, RuntimeTable>,
@@ -22,6 +55,7 @@ export function previewRuntime(app: App, views: View[], runtimeTables: Record<st
    * что можно выкладывать в интернет.
    */
   const readable: Record<string, ReadonlySet<string>> = {}
+  const relationReadable: Record<string, ReadonlySet<string>> = {}
   const tables: Record<string, RuntimeTable> = {}
   const screens: Record<string, ScreenRows> = {}
   const forBlocks: Record<string, RuntimeTable> = {}
@@ -62,7 +96,14 @@ export function previewRuntime(app: App, views: View[], runtimeTables: Record<st
     }
 
     const policy = fieldPolicy(definition, tableId, reading, viewsById)
-    if (policy.restricted) readable[tableId] = policy.fields
+    if (policy.restricted) {
+      readable[tableId] = policy.fields
+      const selectable = new Set(policy.fields)
+      for (const screen of definition.screens) if (screen.type === 'form' && screen.tableId === tableId) {
+        for (const id of formFields(definition, screen, previewVisitor)) selectable.add(id)
+      }
+      relationReadable[tableId] = selectable
+    }
 
     const shipped =
       reach.kind === 'none'
@@ -86,7 +127,7 @@ export function previewRuntime(app: App, views: View[], runtimeTables: Record<st
       new Map(Object.values(runtimeTables).map(table => [table.id, table.primaryFieldId])),
       new Map(Object.values(runtimeTables).map(table => [table.id, table.fields])),
       new Map(Object.values(runtimeTables).map(table => [table.id, new Map(table.rows.map(row => [row.id, row.data]))])),
-      { app: definition, visitor: previewVisitor, views: viewsById, readable }),
+      { app: definition, visitor: previewVisitor, views: viewsById, readable: relationReadable }),
     blocks: computeDashboards(definition, {
       views: viewsById,
       // Числа считаются по неурезанным строкам: отбор полей ограничивает

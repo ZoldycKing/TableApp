@@ -1,8 +1,49 @@
 import { describe, expect, it } from 'vitest'
 import { asRole, visibleScreensFor } from './app-roles'
-import { previewRuntime } from './preview-runtime'
+import { bookingPreviewData, defaultPreviewRole, previewCheckout, previewRuntime } from './preview-runtime'
 import { templateExample } from './templates/presentation'
 import type { RuntimeTable } from './app-runtime'
+
+describe('owner checkout preview', () => {
+  it.each([['crm', 'manager'], ['sklad', 'manager'], ['proizvodstvo', 'director']])('opens %s with the full working role while public apps start as a visitor', (id, role) => {
+    expect(defaultPreviewRole(templateExample(id!).app)).toBe(role)
+    expect(defaultPreviewRole(templateExample('salon').app)).toBe('anonymous')
+  })
+  it('offers permitted catalog choices in create forms without exposing private row fields', () => {
+    const example = templateExample('service'), flow = example.app.customer!, visitor = asRole('client', null, '', true)
+    const app = { ...example.app, screens: visibleScreensFor(example.app, visitor) }
+    const tables: Record<string, RuntimeTable> = Object.fromEntries(example.built.tables.map(table => [table.id, { ...table,
+      fields: example.byTable.get(table.id)!, rows: example.rows.filter(row => row.tableId === table.id).map(row => ({ ...row, version: 0 })) }]))
+    const result = previewRuntime(app, example.views, tables, {}, visitor)
+    expect(result.relatedTitles[flow.catalog!.tableId]?.length).toBeGreaterThan(0)
+    expect(result.tables[flow.tableId]!.rows).toHaveLength(0)
+  })
+  it.each(['salon', 'service', 'zayavki', 'nedvizhimost', 'dostavka'])('enters %s checkout with its selected catalog item without modifying access', id => {
+    const { app } = templateExample(id)
+    const before = structuredClone(app)
+    const config = app.booking ?? app.customer!
+    const target = previewCheckout(app, config.formScreenId, 'chosen-row')!
+    expect(target.roleId).toBe('client')
+    const selection = app.booking?.visit.service ?? app.customer!.catalog!.selectionFieldId
+    expect(target.values).toEqual({ [selection!]: ['chosen-row'] })
+    expect(app).toEqual(before)
+    expect(previewCheckout(app, app.screens.find(screen => screen.type === 'list')!.id, null)).toBeNull()
+  })
+  it('supplies the actual schedule and occupied intervals without customer contacts', () => {
+    const example = templateExample('salon'), config = example.app.booking!
+    const tables: Record<string, RuntimeTable> = Object.fromEntries(example.built.tables.map(table => [table.id, { ...table,
+      fields: example.byTable.get(table.id)!, rows: example.rows.filter(row => row.tableId === table.id).map(row => ({ ...row, version: 0 })) }]))
+    const data = bookingPreviewData(example.app, tables)!
+    expect(data.schedule).toHaveLength(tables[config.tables.schedule]!.rows.length)
+    expect(data.visits).toHaveLength(tables[config.tables.visits]!.rows.length)
+    for (const visit of data.visits) {
+      expect(Object.keys(visit.data).sort()).toEqual([config.visit.master, config.visit.start, config.visit.minutes, config.visit.status].sort())
+      expect(visit.data[config.visit.email]).toBeUndefined()
+      expect(visit.data[config.visit.phone]).toBeUndefined()
+    }
+    expect(bookingPreviewData(templateExample('crm').app, {})).toBeUndefined()
+  })
+})
 
 describe('preview identity selects both records and dashboard totals', () => {
   const example = templateExample('portal', undefined, true)

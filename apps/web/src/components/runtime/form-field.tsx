@@ -8,7 +8,7 @@ import { FileUpload } from '@/components/file-upload'
  * а не мышью, и на телефоне поле ниже 44 точек промахивается.
  */
 const INPUT =
-  'w-full rounded-xl border border-sand-300 bg-white px-3.5 py-2.5 text-[15px] outline-none transition-colors placeholder:text-ink-muted/70 focus:border-sage-400 focus:ring-4 focus:ring-sage-400/15'
+  'min-h-11 w-full rounded-xl border border-sand-300 bg-white px-3.5 py-2.5 text-base @min-[640px]:text-[15px] outline-none transition-colors placeholder:text-ink-muted focus:border-sage-400 focus:ring-4 focus:ring-sage-400/15'
 
 function toDateInput(value: unknown, withTime: boolean, zone: string): string {
   if (!value) return ''

@@ -84,6 +84,13 @@ function metric(patch: Record<string, unknown> = {}, id = 'blk_1'): Block {
 }
 
 describe('подсчёт идёт по тем строкам, что человеку положены', () => {
+  it('отличает измеренный ноль от отсутствующих значений', () => {
+    const block = metric({ kind: 'sum', fieldId: total.id, format: 'plain' })
+    const zero = computeBlocks(args([block], { tables: { tbl_1: { fields, rows: [{ id: 'row_zero', position: 'a', data: { [total.id]: 0 } }] } } }))
+    const missing = computeBlocks(args([block], { tables: { tbl_1: { fields, rows: [] } } }))
+    expect(zero[block.id]).toMatchObject({ kind: 'metric', empty: false, text: '0', caption: 'за всё время' })
+    expect(missing[block.id]).toMatchObject({ kind: 'metric', empty: true, text: '—', caption: 'Нет данных для расчёта' })
+  })
   it('клиент со своими тремя заказами из ста видит три', () => {
     // Рантайм отдаёт сюда только свои строки. Блок не может дотянуться
     // до остальных: других строк у него просто нет.
@@ -120,7 +127,7 @@ describe('подсчёт идёт по тем строкам, что челов�
     const block = metric({ kind: 'sum', fieldId: total.id })
     const result = computeBlocks(args([block]))
     // Наружу уходит одна строка с числом, а не сто значений колонки.
-    expect(Object.keys(result[block.id]!).sort()).toEqual(['caption', 'compared', 'delta', 'kind', 'text'])
+    expect(Object.keys(result[block.id]!).sort()).toEqual(['caption', 'compared', 'delta', 'empty', 'kind', 'text'])
   })
 })
 

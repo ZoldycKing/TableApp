@@ -1,21 +1,24 @@
-import { TemplatePreviewShell } from './template-preview-shell'
+import { DeferredTemplatePreview } from './deferred-preview'
 import { templateAppPreview } from '@/lib/templates/app-preview'
 import type { templateExample } from '@/lib/templates/presentation'
 import { DeviceFrame } from './demo-stage'
+import styles from './elaya/inner-pages.module.css'
 
-export function TemplateAppPreview({ example, role, email, name, title, note, tableId }: {
-  example: ReturnType<typeof templateExample>; role: string; email?: string; name?: string; title: string; note: string; tableId?: string
+export function TemplateAppPreview({ example, role, email, name, title, note, tableId, screenId }: {
+  example: ReturnType<typeof templateExample>; role: string; email?: string; name?: string; title: string; note: string; tableId?: string; screenId?: string
 }) {
   const initialPreview = templateAppPreview(example, role, email, name)
   const { runtime } = initialPreview
   const signedIn = role === 'guest' && (example.app.customer || example.app.booking) ? templateAppPreview(example, 'client', 'irina@example.com', 'Ирина') : null
-  const initial = tableId ? runtime.app.screens.find(screen => (screen.type === 'list' || screen.type === 'tiles') &&
-    example.views.find(view => view.id === screen.source.viewId)?.tableId === tableId)?.id : undefined
+  runtime.app.theme.accent = 'green'
+  if (signedIn) signedIn.runtime.app.theme.accent = 'green'
+  const initial = runtime.app.screens.find(screen => screen.id === screenId)?.id ?? (tableId ? runtime.app.screens.find(screen => (screen.type === 'list' || screen.type === 'tiles') &&
+    example.views.find(view => view.id === screen.source.viewId)?.tableId === tableId)?.id : undefined)
   return <figure className="m-0 min-w-0 max-w-full">
-    <figcaption className="mb-3 text-[13px] font-medium text-ink">{title}</figcaption>
+    <figcaption className="mb-4 text-sm font-medium text-ink">{title}</figcaption>
     <div className="mx-auto w-full max-w-[25rem]">
-      <DeviceFrame device="mobile" height={640} bezel={12}>
-        <TemplatePreviewShell initial={initialPreview} signedIn={signedIn} initialScreenId={initial} />
+      <DeviceFrame device="mobile" height={640} bezel={8}>
+        <div className={styles.runtimeTheme}><DeferredTemplatePreview initial={initialPreview} signedIn={signedIn} initialScreenId={initial} /></div>
       </DeviceFrame>
     </div>
     <p className="mt-3 text-xs leading-relaxed text-ink-muted">{note}</p>

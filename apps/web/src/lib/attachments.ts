@@ -1,6 +1,7 @@
-import { attachments, db, fields as fieldsTable, rows, tables } from '@tableapp/db'
+import { attachments, db, fields as fieldsTable, rows, tables,workspaceMembers } from '@tableapp/db'
 import type { Attachment, Field } from '@tableapp/schema'
 import { and, eq, inArray } from 'drizzle-orm'
+import { isBuilderV2LogoKey } from './builder-v2-logo-types'
 
 /**
  * Привязка загруженных файлов к ячейке.
@@ -31,6 +32,7 @@ export const ATTACHMENT_IN_USE = 'Файл уже прикреплён к дру
 
 function attachmentError(record: typeof attachments.$inferSelect, target: Target, author?: AttachmentAuthor): string | null {
   if (record.state !== 'ready') return INVALID_ATTACHMENT
+  if (isBuilderV2LogoKey(record.key)) return INVALID_ATTACHMENT
   if (record.conversationId || record.messageId) return ATTACHMENT_IN_USE
   if (record.tableId || record.rowId || record.fieldId) {
     return record.tableId === target.tableId && record.rowId === target.rowId && record.fieldId === target.fieldId
@@ -55,6 +57,10 @@ export async function validateRowAttachments(
   const owned = await runner.select().from(attachments)
     .where(and(inArray(attachments.key, keys), eq(attachments.workspaceId, table.workspaceId)))
   if (owned.length !== keys.length) return INVALID_ATTACHMENT
+  if(author?.kind==='member'&&author.id){
+    const [member]=await runner.select({role:workspaceMembers.role,tableAccess:workspaceMembers.tableAccess}).from(workspaceMembers).where(and(eq(workspaceMembers.workspaceId,table.workspaceId),eq(workspaceMembers.userId,author.id))).limit(1)
+    if(member&&member.role!=='owner'&&member.tableAccess!=null&&owned.some(file=>!file.tableId&&file.uploadedBy!==author.id))return INVALID_ATTACHMENT
+  }
   const assigned = new Set<string>()
   for (const field of fields.filter(isAttachmentField)) {
     for (const key of keysOf(data[field.id])) {

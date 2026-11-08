@@ -135,12 +135,14 @@ describe.skipIf(!process.env.DATABASE_URL)('orders and stock reservations in Pos
   it('issues from an authorized courier transition and records an actual returned package once', async () => {
     const space = await business(3, true), id = await order(space, 2); await signIn(manager); await confirm(space, id)
     const shipping = await (await import('./order-delivery')).handoffOrderDelivery(space.pair.order.tableId, id, (await row(space.pair.order.tableId, id)).version, space.app.slug)
+    expect(await service.readOrderStock(space.pair.order.tableId, id, space.app.slug)).toMatchObject({ state: 'reserved', reason: 'Товар спишется со склада при передаче курьеру.' })
     const delivery = (await import('@tableapp/schema')).customerWorkflows(space.app).find(config => config.logistics?.kind === 'delivery')!
     await writes.writeRows(space.workspaceId, context => writes.updateRow(context, delivery.tableId, shipping.id, { [delivery.assignmentFieldId!]: 'courier-stock@example.invalid' }, { id: ownerId, kind: 'member' }))
     await signIn('courier-stock@example.invalid')
     const runtime = await import('@/app/runtime-actions')
     expect(await runtime.appUpdateRowAction(space.app.slug, delivery.tableId, shipping.id, { [delivery.statusFieldId]: delivery.logistics!.shippedStatus }, (await row(delivery.tableId, shipping.id)).version)).toMatchObject({ ok: true })
     await signIn(manager); expect(await balance(space)).toEqual({ stock: 1, reserved: 0, available: 1 })
+    expect((await service.readOrderStock(space.pair.order.tableId, id, space.app.slug))!.reason).toBeUndefined()
     await signIn('courier-stock@example.invalid')
     const logistics = delivery.logistics!; if (logistics.kind !== 'delivery') throw new Error('Wrong fixture')
     expect(await runtime.appUpdateRowAction(space.app.slug, delivery.tableId, shipping.id, { [delivery.statusFieldId]: logistics.returnedStatus }, (await row(delivery.tableId, shipping.id)).version)).toMatchObject({ ok: true })
@@ -149,6 +151,34 @@ describe.skipIf(!process.env.DATABASE_URL)('orders and stock reservations in Pos
     expect(movements).toHaveLength(2)
     expect(movements.every(movement => (movement.data as Record<string, unknown>)[space.pair.inventory.movement.author] === 'courier-stock@example.invalid')).toBe(true)
     expect((await service.readOrderStock(space.pair.order.tableId, id, space.app.slug))!.state).toBe('returned')
+    expect((await service.readOrderStock(space.pair.order.tableId, id, space.app.slug))!.reason).toBeUndefined()
+  })
+  it('keeps one stock issue through delivery retries and completion, then releases a separately cancelled delivery', async () => {
+    const space = await business(10, true), id = await order(space, 2), cancelled = await order(space, 1)
+    await signIn(manager); await confirm(space, id); await confirm(space, cancelled)
+    const serviceDelivery = await import('./order-delivery'), decisions = await import('@/app/customer-actions'), runtime = await import('@/app/runtime-actions')
+    const source = space.pair.order, config = (await import('@tableapp/schema')).customerWorkflows(space.app).find(config => config.logistics?.kind === 'delivery')!, logistics = config.logistics!
+    if (logistics.kind !== 'delivery') throw new Error('Wrong fixture')
+    const first = await serviceDelivery.handoffOrderDelivery(source.tableId, id, (await row(source.tableId, id)).version, space.app.slug)
+    const second = await serviceDelivery.handoffOrderDelivery(source.tableId, cancelled, (await row(source.tableId, cancelled)).version, space.app.slug)
+    expect(await balance(space)).toEqual({ stock: 10, reserved: 3, available: 7 })
+    await writes.writeRows(space.workspaceId, context => writes.updateRow(context, config.tableId, first.id, { [config.assignmentFieldId!]: 'courier-stock@example.invalid' }, { id: ownerId, kind: 'member' }))
+    await signIn('courier-stock@example.invalid')
+    const version = (await row(config.tableId, first.id)).version
+    const retries = await Promise.all([1, 2].map(() => runtime.appUpdateRowAction(space.app.slug, config.tableId, first.id, { [config.statusFieldId]: logistics.shippedStatus }, version)))
+    expect(retries.filter(result => result.ok)).toHaveLength(1)
+    for (const status of [logistics.missedStatus, logistics.shippedStatus, logistics.deliveredStatus]) {
+      expect(await runtime.appUpdateRowAction(space.app.slug, config.tableId, first.id, { [config.statusFieldId]: status }, (await row(config.tableId, first.id)).version)).toEqual({ ok: true })
+    }
+    await signIn(manager)
+    expect(await balance(space)).toEqual({ stock: 8, reserved: 1, available: 7 })
+    expect(((await row(source.tableId, id)).data as Record<string, unknown>)[source.statusFieldId]).toBe(source.logistics!.deliveredStatus)
+    await signIn(client)
+    expect(await decisions.customerDecisionAction(space.app.slug, second.id, (await row(config.tableId, second.id)).version, 'cancel', config.tableId)).toEqual({ ok: true })
+    expect(((await row(source.tableId, cancelled)).data as Record<string, unknown>)[source.statusFieldId]).toBe(source.cancelStatus)
+    await signIn(manager)
+    expect(await balance(space)).toEqual({ stock: 8, reserved: 0, available: 8 })
+    expect(await database.db.select().from(database.rows).where(eq(database.rows.tableId, space.pair.inventory.tables.movements))).toHaveLength(1)
   })
   it('preserves accepted allocation rules after app deletion and prevents changing initial balances below a live reserve', async () => {
     const space = await business(3), id = await order(space, 2); await signIn(manager); await confirm(space, id)

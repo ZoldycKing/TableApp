@@ -1,0 +1,139 @@
+'use client'
+import {BuilderV2EnterSettings} from './enter-settings'
+import {BuilderV2MediaSettings} from './media-settings'
+import {BuilderV2IconPicker} from './appearance-settings'
+import {BuilderV2ChartSettings} from './chart-settings'
+import {BoardMoveSettings} from './board-move-settings'
+import {CollectionActionSettings} from './collection-action-settings'
+import { BuilderBusinessSettings } from './business-operation'
+import type { BuilderBusinessApp } from '@/lib/builder-v2-business-types'
+import { useId, useState } from 'react'
+import { appV2ListGroupFieldTypes, type AppV2, type AppV2Binding, type AppV2Node } from '@tableapp/schema/app-v2'
+import type { BuilderV2Table } from '@/lib/builder-v2'
+import { builderCatalogImageField, builderV2CardLayout, builderV2CatalogCollection, builderV2CatalogDefaults } from '@/lib/builder-v2-catalog'
+import { ProtoIcon } from '../prototype/icons'
+import styles from '../prototype/prototype.module.css'
+import ui from './view.module.css'
+import { BuilderV2InputSettings } from './form-settings'
+import { BuilderV2FormActionSettings } from './form-action-settings'
+import { BuilderV2DeleteActionSettings } from './delete-action-settings'
+import { BuilderV2SourceSettings } from './source-settings'
+import { collectionCardScreen } from './collection-navigation'
+import { NODE_KINDS, nodeContext, nodeDescendants, type BuilderV2SourcePatch } from './model'
+
+function CatalogScreenSettings({ screen, table, onScreen }: {
+  screen: AppV2['screens'][number]
+  table?: BuilderV2Table
+  onScreen: (patch: Partial<AppV2['screens'][number]>) => void
+}) {
+  if (!table?.fields.length) return null
+  const catalog = screen.catalog
+  const bindings = [
+    ['titleFieldId', 'Название товара или услуги'],
+    ['imageFieldId', 'Фото'],
+    ['priceFieldId', 'Цена'],
+    ['descriptionFieldId', 'Описание'],
+  ] as const
+  return <>
+    <label>Вид карточки<select value={catalog ? 'catalog' : 'default'} onChange={event => onScreen({ catalog: event.target.value === 'catalog' ? builderV2CatalogDefaults(table) : undefined })}>
+      <option value="default">Обычная запись</option>
+      <option value="catalog">Товар или услуга</option>
+    </select></label>
+    {catalog && bindings.map(([key, label]) => <label key={key}>{label}<select value={catalog[key] ?? ''} onChange={event => onScreen({ catalog: { ...catalog, [key]: event.target.value || undefined } })}>
+      {key !== 'titleFieldId' && <option value="">Не показывать</option>}
+      {table.fields.filter(field => key !== 'imageFieldId' || builderCatalogImageField(field)).map(field => <option value={field.id} key={field.id}>{field.name}</option>)}
+    </select></label>)}
+  </>
+}
+
+function ValueEditor({ value, table, screenTable, onChange,literalLabel='Текст' }: { value: AppV2Binding; table?: BuilderV2Table; screenTable?: BuilderV2Table; onChange: (value: AppV2Binding) => void;literalLabel?:string }) {
+  return <><label>Источник значения<select value={value.kind} onChange={event => onChange(event.target.value === 'screen_row' && screenTable?.fields.length ? { kind: 'screen_row', fieldId: screenTable.fields[0]!.id } : event.target.value === 'user' ? { kind: 'user', property: 'name' } : event.target.value === 'row' && table?.fields.length ? { kind: 'row', fieldId: table.fields[0]!.id } : { kind: 'literal', value: '' })}><option value="literal">{literalLabel==='Текст'?'Свой текст':literalLabel.startsWith('Ссылки')?'Свои ссылки':'Своя ссылка'}</option>{table && <option value="row">Поле записи{screenTable && table.id !== screenTable.id ? ` в списке «${table.name}»` : ""}</option>}{screenTable && (screenTable.id !== table?.id || value.kind === 'screen_row') && <option value="screen_row">Поле открытой карточки: {screenTable.name}</option>}<option value="user">Данные пользователя</option>{!['literal', 'row', 'screen_row', 'user'].includes(value.kind) && <option value={value.kind}>Настроенное значение</option>}</select></label>{value.kind === 'literal' ? <label>{literalLabel}<textarea rows={4} value={typeof value.value === 'object' ? JSON.stringify(value.value) : String(value.value ?? '')} onChange={event => onChange({ kind: 'literal', value: event.target.value })} /></label> : value.kind === 'row' || value.kind === 'screen_row' ? <label>Поле<select value={value.fieldId} onChange={event => onChange({ kind: value.kind, fieldId: event.target.value })}>{(value.kind === 'screen_row' ? screenTable : table)?.fields.map(field => <option key={field.id} value={field.id}>{field.name}</option>)}</select></label> : value.kind === 'user' ? <label>Что показать<select value={value.property} onChange={event => onChange({ kind: 'user', property: event.target.value as 'id' | 'name' | 'email' | 'company' })}><option value="name">Имя</option><option value="email">Почта</option><option value="company">Организация</option><option value="id">Идентификатор</option></select></label> : <p className={ui.hint}>Значение связано с формой или действием.</p>}</>
+}
+
+export function BuilderV2Inspector({ app, screenId, selected, tables, businessApps = [], onNode, onScreen, onHome, onMove, onDuplicate, onDelete, onPlace, onSource, onSourceSettings, onCard, onMoveScreen, onDeleteScreen, onFormAction, onOpenForm, onFormMode, onDeleteAction, onOpenAction, onFormWorkflow, onButtonAction, onButtonWorkflow,onItemAction,onItemWorkflow,onOpenItemAction,onBoardMove,onEnterConfigure,onEnterWorkflow,onOpenEnter,canOpenEnter }: {
+  app: AppV2; screenId: string; selected?: AppV2Node; tables: readonly BuilderV2Table[]; businessApps?: readonly BuilderBusinessApp[]; onNode: (node: AppV2Node) => void; onScreen: (patch: Partial<AppV2['screens'][number]>) => void; onHome: () => void; onMove: (delta: number) => void; onDuplicate: () => void; onDelete: () => void; onPlace: (parentId: string | null) => void; onSource: (tableId: string) => void; onSourceSettings: (patch: BuilderV2SourcePatch) => void; onCard?: (screenId: string | null | 'create') => void; onMoveScreen: (delta: number) => void; onDeleteScreen: () => void; onFormAction?: (roles: string[] | null) => void; onOpenForm?: () => void; onFormMode?: (mode: 'create' | 'edit') => void; onDeleteAction?: (roles: string[] | null) => void; onOpenAction?: () => void; onFormWorkflow?: (flow: AppV2['workflows'][number]) => string | null; onButtonAction?: (roles: string[] | null) => void; onBoardMove?:(roles:string[]|null)=>void;onItemAction?:(roles:string[]|null)=>void;onOpenItemAction?:()=>void;onItemWorkflow?:(flow:AppV2['workflows'][number])=>string|null;onButtonWorkflow?: (flow: AppV2['workflows'][number]) => string | null;onEnterConfigure?:(roles:string[]|null)=>void;onEnterWorkflow?:(flow:AppV2['workflows'][number])=>string|null;onOpenEnter?:()=>void;canOpenEnter?:boolean
+}) {
+  const [tab, setTab] = useState<'element' | 'data'>('element'), panelId = useId()
+  const screen = app.screens.find(screen => screen.id === screenId)!
+  if (!selected) return <div className={styles.inspectorContent}><div className={styles.inspectorHeading}><span className={styles.elementMark}><ProtoIcon name={screen.icon} /></span><div><span>Экран</span><h2>{screen.name}</h2></div></div>
+    <label>Название экрана<input value={screen.name} maxLength={120} onChange={event => onScreen({ name: event.target.value })} /></label>
+    <BuilderV2IconPicker label="Иконка" value={screen.icon} onChange={icon=>onScreen({icon})}/>
+    {!screen.contextTableId&&<label>Название в меню<input value={screen.menuLabel??''} placeholder={screen.name} maxLength={120} onChange={event=>onScreen({menuLabel:event.target.value})}/></label>}
+    <label>Тип экрана<select value={screen.contextTableId ?? ''} onChange={event => onScreen({ contextTableId: event.target.value || null, catalog: undefined, recordTitleFieldId: undefined, ...(event.target.value ? { navigation: false } : {}) })}><option value="">Обычный экран</option>{tables.map(table => <option value={table.id} key={table.id}>Карточка: {table.name}</option>)}</select></label>
+    {screen.contextTableId && !screen.catalog && <label>Заголовок карточки<select value={screen.recordTitleFieldId ?? ''} onChange={event => onScreen({ recordTitleFieldId: event.target.value || undefined })}><option value="">Главная колонка таблицы</option>{tables.find(table => table.id === screen.contextTableId)?.fields.map(field => <option value={field.id} key={field.id}>{field.name}</option>)}</select></label>}
+    {screen.contextTableId && <CatalogScreenSettings screen={screen} table={tables.find(table => table.id === screen.contextTableId)} onScreen={onScreen} />}
+    {screen.contextTableId ? <p className={ui.hint}>Карточка открывается для выбранной записи из списка.</p> : <label className={styles.checkbox}><input type="checkbox" checked={screen.navigation} onChange={event => onScreen({ navigation: event.target.checked })} />Показывать в меню</label>}
+    <button type="button" className={styles.secondary} disabled={app.homeScreenId === screen.id || Boolean(screen.contextTableId)} onClick={onHome}><ProtoIcon name="home" />{app.homeScreenId === screen.id ? 'Стартовый экран' : 'Сделать стартовым'}</button>
+    {onEnterConfigure&&onEnterWorkflow&&onOpenEnter&&<BuilderV2EnterSettings app={app} screenId={screenId} tables={tables} onConfigure={onEnterConfigure} onWorkflow={onEnterWorkflow} onOpen={onOpenEnter} canOpen={Boolean(canOpenEnter)}/>}
+    <div className={ui.screenActions}><button type="button" className={styles.iconButton} aria-label="Экран выше" onClick={() => onMoveScreen(-1)} disabled={app.screens[0]?.id === screen.id}><ProtoIcon name="up" /></button><button type="button" className={styles.iconButton} aria-label="Экран ниже" onClick={() => onMoveScreen(1)} disabled={app.screens.at(-1)?.id === screen.id}><ProtoIcon name="down" /></button><button type="button" className={styles.iconButton} aria-label="Удалить экран" onClick={onDeleteScreen} disabled={app.screens.length < 2}><ProtoIcon name="trash" /></button></div>
+  </div>
+  const source = 'sourceId' in selected ? app.sources.find(source => source.id === selected.sourceId) : undefined
+  const sourceTable = tables.find(table => table.id === source?.tableId)
+  const hasNumbers = sourceTable?.fields.some(field => ['number', 'count', 'formula', 'rollup'].includes(field.type)) ?? false
+  const context = nodeContext(app, screenId, selected.id), rowTable = tables.find(table => table.id === context.rowTableId)
+  const descendantIds = nodeDescendants(app, selected.id), screenIds = new Set(screen.rootIds.flatMap(id => [...nodeDescendants(app, id)]))
+  const parent = app.nodes.find(node => ('childIds' in node ? node.childIds : node.type === 'collection' ? node.itemIds : []).includes(selected.id))
+  const containers = app.nodes.filter(node => screenIds.has(node.id) && !descendantIds.has(node.id) && ('childIds' in node || node.type === 'collection'))
+  return <div className={styles.inspectorContent}><div className={styles.inspectorHeading}><span className={styles.elementMark}><ProtoIcon name={NODE_KINDS[selected.type][2]} /></span><div><span>{NODE_KINDS[selected.type][0]}</span><h2>{selected.name || NODE_KINDS[selected.type][0]}</h2></div></div>
+    {(selected.type === 'collection' || selected.type === 'metric' || selected.type==='chart') && <div className={ui.inspectorTabs} role="tablist" aria-label="Настройки элемента">{([['element', 'Элемент'], ['data', 'Данные']] as const).map(([id, title]) => <button type="button" key={id} role="tab" id={`${panelId}-${id}`} aria-selected={tab === id} aria-controls={`${panelId}-panel`} tabIndex={tab === id ? 0 : -1} onClick={() => setTab(id)} onKeyDown={event => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) { event.preventDefault(); const next = event.key === 'Home' ? 'element' : event.key === 'End' ? 'data' : tab === 'data' ? 'element' : 'data'; setTab(next); const buttons = event.currentTarget.parentElement?.querySelectorAll('button'); buttons?.[next === 'element' ? 0 : 1]?.focus() } }}>{title}</button>)}</div>}
+    <div className={ui.inspectorPanel} role={selected.type === 'collection' || selected.type === 'metric' || selected.type==='chart' ? 'tabpanel' : undefined} id={`${panelId}-panel`} aria-labelledby={selected.type === 'collection' || selected.type === 'metric' || selected.type==='chart' ? `${panelId}-${tab}` : undefined}>
+    {(tab === 'element' || selected.type !== 'collection' && selected.type !== 'metric'&&selected.type!=='chart') && <>
+    {selected.type === 'button' ? <><label>Надпись на кнопке<input maxLength={100} value={selected.label} onChange={event => onNode({ ...selected, name: event.target.value, label: event.target.value })} /></label>{onDeleteAction && onOpenAction ? <BuilderV2DeleteActionSettings app={app} node={selected} screenId={screenId} tables={tables} onConfigure={onDeleteAction} onConfigureChain={onButtonAction} onEditChain={onButtonWorkflow} onOpen={onOpenAction} onWorkflow={id => onNode({ ...selected, events: { press: id } })} /> : <label>Действие<select value={selected.events.press ?? ''} onChange={event => onNode({ ...selected, events: { press: event.target.value || null } })}><option value="">Без действия</option>{app.workflows.filter(flow => flow.input.rowTableId === context.rowTableId && flow.input.formId === context.formId && (flow.input.screenTableId??null)===(app.screens.find(screen=>screen.id===screenId)?.contextTableId??null)).map(flow => <option key={flow.id} value={flow.id}>{flow.name}</option>)}</select></label>}<label>Вид кнопки<select value={selected.variant} onChange={event => onNode({ ...selected, variant: event.target.value as typeof selected.variant })}><option value="primary">Основная</option><option value="secondary">Дополнительная</option><option value="danger">Важное действие</option></select></label></> : selected.type !== 'heading' && selected.type !== 'text' && selected.type !== 'field' && selected.type !== 'input' && <label>Название<input maxLength={120} value={selected.name} onChange={event => onNode({ ...selected, name: event.target.value })} /></label>}
+    {'value' in selected && selected.type!=='gallery'&&selected.type!=='files'&& <ValueEditor literalLabel={selected.type==='video'?'Ссылка на видео':selected.type==='image'?'Ссылка на изображение':undefined} value={selected.value} table={rowTable} screenTable={tables.find(table => table.id === screen.contextTableId)} onChange={value => onNode({ ...selected, value, ...((selected.type === 'text' || selected.type === 'heading') && value.kind === 'literal' && typeof value.value === 'string' ? { name: value.value.slice(0, 120) } : {}) })} />}
+    {selected.type === 'business' && <BuilderBusinessSettings node={selected} apps={businessApps} tableId={screen.contextTableId} onChange={onNode} />}
+    {selected.type === 'field' && <label>Подпись поля<input value={selected.label} onChange={event => onNode({ ...selected, label: event.target.value })} /></label>}
+    {selected.type === 'heading' && <label>Размер<select value={selected.size} onChange={event => onNode({ ...selected, size: event.target.value as typeof selected.size })}><option value="s">Небольшой</option><option value="m">Обычный</option><option value="l">Крупный</option></select></label>}
+    {(selected.type==='gallery'||selected.type==='files')&&<BuilderV2MediaSettings node={selected} table={rowTable} screenTable={tables.find(table=>table.id===screen.contextTableId)} onChange={onNode}/>}
+    {selected.type === 'image' && <label>Описание изображения<input value={selected.alt} onChange={event => onNode({ ...selected, alt: event.target.value })} /></label>}
+    {selected.type === 'collection' && <><label>Внешний вид<select value={selected.layout} onChange={event => {
+      const layout = event.target.value as typeof selected.layout
+      const catalog = layout === 'catalog' && sourceTable && builderV2CatalogDefaults(sourceTable)
+      if (catalog) { onNode(builderV2CatalogCollection(selected, catalog)); return }
+      onNode({...selected,layout,recordGroup:layout==='list'?selected.recordGroup:undefined,listGroupFieldId:layout==='calendar'||layout==='kanban'?undefined:selected.listGroupFieldId,dateFieldId:layout==='calendar'?sourceTable?.fields.find(field=>['date','datetime'].includes(field.type))?.id:undefined,groupFieldId:layout==='kanban'?sourceTable?.fields.find(field=>field.type==='single_select')?.id:undefined,kanbanMoveRoleIds:undefined})
+    }}><option value="list">Список</option><option value="cards">Сетка карточек</option><option value="tiles">Квадратные плитки</option><option value="catalog" disabled={!sourceTable?.fields.length}>Витрина</option><option value="table">Таблица</option><option value="calendar" disabled={!sourceTable?.fields.some(field=>['date','datetime'].includes(field.type))}>Календарь</option><option value="kanban" disabled={!sourceTable?.fields.some(field=>field.type==='single_select')}>Канбан</option></select></label>
+    {selected.layout !== 'calendar' && selected.layout !== 'kanban' && <label>Группировать по<select value={selected.listGroupFieldId ?? ''} onChange={event => onNode({...selected,listGroupFieldId:event.target.value||undefined})}><option value="">Без группировки</option>{sourceTable?.fields.filter(field=>appV2ListGroupFieldTypes.has(field.type)).map(field=><option key={field.id} value={field.id}>{field.name}</option>)}</select></label>}
+    {selected.layout==='calendar'&&<label>Дата записи<select value={selected.dateFieldId??''} onChange={event=>onNode({...selected,dateFieldId:event.target.value})}>{sourceTable?.fields.filter(field=>['date','datetime'].includes(field.type)).map(field=><option key={field.id} value={field.id}>{field.name}</option>)}</select></label>}
+    {selected.layout==='kanban'&&<label>Статус для колонок<select value={selected.groupFieldId??''} onChange={event=>onNode({...selected,groupFieldId:event.target.value,kanbanMoveRoleIds:undefined})}>{sourceTable?.fields.filter(field=>field.type==='single_select').map(field=><option key={field.id} value={field.id}>{field.name}</option>)}</select></label>}
+    {selected.layout==='kanban'&&onBoardMove&&<BoardMoveSettings app={app} node={selected} onChange={onBoardMove}/>}
+    {selected.layout !== 'catalog' && !sourceTable?.fields.some(field=>['date','datetime'].includes(field.type))&&<p className={ui.hint}>Для календаря добавьте в таблицу поле даты.</p>}
+    {selected.layout !== 'catalog' && !sourceTable?.fields.some(field=>field.type==='single_select')&&<p className={ui.hint}>Для канбана добавьте поле с выбором одного варианта, например «Статус».</p>}
+    <label>{selected.layout === 'catalog' ? 'Название на карточке' : 'Главное поле'}<select value={selected.titleFieldId} onChange={event => onNode({ ...selected, titleFieldId: event.target.value })}>{sourceTable?.fields.map(field => <option key={field.id} value={field.id}>{field.name}</option>)}</select></label><label>{selected.layout === 'catalog' ? 'Подпись под названием' : 'Дополнительное поле'}<select value={selected.subtitleFieldId ?? ''} onChange={event => onNode({ ...selected, subtitleFieldId: event.target.value || null })}><option value="">Не показывать</option>{sourceTable?.fields.map(field => <option key={field.id} value={field.id}>{field.name}</option>)}</select></label></>}
+    {selected.type === 'collection' && builderV2CardLayout(selected.layout) && !selected.itemIds.length && <>
+      <label>Фото карточки<select value={selected.cardImageFieldId ?? ''} onChange={event => onNode({ ...selected, cardImageFieldId: event.target.value || undefined })}>
+        <option value="">Без фото</option>
+        {sourceTable?.fields.filter(field => ['image', 'url'].includes(field.type)).map(field => <option key={field.id} value={field.id}>{field.name}</option>)}
+      </select></label>
+      {!sourceTable?.fields.some(field => ['image', 'url'].includes(field.type)) && <p className={ui.hint}>Чтобы показать фото, добавьте в исходную таблицу колонку с изображениями или ссылками на них.</p>}
+      <label>{selected.layout === 'catalog' ? 'Цена' : 'Значение внизу карточки'}<select value={selected.cardDetailFieldId ?? ''} onChange={event => onNode({ ...selected, cardDetailFieldId: event.target.value || undefined })}>
+        <option value="">Не показывать</option>
+        {sourceTable?.fields.filter(field => !['image', 'attachment'].includes(field.type)).map(field => <option key={field.id} value={field.id}>{field.name}</option>)}
+      </select></label>
+    </>}
+    {selected.type==='collection'&&onCard&&<CollectionActionSettings app={app} node={selected} tables={tables} onCard={onCard} onConfigure={onItemAction} onWorkflow={onItemWorkflow} onOpen={onOpenItemAction}/>}
+    {selected.type==='video'&&<><label>Подпись<input maxLength={200} value={selected.caption} onChange={event=>onNode({...selected,caption:event.target.value})}/></label><p className={ui.hint}>Прямая ссылка на видео MP4 или WebM. Ссылка на страницу видеосервиса не подойдёт. Видео запускает сам пользователь.</p></>}
+    {selected.type==='chart'&&<BuilderV2ChartSettings node={selected} table={sourceTable} onChange={onNode}/>}
+    {selected.type === 'metric' && <><label>Что посчитать<select value={selected.operation} onChange={event => { const operation = event.target.value as typeof selected.operation; onNode({ ...selected, operation, fieldId: operation === 'count' ? null : sourceTable?.fields.find(field => ['number', 'count', 'formula', 'rollup'].includes(field.type))?.id ?? null }) }}><option value="count">Количество записей</option><option value="sum" disabled={!hasNumbers}>Сумма</option><option value="avg" disabled={!hasNumbers}>Среднее</option><option value="min" disabled={!hasNumbers}>Минимум</option><option value="max" disabled={!hasNumbers}>Максимум</option></select></label>{selected.operation !== 'count' && <label>Поле расчёта<select value={selected.fieldId ?? ''} onChange={event => onNode({ ...selected, fieldId: event.target.value })}><option value="" disabled>Выберите числовое поле</option>{sourceTable?.fields.filter(field => ['number', 'count', 'formula', 'rollup'].includes(field.type)).map(field => <option key={field.id} value={field.id}>{field.name}</option>)}</select></label>}</>}
+    {selected.type === 'columns' && <label>Колонок на компьютере<select value={selected.columns} onChange={event => onNode({ ...selected, columns: Number(event.target.value) })}>{[1, 2, 3, 4].map(value => <option key={value}>{value}</option>)}</select></label>}
+    {selected.type === 'group' && <label>Оформление<select value={selected.appearance} onChange={event => onNode({ ...selected, appearance: event.target.value as typeof selected.appearance })}><option value="plain">Без оформления</option><option value="card">Карточка</option></select></label>}
+    {selected.type === 'form' && <><p className={ui.hint}>Таблица: {tables.find(table => table.id === selected.tableId)?.name ?? 'Недоступна'}.</p><label>Что делает форма<select value={selected.mode} onChange={event => onFormMode ? onFormMode(event.target.value as 'create' | 'edit') : onNode({ ...selected, mode: event.target.value as 'create' | 'edit' })}><option value="create">Добавляет запись</option><option value="edit" disabled={context.rowTableId !== selected.tableId || screen.contextTableId !== selected.tableId}>Изменяет открытую запись</option></select></label><label>Надпись на кнопке<input maxLength={100} value={selected.submitLabel ?? 'Сохранить'} onChange={event => onNode({ ...selected, submitLabel: event.target.value || 'Сохранить' })} /></label></>}
+    {selected.type === 'form' && onFormAction && onOpenForm && <BuilderV2FormActionSettings app={app} form={selected} tables={tables} onWorkflow={onFormWorkflow} onConfigure={onFormAction} onOpen={onOpenForm} />}
+    {selected.type === 'input' && <><label>Подпись поля<input value={selected.label} onChange={event => onNode({ ...selected, label: event.target.value, name: event.target.value })} /></label><label className={styles.checkbox}><input type="checkbox" checked={selected.required} onChange={event => onNode({ ...selected, required: event.target.checked })} />Обязательное поле</label><BuilderV2InputSettings app={app} input={selected} screenId={screenId} tables={tables} onChange={onNode} /></>}
+    <label>Расположение<select value={parent?.id ?? ''} onChange={event => onPlace(event.target.value || null)}><option value="">На экране</option>{containers.map(node => <option key={node.id} value={node.id}>{node.name || NODE_KINDS[node.type][0]}</option>)}</select></label>
+    </>}
+    {tab === 'data' && (selected.type === 'collection' || selected.type === 'metric' || selected.type==='chart') && <>
+    {(selected.type === 'metric' || selected.type === 'collection' || selected.type==='chart') && <label>Таблица<select value={source?.tableId ?? ''} onChange={event => onSource(event.target.value)}><option value="" disabled>Выберите таблицу</option>{tables.map(table => <option key={table.id} value={table.id}>{table.name}</option>)}</select></label>}
+    {source && sourceTable && (selected.type === 'collection' || selected.type === 'metric' || selected.type==='chart') && <BuilderV2SourceSettings source={source} table={sourceTable} metric={selected.type === 'metric'||selected.type==='chart'} screenTable={tables.find(table => table.id === screen.contextTableId)} onChange={onSourceSettings} />}
+    {selected.type === 'collection' && selected.layout === 'list' && sourceTable && <>
+      <label>Один пункт на значение<select value={selected.recordGroup?.fieldId ?? ''} onChange={event => onNode({
+        ...selected, recordGroup: event.target.value ? { ...selected.recordGroup, fieldId: event.target.value } : undefined,
+      })}><option value="">Показывать каждую строку</option>{sourceTable.fields.filter(field => ['text', 'number', 'single_select'].includes(field.type)).map(field => <option key={field.id} value={field.id}>{field.name}</option>)}</select></label>
+      {selected.recordGroup && <><p className={ui.hint}>Например, позиции с одним номером заказа появятся в списке одним пунктом.</p>
+        <label>Сумма по позициям<select value={selected.recordGroup.amountFieldId ?? ''} onChange={event => onNode({
+          ...selected, recordGroup: { ...selected.recordGroup!, amountFieldId: event.target.value || undefined },
+        })}><option value="">Без суммы</option>{sourceTable.fields.filter(field => ['number', 'count', 'rollup', 'formula'].includes(field.type)).map(field => <option key={field.id} value={field.id}>{field.name}</option>)}</select></label></>}
+    </>}
+    </>}
+    </div>
+    <div className={styles.elementActions}><div><button type="button" className={styles.iconButton} aria-label="Переместить выше" onClick={() => onMove(-1)}><ProtoIcon name="up" /></button><button type="button" className={styles.iconButton} aria-label="Переместить ниже" onClick={() => onMove(1)}><ProtoIcon name="down" /></button></div><button type="button" className={styles.iconButton} aria-label="Дублировать элемент" onClick={onDuplicate}><ProtoIcon name="copy" /></button><button type="button" className={styles.iconButton} aria-label="Удалить элемент" onClick={onDelete}><ProtoIcon name="trash" /></button></div>
+  </div>
+}

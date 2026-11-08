@@ -144,7 +144,9 @@ export function moduleContract(app: App, module: AppModule): ModuleContract | nu
       group(c.tables.production, c.run, { date: ['date', 'datetime'], product: ['relation'], qty: ['number'], defects: ['number'], shift: ['single_select'] }, productTarget)
       group(c.tables.norms, c.norm, { product: ['relation'], material: ['relation'], perUnit: ['number'], active: ['checkbox'] }, { ...productTarget, material: c.tables.materials })
       group(c.tables.movements, c.movement, { date: ['date', 'datetime'], material: ['relation'], kind: ['single_select'], qty: ['number'], run: ['relation'] }, { material: c.tables.materials, run: c.tables.production })
-      group(c.tables.materials, c.material, { unit: ['single_select'], opening: ['number'], movements: ['relation'] }, { movements: c.tables.movements })
+      // Optional summary coordinates do not expand the production write contract.
+      const { name, unit, opening, movements } = c.material
+      group(c.tables.materials, { name, unit, opening, movements }, { unit: ['single_select'], opening: ['number'], movements: ['relation'] }, { movements: c.tables.movements })
       // Products are addressed by the existing relation, not a guessed table name.
       break
     }

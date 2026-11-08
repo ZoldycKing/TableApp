@@ -65,6 +65,8 @@ export type TemplateField = {
 export type TemplateView = {
   name: string
   type: ViewType
+  /** Auxiliary columns stay available to formulas but start hidden in this view. */
+  hiddenFields?: string[]
   /** Поле группировки для доски. */
   stackBy?: string
   /** Обложка для галереи. */

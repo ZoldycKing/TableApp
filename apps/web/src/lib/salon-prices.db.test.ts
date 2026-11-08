@@ -19,6 +19,7 @@ describe.skipIf(!process.env.DATABASE_URL)('price snapshots in PostgreSQL', () =
     database = await import('@tableapp/db'); writes = await import('./row-mutations')
     await database.db.insert(database.users).values({ id: userId, email: `${userId}@example.invalid` })
     await database.db.insert(database.workspaces).values({ id: workspaceId, ownerId: userId, name: 'Price snapshot tests', slug: workspaceId.toLowerCase() })
+    await database.db.insert(database.workspaceMembers).values({workspaceId,userId,role:'owner'})
     await database.db.insert(database.tables).values(example.built.tables.map(table => ({ ...table, workspaceId })))
     await database.db.insert(database.fields).values(example.built.fields)
     await database.db.insert(database.rows).values(example.built.rows)

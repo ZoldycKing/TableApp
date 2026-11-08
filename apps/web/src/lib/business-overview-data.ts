@@ -1,6 +1,7 @@
 import { businessProfileSchema, type BusinessProfile } from '@tableapp/schema'
 import { and, desc, eq, sql } from 'drizzle-orm'
 import { canAdminister, canEdit, type MemberRole } from './roles'
+import { restrictedTables,tablePermission } from './table-permissions'
 
 export type OverviewTable = {
   id: string
@@ -18,6 +19,7 @@ export type OverviewApp = {
   published: boolean
   hasUnpublishedChanges: boolean
   updatedAt: string
+  formatVersion?: number
 }
 
 export type BusinessOverviewData = {
@@ -35,38 +37,44 @@ export type OverviewAction = { title: string; description: string; label: string
 /** The next step describes persisted state, never a fictitious onboarding percentage. */
 export function overviewNextAction(data: BusinessOverviewData): OverviewAction {
   if (!canEdit(data.role)) return {
-    title: data.tables.length ? 'Данные бизнеса доступны для просмотра' : 'Здесь появятся данные бизнеса',
-    description: 'У вас доступ для просмотра. Данные, экраны и публикацию подготавливает владелец или редактор бизнеса.',
+    title: data.tables.length ? 'Таблицы доступны для просмотра' : 'Здесь появятся таблицы',
+    description: 'Данные и приложения подготавливает владелец или редактор пространства.',
     label: data.tables.length ? 'Посмотреть таблицы' : 'Посмотреть приложения',
     href: data.tables.length ? '/tables' : '/apps', icon: 'table',
   }
+  const builder = data.apps.find(app => app.formatVersion === 2 && !app.published)
+  if (builder) return {
+    title: 'Продолжите работу в конструкторе',
+    description: `Настройте список, карточки и экраны приложения «${builder.name}». Подсказки доступны в разделе «Первые шаги».`,
+    label: 'Открыть конструктор', href: `/apps/${encodeURIComponent(builder.id)}`, icon: 'apps',
+  }
   if (!data.tables.length) return {
-    title: 'Начните с данных вашего бизнеса',
-    description: 'Загрузите Excel или CSV, выберите готовый сценарий или создайте таблицу. Затем подготовьте из неё приложение.',
+    title: 'Добавьте первые данные',
+    description: 'Загрузите Excel или CSV, выберите готовый шаблон или создайте таблицу. Затем подготовьте из неё приложение.',
     label: 'Начать настройку', href: '/setup', icon: 'plus',
   }
   if (!data.profile) return {
-    title: 'Укажите, какой бизнес увидят клиенты',
-    description: 'Название бизнеса будет видно в каталоге, личном кабинете и переписке. Данные таблиц уже доступны для работы.',
-    label: 'Заполнить данные бизнеса', href: '/setup?step=business', icon: 'gear',
+    title: 'Продолжите настройку приложения',
+    description: 'Проверьте название, данные и разделы приложения.',
+    label: 'Продолжить настройку', href: '/setup?step=business', icon: 'gear',
   }
   if (!data.apps.length) return {
     title: 'Данные есть — подготовьте приложение',
-    description: 'Выберите исходную таблицу, создайте приложение и проверьте его экраны и доступ для клиентов и сотрудников.',
+    description: 'Создайте приложение на своих данных. Вы сможете настроить его разделы и доступ.',
     label: 'Подготовить приложение', href: `/tables/${encodeURIComponent(data.tables[0]!.id)}`, icon: 'apps',
   }
   const pending = data.apps.find(app => !app.published || app.hasUnpublishedChanges)
   if (pending) return {
     title: pending.published ? 'Есть неопубликованные изменения' : 'Приложение ещё не опубликовано',
     description: pending.published
-      ? `В приложении «${pending.name}» сохранён новый черновик. Пользователи продолжают видеть опубликованную версию. Проверьте правки перед публикацией.`
+      ? `Проверьте новый черновик «${pending.name}». Пока пользователи видят предыдущую опубликованную версию.`
       : `Проверьте экраны и доступ в приложении «${pending.name}». После публикации появится рабочая ссылка для пользователей.`,
     label: pending.published ? 'Проверить изменения' : 'Проверить и опубликовать',
     href: pending.published ? `/apps/${encodeURIComponent(pending.id)}` : `/setup?app=${encodeURIComponent(pending.id)}&step=review`, icon: 'apps',
   }
   return {
     title: 'Приложение опубликовано',
-    description: 'Пользователи видят опубликованные экраны. Записи таблиц доступны в приложении согласно настроенным правам; изменения экранов требуют новой публикации.',
+    description: 'Рабочая ссылка готова. Сохранённые записи видны сразу, а изменения экранов и доступа появятся после публикации.',
     label: 'Открыть приложение', href: `/a/${encodeURIComponent(data.apps[0]!.slug)}`, icon: 'check',
   }
 }
@@ -114,6 +122,7 @@ export async function loadBusinessOverview(): Promise<BusinessOverviewData | nul
       .where(eq(tables.workspaceId, member.workspaceId)).orderBy(desc(tables.updatedAt), tables.id),
     db.select({
       id: apps.id, name: apps.name, slug: apps.slug, updatedAt: apps.updatedAt,
+      formatVersion: sql<number>`case when ${apps.draft}->>'formatVersion' = '2' then 2 else 1 end`.mapWith(Number),
       published: sql<boolean>`${apps.published} is not null`,
       hasUnpublishedChanges: sql<boolean>`${apps.published} is not null and ${apps.draft} <> ${apps.published}`,
     }).from(apps).where(eq(apps.workspaceId, member.workspaceId)).orderBy(desc(apps.updatedAt), apps.id),
@@ -123,10 +132,10 @@ export async function loadBusinessOverview(): Promise<BusinessOverviewData | nul
   return {
     workspaceId: member.workspaceId, workspaceName: member.workspaceName,
     businessName: profile?.name ?? member.workspaceName, profile, role: member.role,
-    tables: tableRows.map(({ lastRowChange, lastFieldChange, ...table }) => ({
+    tables: tableRows.filter(table=>tablePermission(member,table.id)!=='none').map(({ lastRowChange, lastFieldChange, ...table }) => ({
       ...table,
       updatedAt: new Date(Math.max(table.updatedAt.getTime(), ...[lastRowChange, lastFieldChange].filter((date): date is string => Boolean(date)).map(date => new Date(date).getTime()))).toISOString(),
     })).sort((first, second) => second.updatedAt.localeCompare(first.updatedAt) || first.id.localeCompare(second.id)),
-    apps: appRows.map(app => ({ ...app, updatedAt: app.updatedAt.toISOString() })),
+    apps: restrictedTables(member)?[]:appRows.map(app => ({ ...app, updatedAt: app.updatedAt.toISOString() })),
   }
 }

@@ -5,6 +5,45 @@ import { templateExample } from './presentation'
 import { TEMPLATES } from './catalog'
 
 describe('examples and dashboards match installed presets', () => {
+  it.each(['2026-10-30T00:15:00Z', '2026-10-30T22:15:00Z', '2026-12-31T23:30:00Z'])('production has a current-day run with matching movements at %s', instant => {
+    const now = new Date(instant)
+    const example = templateExample('proizvodstvo', now)
+    const production = example.built.production!
+    const values = computeDashboards(example.app, { now, role: 'director',
+      views: Object.fromEntries(example.views.map(view => [view.id, view])),
+      tables: Object.fromEntries(example.built.tables.map(table => [table.id, { fields: example.byTable.get(table.id)!,
+        rows: example.rows.filter(row => row.tableId === table.id).map(row => ({ ...row, version: 0 })) }])) })
+    const home = example.app.screens.find(screen => screen.type === 'dashboard')!
+    if (home.type !== 'dashboard') throw new Error('missing production summary')
+    for (const [title, expected] of [['Произведено сегодня', '20000'], ['Брак сегодня', '320']]) {
+      const block = home.blocks.find(block => block.title === title)!
+      const value = values[block.id]!
+      expect(value.kind).toBe('metric')
+      if (value.kind === 'metric') expect(value.text.replace(/\s/g, '')).toBe(expected)
+    }
+    for (const movement of example.rows.filter(row => row.tableId === production.tables.movements)) {
+      const runIds = movement.data[production.movement.run] as string[] | undefined
+      if (!runIds?.length) continue
+      const run = example.rows.find(row => row.id === runIds[0])!
+      expect(movement.data[production.movement.date]).toBe(run.data[production.run.date])
+    }
+  })
+
+  it('keeps production lookup helpers for formulas while hiding duplicate names in starter views', () => {
+    const example = templateExample('proizvodstvo')
+    for (const [tableKey, helperKeys] of [['production', ['productName']], ['norms', ['productName', 'materialName']], ['movements', ['materialName']]] as const) {
+      for (const key of helperKeys) {
+        const field = example.field(tableKey, key)
+        expect(field.type).toBe('lookup')
+        const views = example.views.filter(view => view.tableId === example.table(tableKey).id)
+        expect(views.length).toBeGreaterThan(0)
+        expect(views.every(view => view.config.hiddenFieldIds.includes(field.id))).toBe(true)
+      }
+    }
+    const title = example.field('production', 'name')
+    const run = example.rows.find(row => row.tableId === title.tableId)!
+    expect(String(run.data[title.id])).toContain('Пивной пакет 1 л')
+  })
   it('builds every template using actual fields and valid screen references', () => {
     for (const template of TEMPLATES) {
       const example = templateExample(template.id)

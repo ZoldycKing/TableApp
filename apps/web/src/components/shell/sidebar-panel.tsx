@@ -116,7 +116,7 @@ export function SidebarPanel({
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overflow-x-hidden px-3 py-4">
         {businesses !== undefined ? <BusinessTree businesses={businesses} activeWorkspaceId={activeWorkspaceId} pathname={pathname} variant={variant} /> : null}
         <NavList pathname={pathname} role={role} variant={variant}
-          omitIds={businesses !== undefined && variant === 'wide' ? ['data', 'apps'] : []}
+          omitIds={businesses?.find(business=>business.workspaceId===activeWorkspaceId)?.tableLimited?['overview','templates','apps','messages','team','usage',...(variant==='wide'?['data']:[])]:businesses !== undefined && variant === 'wide' ? ['data', 'apps'] : []}
           contextName={businesses !== undefined ? businesses.find(business => business.workspaceId === activeWorkspaceId)?.workspaceName ?? workspaceName : undefined} />
       </div>
 

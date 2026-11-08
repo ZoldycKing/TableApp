@@ -113,7 +113,7 @@ describe('боковая панель', () => {
   it('показывает все разделы и содержимое страницы', () => {
     show()
     const nav = screen.getAllByRole('navigation', { name: 'Разделы платформы' })[0]!
-    for (const label of ['Таблицы', 'Шаблоны', 'Приложения', 'Команда и доступ', 'Использование']) {
+    for (const label of ['Таблицы', 'Шаблоны', 'Приложения', 'Команда и доступ', 'Тариф и лимиты']) {
       expect(within(nav).getByRole('link', { name: label })).toBeTruthy()
     }
     expect(screen.getByText('Содержимое страницы')).toBeTruthy()
@@ -128,7 +128,7 @@ describe('боковая панель', () => {
     show()
     const current = screen.getAllByRole('link', { current: 'page' })
     expect(current.length).toBeGreaterThan(0)
-    expect(current[0]!.textContent).toContain('Использование')
+    expect(current[0]!.textContent).toContain('Тариф и лимиты')
   })
 
   it('подсветка держится на вложенной странице', () => {
@@ -235,7 +235,7 @@ describe('выдвижная панель на телефоне', () => {
   it('открывается по нажатию и содержит те же разделы', () => {
     show()
     const drawer = open()
-    for (const label of ['Таблицы', 'Шаблоны', 'Приложения', 'Команда и доступ', 'Использование']) {
+    for (const label of ['Таблицы', 'Шаблоны', 'Приложения', 'Команда и доступ', 'Тариф и лимиты']) {
       expect(within(drawer).getByRole('link', { name: label })).toBeTruthy()
     }
     expect(within(drawer).getByRole('link', { current: 'page' })).toBeTruthy()

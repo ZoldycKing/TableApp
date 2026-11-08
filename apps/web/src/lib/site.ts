@@ -39,14 +39,13 @@ export const PUBLIC_ROUTES = {
 /**
  * Разделы шапки.
  *
- * Два выпадающих списка и три прямые ссылки: больше не помещается, а меньше
- * не рассказывает. Якоря на главной остались, но ни один пункт меню в них
- * не ведёт — у каждой крупной темы есть своя страница.
+ * Шапка ведёт прямо к возможностям, шаблонам, тарифам и демо.
+ * Подробные объяснения и решения доступны из содержимого и подвала.
  */
 export const NAV_PRODUCT: SiteLink[] = [
   { href: PUBLIC_ROUTES.features, label: 'Возможности', hint: 'Таблицы, формулы, приложения, права' },
-  { href: PUBLIC_ROUTES.howItWorks, label: 'Как это работает', hint: 'Путь от файла до ссылки сотруднику' },
-  { href: PUBLIC_ROUTES.demo, label: 'Живое демо', hint: 'Настоящее приложение без регистрации' },
+  { href: PUBLIC_ROUTES.howItWorks, label: 'Как это работает', hint: 'От своей таблицы к своему приложению' },
+  { href: PUBLIC_ROUTES.demo, label: 'Живое демо', hint: 'Личный и рабочий примеры без регистрации' },
 ]
 
 export const NAV_SOLUTIONS: SiteLink[] = [
@@ -63,6 +62,13 @@ export const NAV_MAIN: SiteLink[] = [
   { href: PUBLIC_ROUTES.pricing, label: 'Тарифы' },
 ]
 
+/** Прямые ссылки плавающей шапки. */
+export const NAV_HEADER: SiteLink[] = [
+  { href: PUBLIC_ROUTES.features, label: 'Возможности' },
+  ...NAV_MAIN,
+  { href: PUBLIC_ROUTES.demo, label: 'Демо' },
+]
+
 /** Подвал: те же адреса, разложенные по смыслу, без повторения всей шапки. */
 export const FOOTER_COLUMNS: { title: string; links: SiteLink[] }[] = [
   {
@@ -75,7 +81,7 @@ export const FOOTER_COLUMNS: { title: string; links: SiteLink[] }[] = [
     ],
   },
   {
-    title: 'Решения',
+    title: 'Для бизнеса',
     links: [
       { href: '/solutions/client-portal', label: 'Кабинет клиента' },
       { href: '/solutions/order-management', label: 'Заявки и выезды' },

@@ -7,7 +7,7 @@ describe('scenario preparation from installed resource bindings', () => {
     ['salon', 'Услуги', 'Мастера и график'], ['zakazy', 'Товары', 'Обработка заказов'],
     ['service', 'Услуги', 'Приём и ремонт'], ['zayavki', 'Услуги', 'Назначение мастеров'],
     ['dostavka', 'Услуги доставки', 'Диспетчер и курьеры'], ['nedvizhimost', 'Объекты', 'Агенты и просмотры'],
-    ['crm', 'Клиенты', 'Менеджеры и сделки'], ['sklad', 'Товары и остатки', 'Работа склада'],
+    ['crm', 'Клиенты', 'Менеджеры и сделки'], ['sklad', 'Товары и остатки', 'Команда'],
     ['proizvodstvo', 'Материалы и продукция', 'Нормы и команда'],
   ])('prepares %s with relevant data and work tasks', (id, data, work) => {
     const example = templateExample(id!)
@@ -49,10 +49,10 @@ describe('scenario preparation from installed resource bindings', () => {
     expect(guidedSetupPlan(null).tasks).toEqual([])
     expect(guidedSetupPlan(null).steps.map(step => step.id)).toEqual(['business', 'data', 'work', 'review'])
   })
-  it('opens the grid and preserves exact app/step context and read-only mode', () => {
+  it('opens record forms and preserves exact app/step context and read-only mode', () => {
     const url = new URL(setupTableHref('table 1', 'app&a', 'work', true), 'https://tableapp.test')
     expect(url.pathname).toBe('/t/table%201')
-    expect(url.searchParams.get('mode')).toBe('grid')
+    expect(url.searchParams.get('mode')).toBe('records')
     expect(url.searchParams.get('readonly')).toBe('1')
     expect(url.searchParams.get('setup')).toBe(setupHref('app&a', 'work'))
     const help = new URL(setupHelpHref('schedule', 'app&a', 'work'), 'https://tableapp.test')

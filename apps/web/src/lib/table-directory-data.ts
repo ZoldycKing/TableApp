@@ -1,5 +1,7 @@
 import { apps, db, fields, rows, tables, views } from '@tableapp/db'
-import { asc, eq, sql } from 'drizzle-orm'
+import { and,asc, eq, sql } from 'drizzle-orm'
+import { memberTableFields,restrictedTables,tablePermission,type TableMember } from './table-permissions'
+import { normalizeFieldOptions,type Field } from '@tableapp/schema'
 
 export type DirectoryApp = { id: string; name: string; inDraft: boolean; inPublished: boolean }
 export type DirectoryField = { id: string; name: string; type: string; description: string | null }
@@ -14,6 +16,7 @@ export type DirectoryTable = {
   rowCount: number; fieldCount: number
   createdAt: string; updatedAt: string
   fields: DirectoryField[]; apps: DirectoryApp[]; relations: DirectoryRelation[]
+  access?:'view'|'edit'
 }
 
 type TableMetadata = Omit<DirectoryTable, 'fields' | 'apps' | 'relations' | 'createdAt' | 'updatedAt'> & { createdAt: Date; updatedAt: Date }
@@ -70,7 +73,7 @@ export function assembleTableDirectory(
 }
 
 /** Counts and timestamps are computed by PostgreSQL; no business rows are loaded for this directory. */
-export async function loadTableDirectory(workspaceId: string): Promise<DirectoryTable[]> {
+export async function loadTableDirectory(workspaceId: string,member?:TableMember): Promise<DirectoryTable[]> {
   // Drizzle removes Column qualifiers in single-table SELECT projections. An
   // explicit identifier keeps this correlation bound to the OUTER table, rather
   // than comparing each row/field's table_id to its own id inside the subquery.
@@ -91,5 +94,8 @@ export async function loadTableDirectory(workspaceId: string): Promise<Directory
     db.select({ id: apps.id, name: apps.name, draft: apps.draft, published: apps.published })
       .from(apps).where(eq(apps.workspaceId, workspaceId)).orderBy(asc(apps.createdAt)),
   ])
-  return assembleTableDirectory(tableRecords, fieldRecords, viewRecords, appRecords)
+  const visibleTables=member?tableRecords.filter(table=>tablePermission(member,table.id)!=='none'):tableRecords
+  const ids=new Set(visibleTables.map(table=>table.id))
+  const visibleFields=member?visibleTables.flatMap(table=>memberTableFields(fieldRecords.filter(field=>field.tableId===table.id).map(field=>({...field,description:field.description,position:'a0',options:normalizeFieldOptions(field.type as Field['type'],field.options)}) as Field),member)):fieldRecords
+  return assembleTableDirectory(visibleTables,visibleFields,viewRecords.filter(view=>ids.has(view.tableId)),member&&restrictedTables(member)?[]:appRecords).map(table=>({...table,...(member?{access:tablePermission(member,table.id) as 'view'|'edit'}:{})}))
 }

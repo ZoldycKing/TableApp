@@ -20,8 +20,8 @@ beforeEach(() => { mocks.create.mockReset(); mocks.createApp.mockReset(); mocks.
 
 describe('business table directory', () => {
   it('lets a viewer open existing data while hiding write entry points', () => {
-    render(<TableDirectory tables={tables} businessName="ИП Иванов" canCreate={false} />)
-    expect(screen.getByRole('link', { name: 'Услуги' }).getAttribute('href')).toBe('/tables/tbl_services')
+    render(<TableDirectory tables={tables} canCreate={false} />)
+    expect(screen.getByRole('link', { name: 'Услуги' }).getAttribute('href')).toBe('/t/tbl_services?readonly=1')
     expect(screen.getByText('Записей:', { exact: false }).textContent).toContain('12')
     expect(screen.queryByRole('button', { name: 'Новая таблица' })).toBeNull()
     expect(screen.queryByRole('link', { name: 'Загрузить Excel или CSV' })).toBeNull()
@@ -31,17 +31,17 @@ describe('business table directory', () => {
 
   it('creates through the existing authorized action and opens the returned table', async () => {
     mocks.create.mockResolvedValue({ ok: true, tableId: 'tbl_created' })
-    render(<TableDirectory tables={tables} businessName="ИП Иванов" canCreate />)
+    render(<TableDirectory tables={tables} canCreate />)
     fireEvent.click(screen.getByRole('button', { name: 'Новая таблица' }))
     fireEvent.change(screen.getByLabelText('Название таблицы'), { target: { value: '  Клиенты  ' } })
     fireEvent.click(screen.getByRole('button', { name: 'Создать' }))
-    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith('/tables/tbl_created'))
+    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith('/t/tbl_created'))
     expect(mocks.create).toHaveBeenCalledExactlyOnceWith('Клиенты')
   })
 
   it('keeps the name and business page when the server rejects creation', async () => {
     mocks.create.mockResolvedValue({ ok: false, error: 'Лимит таблиц исчерпан' })
-    render(<TableDirectory tables={[]} businessName="ИП Иванов" canCreate />)
+    render(<TableDirectory tables={[]} canCreate />)
     fireEvent.click(screen.getByRole('button', { name: 'Новая таблица' }))
     fireEvent.change(screen.getByLabelText('Название таблицы'), { target: { value: 'Клиенты' } })
     fireEvent.click(screen.getByRole('button', { name: 'Создать' }))
@@ -50,26 +50,29 @@ describe('business table directory', () => {
     expect(mocks.push).not.toHaveBeenCalled()
   })
 
-  it('opens one shared table in view mode or either editor without mixing them', () => {
-    render(<TableOverview table={tables[0]!} businessName="ИП Иванов" canEdit />)
-    expect(screen.getByRole('link', { name: 'Посмотреть таблицу' }).getAttribute('href')).toBe('/t/tbl_services?mode=grid&readonly=1')
-    expect(screen.queryByRole('link', { name: /Таблицей/ })).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Редактировать' }))
-    expect(screen.getByRole('link', { name: /Таблицей/ }).getAttribute('href')).toBe('/t/tbl_services?mode=grid')
-    expect(screen.getByRole('link', { name: /По записям/ }).getAttribute('href')).toBe('/t/tbl_services?mode=records')
-    expect(screen.getByText('Оба способа изменяют одни и те же данные.')).toBeTruthy()
+  it('opens editable data directly and keeps metadata available separately', () => {
+    render(<TableDirectory tables={tables} canCreate />)
+    expect(screen.getByRole('link', { name: 'Услуги' }).getAttribute('href')).toBe('/t/tbl_services')
+    expect(screen.getByRole('link', { name: 'Сведения о таблице «Услуги»' }).getAttribute('href')).toBe('/tables/tbl_services')
+    expect(mocks.create).not.toHaveBeenCalled()
+  })
+
+  it('returns from metadata to the same table without another editing choice', () => {
+    render(<TableOverview table={tables[0]!} canEdit />)
+    expect(screen.getByRole('link', { name: 'Открыть таблицу' }).getAttribute('href')).toBe('/t/tbl_services')
+    expect(screen.queryByRole('button', { name: 'Редактировать' })).toBeNull()
   })
 
   it('hides editor and application creation for viewers on the overview', () => {
-    render(<TableOverview table={tables[0]!} businessName="ИП Иванов" canEdit={false} />)
+    render(<TableOverview table={tables[0]!} canEdit={false} />)
     expect(screen.queryByRole('button', { name: 'Редактировать' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Подготовить приложение' })).toBeNull()
-    expect(screen.getByRole('link', { name: 'Посмотреть таблицу' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Открыть таблицу' }).getAttribute('href')).toBe('/t/tbl_services?readonly=1')
   })
 
   it('prepares a real application and opens its builder after server success', async () => {
     mocks.createApp.mockResolvedValue({ ok: true, appId: 'app_services' })
-    render(<TableOverview table={tables[0]!} businessName="ИП Иванов" canEdit />)
+    render(<TableOverview table={tables[0]!} canEdit />)
     fireEvent.click(screen.getByRole('button', { name: 'Подготовить приложение' }))
     await waitFor(() => expect(mocks.push).toHaveBeenCalledWith('/apps/app_services'))
     expect(mocks.createApp).toHaveBeenCalledExactlyOnceWith('tbl_services')
@@ -80,7 +83,7 @@ describe('business table directory', () => {
     render(<TableOverview table={{ ...tables[0]!, relations: [
       { ...relation, fieldId: 'fld_master', fieldName: 'Мастер', targetId: 'tbl_masters', targetName: 'Мастера' },
       { ...relation, fieldId: 'fld_type', fieldName: 'Категория', targetId: 'tbl_types', targetName: 'Категории' },
-    ] }} businessName="ИП Иванов" canEdit />)
+    ] }} canEdit />)
     expect(screen.getAllByRole('heading', { name: 'Эта таблица использует данные других таблиц' })).toHaveLength(1)
     expect(screen.getByRole('link', { name: 'Мастера' }).getAttribute('href')).toBe('/tables/tbl_masters')
     expect(screen.getByRole('link', { name: 'Категории' }).getAttribute('href')).toBe('/tables/tbl_types')

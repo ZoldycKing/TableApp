@@ -15,10 +15,10 @@ const row = { app, publishedAt: null, origin: 'https://example.invalid' }
 describe('application settings permissions and address policy', () => {
   it('distinguishes the published application from pending draft changes', () => {
     const ui = render(<AppsManager apps={[{ ...row, publishedAt: '2026-10-19T10:00:00Z', hasUnpublishedChanges: true }]} tables={[]} />)
-    expect(ui.getByText('Опубликовано')).toBeTruthy()
-    expect(ui.getByText('Есть сохранённые изменения, которые ещё не опубликованы.')).toBeTruthy()
+    expect(ui.getByText('Опубликовано · есть изменения')).toBeTruthy()
+    expect(ui.getByText('Пользователи видят предыдущую опубликованную версию.')).toBeTruthy()
     expect(ui.getByRole('link', { name: 'Открыть приложение' }).getAttribute('href')).toBe('/a/shop')
-    expect(ui.getByRole('link', { name: 'Настроить приложение' }).getAttribute('href')).toBe('/apps/app-1')
+    expect(ui.getByRole('link', { name: 'Проверить изменения' }).getAttribute('href')).toBe('/apps/app-1')
     expect(ui.getByRole('button', { name: 'Удалить' }).closest('details')!.hasAttribute('open')).toBe(false)
     expect(mocks.publish).not.toHaveBeenCalled()
   })

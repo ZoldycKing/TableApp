@@ -1,6 +1,6 @@
 'use server'
 
-import { authTokens, db, users, workspaceMembers } from '@tableapp/db'
+import { authTokens, db, users, workspaceMembers,tables } from '@tableapp/db'
 import { newId } from '@tableapp/schema'
 import { and, eq } from 'drizzle-orm'
 import { cookies, headers } from 'next/headers'
@@ -17,6 +17,8 @@ import { sendMagicLink } from '@/lib/mailer'
 import { canAdminister, isKnownRole, type MemberRole } from '@/lib/roles'
 import { currentAccount, currentMember, listMemberships } from '@/lib/session'
 import type { ActionResult } from './actions'
+import { validateTableAccess } from '@/lib/validate-table-access'
+import { publishTable } from '@/lib/live'
 
 const NOT_OWNER = 'Управлять командой может только владелец'
 
@@ -38,6 +40,7 @@ async function ownerCount(workspaceId: string): Promise<number> {
 export async function inviteMemberAction(
   rawEmail: string,
   role: string,
+  tableAccess?:unknown,
 ): Promise<{ ok: true; delivered: boolean; hint: string | null } | { ok: false; error: string }> {
   const auth = await requireOwner()
   if (!auth.ok) return auth
@@ -45,6 +48,8 @@ export async function inviteMemberAction(
   const email = normalizeEmail(rawEmail)
   if (!isValidEmail(email)) return { ok: false, error: 'Введите корректный адрес почты' }
   if (!isKnownRole(role)) return { ok: false, error: 'Неизвестная роль' }
+  const scope=await validateTableAccess(auth.member.workspaceId,role,tableAccess)
+  if(!scope.ok)return scope
 
   // Пользователь может ещё не существовать: приглашение заводит запись,
   // но воркспейса ему не создаёт — он придёт в чужой.
@@ -70,10 +75,11 @@ export async function inviteMemberAction(
       workspaceId: auth.member.workspaceId,
       userId,
       role: role as MemberRole,
+      tableAccess:scope.access,
       invitedEmail: email,
       acceptedAt: null,
     })
-  }
+  }else if(scope.access!==null)return {ok:false,error:'Участник уже в команде. Измените доступ в его настройках.'}
 
   const { token, hash } = createToken()
   await db.insert(authTokens).values({
@@ -101,6 +107,30 @@ export async function inviteMemberAction(
   return { ok: true, delivered: result.delivered, hint: result.delivered ? null : result.reason }
 }
 
+export async function setMemberTableAccessAction(userId:string,input:unknown):Promise<ActionResult>{
+  const auth=await requireOwner()
+  if(!auth.ok)return auth
+  if(typeof userId!=='string'||!userId||userId.length>128)return {ok:false,error:'Участник не найден'}
+  const [target]=await db.select().from(workspaceMembers).where(and(eq(workspaceMembers.workspaceId,auth.member.workspaceId),eq(workspaceMembers.userId,userId)))
+  if(!target)return {ok:false,error:'Участник не найден'}
+  if(target.role==='owner')return {ok:false,error:'Владельцу доступны все таблицы'}
+  const scope=await validateTableAccess(auth.member.workspaceId,target.role,input)
+  if(!scope.ok)return scope
+  const saved=await db.transaction(async tx=>{
+    const [owner]=await tx.select().from(workspaceMembers).where(and(eq(workspaceMembers.workspaceId,auth.member.workspaceId),eq(workspaceMembers.userId,auth.member.userId))).for('share')
+    if(owner?.role!=='owner')return false
+    const [current]=await tx.select().from(workspaceMembers).where(and(eq(workspaceMembers.workspaceId,auth.member.workspaceId),eq(workspaceMembers.userId,userId))).for('update')
+    if(!current||current.role!==target.role||current.role==='owner')return false
+    await tx.update(workspaceMembers).set({tableAccess:scope.access}).where(and(eq(workspaceMembers.workspaceId,auth.member.workspaceId),eq(workspaceMembers.userId,userId)))
+    return true
+  })
+  if(!saved)return {ok:false,error:'Роль участника изменилась. Откройте настройки заново.'}
+  const affected=await db.select({id:tables.id}).from(tables).where(eq(tables.workspaceId,auth.member.workspaceId))
+  for(const table of affected)publishTable(table.id,'structure')
+  revalidatePath('/','layout')
+  return {ok:true}
+}
+
 export async function changeRoleAction(userId: string, role: string): Promise<ActionResult> {
   const auth = await requireOwner()
   if (!auth.ok) return auth
@@ -122,7 +152,7 @@ export async function changeRoleAction(userId: string, role: string): Promise<Ac
 
   await db
     .update(workspaceMembers)
-    .set({ role })
+    .set({ role,...(role==='owner'?{tableAccess:null}:{}) })
     .where(
       and(eq(workspaceMembers.workspaceId, auth.member.workspaceId), eq(workspaceMembers.userId, userId)),
     )

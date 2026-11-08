@@ -3,7 +3,7 @@ import type { Binding, Field } from '@tableapp/schema'
 import { formatCell } from '@/lib/format'
 import type { TableRow } from '@/lib/table-store'
 
-export type Viewer = { email: string; name: string | null; id: string } | null
+export type Viewer = { email: string; name: string | null; id: string; workspaceSession?: boolean } | null
 
 /** Источник значения компонента: константа, поле строки или свойство вошедшего. */
 export function resolveBinding(

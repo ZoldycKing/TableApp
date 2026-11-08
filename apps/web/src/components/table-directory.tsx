@@ -7,12 +7,13 @@ import { APP_TIME_ZONE } from '@tableapp/schema'
 import { createTableAction } from '@/app/actions'
 import { ShellIcon } from './shell/icons'
 import type { DirectoryTable } from '@/lib/table-directory-data'
+import { tableWorkLink } from '@/lib/table-work-link'
+import { ownerPrimary } from './owner-ui'
 
 export type { DirectoryTable } from '@/lib/table-directory-data'
 
-export function TableDirectory({ tables, businessName, canCreate }: {
+export function TableDirectory({ tables, canCreate }: {
   tables: DirectoryTable[]
-  businessName: string
   canCreate: boolean
 }) {
   const router = useRouter()
@@ -30,7 +31,7 @@ export function TableDirectory({ tables, businessName, canCreate }: {
       try {
         const result = await createTableAction(name.trim())
         if (!result.ok) return setError(result.error)
-        router.push(`/tables/${result.tableId}`)
+        router.push(tableWorkLink(result.tableId, true))
       } catch {
         setError('Не удалось создать таблицу. Попробуйте ещё раз.')
       }
@@ -41,13 +42,12 @@ export function TableDirectory({ tables, businessName, canCreate }: {
     <main className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-6 sm:py-10">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
-          <p className="mb-1 break-words text-sm text-ink-muted">{businessName}</p>
           <h1 className="text-2xl font-semibold tracking-tight text-ink">Таблицы</h1>
-          <p className="mt-2 max-w-2xl text-sm text-ink-soft">{canCreate ? 'Данные вашего бизнеса. Откройте таблицу, чтобы посмотреть записи, изменить их или подготовить приложение.' : 'Данные этого бизнеса. Откройте таблицу, чтобы посмотреть записи и связи.'}</p>
+          <p className="mt-2 max-w-2xl text-sm text-ink-soft">{canCreate||tables.some(table=>table.access==='edit') ? 'Откройте таблицу и работайте с данными.' : 'Откройте таблицу, чтобы посмотреть записи.'}</p>
         </div>
         {canCreate ? (
           <button type="button" onClick={() => { setCreating(true); setError(null) }}
-            className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-ink px-3.5 py-2 text-sm font-medium text-sand-50 transition-colors hover:bg-ink/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sage-400">
+            className={ownerPrimary}>
             <ShellIcon name="plus" className="size-4" />Новая таблица
           </button>
         ) : null}
@@ -80,22 +80,15 @@ export function TableDirectory({ tables, businessName, canCreate }: {
             <p className="text-sm text-ink-muted">Всего таблиц: {tables.length}</p>
             {tables.length > 3 ? <label className="w-full sm:w-72"><span className="sr-only">Поиск таблицы</span><input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Найти таблицу" className="w-full rounded-xl border border-sand-200 bg-white px-3 py-2 text-sm outline-none focus:border-sage-400 focus-visible:ring-2 focus-visible:ring-sage-400/30" /></label> : null}
           </div>
-          <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <ul className="overflow-hidden rounded-2xl border border-sand-200 bg-white divide-y divide-sand-200">
             {visible.map(table => (
-              <li key={table.id} className="min-w-0">
-                <Link href={`/tables/${table.id}`} aria-label={table.name} className="group flex h-full flex-col rounded-2xl border border-sand-200 bg-white p-5 transition-colors hover:border-sage-300 hover:bg-sand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sage-400">
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-sand-100 text-ink-soft"><ShellIcon name="table" /></span>
-                    <span aria-hidden="true" className="text-ink-muted transition-transform group-hover:translate-x-0.5">→</span>
-                  </div>
-                  <h2 className="mt-4 break-words text-base font-semibold text-ink">{table.name}</h2>
-                  <p className="mt-1 text-sm text-ink-soft">Записей: <span className="tabular-nums">{table.rowCount.toLocaleString('ru-RU')}</span> · Полей: {table.fieldCount}</p>
-                  <p className="mt-3 line-clamp-2 text-xs leading-5 text-ink-muted">{table.fields.length ? table.fields.slice(0, 4).map(field => field.name).join(' · ') : 'Добавьте поля, чтобы начать заполнять таблицу.'}</p>
-                  <div className="mt-auto pt-5 text-xs text-ink-muted">
-                    <p>{table.apps.length ? `В приложениях: ${table.apps.length}` : 'Ещё не используется в приложении'}{table.relations.length ? ` · Связей: ${table.relations.length}` : ''}</p>
-                    <p className="mt-1">Изменена <time dateTime={table.updatedAt}>{new Date(table.updatedAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric', timeZone: APP_TIME_ZONE })}</time></p>
-                  </div>
+              <li key={table.id} className="flex min-w-0 items-center gap-2 pr-4 hover:bg-sand-50">
+                <Link href={tableWorkLink(table.id, table.access?table.access==='edit':canCreate)} aria-label={table.name} className="group flex min-w-0 flex-1 items-center gap-4 p-4 sm:p-6 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sage-400">
+                  <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-sand-100 text-sage-700"><ShellIcon name="table" /></span>
+                  <div className="min-w-0 flex-1"><h2 className="break-words text-base font-semibold text-ink">{table.name}</h2><p className="mt-1 text-sm text-ink-soft">Записей: <span className="tabular-nums">{table.rowCount.toLocaleString('ru-RU')}</span>{table.access==='view'?<span className="ml-3 text-xs text-ink-muted">Просмотр</span>:null}</p></div>
+                  <time dateTime={table.updatedAt} className="hidden text-sm text-ink-muted sm:block">{new Date(table.updatedAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', timeZone: APP_TIME_ZONE })}</time>
                 </Link>
+                <Link href={`/tables/${encodeURIComponent(table.id)}`} aria-label={`Сведения о таблице «${table.name}»`} title="Сведения о таблице" className="flex size-11 shrink-0 items-center justify-center rounded-full text-ink-muted hover:bg-sand-100 hover:text-sage-700 focus-visible:ring-2 focus-visible:ring-sage-400"><ShellIcon name="gear" className="size-5" /></Link>
               </li>
             ))}
           </ul>
@@ -103,8 +96,8 @@ export function TableDirectory({ tables, businessName, canCreate }: {
         </div>
       ) : (
         <div className="mt-7 rounded-2xl border border-sand-200 bg-white px-5 py-8">
-          <p className="font-medium text-ink">В этом бизнесе пока нет таблиц</p>
-          <p className="mt-2 text-sm text-ink-soft">{canCreate ? 'Создайте свою таблицу, загрузите файл или начните с готового шаблона.' : 'Таблицы появятся здесь, когда владелец или редактор добавит данные.'}</p>
+          <p className="font-medium text-ink">{canCreate?'Таблиц пока нет':'Нет доступных таблиц'}</p>
+          <p className="mt-2 text-sm text-ink-soft">{canCreate ? 'Создайте свою таблицу, загрузите файл или начните с готового шаблона.' : 'Таблицы появятся здесь, когда владелец откроет к ним доступ.'}</p>
         </div>
       )}
 

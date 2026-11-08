@@ -11,7 +11,7 @@ import {compareRows,evalFilter,indexFields,normalizeView} from '@tableapp/schema
 import {appV2ChildIds,evaluateAppV2Condition,matchesAppV2Audience,type AppV2,type AppV2Actor,type AppV2Node,type AppV2Record} from '@tableapp/schema/app-v2'
 import {and,asc,eq,gt,inArray,isNull,or,sql} from 'drizzle-orm'
 import {withPublishedV2Read,publishedV2Context,publishedV2Screen} from './builder-v2-published'
-import {derivePublishedV2Rows,publishedV2Fields,publishedV2Row} from './builder-v2-published-rows'
+import {canReadPublishedV2Row,derivePublishedV2Rows,publishedV2Fields,publishedV2Row} from './builder-v2-published-rows'
 import {builderV2Json,loadBuilderV2ReadMetadata,type BuilderV2ReadMetadata} from './builder-v2-row-data'
 import {builderV2Revision} from './builder-v2-revision'
 import {historyCursor,readHistoryCursor} from './history-cursor'
@@ -153,5 +153,20 @@ export async function readPublishedV2Record(slug:string,request:{screenId:string
     const { record } = await publishedV2Row(meta, app, actor, screen.contextTableId, request.recordId)
     const titleFieldId = screen.catalog?.titleFieldId ?? screen.recordTitleFieldId ?? meta.primaryByTable.get(screen.contextTableId)
     return { record, title: titleFieldId && record.display[titleFieldId] || 'Запись' }
+  })
+}
+
+/** Load related table rows by id for a published actor, honoring row/field grants. */
+export async function readPublishedV2RelatedRows(slug:string,request:{revision:string;tableId:string;recordIds:readonly string[]}){
+  return withPublishedV2Read(async tx=>{
+    const {app,actor,revision}=await publishedV2Context(slug,tx)
+    if(revision!==request.revision)throw new RowWriteError('conflict','Приложение обновлено. Обновите страницу.')
+    if(!request.recordIds.length||request.recordIds.length>100)throw new RowWriteError('invalid','Слишком много связанных записей')
+    const meta=await loadBuilderV2ReadMetadata(tx,app.workspaceId,[request.tableId])
+    const stored=await tx.select().from(rows).where(and(eq(rows.tableId,request.tableId),inArray(rows.id,[...request.recordIds]),isNull(rows.deletedAt)))
+    const visible=stored.filter(row=>canReadPublishedV2Row(app,actor,row as RuntimeSourceRow)) as RuntimeSourceRow[]
+    const derived=await derivePublishedV2Rows(meta,app,actor,visible)
+    const byId=new Map(derived.map(row=>[row.id,output(row)]))
+    return {rows:request.recordIds.flatMap(id=>byId.has(id)?[byId.get(id)!]:[])}
   })
 }

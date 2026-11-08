@@ -1,11 +1,11 @@
 'use server'
 import {appDefinitionInputError,appV2IdSchema} from '@tableapp/schema/app-v2'
-import {readPublishedV2Data,readPublishedV2Record} from '@/lib/builder-v2-published-data'
+import {readPublishedV2Data,readPublishedV2Record,readPublishedV2RelatedRows} from '@/lib/builder-v2-published-data'
 import {inspectPublishedV2Button,inspectPublishedV2FormRequest,submitPublishedV2} from '@/lib/builder-v2-published-write'
 import {validBuilderCollectionQuery} from '@/lib/builder-v2-collection-query'
 import {RowWriteError} from '@/lib/row-mutations'
 import {PlanLimitError} from '@/lib/limits'
-import type {BuilderV2DataResult,BuilderV2RecordResult} from '@/lib/builder-v2-data-types'
+import type {BuilderV2DataRecord,BuilderV2DataResult,BuilderV2RecordResult} from '@/lib/builder-v2-data-types'
 import type {BuilderV2FormOptionsResult,BuilderV2FormResult} from '@/lib/builder-v2-form-types'
 import type {BuilderV2ActionResult,BuilderV2ButtonInspection} from '@/lib/builder-v2-button-types'
 import {inspectPublishedV2Delete,submitPublishedV2Delete} from '@/lib/builder-v2-published-delete'
@@ -39,6 +39,12 @@ export async function readPublishedV2DataAction(slug:string,value:unknown):Promi
 export async function readPublishedV2RecordAction(slug:string,value:unknown):Promise<BuilderV2RecordResult>{
   const parsed=input(value,['revision','screenId','recordId'],['screenId','recordId']);if(!parsed)return {ok:false,error:'Запись недоступна'}
   try{return {ok:true,...await readPublishedV2Record(slug,parsed as Parameters<typeof readPublishedV2Record>[1])}}catch(error){return failure(error)}
+}
+export async function readPublishedV2RelatedRowsAction(slug:string,value:unknown):Promise<{ok:true;rows:BuilderV2DataRecord[]}|{ok:false;error:string}>{
+  if(appDefinitionInputError(value)||!value||typeof value!=='object'||Array.isArray(value))return {ok:false,error:'Записи недоступны'}
+  const parsed=value as Record<string,unknown>
+  if(!hash(parsed.revision)||!id(parsed.tableId)||!Array.isArray(parsed.recordIds)||parsed.recordIds.length>100||parsed.recordIds.some(item=>!id(item))||Object.keys(parsed).some(key=>!['revision','tableId','recordIds'].includes(key)))return {ok:false,error:'Записи недоступны'}
+  try{return {ok:true,...await readPublishedV2RelatedRows(slug,{revision:String(parsed.revision),tableId:String(parsed.tableId),recordIds:parsed.recordIds as string[]})}}catch(error){return failure(error)}
 }
 export async function inspectPublishedV2FormAction(slug:string,value:unknown):Promise<BuilderV2FormResult|BuilderV2FormOptionsResult>{
   const parsed=form(value);if(!parsed)return {ok:false,error:'Обновите форму'}

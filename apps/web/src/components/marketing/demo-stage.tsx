@@ -67,7 +67,7 @@ export function DemoStage({ roles, activeRole, initialDevice, deviceChosen, desc
   const scale = expanded || phone || available === 0 ? 1 : Math.min(1, available / outerWidth)
   return <div className={styles.demoStage} data-demo-stage data-device={device}>
     <div className={styles.demoToolbar} data-demo-background>
-      <nav aria-label="Посмотреть как" className={styles.segment}>{roles.map(role => <Link key={role.id} href={`/demo?role=${role.id}&device=${device}`} scroll={false} aria-current={role.id === activeRole ? 'page' : undefined} onClick={event => {
+      <nav aria-label="Посмотреть как" className={styles.segment}>{roles.map(role => <Link key={role.id} href={`/templates?role=${role.id}&device=${device}`} scroll={false} aria-current={role.id === activeRole ? 'page' : undefined} onClick={event => {
         if (!onRolePick || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return
         event.preventDefault(); onRolePick(role.id)
       }}>{role.id === 'anonymous' ? 'Гость' : role.name}</Link>)}</nav>
@@ -90,7 +90,7 @@ export function DemoStage({ roles, activeRole, initialDevice, deviceChosen, desc
 
 export function DeviceFrame({ device, height, bezel, children }: { device: Device; height: number; bezel: number; children: ReactNode }) {
   return <div className={styles.deviceFrame} data-device={device} data-bezel={bezel > 0} style={{ height: height + bezel * 2, ...(device === 'mobile' && bezel ? { padding: bezel } : {}) }}>
-    {device === 'desktop' && <div className={styles.browserChrome}><span aria-hidden><i /><i /><i /></span><span>Приложение TableApp</span><span>Демо</span></div>}
+    {device === 'desktop' && <div className={styles.browserChrome}><span aria-hidden><i /><i /><i /></span><span>Приложение TableApp</span><span>Пример</span></div>}
     <div className={`demo-frame ${styles.deviceContent}`} style={{ height }}>{children}</div>
   </div>
 }

@@ -26,7 +26,6 @@ describe('карта сайта', () => {
       PUBLIC_ROUTES.solutions,
       PUBLIC_ROUTES.templates,
       PUBLIC_ROUTES.pricing,
-      PUBLIC_ROUTES.demo,
     ]) {
       expect(list, path).toContain(absolute(path))
     }

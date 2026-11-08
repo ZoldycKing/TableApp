@@ -105,7 +105,7 @@ export function LandingContent({ signedIn, entry, freeRows, startPrice }: {
       <section className={styles.closing}>
         <Reveal><h2>Одни данные.<br />Разные задачи.</h2></Reveal>
         <AppOutcome />
-        <div className={styles.closingActions}><Link href={entry} className={styles.primary}>Загрузить свою таблицу <span aria-hidden>↗</span></Link><Link href="/demo" className={styles.textLink}>Открыть живое демо <span aria-hidden>→</span></Link></div>
+        <div className={styles.closingActions}><Link href={entry} className={styles.primary}>Загрузить свою таблицу <span aria-hidden>↗</span></Link><Link href="/templates" className={styles.textLink}>Открыть шаблоны <span aria-hidden>→</span></Link></div>
       </section>
     </main>
     <SiteFooter />

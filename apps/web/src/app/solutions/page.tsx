@@ -42,7 +42,7 @@ export default async function SolutionsPage() {
         lead="Выберите рабочую задачу и посмотрите, как с ней справляются клиент, сотрудник и руководитель."
         actions={
           <>
-            <PrimaryLink href="/demo">Попробовать демо</PrimaryLink>
+            <PrimaryLink href="/templates">Открыть шаблоны</PrimaryLink>
             <SecondaryLink href="/templates">Выбрать шаблон</SecondaryLink>
           </>
         }

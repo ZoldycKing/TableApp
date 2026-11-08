@@ -47,6 +47,6 @@ export default async function HowItWorksPage() {
     </Section>
     <Section width="narrow"><div className={styles.note}><p>Исходный файл не меняется. Автоматической синхронизации с ним нет. Формулы и связи между листами нужно настроить в TableApp.</p><ImportGuideLink /></div></Section>
     <Section title="О начале работы" width="narrow"><FaqList items={QUESTIONS} /></Section>
-    <CtaSection title="Попробуйте" accent="на своих данных." text="Бесплатный тариф без ограничения по времени. Карта не нужна." href={start} label="Загрузить свою таблицу" secondary={{href:'/demo',label:'Сначала посмотреть демо'}} />
+    <CtaSection title="Попробуйте" accent="на своих данных." text="Бесплатный тариф без ограничения по времени. Карта не нужна." href={start} label="Загрузить свою таблицу" secondary={{href:'/templates',label:'Сначала открыть шаблон'}} />
   </MarketingShell>
 }

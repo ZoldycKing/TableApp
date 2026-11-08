@@ -50,7 +50,7 @@ try {
   const first = await sync(), second = await sync({ since: first.cursor })
   assert.equal(first.rows.length, 500); assert.equal(second.rows.length, 100); assert.equal(second.hasMore, false)
   assert.equal(new Set([...first.rows, ...second.rows].map((row) => row.id)).size, 600)
-  const pages = ['/', '/pricing', '/templates', '/features', '/demo?role=client']
+  const pages = ['/', '/pricing', '/templates', '/features', '/templates/zakazy']
   await Promise.all([
     ...Array.from({ length: 10 }, async (_, index) => {
       for (let i = 0; i < 10; i++) await timed('pages', async () => {

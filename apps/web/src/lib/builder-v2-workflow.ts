@@ -10,6 +10,7 @@ import { PlanLimitError } from './limits'
 import { builderV2ExecutableWorkflow, builderV2StepLabel, builderV2WorkflowSteps, type BuilderV2Workflow, type BuilderV2WorkflowEffect, type BuilderV2WorkflowTrace } from './builder-v2-workflow-types'
 import { builderV2WorkflowValues } from './builder-v2-workflow-values'
 import {derivePublishedV2Rows,canReadPublishedV2Row} from './builder-v2-published-rows'
+import { placeShopOrder } from './shop-order'
 
 export class BuilderV2WorkflowError extends Error {
   readonly trace: BuilderV2WorkflowTrace
@@ -54,7 +55,13 @@ export async function executeBuilderV2Workflow(options: { write: RowTransaction;
           await run(active); continue
         }
         if (step.type === 'require') { if (!condition(step.condition)) throw new RowWriteError('invalid', step.message) }
-        else if (step.type === 'create_row' || step.type === 'update_row') {
+        else if (step.type === 'place_shop_order') {
+          const values = await builderV2WorkflowValues(meta, step.tableId, Object.fromEntries(Object.entries(step.values).map(([id, value]) => [id, resolve(value)])), options.published ? { app, actor } : undefined)
+          const placed = await placeShopOrder(write, app, actor, values)
+          const next = await record(await workingBuilderV2Record(write.tx, step.tableId, placed.id))
+          results.set(step.id, next)
+          if (context.row?.id === next.id && context.row.tableId === step.tableId) context.row = next
+        } else if (step.type === 'create_row' || step.type === 'update_row') {
           const values = await builderV2WorkflowValues(meta, step.tableId, Object.fromEntries(Object.entries(step.values).map(([id, value]) => [id, resolve(value)])),options.published?{app,actor}:undefined), row = step.type === 'update_row' ? target(step.target) : undefined
           if (row && row.tableId !== step.tableId) throw new RowWriteError('denied', 'Запись относится к другой таблице')
           const stored = row ? await workingBuilderV2Record(write.tx, row.tableId, row.id, true) : undefined, current = stored ? options.published?{id:stored.id,tableId:stored.tableId,values:stored.data as Record<string,AppV2Json>}:await record(stored) : undefined

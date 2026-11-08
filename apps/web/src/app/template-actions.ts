@@ -15,7 +15,9 @@ import { revalidatePath } from 'next/cache'
 import { publishTable } from '@/lib/live'
 import { assertCanIncreaseUsage, isPlanLimitError } from '@/lib/limits'
 import { deleteRow, lockRowUsage, lockedRow, mutationFields, RowWriteError, writeRows } from '@/lib/row-mutations'
+import { validateAppV2Definition } from '@tableapp/schema/app-definition'
 import { generateApp, slugify } from '@/lib/app-builder'
+import { loadBuilderV2Catalog } from '@/lib/builder-v2'
 import { lockAppSlugs, uniqueSlug } from '@/lib/app-slug'
 import { authorizeApp, authorizeTable, authorizeWorkspace } from '@/lib/authorize'
 import { inventoryPreparation } from '@/lib/inventory-preparation'
@@ -23,6 +25,7 @@ import { templatePreparation } from '@/lib/template-preparation'
 import { buildTemplate } from '@/lib/templates/build'
 import { findTemplate } from '@/lib/templates/catalog'
 import { templatePreset } from '@/lib/templates/presets'
+import { buildShopV2App, isShopTemplate } from '@/lib/templates/shop-v2'
 import { discardShopSampleFiles, stageShopSampleFile } from '@/lib/templates/shop-sample-files'
 import { linkAttachments } from '@/lib/attachments'
 import type { ActionResult } from './actions'
@@ -85,7 +88,7 @@ export async function applyTemplateAction(
    */
   const draft = templatePreset(generated, built)
   // Production uses "director" for the creator's existing owner role.
-  if (draft.booking || draft.customer || draft.inventory || draft.production || template.id === 'crm') draft.allowlist = [{ email: auth.member.email, roleId: draft.production ? 'director' : 'manager', company: '' }]
+  if (!isShopTemplate(template.id) && (draft.booking || draft.customer || draft.inventory || draft.production || template.id === 'crm')) draft.allowlist = [{ email: auth.member.email, roleId: draft.production ? 'director' : 'manager', company: '' }]
 
   const sampleFiles: { tableId: string; rowId: string; fieldId: string; file: NonNullable<Awaited<ReturnType<typeof stageShopSampleFile>>> }[] = []
   try {
@@ -115,17 +118,24 @@ export async function applyTemplateAction(
       for (const { file, ...cell } of sampleFiles) await linkAttachments(cell, [file], tx)
       await lockAppSlugs(tx)
       draft.slug = await uniqueSlug(slugify(built.appName), undefined, tx)
+      const shop = isShopTemplate(template.id) ? buildShopV2App(built, { id: appId, workspaceId, name: built.appName, slug: draft.slug, email: auth.member.email }) : null
+      if (shop) {
+        const { catalog } = await loadBuilderV2Catalog(workspaceId, tx)
+        const valid = validateAppV2Definition(shop, catalog)
+        if (!valid.ok) throw new Error(valid.issues[0]?.message ?? 'Магазин не прошёл проверку')
+      }
+      const stored = shop ?? draft
       await tx.insert(apps).values({
         id: appId,
         workspaceId,
-        name: draft.name,
+        name: stored.name,
         slug: draft.slug,
-        theme: draft.theme,
-        accessMode: draft.accessMode,
-        allowlist: draft.allowlist,
-        rowAccessRules: draft.rowAccessRules,
-        homeScreenId: draft.homeScreenId,
-        draft,
+        theme: stored.theme,
+        accessMode: shop ? 'allowlist' : draft.accessMode,
+        allowlist: shop ? [] : draft.allowlist,
+        rowAccessRules: shop ? [] : draft.rowAccessRules,
+        homeScreenId: stored.homeScreenId,
+        draft: stored,
       })
     })
 

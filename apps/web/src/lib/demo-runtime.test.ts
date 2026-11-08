@@ -19,8 +19,13 @@ describe('isolated synthetic demo', () => {
   it('projects public columns while keeping internal costs out of the public snapshot', () => {
     const publicRuntime = loadDemoRuntime(ANONYMOUS)
     const staffRuntime = loadDemoRuntime(asRole('staff'))
-    expect(JSON.stringify(publicRuntime.tables)).not.toContain('Себестоимость')
+    const published = JSON.stringify(publicRuntime.tables)
+    expect(published).not.toContain('Себестоимость')
+    expect(published).not.toContain('Если можно, сохраните данные с диска.')
+    expect(published).not.toContain('Забрать до конца недели, иначе на склад.')
     expect(JSON.stringify(staffRuntime.tables)).toContain('Себестоимость')
+    expect(JSON.stringify(staffRuntime.tables)).toContain('Если можно, сохраните данные с диска.')
+    expect(JSON.stringify(staffRuntime.tables)).toContain('Забрать до конца недели, иначе на склад.')
     expect(Object.values(publicRuntime.tables).flatMap((table) => table.rows).length).toBeGreaterThan(0)
   })
   it('applies client ownership rules to synthetic orders', () => {

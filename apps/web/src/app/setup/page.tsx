@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { OwnerHelpButton } from '@/components/owner-help'
 import { apps, db } from '@tableapp/db'
 import { appSchema } from '@tableapp/schema'
+import { readAppDefinition } from '@tableapp/schema/app-definition'
 import { and, eq } from 'drizzle-orm'
 import { notFound, redirect } from 'next/navigation'
 import { AppChrome } from '@/components/app-chrome'
@@ -37,6 +38,8 @@ export default async function BusinessSetupPage({ searchParams }: { searchParams
   const selected = query.app ? data.apps.find(app => app.id === query.app) : data.apps.find(app => !app.published) ?? data.apps[0]
   if (query.app && !selected) notFound()
   const [record] = selected ? await db.select().from(apps).where(and(eq(apps.id, selected.id), eq(apps.workspaceId, member.workspaceId))).limit(1) : []
+  const definition = record ? readAppDefinition(record.draft) : null
+  if (definition?.ok && definition.formatVersion === 2) redirect(`/apps/${encodeURIComponent(record!.id)}`)
   const parsed = record ? appSchema.safeParse({ ...(record.draft as object), slug: record.slug }) : null
   if (record && !parsed?.success) notFound()
   const app = parsed?.success ? parsed.data : null

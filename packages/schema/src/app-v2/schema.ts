@@ -27,6 +27,7 @@ export type AppV2Target = z.infer<typeof target>
 const values = z.record(id, appV2BindingSchema)
 export type AppV2Step = { id: string } & (
   | { type: 'create_row'; tableId: string; values: Record<string, AppV2Binding> }
+  | { type: 'place_shop_order'; tableId: string; values: Record<string, AppV2Binding> }
   | { type: 'update_row'; tableId: string; target: AppV2Target; values: Record<string, AppV2Binding> }
   | { type: 'delete_row'; tableId: string; target: AppV2Target; confirm: boolean }
   | { type: 'require'; condition: AppV2Condition; message: string }
@@ -38,6 +39,7 @@ export type AppV2Step = { id: string } & (
 )
 export const appV2StepSchema: z.ZodType<AppV2Step> = z.lazy(() => z.discriminatedUnion('type', [
   z.strictObject({ id, type: z.literal('create_row'), tableId: id, values }),
+  z.strictObject({ id, type: z.literal('place_shop_order'), tableId: id, values }),
   z.strictObject({ id, type: z.literal('update_row'), tableId: id, target, values }),
   z.strictObject({ id, type: z.literal('delete_row'), tableId: id, target, confirm: z.boolean() }),
   z.strictObject({ id, type: z.literal('require'), condition: appV2ConditionSchema, message: z.string().min(1).max(500) }),
@@ -96,6 +98,16 @@ export const appV2Schema = z.strictObject({
   workflows: z.array(flow).max(100),
   /** Presentation never grants data access. Missing grants always deny. */
   policy: z.strictObject({ tables: z.array(z.strictObject({ tableId: id, grants: z.array(grant).max(100) })).max(200), workflows: z.array(z.strictObject({ workflowId: id, audience: appV2AudienceSchema })).max(200) }),
+  /** Explicit shop bindings. Absent for every app that is not the installed catalogue. */
+  shop: z.strictObject({
+    catalogTableId: id, catalogViewId: id, catalogScreenId: id, detailScreenId: id, basketScreenId: id, ordersScreenId: id, orderScreenId: id, checkoutFormId: id,
+    activeFieldId: id, productTitleFieldId: id, priceFieldId: id, imageFieldId: id.optional(), descriptionFieldId: id.optional(),
+    ordersTableId: id, itemsTableId: id, emailFieldId: id, statusFieldId: id, assignmentFieldId: id,
+    initialStatus: z.string().min(1).max(80), cancelStatus: z.string().min(1).max(80),
+    cancellableStatuses: z.array(z.string().min(1).max(80)).min(1).max(20), terminalStatuses: z.array(z.string().min(1).max(80)).max(20),
+    submissionFieldId: id, createdFieldId: id, cartFieldId: id, positionsFieldId: id, orderTitleFieldId: id, addressFieldId: id,
+    itemNameFieldId: id, itemQtyFieldId: id, itemPriceFieldId: id, itemEmailFieldId: id, itemAssignmentFieldId: id, productFieldId: id,
+  }).optional(),
 })
 export type AppV2 = z.infer<typeof appV2Schema>
 export type AppV2Workflow = AppV2['workflows'][number]

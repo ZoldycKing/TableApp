@@ -76,9 +76,17 @@ export function ShopBasketPanel({ app, tables, actor, onCheckout }: { app: AppV2
             <strong>{name}</strong>
             {unit && <small>{unit} / шт.</small>}
             <div className={ui.shopQty}>
-              <button type="button" className={ui.shopQtyButton} aria-label={`Уменьшить количество: ${name}`} disabled={item.qty <= 1} onClick={() => update(changeShopBasketQty(basket, item.id, item.qty - 1))}>−</button>
-              <input aria-label={`Количество: ${name}`} type="number" min={1} max={1000} step={1} value={item.qty} onChange={event => update(changeShopBasketQty(basket, item.id, Number(event.target.value)))} />
-              <button type="button" className={ui.shopQtyButton} aria-label={`Увеличить количество: ${name}`} disabled={item.qty >= 1000} onClick={() => update(changeShopBasketQty(basket, item.id, item.qty + 1))}>+</button>
+              <div className={ui.shopStepper}>
+                <button type="button" className={ui.shopQtyButton} aria-label={`Уменьшить количество: ${name}`} disabled={item.qty <= 1} onClick={() => update(changeShopBasketQty(basket, item.id, item.qty - 1))}>−</button>
+                <label className={ui.shopStepperField}>
+                  <span className={ui.shopStepperValue} aria-hidden="true">{item.qty}</span>
+                  <input aria-label={`Количество: ${name}`} type="text" inputMode="numeric" pattern="[0-9]*" autoComplete="off" value={String(item.qty)} onChange={event => {
+                    const digits = event.target.value.replace(/\D/g, '')
+                    update(changeShopBasketQty(basket, item.id, digits ? Number(digits) : 1))
+                  }} />
+                </label>
+                <button type="button" className={ui.shopQtyButton} aria-label={`Увеличить количество: ${name}`} disabled={item.qty >= 1000} onClick={() => update(changeShopBasketQty(basket, item.id, item.qty + 1))}>+</button>
+              </div>
               <button type="button" className={ui.shopRemove} onClick={() => update(removeShopBasketItem(basket, item.id))}>Удалить</button>
             </div>
           </div>

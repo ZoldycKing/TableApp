@@ -43,7 +43,7 @@ describe('builder v2 order detail composition', () => {
       app: { nodes: [...nodes.values()] } as AppV2,
       rootIds: ['name', 'status', 'total', 'positions', 'form', 'cancel'],
       nodes,
-      recordTable: { id: 'tbl_orders', name: 'Заказы', fields: [], views: [] },
+      recordTable: { id: 'tbl_orders', name: 'Заказы', primaryFieldId: null, fields: [], views: [] },
       statusFieldId: 'fld_status',
       amountFieldId: 'fld_total',
       positionsFieldId: 'fld_positions',

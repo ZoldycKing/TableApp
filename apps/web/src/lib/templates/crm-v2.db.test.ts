@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { and, eq, isNull } from 'drizzle-orm'
+import { and, eq, inArray, isNull } from 'drizzle-orm'
 import { readAppDefinition, validateAppV2Definition } from '@tableapp/schema/app-definition'
 import { newId } from '@tableapp/schema'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -74,5 +74,26 @@ describe.skipIf(!process.env.DATABASE_URL)('installed crm v2 deals', () => {
     expect(stageField.type).toBe('single_select')
     const board = read.app.screens.find(screen => screen.id === crm.boardScreenId)!
     expect(board.rootIds.some(id => read.app.nodes.find(node => node.id === id)?.type === 'form')).toBe(false)
+  })
+
+  it('clears sample history while keeping a real client and its deals', async () => {
+    const installed = await actions.applyTemplateAction('crm')
+    if (!installed.ok) throw new Error(installed.error)
+    const [record] = await database.db.select().from(database.apps).where(eq(database.apps.id, installed.appId))
+    const read = readAppDefinition(record!.draft)
+    if (!read.ok || read.formatVersion !== 2 || !read.app.crm) throw new Error('CRM draft is not builder v2')
+    const crm = read.app.crm
+    const { db, rows } = database
+    const [client] = await db.select().from(rows).where(and(eq(rows.tableId, crm.clientsTableId), isNull(rows.deletedAt))).limit(1)
+    await db.update(rows).set({ sample: false }).where(eq(rows.id, client!.id))
+    const preparation = await import('../template-preparation')
+    const state = await preparation.templatePreparation(workspaceId, installed.appId)
+    expect(state!.samples).toBeGreaterThan(0)
+    expect(state!.removable.some(row => row.id === client!.id)).toBe(false)
+    expect(await actions.clearTemplateSamplesAction(installed.appId)).toEqual({ ok: true })
+    const remaining = await db.select().from(rows).where(and(inArray(rows.tableId, installed.tableIds), isNull(rows.deletedAt)))
+    expect(remaining.some(row => row.id === client!.id)).toBe(true)
+    expect(remaining.some(row => row.tableId === crm.dealsTableId)).toBe(true)
+    expect((await preparation.templatePreparation(workspaceId, installed.appId))!.samples).toBe(0)
   })
 })

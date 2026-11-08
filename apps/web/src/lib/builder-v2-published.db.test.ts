@@ -408,4 +408,27 @@ describe.skipIf(!process.env.DATABASE_URL)('published v2 snapshots, two app-only
     identity.email=null;expect(await pages.loadPublishedV2Page(app.slug,{})).toMatchObject({login:true,theme:app.theme})
   })
 
+  it('seeds edit forms with empty permitted fields and still denies fields the role cannot read', async () => {
+    const f = await fixture()
+    await data.db.update(data.rows).set({ data: { [title]: 'Проект Альфа', [owner]: emailA } }).where(eq(data.rows.id, a))
+    const scope = { revision: f.revision, screenId: f.detail, formId: f.editForm, recordId: a }
+    const initial = await api.inspectPublishedV2FormAction(f.app.slug, { ...scope, mode: 'initial' })
+    expect(initial).toMatchObject({ ok: true, state: { values: { [title]: 'Проект Альфа', [amount]: null, [done]: false } } })
+    if (!initial.ok || !('state' in initial)) throw new Error(JSON.stringify(initial))
+    expect(await api.submitPublishedV2FormAction(f.app.slug, {
+      ...scope, requestId: token('submit'), fingerprint: initial.state.fingerprint,
+      values: { [title]: 'Проект Альфа', [amount]: null, [done]: true },
+    })).toMatchObject({ ok: true })
+    expect(await record(f)).toMatchObject({ ok: true, record: { values: { [done]: true } } })
+
+    const deniedApp = structuredClone(f.app)
+    const projectsPolicy = deniedApp.policy.tables.find(rule => rule.tableId === projects)!
+    const workerGrant = projectsPolicy.grants.find(grant => grant.audience.kind === 'roles' && grant.audience.roleIds.includes('worker'))!
+    workerGrant.read = { ...workerGrant.read!, fieldIds: workerGrant.read!.fieldIds.filter(id => id !== amount) }
+    await data.db.update(data.apps).set({ published: deniedApp }).where(eq(data.apps.id, f.app.id))
+    expect(await api.inspectPublishedV2FormAction(f.app.slug, { ...scope, revision: builderV2Revision(deniedApp), mode: 'initial' })).toMatchObject({
+      ok: false, error: 'Одно из полей формы недоступно для чтения',
+    })
+  })
+
 })

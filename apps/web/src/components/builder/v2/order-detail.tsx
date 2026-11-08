@@ -24,19 +24,21 @@ export function BuilderV2OrderIdentity({
   manage?: boolean
 }) {
   if (!title && !status && !amount && !progress?.length) return null
-  return <section className={`${presentation.panel} ${ui.orderIdentity}`} aria-label="Главное о заказе">
+  const showCopy = Boolean(title || (status && !manage))
+  const showMeta = Boolean((status && manage) || amount)
+  return <section className={`${presentation.panel} ${ui.orderIdentity}`} data-manage={manage || undefined} aria-label="Главное о заказе">
     <div className={ui.orderIdentityMain}>
-      <div className={ui.orderIdentityCopy}>
+      {showCopy && <div className={ui.orderIdentityCopy}>
         {title && <h2 className={ui.orderTitle}>{title}</h2>}
         {status && !manage && <p className={ui.orderStatusLead} data-tone={builderV2StatusTone(status)}>{status}</p>}
-      </div>
-      <div className={ui.orderIdentityMeta}>
+      </div>}
+      {showMeta && <div className={ui.orderIdentityMeta}>
         {status && manage && <span className={ui.heroStatus} data-tone={builderV2StatusTone(status)}><ProtoIcon name="box" size={18} />{status}</span>}
         {amount && <div className={ui.heroAmount}><span>{scoped ? 'Сумма доступных позиций' : 'Итого'}</span><strong>{amount}</strong></div>}
-      </div>
+      </div>}
     </div>
     {progress && progress.length > 1 && <ol className={ui.orderProgress} aria-label="Статус заказа">
-      {progress.map(step => <li key={step.id} data-state={step.state}><span>{step.label}</span></li>)}
+      {progress.map(step => <li key={step.id} data-state={step.state} aria-current={step.state === 'current' ? 'step' : undefined}><span>{step.label}</span></li>)}
     </ol>}
   </section>
 }

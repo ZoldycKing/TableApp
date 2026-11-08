@@ -108,6 +108,16 @@ export const appV2Schema = z.strictObject({
     submissionFieldId: id, createdFieldId: id, cartFieldId: id, positionsFieldId: id, orderTitleFieldId: id, addressFieldId: id,
     itemNameFieldId: id, itemQtyFieldId: id, itemPriceFieldId: id, itemEmailFieldId: id, itemAssignmentFieldId: id, productFieldId: id,
   }).optional(),
+  /** Explicit CRM bindings for the internal deals starter. Absent outside that install. */
+  crm: z.strictObject({
+    dealsTableId: id, clientsTableId: id,
+    boardScreenId: id, dealScreenId: id, clientsScreenId: id, clientScreenId: id, calendarScreenId: id,
+    createDealFormId: id, createClientFormId: id, contactFormId: id,
+    titleFieldId: id, stageFieldId: id, dueFieldId: id, noteFieldId: id, sumFieldId: id,
+    clientRelationFieldId: id, assignmentFieldId: id, clientNameFieldId: id,
+    clientTitleFieldId: id, clientPhoneFieldId: id, clientEmailFieldId: id, clientNoteFieldId: id,
+    initialStage: z.string().min(1).max(80),
+  }).optional(),
 })
 export type AppV2 = z.infer<typeof appV2Schema>
 export type AppV2Workflow = AppV2['workflows'][number]

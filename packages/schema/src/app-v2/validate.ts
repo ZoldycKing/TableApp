@@ -330,6 +330,20 @@ export function validateAppV2(app: AppV2, catalog: AppV2Catalog, options: { mode
     const positions = catalog.fields.get(shop.positionsFieldId)
     if (positions && positions.relationTableId !== shop.itemsTableId) issue('shop_positions_relation', path, 'Состав заказа должен ссылаться на позиции')
   }
+  if (app.crm) {
+    const crm = app.crm, path = 'crm'
+    table(crm.dealsTableId, path); table(crm.clientsTableId, path)
+    for (const screenId of [crm.boardScreenId, crm.dealScreenId, crm.clientsScreenId, crm.clientScreenId, crm.calendarScreenId]) if (!screens.has(screenId)) issue('crm_screen', path, 'Экран CRM удалён')
+    for (const formId of [crm.createDealFormId, crm.createClientFormId, crm.contactFormId]) if (nodes.get(formId)?.type !== 'form') issue('crm_form', path, 'Форма CRM удалена')
+    const deal = (fieldId: string) => field(fieldId, crm.dealsTableId, path)
+    const client = (fieldId: string) => field(fieldId, crm.clientsTableId, path)
+    for (const fieldId of [crm.titleFieldId, crm.stageFieldId, crm.dueFieldId, crm.noteFieldId, crm.sumFieldId, crm.clientRelationFieldId, crm.assignmentFieldId, crm.clientNameFieldId]) deal(fieldId)
+    for (const fieldId of [crm.clientTitleFieldId, crm.clientPhoneFieldId, crm.clientEmailFieldId, crm.clientNoteFieldId]) client(fieldId)
+    const relation = catalog.fields.get(crm.clientRelationFieldId)
+    if (relation && relation.relationTableId !== crm.clientsTableId) issue('crm_client_relation', path, 'Сделка должна ссылаться на клиентов')
+    const stage = catalog.fields.get(crm.stageFieldId)
+    if (stage && stage.type !== 'single_select') issue('crm_stage_type', path, 'Этап сделки должен быть одиночным выбором')
+  }
   for (const rule of app.policy.tables) {
     const path = `policy.tables.${rule.tableId}`
     if (tables.has(rule.tableId)) issue('duplicate_table_policy', path, 'Правила одной таблицы должны находиться в одном разделе')

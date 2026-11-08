@@ -26,6 +26,20 @@ export function TemplateExample({ id }: { id: string }) {
         note="В шапке видно название бизнеса. Клиент видит свои записи и статусы; отменённые и завершённые обращения сохраняются в истории. Чужие обращения и внутренние заметки сюда не попадают." />
     </div>
   }
+  if (template.id === 'crm') {
+    const deals = rows.filter(row => row.tableId === table('deals').id)
+    const clients = rows.filter(row => row.tableId === table('clients').id)
+    return <div className="grid gap-5 sm:grid-cols-2">
+      <ScreenFrame device="desktop" title="Воронка сделок (данные установки)" note="После установки открывается тот же App V2 редактор/публикация: канбан по этапам, создание сделки и запись контакта. Отдельного legacy-превью приложения нет.">
+        <ScreenTable caption="Сделки" columns={['О чём сделка', 'Клиент', 'Этап', 'Вернуться']}
+          rows={deals.slice(0, 4).map(row => [text(row, field('deals', 'what')), text(row, field('deals', 'client')), text(row, field('deals', 'stage')), text(row, field('deals', 'due')) || '—'])} />
+      </ScreenFrame>
+      <ScreenFrame device="phone" title="Клиент и связанные сделки" note="В установленном приложении карточка клиента показывает связанные сделки с этапом и датой следующего контакта — без декоративной timeline.">
+        <ScreenTable caption="Клиенты" columns={['Клиент', 'Телефон']}
+          rows={clients.slice(0, 4).map(row => [text(row, field('clients', 'name')), text(row, field('clients', 'phone')) || '—'])} />
+      </ScreenFrame>
+    </div>
+  }
   if (template.inventory) {
     const items = rows.filter(row => row.tableId === table('items').id)
     const low = items.filter(row => row.data[field('items', 'low').id] === true)

@@ -477,6 +477,8 @@ const screenBase = {
     .nullable()
     .default(null),
   access: screenAccessSchema,
+  /** Screens generated together for a user-created navigation section. */
+  sectionId: z.string().optional(),
 }
 
 const collectionScreen = {
@@ -689,6 +691,9 @@ export const productionConfigSchema = z.object({
     unit: z.string(),
     opening: z.string(),
     movements: z.string(),
+    /** Optional display coordinates. Existing installations keep their original write contract. */
+    stock: z.string().optional(),
+    min: z.string().optional(),
   }),
   /** Вариант «Производство» в колонке типа движения. */
   movementKindId: z.string(),
@@ -748,9 +753,14 @@ export const bookingConfigSchema = z.object({
 export type BookingConfig = z.infer<typeof bookingConfigSchema>
 
 export const appSchema = z.object({
+  /** Unversioned definitions remain v1; a newer format must never reach the legacy runtime. */
+  formatVersion: z.literal(1).optional(),
   id: z.string(),
   workspaceId: z.string(),
   name: z.string().min(1).max(200),
+  purpose: z.enum(['personal', 'business']).optional(),
+  /** Installation resources used for recoverable example cleanup, not runtime permissions. */
+  templateTableIds: z.array(z.string()).max(100).optional(),
   slug: z.string().min(2).max(64),
   theme: appThemeSchema,
   accessMode: z.preprocess(

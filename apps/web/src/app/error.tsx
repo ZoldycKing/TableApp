@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { ownerPrimary, ownerSecondary } from '@/components/owner-ui'
 
 /**
  * Что человек видит, когда страница не собралась.
@@ -26,8 +27,8 @@ import Link from 'next/link'
  */
 export default function Error({ reset }: { error: Error & { digest?: string }; reset: () => void }) {
   return (
-    <main className="mx-auto flex min-h-[70vh] w-full max-w-xl flex-col justify-center px-5 py-20 text-center">
-      <h1 className="font-display text-[2rem] font-extrabold leading-tight">Страница не открылась</h1>
+    <main className="platform-surface mx-auto flex min-h-[70vh] w-full max-w-xl flex-col justify-center px-6 py-16 text-center">
+      <h1 className="text-3xl font-semibold">Страница не открылась</h1>
       <p className="mt-5 text-ink-soft">
         Что-то не сработало на нашей стороне. Данные это не затронуло — попробуйте ещё раз.
       </p>
@@ -36,13 +37,13 @@ export default function Error({ reset }: { error: Error & { digest?: string }; r
         <button
           type="button"
           onClick={reset}
-          className="rounded-xl bg-ink px-6 py-3.5 text-sm font-medium text-sand-50 shadow-soft transition-all hover:-translate-y-0.5 hover:bg-ink/90"
+          className={ownerPrimary}
         >
           Попробовать снова
         </button>
         <Link
           href="/"
-          className="rounded-xl border border-sand-300 bg-white/60 px-6 py-3.5 text-sm font-medium transition-all hover:-translate-y-0.5 hover:border-ink/25 hover:bg-white"
+          className={ownerSecondary}
         >
           На главную
         </Link>

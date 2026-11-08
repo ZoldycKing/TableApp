@@ -1,0 +1,148 @@
+.transfer { --fluid: cubic-bezier(.32,.72,0,1); position: relative; isolation: isolate; overflow: hidden; border: 1px solid #d7dfd1; border-radius: 24px; background: #e9eee4; color: #202b23; }
+.scene { position: relative; width: 100%; height: 560px; isolation: isolate; }
+.tableStack, .phoneStack { position: absolute; top: 0; height: 100%; perspective: 1100px; }
+.tableStack { left: 0; width: 48%; }
+.phoneStack { right: 0; width: 44%; }
+.sideLabel { position: absolute; top: 16px; left: 50%; transform: translateX(-50%); width: max-content; color: #53634d; font-size: 14px; line-height: 20px; }
+.sheetLayer, .phoneLayer { --dx: 0px; --dy: 0px; --depth: 0px; position: absolute; top: 55%; left: 50%; transform-style: preserve-3d; transition: transform .7s var(--fluid), filter .7s var(--fluid), opacity .7s var(--fluid); will-change: transform; }
+.sheetLayer { width: min(88%, 448px); transform: translate(-50%,-50%) translate3d(var(--dx),var(--dy),var(--depth)) rotateY(30deg) rotateX(5deg) rotateZ(-4deg); }
+.phoneLayer { width: 248px; transform: translate(-50%,-50%) translate3d(var(--dx),var(--dy),var(--depth)) rotateY(-30deg) rotateX(5deg) rotateZ(4deg); }
+.sheetLayer[data-rank="0"], .phoneLayer[data-rank="0"] { z-index: 3; filter: blur(0); opacity: 1; }
+.sheetLayer[data-rank="1"], .phoneLayer[data-rank="1"] { --dy: -40px; --depth: -96px; z-index: 2; filter: blur(1.2px); opacity: .74; }
+.sheetLayer[data-rank="2"], .phoneLayer[data-rank="2"] { --dy: -80px; --depth: -192px; z-index: 1; filter: blur(2.4px); opacity: .52; }
+.sheetLayer[data-rank="1"] { --dx: 32px; }
+.sheetLayer[data-rank="2"] { --dx: 64px; }
+.phoneLayer[data-rank="1"] { --dx: -32px; }
+.phoneLayer[data-rank="2"] { --dx: -64px; }
+.sheet { overflow: hidden; border: 1px solid #c8d4c0; border-radius: 16px; background: #fff; box-shadow: 0 16px 32px -16px #253d2c30; transform-origin: center; }
+.sheetHeader { display: flex; align-items: center; gap: 8px; min-height: 56px; padding: 12px 16px; background: #f5f7f1; color: #355740; }
+.sheetHeader strong { font-size: 16px; line-height: 24px; font-weight: 600; }
+.sheetHeader > span { margin-left: auto; color: #586651; font-size: 12px; line-height: 16px; }
+.sheet table { width: 100%; border-collapse: collapse; table-layout: fixed; text-align: left; }
+.sheet th { padding: 8px 12px; background: #fafbf8; color: #586651; font-size: 12px; line-height: 16px; font-weight: 400; }
+.sheet th:first-child { width: 48%; }
+.sheet th:nth-child(2) { width: 26%; }
+.sheet td { height: 60px; padding: 8px 12px; border-top: 1px solid #e5eade; font-size: 12px; line-height: 16px; }
+.sheet td:first-child { font-size: 14px; line-height: 20px; font-weight: 500; }
+.sheet td:last-child { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.sheet tr[data-first=true] td { background: #edf3e7; }
+.sheetFooter { display: flex; justify-content: space-between; gap: 8px; padding: 8px 12px; color: #586651; font-size: 12px; line-height: 16px; background: #f8faf5; }
+.desktopPath, .mobilePath { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; z-index: -1; }
+.mobilePath { display: none; }
+.motionPath { stroke: none; }
+.track, .progress, .desktopPath marker path, .mobilePath marker path { stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.track { stroke: #7e996e; }
+.desktopPath marker path, .mobilePath marker path { stroke: #426b44; stroke-width: 1.75; }
+.progress { stroke: #426b44; stroke-width: 2.5; stroke-dasharray: 1; stroke-dashoffset: 1; opacity: 0; transition: opacity .25s var(--fluid); }
+.transfer[data-phase=transfer] .progress, .transfer[data-phase=reveal] .progress { opacity: 1; }
+.traveler { position: absolute; top: 0; left: 0; z-index: 10; width: 44px; height: 52px; filter: drop-shadow(0 4px 8px #253d2c30); opacity: 0; transform: translate3d(var(--travel-x,0px),var(--travel-y,0px),0) translate(-50%,-50%) scale(var(--travel-scale,1)); will-change: transform, opacity; pointer-events: none; }
+.traveler svg { display: block; overflow: visible; transform: rotate(-8deg); }
+.device { position: relative; display: flex; flex-direction: column; height: 428px; overflow: hidden; border: 6px solid #253d2c; border-radius: 32px; background: #fafbf8; box-shadow: 0 16px 32px -16px #253d2c40, inset 0 0 0 1px #ffffff80; }
+.statusBar { position: relative; display: flex; justify-content: space-between; align-items: center; height: 28px; flex-shrink: 0; padding: 4px 12px; font-size: 12px; line-height: 16px; font-weight: 600; }
+.camera { position: absolute; left: 50%; top: 8px; width: 48px; height: 8px; border-radius: 9999px; background: #253d2c; transform: translateX(-50%); }
+.phoneHeader { padding: 8px 12px 12px; }
+.phoneHeader > span { display: block; color: #586651; font-size: 12px; line-height: 16px; }
+.phoneHeader h3 { margin: 4px 0 0; font-size: 24px; line-height: 32px; font-weight: 600; letter-spacing: -.04em; }
+.phoneBody { position: relative; flex: 1; min-height: 0; margin: 0 8px; }
+.phoneRows { display: grid; gap: 8px; padding: 0; margin: 0; list-style: none; }
+.phoneRows li { display: flex; align-items: flex-start; gap: 8px; min-width: 0; min-height: 72px; padding: 8px; border: 1px solid #dfe5d8; border-radius: 12px; background: #fff; }
+.rowIcon { display: grid; place-items: center; width: 28px; height: 28px; flex-shrink: 0; border-radius: 8px; background: #f2ebd4; color: #795e25; font-size: 12px; line-height: 16px; }
+.rowIcon[data-tone="1"] { background: #deead5; color: #45623e; }
+.rowIcon[data-tone="2"] { background: #e8e8df; color: #605f50; }
+.phoneRows li > div { flex: 1; min-width: 0; }
+.phoneRows strong { display: block; font-size: 14px; line-height: 20px; font-weight: 500; }
+.phoneRows li > div > span { display: block; color: #586651; font-size: 12px; line-height: 16px; }
+.phoneRows b { display: block; margin-top: 4px; color: #42633e; font-size: 14px; line-height: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.emptyRows { position: absolute; inset: 0; display: grid; align-content: start; gap: 8px; opacity: 1; transition: opacity .5s var(--fluid); }
+.emptyRows > div { display: flex; align-items: center; gap: 12px; min-height: 72px; padding: 12px; border: 1px solid #e1e8da; border-radius: 12px; background: #f7f9f3; }
+.emptyRows > div > span { width: 28px; height: 28px; border-radius: 8px; background: #e3eadc; }
+.emptyRows > div > div { flex: 1; }
+.emptyRows > div > div > span { display: block; width: 80%; height: 8px; margin: 8px 0; border-radius: 4px; background: #e3eadc; }
+.emptyRows > div > div > span:last-child { width: 48%; }
+.device[data-filled=false] .phoneRows { visibility: hidden; }
+.device[data-filled=true] .emptyRows { opacity: 0; pointer-events: none; }
+.appTabs { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 4px; flex-shrink: 0; padding: 8px 4px; }
+.appTabs > span { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 44px; border-radius: 8px; color: #586651; font-size: 12px; line-height: 16px; }
+.appTabs > span[data-selected=true] { color: #315a3e; background: #e5efdc; }
+.arrival { position: absolute; top: 36px; right: 12px; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 9999px; background: #deead5; color: #355e39; opacity: 0; }
+.transfer[data-phase=compress] .sheetLayer[data-rank="0"] .sheet { animation: compress .6s var(--fluid) both; }
+.sheetLayer[data-consumed=true] .sheet { opacity: 0; transform: scale(.07); }
+.transfer[data-phase=reveal] .phoneLayer[data-rank="0"] .device { animation: receivePhone .8s var(--fluid) both; }
+.transfer[data-phase=reveal] .phoneLayer[data-rank="0"] .phoneRows li { animation: receive .55s var(--fluid) calc(var(--row) * .1s) both; }
+.transfer[data-phase=reveal] .phoneLayer[data-rank="0"] .arrival { animation: arrived .8s var(--fluid) both; }
+.transfer[data-phase=exit] .phoneLayer[data-rank="0"] .device { animation: leave .5s var(--fluid) both; }
+.transfer[data-phase=rotate] .sheetLayer[data-rank="2"] .sheet, .transfer[data-phase=rotate] .phoneLayer[data-rank="2"] .device { animation: requeue .7s var(--fluid) both; }
+.transfer[data-running=false] *, .transfer[data-running=false] *::before, .transfer[data-running=false] *::after { animation-play-state: paused !important; }
+.footer { position: relative; z-index: 5; padding: 16px 32px 24px; }
+.footer > p { margin: 0; color: #35503c; font-size: 14px; line-height: 20px; text-wrap: pretty; }
+@keyframes compress { 0% { transform: scale(1); opacity: 1; } 36% { transform: rotateY(-16deg) scale(1.04); opacity: 1; } 100% { transform: rotateY(-30deg) scale(.07); opacity: 0; } }
+@keyframes receive { from { transform: translateY(16px) scale(.94); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes receivePhone { 0%,100% { transform: none; } 45% { transform: translateZ(32px) rotateY(8deg) scale(1.025); } }
+@keyframes arrived { 0% { transform: scale(.5); opacity: 0; } 35%,75% { transform: scale(1); opacity: 1; } 100% { transform: scale(1); opacity: 0; } }
+@keyframes leave { to { opacity: 0; transform: translateY(16px) scale(.94); } }
+@keyframes requeue { 0%,65% { opacity: 0; } 100% { opacity: 1; } }
+@media (max-width: 1100px) and (min-width: 761px) {
+  .sheetLayer { width: 94%; }
+  .sheet th, .sheet td { padding: 8px; }
+  .phoneLayer { width: 224px; }
+  .device { height: 428px; }
+  .phoneRows li { gap: 4px; padding: 8px 4px; }
+  .phoneRows .rowIcon { width: 24px; height: 24px; }
+}
+@media (max-width: 900px) and (min-width: 761px) {
+  .tableStack { width: 42%; }
+  .phoneStack { width: 38%; }
+}
+@media (max-width: 760px) {
+  .transfer { border-radius: 16px; }
+  .scene { height: 608px; }
+  .tableStack { top: 64px; left: 16px; width: calc(100% - 48px); max-width: 288px; height: 160px; }
+  .phoneStack { top: 248px; right: 16px; width: 200px; height: 304px; }
+  .sideLabel { top: -48px; left: 0; transform: none; font-size: 12px; line-height: 16px; }
+  .phoneStack .sideLabel { top: calc(100% + 24px); left: auto; right: 0; }
+  .sheetLayer, .phoneLayer { top: 50%; }
+  .sheetLayer { width: 100%; transform: translate(-50%,-50%) translate3d(var(--dx),var(--dy),var(--depth)) rotateY(8deg) rotateZ(-2deg); }
+  .phoneLayer { width: 100%; transform: translate(-50%,-50%) translate3d(var(--dx),var(--dy),var(--depth)) rotateY(-8deg) rotateZ(2deg); }
+  .sheetLayer[data-rank="1"], .phoneLayer[data-rank="1"] { --dy: -8px; --depth: -40px; filter: blur(1px); opacity: .32; }
+  .sheetLayer[data-rank="2"], .phoneLayer[data-rank="2"] { --dy: -16px; --depth: -80px; filter: blur(1.5px); opacity: .16; }
+  .sheetLayer[data-rank="1"] { --dx: 8px; }
+  .sheetLayer[data-rank="2"] { --dx: 16px; }
+  .phoneLayer[data-rank="1"] { --dx: -8px; }
+  .phoneLayer[data-rank="2"] { --dx: -16px; }
+  .sheet { border-radius: 12px; }
+  .sheetHeader { min-height: 36px; padding: 8px; }
+  .sheetHeader strong { font-size: 14px; line-height: 20px; }
+  .sheetHeader > span { display: none; }
+  .sheet th, .sheet td { padding: 4px 8px; }
+  .sheet td { height: 32px; }
+  .sheet td:first-child { font-size: 12px; line-height: 16px; }
+  .sheet td:first-child, .sheet td:nth-child(2) { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .sheetFooter { display: none; }
+  .desktopPath { display: none; }
+  .mobilePath { display: block; }
+  .device { height: 304px; border-width: 4px; border-radius: 24px; }
+  .statusBar { display: none; }
+  .phoneHeader { padding: 8px 12px; }
+  .phoneHeader > span { display: none; }
+  .phoneHeader h3 { margin: 0; font-size: 18px; line-height: 28px; }
+  .phoneRows li { min-height: 56px; gap: 4px; padding: 4px 8px; border-radius: 8px; }
+  .phoneRows strong, .phoneRows b { font-size: 12px; line-height: 16px; }
+  .phoneRows b { margin-top: 0; }
+  .phoneRows .rowIcon { width: 20px; height: 20px; border-radius: 4px; }
+  .phoneRows .rowIcon svg { width: 16px; height: 16px; }
+  .emptyRows > div { min-height: 56px; padding: 8px; gap: 8px; border-radius: 8px; }
+  .emptyRows > div > span { width: 20px; height: 20px; border-radius: 4px; }
+  .appTabs { padding: 4px; }
+  .appTabs > span { gap: 4px; min-height: 40px; }
+  .appTabs svg { width: 16px; height: 16px; }
+  .arrival { top: 8px; right: 8px; width: 24px; height: 24px; }
+  .footer { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); }
+}
+@media (max-width: 370px) {
+  .sheet th, .sheet td { padding: 4px; }
+  .sheet th:first-child { width: 45%; }
+  .sheet th:nth-child(2) { width: 28%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .transfer *, .transfer *::before, .transfer *::after { animation: none !important; transition: none !important; }
+}

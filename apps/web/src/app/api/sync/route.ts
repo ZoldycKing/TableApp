@@ -14,6 +14,7 @@ import { applySyncMutation } from '@/lib/sync-write'
 import { compileTableFormulas, computeDerivedRow } from '@tableapp/formula'
 import { normalizeFieldOptions, systemRowData, type Field } from '@tableapp/schema'
 import { loadRelatedRows } from '@/lib/queries'
+import { memberTableFields,projectMemberData,tablePermission } from '@/lib/table-permissions'
 
 export async function POST(request: Request) {
   let raw: unknown
@@ -68,14 +69,16 @@ export async function POST(request: Request) {
     if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 403 })
     workspaceId = auth.member.workspaceId
     actor = { id: auth.member.userId, kind: 'member', deviceId }
-    const columns = (await db.select().from(fields).where(eq(fields.tableId, tableId)))
+    const allColumns = (await db.select().from(fields).where(eq(fields.tableId, tableId)))
       .map((field) => ({ ...field, options: normalizeFieldOptions(field.type as Field['type'], field.options) }) as unknown as Field)
-    const related = await loadRelatedRows(columns, workspaceId)
+    const columns=memberTableFields(allColumns,auth.member)
+    const allowedFields=new Set(columns.map(field=>field.id))
+    const related = await loadRelatedRows(columns, workspaceId,auth.member)
     const formulas = compileTableFormulas(columns)
-    policy = { fingerprint: policyDigest([auth.member.role, columns,
+    policy = { readable:{fields:allowedFields},fingerprint: policyDigest([auth.member.role,auth.member.tableAccess, columns,
       [...related].map(([id, records]) => [id, [...records]])]), canRead: () => true,
-      project: (data, row) => computeDerivedRow(systemRowData({ ...(row ?? { id: '' }), data }, columns), columns, related, formulas) }
-    access = { guard: () => true, may: () => canEdit(auth.member), mayField: () => canEdit(auth.member),
+      project: (data, row) => projectMemberData(computeDerivedRow(systemRowData({ ...(row ?? { id: '' }), data }, columns), columns, related, formulas),columns) }
+    access = { guard: () => true, may: () => tablePermission(auth.member,tableId)==='edit', mayField: (_op,id) => tablePermission(auth.member,tableId)==='edit'&&allowedFields.has(id),
       stamp: (data) => data, locked: () => false }
   }
   const scope = policyDigest([workspaceId, tableId, appSlug ?? null, actor])

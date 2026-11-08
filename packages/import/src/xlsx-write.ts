@@ -39,7 +39,8 @@ function widthFor(header: string, values: string[]): number {
 }
 
 export async function writeXlsx(sheet: SheetData): Promise<Uint8Array> {
-  const { Workbook } = await import('exceljs')
+  const excel = await import('exceljs')
+  const Workbook = excel.Workbook ?? excel.default.Workbook
   const workbook = new Workbook()
   workbook.created = new Date()
 

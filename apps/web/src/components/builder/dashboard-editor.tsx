@@ -41,12 +41,14 @@ export function DashboardEditor({
   screen,
   views,
   runtimeTables,
+  metadataOnly = false,
   onChange,
 }: {
   app: App
   screen: ScreenOf<'dashboard'>
   views: View[]
   runtimeTables: Record<string, RuntimeTable>
+  metadataOnly?: boolean
   onChange: (screen: ScreenOf<'dashboard'>) => void
 }) {
   const [blockId, setBlockId] = useState<string | null>(null)
@@ -124,7 +126,7 @@ export function DashboardEditor({
       for (const suggestion of [...suggestMetrics(ctx), ...suggestBlocks(ctx)]) {
         let value: string | null = null
         const draft = suggestion.block
-        if (draft.type === 'metric') {
+        if (draft.type === 'metric' && !metadataOnly) {
           const result = computeMetric(draft, rows)
           const field = fields.find((item) => item.id === draft.fieldId)
           value =
@@ -139,7 +141,7 @@ export function DashboardEditor({
     }
 
     return out.sort((a, b) => Number(b.own) - Number(a.own))
-  }, [app.screens, views, runtimeTables])
+  }, [app.screens, views, runtimeTables, metadataOnly])
 
   const place = (block: Block) => {
     const last = blocks[blocks.length - 1]?.position ?? null
@@ -278,7 +280,7 @@ export function DashboardEditor({
         <div className="space-y-2.5 rounded-lg border border-[var(--color-border-subtle)] p-2.5">
           <div className="space-y-1.5">
             <p className="text-xs text-[var(--color-ink-muted)]">
-              Числа посчитаны по вашим данным прямо сейчас. Выберите то, на что смотрите каждый день.
+              {metadataOnly ? 'Выберите показатель. Его значение появится в предпросмотре после добавления.' : 'Числа посчитаны по вашим данным прямо сейчас. Выберите то, на что смотрите каждый день.'}
             </p>
 
             {suggestions.length === 0 ? (

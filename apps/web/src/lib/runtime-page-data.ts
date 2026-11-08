@@ -81,7 +81,7 @@ export async function loadRuntimePageMetadata(app: App, visitor: Visitor, runner
 }
 
 /** Fetch exact related IDs in bounded queries; never enumerate a whole relation target for a collection page. */
-export async function loadPageRowData(meta: RuntimePageMetadata, candidates: readonly RuntimeSourceRow[]): Promise<RuntimeSourceRow[]> {
+export async function loadPageRowData(meta: Pick<RuntimePageMetadata, 'fieldsByTable' | 'primaryByTable' | 'neededFields' | 'runner'>, candidates: readonly RuntimeSourceRow[]): Promise<RuntimeSourceRow[]> {
   const found = new Map(candidates.map(row => [`${row.tableId}:${row.id}`, row]))
   const wanted = new Map<string, Set<string>>()
   for (const row of candidates) for (const field of meta.fieldsByTable.get(row.tableId) ?? []) {

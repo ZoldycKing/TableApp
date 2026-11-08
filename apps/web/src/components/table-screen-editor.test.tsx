@@ -1,0 +1,173 @@
+// @vitest-environment jsdom
+import { act,cleanup,fireEvent,render,waitFor } from '@testing-library/react'
+import { afterEach,beforeAll,beforeEach,describe,expect,it,vi } from 'vitest'
+import { defaultViewConfig,normalizeFieldOptions,viewSchema,type Field } from '@tableapp/schema'
+import type { LoadedTable } from '@/lib/queries'
+import { TableScreen } from './table-screen'
+import { TABLE_EDITOR_MODE_COOKIE, tableEditorMode } from '@/lib/table-editor-mode'
+const mocks=vi.hoisted(()=>({save:vi.fn(),refresh:vi.fn(),push:vi.fn(),loadPage:vi.fn()}))
+vi.mock('next/navigation',()=>({useRouter:()=>({refresh:mocks.refresh,push:mocks.push}),useSearchParams:()=>new URLSearchParams(window.location.search)}))
+vi.mock('@/app/table-editor-actions',()=>({saveTableRowsAction:mocks.save,loadTablePageAction:mocks.loadPage}))
+vi.mock('@/app/actions',()=>({deleteRowAction:vi.fn(),renameFieldAction:vi.fn(),setCellAction:vi.fn(),createTableAction:vi.fn()}))
+vi.mock('@/app/app-actions',()=>({createAppAction:vi.fn()}))
+vi.mock('@/app/view-actions',()=>({createViewAction:vi.fn(),deleteViewAction:vi.fn(),renameViewAction:vi.fn(),updateViewConfigAction:vi.fn()}))
+vi.mock('@/lib/use-live-table',()=>({useLiveTable:()=>{}}))
+vi.mock('@/components/history-panel',()=>({HistoryPanel:()=>null}))
+vi.mock('@/components/grid/row-card',()=>({RowCard:()=><div role="dialog" aria-label="Карточка строки"/>}))
+vi.mock('@/components/runtime/order-delivery-panel',()=>({OrderDeliveryPanel:()=><p>Панель доставки</p>}))
+vi.mock('@/components/runtime/order-stock-panel',()=>({OrderStockPanel:()=><p>Панель товаров заказа</p>,InventoryBalancePanel:()=><p>Панель остатков</p>}))
+vi.mock('@/components/runtime/customer-history-panel',()=>({CustomerHistoryPanel:()=><p>Панель истории клиента</p>}))
+vi.mock('@/components/template-notice',()=>({TemplateNotice:()=>null}))
+vi.mock('@/components/fields/field-editor',()=>({FieldEditor:()=>null}))
+vi.mock('@/components/file-upload',()=>({FileUpload:()=>null,AttachmentPreview:()=>null}))
+const name={id:'name',tableId:'t',name:'Название',type:'text',options:normalizeFieldOptions('text',{}),position:'a0',description:null} as Field
+const number={...name,id:'qty',name:'Количество',type:'number',options:normalizeFieldOptions('number',{})} as Field
+const table:LoadedTable={id:'t',name:'Товары',workspaceId:'w',icon:'table',primaryFieldId:'name',templateId:null,sampleCount:0,fields:[name,number],views:[viewSchema.parse({id:'v',tableId:'t',name:'Все товары',type:'grid',position:'a0',config:defaultViewConfig('grid','filter')})],rows:[{id:'r1',position:'a0',version:0,data:{name:'Первый',qty:1}},{id:'r2',position:'a1',version:0,data:{name:'Второй',qty:2}}],workspaceTables:[],relatedTitles:{}}
+beforeAll(()=>{
+  HTMLDialogElement.prototype.showModal=function(){this.setAttribute('open','')}
+  HTMLDialogElement.prototype.close=function(){this.removeAttribute('open')}
+})
+beforeEach(()=>{window.history.replaceState(null,'','/?mode=grid');document.cookie=`${TABLE_EDITOR_MODE_COOKIE}=; Path=/; Max-Age=0`;mocks.save.mockResolvedValue({ok:true})})
+afterEach(()=>{cleanup();vi.clearAllMocks()})
+describe('table screen editor journey',()=>{
+  it('mounts only the operation panels declared for the current table',()=>{
+    window.history.replaceState(null,'','/?mode=records&r=r1')
+    const view=render(<TableScreen table={table} member={{role:'owner'}} initialMode="records" initialRowId="r1"/> )
+    expect(view.queryByText(/Панель/)).toBeNull()
+    view.rerender(<TableScreen table={table} member={{role:'owner'}} initialMode="records" initialRowId="r1" recordPanels={{orderStock:false,inventoryBalance:true,delivery:false,customerHistory:false}}/> )
+    expect(view.getByText('Панель остатков')).toBeTruthy()
+    expect(view.queryByText('Панель товаров заказа')).toBeNull()
+    expect(view.queryByText('Панель доставки')).toBeNull()
+    expect(view.queryByText('Панель истории клиента')).toBeNull()
+  })
+  it.each(['viewer','limited'])('keeps operation panels disabled for %s access even when declared',access=>{
+    window.history.replaceState(null,'','/?mode=records&r=r1')
+    const view=render(<TableScreen table={table} member={{role:access==='viewer'?'viewer':'editor'}} limitedAccess={access==='limited'} initialMode="records" initialRowId="r1" recordPanels={{orderStock:true,inventoryBalance:true,delivery:true,customerHistory:true}}/> )
+    expect(view.queryByText(/Панель/)).toBeNull()
+  })
+  it('changes pages and searches globally instead of filtering only the loaded page', async () => {
+    window.history.replaceState(null,'','/?mode=records')
+    const first:LoadedTable={...table,editorPage:{total:205,matched:205,offset:0,limit:100,lastPosition:'z9',mode:'records',viewId:'v',search:''}}
+    mocks.loadPage.mockImplementation(async (_id,input)=>({ok:true,table:{...first,rows:[{id:'outside',position:'z9',version:0,data:{name:'За пределами страницы',qty:205}}],editorPage:{...first.editorPage,...input,matched:input.search?1:205}}}))
+    const ui=render(<TableScreen table={first} member={{role:'owner'}}/>)
+    fireEvent.click(ui.getByRole('button',{name:'Далее'}))
+    await waitFor(()=>expect(ui.getByRole('button',{name:/За пределами страницыКоличество/})).toBeTruthy())
+    expect(mocks.loadPage).toHaveBeenLastCalledWith('t',expect.objectContaining({offset:100,mode:'records'}))
+    expect(window.location.search).toContain('p=2')
+    fireEvent.change(ui.getByRole('textbox',{name:'Поиск записей'}),{target:{value:'За пределами'}})
+    await waitFor(()=>expect(ui.getByText('1 из 205 строк')).toBeTruthy())
+    expect(mocks.loadPage).toHaveBeenLastCalledWith('t',expect.objectContaining({offset:0,search:'За пределами'}))
+    expect(ui.getByRole('button',{name:'Далее'}).hasAttribute('disabled')).toBe(true)
+    expect(mocks.save).not.toHaveBeenCalled()
+  })
+  it('keeps old data blocked after a page error and retries explicitly', async () => {
+    window.history.replaceState(null,'','/?mode=records')
+    const first:LoadedTable={...table,editorPage:{total:205,matched:205,offset:0,limit:100,lastPosition:'z9',mode:'records',viewId:'v',search:''}}
+    mocks.loadPage.mockResolvedValueOnce({ok:false,error:'Сеть недоступна'}).mockResolvedValue({ok:true,table:{...first,editorPage:{...first.editorPage!,offset:100}}})
+    const ui=render(<TableScreen table={first} member={{role:'owner'}}/>)
+    fireEvent.click(ui.getByRole('button',{name:'Далее'}))
+    expect(await ui.findByRole('alert')).toHaveProperty('textContent','Сеть недоступна')
+    expect(ui.container.querySelector('[inert]')).toBeTruthy()
+    fireEvent.click(ui.getByRole('button',{name:'Повторить загрузку'}))
+    await waitFor(()=>expect(ui.queryByRole('alert')).toBeNull())
+    expect(ui.container.querySelector('[inert]')).toBeNull()
+  })
+  it('starts in records for a new visitor and opens an existing record without writes',()=>{
+    window.history.replaceState(null,'','/')
+    const view=render(<TableScreen table={table} member={{role:'owner'}}/>)
+    expect(view.getByRole('button',{name:'По записям'}).getAttribute('aria-pressed')).toBe('true')
+    expect(view.queryByRole('grid')).toBeNull()
+    fireEvent.click(view.getByRole('button',{name:/ВторойКоличество/}))
+    expect(mocks.save).not.toHaveBeenCalled()
+  })
+  it('remembers a confirmed switch and restores it on another ordinary entry',async()=>{
+    window.history.replaceState(null,'','/')
+    const view=render(<TableScreen table={table} member={{role:'owner'}}/>)
+    fireEvent.click(view.getByRole('button',{name:'Таблицей'}))
+    await waitFor(()=>expect(view.getByRole('grid')).toBeTruthy())
+    expect(document.cookie).toContain(`${TABLE_EDITOR_MODE_COOKIE}=grid`)
+    cleanup();window.history.replaceState(null,'','/')
+    const reopened=render(<TableScreen table={{...table,id:'another-table'}} member={{role:'owner'}}/>)
+    await waitFor(()=>expect(reopened.getByRole('grid')).toBeTruthy())
+    expect(mocks.save).not.toHaveBeenCalled()
+  })
+  it('honors an explicit records link without overwriting the saved grid preference',()=>{
+    document.cookie=`${TABLE_EDITOR_MODE_COOKIE}=grid; Path=/`
+    window.history.replaceState(null,'','/?mode=records')
+    const view=render(<TableScreen table={table} member={{role:'owner'}} initialMode={tableEditorMode('records','grid')}/>)
+    expect(view.getByRole('button',{name:'По записям'}).getAttribute('aria-pressed')).toBe('true')
+    expect(document.cookie).toContain(`${TABLE_EDITOR_MODE_COOKIE}=grid`)
+  })
+  it('restores a selected grid row from a link without opening an extra card',()=>{
+    window.history.replaceState(null,'','/?mode=grid&r=r2')
+    const view=render(<TableScreen table={table} member={{role:'owner'}} initialMode="grid" initialRowId="r2"/>)
+    expect(view.getByText('Второй').closest('td')?.getAttribute('data-focus')).toBe('true')
+    expect(view.queryByRole('dialog',{name:'Карточка строки'})).toBeNull()
+  })
+  it('keeps a new row local until Save and cancels without a server call',async()=>{
+    const view=render(<TableScreen table={table} member={{role:'owner'}} initialMode="grid"/>)
+    fireEvent.click(view.getAllByRole('button',{name:'Добавить строку'})[0]!)
+    const input=await view.findByRole('textbox',{name:'Название'})
+    fireEvent.change(input,{target:{value:'Черновик'}});fireEvent.keyDown(input,{key:'Tab'})
+    await waitFor(()=>expect(view.getByText('Черновик')).toBeTruthy())
+    expect(mocks.save).not.toHaveBeenCalled()
+    fireEvent.click(view.getAllByRole('button',{name:'Отменить'})[0]!)
+    expect(view.queryByText('Черновик')).toBeNull();expect(view.queryByText('Новая строка не сохранена')).toBeNull();expect(mocks.save).not.toHaveBeenCalled()
+    expect(new URLSearchParams(window.location.search).get('r')).toBe('r1')
+  })
+  it('retains draft values and the same row ID after a failed save',async()=>{
+    mocks.save.mockResolvedValueOnce({ok:false,error:'Нет связи'}).mockResolvedValue({ok:true})
+    const view=render(<TableScreen table={table} member={{role:'owner'}} initialMode="grid"/>)
+    fireEvent.click(view.getAllByRole('button',{name:'Добавить строку'})[0]!)
+    const input=await view.findByRole('textbox',{name:'Название'})
+    fireEvent.change(input,{target:{value:'Не потерять'}});fireEvent.keyDown(input,{key:'Tab'})
+    await waitFor(()=>expect(view.getByText('Не потерять')).toBeTruthy())
+    fireEvent.click(view.getAllByRole('button',{name:'Сохранить строку'})[0]!)
+    await waitFor(()=>expect(mocks.save).toHaveBeenCalledTimes(1))
+    const first=mocks.save.mock.calls[0]![1]
+    expect(first).toEqual([{id:expect.any(String),create:true,data:{name:'Не потерять'}}])
+    expect(view.getByText('Не потерять')).toBeTruthy()
+    fireEvent.click(view.getAllByRole('button',{name:'Сохранить строку'})[0]!)
+    await waitFor(()=>expect(mocks.save).toHaveBeenCalledTimes(2))
+    expect(mocks.save.mock.calls[1]![1]).toEqual(first)
+    await waitFor(()=>expect(view.queryByText('Новая строка не сохранена')).toBeNull())
+    expect(view.getAllByText('Не потерять')).toHaveLength(1)
+  })
+  it('preserves the selected record between table and record modes',async()=>{
+    const view=render(<TableScreen table={table} member={{role:'owner'}} initialMode="grid"/>)
+    fireEvent.click(view.getByText('Второй'))
+    fireEvent.click(view.getByRole('button',{name:'По записям'}))
+    await waitFor(()=>expect((view.getByRole('textbox',{name:'Название'}) as HTMLInputElement).value).toBe('Второй'))
+    fireEvent.click(view.getByRole('button',{name:'Таблицей'}))
+    await waitFor(()=>expect(view.getByText('Второй').closest('td')?.getAttribute('data-focus')).toBe('true'))
+    expect(mocks.save).not.toHaveBeenCalled()
+  })
+  it('blocks switching modes while a record request is in flight',async()=>{
+    window.history.replaceState(null,'','/?mode=records&r=r1')
+    let release!:(value:{ok:true})=>void
+    mocks.save.mockReturnValue(new Promise(resolve=>{release=resolve}))
+    const view=render(<TableScreen table={table} member={{role:'owner'}} initialMode="records" initialRowId="r1"/>)
+    fireEvent.change(view.getByRole('textbox',{name:'Название'}),{target:{value:'Изменено'}})
+    fireEvent.click(view.getByRole('button',{name:'Сохранить изменения'}))
+    await waitFor(()=>expect((view.getByRole('button',{name:'Таблицей'}) as HTMLButtonElement).disabled).toBe(true))
+    expect(view.queryByRole('dialog',{name:'Сохранить изменения?'})).toBeNull()
+    await act(async()=>release({ok:true}))
+    await waitFor(()=>expect((view.getByRole('button',{name:'Таблицей'}) as HTMLButtonElement).disabled).toBe(false))
+  })
+  it('blocks a mode change and offers staying or discarding a record draft',async()=>{
+    window.history.replaceState(null,'','/?mode=records&r=r1')
+    const view=render(<TableScreen table={table} member={{role:'owner'}} initialMode="records" initialRowId="r1"/>)
+    // The URL is the source of truth on history navigation as well.
+    fireEvent.click(view.getByRole('button',{name:'По записям'}))
+    await waitFor(()=>expect(view.getByRole('textbox',{name:'Название'})).toBeTruthy())
+    fireEvent.change(view.getByRole('textbox',{name:'Название'}),{target:{value:'Несохранённая запись'}})
+    fireEvent.click(view.getByRole('button',{name:'Таблицей'}))
+    await waitFor(()=>expect(view.getByRole('dialog',{name:'Сохранить изменения?'})).toBeTruthy())
+    fireEvent.click(view.getByRole('button',{name:'Остаться'}))
+    expect((view.getByRole('textbox',{name:'Название'}) as HTMLInputElement).value).toBe('Несохранённая запись')
+    fireEvent.click(view.getByRole('button',{name:'Таблицей'}))
+    await view.findByRole('dialog',{name:'Сохранить изменения?'})
+    await act(async()=>fireEvent.click(view.getByRole('button',{name:'Не сохранять'})))
+    expect(view.getByRole('grid')).toBeTruthy();expect(view.queryByText('Несохранённая запись')).toBeNull();expect(mocks.save).not.toHaveBeenCalled()
+  })
+})

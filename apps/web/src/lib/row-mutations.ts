@@ -1,4 +1,4 @@
-import { db, fields as fieldsTable, rows, rowChanges, tables, workspaceUsage } from '@tableapp/db'
+import { db, fields as fieldsTable, rows, rowChanges, tables, workspaceUsage,workspaceMembers } from '@tableapp/db'
 import { compileTableFormulas, computeRow, stripDerived } from '@tableapp/formula'
 import { newId, normalizeFieldOptions, parseCellValue, positionBetween, type CustomerWorkflow, type Field } from '@tableapp/schema'
 import { and, asc, desc, eq, gt, isNull, sql } from 'drizzle-orm'
@@ -16,6 +16,7 @@ import { currentModularAppError, moduleIntakeError } from './module-lifecycle'
 import { prepareOrderDeliveryWrite, assertOrderDeliveryDeletion } from './order-delivery-store'
 import { prepareOrderStockWrite, assertOrderStockDeletion } from './order-stock-store'
 import { prepareProductionStockWrite, assertProductionStockDeletion, type ProductionStockAuthorization } from './production-stock-write'
+import { memberTableFields,restrictedTables,tablePermission,type TableMember } from './table-permissions'
 
 export class RowWriteError extends Error {
   constructor(readonly code: 'missing' | 'conflict' | 'denied' | 'invalid', message: string) {
@@ -26,7 +27,7 @@ export class RowWriteError extends Error {
 
 export type RowActor = { id: string | null; kind: string; ip?: string | null }
 export type RowTransaction = { tx: Transaction; workspaceId: string; changed: Set<string>;
-  usageLocked?: boolean; fieldCache?: Map<string, Field[]>; customerConfigCache?: CustomerWorkflow[]; moduleStateCache?: import('@tableapp/schema').App[]; orderDeliverySync?: Set<string>; orderStockInternal?: Set<string>; orderStockReturn?: Set<string>; productionStockInternal?: ProductionStockAuthorization }
+  usageLocked?: boolean; fieldCache?: Map<string, Field[]>; memberAccess?:Map<string,TableMember>;customerConfigCache?: CustomerWorkflow[]; moduleStateCache?: import('@tableapp/schema').App[]; orderDeliverySync?: Set<string>; orderStockInternal?: Set<string>; orderStockReturn?: Set<string>; productionStockInternal?: ProductionStockAuthorization }
 export type StoredRow = typeof rows.$inferSelect
 export const ROW_CONFLICT = 'Запись изменилась после открытия формы. Обновите её и повторите действие.'
 
@@ -127,6 +128,7 @@ export async function createRow(context: RowTransaction, tableId: string, data: 
   options: { id?: string; afterRowId?: string; origin?: Origin; beforeInsert?: (tx: Transaction) => Promise<void> } = {}) {
   await lockRowUsage(context)
   const fields = await mutationFields(context, tableId)
+  await assertMemberRowWrite(context,tableId,fields,Object.keys(data),actor)
   const id = options.id ?? newId('row')
   const existing = await lockedRow(context, tableId, id)
   if (existing) {
@@ -180,6 +182,7 @@ export async function updateRow(context: RowTransaction, tableId: string, rowId:
   patch: Record<string, unknown> | ((fields: Field[], current: StoredRow) => Record<string, unknown>), actor: RowActor,
   options: { baseVersion?: number; base?: Record<string, unknown>; guard?: (data: Record<string, unknown>, row?: StoredRow) => boolean } = {}) {
   const fields = await mutationFields(context, tableId)
+  await assertMemberRowWrite(context,tableId,fields,typeof patch==='function'?[]:Object.keys(patch),actor)
   const current = await lockedRow(context, tableId, rowId)
   checkRow(current, options)
   const before = current.data as Record<string, unknown>
@@ -187,6 +190,7 @@ export async function updateRow(context: RowTransaction, tableId: string, rowId:
     if (!sameCellValue(before[fieldId], base)) throw new RowWriteError('conflict', CELL_CONFLICT)
   }
   let changed = parsePatch(fields, typeof patch === 'function' ? patch(fields, current) : patch)
+  await assertMemberRowWrite(context,tableId,fields,Object.keys(changed),actor)
   const error = await validateRowAttachments(tableId, fields, changed, context.tx, actor, rowId)
   if (error) throw new RowWriteError('invalid', error)
   changed = await canonicalAttachments(fields, changed, context.tx)
@@ -208,7 +212,8 @@ export async function updateRow(context: RowTransaction, tableId: string, rowId:
 export async function deleteRow(context: RowTransaction, tableId: string, rowId: string, actor: RowActor,
   options: { baseVersion?: number; guard?: (data: Record<string, unknown>, row?: StoredRow) => boolean } = {}) {
   await lockRowUsage(context)
-  await mutationFields(context, tableId)
+  const fields=await mutationFields(context, tableId)
+  await assertMemberRowWrite(context,tableId,fields,[],actor)
   const current = await lockedRow(context, tableId, rowId)
   checkRow(current, options)
   await assertProductionStockDeletion(context, tableId, rowId)
@@ -219,6 +224,7 @@ export async function deleteRow(context: RowTransaction, tableId: string, rowId:
     ...(dependent?.rows ?? []).map((row) => ({ ...row, tableId: dependent!.tableId }))]
   // Cascade targets obey their own accepted contracts before any row is removed.
   for (const target of targets.slice(1)) {
+    await assertMemberRowWrite(context,target.tableId,await mutationFields(context,target.tableId),[],actor)
     await assertProductionStockDeletion(context, target.tableId, target.id)
     await assertOrderStockDeletion(context, target.tableId, target.id)
     await assertOrderDeliveryDeletion(context, target.tableId, target.id)
@@ -234,4 +240,22 @@ export async function deleteRow(context: RowTransaction, tableId: string, rowId:
   }
   await noteRemoved(context.workspaceId, 'rows', removed, context.tx)
   return removed
+}
+
+/** Recheck live membership inside the transaction, including imported and offline writes. */
+async function assertMemberRowWrite(context:RowTransaction,tableId:string,fields:Field[],fieldIds:string[],actor:RowActor){
+  if(actor.kind!=='member')return
+  if(!actor.id)throw new RowWriteError('denied','Нужно войти в систему')
+  context.memberAccess??=new Map()
+  let member=context.memberAccess.get(actor.id)
+  if(!member){
+    const [found]=await context.tx.select({role:workspaceMembers.role,tableAccess:workspaceMembers.tableAccess}).from(workspaceMembers)
+      .where(and(eq(workspaceMembers.workspaceId,context.workspaceId),eq(workspaceMembers.userId,actor.id))).for('share')
+    if(!found)throw new RowWriteError('denied','Доступ к пространству отозван')
+    member=found;context.memberAccess.set(actor.id,member)
+  }
+  if(tablePermission(member,tableId)!=='edit')throw new RowWriteError('denied','Нет права редактировать эту таблицу')
+  if(!restrictedTables(member))return
+  const allowed=new Set(memberTableFields(fields,member).map(field=>field.id))
+  if(fieldIds.some(id=>!allowed.has(id)))throw new RowWriteError('denied','Поле связано с недоступной таблицей')
 }

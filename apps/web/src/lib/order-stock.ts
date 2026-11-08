@@ -32,7 +32,7 @@ export async function readOrderStock(tableId: string, rowId: string, slug?: stri
     const items = reservation ? await context.tx.select().from(orderStockItems).where(and(eq(orderStockItems.workspaceId, context.workspaceId), eq(orderStockItems.orderTableId, tableId), eq(orderStockItems.orderRowId, rowId))) : []
     return { state, canConfirm: canChangeStatus(access) && !reservation && status === pair.order.initialStatus, canIssue: canChangeStatus(access) && state === 'reserved' && !delivery,
       canReturn: canChangeStatus(access) && state === 'issued' && !delivery && Boolean(reservation && pickupReturnStatus(pair.order, reservation.contract.order)) && status === reservation?.contract.order.logistics?.deliveredStatus,
-      ...(reservation ? { quantity: items.reduce((sum, item) => sum + item.quantity, 0) } : {}), ...(delivery ? { reason: 'Товар спишется со склада при передаче курьеру.' } : {}) }
+      ...(reservation ? { quantity: items.reduce((sum, item) => sum + item.quantity, 0) } : {}), ...(delivery && state === 'reserved' ? { reason: 'Товар спишется со склада при передаче курьеру.' } : {}) }
   })
 }
 

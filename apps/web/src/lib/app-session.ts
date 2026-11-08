@@ -9,6 +9,7 @@ import { ensureBusinessCustomer } from './business-customer'
 import type { ModuleAccessApp } from './module-access'
 import { generalChatAvailableApp } from './general-conversation-config'
 import { validateAppReferences } from './app-references'
+import { currentAccount } from './session'
 
 export type AppViewer = {
   id: string
@@ -19,6 +20,7 @@ export type AppViewer = {
   enrolled: boolean
   /** Profile is scoped to this business; app user IDs and old ownership remain stable. */
   businessCustomerId?: string
+  workspaceSession?: boolean
 }
 
 /** Кто пришёл и что ему можно: одно решение на чтение и на запись. */
@@ -85,6 +87,13 @@ export async function enrolFromQuestion(app: App, email: string): Promise<boolea
 export async function currentAppAccess(
   app: ModuleAccessApp,
 ): Promise<AppAccess> {
+  if (app.purpose === 'personal' || app.purpose === 'business' && !app.modules?.length) {
+    const account = await currentAccount()
+    if (account && visitorFor(app, account.email).authenticated) {
+      const access = await appAccessFor(app, account.email)
+      if (access.viewer) return { ...access, viewer: { ...access.viewer, workspaceSession: true } }
+    }
+  }
   return appAccessFor(app, await currentStaffEmail())
 }
 

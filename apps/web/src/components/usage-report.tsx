@@ -47,15 +47,15 @@ const TONE: Record<UsageLevel, { bar: string; text: string; note: string | null 
   warning: {
     bar: 'bg-amber-500',
     text: 'text-amber-900',
-    note: 'Место скоро кончится — стоит посмотреть на следующий тариф.',
+    note: 'Лимит почти использован. Проверьте, хватит ли его для новых данных.',
   },
   reached: {
-    bar: 'bg-red-500',
-    text: 'text-red-800',
+    bar: 'bg-sage-600',
+    text: 'text-sage-700',
     // Точная формулировка: добавлять нельзя, но ничего из созданного
     // не выключено. Второе человек должен услышать в той же фразе,
     // иначе первое читается как «всё встало».
-    note: 'Место кончилось: добавлять больше нельзя. Созданное работает как прежде.',
+    note: 'Лимит использован. Существующие данные остаются доступны.',
   },
 }
 
@@ -101,11 +101,13 @@ function Meter({
   used,
   limit,
   format = count,
+  reachedMessage,
 }: {
   label: string
   used: number
   limit: number
   format?: (value: number) => string
+  reachedMessage?: string
 }) {
   const level = usageLevel(used, limit)
   const tone = TONE[level]
@@ -126,17 +128,18 @@ function Meter({
       <div
         className="h-2 overflow-hidden rounded-full bg-[var(--color-surface-muted)]"
         role="progressbar"
-        aria-valuenow={percent}
+        aria-valuenow={Math.min(percent, 100)}
         aria-valuemin={0}
         aria-valuemax={100}
         aria-label={label}
+        aria-valuetext={`${format(used)} из ${format(limit)}`}
       >
         {/* Полоса не уходит за край, даже когда израсходовано больше потолка:
             иначе «120%» рисуется как «ровно столько же», и разницы не видно. */}
         <div className={`h-full rounded-full ${tone.bar}`} style={{ width: `${Math.min(percent, 100)}%` }} />
       </div>
 
-      {tone.note ? <p className={`text-xs ${tone.text}`}>{tone.note}</p> : null}
+      {tone.note ? <p className={`text-xs leading-4 ${tone.text}`}>{level === 'reached' ? reachedMessage ?? tone.note : tone.note}</p> : null}
     </li>
   )
 }
@@ -233,7 +236,7 @@ export function UsageReport({
         </header>
 
         <ul className="space-y-4">
-          <Meter label="Строки" used={usage.rows} limit={plan.limits.rows} />
+          <Meter label="Строки" used={usage.rows} limit={plan.limits.rows} reachedMessage="Лимит строк использован. Чтобы добавить новые, освободите место или обсудите другой тариф. Существующие записи доступны." />
           {/*
             Резерв показываем только после того, как основной потолок пройден.
             До этого он — внутреннее устройство, и рисовать вторую полосу
@@ -241,13 +244,14 @@ export function UsageReport({
             в том, что его пока не касается.
           */}
           {over ? <Reserve used={reserveUsed} limit={reserveSize} /> : null}
-          <Meter label="Файлы" used={usage.fileBytes} limit={plan.limits.fileBytes} format={bytes} />
+          <Meter label="Файлы" used={usage.fileBytes} limit={plan.limits.fileBytes} format={bytes} reachedMessage="Место для новых файлов использовано. Загруженные файлы остаются доступны." />
           <Meter
             label="Опубликованные приложения"
             used={usage.publishedApps}
             limit={plan.limits.publishedApps}
+            reachedMessage={`Опубликовано ${usage.publishedApps} из ${plan.limits.publishedApps}. Для следующего приложения нужен другой тариф. Текущие приложения продолжают работать.`}
           />
-          <Meter label="Таблицы" used={usage.tables} limit={plan.limits.tables} />
+          <Meter label="Таблицы" used={usage.tables} limit={plan.limits.tables} reachedMessage="Лимит таблиц использован. Существующие таблицы доступны, новые можно создать после освобождения места или смены тарифа." />
         </ul>
 
         {/*

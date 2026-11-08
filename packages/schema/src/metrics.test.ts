@@ -24,6 +24,22 @@ const rows = [
 ]
 
 describe('сроки', () => {
+  it.each([
+    ['today', '2026-10-29T21:00:00.000Z'],
+    ['week', '2026-10-25T21:00:00.000Z'],
+  ] as const)('обнуляет секунды и миллисекунды у начала %s', (range, expected) => {
+    const spans = spansFor(range, new Date('2026-10-30T11:22:47.345Z'))!
+    expect(new Date(spans.current.from).toISOString()).toBe(expected)
+  })
+  it('включает дату без времени в сегодняшний итог и не захватывает завтра', () => {
+    const result = computeMetric({ kind:'sum',fieldId:'s',dateFieldId:'d',range:'today',compare:true },[
+      row('2026-10-29T21:00:00.000Z',5),
+      row('2026-10-30T20:59:59.999Z',2),
+      row('2026-10-30T21:00:00.000Z',100),
+      row('2026-10-29T20:59:59.999Z',9),
+    ],new Date('2026-10-30T11:22:47.345Z'))
+    expect(result).toMatchObject({value:7,previous:9,rows:2})
+  })
   it('за всё время срока нет', () => {
     expect(spansFor('all', now)).toBeNull()
   })

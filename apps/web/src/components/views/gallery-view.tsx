@@ -5,6 +5,7 @@ import type { TableRow } from '@/lib/table-store'
 import { RowCard } from './card'
 
 type GalleryProps = {
+  readOnly?: boolean
   view: ViewOf<'gallery'>
   fields: Field[]
   shownFields: Field[]
@@ -23,6 +24,7 @@ const CARD_COLUMNS: Record<string, string> = {
 }
 
 export function GalleryView({
+  readOnly = false,
   view,
   fields,
   shownFields,
@@ -40,9 +42,10 @@ export function GalleryView({
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <span className="text-[var(--color-ink-muted)]">Размер карточек</span>
         <select
+          disabled={readOnly}
           value={view.config.cardSize}
           onChange={(event) =>
-            onConfigChange({ ...view.config, cardSize: event.target.value as 'small' | 'medium' | 'large' })
+            !readOnly && onConfigChange({ ...view.config, cardSize: event.target.value as 'small' | 'medium' | 'large' })
           }
           className="rounded border border-[var(--color-border-subtle)] bg-white px-2 py-1 text-sm outline-none focus:border-sage-400"
         >
@@ -55,9 +58,10 @@ export function GalleryView({
           <>
             <span className="text-[var(--color-ink-muted)]">Обложка</span>
             <select
+              disabled={readOnly}
               value={coverField?.id ?? ''}
               onChange={(event) =>
-                onConfigChange({ ...view.config, coverFieldId: event.target.value || null })
+                !readOnly && onConfigChange({ ...view.config, coverFieldId: event.target.value || null })
               }
               className="rounded border border-[var(--color-border-subtle)] bg-white px-2 py-1 text-sm outline-none focus:border-sage-400"
             >
@@ -84,13 +88,13 @@ export function GalleryView({
         </div>
       )}
 
-      <button
+      {!readOnly ? <button
         type="button"
         onClick={onAddRow}
         className="rounded-lg border border-dashed border-[var(--color-border-subtle)] px-4 py-2 text-sm text-[var(--color-ink-muted)] hover:border-sage-400 hover:text-sage-700"
       >
         + Строка
-      </button>
+      </button> : null}
     </div>
   )
 }

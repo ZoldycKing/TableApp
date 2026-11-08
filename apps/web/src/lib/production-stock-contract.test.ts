@@ -14,6 +14,16 @@ function fixture() {
 }
 
 describe('retained production stock contracts', () => {
+  it('keeps optional list display fields outside historical write coordinates', () => {
+    const { contract, fields } = fixture(), legacy = structuredClone(contract.production)
+    delete legacy.material.stock; delete legacy.material.min
+    expect(productionStockBinding(legacy)).toBe(productionStockBinding(contract.production))
+    const next = structuredClone(contract.production)
+    next.material.min = 'another_display_field'
+    expect(productionStockBinding(next)).toBe(productionStockBinding(contract.production))
+    const minimum = fields.find(field => field.id === contract.production.material.min)!
+    expect(retainedProductionStockFieldError(contract, minimum, null)).toBeNull()
+  })
   it('keeps factory defaults and UI/grant changes outside the retained lifecycle binding', () => {
     const { contract } = fixture(), next = structuredClone(contract.production)
     next.formScreenId = 'screen_changed'; next.movementScreenId = 'screen_another'

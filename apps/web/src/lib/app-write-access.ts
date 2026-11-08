@@ -9,7 +9,7 @@ export async function loadApp(slug: string): Promise<App | null> {
   if (!record?.published) return null
   const parsed = appSchema.safeParse(record.published)
   if (!parsed.success) return null
-  const app = { ...parsed.data, id: record.id, workspaceId: record.workspaceId }
+  const app = { ...parsed.data, id: record.id, workspaceId: record.workspaceId, slug: record.slug }
   return await validateAppReferences(app) ? null : app
 }
 

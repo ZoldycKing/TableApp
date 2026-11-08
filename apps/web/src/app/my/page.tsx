@@ -26,7 +26,7 @@ export default async function MyAppsPage() {
   const mine = await appsForStaff(email)
 
   return (
-    <main className="mx-auto w-full max-w-lg px-5 py-16">
+    <main className="platform-surface mx-auto w-full max-w-lg px-6 py-16">
       <h1 className="text-2xl font-semibold tracking-tight">Ваши приложения</h1>
       <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-[var(--color-ink-muted)]">Вход выполнен как {email}</p>
@@ -35,8 +35,8 @@ export default async function MyAppsPage() {
 
       {mine.length === 0 ? (
         <p className="mt-8 rounded-xl border border-sand-200 bg-sand-100/60 px-4 py-3 text-sm text-ink-soft">
-          Пока здесь нет приложений. Откройте ссылку бизнеса и оформите обращение —
-          его кабинет появится здесь. Рабочий доступ сотруднику выдаёт бизнес.
+          Приложений пока нет. Откройте ссылку компании, чтобы оформить обращение.
+          Для рабочего доступа попросите руководителя добавить вашу почту.
         </p>
       ) : (
         <ul className="mt-8 space-y-2">
@@ -46,7 +46,7 @@ export default async function MyAppsPage() {
                 href={`/a/${app.slug}`}
                 className="flex items-center justify-between gap-3 rounded-xl border border-sand-200 bg-white px-4 py-3 text-sm shadow-soft transition-all hover:-translate-y-0.5 hover:border-sage-300 hover:shadow-lift"
               >
-                <span className="min-w-0"><span className="block font-medium">{app.businessName}</span><span className="block text-xs text-ink-muted">{app.name}</span></span>
+                <span className="min-w-0 break-words"><span className="block font-medium">{app.businessName}</span><span className="block text-xs text-ink-muted">{app.name}</span></span>
                 <span className="text-ink-muted">→</span>
               </Link>
             </li>

@@ -27,6 +27,7 @@ describe.skipIf(!process.env.DATABASE_URL)('salon scenarios with atomic PostgreS
     example.app.allowlist = [{ email: admin, roleId: 'manager', company: '' }, { email: 'olga@example.com', roleId: 'staff', company: '' }]
     await database.db.insert(database.users).values({ id: userId, email: `${userId}@example.invalid` })
     await database.db.insert(database.workspaces).values({ id: workspaceId, ownerId: userId, name: 'Synthetic salon', slug: example.app.slug })
+    await database.db.insert(database.workspaceMembers).values({workspaceId,userId,role:'owner'})
     await database.db.insert(database.tables).values(example.built.tables.map(table => ({ ...table, workspaceId })))
     await database.db.insert(database.fields).values(example.built.fields); await database.db.insert(database.views).values(example.built.views); await database.db.insert(database.rows).values(example.built.rows)
     await database.db.insert(database.apps).values({ id: example.app.id, workspaceId, name: 'Synthetic salon', slug: example.app.slug, draft: example.app, published: example.app })
@@ -63,6 +64,7 @@ describe.skipIf(!process.env.DATABASE_URL)('salon scenarios with atomic PostgreS
     expect(loaded!.tables[config.tables.visits]!.rows).toHaveLength(1)
     const row = loaded!.tables[config.tables.visits]!.rows[0]!
     ownId = row.id
+    expect(result.rowId).toBe(ownId)
     expect(row.data).toMatchObject({ [config.visit.price]: 2500, [config.visit.minutes]: 60, [config.visit.status]: config.statuses.booked })
     expect((await stored(ownId)).data).toMatchObject({ [config.visit.email]: email, [config.visit.masterEmail]: 'olga@example.com' })
     expect((await actions.bookingAvailabilityAction(example.app.slug, serviceId, day, masterId)).ok).toBe(true)

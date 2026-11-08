@@ -3,6 +3,7 @@
 import type { ProductionConfig } from '@tableapp/schema'
 import { newId } from '@tableapp/schema'
 import { useEffect, useRef, useState } from 'react'
+import styles from './production-form.module.css'
 import {
   previewConsumptionAction,
   type ConsumptionPreview,
@@ -131,20 +132,22 @@ export function useConsumption(
   const seq = useRef(0)
 
   useEffect(() => {
+    const mine = ++seq.current
     if (!enabled || !productId || quantity <= 0) {
       setPreview(null)
       setLoading(false)
       return
     }
-    const mine = ++seq.current
     setLoading(true)
     const timer = setTimeout(async () => {
-      const result = await previewConsumptionAction(slug, productId, quantity)
-      if (mine !== seq.current) return
-      setLoading(false)
-      setPreview(result.ok ? { lines: result.lines, quantity } : null)
+      try {
+        const result = await previewConsumptionAction(slug, productId, quantity)
+        if (mine !== seq.current) return
+        setLoading(false)
+        setPreview(result.ok ? { lines: result.lines, quantity } : null)
+      } catch { if (mine === seq.current) { setLoading(false); setPreview(null) } }
     }, 350)
-    return () => clearTimeout(timer)
+    return () => { clearTimeout(timer); seq.current++ }
   }, [slug, productId, quantity, enabled])
 
   return { preview, loading }
@@ -186,24 +189,23 @@ export function ConsumptionPanel({
   const short = preview.lines.filter((line) => line.missing > 0)
 
   return (
-    <div className="rounded-xl border border-sand-200 bg-sand-50 p-4">
+    <div className={`${styles.panel} border-y border-sand-200 py-4`}>
       <p className="text-[13px] font-semibold text-ink-soft">
-        Спишется при сохранении
+        Расход материалов
         {loading ? <span className="font-normal text-ink-muted"> — пересчитываем…</span> : null}
       </p>
-      <ul className="mt-2 space-y-1.5">
+      <div className={`${styles.grid} mt-3 grid items-baseline gap-x-3 gap-y-3 text-sm`}>
+      <span className={`${styles.header} text-xs text-ink-muted`}>Материал</span><span className={`${styles.header} text-xs text-ink-muted`}>Спишется</span><span className={`${styles.header} text-xs text-ink-muted`}>Останется</span>
         {preview.lines.map((line) => (
-          <li key={line.materialId} className="flex items-baseline justify-between gap-3 text-sm">
-            <span className="text-ink-soft">{line.material}</span>
-            <span className="shrink-0 tabular-nums">
-              <span className={line.missing > 0 ? 'font-semibold text-amber-700' : 'font-medium'}>
-                {decimal.format(line.need)} {line.unit}
+          <div key={line.materialId} className="contents">
+            <span className={`${styles.material} min-w-0 break-words text-ink-soft`}>{line.material}</span>
+              <span className={`min-w-0 break-words text-right tabular-nums ${line.missing > 0 ? 'font-semibold text-amber-700' : 'font-medium'}`}>
+                <span className={styles.mobileLabel}>Спишется</span>{decimal.format(line.need)} {line.unit}
               </span>
-              <span className="text-ink-muted"> из {decimal.format(line.stock)}</span>
-            </span>
-          </li>
+              <span className="min-w-0 break-words text-right tabular-nums text-ink-soft"><span className={styles.mobileLabel}>Останется</span>{decimal.format(line.stock-line.need)} {line.unit}</span>
+          </div>
         ))}
-      </ul>
+      </div>
       {short.length > 0 ? (
         <p className="mt-3 border-t border-sand-200 pt-3 text-sm text-amber-900">
           На складе не хватает:{' '}

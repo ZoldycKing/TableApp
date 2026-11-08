@@ -11,7 +11,7 @@ type EditorProps = {
   value: unknown
   /** Заголовки строк связанной таблицы: id -> как показать человеку. */
   relatedOptions?: { id: string; title: string }[]
-  onCommit: (value: unknown) => void
+  onCommit: (value: unknown, navigate?: 'next' | 'previous' | 'below' | 'above' | 'save') => void
   onCancel: () => void
 }
 
@@ -38,6 +38,8 @@ const SHARED =
   'absolute inset-0 z-10 w-full border-2 border-sage-400 bg-white px-2 py-1 text-sm outline-none'
 
 export function CellEditor({ field, value, relatedOptions, onCommit, onCancel }: EditorProps) {
+  const [error, setError] = useState('')
+  const [selectedValues,setSelectedValues]=useState<string[]>(Array.isArray(value)?value.map(String):[])
   const [draft, setDraft] = useState(() => {
     if (field.type === 'date') return toDateInput(value, false, fieldTimeZone(field))
     if (field.type === 'datetime') return toDateInput(value, true, fieldTimeZone(field))
@@ -61,28 +63,33 @@ export function CellEditor({ field, value, relatedOptions, onCommit, onCancel }:
     }
   }, [])
 
-  const commit = () => {
+  const commit = (navigate?: 'next' | 'previous' | 'below' | 'above' | 'save') => {
+    if(field.type==='multi_select'||field.type==='relation'&&field.options.allowMultiple)return onCommit(selectedValues,navigate)
     if (field.type === 'number') {
       // Ввод «1 234,50» должен приниматься так же, как «1234.50».
       const normalized = draft.trim().replace(/\s/g, '').replace(',', '.')
-      if (normalized === '') return onCommit(null)
+      if (normalized === '') return onCommit(null, navigate)
       const parsed = Number(normalized)
-      return onCommit(Number.isFinite(parsed) ? parsed : null)
+      if (!Number.isFinite(parsed)) { setError('Введите число.'); return }
+      return onCommit(parsed, navigate)
     }
     if (field.type === 'date' || field.type === 'datetime') {
-      if (draft === '') return onCommit(null)
+      if (draft === '') return onCommit(null, navigate)
       const parsed = fromDateInput(draft, fieldTimeZone(field))
-      if (parsed !== null) onCommit(parsed)
+      if (parsed !== null) onCommit(parsed, navigate)
+      else setError('Проверьте дату.')
       return
     }
-    return onCommit(draft === '' ? null : draft)
+    return onCommit(draft === '' ? null : draft, navigate)
   }
 
   const handleKey = (event: KeyboardEvent) => {
+    event.stopPropagation()
+    if (event.key === 'Tab') { event.preventDefault(); commit(event.shiftKey ? 'previous' : 'next'); return }
     const multiline = field.type === 'long_text' && event.shiftKey
     if (event.key === 'Enter' && !multiline) {
       event.preventDefault()
-      commit()
+      commit(event.ctrlKey || event.metaKey ? 'save' : event.shiftKey ? 'above' : 'below')
     }
     if (event.key === 'Escape') {
       event.preventDefault()
@@ -113,7 +120,7 @@ export function CellEditor({ field, value, relatedOptions, onCommit, onCancel }:
   }
 
   if (field.type === 'relation') {
-    const selected = Array.isArray(value) ? value.map(String) : []
+    const selected = selectedValues
     const options = relatedOptions ?? []
 
     if (!field.options.allowMultiple) {
@@ -143,10 +150,9 @@ export function CellEditor({ field, value, relatedOptions, onCommit, onCancel }:
         ref={ref as Ref<HTMLSelectElement>}
         multiple
         value={selected}
-        onChange={(event) =>
-          onCommit([...event.target.selectedOptions].map((option) => option.value))
-        }
-        onKeyDown={(event) => { if (event.key === 'Escape') onCancel() }}
+        onChange={(event) => setSelectedValues([...event.target.selectedOptions].map((option) => option.value))}
+        onBlur={()=>commit()}
+        onKeyDown={handleKey}
         className={`${SHARED} h-auto min-h-32`}
       >
         {options.map((option) => (
@@ -158,13 +164,15 @@ export function CellEditor({ field, value, relatedOptions, onCommit, onCancel }:
     )
   }
 
+  if(field.type==='multi_select')return <select ref={ref as Ref<HTMLSelectElement>} aria-label={field.name} multiple value={selectedValues} onChange={event=>setSelectedValues([...event.target.selectedOptions].map(option=>option.value))} onBlur={()=>commit()} onKeyDown={handleKey} className={`${SHARED} h-auto min-h-32`}>{field.options.choices.map(choice=><option key={choice.id} value={choice.id}>{choice.name}</option>)}</select>
+
   if (field.type === 'single_select') {
     return (
       <select
         ref={ref as Ref<HTMLSelectElement>}
         value={draft}
         onChange={(event) => setDraft(event.target.value)}
-        onBlur={commit}
+        onBlur={() => commit()}
         onKeyDown={handleKey}
         className={SHARED}
       >
@@ -184,7 +192,7 @@ export function CellEditor({ field, value, relatedOptions, onCommit, onCancel }:
         ref={ref as Ref<HTMLTextAreaElement>}
         value={draft}
         onChange={(event) => setDraft(event.target.value)}
-        onBlur={commit}
+        onBlur={() => commit()}
         onKeyDown={handleKey}
         rows={4}
         className={`${SHARED} h-auto min-h-full resize-y`}
@@ -200,15 +208,18 @@ export function CellEditor({ field, value, relatedOptions, onCommit, onCancel }:
       : field.type === 'phone' ? 'tel'
       : 'text'
 
-  return (
+  return <>
     <input
       ref={ref as Ref<HTMLInputElement>}
       type={inputType}
       value={draft}
-      onChange={(event) => setDraft(event.target.value)}
-      onBlur={commit}
+      onChange={(event) => { setDraft(event.target.value); setError('') }}
+      aria-label={field.name}
+      aria-invalid={!!error}
+      onBlur={() => commit()}
       onKeyDown={handleKey}
       className={SHARED}
     />
-  )
+    {error ? <span role="alert" className="absolute left-0 top-full z-30 w-max max-w-64 rounded-lg border border-red-200 bg-white p-2 text-xs text-red-700 shadow-soft">{error}</span> : null}
+  </>
 }

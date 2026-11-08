@@ -58,10 +58,12 @@ describe('состав', () => {
 })
 
 describe('подсветка вложенных страниц', () => {
-  it('таблица подсвечивает «Данные»', () => {
+  it('таблица подсвечивает «Таблицы», а обзор имеет свой пункт', () => {
     // Человек работает именно здесь — потерять подсветку тут хуже всего.
     expect(activeNavId('/t/tbl_123')).toBe('data')
-    expect(activeNavId('/app')).toBe('data')
+    expect(activeNavId('/tables/tbl_123')).toBe('data')
+    expect(activeNavId('/app')).toBe('overview')
+    expect(activeNavId('/setup')).toBe('overview')
     expect(activeNavId('/import')).toBe('data')
   })
 
@@ -85,7 +87,7 @@ describe('подсветка вложенных страниц', () => {
      * без разделителя подсветило бы оба, и человек в конструкторе видел бы
      * открытыми «Данные».
      */
-    expect(activeNavId('/app')).toBe('data')
+    expect(activeNavId('/app')).toBe('overview')
     expect(activeNavId('/apps')).toBe('apps')
     expect(activeNavId('/application')).toBe(null)
   })

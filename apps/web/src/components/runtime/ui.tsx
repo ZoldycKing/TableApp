@@ -14,24 +14,7 @@ import { Icon, type IconName } from './icons'
  * человек каждый раз заново соображает, на что он смотрит.
  */
 
-/** Оттенки акцента: сплошной для кнопок, мягкий для активного пункта меню. */
-export function accentTones(accent: string): {
-  solid: string
-  text: string
-  soft: string
-  ring: string
-} {
-  const map: Record<string, { solid: string; text: string; soft: string; ring: string }> = {
-    blue: { solid: 'bg-blue-600', text: 'text-blue-700', soft: 'bg-blue-50', ring: 'ring-blue-500' },
-    green: { solid: 'bg-green-600', text: 'text-green-700', soft: 'bg-green-50', ring: 'ring-green-500' },
-    violet: { solid: 'bg-violet-600', text: 'text-violet-700', soft: 'bg-violet-50', ring: 'ring-violet-500' },
-    rose: { solid: 'bg-rose-600', text: 'text-rose-700', soft: 'bg-rose-50', ring: 'ring-rose-500' },
-    amber: { solid: 'bg-amber-500', text: 'text-amber-700', soft: 'bg-amber-50', ring: 'ring-amber-500' },
-    teal: { solid: 'bg-teal-600', text: 'text-teal-700', soft: 'bg-teal-50', ring: 'ring-teal-500' },
-    indigo: { solid: 'bg-indigo-600', text: 'text-indigo-700', soft: 'bg-indigo-50', ring: 'ring-indigo-500' },
-  }
-  return map[accent] ?? map.blue!
-}
+export { accentTones } from './accent-tones'
 
 const AVATAR_TONES = [
   'bg-sage-100 text-sage-700',

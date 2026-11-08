@@ -1,0 +1,10 @@
+[
+  {
+    "key": "team",
+    "prompt": "Use the attached reference only for visual art direction, colors, materials and isometric camera. Create a NEW standalone 3:2 landscape illustration for the next scene of the same TableApp business story. Scene: open miniature stationery shop back office and packing desk, one calm featureless cream clay staff figure checking a large paper order sheet beside exactly two sage daily planners and an open kraft shipping carton. Shelves of neatly arranged stationery behind. Everything on one warm cream plinth. Same premium restrained matte clay, ceramic and paper surfaces, sage #618769, pale sage #e8f0e4, warm ivory #fcfaf7 and clay #b97a58. Isometric locked-angle camera, soft daylight and gentle contact shadows, center composition, wide empty ivory background. Clearly show work being prepared, not abstract software imagery. No text, letters, digits, symbols, logos, watermarks or UI cards. No neon, no gradient backgrounds. Match reference visual family closely; no toy facial features."
+  },
+  {
+    "key": "result",
+    "prompt": "Use the attached reference only for visual art direction, colors, materials and isometric camera. Create a NEW standalone 3:2 landscape illustration for the last scene of the same TableApp business story. Scene: small open miniature stockroom with sage shelf and neatly stacked cream/kraft boxes at back left, a completed sealed parcel and exactly two sage daily planners on a low pickup counter at center, one featureless cream clay shopkeeper handing a parcel to one cream clay customer at right. One compact hand truck near stockroom, simple calm business scene on one warm cream plinth. Premium restrained matte clay, ceramic and paper materials. Palette sage #618769, pale sage #e8f0e4, warm ivory #fcfaf7, clay #b97a58. Locked isometric camera, soft natural daylight, subtle realistic contact shadows, plenty of blank ivory background. Show a completed pickup and orderly stock visually. No text, letters, digits, logos, watermarks or floating UI cards, no neon, no gradients, no expressive cartoon faces."
+  }
+]

@@ -69,15 +69,15 @@ export function withCustomerScenario(original: TemplateDef): TemplateDef {
     }
     case 'dostavka':
       scenario = { ...common, table: 'deliveries', title: 'Мои доставки', submitLabel: 'Заказать доставку', intro: 'Укажите адрес, содержимое и желаемое время. Диспетчер согласует стоимость и интервал; после этого доставка появится у назначенного курьера.',
-        formFields: ['selectedService', 'requestName', 'requestPhone', 'address', 'what', 'window', 'note'], customerFields: ['what', 'status', 'date', 'window', 'price', 'address', 'clientSummary'], workerFields: ['status', 'photo', 'clientSummary'], workerName: 'Курьер', managerName: 'Диспетчер',
+        formFields: ['selectedService', 'requestName', 'requestPhone', 'address', 'what', 'window', 'note'], customerFields: ['what', 'status', 'date', 'window', 'price', 'address', 'note', 'clientSummary'], workerFields: ['status', 'photo', 'clientSummary'], workerReadFields: ['pay', 'photo'], workerName: 'Курьер', managerName: 'Диспетчер',
         status: 'status', initial: 'Принята', terminal: ['Доставлена', 'Возврат', 'Отменена'], cancel: 'Отменена', cancellable: ['Принята'], catalog: catalog('Услуги доставки') }
       break
     case 'service':
       main.fields.push({ key: 'approvedPrice', name: 'Согласованная стоимость', type: 'number', options: { format: 'currency', currency: 'RUB', precision: 2 }, help: 'Фиксируется сервером при согласии клиента. Изменение сметы требует нового согласования.' })
       scenario = { ...common, table: 'repairs', title: 'Мои ремонты', submitLabel: 'Отправить заявку на ремонт', intro: 'Укажите устройство и неисправность. После приёмки и диагностики мастер предложит стоимость; вы сможете согласовать её в кабинете.',
         formFields: ['selectedService', 'requestName', 'requestPhone', 'device', 'problem'], requiredFields: ['requestName', 'requestPhone', 'device', 'problem'], customerFields: ['ticket', 'status', 'problem', 'ready', 'price', 'approvedPrice', 'note', 'clientSummary'], workerFields: ['status', 'price', 'ready', 'note', 'clientSummary'], workerName: 'Мастер',
-        status: 'status', initial: 'Принято', terminal: ['Выдано', 'Отменён', 'Отказ от ремонта'], cancel: 'Отменён', cancellable: ['Принято'], catalog: catalog('Услуги сервиса'),
-        approval: { price: 'price', agreed: 'approvedPrice', waiting: 'Ждём согласования', approved: 'В ремонте', declined: 'Отказ от ремонта', consentRequired: ['В ремонте', 'Готово', 'Выдано'] } }
+        status: 'status', initial: 'Принято', terminal: ['Выполнено', 'Отменён', 'Отказ от ремонта'], cancel: 'Отменён', cancellable: ['Принято'], catalog: catalog('Услуги сервиса'),
+        approval: { price: 'price', agreed: 'approvedPrice', waiting: 'Ждём согласования', approved: 'В ремонте', declined: 'Отказ от ремонта', consentRequired: ['В ремонте', 'Готово', 'Выполнено'] } }
       break
     case 'nedvizhimost': {
       const objects = main
@@ -99,14 +99,15 @@ export function withCustomerScenario(original: TemplateDef): TemplateDef {
     }
     case 'zayavki':
       scenario = { ...common, table: template.appTable, title: 'Мои заявки', submitLabel: 'Отправить заявку', intro: 'Опишите работы и адрес. Диспетчер назначит мастера и согласует дату; результат появится в вашем кабинете.',
-        formFields: ['selectedService', 'requestName', 'requestPhone', 'what', 'requestAddress', 'comment'], customerFields: ['status', 'date', 'price', 'requestAddress', 'clientSummary'], workerFields: ['status', 'photo', 'comment', 'clientSummary'], workerName: 'Мастер', managerName: 'Диспетчер',
+        formFields: ['selectedService', 'requestName', 'requestPhone', 'what', 'requestAddress', 'requestNote'], customerFields: ['status', 'date', 'price', 'requestAddress', 'requestNote', 'clientSummary'], workerFields: ['status', 'photo', 'comment', 'clientSummary'], workerReadFields: ['comment', 'photo', 'clientName', 'phone', 'address'], workerName: 'Мастер', managerName: 'Диспетчер',
         status: 'status', initial: 'Новая', terminal: ['Готово', 'Отменена'], cancel: 'Отменена', cancellable: ['Новая'], assignment: 'masterEmail', catalog: catalog('Услуги и выезды') }
-      main.fields.push({ key: 'requestAddress', name: 'Адрес клиента', type: 'text' })
+      main.fields.push({ key: 'requestAddress', name: 'Адрес клиента', type: 'text' },
+        { key: 'requestNote', name: 'Пожелания клиента', type: 'long_text', help: 'Инструкции и пожелания при оформлении. Видны клиенту и назначенному мастеру; внутренние заметки о работах храните в «Комментарий».' })
       break
     case 'crm':
-      scenario = { ...common, table: 'deals', title: 'Мои обращения', submitLabel: 'Оставить обращение', intro: 'Опишите, что вас интересует. Менеджер свяжется с вами и сообщит результат в кабинете. Внутренние переговоры и сведения о других клиентах сюда не попадают.',
-        formFields: ['selectedService', 'requestName', 'requestPhone', 'what'], customerFields: ['stage', 'due', 'clientSummary'], workerFields: ['stage', 'due', 'sum', 'note', 'clientSummary'], workerName: 'Менеджер', managerName: 'Руководитель',
-        status: 'stage', initial: 'Новая', terminal: ['Оплачено', 'Отказ', 'Отменено'], cancel: 'Отменено', cancellable: ['Новая'], catalog: catalog('Обращения в отдел продаж') }
+      scenario = { ...common, table: 'deals', title: 'Мои сделки', submitLabel: 'Создать сделку', intro: 'Выберите клиента и заполните условия сделки.',
+        formFields: ['what', 'client', 'stage', 'sum', 'due', 'note'], requiredFields: ['what', 'client'], customerFields: ['client', 'phone', 'stage', 'sum', 'due', 'note'], workerFields: ['stage', 'due', 'sum', 'note'], workerName: 'Менеджер', managerName: 'Руководитель',
+        status: 'stage', initial: 'Новая', terminal: ['Оплачено', 'Отказ', 'Отменено'], cancel: 'Отменено', cancellable: ['Новая'], catalog: null }
       break
     case 'portal':
       scenario = { ...common, table: 'orders', title: 'Мои заказы', submitLabel: 'Отправить заявку', intro: 'Опишите задачу. Мы свяжемся с вами для согласования условий; заявка и её статус появятся в кабинете.',
@@ -129,7 +130,7 @@ export function withCustomerScenario(original: TemplateDef): TemplateDef {
     scenario.formFields = scenario.formFields.map(recipient)
     scenario.requiredFields = scenario.requiredFields.map(recipient)
   }
-  main.fields.push(...(template.id === 'dostavka' ? [] : structuredClone(contact)), structuredClone(summary))
+  if (template.id !== 'crm') main.fields.push(...(template.id === 'dostavka' ? [] : structuredClone(contact)), structuredClone(summary))
   main.fields.push({ key: 'requestDate', name: 'Создано', type: 'datetime', options: { timeZone: 'Europe/Moscow' }, help: 'Дата оформления. При онлайн-заявке фиксируется сервером и видна в истории клиента.' },
     { key: 'submissionId', name: 'Ключ оформления', type: 'text', help: 'Служебный ключ, защищающий оформление от повторной отправки. Клиенту не показывается.' })
   scenario.formFields.push('submissionId'); scenario.customerFields.push('requestDate')
@@ -139,9 +140,9 @@ export function withCustomerScenario(original: TemplateDef): TemplateDef {
   }
   // Demonstrate one fictional customer's active and historical records; others stay isolated.
   main.rows = main.rows.map((row, index) => ({ ...row, values: { ...row.values,
-    [scenario.email]: index < 2 ? 'irina@example.com' : `other${index}@example.invalid`, requestName: index < 2 ? 'Ирина' : 'Другой клиент', requestPhone: '+7 900 000-00-00',
+    ...(template.id === 'crm' ? {} : { [scenario.email]: index < 2 ? 'irina@example.com' : `other${index}@example.invalid`, requestName: index < 2 ? 'Ирина' : 'Другой клиент', requestPhone: '+7 900 000-00-00' }),
     requestDate: inDays(-index * 3),
-    ...(index === 1 ? { [scenario.status]: scenario.terminal[0]! } : {}),
+    ...(index === 1 && template.id !== 'crm' ? { [scenario.status]: scenario.terminal[0]! } : {}),
     ...(scenario.assignment ? { [scenario.assignment]: 'worker@example.invalid' } : {}),
   } }))
   if (!main.rows.length) main.rows = [
@@ -199,7 +200,6 @@ export function withCustomerScenario(original: TemplateDef): TemplateDef {
   }
   if (template.id === 'dostavka') scenario.requiredFields.push('address', 'what')
   if (template.id === 'zayavki') scenario.requiredFields.push('what', 'requestAddress')
-  if (template.id === 'crm') scenario.requiredFields.push('what')
   if (template.id === 'portal') scenario.requiredFields.push('title')
   if (scenario.catalog?.selection) scenario.requiredFields.push(scenario.catalog.selection)
   const help: Record<string, string> = {

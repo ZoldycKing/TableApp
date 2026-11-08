@@ -1,0 +1,164 @@
+.contentWidth {
+  width: 100%;
+  max-width: var(--app-content-width, 1480px);
+  margin-inline: auto;
+  padding-inline: clamp(16px, 3cqw, 40px);
+}
+
+.pageTitle {
+  font-size: clamp(21px, 2.2cqw, 29px);
+  font-weight: 650;
+  line-height: 1.17;
+  letter-spacing: -.025em;
+  overflow-wrap: anywhere;
+}
+
+.iconControl {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--v2-line, var(--color-sand-200));
+  border-radius: var(--v2-control-radius, 10px);
+  color: inherit;
+  background: var(--v2-surface, var(--color-white));
+}
+
+.iconControl:hover {
+  background: var(--v2-soft, var(--color-surface-muted));
+}
+
+.panel {
+  min-width: 0;
+  border: 1px solid var(--v2-line, var(--color-sand-200));
+  border-radius: var(--v2-card-radius, 14px);
+  background: var(--v2-surface, var(--color-white));
+}
+
+.sectionTitle {
+  font-size: 17px;
+  font-weight: 650;
+  line-height: 1.4;
+  letter-spacing: -.012em;
+  overflow-wrap: anywhere;
+}
+
+.fieldLabel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--v2-muted, var(--color-ink-muted));
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.45;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.fieldLabel svg { flex: none; }
+.fieldLabel span { min-width: 0; overflow-wrap: anywhere; }
+
+.avatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: var(--v2-soft, var(--color-surface-muted));
+  color: var(--v2-accent, var(--color-brand));
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -.025em;
+}
+
+.catalog {
+  container: app-catalog / inline-size;
+}
+
+.catalogGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(8px, 2cqi, 20px);
+}
+
+.catalogCard {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--v2-line, var(--color-sand-200));
+  border-radius: 14px;
+  background: var(--v2-surface, var(--color-white));
+}
+
+.catalogCard:is(button:not(:disabled), :has(button)):hover {
+  border-color: var(--v2-accent, var(--color-ink-muted));
+}
+
+.photo {
+  display: grid;
+  width: 100%;
+  aspect-ratio: 1;
+  place-items: center;
+  overflow: hidden;
+  color: var(--v2-muted, var(--color-ink-muted));
+  background: var(--v2-soft, var(--color-surface-muted));
+}
+
+.photo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.demoPhoto {
+  background-image: url('/template-media/catalog-atlas.webp');
+  background-size: 500% 500%;
+  background-repeat: no-repeat;
+}
+
+.detailHero {
+  display: grid;
+  gap: clamp(16px, 3cqi, 32px);
+  align-items: start;
+}
+
+.detailMedia {
+  min-width: 0;
+  max-width: 580px;
+  overflow: hidden;
+  border: 1px solid var(--color-sand-200);
+  border-radius: 14px;
+}
+
+.detailText {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+  min-width: 0;
+  padding: clamp(16px, 3cqi, 28px);
+  border: 1px solid var(--color-sand-200);
+  border-radius: 14px;
+  background: var(--color-white, #fff);
+}
+
+@container (min-width: 640px) {
+  .detailHero:has(.detailMedia + .detailText) {
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  }
+}
+
+@container app-catalog (max-width: 229px) {
+  .catalogGrid { grid-template-columns: minmax(0, 1fr); }
+}
+
+@container app-catalog (min-width: 680px) {
+  .catalogGrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@container app-catalog (min-width: 1050px) {
+  .catalogGrid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}

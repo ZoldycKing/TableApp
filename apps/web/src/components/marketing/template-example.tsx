@@ -1,10 +1,23 @@
 import { templateExample } from '@/lib/templates/presentation'
 import { ScreenFrame, ScreenTable } from './screens'
 import { TemplateAppPreview } from './template-app-preview'
+import { employeeExample } from '@/lib/templates/employee-example'
 
 export function TemplateExample({ id }: { id: string }) {
-  const example = templateExample(id)
+  const employee = id === 'zayavki' ? employeeExample(id) : null
+  const example = employee?.example ?? templateExample(id)
   const { template, built, rows, field, table, text } = example
+  if (template.id === 'zayavki') {
+    const items = rows.filter(row => row.tableId === built.appTableId)
+    const columns = ['what', 'master', 'status', 'paid'].map(key => field('zayavki', key))
+    return <div className="grid gap-5 sm:grid-cols-2">
+      <ScreenFrame device="desktop" title="У диспетчера: все заявки" note="Диспетчер назначает мастера, согласует дату и ведёт оплату.">
+        <ScreenTable caption="Заявки" columns={columns.map(column => column.name)} rows={items.slice(0, 4).map(row => columns.map(column => text(row, column) || '—'))} />
+      </ScreenFrame>
+      <TemplateAppPreview example={example} role="staff" email={employee!.email} name={employee!.name} title="У мастера: назначенные ему заявки"
+        note="Откройте заявку и нажмите «Изменить»: можно обновить статус, добавить фото и комментарий. Стоимость и оплата мастеру не видны." />
+    </div>
+  }
   if (template.customer && !template.internalOnly) {
     return <div className="grid gap-5 sm:grid-cols-2">
       <TemplateAppPreview example={example} role="guest" title="Без входа: каталог и описание"
@@ -33,17 +46,6 @@ export function TemplateExample({ id }: { id: string }) {
         note="Клиент видит только свои заказы, их статусы и историю. Откройте заказ, чтобы посмотреть подробности; данные других клиентов скрыты." />
     </div>
   }
-  if (template.id === 'zayavki') {
-    const items = rows.filter(row => row.tableId === built.appTableId)
-    const columns = ['what', 'master', 'status', 'paid'].map(key => field('zayavki', key))
-    return <div className="grid gap-5 sm:grid-cols-2">
-      <ScreenFrame device="desktop" title="В таблице диспетчера: все заявки" note={`Показаны 4 из ${items.length} заявок. Диспетчер выбирает клиента, дату и почту мастера, ведёт стоимость и оплату. Доска и календарь доступны в рабочем пространстве.`}>
-        <ScreenTable caption="Заявки" columns={columns.map(column => column.name)} rows={items.slice(0, 4).map(row => columns.map(column => text(row, column) || '—'))} />
-      </ScreenFrame>
-      <TemplateAppPreview example={example} role="staff" email="sergey@example.invalid" name="Сергей" title="В приложении мастера: его заявки"
-        note="Сергей видит 2 назначенные ему заявки из 6. Через «Изменить» доступны статус, фото и комментарий. Стоимость и оплату мастер не видит." />
-    </div>
-  }
   if (template.id === 'salon') {
     return <div className="grid gap-5 sm:grid-cols-2">
       <TemplateAppPreview example={example} role="guest" tableId={table('services').id} title="Услуги, цена и длительность"
@@ -54,7 +56,8 @@ export function TemplateExample({ id }: { id: string }) {
   }
   const main = built.tables.find(item => item.id === built.appTableId)!
   const items = rows.filter(row => row.tableId === main.id)
-  const columns = example.byTable.get(main.id)!.filter(item => item.type !== 'image' && item.type !== 'attachment' && item.type !== 'long_text').slice(0, 4)
+  const hidden = new Set(example.views.find(view => view.id === built.appViewId)?.config.hiddenFieldIds ?? [])
+  const columns = example.byTable.get(main.id)!.filter(item => !hidden.has(item.id) && item.type !== 'image' && item.type !== 'attachment' && item.type !== 'long_text').slice(0, 4)
   const role = template.production ? 'director' : 'manager'
   return <div className="grid gap-5 sm:grid-cols-2">
     <ScreenFrame device="desktop" title={`В рабочем пространстве: ${main.name.toLowerCase()}`} note={`Показаны ${Math.min(4, items.length)} из ${items.length} записей и ${columns.length} колонок. Доску и календарь, если они есть в шаблоне, открывают в рабочем пространстве.`}>

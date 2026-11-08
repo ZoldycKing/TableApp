@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { AppChrome } from '@/components/app-chrome'
 import { UsageReport } from '@/components/usage-report'
 import { canAdminister } from '@/lib/roles'
-import { listMemberships, requireMember } from '@/lib/session'
+import { listMemberships, requireWorkspaceMember as requireMember } from '@/lib/session'
 import { workspaceUsageReport } from '@/lib/usage'
 import { paymentsMode } from '@/lib/payments/provider'
 import { paymentHistory, settleExpired, subscriptionFor } from '@/lib/payments/subscription'
@@ -14,7 +14,7 @@ import { PRIVATE_PAGE } from '@/lib/seo'
  * Запрет в robots.txt обход закрывает, но не индексацию — адрес, на который
  * кто-то сослался, попадает в выдачу и без обхода. Отказ говорится здесь.
  */
-export const metadata = PRIVATE_PAGE
+export const metadata = { ...PRIVATE_PAGE, title: 'Тариф и лимиты' }
 
 export const dynamic = 'force-dynamic'
 
@@ -51,9 +51,9 @@ export default async function UsagePage() {
   return (
     <AppChrome {...chrome}>
       <main className="mx-auto w-full max-w-3xl px-6 py-10">
-        <header className="mb-6 flex items-center justify-between gap-4">
+        <header className="mb-6 flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Использование</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">Тариф и лимиты</h1>
             <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
               Сколько занимает пространство «{member.workspaceName}».
             </p>
@@ -62,7 +62,7 @@ export default async function UsagePage() {
             href="/app"
             className="rounded-lg border border-[var(--color-border-subtle)] px-3 py-2 text-sm font-medium hover:bg-[var(--color-surface-muted)]"
           >
-            К таблицам
+            К обзору пространства
           </Link>
         </header>
 

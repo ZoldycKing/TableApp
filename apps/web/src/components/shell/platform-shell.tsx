@@ -22,6 +22,7 @@ import {
 } from './variant'
 import { WorkspaceSwitcher, type ShellWorkspace } from './workspace-switcher'
 import { BusinessTree } from './business-tree'
+import { OWNER_HELP_EVENT } from '@/lib/owner-help'
 import type { BusinessNavigation } from '@/lib/business-navigation-types'
 
 /**
@@ -76,11 +77,25 @@ export function PlatformShell({
   /** Открытое меню придерживает уборку: см. `menu.tsx`. */
   const locked = useRef(false)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const mounted = useRef(false)
   const panel = useRef<HTMLDivElement>(null)
 
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+      if (timer.current !== null) clearTimeout(timer.current)
+      timer.current = null
+    }
+  }, [])
+
   const later = (fn: () => void, ms: number) => {
+    if (!mounted.current) return
     if (timer.current) clearTimeout(timer.current)
-    timer.current = setTimeout(fn, ms)
+    timer.current = setTimeout(() => {
+      timer.current = null
+      if (mounted.current) fn()
+    }, ms)
   }
 
   const remember = (next: SidebarMode) => {
@@ -162,12 +177,15 @@ export function PlatformShell({
    * который должен был её удержать.
    */
   const setLock = useCallback((on: boolean) => {
+    // A child menu releases its lock during cleanup, after the shell may already be gone.
+    if (!mounted.current) return
     locked.current = on
     if (on) return
     // Меню закрылось, а курсор мог уйти ещё раньше: проверяем, не пора ли.
     if (timer.current) clearTimeout(timer.current)
     timer.current = setTimeout(() => {
-      if (!locked.current) setPeek(false)
+      timer.current = null
+      if (mounted.current && !locked.current) setPeek(false)
     }, CLOSE_AFTER)
   }, [])
 
@@ -185,7 +203,8 @@ export function PlatformShell({
 
   return (
     <HoverLockProvider value={setLock}>
-      <div className="min-h-dvh bg-sand-50">
+      <div className="platform-surface" data-platform>
+        <a className="platform-skip" href="#workspace-content">Перейти к содержимому</a>
         <MobileBar email={email} onOpen={() => setDrawer(true)} />
 
         <div className="flex">
@@ -201,7 +220,7 @@ export function PlatformShell({
             колонку, и страница получает боковую прокрутку целиком вместо
             прокрутки одной таблицы.
           */}
-          <main className="min-w-0 flex-1">{children}</main>
+          <div id="workspace-content" tabIndex={-1} className="min-w-0 flex-1 outline-none">{children}</div>
         </div>
 
         {/*
@@ -278,9 +297,10 @@ function MobileBar({ email, onOpen }: { email: string; onOpen: () => void }) {
         <Logo />
       </Link>
 
+      <button type="button" aria-label="Помощь" onClick={() => window.dispatchEvent(new Event(OWNER_HELP_EVENT))} className="ml-auto flex size-11 shrink-0 items-center justify-center rounded-lg text-ink-soft outline-none hover:bg-sand-100 focus-visible:ring-2 focus-visible:ring-sage-400"><ShellIcon name="help" className="size-5" /></button>
       <span
         aria-hidden="true"
-        className="ml-auto flex size-8 items-center justify-center rounded-full bg-sage-100 text-sm font-semibold text-ink"
+        className="flex size-8 shrink-0 items-center justify-center rounded-full bg-sage-100 text-sm font-semibold text-ink"
       >
         {initialsOf(email)}
       </span>
@@ -406,8 +426,8 @@ function Drawer({
         <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-3 py-4">
           {businesses !== undefined ? <BusinessTree businesses={businesses} activeWorkspaceId={activeWorkspaceId} pathname={pathname} variant="wide" mobile onNavigate={onClose} /> : null}
           <NavList pathname={pathname} role={role} onNavigate={onClose}
-            omitIds={businesses !== undefined ? ['data', 'apps'] : []}
-            contextName={businesses !== undefined ? businesses.find(business => business.workspaceId === activeWorkspaceId)?.businessName ?? workspaceName : undefined} />
+            omitIds={businesses?.find(business=>business.workspaceId===activeWorkspaceId)?.tableLimited?['overview','templates','apps','messages','team','usage','data']:businesses !== undefined ? ['data', 'apps'] : []}
+            contextName={businesses !== undefined ? businesses.find(business => business.workspaceId === activeWorkspaceId)?.workspaceName ?? workspaceName : undefined} />
         </div>
 
         <div className="border-t border-sand-200 px-3 py-2.5">

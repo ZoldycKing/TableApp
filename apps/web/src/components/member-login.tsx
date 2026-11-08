@@ -30,6 +30,13 @@ export function MemberLogin({
   const [error, setError] = useState<string | null>(initialError)
   const [sent, setSent] = useState<{ hint: string | null } | null>(null)
   const [pending, startTransition] = useTransition()
+  const run = (work: () => Promise<void>) => {
+    setError(null)
+    startTransition(async () => {
+      try { await work() }
+      catch { setError('Не удалось связаться с сервером. Проверьте соединение и попробуйте ещё раз.') }
+    })
+  }
 
   if (totp) {
     return (
@@ -38,7 +45,7 @@ export function MemberLogin({
         onSubmit={(event) => {
           event.preventDefault()
           setError(null)
-          startTransition(async () => {
+          run(async () => {
             const result = await consumeTotpAction(second)
             if (!result.ok) setError(result.error)
             else if (result.go === 'apps') router.push('/my')
@@ -112,7 +119,7 @@ export function MemberLogin({
         onSubmit={(event) => {
           event.preventDefault()
           setError(null)
-          startTransition(async () => {
+          run(async () => {
             const result = await consumeMemberCodeAction(code)
             if (!result.ok) {
               setError(result.error)
@@ -209,7 +216,7 @@ export function MemberLogin({
       onSubmit={(event) => {
         event.preventDefault()
         setError(null)
-        startTransition(async () => {
+        run(async () => {
           const result = await requestMemberLoginAction(email, intent)
           if (result.ok) setSent({ hint: result.hint })
           else setError(result.error)
@@ -230,7 +237,7 @@ export function MemberLogin({
         {(
           [
             { id: 'owner', title: 'Своё пространство', hint: 'Я веду таблицы и делаю приложение' },
-            { id: 'staff', title: 'Рабочее приложение', hint: 'Мой адрес добавил руководитель' },
+            { id: 'staff', title: 'Рабочее приложение', hint: 'Мне дали доступ по почте' },
           ] as const
         ).map((option) => (
           <button
@@ -244,7 +251,7 @@ export function MemberLogin({
             }`}
           >
             <span className="block text-sm font-medium">{option.title}</span>
-            <span className="mt-0.5 block text-xs text-[var(--color-ink-muted)]">{option.hint}</span>
+            <span className="mt-0.5 block text-xs leading-relaxed text-[var(--color-ink-muted)]">{option.hint}</span>
           </button>
         ))}
       </div>
@@ -255,7 +262,7 @@ export function MemberLogin({
         что это за поле. Читающим с экрана она даёт имя поля.
       */}
       <label className="block">
-        <span className="mb-1.5 block text-sm font-medium text-ink">Рабочая почта</span>
+        <span className="mb-1.5 block text-sm font-medium text-ink">Ваша почта</span>
         <input
           type="email"
           required
@@ -263,13 +270,14 @@ export function MemberLogin({
           autoComplete="email"
           value={email}
           onChange={(event) => setEmail(event.target.value)}
-          placeholder="you@company.ru"
-          className="w-full rounded-xl border border-sand-300 bg-sand-50 px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-sage-400 focus:bg-white"
+          placeholder="name@example.ru"
+          disabled={pending}
+          className="min-h-11 w-full rounded-xl border border-sand-300 bg-sand-50 px-3.5 py-2.5 text-base outline-none transition-colors focus:border-sage-400 focus:bg-white"
         />
         <span className="mt-1.5 block text-xs text-ink-muted">
           {intent === 'owner'
-            ? 'Пришлём код. Если такого адреса у нас ещё нет, создадим новое пространство.'
-            : 'Пришлём код. Доступ к приложению даёт тот, кто внёс ваш адрес в список.'}
+            ? 'Подойдёт личная или рабочая почта.'
+            : 'Укажите почту, на которую вам дали доступ.'}
         </span>
       </label>
 

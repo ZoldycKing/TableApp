@@ -18,6 +18,7 @@ export const conversationPerson = (workspaceId: string, email: string) => `perso
 /** A live verified identity and an explicit grant; module roles never imply this permission. */
 export async function generalOperator(workspaceId: string, business: boolean, runner: Runner = db) {
   const member = business ? await currentMember() : null
+  if(member&&member.role!=='owner'&&member.tableAccess!=null)return null
   if (business && (!member || member.workspaceId !== workspaceId)) return null
   const rawEmail = business ? member!.email : await currentStaffEmail()
   if (!rawEmail || !isValidEmail(rawEmail)) return null

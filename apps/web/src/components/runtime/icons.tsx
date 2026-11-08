@@ -10,6 +10,7 @@
 const PATHS: Record<string, string> = {
   list: 'M4 7h16M4 12h16M4 17h10',
   grid: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
+  image: 'M4 5h16v14H4zM7 16l4-4 3 3 2-2 4 4M8.5 9h.01',
   plus: 'M12 5v14M5 12h14',
   home: 'M4 10.5 12 4l8 6.5M6 9.5V20h12V9.5',
   box: 'M4 8.5 12 4l8 4.5M4 8.5V16l8 4.5L20 16V8.5M4 8.5 12 13l8-4.5M12 13v7.5',

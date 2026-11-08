@@ -85,6 +85,45 @@ describe.skipIf(!process.env.DATABASE_URL)('row writes against Postgres', () => 
   const changes = async (id: string = ids.row) => database.db.select().from(database.rowChanges).where(eq(database.rowChanges.rowId, id)).orderBy(asc(database.rowChanges.createdAt))
   const update = (patch: Record<string, unknown>, options = {}) => core.writeRows(ids.workspace,
     (context) => core.updateRow(context, ids.table, ids.row, patch, actor, options))
+  it('saves both edited fields in one history entry and retries without duplicate writes',async()=>{
+    const {saveTableRowsAction}=await import('@/app/table-editor-actions')
+    const write={id:ids.row,data:{[ids.a]:'New A',[ids.b]:'New B'},base:{[ids.a]:'old A',[ids.b]:'old B'}}
+    expect(await saveTableRowsAction(ids.table,[write])).toEqual({ok:true})
+    expect((await read()).data).toEqual(write.data)
+    expect(await changes()).toHaveLength(1)
+    expect(await saveTableRowsAction(ids.table,[write])).toEqual({ok:true})
+    expect(await changes()).toHaveLength(1)
+  })
+  it('rolls back the whole pasted rectangle when a later row has changed',async()=>{
+    const {saveTableRowsAction}=await import('@/app/table-editor-actions'),second=newId('row')
+    await database.db.insert(database.rows).values({id:second,tableId:ids.table,position:'a2',data:{[ids.a]:'Colleague value'}})
+    const result=await saveTableRowsAction(ids.table,[{id:ids.row,data:{[ids.a]:'My first row'},base:{[ids.a]:'old A'}},{id:second,data:{[ids.a]:'My second row'},base:{[ids.a]:'Original value'}}])
+    expect(result.ok).toBe(false)
+    if(!result.ok){expect(result.rowId).toBe(second);expect(result.fieldId).toBe(ids.a)}
+    expect(((await read()).data as Record<string,unknown>)[ids.a]).toBe('old A');expect(((await read(second)).data as Record<string,unknown>)[ids.a]).toBe('Colleague value');expect(await changes()).toHaveLength(0)
+  })
+  it('creates a stable draft ID once and rejects a different repeat payload',async()=>{
+    const {saveTableRowsAction}=await import('@/app/table-editor-actions'),id=newId('row'),write={id,create:true,data:{[ids.a]:'Draft'}}
+    expect(await saveTableRowsAction(ids.table,[write])).toEqual({ok:true})
+    expect(await saveTableRowsAction(ids.table,[write])).toEqual({ok:true})
+    expect(await changes(id)).toHaveLength(1)
+    expect((await saveTableRowsAction(ids.table,[{...write,data:{[ids.a]:'Other'}}])).ok).toBe(false)
+    expect(((await read(id)).data as Record<string,unknown>)[ids.a]).toBe('Draft')
+  })
+  it('rejects computed columns and rolls back preceding changes',async()=>{
+    const {saveTableRowsAction}=await import('@/app/table-editor-actions'),computed=newId('field')
+    await database.db.insert(database.fields).values({id:computed,tableId:ids.table,name:'Расчёт',type:'formula',options:{expression:'1'},position:'a2'})
+    expect((await saveTableRowsAction(ids.table,[{id:ids.row,data:{[ids.a]:'Do not save',[computed]:999},base:{[ids.a]:'old A',[computed]:null}}])).ok).toBe(false)
+    expect(((await read()).data as Record<string,unknown>)[ids.a]).toBe('old A');expect(await changes()).toHaveLength(0)
+  })
+  it('rejects inaccessible related rows and viewer writes at the action boundary',async()=>{
+    const {saveTableRowsAction}=await import('@/app/table-editor-actions')
+    expect((await saveTableRowsAction(ids.peer,[{id:ids.peerRow,data:{[ids.peerField]:['missing-row']},base:{[ids.peerField]:[ids.row]}}])).ok).toBe(false)
+    expect(((await read(ids.peerRow)).data as Record<string,unknown>)[ids.peerField]).toEqual([ids.row])
+    const member=identity.member!;identity.member={...member,role:'viewer'}
+    try{expect((await saveTableRowsAction(ids.table,[{id:ids.row,data:{[ids.a]:'Denied'},base:{[ids.a]:'old A'}}])).ok).toBe(false)}finally{identity.member=member}
+    expect(((await read()).data as Record<string,unknown>)[ids.a]).toBe('old A')
+  })
   async function production() {
     const { applyTemplateAction } = await import('@/app/template-actions')
     const applied = await applyTemplateAction('proizvodstvo')
@@ -415,6 +454,18 @@ describe.skipIf(!process.env.DATABASE_URL)('row writes against Postgres', () => 
     if (!successful.ok) return
     expect((await counter()).rows).toBe(before + 1 + successful.wrote.length)
     expect(await changes(input.runId)).toHaveLength(1)
+  })
+  it('uses the configured product title in the receipt instead of the first JSON value', async () => {
+    const test = await production(), product = await read(test.product)
+    const [table] = await database.db.select().from(database.tables).where(eq(database.tables.id, product.tableId))
+    const data = product.data as Record<string, unknown>
+    const noteField = `fld_${newId('field').slice(4, 12)}`
+    await database.db.insert(database.fields).values({ id: noteField, tableId: product.tableId, name: 'Internal note', type: 'text', options: {}, position: 'zz' })
+    // JSONB orders this shorter key before the primary field regardless of insertion order.
+    await database.db.update(database.rows).set({ data: { ...data, [noteField]: 'Internal warehouse note' } }).where(eq(database.rows.id, product.id))
+    const result = await test.module.saveProductionAction(test.slug, { runId: newId('row'), productId: test.product, quantity: 1, defects: 0, date: null, shiftId: null, note: '' })
+    expect(result).toMatchObject({ ok: true, product: String(data[table!.primaryFieldId!]) })
+    if (result.ok) expect(result.product).not.toBe('Internal warehouse note')
   })
   it('rolls back an entire production run when its movements exceed quota', async () => {
     const test = await production()

@@ -67,28 +67,6 @@ export function Spotlight({ children, className = '' }: { children: ReactNode; c
   )
 }
 
-/** Бегущая строка сценариев. Дублируется, чтобы шов был незаметен. */
-export function Marquee({ items }: { items: string[] }) {
-  const doubled = [...items, ...items]
-  return (
-    <div className="marquee-host relative flex overflow-hidden py-1">
-      <div className="animate-marquee flex shrink-0 items-center gap-3 pr-3">
-        {doubled.map((item, index) => (
-          <span
-            key={`${item}-${index}`}
-            className="flex shrink-0 items-center gap-3 whitespace-nowrap text-sm text-ink-soft"
-          >
-            {item}
-            <span className="h-1 w-1 rounded-full bg-sage-400" />
-          </span>
-        ))}
-      </div>
-      <div aria-hidden className="pointer-events-none absolute inset-y-0 left-0 w-20 bg-gradient-to-r from-sand-50 to-transparent" />
-      <div aria-hidden className="pointer-events-none absolute inset-y-0 right-0 w-20 bg-gradient-to-l from-sand-50 to-transparent" />
-    </div>
-  )
-}
-
 /** Лёгкий параллакс: элемент отстаёт от прокрутки и создаёт глубину. */
 export function Parallax({ children, strength = 24 }: { children: ReactNode; strength?: number }) {
   const ref = useRef<HTMLDivElement>(null)

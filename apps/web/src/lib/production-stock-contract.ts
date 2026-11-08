@@ -13,13 +13,14 @@ const canonical = (value: unknown): unknown => Array.isArray(value) ? value.map(
 /** Screen names, layout and staff grants may change; accepted stock coordinates may not. */
 export function productionStockBinding(config: ProductionConfig): string {
   const stock = (config as ProductionConfig & { stock?: { itemsTableId: string } | null }).stock
-  return JSON.stringify(canonical([config.tables, config.run, config.norm, config.movement, config.material, config.movementKindId, stock ?? null]))
+  const { name, unit, opening, movements } = config.material
+  return JSON.stringify(canonical([config.tables, config.run, config.norm, config.movement, { name, unit, opening, movements }, config.movementKindId, stock ?? null]))
 }
 
 export function retainedProductionStockFieldError(contract: ProductionStockContract, original: Field, next: Field | null): string | null {
   const { production: p, inventory: i } = contract
   const materialStock = (p as ProductionConfig & { stock?: { materialStockFieldId?: string } | null }).stock?.materialStockFieldId
-  const ids = [...Object.values(p.run), ...Object.values(p.norm), ...Object.values(p.movement), ...Object.values(p.material),
+  const ids = [...Object.values(p.run), ...Object.values(p.norm), ...Object.values(p.movement), p.material.name, p.material.unit, p.material.opening, p.material.movements,
     materialStock, i.item.opening, i.item.movements, i.item.stock, ...Object.values(i.movement), ...Object.values(i.operations?.fields ?? {})]
   const stockSum = original.type === 'rollup' && original.tableId === i.tables.items && original.options.relationFieldId === i.item.movements &&
     original.options.targetFieldId === i.movement.qty && original.options.fn === 'sum'

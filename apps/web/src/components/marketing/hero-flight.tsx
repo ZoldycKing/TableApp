@@ -8,15 +8,17 @@ import { BuilderScene, StockScreen } from './hero-stock'
 import frame from './motion-lab/motion-lab.module.css'
 import styles from './hero-story.module.css'
 import { useHeroDemo } from './use-hero-demo'
+import { useDemoRecords } from './demo-records'
 
 /** One complete table → builder → employee → source story, then a working sample. */
-export function HeroFlight() {
+export function HeroFlight({ interactive = false }: { interactive?: boolean }) {
   const root = useRef<HTMLDivElement>(null)
   const cards = useRef<Array<HTMLElement | null>>([])
   const backButton = useRef<HTMLButtonElement>(null)
   const resultButton = useRef<HTMLButtonElement>(null)
   const focusTarget = useRef<'detail' | 'mobile' | 'result' | null>(null)
-  const demo = useHeroDemo(root)
+  const sharedRecords = useDemoRecords()
+  const demo = useHeroDemo(root, { interactive, onProductsChange: sharedRecords?.update })
   const { phase, pick, products, receipt, quantity, error, automatic, paused, running, reduced, open, back, replay, togglePause, editQuantity, save } = demo
   const prefix = `tableapp-hero-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`
   const shared: Shared = (key) => ({ viewTransitionName: `${prefix}-${key}` })
@@ -35,29 +37,38 @@ export function HeroFlight() {
 
   const returnToApp = () => { focusTarget.current = 'mobile'; back() }
 
-  return <div ref={root} className={frame.heroDemo} data-hero-phase={phase}>
-    <div className={frame.heroTop}>
+  return <div ref={root} className={`${frame.heroDemo} ${interactive ? styles.interactiveDemo : ''}`} data-hero-phase={phase} data-ui>
+    <div className={`${frame.heroTop} ${interactive ? styles.demoHeading : ''}`}>
       <span className={frame.heroTitle}><Icon name={phase === 'table' || phase === 'result' ? 'list' : phase === 'builder' ? 'gear' : 'smartphone'} className="size-4" />
         {phase === 'builder' ? 'Из таблицы — в приложение' : phase === 'table' || phase === 'result' ? 'Таблица «Склад»' : 'Приложение «Склад»'}
       </span>
       <div className={frame.transport}>
         {automatic && !reduced && <button className={frame.control} type="button" onClick={togglePause}
           aria-label={paused ? 'Продолжить показ' : 'Приостановить показ'}>{paused ? 'Продолжить' : 'Пауза'}</button>}
-        <button className={frame.control} type="button" aria-label="Повторить показ" onClick={() => { focusTarget.current = null; replay() }}>Повторить</button>
+        <button className={frame.control} type="button" aria-label={interactive ? 'Сбросить приёмку' : 'Повторить показ'} onClick={() => { focusTarget.current = null; replay() }}>{interactive ? 'Сначала' : 'Повторить'}</button>
       </div>
     </div>
-    <div className={frame.heroProgress} aria-label="Как работает TableApp">
+    {!interactive && <div className={frame.heroProgress} aria-label="Как работает TableApp">
       {labels.map((label, index) => <span key={label} aria-current={scene === index ? 'step' : undefined}>
         <i data-active={scene === index} data-running={running} />{label}
       </span>)}
       <small>Данные примера</small>
-    </div>
-    <div className={`${frame.canvas} ${frame.heroCanvas}`}>
+    </div>}
+    <div className={`${frame.canvas} ${frame.heroCanvas} ${interactive ? styles.interactiveCanvas : ''}`}>
       {phase === 'table' && <ProductView mode="table" products={products} shared={shared} />}
       {phase === 'builder' && <BuilderScene products={products} shared={shared} />}
       {phase === 'mobile' && <div className={styles.receiptLayout}>
-        <StockScreen products={products} shared={shared} cardRef={(index, node) => { cards.current[index] = node }}
-          onOpen={(index) => { focusTarget.current = 'detail'; open(index) }} />
+        <div className={styles.phoneStage}>
+          {interactive && <div className={styles.clickHint} data-demo-hint>
+            <span>Можно нажимать</span>
+            <svg viewBox="0 0 112 92" fill="none" aria-hidden="true">
+              <path className={styles.spiralLine} pathLength="1" d="M12 12C32-4 70 1 75 26C82 58 36 66 28 43C20 22 48 15 55 34C62 54 50 73 103 78" />
+              <path className={styles.spiralHead} pathLength="1" d="m94 69 10 9-13 4" />
+            </svg>
+          </div>}
+          <StockScreen products={products} shared={shared} cardRef={(index, node) => { cards.current[index] = node }}
+            onOpen={(index) => { focusTarget.current = 'detail'; open(index) }} />
+        </div>
         {receipt && <div className={styles.sourceLink} data-source-stock={products[receipt.index]!.stock}>
           <span><Icon name="check" className="size-3.5" />В таблице «Склад» и в приложении</span>
           <div><span>{products[receipt.index]!.short}</span><strong>{products[receipt.index]!.stock} шт</strong></div>
@@ -100,13 +111,13 @@ export function HeroFlight() {
         <ProductView mode="table" products={products} shared={shared} highlight highlightIndex={receipt.index} />
       </div>}
     </div>
-    <p className={frame.heroCaption}>
+    <p className={`${frame.heroCaption} ${interactive ? styles.demoCaption : ''}`}>
       {phase === 'table' ? 'Всё начинается с ваших данных: товары, цены и остатки в одной таблице.'
         : phase === 'builder' ? 'Выбираете поля, действие и роль — сотруднику доступны нужные экраны и данные.'
         : isForm ? 'Сотрудник принимает товар с телефона. Сохранение изменит остаток в общей таблице.'
         : phase === 'result' ? 'Действие в приложении обновило исходные данные. Вручную переносить их не нужно.'
         : receipt ? 'Одни данные в таблице и приложении. Попробуйте принять ещё товар — нажмите на строку.'
-        : 'У кладовщика свой рабочий экран: товары, остатки и приёмка. Цены ему не показаны.'}
+        : interactive ? 'Выберите товар и попробуйте приёмку.' : 'У кладовщика свой рабочий экран: товары, остатки и приёмка. Цены ему не показаны.'}
     </p>
   </div>
 }

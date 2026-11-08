@@ -1,0 +1,94 @@
+{
+  "candidates": [
+    {
+      "id": "tasks-home",
+      "name": "tasks-home",
+      "kind": "url",
+      "url": "http://127.0.0.1:3103/full/tasks/?motion=off"
+    },
+    {
+      "id": "tasks-pricing",
+      "name": "tasks-pricing",
+      "kind": "url",
+      "url": "http://127.0.0.1:3103/full/tasks/pricing/?motion=off"
+    },
+    {
+      "id": "tasks-template",
+      "name": "tasks-template",
+      "kind": "url",
+      "url": "http://127.0.0.1:3103/full/tasks/templates/zakazy/?motion=off"
+    },
+    {
+      "id": "tasks-solutions",
+      "name": "tasks-solutions",
+      "kind": "url",
+      "url": "http://127.0.0.1:3103/full/tasks/solutions/?motion=off"
+    },
+    {
+      "id": "tasks-features",
+      "name": "tasks-features",
+      "kind": "url",
+      "url": "http://127.0.0.1:3103/full/tasks/features/?motion=off"
+    },
+    {
+      "id": "product-home",
+      "name": "product-home",
+      "kind": "url",
+      "url": "http://127.0.0.1:3103/full/product/?motion=off"
+    },
+    {
+      "id": "product-pricing",
+      "name": "product-pricing",
+      "kind": "url",
+      "url": "http://127.0.0.1:3103/full/product/pricing/?motion=off"
+    },
+    {
+      "id": "product-template",
+      "name": "product-template",
+      "kind": "url",
+      "url": "http://127.0.0.1:3103/full/product/templates/zakazy/?motion=off"
+    },
+    {
+      "id": "product-solutions",
+      "name": "product-solutions",
+      "kind": "url",
+      "url": "http://127.0.0.1:3103/full/product/solutions/?motion=off"
+    },
+    {
+      "id": "product-features",
+      "name": "product-features",
+      "kind": "url",
+      "url": "http://127.0.0.1:3103/full/product/features/?motion=off"
+    },
+    {
+      "id": "world-home",
+      "name": "world-home",
+      "kind": "url",
+      "url": "http://127.0.0.1:3103/full/world/?motion=off"
+    },
+    {
+      "id": "world-pricing",
+      "name": "world-pricing",
+      "kind": "url",
+      "url": "http://127.0.0.1:3103/full/world/pricing/?motion=off"
+    },
+    {
+      "id": "world-template",
+      "name": "world-template",
+      "kind": "url",
+      "url": "http://127.0.0.1:3103/full/world/templates/zakazy/?motion=off"
+    },
+    {
+      "id": "world-solutions",
+      "name": "world-solutions",
+      "kind": "url",
+      "url": "http://127.0.0.1:3103/full/world/solutions/?motion=off"
+    },
+    {
+      "id": "world-features",
+      "name": "world-features",
+      "kind": "url",
+      "url": "http://127.0.0.1:3103/full/world/features/?motion=off"
+    }
+  ]
+}

@@ -4,6 +4,7 @@ import { resolve } from 'node:path'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { and, eq, inArray } from 'drizzle-orm'
 import { appSchema, customerCartWorkflow, customerWorkflows, instantToWallClock, newId, type App } from '@tableapp/schema'
+import { templateExample } from './templates/presentation'
 
 const envFile = resolve(import.meta.dirname, '../../../../.env')
 if (!process.env.DATABASE_URL && existsSync(envFile)) process.loadEnvFile(envFile)
@@ -68,6 +69,20 @@ describe.skipIf(!process.env.DATABASE_URL)('modular business scenarios in Postgr
     expect(canEnter(app, ANONYMOUS)).toBe(false)
     expect(canEnter(app, asRole('client', clientEmail))).toBe(false)
     expect(canEnter(app, asRole('manager', ownerEmail))).toBe(true)
+    await session(ownerEmail)
+    const runtimeActions = await import('@/app/runtime-actions'), config = app.customer!, crm = config.crm!
+    const createdClient = await runtimeActions.appCreateRowAction(first.slug, crm.clientsTableId, {
+      [crm.nameFieldId]: 'Synthetic CRM contact', [crm.emailFieldId]: 'crm-contact@example.invalid', [crm.phoneFieldId]: '+79000002102',
+    })
+    expect(createdClient).toMatchObject({ ok: true })
+    const fields = await database.db.select().from(database.fields).where(eq(database.fields.tableId, config.tableId))
+    const title = fields.find(field => field.name === 'О чём сделка')!, sum = fields.find(field => field.name === 'Сумма')!
+    const createdDeal = await runtimeActions.appCreateRowAction(first.slug, config.tableId, {
+      [title.id]: 'Synthetic internal deal', [crm.relationFieldId]: [createdClient.rowId!], [sum.id]: 42000, [config.statusFieldId]: config.initialStatus,
+    })
+    expect(createdDeal).toMatchObject({ ok: true })
+    const [stored] = await database.db.select().from(database.rows).where(eq(database.rows.id, createdDeal.rowId!))
+    expect(stored!.data).toMatchObject({ [crm.relationFieldId]: [createdClient.rowId!], [sum.id]: 42000 })
   })
   async function session(email: string) {
     const id = newId('session'); sessions.push(id)
@@ -173,8 +188,9 @@ describe.skipIf(!process.env.DATABASE_URL)('modular business scenarios in Postgr
     expect(order).toMatchObject({ ok: true })
     const orders = await database.db.select().from(database.rows).where(eq(database.rows.tableId, config.tableId)); expect(orders).toHaveLength(1)
     const orderId = orders[0]!.id, stored = orders[0]!.data as Record<string, unknown>
+    expect(order.rowId).toBe(orderId)
     expect(stored[config.emailFieldId]).toBe(clientEmail)
-    expect(await appCreateRowAction(first.slug, config.tableId, values)).toMatchObject({ ok: true })
+    expect(await appCreateRowAction(first.slug, config.tableId, values)).toEqual({ ok: true, rowId: orderId })
     expect(await database.db.select().from(database.rows).where(eq(database.rows.tableId, config.tableId))).toHaveLength(1)
     const { loadPublishedApp } = await import('./app-runtime'), { currentAppAccess } = await import('./app-session')
     const mine = await loadPublishedApp(first.slug, (await currentAppAccess(app)).visitor)
@@ -333,7 +349,17 @@ describe.skipIf(!process.env.DATABASE_URL)('modular business scenarios in Postgr
     for (const config of customerWorkflows(app).filter(config => config !== app.customer)) expect(other.tables[config.tableId]!.rows).toHaveLength(0)
   }, 15000)
   it('retries a legacy UUID record without changing its identifier or accepting another customer', async () => {
-    const first = await business('zakazy'), app = await definition(first.appId), config = app.customer!
+    const example = templateExample('zakazy'), workspaceId = newId('workspace'); spaces.push(workspaceId)
+    const app = { ...example.app, workspaceId, slug: `legacy-shop-${workspaceId}` }
+    await database.db.insert(database.workspaces).values({ id: workspaceId, ownerId: owner, slug: workspaceId, name: 'Synthetic business', plan: 'business', businessProfile: { name: workspaceId, location: '', phone: '' } })
+    await database.db.insert(database.workspaceMembers).values({ workspaceId, userId: owner, role: 'editor' })
+    await database.db.insert(database.tables).values(example.built.tables.map(table => ({ ...table, workspaceId })))
+    await database.db.insert(database.fields).values(example.fields)
+    await database.db.insert(database.views).values(example.views)
+    await database.db.insert(database.rows).values(example.rows)
+    await database.db.insert(database.apps).values({ id: app.id, workspaceId, name: app.name, slug: app.slug, draft: app, published: app, theme: app.theme, accessMode: app.accessMode, allowlist: app.allowlist, rowAccessRules: app.rowAccessRules, homeScreenId: app.homeScreenId })
+    state.member = { userId: owner, email: ownerEmail, workspaceId, workspaceName: 'Synthetic business', role: 'editor', name: 'Test' }
+    const first = { workspaceId, appId: app.id, slug: app.slug }, config = app.customer!
     expect(await appActions.publishAppAction(first.appId)).toMatchObject({ ok: true })
     const token = randomUUID(), legacyId = `row_${token}`, { writeRows, createRow } = await import('./row-mutations')
     await writeRows(first.workspaceId, context => createRow(context, config.tableId, {

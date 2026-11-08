@@ -87,6 +87,7 @@ function reducer(state: TableState, action: Action): TableState {
     }
 
     case 'add_row': {
+      if(action.rowId&&state.rows.some(row=>row.id===action.rowId))return state
       const index = action.afterRowId
         ? state.rows.findIndex((row) => row.id === action.afterRowId)
         : state.rows.length - 1

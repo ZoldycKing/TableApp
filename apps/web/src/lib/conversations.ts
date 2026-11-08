@@ -44,6 +44,7 @@ export async function conversationAccess(slug: string, tableId: string, rowId: s
     .where(and(eq(rows.id, rowId), eq(rows.tableId, tableId), eq(tables.workspaceId, app.workspaceId), isNull(rows.deletedAt))).limit(1)
   if (!parent) throw denied()
   const member = business ? await currentMember() : null
+  if(member&&member.role!=='owner'&&member.tableAccess!=null)throw denied()
   const [space] = await runner.select({ ownerId: workspaces.ownerId }).from(workspaces).where(eq(workspaces.id, app.workspaceId))
   const owner = Boolean(member && member.workspaceId === app.workspaceId && member.role === 'owner' && space?.ownerId === member.userId)
   if (business && (!member || member.workspaceId !== app.workspaceId)) throw denied()
@@ -205,7 +206,8 @@ export async function prepareConversationUpload(slug: string, tableId: string, r
   return writeRows(initial.app.workspaceId, async ({ tx }) => {
     const access = await conversationAccess(slug, tableId, rowId, tx, business), thread = await threadFor(access, tx, true)
     if (access.kind === 'general' && !access.app.communications?.enabled) throw new RowWriteError('invalid', 'Новые сообщения временно отключены. Свяжитесь с бизнесом другим способом.')
-    if (thread!.closedAt) throw new RowWriteError('invalid', 'Переписка закрыта')
+    // A client's next general message reopens the question; staging its file must not do so.
+    if (thread!.closedAt && (access.kind !== 'general' || access.staff)) throw new RowWriteError('invalid', 'Переписка закрыта')
     await limits(access, thread!.id, tx)
     return { workspaceId: access.app.workspaceId, conversationId: thread!.id, uploadedBy: access.uploadId, origin: access.owner ? 'manual' as const : 'runtime' as const }
   })

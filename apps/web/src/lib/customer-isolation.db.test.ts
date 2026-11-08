@@ -81,11 +81,15 @@ describe.skipIf(!process.env.DATABASE_URL)('shared customer login with separate 
     expect(b.viewer!.id).not.toBe(a.viewer!.id)
     const loaded = await runtime.loadPublishedApp(second.app.slug, b.visitor)
     expect(loaded!.tables[second.table('orders').id]!.rows).toHaveLength(0)
-    expect(await actions.appCreateRowAction(second.app.slug, second.table('orders').id, {
+    const created = await actions.appCreateRowAction(second.app.slug, second.table('orders').id, {
       [second.field('orders', 'title').id]: 'Other business request', [second.field('orders', 'email').id]: email,
-    })).toEqual({ ok: true })
+    })
+    expect(created).toMatchObject({ ok: true, rowId: expect.any(String) })
     expect((await runtime.loadPublishedApp(first.app.slug, a.visitor))!.tables[first.table('orders').id]!.rows).toHaveLength(1)
-    expect((await runtime.loadPublishedApp(second.app.slug, b.visitor))!.tables[second.table('orders').id]!.rows).toHaveLength(1)
+    const own = (await runtime.loadPublishedApp(second.app.slug, b.visitor))!.tables[second.table('orders').id]!.rows
+    expect(own).toHaveLength(1)
+    expect(created.rowId).toBe(own[0]!.id)
+    expect((await runtime.loadPublishedApp(first.app.slug, a.visitor))!.tables[first.table('orders').id]!.rows.map(row => row.id)).not.toContain(created.rowId)
     expect((await actions.appCreateRowAction(first.app.slug, second.table('orders').id, {
       [second.field('orders', 'title').id]: 'Must not cross businesses',
     })).ok).toBe(false)
@@ -95,13 +99,17 @@ describe.skipIf(!process.env.DATABASE_URL)('shared customer login with separate 
     expect((await actions.appCreateRowAction(first.app.slug, first.table('orders').id, {
       [first.field('orders', 'title').id]: '   ', [first.field('orders', 'wish').id]: 'Cannot replace required title',
     })).ok).toBe(false)
-    expect(await actions.appCreateRowAction(first.app.slug, first.table('orders').id, {
+    const created = await actions.appCreateRowAction(first.app.slug, first.table('orders').id, {
       [first.field('orders', 'title').id]: 'Repeated request', [first.field('orders', 'email').id]: 'someone-else@example.invalid',
       [first.field('orders', 'sum').id]: 0,
-    })).toEqual({ ok: true })
+    })
+    expect(created).toMatchObject({ ok: true, rowId: expect.any(String) })
     const access = await sessions.currentAppAccess(first.app), loaded = await runtime.loadPublishedApp(first.app.slug, access.visitor)
     expect(loaded!.tables[first.table('orders').id]!.rows).toHaveLength(2)
     expect(loaded!.tables[first.table('orders').id]!.rows.every(row => row.data[first.field('orders', 'email').id] === email)).toBe(true)
+    const row = loaded!.tables[first.table('orders').id]!.rows.find(row => row.id === created.rowId)!
+    expect(row.data[first.field('orders', 'title').id]).toBe('Repeated request')
+    expect(row.data[first.field('orders', 'email').id]).toBe(email)
   })
 
   it('keeps employee roles local and fails closed when a personal rule is removed', async () => {

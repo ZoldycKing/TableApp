@@ -14,7 +14,8 @@ import {
 import { and, asc, eq, sql } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { publishTable } from '@/lib/live'
-import { authorizeTable } from '@/lib/authorize'
+import { authorizeTable,authorizeTableStructure } from '@/lib/authorize'
+import { memberTableFields } from '@/lib/table-permissions'
 import { renameInFormulas } from '@/lib/formula-rename'
 import { lockRowUsage } from '@/lib/row-mutations'
 import { modularFieldChangeError } from '@/lib/module-resource-guard'
@@ -121,7 +122,7 @@ export async function createFieldAction(
   tableId: string,
   input: { name: string; type: FieldType; options?: unknown; afterFieldId?: string },
 ): Promise<{ ok: true; fieldId: string } | { ok: false; error: string }> {
-  const auth = await authorizeTable(tableId)
+  const auth = await authorizeTableStructure(tableId)
   if (!auth.ok) return auth
 
   const siblings = await loadFields(tableId)
@@ -171,7 +172,7 @@ export async function updateFieldAction(
   fieldId: string,
   input: { name?: string; type?: FieldType; options?: unknown },
 ): Promise<ActionResult> {
-  const auth = await authorizeTable(tableId)
+  const auth = await authorizeTableStructure(tableId)
   if (!auth.ok) return auth
 
   const siblings = await loadFields(tableId)
@@ -234,7 +235,7 @@ export async function updateFieldAction(
 }
 
 export async function deleteFieldAction(tableId: string, fieldId: string): Promise<ActionResult> {
-  const auth = await authorizeTable(tableId)
+  const auth = await authorizeTableStructure(tableId)
   if (!auth.ok) return auth
 
   const siblings = await loadFields(tableId)
@@ -303,7 +304,7 @@ export async function checkFormulaAction(
   const auth = await authorizeTable(tableId, false)
   if (!auth.ok) return auth
 
-  const siblings = await loadFields(tableId)
+  const siblings = memberTableFields(await loadFields(tableId),auth.member)
   try {
     const compiled = compile(expression, siblings)
     if (fieldId && compiled.dependencies.includes(fieldId)) {

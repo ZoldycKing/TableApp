@@ -1,0 +1,360 @@
+import { CELL_VALUE } from '../values'
+import { isComputed, type FieldType } from '../fields'
+import { appV2ChildIds, type AppV2, type AppV2Audience, type AppV2RowScope, type AppV2Step, type AppV2Target } from './schema'
+import type { AppV2Binding, AppV2Condition } from './values'
+import { appV2NavigationUrl } from './values'
+
+export const appV2ListGroupFieldTypes: ReadonlySet<FieldType> = new Set(['single_select', 'text', 'checkbox', 'date', 'datetime'])
+
+/** The server builds this catalog from the authoritative workspace, never from a browser payload. */
+export type AppV2Catalog = {
+  workspaceId: string
+  tables: ReadonlyMap<string, { workspaceId: string }>
+  fields: ReadonlyMap<string, { tableId: string; type: FieldType; relationTableId?: string }>
+  views: ReadonlyMap<string, { tableId: string }>
+}
+export type AppV2Issue = { code: string; path: string; message: string }
+type Context = { screenTableId?: string | null; rowTableId: string | null; formId: string | null; results: ReadonlyMap<string, string> }
+const noResults = new Map<string, string>()
+
+/** Semantic validation follows finite schema parsing. Errors are for the author, not runtime visitors. */
+export function validateAppV2(app: AppV2, catalog: AppV2Catalog, options: { mode?: 'draft' | 'publish' } = {}): AppV2Issue[] {
+  const issues: AppV2Issue[] = []
+  const issue = (code: string, path: string, message: string) => { if (issues.length < 100) issues.push({ code, path, message }) }
+  if (app.workspaceId !== catalog.workspaceId) issue('workspace_mismatch', 'workspaceId', 'Описание приложения относится к другому пространству')
+  const index = <T extends { id: string }>(items: readonly T[], path: string) => {
+    const map = new Map<string, T>()
+    for (const item of items) { if (map.has(item.id)) issue('duplicate_id', path, `Идентификатор «${item.id}» повторяется`); map.set(item.id, item) }
+    return map
+  }
+  const roles = index(app.roles, 'roles'), screens = index(app.screens, 'screens'), nodes = index(app.nodes, 'nodes')
+  const sources = index(app.sources, 'sources'), flows = index(app.workflows, 'workflows')
+  if (roles.has('guest')) issue('reserved_role', 'roles', 'Посетитель без входа не является рабочей ролью')
+  const role = (id: string, path: string) => { if (!roles.has(id)) issue('missing_role', path, `Роль «${id}» не существует`) }
+  const unique = (ids: readonly string[], path: string) => { if (new Set(ids).size !== ids.length) issue('duplicate_reference', path, 'Ссылка повторяется') }
+  const audience = (value: AppV2Audience, path: string) => { if (value.kind === 'roles') { unique(value.roleIds, path); value.roleIds.forEach(id => role(id, path)) } }
+  const table = (id: string, path: string): boolean => {
+    if (catalog.tables.get(id)?.workspaceId !== catalog.workspaceId) { issue('unavailable_table', path, `Таблица «${id}» недоступна этому пространству`); return false }
+    return true
+  }
+  const field = (id: string, tableId: string | null, path: string, writable = false) => {
+    const found = catalog.fields.get(id)
+    if (!found || !tableId || found.tableId !== tableId || catalog.tables.get(tableId)?.workspaceId !== catalog.workspaceId) { issue('unavailable_field', path, `Поле «${id}» не принадлежит таблице этого контекста`); return undefined }
+    if (writable && isComputed(found.type)) issue('readonly_field', path, `Поле «${id}» вычисляется автоматически`)
+    return found
+  }
+  if (app.authentication.defaultRoleId) role(app.authentication.defaultRoleId, 'authentication.defaultRoleId')
+  const emails = new Set<string>()
+  for (const [i, member] of app.authentication.members.entries()) {
+    const path = `authentication.members.${i}`, email = member.email.trim().toLowerCase()
+    if (emails.has(email)) issue('duplicate_member', path, 'Адрес участника повторяется')
+    emails.add(email); unique(member.roleIds, path); member.roleIds.forEach(id => role(id, path))
+  }
+  if (app.homeScreenId && !screens.has(app.homeScreenId)) issue('missing_screen', 'homeScreenId', 'Стартовый экран удалён')
+  if (options.mode === 'publish' && (!app.screens.length || !app.homeScreenId)) issue('missing_home', 'homeScreenId', 'Выберите стартовый экран перед публикацией')
+
+  const formFields = new Map<string, Set<string>>()
+  for (const form of app.nodes.filter(node => node.type === 'form')) {
+    const fields = new Set<string>(), visited = new Set<string>(), pending = [...appV2ChildIds(form)]
+    while (pending.length) {
+      const id = pending.pop()!
+      if (visited.has(id)) continue
+      visited.add(id)
+      const node = nodes.get(id)
+      if (node?.type === 'input') { if (fields.has(node.fieldId)) issue('duplicate_input', `nodes.${form.id}`, 'Поле повторяется в одной форме'); fields.add(node.fieldId) }
+      if (node && node.type !== 'form') pending.push(...appV2ChildIds(node))
+    }
+    formFields.set(form.id, fields)
+  }
+  const binding = (value: AppV2Binding, context: Context, path: string) => {
+    if (value.kind === 'record_ids') {
+      table(value.tableId, path)
+      const target = value.record.kind === 'screen' ? context.screenTableId : value.record.kind === 'row' ? context.rowTableId : context.results.get(value.record.stepId)
+      if (!target || target !== value.tableId) issue('relation_record_context', path, 'Связанная запись должна относиться к выбранной таблице')
+    } else if (value.kind === 'screen_row') field(value.fieldId, context.screenTableId ?? null, path)
+    else if (value.kind === 'screen_row_id' && !context.screenTableId) issue('missing_screen_context', path, 'Для этого значения нужна открытая запись экрана')
+    else if (value.kind === 'row') field(value.fieldId, context.rowTableId, path)
+    else if (value.kind === 'row_id' && !context.rowTableId) issue('missing_row_context', path, 'Для этого значения нужна выбранная запись')
+    else if (value.kind === 'form') {
+      const form = nodes.get(value.formId)
+      if (context.formId !== value.formId || form?.type !== 'form') issue('invalid_form_context', path, 'Значение относится к другой форме')
+      else { field(value.fieldId, form.tableId, path); if (!formFields.get(form.id)?.has(value.fieldId)) issue('missing_form_input', path, 'Этого поля нет в форме') }
+    } else if (value.kind === 'result' || value.kind === 'result_id') {
+      const tableId = context.results.get(value.stepId)
+      if (!tableId) issue('unavailable_result', path, 'Результат шага недоступен на этом пути действия')
+      else if (value.kind === 'result') field(value.fieldId, tableId, path)
+    }
+  }
+  const family = (type: FieldType | undefined): string => {
+    if (!type || type === 'formula' || type === 'rollup') return 'unknown'
+    if (type === 'number' || type === 'count') return 'number'
+    if (type === 'checkbox') return 'boolean'
+    if (['relation', 'member', 'multi_select', 'attachment', 'image', 'lookup'].includes(type)) return 'array'
+    return 'string'
+  }
+  const bindingFamily = (value: AppV2Binding, context: Context): string => {
+    if (value.kind === 'record_ids') return 'array'
+    if (value.kind === 'literal') return value.value === null ? 'null' : Array.isArray(value.value) ? 'array' : typeof value.value
+    if (value.kind === 'user' || value.kind === 'row_id' || value.kind === 'screen_row_id' || value.kind === 'result_id') return 'string'
+    return family(catalog.fields.get(value.fieldId)?.type)
+  }
+  const condition = (value: AppV2Condition, context: Context, path: string, depth = 0): void => {
+    if (depth > 8) { issue('condition_depth', path, 'Слишком много вложенных условий'); return }
+    if ('conditions' in value) value.conditions.forEach((item, i) => condition(item, context, `${path}.conditions.${i}`, depth + 1))
+    else if ('value' in value) binding(value.value, context, `${path}.value`)
+    else {
+      binding(value.left, context, `${path}.left`); binding(value.right, context, `${path}.right`)
+      const a = bindingFamily(value.left, context), b = bindingFamily(value.right, context)
+      if (value.op === 'includes' && (value.left.kind === 'row' || value.left.kind === 'screen_row') && (value.right.kind === 'row_id' || value.right.kind === 'screen_row_id')) {
+        const relation = catalog.fields.get(value.left.fieldId)
+        const target = value.right.kind === 'screen_row_id' ? context.screenTableId : context.rowTableId
+        if (relation?.relationTableId && relation.relationTableId !== target) issue('relation_context', path, 'Связь ведёт к другой таблице, а не к выбранной записи')
+      }
+      const wrong = (expected: string) => [a, b].some(type => type !== expected && type !== 'unknown')
+      if (value.op === 'includes' && (a !== 'array' && a !== 'unknown' || ['array', 'object', 'null'].includes(b)) || ['gt', 'gte', 'lt', 'lte'].includes(value.op) && wrong('number') || value.op === 'contains' && wrong('string') || ['eq', 'ne'].includes(value.op) && ([a, b].some(type => type === 'array' || type === 'object') || a !== b && ![a, b].some(type => type === 'null' || type === 'unknown'))) issue('condition_type', path, 'Значения не подходят для выбранного сравнения')
+    }
+  }
+  for (const source of app.sources) {
+    const path = `sources.${source.id}`, context: Context = { screenTableId: source.screenTableId ?? null, rowTableId: source.tableId, formId: null, results: noResults }
+    table(source.tableId, path)
+    if (source.screenTableId) table(source.screenTableId, `${path}.screenTableId`)
+    if (source.viewId && catalog.views.get(source.viewId)?.tableId !== source.tableId) issue('unavailable_view', path, 'Представление принадлежит другой таблице или удалено')
+    if (source.filter) condition(source.filter, context, `${path}.filter`)
+    source.sorts.forEach(sort => field(sort.fieldId, source.tableId, `${path}.sorts`))
+    unique(source.searchFieldIds, `${path}.searchFieldIds`)
+    source.searchFieldIds.forEach(id => field(id, source.tableId, `${path}.searchFieldIds`))
+  }
+  const event = (workflowId: string | null, context: Context, path: string) => {
+    if (!workflowId) return
+    const flow = flows.get(workflowId)
+    if (!flow) issue('missing_workflow', path, 'Выбранное действие удалено')
+    else if (flow.input.rowTableId !== context.rowTableId || flow.input.formId !== context.formId || flow.input.screenTableId && flow.input.screenTableId !== context.screenTableId) issue('workflow_context', path, 'Действию нужна другая запись или форма')
+  }
+  const reached = new Set<string>(), active = new Set<string>()
+  const visit = (id: string, context: Context, path: string, depth: number, insideCollection = false): void => {
+    if (active.has(id)) { issue('component_cycle', path, 'Элемент вложен сам в себя'); return }
+    if (reached.has(id)) { issue('multiple_parents', path, 'Элемент нельзя разместить в двух местах одновременно'); return }
+    const node = nodes.get(id)
+    if (!node) { issue('missing_node', path, `Элемент «${id}» удалён`); return }
+    if (depth > 12) { issue('component_depth', path, 'Слишком много вложенных элементов'); return }
+    reached.add(id); active.add(id)
+    const ownPath = `nodes.${id}`
+    if (node.visibleTo) audience(node.visibleTo, `${ownPath}.visibleTo`)
+    if (node.visibleWhen) condition(node.visibleWhen, context, `${ownPath}.visibleWhen`)
+    if ('value' in node) binding(node.value, context, `${ownPath}.value`)
+    if((node.type==='gallery'||node.type==='files')&&(node.value.kind==='row'||node.value.kind==='screen_row')){
+      const selected=catalog.fields.get(node.value.fieldId)
+      if(selected&&!['image','attachment','url','text','long_text'].includes(selected.type))issue('media_field_type',ownPath,'Выберите поле с фотографиями, файлами или ссылками')
+    }
+    if (node.type === 'button') event(node.events.press, context, `${ownPath}.events.press`)
+    if (node.type === 'business') {
+      if (insideCollection || context.formId) issue('business_placement', ownPath, 'Добавьте бизнес-операцию на экран или в карточку')
+      if (node.target?.appId === app.id) issue('business_self_reference', ownPath, 'Выберите другое опубликованное приложение')
+      if (!node.target && options.mode === 'publish') issue('missing_business_target', ownPath, 'Выберите рабочий сценарий и операцию')
+    }
+    let childrenContext = context
+    if (node.type === 'collection' || node.type === 'metric' || node.type === 'chart') {
+      const source = sources.get(node.sourceId)
+      if (!source) issue('missing_source', ownPath, 'Источник данных удалён')
+      else if (source.screenTableId && source.screenTableId !== context.screenTableId) issue('source_screen_context', ownPath, 'Источник относится к другой открытой записи экрана')
+      if(source&&node.type==='chart'){
+        if(insideCollection)issue('repeated_chart',ownPath,'Разместите диаграмму вне повторяющихся строк списка')
+        const group=field(node.groupFieldId,source.tableId,ownPath)
+        if(group&&!['text','long_text','single_select','checkbox','date','datetime'].includes(group.type))issue('chart_group_type',ownPath,'Выберите текст, статус или дату для категорий')
+        if(node.chartType==='line'&&group&&!['date','datetime'].includes(group.type))issue('chart_line_date',ownPath,'Для линии выберите поле даты')
+        if(node.chartType==='donut'&&node.operation==='avg')issue('chart_donut_average',ownPath,'Среднее показывайте столбцами или линией')
+        if(node.operation!=='count'&&!node.fieldId)issue('missing_chart_value',ownPath,'Выберите числовое поле для диаграммы')
+        if(node.fieldId){const value=field(node.fieldId,source.tableId,ownPath);if(value&&!['number','count','rollup','formula'].includes(value.type))issue('chart_value_type',ownPath,'Для расчёта нужно числовое поле')}
+      }else if (source && node.type === 'metric') {
+        if (node.operation !== 'count' && !node.fieldId) issue('missing_metric_field', ownPath, 'Выберите поле для расчёта')
+        if (node.fieldId) {
+          const found = field(node.fieldId, source.tableId, ownPath)
+          if (node.operation !== 'count' && found && !['number', 'count', 'rollup', 'formula'].includes(found.type)) issue('metric_type', ownPath, 'Для этого расчёта нужно числовое поле')
+        }
+      } else if (source && node.type === 'collection') {
+        field(node.titleFieldId, source.tableId, ownPath)
+        if(node.dateFieldId){const found=field(node.dateFieldId,source.tableId,ownPath);if(found&&!['date','datetime'].includes(found.type))issue('calendar_field_type',ownPath,'Для календаря выберите поле даты')}
+        if(node.groupFieldId){const found=field(node.groupFieldId,source.tableId,ownPath);if(found&&found.type!=='single_select')issue('board_field_type',ownPath,'Для колонок выберите поле с одним вариантом')}
+        if (node.listGroupFieldId) {
+          const found = field(node.listGroupFieldId, source.tableId, ownPath)
+          if (node.layout === 'calendar' || node.layout === 'kanban' || (found && !appV2ListGroupFieldTypes.has(found.type))) issue('list_group_field', ownPath, 'Для группировки списка выберите поле с вариантом, текстом, отметкой или датой')
+        }
+        if (node.recordGroup) {
+          const key = field(node.recordGroup.fieldId, source.tableId, ownPath)
+          const amount = node.recordGroup.amountFieldId && field(node.recordGroup.amountFieldId, source.tableId, ownPath)
+          if (node.layout !== 'list' || (key && !['text', 'number', 'single_select'].includes(key.type))) issue('record_group_field', ownPath, 'Для объединения строк списка выберите текст, число или один вариант')
+          if (amount && !['number', 'count', 'rollup', 'formula'].includes(amount.type)) issue('record_group_amount', ownPath, 'Для суммы выберите числовое поле')
+        }
+        if(node.kanbanMoveRoleIds)for(const id of node.kanbanMoveRoleIds)if(!roles.has(id))issue('missing_role',ownPath,'Выберите существующую роль для смены статуса')
+        if(node.layout==='calendar'&&!node.dateFieldId)issue('missing_calendar_field',ownPath,'Выберите поле даты для календаря')
+        if(node.layout==='kanban'&&!node.groupFieldId)issue('missing_board_field',ownPath,'Выберите поле статуса для канбана')
+        if (node.subtitleFieldId) field(node.subtitleFieldId, source.tableId, ownPath)
+        if (node.cardImageFieldId) {
+          const image = field(node.cardImageFieldId, source.tableId, ownPath)
+          if (image && !['image', 'url'].includes(image.type)) issue('card_image_field', ownPath, 'Для фото карточки выберите поле с фото или ссылкой')
+        }
+        if (node.cardDetailFieldId) field(node.cardDetailFieldId, source.tableId, ownPath)
+        childrenContext = { screenTableId: context.screenTableId, rowTableId: source.tableId, formId: null, results: noResults }
+        event(node.events.itemPress, childrenContext, `${ownPath}.events.itemPress`)
+      }
+    }
+    if (node.type === 'form') {
+      table(node.tableId, ownPath)
+      if (context.formId) issue('nested_form', ownPath, 'Форму нельзя поместить внутрь другой формы')
+      if (node.mode === 'edit' && context.rowTableId !== node.tableId) issue('edit_form_context', ownPath, 'Форма редактирования должна получить запись своей таблицы')
+      childrenContext = { ...context, formId: node.id }
+      event(node.events.submit, childrenContext, `${ownPath}.events.submit`)
+    }
+    if (node.type === 'input') {
+      const form = context.formId ? nodes.get(context.formId) : undefined
+      if (form?.type !== 'form') issue('input_outside_form', ownPath, 'Поле ввода должно находиться в форме')
+      else {
+        field(node.fieldId, form.tableId, ownPath, true)
+        if (insideCollection) issue('repeated_form_input', ownPath, 'Разместите форму отдельно от повторяющихся элементов списка')
+      }
+      if (node.initialValue) {
+        const value = node.initialValue, path = `${ownPath}.initialValue`
+        binding(value, { ...context, formId: null }, path)
+        const found = catalog.fields.get(node.fieldId)
+        if (found && value.kind === 'literal' && !CELL_VALUE[found.type].safeParse(value.value).success) issue('literal_type', path, 'Начальное значение не подходит типу поля')
+        if (found && value.kind !== 'literal' && bindingFamily(value, context) !== family(found.type) && ![bindingFamily(value, context), family(found.type)].includes('unknown')) issue('binding_type', path, 'Начальное значение не подходит типу поля')
+        if (value.kind === 'record_ids' && (found?.type !== 'relation' || found.relationTableId !== value.tableId)) issue('relation_target', path, 'Поле связи ведёт к другой таблице')
+      }
+    }
+    const childIds = appV2ChildIds(node); unique(childIds, ownPath)
+    childIds.forEach(childId => visit(childId, childrenContext, ownPath, depth + 1, insideCollection || node.type === 'collection'))
+    active.delete(id)
+  }
+  for (const screen of app.screens) {
+    const path = `screens.${screen.id}`, context: Context = { screenTableId: screen.contextTableId, rowTableId: screen.contextTableId, formId: null, results: noResults }
+    audience(screen.audience, path)
+    if (screen.contextTableId) table(screen.contextTableId, path)
+    if (screen.recordTitleFieldId) {
+      if (screen.contextTableId) field(screen.recordTitleFieldId, screen.contextTableId, path)
+      else issue('record_title_context', path, 'Поле заголовка можно выбрать для карточки записи')
+    }
+    if (screen.catalog) {
+      if (!screen.contextTableId) issue('catalog_context', path, 'Витрину можно выбрать для карточки записи')
+      else {
+        for (const fieldId of Object.values(screen.catalog)) if (fieldId) field(fieldId, screen.contextTableId, path)
+        const image = screen.catalog.imageFieldId && field(screen.catalog.imageFieldId, screen.contextTableId, path)
+        if (image && !['image', 'url'].includes(image.type)) issue('catalog_image_field', path, 'Выберите поле с фотографиями или ссылками')
+      }
+    }
+    if (screen.contextTableId && (screen.navigation || screen.id === app.homeScreenId)) issue('navigation_context', path, 'Карточку выбранной записи открывают из списка, а не из главного меню')
+    event(screen.events.enter, context, `${path}.events.enter`)
+    unique(screen.rootIds, `${path}.rootIds`)
+    screen.rootIds.forEach(id => visit(id, context, path, 0))
+  }
+  for (const node of app.nodes) if (!reached.has(node.id)) issue('orphan_node', `nodes.${node.id}`, 'Элемент не принадлежит ни одному экрану')
+  const targetTable = (value: AppV2Target, context: Context, path: string): string | null => {
+    const tableId = value.kind === 'current' ? context.rowTableId : context.results.get(value.stepId)
+    if (!tableId) issue('missing_record_context', path, 'Запись недоступна на этом шаге')
+    return tableId ?? null
+  }
+  for (const flow of app.workflows) {
+    const path = `workflows.${flow.id}`, seen = new Set<string>(); let count = 0
+    if (flow.input.screenTableId) table(flow.input.screenTableId, `${path}.input.screenTableId`)
+    if (flow.input.rowTableId) table(flow.input.rowTableId, `${path}.input`)
+    if (flow.input.formId && nodes.get(flow.input.formId)?.type !== 'form') issue('missing_form', `${path}.input`, 'Форма действия удалена')
+    const steps = (items: readonly AppV2Step[], context: Context, parent: string, depth: number): void => {
+      if (depth > 8) { issue('workflow_depth', parent, 'Слишком много вложенных ветвей'); return }
+      const results = new Map(context.results), current = { ...context, results }
+      for (const step of items) {
+        const ownPath = `${parent}.${step.id}`
+        if (++count > 200) { issue('workflow_size', parent, 'В одном действии доступно до 200 шагов'); return }
+        if (seen.has(step.id)) issue('duplicate_step', ownPath, 'Идентификатор шага повторяется')
+        seen.add(step.id)
+        if (step.type === 'require' || step.type === 'branch') condition(step.condition, current, `${ownPath}.condition`)
+        if (step.type === 'branch') {
+          steps(step.then, current, `${ownPath}.then`, depth + 1); steps(step.else, current, `${ownPath}.else`, depth + 1)
+          // A result created in one branch is not definitely available after that branch.
+        } else if (step.type === 'create_row' || step.type === 'update_row' || step.type === 'place_shop_order') {
+          table(step.tableId, ownPath)
+          if (step.type === 'place_shop_order') {
+            if (!app.shop) issue('missing_shop', ownPath, 'Оформление заказа доступно только в установленном магазине')
+            else if (step.tableId !== app.shop.ordersTableId) issue('shop_order_table', ownPath, 'Оформление заказа записывает таблицу заказов')
+            else if (step.values[app.shop.emailFieldId] || step.values[app.shop.statusFieldId] || step.values[app.shop.positionsFieldId]) issue('shop_server_field', ownPath, 'Почту, статус и состав заказа заполняет сервер')
+            else if (step.values[app.shop.cartFieldId]?.kind !== 'form' || step.values[app.shop.submissionFieldId]?.kind !== 'form') issue('shop_cart_binding', ownPath, 'Корзина и ключ оформления берутся из формы')
+          }
+          if (step.type === 'update_row' && targetTable(step.target, current, ownPath) !== step.tableId) issue('record_table_mismatch', ownPath, 'Запись относится к другой таблице')
+          if (!Object.keys(step.values).length) issue('empty_write', ownPath, 'Укажите значения полей для изменения')
+          for (const [id, value] of Object.entries(step.values)) {
+            const found = field(id, step.tableId, `${ownPath}.values.${id}`, true)
+            binding(value, current, `${ownPath}.values.${id}`)
+            if (value.kind === 'record_ids' && (found?.type !== 'relation' || found.relationTableId !== value.tableId)) issue('relation_target', `${ownPath}.values.${id}`, 'Поле связи ведёт к другой таблице')
+            if (found && value.kind === 'literal' && !CELL_VALUE[found.type].safeParse(value.value).success) issue('literal_type', `${ownPath}.values.${id}`, 'Значение не соответствует типу поля')
+            if (found && value.kind !== 'literal') {
+              const sourceType = bindingFamily(value, current), targetType = family(found.type)
+              if (sourceType !== targetType && sourceType !== 'unknown' && targetType !== 'unknown') issue('binding_type', `${ownPath}.values.${id}`, 'Источник значения не соответствует типу поля')
+            }
+          }
+          results.set(step.id, step.tableId)
+        } else if (step.type === 'delete_row') {
+          table(step.tableId, ownPath)
+          if (targetTable(step.target, current, ownPath) !== step.tableId) issue('record_table_mismatch', ownPath, 'Запись относится к другой таблице')
+        } else if (step.type === 'open_screen') {
+          const screen = screens.get(step.screenId)
+          if (!screen) issue('missing_screen', ownPath, 'Экран перехода удалён')
+          else if (screen.contextTableId !== (step.record ? targetTable(step.record, current, ownPath) : null)) issue('screen_context', ownPath, 'Экрану нужна запись другой таблицы')
+        } else if (step.type === 'notify') binding(step.message, current, ownPath)
+        else if (step.type === 'open_url' || step.type === 'copy_value') {
+          binding(step.value, current, ownPath)
+          if (step.type === 'open_url' && step.value.kind === 'literal' && appV2NavigationUrl(step.value.value) === null) issue('unsafe_url', ownPath, 'Укажите адрес страницы HTTP или HTTPS')
+        }
+      }
+    }
+    steps(flow.steps, { ...flow.input, results: noResults }, `${path}.steps`, 0)
+  }
+  const tables = new Set<string>()
+  const rowScope = (value: AppV2RowScope, tableId: string, path: string) => {
+    if (value.kind === 'owned') {
+      const found = field(value.fieldId, tableId, path)
+      if (found && !['text', 'email', 'created_by', 'updated_by'].includes(found.type)) issue('owner_field_type', path, 'Для владельца записи нужно текстовое поле или почта')
+    }
+  }
+  if (app.shop) {
+    const shop = app.shop, path = 'shop'
+    table(shop.catalogTableId, path); table(shop.ordersTableId, path); table(shop.itemsTableId, path)
+    if (catalog.views.get(shop.catalogViewId)?.tableId !== shop.catalogTableId) issue('shop_catalog_view', path, 'Витрина магазина ссылается на чужое представление')
+    for (const screenId of [shop.catalogScreenId, shop.detailScreenId, shop.basketScreenId, shop.ordersScreenId, shop.orderScreenId]) if (!screens.has(screenId)) issue('shop_screen', path, 'Экран магазина удалён')
+    if (nodes.get(shop.checkoutFormId)?.type !== 'form') issue('shop_form', path, 'Форма оформления заказа удалена')
+    const product = (fieldId: string, tableId: string) => field(fieldId, tableId, path)
+    product(shop.activeFieldId, shop.catalogTableId); product(shop.productTitleFieldId, shop.catalogTableId); product(shop.priceFieldId, shop.catalogTableId)
+    if (shop.imageFieldId) { const image = product(shop.imageFieldId, shop.catalogTableId); if (image && !['image', 'url'].includes(image.type)) issue('shop_image', path, 'Фото каталога должно быть изображением или ссылкой') }
+    if (shop.descriptionFieldId) product(shop.descriptionFieldId, shop.catalogTableId)
+    for (const fieldId of [shop.emailFieldId, shop.statusFieldId, shop.assignmentFieldId, shop.submissionFieldId, shop.createdFieldId, shop.cartFieldId, shop.positionsFieldId, shop.orderTitleFieldId, shop.addressFieldId]) product(fieldId, shop.ordersTableId)
+    for (const fieldId of [shop.itemNameFieldId, shop.itemQtyFieldId, shop.itemPriceFieldId, shop.itemEmailFieldId, shop.itemAssignmentFieldId, shop.productFieldId]) product(fieldId, shop.itemsTableId)
+    const productRelation = catalog.fields.get(shop.productFieldId)
+    if (productRelation && productRelation.relationTableId !== shop.catalogTableId) issue('shop_product_relation', path, 'Позиция заказа должна ссылаться на каталог')
+    const positions = catalog.fields.get(shop.positionsFieldId)
+    if (positions && positions.relationTableId !== shop.itemsTableId) issue('shop_positions_relation', path, 'Состав заказа должен ссылаться на позиции')
+  }
+  for (const rule of app.policy.tables) {
+    const path = `policy.tables.${rule.tableId}`
+    if (tables.has(rule.tableId)) issue('duplicate_table_policy', path, 'Правила одной таблицы должны находиться в одном разделе')
+    tables.add(rule.tableId); table(rule.tableId, path)
+    for (const [i, grant] of rule.grants.entries()) {
+      const ownPath = `${path}.grants.${i}`
+      audience(grant.audience, ownPath)
+      for (const [operation, permission] of [['read', grant.read], ['create', grant.create], ['update', grant.update]] as const) {
+        if (!permission) continue
+        unique(permission.fieldIds, `${ownPath}.${operation}`)
+        permission.fieldIds.forEach(id => field(id, rule.tableId, `${ownPath}.${operation}`, operation !== 'read'))
+        if ('rows' in permission) rowScope(permission.rows, rule.tableId, ownPath)
+      }
+      if (grant.delete) rowScope(grant.delete.rows, rule.tableId, ownPath)
+      if (grant.create?.owner) {
+        field(grant.create.owner.fieldId, rule.tableId, ownPath, true)
+        rowScope({ kind: 'owned', ...grant.create.owner }, rule.tableId, ownPath)
+        if (grant.create.fieldIds.includes(grant.create.owner.fieldId)) issue('editable_owner', ownPath, 'Владелец новой записи задаётся сервером, а не формой')
+      }
+    }
+  }
+  for (const [i, grant] of app.policy.workflows.entries()) {
+    const path = `policy.workflows.${i}`
+    if (!flows.has(grant.workflowId)) issue('missing_workflow', path, 'Действие из правил доступа удалено')
+    audience(grant.audience, path)
+  }
+  return issues
+}

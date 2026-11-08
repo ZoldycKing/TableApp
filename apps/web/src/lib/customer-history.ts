@@ -24,6 +24,7 @@ export type HistoryContext = NonNullable<Awaited<ReturnType<typeof customerHisto
 export async function* crmAccessCandidates(tableId: string, slug: string | undefined, business: boolean) {
   if (!ref(tableId) || slug !== undefined && !ref(slug) || typeof business !== 'boolean') throw denied()
   const member = business ? await currentMember() : null
+  if(member&&member.role!=='owner'&&member.tableAccess!=null)throw denied()
   if (business && !member || !business && !slug) throw denied()
   const records = await db.select().from(apps).where(business ? and(eq(apps.workspaceId, member!.workspaceId), slug ? eq(apps.slug, slug) : undefined) : eq(apps.slug, slug!))
   for (const record of records) {

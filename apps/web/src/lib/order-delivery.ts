@@ -7,6 +7,7 @@ import { canEnter, canOpenScreen } from './app-roles'
 import { appReadPolicy } from './app-read-policy'
 import { validateAppReferences } from './app-references'
 import { currentMember } from './session'
+import { restrictedTables } from './table-permissions'
 import { acceptsModuleIntake, hasRole, workflowRole } from './module-access'
 import { assertCurrentModuleState, checkRow, createRow, lockedRow, RowWriteError, updateRow, writeRows } from './row-mutations'
 import { orderDeliveryPair, type OrderDeliveryState } from './order-delivery-config'
@@ -17,6 +18,7 @@ const ref = (value: unknown) => typeof value === 'string' && value.length > 0 &&
 export async function orderWorkflowAccess(tableId: string, rowId: string, slug?: string, business = false) {
   if (!ref(tableId) || !ref(rowId) || slug !== undefined && !ref(slug) || typeof business !== 'boolean') throw denied()
   const member = business ? await currentMember() : null
+  if(member&&restrictedTables(member))throw denied()
   if (business && !member || !business && !slug) throw denied()
   const records = await db.select().from(apps).where(business ? and(eq(apps.workspaceId, member!.workspaceId), slug ? eq(apps.slug, slug) : undefined) : eq(apps.slug, slug!))
   for (const record of records) {
@@ -38,7 +40,7 @@ export async function orderWorkflowAccess(tableId: string, rowId: string, slug?:
     const pair = orderDeliveryPair(app)
     const manager = (target: string) => owner || hasRole(access!.visitor, workflowRole(app, target, 'manager'))
     const canCreate = Boolean(pair && tableId === pair.order.tableId && manager(pair.order.tableId) && manager(pair.delivery.tableId) && (owner || app.screens.some(screen => screen.type === 'form' && screen.mode === 'create' && screen.tableId === pair.delivery.tableId && canOpenScreen(screen, access!.visitor))))
-    return { app, config, parent: parent.row, pair, canCreate, owner, access, policy, actor: { id: owner ? member!.userId : access!.viewer!.id, kind: business ? 'member' : 'app_user' } }
+    return { app, config, parent: parent.row, pair, canCreate, owner, access, policy, actor: { id: business ? member!.userId : access!.viewer!.id, kind: business ? 'member' : 'app_user' } }
   }
   if (business && !slug) return null
   throw denied()

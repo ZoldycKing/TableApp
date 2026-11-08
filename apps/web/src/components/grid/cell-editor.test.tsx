@@ -13,6 +13,6 @@ describe('datetime editing uses the configured field zone', () => {
     const input = container.querySelector('input')!
     expect(input.value).toBe('2026-03-13T22:30')
     fireEvent.keyDown(input, { key: 'Enter' })
-    expect(commit).toHaveBeenCalledWith(instant)
+    expect(commit).toHaveBeenCalledWith(instant, 'below')
   })
 })

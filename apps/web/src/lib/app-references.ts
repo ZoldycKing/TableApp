@@ -21,6 +21,7 @@ export function checkAppReferences(app: App, catalog: AppReferenceCatalog): stri
     if (id && !catalog.tableIds.has(id)) invalid('таблица', id)
     return id || undefined
   }
+  app.templateTableIds?.forEach(table)
   const field = (id: string, tableId?: string) => {
     if (id && (!tableId || catalog.fields.get(id)?.tableId !== tableId)) invalid('поле', id)
   }

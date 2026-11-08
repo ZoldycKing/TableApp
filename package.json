@@ -9,6 +9,8 @@
     "typecheck": "pnpm -r typecheck && pnpm typecheck:scripts",
     "typecheck:scripts": "node node_modules/typescript/bin/tsc --project tsconfig.scripts.json",
     "test": "vitest run",
+    "agentation": "agentation-mcp server --host 127.0.0.1",
+    "agentation:doctor": "agentation-mcp doctor",
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
     "db:generate": "pnpm --filter @tableapp/db generate",
@@ -26,6 +28,7 @@
   "devDependencies": {
     "@types/node": "^26.6.2",
     "@vitejs/plugin-react": "^6.1.1",
+    "agentation-mcp": "1.3.2",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vitest": "^5.0.1"

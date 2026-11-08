@@ -1,4 +1,6 @@
-@import "tailwindcss";
+@import "tailwindcss" source("../");
+@import "@fontsource-variable/manrope";
+@import "./platform.css";
 
 /**
  * Палитра: тёплая песочная база, глубокие чернила, приглушённый шалфей.
@@ -6,35 +8,37 @@
  * а не больнично.
  */
 @theme {
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-display: var(--font-unbounded), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  --font-accent: var(--font-literata), Georgia, serif;
+  --font-sans: 'Manrope Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Manrope Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-accent: 'Manrope Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-weight-extrabold: 700;
 
-  --color-sand-50: oklch(0.985 0.006 85);
-  --color-sand-100: oklch(0.966 0.011 84);
-  --color-sand-200: oklch(0.932 0.016 84);
-  --color-sand-300: oklch(0.885 0.020 83);
+  --color-sand-50: #fafbf8;
+  --color-sand-100: #edf1e7;
+  --color-sand-200: #dce2d6;
+  --color-sand-300: #cad6c1;
 
-  --color-ink: oklch(0.235 0.012 75);
-  --color-ink-soft: oklch(0.415 0.012 78);
-  --color-ink-muted: oklch(0.565 0.013 80);
+  --color-ink: #202521;
+  --color-ink-soft: #586651;
+  --color-ink-muted: #65725d;
 
-  --color-sage-50: oklch(0.963 0.018 140);
-  --color-sage-100: oklch(0.925 0.032 142);
-  --color-sage-200: oklch(0.865 0.046 143);
-  --color-sage-300: oklch(0.782 0.055 144);
-  --color-sage-400: oklch(0.680 0.062 145);
-  --color-sage-500: oklch(0.585 0.068 146);
-  --color-sage-600: oklch(0.505 0.066 147);
-  --color-sage-700: oklch(0.425 0.058 148);
+  --color-sage-50: #f1f5ed;
+  --color-sage-100: #e3ecdc;
+  --color-sage-200: #d3e0c9;
+  --color-sage-300: #b8cdae;
+  --color-sage-400: #7d9a79;
+  --color-sage-500: #527157;
+  --color-sage-600: #426145;
+  --color-sage-700: #32583d;
+  --color-brand: #253d2c;
 
   --color-clay-400: oklch(0.715 0.075 55);
   --color-clay-500: oklch(0.640 0.090 50);
 
   /* Совместимость с уже написанными экранами. */
   --color-surface: oklch(1 0 0);
-  --color-surface-muted: oklch(0.966 0.011 84);
-  --color-border-subtle: oklch(0.905 0.014 84);
+  --color-surface-muted: #edf1e7;
+  --color-border-subtle: #dce2d6;
 
   /*
    * Порог для сравнения тарифов: четыре карточки рядом встают только там, где
@@ -44,8 +48,8 @@
    */
   --breakpoint-plans: 75rem;
 
-  --radius-xl: 0.875rem;
-  --radius-2xl: 1.125rem;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
 
   --shadow-soft: 0 1px 2px oklch(0.235 0.012 75 / 0.04), 0 8px 24px -12px oklch(0.235 0.012 75 / 0.12);
   --shadow-lift: 0 2px 4px oklch(0.235 0.012 75 / 0.05), 0 18px 40px -18px oklch(0.235 0.012 75 / 0.20);
@@ -54,6 +58,23 @@
 :root {
   color-scheme: light;
 }
+
+@theme static {
+  --color-app-canvas: #f8fafc;
+  --color-app-control: #f1f5f9;
+  --spacing-canvas-p: 24px;
+  --spacing-widget-p: 16px;
+  --spacing-element-g: 12px;
+  --radius-badge: 9999px;
+  --radius-input: 10px;
+  --radius-card: 16px;
+  --radius-panel: 24px;
+  --shadow-app-sm: 0 2px 8px rgb(15 23 42 / 3%), 0 1px 2px rgb(15 23 42 / 2%);
+  --shadow-app-md: 0 8px 30px rgb(15 23 42 / 4%), 0 2px 6px rgb(15 23 42 / 3%);
+  --shadow-app-lg: 0 20px 40px rgb(15 23 42 / 8%), 0 4px 12px rgb(15 23 42 / 4%);
+}
+
+.owner-guide-target { outline: 2px solid var(--color-sage-500); outline-offset: 6px; scroll-margin-bottom: 20rem; }
 
 html {
   scroll-behavior: smooth;
@@ -66,28 +87,23 @@ body {
 }
 
 body {
-  background: var(--color-surface);
+  background: var(--color-sand-50);
   color: var(--color-ink);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
-/*
- * Заголовки по умолчанию — обычный гротеск: это шрифт рабочего пространства,
- * где люди проводят часы. Характерный Unbounded включается точечно классом
- * font-display и живёт только на маркетинговом сайте.
- */
+/* The site, account and portalled dialogs share one type family. */
 h1, h2, h3 {
   font-family: var(--font-sans);
   letter-spacing: -0.018em;
 }
 
-/* Выделенное слово курсивной антиквой — живая нота в строгом наборе. */
 .accent-word {
   font-family: var(--font-accent);
-  font-style: italic;
-  font-weight: 500;
+  font-style: normal;
+  font-weight: 600;
   letter-spacing: -0.01em;
 }
 
@@ -105,13 +121,13 @@ h1, h2, h3 {
   [data-reveal="pending"] {
     opacity: 0;
     transform: translateY(18px);
-    transition: opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1), transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+    transition: opacity 0.8s cubic-bezier(0.32, 0.72, 0, 1), transform 0.8s cubic-bezier(0.32, 0.72, 0, 1);
   }
 
   [data-reveal="shown"] {
     opacity: 1;
     transform: none;
-    transition: opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1), transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+    transition: opacity 0.8s cubic-bezier(0.32, 0.72, 0, 1), transform 0.8s cubic-bezier(0.32, 0.72, 0, 1);
   }
 }
 
@@ -162,19 +178,6 @@ h1, h2, h3 {
   animation: border-spin 6s linear infinite;
 }
 
-@keyframes marquee {
-  from { transform: translate3d(0, 0, 0); }
-  to { transform: translate3d(-50%, 0, 0); }
-}
-
-.animate-marquee {
-  animation: marquee 38s linear infinite;
-}
-
-.marquee-host:hover .animate-marquee {
-  animation-play-state: paused;
-}
-
 /*
  * Подчёркивание дорисовывается само при загрузке.
  * Первый экран не должен зависеть от наблюдателя прокрутки: если тот молчит,
@@ -203,8 +206,7 @@ h1, h2, h3 {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .animate-border-spin,
-  .animate-marquee { animation: none; }
+  .animate-border-spin { animation: none; }
   .word-stagger > span { animation: none; opacity: 1; transform: none; }
   .underline-draw path { animation: none; transition: none; stroke-dashoffset: 0; }
 }

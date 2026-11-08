@@ -14,13 +14,14 @@ export function Chrome({ title, icon = 'grid', children }: { title: string; icon
   return <div className={styles.chrome}><span><Icon name={icon} className="size-4" />{title}</span>{children ?? <small>4 товара</small>}</div>
 }
 
-export function ProductView({ mode, shared, scope = 'products', products = PRODUCTS, owner = false, client = false, highlight = false, highlightIndex = 1, onOpen, cardRef }: {
+export function ProductView({ mode, shared, scope = 'products', products = PRODUCTS, owner = false, client = false, highlight = false, highlightIndex = 1, previousPrice, onOpen, cardRef }: {
   mode: 'table' | 'catalog' | 'mobile'; shared: Shared; scope?: string; products?: Product[]; owner?: boolean; client?: boolean; highlight?: boolean
   onOpen?: (index: number) => void; cardRef?: (index: number, node: HTMLElement | null) => void
   highlightIndex?: number
+  previousPrice?: string
 }) {
   return (
-    <div className={`${styles.productFrame} ${styles[mode]}`} data-owner={owner} style={shared(`${scope}-frame`)}>
+    <div className={`${styles.productFrame} ${styles[mode]}`} data-product-view={mode} data-owner={owner} style={shared(`${scope}-frame`)}>
       <Chrome title={mode === 'table' ? 'Таблица «Склад»' : 'Каталог инструментов'} icon={mode === 'table' ? 'list' : mode === 'mobile' ? 'smartphone' : 'grid'} />
       {mode === 'table' && <div className={styles.tableHead}><span>Товар</span><span>Цена, ₽</span>{owner && <span>Закупка, ₽</span>}<span>Остаток</span></div>}
       <div className={styles.productRecords}>
@@ -34,7 +35,10 @@ export function ProductView({ mode, shared, scope = 'products', products = PRODU
               <ProductGlyph kind={product.glyph} className={styles.glyph} />
             </span>
             <span className={styles.productName} style={shared(`${scope}-name-${index}`)} title={product.name}>{product.short}<small>{product.code}</small></span>
-            <strong className={styles.price} style={shared(`${scope}-price-${index}`)}>{product.price}<small> ₽</small></strong>
+            <strong className={styles.price} style={shared(`${scope}-price-${index}`)}>
+              {previousPrice && index === highlightIndex ? <del className={styles.previousPrice}>{previousPrice}</del> : null}
+              <span>{product.price}</span><small> ₽</small>
+            </strong>
             {owner && <span className={styles.cost}>{money(Math.round(numericPrice(product) * 0.6))}</span>}
             <span className={styles.stock} data-empty={product.stock === 0} style={shared(`${scope}-stock-${index}`)}>
               {client ? product.stock > 0 ? 'В наличии' : 'Под заказ' : `${product.stock} шт`}

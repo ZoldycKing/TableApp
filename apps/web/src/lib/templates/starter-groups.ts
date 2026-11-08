@@ -11,3 +11,8 @@ export const STARTER_GROUPS = [
     templateIds: ['crm', 'sklad', 'proizvodstvo'],
   },
 ] as const
+
+export function installedTemplateHref(templateId: string, appId: string) {
+  if (templateId === 'zakazy') return `/apps/${encodeURIComponent(appId)}`
+  return `/setup?app=${encodeURIComponent(appId)}&step=business`
+}

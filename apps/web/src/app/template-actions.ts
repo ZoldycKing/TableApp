@@ -14,13 +14,20 @@ import { and, asc, desc, eq, isNull } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { publishTable } from '@/lib/live'
 import { assertCanIncreaseUsage, isPlanLimitError } from '@/lib/limits'
-import { deleteRow, lockRowUsage, lockedRow, mutationFields, writeRows } from '@/lib/row-mutations'
+import { deleteRow, lockRowUsage, lockedRow, mutationFields, RowWriteError, writeRows } from '@/lib/row-mutations'
+import { validateAppV2Definition } from '@tableapp/schema/app-definition'
 import { generateApp, slugify } from '@/lib/app-builder'
-import { uniqueSlug } from '@/lib/app-slug'
-import { authorizeTable, authorizeWorkspace } from '@/lib/authorize'
+import { loadBuilderV2Catalog } from '@/lib/builder-v2'
+import { lockAppSlugs, uniqueSlug } from '@/lib/app-slug'
+import { authorizeApp, authorizeTable, authorizeWorkspace } from '@/lib/authorize'
+import { inventoryPreparation } from '@/lib/inventory-preparation'
+import { templatePreparation } from '@/lib/template-preparation'
 import { buildTemplate } from '@/lib/templates/build'
 import { findTemplate } from '@/lib/templates/catalog'
 import { templatePreset } from '@/lib/templates/presets'
+import { buildShopV2App, isShopTemplate } from '@/lib/templates/shop-v2'
+import { discardShopSampleFiles, stageShopSampleFile } from '@/lib/templates/shop-sample-files'
+import { linkAttachments } from '@/lib/attachments'
 import type { ActionResult } from './actions'
 
 export type AppliedTemplate = {
@@ -69,7 +76,7 @@ export async function applyTemplateAction(
     appId,
     workspaceId,
     name: built.appName,
-    slug: await uniqueSlug(slugify(built.appName)),
+    slug: slugify(built.appName),
     table: { id: appTable.id, name: appTable.name, primaryFieldId: appTable.primaryFieldId },
     fields: appFields,
     view: appView,
@@ -80,9 +87,23 @@ export async function applyTemplateAction(
    * производственный учёт, склад с приёмками и заявки с ролями мастера и диспетчера.
    */
   const draft = templatePreset(generated, built)
-  if (draft.booking || draft.customer || template.id === 'crm') draft.allowlist = [{ email: auth.member.email, roleId: 'manager', company: '' }]
+  // Production uses "director" for the creator's existing owner role.
+  if (!isShopTemplate(template.id) && (draft.booking || draft.customer || draft.inventory || draft.production || template.id === 'crm')) draft.allowlist = [{ email: auth.member.email, roleId: draft.production ? 'director' : 'manager', company: '' }]
 
+  const sampleFiles: { tableId: string; rowId: string; fieldId: string; file: NonNullable<Awaited<ReturnType<typeof stageShopSampleFile>>> }[] = []
   try {
+    if (template.id === 'zakazy' && draft.customer?.catalog) {
+      const { tableId, titleFieldId } = draft.customer.catalog
+      const image = built.fields.find(field => field.tableId === tableId && field.type === 'image')
+      if (image) {
+        for (const row of built.rows.filter(row => row.tableId === tableId)) {
+          const file = await stageShopSampleFile(workspaceId, auth.member.userId, row.data[titleFieldId])
+          if (!file) continue
+          row.data[image.id] = [file]
+          sampleFiles.push({ tableId, rowId: row.id, fieldId: image.id, file })
+        }
+      }
+    }
     await writeRows(workspaceId, async (context) => {
       const { tx } = context
       await lockRowUsage(context)
@@ -94,21 +115,34 @@ export async function applyTemplateAction(
         await assertCanIncreaseUsage({ workspaceId, resource: 'rows', amount: built.rows.length, tx })
         await tx.insert(rowsTable).values(built.rows.map((row) => ({ ...row, createdBy: auth.member.userId, updatedBy: auth.member.userId })))
       }
+      for (const { file, ...cell } of sampleFiles) await linkAttachments(cell, [file], tx)
+      await lockAppSlugs(tx)
+      draft.slug = await uniqueSlug(slugify(built.appName), undefined, tx)
+      const shop = isShopTemplate(template.id) ? buildShopV2App(built, { id: appId, workspaceId, name: built.appName, slug: draft.slug, email: auth.member.email }) : null
+      if (shop) {
+        const { catalog } = await loadBuilderV2Catalog(workspaceId, tx)
+        const valid = validateAppV2Definition(shop, catalog)
+        if (!valid.ok) throw new Error(valid.issues[0]?.message ?? 'Магазин не прошёл проверку')
+      }
+      const stored = shop ?? draft
       await tx.insert(apps).values({
         id: appId,
         workspaceId,
-        name: draft.name,
+        name: stored.name,
         slug: draft.slug,
-        theme: draft.theme,
-        accessMode: draft.accessMode,
-        allowlist: draft.allowlist,
-        rowAccessRules: draft.rowAccessRules,
-        homeScreenId: draft.homeScreenId,
-        draft,
+        theme: stored.theme,
+        accessMode: shop ? 'allowlist' : draft.accessMode,
+        allowlist: shop ? [] : draft.allowlist,
+        rowAccessRules: shop ? [] : draft.rowAccessRules,
+        homeScreenId: stored.homeScreenId,
+        draft: stored,
       })
     })
 
   } catch (error) {
+    await discardShopSampleFiles(workspaceId, sampleFiles.map(item => item.file)).catch(() => {
+      // Unlinked records remain discoverable by the regular file cleanup.
+    })
     if (isPlanLimitError(error)) return { ok: false, error: error.message }
     throw error
   }
@@ -157,6 +191,39 @@ export async function deleteSampleRowsAction(tableId: string): Promise<ActionRes
     }
   })
 
+  revalidatePath('/t/[tableId]', 'page')
+  return { ok: true }
+}
+
+/** One atomic, recoverable cleanup of this app's untouched warehouse examples. */
+export async function clearInventorySamplesAction(appId: string): Promise<ActionResult> {
+  return clearTemplateSamples(appId, true)
+}
+
+/** One recoverable cleanup of untouched examples across the selected scenario. */
+export async function clearTemplateSamplesAction(appId: string): Promise<ActionResult> {
+  return clearTemplateSamples(appId, false)
+}
+
+async function clearTemplateSamples(appId: string, inventoryOnly: boolean): Promise<ActionResult> {
+  const auth = await authorizeApp(appId)
+  if (!auth.ok) return auth
+  try {
+    await writeRows(auth.member.workspaceId, async context => {
+      await context.tx.select({ id: apps.id }).from(apps).where(and(eq(apps.id, appId), eq(apps.workspaceId, auth.member.workspaceId))).for('update')
+      const state = await (inventoryOnly ? inventoryPreparation : templatePreparation)(auth.member.workspaceId, appId, context.tx)
+      if (!state) throw new RowWriteError('missing', 'Шаблон недоступен. Обновите страницу.')
+      for (const row of state.removable.sort((a, b) => a.id.localeCompare(b.id))) {
+        const current = await lockedRow(context, row.tableId, row.id)
+        if (!current?.sample || current.deletedAt) continue
+        await deleteRow(context, row.tableId, row.id, { id: auth.member.userId, kind: 'member' })
+      }
+    })
+  } catch (error) {
+    if (error instanceof RowWriteError) return { ok: false, error: error.message }
+    throw error
+  }
+  revalidatePath('/setup')
   revalidatePath('/t/[tableId]', 'page')
   return { ok: true }
 }

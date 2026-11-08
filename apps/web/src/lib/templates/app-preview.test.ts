@@ -1,9 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import { TEMPLATES } from './catalog'
 import { templateExample } from './presentation'
-import { templateAppPreview } from './app-preview'
+import { templateAppPreview, templatePreviewRole } from './app-preview'
 
 describe('template phone previews', () => {
+  it('opens a visible work screen when an internal template has a closed default customer role', () => {
+    const example = templateExample('crm')
+    expect(templateAppPreview(example, example.app.roles.find(role => role.isDefault)!.id).runtime.app.screens).toHaveLength(0)
+    const preview = templateAppPreview(example, templatePreviewRole(example))
+    expect(preview.runtime.app.screens.some(screen => screen.tab !== null)).toBe(true)
+    expect(Object.values(preview.runtime.tables).some(table => table.rows.length > 0)).toBe(true)
+    expect(templatePreviewRole(templateExample('zakazy'))).toBe('guest')
+  })
   it('shows salon customer history without exposing other customers or employee contacts', () => {
     const example = templateExample('salon'), config = example.app.booking!
     const preview = templateAppPreview(example, 'client', 'irina@example.com', 'Ирина')

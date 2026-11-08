@@ -15,7 +15,7 @@ export function ConversationPanel({ slug, tableId, rowId, configured, business =
   const [busy, setBusy] = useState(false), [uploading, setUploading] = useState(false), [editing, setEditing] = useState<ConversationMessage | null>(null)
   const [editBody, setEditBody] = useState(''), [deleting, setDeleting] = useState<string | null>(null)
   const [history, setHistory] = useState<{ messageId: string; rows: { version: number; body: string; operation: string; createdAt: string }[] } | null>(null)
-  const request = useRef(''), generation = useRef(0), sending = useRef(false), readThrough = useRef(0)
+  const request = useRef(''), generation = useRef(0), sending = useRef(false), uploadInProgress = useRef(false), readThrough = useRef(0)
   const load = useCallback(async (older = false) => {
     const snapshot = generation.current
     let result: Awaited<ReturnType<typeof readConversationAction>>
@@ -44,6 +44,7 @@ export function ConversationPanel({ slug, tableId, rowId, configured, business =
   useEffect(() => {
     generation.current += 1
     readThrough.current = 0
+    sending.current = false; uploadInProgress.current = false; setBusy(false); setUploading(false)
     setPage(null); setBody(''); setFiles([]); setInternal(false); setError(null); setEditing(null); setDeleting(null); setHistory(null)
     request.current = crypto.randomUUID()
     void loadRef.current()
@@ -55,13 +56,15 @@ export function ConversationPanel({ slug, tableId, rowId, configured, business =
   const clientGeneralDisabled = Boolean(general && page && !page.staff && !page.enabled)
   const mutate = async (run: () => Promise<{ ok: boolean; error?: string }>, after?: () => void) => {
     if (sending.current) return
+    const snapshot = generation.current
     sending.current = true; setBusy(true); setError(null)
     try {
       const result = await run()
+      if (snapshot !== generation.current) return
       if (!result.ok) { setError(result.error ?? 'Не удалось сохранить'); return }
       after?.(); await loadRef.current()
-    } catch { setError('Не удалось сохранить. Повторите отправку.') }
-    finally { sending.current = false; setBusy(false) }
+    } catch { if (snapshot === generation.current) setError('Не удалось сохранить. Повторите отправку.') }
+    finally { if (snapshot === generation.current) { sending.current = false; setBusy(false) } }
   }
   return <section aria-label={general ? 'Вопрос бизнесу' : 'Переписка по обращению'} className="mx-auto mt-5 min-w-0 w-full max-w-xl space-y-4 rounded-2xl border border-sand-200 bg-white p-4 [overflow-wrap:anywhere]">
     <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">{general ? 'Вопрос бизнесу' : showContext && page?.contextTitle ? page.contextTitle : 'Переписка и документы'}</h3>
@@ -105,12 +108,13 @@ export function ConversationPanel({ slug, tableId, rowId, configured, business =
       {page.closed && !clientGeneralDisabled ? <p className="text-sm text-ink-muted">{general && !page.staff && page.enabled ? 'Предыдущий вопрос закрыт. Новое сообщение возобновит переписку.' : 'Обсуждение завершено. Сообщения и документы сохранены в истории.'}</p> : null}
       {!clientGeneralDisabled && (!page.closed || general && !page.staff) ? <form className="space-y-3 border-t border-sand-200 pt-3" onSubmit={event => {
         event.preventDefault()
+        if (sending.current || uploadInProgress.current) return
         void mutate(() => sendConversationAction(slug, tableId, rowId, { body, requestId: request.current, fileIds: internal ? [] : files.map(file => file.id), internal }, business),
           () => { setBody(''); if (!internal) setFiles([]); request.current = crypto.randomUUID() })
       }}>
         {page.staff ? <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={internal} disabled={busy} onChange={event => { request.current = crypto.randomUUID(); setInternal(event.target.checked) }} />Внутренняя заметка — только сотрудникам</label> : null}
         <label className="block text-sm">{internal ? 'Заметка' : 'Сообщение'}<textarea value={body} disabled={busy} onChange={event => { request.current = crypto.randomUUID(); setBody(event.target.value) }} rows={3} maxLength={4000} required={!files.length || internal} className="mt-1 w-full rounded-xl border border-sand-200 p-3 text-sm" /></label>
-        {!internal ? <FileUpload value={files} maxCount={5} compact conversation={{ slug, tableId, rowId, business }} onChange={value => { request.current = crypto.randomUUID(); setFiles(value) }} onBusyChange={setUploading} /> : null}
+        {!internal ? <FileUpload value={files} maxCount={5} compact disabled={busy} conversation={{ slug, tableId, rowId, business }} onChange={value => { request.current = crypto.randomUUID(); setFiles(value) }} onBusyChange={value => { uploadInProgress.current = value; setUploading(value) }} /> : null}
         <button type="submit" disabled={busy || uploading || !body.trim() && (!files.length || internal)} className="rounded-xl bg-sage-700 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-40">{busy ? 'Сохранение…' : internal ? 'Сохранить заметку' : 'Отправить сообщение'}</button>
       </form> : null}
     </>}

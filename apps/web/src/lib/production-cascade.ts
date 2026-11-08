@@ -54,7 +54,7 @@ export type DependentRows = {
  * настройка производства лежит рядом с приложением, а не в коде, потому что
  * таблицы и колонки у каждого свои.
  */
-export async function dependentRows(tableId: string, rowId: string, tx?: Transaction): Promise<DependentRows | null> {
+export async function dependentRows(tableId: string, rowId: string, tx?: Transaction, lock = true): Promise<DependentRows | null> {
   const runner = tx ?? db
   const workspaceId = await workspaceOfTable(tableId, runner)
   if (!workspaceId) return null
@@ -99,7 +99,7 @@ export async function dependentRows(tableId: string, rowId: string, tx?: Transac
         sql`${rowsTable.data} -> ${config.run} @> ${JSON.stringify([rowId])}::jsonb`,
       ),
     ).orderBy(asc(rowsTable.id))
-  const movements = tx ? await query.for('update') : await query
+  const movements = tx && lock ? await query.for('update') : await query
 
   if (movements.length === 0) return null
   return {

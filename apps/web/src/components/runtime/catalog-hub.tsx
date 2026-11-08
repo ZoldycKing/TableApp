@@ -5,6 +5,7 @@ import { CollectionView } from './collection-view'
 import { EMPTY_LIST_STATE, type ListState } from './nav-history'
 import { MODULE_DEFINITIONS } from '@tableapp/schema'
 import type { RuntimePageControls } from '@/lib/use-screen-runtime'
+import { catalogFieldUnits } from '@/lib/catalog-field-units'
 
 export function CatalogHub({ runtime, state, onState, onOpenRow, pageControls }: { runtime: RuntimeApp; state: ListState; onState: (state: ListState) => void; onOpenRow: (screenId: string, rowId: string) => void; pageControls?: Readonly<Record<string, RuntimePageControls>> }) {
   return <div className="space-y-6">
@@ -19,7 +20,7 @@ export function CatalogHub({ runtime, state, onState, onOpenRow, pageControls }:
       const module = runtime.app.modules?.find(module => module.screenIds?.includes(id))
       const title = module?.kind === 'booking' ? 'Услуги' : module?.kind === 'sales' ? 'Товары' : module?.kind === 'property' ? 'Объекты' : module ? MODULE_DEFINITIONS[module.kind].name : screen.name
       return <section key={id} className="space-y-3"><h2 className="text-base font-semibold tracking-tight">{title}</h2>
-        <CollectionView screen={screen} fields={table.fields} rows={rows} relatedTitles={runtime.relatedTitles}
+        <CollectionView screen={screen} fields={table.fields} rows={rows} relatedTitles={runtime.relatedTitles} fieldUnits={catalogFieldUnits(runtime.app, table.id)}
           state={{ ...EMPTY_LIST_STATE, query: state.query }} onState={next => onState({ ...state, query: next.query })} exportHref={null} showToolbar={false}
           page={runtime.screens[id]?.page} pageControls={pageControls?.[id]}
           onOpenRow={screen.onTapScreenId ? rowId => onOpenRow(screen.onTapScreenId!, rowId) : null} />

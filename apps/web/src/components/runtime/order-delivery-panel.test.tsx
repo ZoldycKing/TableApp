@@ -43,7 +43,7 @@ describe('order delivery panel', () => {
     const ui = render(<OrderDeliveryPanel tableId="orders" rowId="order" version={1} slug="shop" />)
     fireEvent.click(await ui.findByRole('button', { name: 'Передать в доставку' }))
     expect((await ui.findByRole('alert')).textContent).toContain('Обновите карточку')
-    expect(ui.getByRole('button', { name: 'Передать в доставку' }).hasAttribute('disabled')).toBe(false)
+    await waitFor(() => expect(ui.getByRole('button', { name: 'Передать в доставку' }).hasAttribute('disabled')).toBe(false))
     expect(mocks.refresh).not.toHaveBeenCalled()
   })
 })

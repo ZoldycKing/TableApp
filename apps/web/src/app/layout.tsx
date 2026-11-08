@@ -1,37 +1,9 @@
 import type { Metadata } from 'next'
 import { Metrika } from '@/components/marketing/metrika'
-import localFont from 'next/font/local'
 import type { ReactNode } from 'react'
 import './globals.css'
 import { SITE_URL } from '@/lib/site-url'
-
-// Файлы и лицензии включены в репозиторий: сборка не обращается к Google Fonts.
-const inter = localFont({
-  src: './fonts/inter.woff2',
-  weight: '400 600',
-  variable: '--font-inter',
-  display: 'swap',
-  // OpenType-наборы относятся к конкретному шрифту: у Unbounded ss01 — цифры в кружках.
-  declarations: [{ prop: 'font-feature-settings', value: "'cv05', 'ss01'" }],
-})
-
-// Геометрический гротеск с характером — заголовки не выглядят шаблонными.
-const unbounded = localFont({
-  src: './fonts/unbounded.woff2',
-  weight: '500 800',
-  variable: '--font-unbounded',
-  display: 'swap',
-})
-
-// Книжная антиква для выделенных слов на сайте: тёплая и очень читаемая.
-const literata = localFont({
-  src: './fonts/literata-italic.woff2',
-  weight: '500 600',
-  style: 'italic',
-  adjustFontFallback: 'Times New Roman',
-  variable: '--font-literata',
-  display: 'swap',
-})
+import { AgentationDevtools } from '@/components/agentation-devtools'
 
 /*
  * Адрес сайта нужен метаданным: по нему строятся абсолютные ссылки на картинку
@@ -40,9 +12,9 @@ const literata = localFont({
  * не разошлись в написании домена.
  */
 
-const title = 'TableApp — приложения поверх ваших таблиц'
+const title = 'TableApp — приложение для бизнеса из ваших таблиц'
 const description =
-  'Российская платформа: превращайте таблицы в рабочие приложения для сотрудников и клиентов. Без программистов.'
+  'Соберите из своих таблиц приложение для заказов, клиентов и учёта. Настройте рабочие экраны и доступ для себя, сотрудников и клиентов.'
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -74,11 +46,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       // Плавная прокрутка нужна для якорей на лендинге, но не при переходе
       // между страницами: без этой отметки Next гасит её целиком.
       data-scroll-behavior="smooth"
-      className={`${inter.variable} ${unbounded.variable} ${literata.variable}`}
     >
       <body>
         {children}
         <Metrika />
+        {process.env.NODE_ENV === 'development' ? <AgentationDevtools /> : null}
       </body>
     </html>
   )

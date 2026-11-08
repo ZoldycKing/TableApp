@@ -1,0 +1,9 @@
+.panel { container-type: inline-size; container-name: consumption; }
+.grid { grid-template-columns: minmax(0, 1fr) minmax(0, auto) minmax(0, auto); }
+.mobileLabel { display: none; }
+@container consumption (max-width: 359px) {
+  .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .header { display: none; }
+  .material { grid-column: 1 / -1; padding-top: 8px; font-weight: 500; }
+  .mobileLabel { display: block; margin-bottom: 4px; color: var(--color-ink-muted); font-size: 12px; line-height: 16px; font-weight: 400; }
+}

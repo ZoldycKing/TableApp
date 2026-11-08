@@ -3,9 +3,11 @@ import { notFound } from 'next/navigation'
 import { CUSTOMER_APP_PAGE } from '@/lib/seo'
 import { AppLogin } from '@/components/runtime/app-login'
 import { AppShell } from '@/components/runtime/app-shell'
-import { canEnter } from '@/lib/app-roles'
+import { appEntry } from '@/lib/app-entry'
+import { homeScreenFor, screensFor } from '@/lib/app-roles'
 import { currentAppAccess } from '@/lib/app-session'
 import { loadAppMeta, loadPublishedApp } from '@/lib/app-runtime'
+import {isPublishedBuilderV2,PublishedBuilderV2Page,publishedBuilderV2Title} from '@/components/builder/v2/published-page'
 
 // Приложение читает живые данные: кэшировать страницу между запросами нельзя.
 export const dynamic = 'force-dynamic'
@@ -16,6 +18,7 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>
 }): Promise<Metadata> {
   const { slug } = await params
+  if(await isPublishedBuilderV2(slug)) return {title:await publishedBuilderV2Title(slug),...CUSTOMER_APP_PAGE}
   const meta = await loadAppMeta(slug)
   if (!meta) return { title: 'Приложение не найдено', ...CUSTOMER_APP_PAGE }
   return {
@@ -37,15 +40,21 @@ export default async function AppRuntimePage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>
-  searchParams: Promise<{ error?: string; login?: string }>
+  searchParams: Promise<{ error?: string; login?: string; screen?: string; row?: string; e?: string; r?: string }>
 }) {
   const { slug } = await params
-  const { error, login } = await searchParams
+  const query=await searchParams
+  if(await isPublishedBuilderV2(slug))return <PublishedBuilderV2Page slug={slug} query={query}/>
+  const {error,login}=query
 
   const meta = await loadAppMeta(slug)
   if (!meta) notFound()
 
   const { visitor, viewer } = await currentAppAccess(meta.app)
+  const entry = appEntry(query.e, query.r)
+  const requestedScreen = entry && meta.app.screens.find(screen => screen.id === entry.e)
+  const openScreens = screensFor(meta.app, visitor)
+  const requested = openScreens.find(screen => screen.id === requestedScreen?.id)
 
   /*
    * Три размера, а не два. На телефоне приложение во весь экран. На планшете —
@@ -62,20 +71,21 @@ export default async function AppRuntimePage({
   // ни один экран: гость с формой заявки должен войти без пароля.
   // Гость может открыть вход сам: в открытом приложении он видит витрину
   // и форму, а свои заявки — только после входа по коду на почту.
-  const wantsLogin = login === '1' && !viewer
+  const wantsLogin = !viewer && (login === '1' || (requestedScreen && !requested))
 
-  if (wantsLogin || !canEnter(meta.app, visitor)) {
+  if (wantsLogin || !openScreens.length) {
     return (
       <div className={backdrop}>
         <main className={`${shell} flex items-center lg:mx-auto lg:max-w-md`}>
-          <AppLogin slug={slug} appName={meta.business ? `${meta.business.name} · ${meta.name}` : meta.name} accent={meta.accent} initialError={error ?? null} />
+          <AppLogin slug={slug} appName={meta.business ? `${meta.business.name} · ${meta.name}` : meta.name} accent={meta.accent} initialError={error ?? null} entry={requestedScreen ? entry : undefined} />
         </main>
       </div>
     )
   }
 
   // Правила видимости строк применяются на сервере по адресу вошедшего.
-  const runtime = await loadPublishedApp(slug, visitor, { screenId: meta.app.homeScreenId ?? meta.app.screens[0]?.id ?? '' })
+  const initial = requested ?? homeScreenFor(meta.app, visitor)
+  const runtime = await loadPublishedApp(slug, visitor, { screenId: initial?.id ?? '', ...(requested && entry?.r ? { rowId: entry.r } : {}) })
   if (!runtime) notFound()
 
   return (
@@ -83,7 +93,7 @@ export default async function AppRuntimePage({
       <main className={shell}>
         <AppShell
           runtime={runtime}
-          viewer={viewer ? { id: viewer.id, email: viewer.email, name: viewer.name } : null}
+          viewer={viewer ? { id: viewer.id, email: viewer.email, name: viewer.name, ...(viewer.workspaceSession ? { workspaceSession: true } : {}) } : null}
           // Предлагать вход есть смысл, только если за ним что-то есть:
           // экран, открытый вошедшим, а не всем подряд.
           canSignIn={!viewer && meta.app.screens.some((item) => item.access.roles.length > 0)}

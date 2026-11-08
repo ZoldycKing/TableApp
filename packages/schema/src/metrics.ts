@@ -1,6 +1,6 @@
 import type { BlockOf, MetricRange } from './app'
 import type { Field } from './fields'
-import { APP_TIME_ZONE, instantToWallClock } from './time'
+import { APP_TIME_ZONE, instantToWallClock, wallClockToInstant } from './time'
 
 /**
  * Подсчёт чисел для плиток сводки.
@@ -34,9 +34,10 @@ export type Span = { from: number; to: number }
 function startOfDay(instant: Date): number {
   const wall = instantToWallClock(instant, APP_TIME_ZONE)
   if (!wall) return instant.getTime()
-  // Полночь в Москве: смещение берём из самого мгновения, а не из машины.
-  const [hours, minutes] = wall.time.split(':').map(Number)
-  return instant.getTime() - ((hours ?? 0) * 60 + (minutes ?? 0)) * 60 * 1000
+  // Build civil midnight rather than subtracting hours/minutes from now:
+  // otherwise its seconds and milliseconds exclude date-only records at 00:00.
+  const [year, month, day] = wall.date.split('-').map(Number) as [number, number, number]
+  return wallClockToInstant({ year, month, day }, APP_TIME_ZONE).getTime()
 }
 
 /**

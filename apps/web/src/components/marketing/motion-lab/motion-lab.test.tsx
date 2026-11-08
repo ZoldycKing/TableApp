@@ -172,7 +172,21 @@ describe('five product stories', () => {
     fireEvent.click(page.getByRole('button', { name: 'Пересчитанные остатки' }))
     expect(page.getAllByText('8 490')).toHaveLength(2)
     expect(page.getByText('176 640 ₽')).toBeTruthy()
-    expect(page.queryByText('7 990')).toBeNull()
+    expect(page.getAllByText('7 990').every(node => node.tagName === 'DEL')).toBe(true)
+  })
+
+  it('shows the edited price before its catalogue and calculated result', () => {
+    const page = render(<MotionStory variantId="sync" />)
+    fireEvent.click(page.getByRole('button', { name: 'Изменение цены' }))
+    expect(page.getAllByText('8 490')).toHaveLength(1)
+    expect(page.getByText('175 140 ₽')).toBeTruthy()
+    expect(page.container.querySelector('[data-sync-focus="source"]')).toBeTruthy()
+    fireEvent.click(page.getByRole('button', { name: 'Обновлённый каталог' }))
+    expect(page.getAllByText('8 490')).toHaveLength(2)
+    expect(page.getByText('175 140 ₽')).toBeTruthy()
+    fireEvent.click(page.getByRole('button', { name: 'Пересчитанные остатки' }))
+    expect(page.getByText('176 640 ₽')).toBeTruthy()
+    expect(page.getByText('3 шт × 500 ₽ = +1 500 ₽')).toBeTruthy()
   })
 
   it('moves the same request through the board without duplication', () => {

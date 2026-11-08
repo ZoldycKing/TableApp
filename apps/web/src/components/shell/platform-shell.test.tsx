@@ -113,7 +113,7 @@ describe('боковая панель', () => {
   it('показывает все разделы и содержимое страницы', () => {
     show()
     const nav = screen.getAllByRole('navigation', { name: 'Разделы платформы' })[0]!
-    for (const label of ['Данные', 'Шаблоны', 'Приложения', 'Команда', 'Использование']) {
+    for (const label of ['Таблицы', 'Шаблоны', 'Приложения', 'Команда и доступ', 'Тариф и лимиты']) {
       expect(within(nav).getByRole('link', { name: label })).toBeTruthy()
     }
     expect(screen.getByText('Содержимое страницы')).toBeTruthy()
@@ -128,7 +128,7 @@ describe('боковая панель', () => {
     show()
     const current = screen.getAllByRole('link', { current: 'page' })
     expect(current.length).toBeGreaterThan(0)
-    expect(current[0]!.textContent).toContain('Использование')
+    expect(current[0]!.textContent).toContain('Тариф и лимиты')
   })
 
   it('подсветка держится на вложенной странице', () => {
@@ -168,24 +168,24 @@ describe('ресурсы нескольких бизнесов', () => {
     const panel = document.querySelector('#platform-sidebar') as HTMLElement
     expect(panel.className).toContain('w-[280px]')
     expect(document.querySelector('[data-rail-spacer]')?.className).toContain('w-[304px]')
-    const tree = within(panel).getByRole('navigation', { name: 'Бизнесы, таблицы и приложения' })
+    const tree = within(panel).getByRole('navigation', { name: 'Пространства, таблицы и приложения' })
     expect(within(tree).getByRole('button', { name: 'Товары', current: 'page' })).toBeTruthy()
-    expect(within(tree).getByRole('button', { name: 'Бизнес: ИП Иванов' })).toBeTruthy()
+    expect(within(tree).getByRole('button', { name: 'Пространство: Вторая фирма' })).toBeTruthy()
     expect(within(panel).queryByRole('button', { name: /Рабочее пространство/ })).toBeNull()
-    expect(within(panel).queryByRole('link', { name: 'Данные' })).toBeNull()
+    expect(within(panel).queryByRole('link', { name: 'Таблицы' })).toBeNull()
     expect(within(panel).queryByRole('link', { name: 'Приложения' })).toBeNull()
-    expect(within(panel).getByText('Бизнес: ООО «Ромашка»')).toBeTruthy()
-    expect(within(panel).getByRole('link', { name: 'Команда' })).toBeTruthy()
+    expect(within(panel).getByText('Пространство: Демо-воркспейс')).toBeTruthy()
+    expect(within(panel).getByRole('link', { name: 'Команда и доступ' })).toBeTruthy()
   })
 
   it('на телефоне показывает выбор бизнеса и только его ресурсы', () => {
     show({ businesses })
     fireEvent.click(screen.getByRole('button', { name: 'Открыть меню' }))
     const drawer = screen.getByRole('dialog', { name: 'Меню платформы' })
-    expect(within(drawer).getByRole('combobox', { name: 'Бизнес' })).toBeTruthy()
+    expect(within(drawer).getByRole('combobox', { name: 'Пространство' })).toBeTruthy()
     expect(within(drawer).getByRole('button', { name: 'Товары' })).toBeTruthy()
     expect(within(drawer).queryByRole('button', { name: 'Услуги' })).toBeNull()
-    expect(within(drawer).queryByRole('link', { name: 'Данные' })).toBeNull()
+    expect(within(drawer).queryByRole('link', { name: 'Таблицы' })).toBeNull()
     expect(within(drawer).getByRole('link', { name: 'Шаблоны' })).toBeTruthy()
     fireEvent.keyDown(document, { key: 'Escape' })
     expect(screen.queryByRole('dialog')).toBeNull()
@@ -235,7 +235,7 @@ describe('выдвижная панель на телефоне', () => {
   it('открывается по нажатию и содержит те же разделы', () => {
     show()
     const drawer = open()
-    for (const label of ['Данные', 'Шаблоны', 'Приложения', 'Команда', 'Использование']) {
+    for (const label of ['Таблицы', 'Шаблоны', 'Приложения', 'Команда и доступ', 'Тариф и лимиты']) {
       expect(within(drawer).getByRole('link', { name: label })).toBeTruthy()
     }
     expect(within(drawer).getByRole('link', { current: 'page' })).toBeTruthy()
@@ -268,7 +268,7 @@ describe('выдвижная панель на телефоне', () => {
     // Иначе она перекрывает ровно то, ради чего её открыли.
     show()
     const drawer = open()
-    fireEvent.click(within(drawer).getByRole('link', { name: 'Команда' }))
+    fireEvent.click(within(drawer).getByRole('link', { name: 'Команда и доступ' }))
     expect(screen.queryByRole('dialog')).toBe(null)
   })
 
@@ -321,7 +321,7 @@ describe('полоска и разворот', () => {
     // Читающим с экрана подпись нужна в любом виде панели.
     show()
     const nav = screen.getAllByRole('navigation', { name: 'Разделы платформы' })[0]!
-    const link = within(nav).getByRole('link', { name: 'Данные' })
+    const link = within(nav).getByRole('link', { name: 'Таблицы' })
     expect(link.querySelector('span')!.className).toContain('max-w-0')
 
     fireEvent.click(expand())
@@ -427,6 +427,22 @@ describe('разворот по наведению', () => {
 
   afterEach(() => {
     vi.useRealTimers()
+  })
+
+  it.each(['ожидание наведения', 'ожидание сворачивания', 'открытое меню'] as const)('не оставляет таймеры после удаления оболочки: %s', state => {
+    vi.useFakeTimers({ shouldAdvanceTime: false })
+    const ui = show(), sidebar = panel()
+    if (state === 'ожидание наведения') fireEvent.mouseEnter(sidebar)
+    else {
+      fireEvent.mouseEnter(sidebar)
+      act(() => void vi.advanceTimersByTime(300))
+      if (state === 'открытое меню') fireEvent.click(within(sidebar).getByRole('button', { name: /Учётная запись/ }))
+      else fireEvent.mouseLeave(sidebar)
+    }
+    ui.unmount()
+    expect(vi.getTimerCount()).toBe(0)
+    act(() => void vi.advanceTimersByTime(1000))
+    expect(vi.getTimerCount()).toBe(0)
   })
 
   it('курсор на полоске разворачивает её поверх содержимого', () => {

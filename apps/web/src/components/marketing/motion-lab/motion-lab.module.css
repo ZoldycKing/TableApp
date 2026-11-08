@@ -51,7 +51,7 @@
 .heroProgress i[data-active="true"] { background: var(--color-sage-600); }
 .heroProgress small { margin-left: auto; font-size: 9px; }
 .heroCanvas { height: 432px; padding: 12px; }
-.heroCaption { padding: 0 16px 14px; min-height: 49px; font-size: 12px; line-height: 1.6; color: var(--color-ink-soft); }
+.heroCaption { padding: 0 16px 14px; min-height: 56px; font-size: 13px; line-height: 1.6; color: var(--color-ink-soft); }
 .table .product { display: grid; grid-template-columns: 38px minmax(0,1fr) 110px 80px; align-items: center; gap: 0; min-height: 62px; padding: 8px 22px; border-top: 1px solid var(--color-sand-200); }
 .table[data-owner="true"] .product { grid-template-columns: 38px minmax(0,1fr) 110px 110px 80px; }
 .table[data-owner="true"] .tableHead { grid-template-columns: minmax(0,1fr) 110px 110px 80px; }
@@ -167,6 +167,33 @@
 .stockResult > span { grid-column: 1 / -1; font-size: 11px; color: var(--color-ink-soft); }
 .stockResult[data-active="true"] { background: var(--color-sage-50); border-color: var(--color-sage-400); }
 
+/* The camera follows the edit, its catalogue card, then the derived total. */
+.canvas[data-variant="sync"] { height: auto; min-height: 560px; padding: 28px 24px; overflow: clip; }
+.syncStory { width: 100%; max-width: 920px; margin: auto; }
+.syncHeading { min-height: 58px; margin-bottom: 22px; font-family: var(--font-display); font-size: 22px; line-height: 1.35; font-weight: 600; letter-spacing: -.025em; }
+.syncStory .syncLayout { gap: 34px; }
+.syncSource, .syncDestinations, .syncDestinations .catalog, .syncStory .total, .syncStory .product { transition: transform 700ms cubic-bezier(.22,1,.36,1), opacity 500ms ease-out; }
+.syncSource { transform-origin: left center; }
+.syncDestinations { transform-origin: right center; }
+.syncStory .editCell > strong { font-size: 24px; line-height: 1.25; transition: font-size 650ms cubic-bezier(.22,1,.36,1); }
+.previousPrice { display: block; font-size: 11px; font-weight: 400; line-height: 1.4; color: var(--color-ink-soft); text-decoration-thickness: 1px; }
+.syncStory .price .previousPrice { margin-bottom: 3px; }
+.totalValue { align-self: center; text-align: right; }
+.totalValue > strong { display: block; font-size: 24px; line-height: 1.2; font-variant-numeric: tabular-nums; transition: font-size 650ms cubic-bezier(.22,1,.36,1); }
+.syncStory .total > small { font-size: 12px; line-height: 1.5; }
+.syncStory[data-sync-focus="source"] .syncSource { transform: scale(1.08); }
+.syncStory[data-sync-focus="source"] .editCell > strong { font-size: 34px; }
+.syncStory[data-sync-focus="source"] .syncDestinations { opacity: .34; transform: scale(.96); }
+.syncStory[data-sync-focus="catalog"] .syncSource { opacity: .4; transform: scale(.96); }
+.syncStory[data-sync-focus="catalog"] .catalog { transform: scale(1.025); }
+.syncStory[data-sync-focus="catalog"] .catalog .product:not([data-highlight="true"]) { opacity: .3; }
+.syncStory[data-sync-focus="catalog"] .catalog .product[data-highlight="true"] { transform: scale(1.045); z-index: 1; }
+.syncStory[data-sync-focus="catalog"] .catalog .product[data-highlight="true"] .price { font-size: 24px; }
+.syncStory[data-sync-focus="catalog"] .total { opacity: .35; }
+.syncStory[data-sync-focus="total"] .syncSource, .syncStory[data-sync-focus="total"] .catalog { opacity: .32; transform: scale(.96); }
+.syncStory[data-sync-focus="total"] .total { transform: scale(1.06); transform-origin: right center; }
+.syncStory[data-sync-focus="total"] .totalValue > strong { font-size: 34px; }
+
 @media (max-width: 767px) {
   .variants { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); }
   .variant { padding: 10px; font-size: 11px; gap: 6px; text-align: left; }
@@ -179,7 +206,20 @@
   .heroTitle { font-size: 10px; }
   .heroProgress { padding-inline: 12px; gap: 10px; font-size: 9px; }
   .heroProgress small { font-size: 8px; }
-  .canvas[data-variant="sync"] { height: 500px; }
+  .canvas[data-variant="sync"] { height: auto; min-height: 0; padding: 22px 14px; }
+  .syncHeading { min-height: 72px; margin-bottom: 18px; font-size: 18px; }
+  .syncStory .syncLayout { gap: 20px; }
+  .syncStory .syncDestinations { display: contents; }
+  .syncStory .total { margin-top: 0; }
+  .syncStory[data-sync-focus="total"] .total { order: -1; position: relative; z-index: 2; }
+  .syncStory[data-sync-focus="source"] .catalog, .syncStory[data-sync-focus="source"] .total { opacity: .34; }
+  .syncStory[data-sync-focus="source"] .syncSource { transform: scale(1.025); }
+  .syncStory[data-sync-focus="source"] .editCell > strong { font-size: 28px; }
+  .syncStory[data-sync-focus="catalog"] .catalog .product[data-highlight="true"] .price { font-size: clamp(18px,5.5vw,22px); }
+  .syncStory .totalValue { grid-column: 1 / -1; text-align: left; margin-top: 5px; }
+  .syncStory .totalValue > strong { font-size: 22px; }
+  .syncStory[data-sync-focus="total"] .totalValue > strong { font-size: 28px; }
+  .syncStory .total > small { font-size: 11px; }
   .canvas[data-variant="intake"] { height: 520px; }
   .canvas[data-service="true"] { height: 560px; }
   .controls { padding: 12px; align-items: flex-start; flex-direction: column; gap: 10px; }
@@ -270,3 +310,4 @@
   .stockResult > div small { font-size: 9px; }
   .stockResult > span { font-size: 10px; }
 }
+@media (prefers-reduced-motion: reduce) { .syncStory * { transition: none !important; } }

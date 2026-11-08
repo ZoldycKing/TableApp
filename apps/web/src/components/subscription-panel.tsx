@@ -101,13 +101,13 @@ export function SubscriptionPanel({
       ) : null}
 
       {subscription.mode === 'off' ? (
-        <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm leading-relaxed text-amber-900">
-          Приём оплаты пока не подключён — кнопки оплаты не работают по-настоящему.
-          Нужен счёт для организации: напишите на{' '}
+        <p className="mt-4 rounded-xl bg-sand-100 p-4 text-sm leading-6 text-ink-soft">
+          Сейчас доступен бесплатный тариф. Платные тарифы пока нельзя подключить.
+          Обсудить нужный объём данных можно по почте{' '}
           <a className="underline" href="mailto:hello@tableapp.ru">
             hello@tableapp.ru
           </a>
-          , пришлём счёт и документы.
+          .
         </p>
       ) : null}
 

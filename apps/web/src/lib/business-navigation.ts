@@ -4,6 +4,7 @@ import { and, asc, eq, sql } from 'drizzle-orm'
 import { isKnownRole } from './roles'
 import { currentMember } from './session'
 import type { BusinessNavigation } from './business-navigation-types'
+import { restrictedTables,tablePermission } from './table-permissions'
 
 export type { BusinessNavigation } from './business-navigation-types'
 
@@ -18,6 +19,7 @@ export async function loadBusinessNavigation(): Promise<BusinessNavigation[]> {
       workspaceName: workspaces.name,
       businessProfile: workspaces.businessProfile,
       role: workspaceMembers.role,
+      tableAccess:workspaceMembers.tableAccess,
     }).from(workspaceMembers)
       .innerJoin(workspaces, eq(workspaces.id, workspaceMembers.workspaceId))
       .where(eq(workspaceMembers.userId, member.userId))
@@ -42,13 +44,14 @@ export async function loadBusinessNavigation(): Promise<BusinessNavigation[]> {
       workspaceName: membership.workspaceName,
       businessName: profile.success ? profile.data.name : membership.workspaceName,
       role: membership.role,
+      ...(restrictedTables(membership)?{tableLimited:true}:{}),
       tables: [],
       apps: [],
     }
     result.push(business)
     byWorkspace.set(business.workspaceId, business)
   }
-  for (const { workspaceId, ...table } of tableRows) byWorkspace.get(workspaceId)?.tables.push(table)
-  for (const { workspaceId, ...app } of appRows) byWorkspace.get(workspaceId)?.apps.push(app)
+  for (const { workspaceId, ...table } of tableRows){const membership=memberships.find(item=>item.workspaceId===workspaceId);if(membership&&tablePermission(membership,table.id)!=='none')byWorkspace.get(workspaceId)?.tables.push(table)}
+  for (const { workspaceId, ...app } of appRows){const membership=memberships.find(item=>item.workspaceId===workspaceId);if(membership&&!restrictedTables(membership))byWorkspace.get(workspaceId)?.apps.push(app)}
   return result
 }

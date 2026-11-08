@@ -5,6 +5,9 @@ import type { Field, Screen } from '@tableapp/schema'
 import type { RuntimeApp } from '@/lib/app-runtime'
 import { hasUnsaved } from '@/lib/unsaved'
 import { ScreenView } from './screen-view'
+import { templateExample } from '@/lib/templates/presentation'
+import { templateAppPreview } from '@/lib/templates/app-preview'
+import { CatalogHub } from './catalog-hub'
 
 vi.mock('./app-shell', () => ({ EMPTY_LIST_STATE: { search: '', filters: {}, sort: null } }))
 
@@ -53,5 +56,56 @@ describe('form snapshots during background updates', () => {
     expect(hasUnsaved()).toBe(false)
     fireEvent.click(form.getByText('Save'))
     expect(initial.onSubmit).toHaveBeenCalledWith({ [field.id]: 'Another row' }, 'edit', 4)
+  })
+  it('restores a navigation draft with its original version and reports only user edits', () => {
+    const initial = props(4, 'Latest server name'), onDraftChange = vi.fn(), onValues = vi.fn()
+    const draft = { values: { [field.id]: 'Draft from previous visit' }, baseVersion: 1 }
+    const form = render(<ScreenView {...initial} draft={draft} onDraftChange={onDraftChange} onValues={onValues} />)
+    expect((form.getByLabelText('Name') as HTMLInputElement).value).toBe('Draft from previous visit')
+    expect(hasUnsaved()).toBe(true)
+    expect(onDraftChange).not.toHaveBeenCalled()
+    expect(onValues).toHaveBeenLastCalledWith(draft.values)
+    form.rerender(<ScreenView {...props(5, 'Changed again')} draft={draft} onDraftChange={onDraftChange} onSubmit={initial.onSubmit} onValues={onValues} />)
+    fireEvent.click(form.getByText('Save'))
+    expect(initial.onSubmit).toHaveBeenCalledWith(draft.values, 'edit', 1)
+    fireEvent.change(form.getByLabelText('Name'), { target: { value: 'Updated draft' } })
+    expect(onDraftChange).toHaveBeenLastCalledWith({ values: { [field.id]: 'Updated draft' }, baseVersion: 1 })
+    expect(onValues).toHaveBeenLastCalledWith({ [field.id]: 'Updated draft' })
+  })
+  it('shows an unavailable record without an edit button for a missing row in a non-paged app', () => {
+    const initial = props(), detail: Screen = { id: 'detail', appId: 'app_test', name: 'Detail', type: 'detail', tableId: 'table_test', position: 'a1', tab: null,
+      access: screen.access, components: [{ id: 'edit', type: 'button', label: 'Изменить', position: 'a1', roles: null, visibleWhen: null, style: 'primary', action: { id: 'open_edit', type: 'open_screen', screenId: screen.id } }] }
+    const form = render(<ScreenView {...initial} screen={detail} row={null} />)
+    expect(form.getByText('Запись недоступна')).toBeTruthy()
+    expect(form.queryByRole('button', { name: 'Изменить' })).toBeNull()
+    expect(initial.onAction).not.toHaveBeenCalled()
+    form.rerender(<ScreenView {...initial} row={null} />)
+    expect(form.queryByLabelText('Name')).toBeNull()
+    expect(form.queryByRole('button', { name: 'Save' })).toBeNull()
+  })
+})
+
+describe('customer catalog and cabinet copy', () => {
+  it('shows duration units in standalone and combined salon catalogs without altering prices', () => {
+    const example = templateExample('salon'), runtime = templateAppPreview(example, 'guest').runtime
+    const table = runtime.tables[runtime.app.booking!.tables.services]!
+    const catalog = runtime.app.screens.find(screen => (screen.type === 'list' || screen.type === 'tiles') && runtime.views[screen.source.viewId]?.tableId === table.id)!
+    const initial = props(), listState = { query: '', choiceId: null }
+    const ui = render(<ScreenView {...initial} runtime={runtime} screen={catalog} table={table} row={null} collection={{ rows: table.rows, shownFields: table.fields }} listState={listState} />)
+    expect(ui.getAllByText('60 мин').length).toBeGreaterThan(0)
+    expect(ui.getAllByText(/2[\s\u00a0]500/).length).toBeGreaterThan(0)
+    ui.rerender(<CatalogHub runtime={{ ...runtime, app: { ...runtime.app, catalogScreenIds: [catalog.id] } }} state={listState} onState={vi.fn()} onOpenRow={vi.fn()} />)
+    expect(ui.getAllByText('60 мин').length).toBeGreaterThan(0)
+    expect(ui.getAllByText(/2[\s\u00a0]500/).length).toBeGreaterThan(0)
+  })
+  it('names the empty sales cabinet as orders, while keeping the history separate', () => {
+    const example = templateExample('zakazy'), runtime = templateAppPreview(example, 'client', 'irina@example.com', 'Ирина').runtime
+    const config = runtime.app.customer!, table = runtime.tables[config.tableId]!, list = runtime.app.screens.find(screen => screen.id === config.listScreenId)!
+    const initial = props(), listState = { query: '', choiceId: null }
+    const ui = render(<ScreenView {...initial} runtime={runtime} screen={list} table={table} row={null} collection={{ rows: [], shownFields: table.fields }} listState={listState} />)
+    expect(ui.getByText('Активных заказов пока нет')).toBeTruthy()
+    expect(ui.queryByText(/Активных обращений/)).toBeNull()
+    ui.rerender(<ScreenView {...initial} runtime={runtime} screen={list} table={table} row={null} collection={{ rows: [], shownFields: table.fields }} listState={{ ...listState, customerSection: 'history' }} />)
+    expect(ui.getByText('История пока пуста')).toBeTruthy()
   })
 })

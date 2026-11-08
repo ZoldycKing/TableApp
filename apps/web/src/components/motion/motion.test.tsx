@@ -6,6 +6,7 @@ import { Reveal } from '@/components/marketing/reveal'
 import { SceneFill } from '@/components/marketing/scene-fill'
 import { HeroFlight } from '@/components/marketing/hero-flight'
 import { PRODUCTS } from '@/components/marketing/catalog-data'
+import { DemoRecordsProvider, useDemoRecords } from '@/components/marketing/demo-records'
 import { useStoryProgress } from '@/components/marketing/use-story-progress'
 import { useEnterMotion } from './enter-motion'
 import { useMotionPlayback } from './use-motion-playback'
@@ -14,7 +15,7 @@ import { useViewTransition } from './use-view-transition'
 let reduced = false
 let hidden = false
 let motionListeners: Set<() => void>
-let observers: Array<{ notify: (visible: boolean) => void; disconnect: ReturnType<typeof vi.fn> }>
+let observers: Array<{ notify: (visible: boolean, ratio?: number) => void; disconnect: ReturnType<typeof vi.fn> }>
 const originalTransition = document.startViewTransition
 
 beforeEach(() => {
@@ -34,7 +35,7 @@ beforeEach(() => {
     unobserve = vi.fn()
     constructor(callback: IntersectionObserverCallback) {
       observers.push({
-        notify: (visible) => callback([{ isIntersecting: visible } as IntersectionObserverEntry], this as unknown as IntersectionObserver),
+        notify: (visible, ratio = 1) => callback([{ isIntersecting: visible, intersectionRatio: ratio } as IntersectionObserverEntry], this as unknown as IntersectionObserver),
         disconnect: this.disconnect,
       })
     }
@@ -123,11 +124,21 @@ describe('shared element transitions', () => {
 })
 
 describe('automatic demonstrations', () => {
-  function Playback() {
+  function Playback({ threshold }: { threshold?: number }) {
     const root = useRef<HTMLDivElement>(null)
-    const { playing, reduced } = useMotionPlayback(root)
+    const { playing, reduced } = useMotionPlayback(root, threshold)
     return <div ref={root}>{playing ? 'playing' : 'stopped'}:{String(reduced)}</div>
   }
+
+  it('waits for the main scene to be readable and pauses when it is mostly offscreen', () => {
+    const page = render(<Playback threshold={.9} />)
+    act(() => observers[0]!.notify(true, .55))
+    expect(page.container.textContent).toBe('stopped:false')
+    act(() => observers[0]!.notify(true, .95))
+    expect(page.container.textContent).toBe('playing:false')
+    act(() => observers[0]!.notify(true, .45))
+    expect(page.container.textContent).toBe('stopped:false')
+  })
 
   it('stops outside the viewport, in a hidden tab, and when reduced motion changes', () => {
     const page = render(<Playback />)
@@ -192,6 +203,42 @@ describe('scroll reveals', () => {
 })
 
 describe('one-time hero demonstration', () => {
+  function SharedInventory() {
+    const records = useDemoRecords()!
+    return <div role="region" aria-label="Остаток в остальных экранах">{records.products[3]!.stock}</div>
+  }
+
+  it('keeps the receipt, source and other homepage screens on the same local records', () => {
+    const page = render(<DemoRecordsProvider><HeroFlight interactive /><SharedInventory /></DemoRecordsProvider>)
+    fireEvent.click(page.getByRole('button', { name: `Открыть ${PRODUCTS[3]!.short}` }))
+    fireEvent.change(page.getByLabelText('Принято, шт'), { target: { value: '6' } })
+    fireEvent.click(page.getByRole('button', { name: 'Сохранить приёмку' }))
+    expect(page.getByRole('status').textContent).toContain('остаток 0 → 6')
+    expect(page.getByLabelText('Остаток в остальных экранах').textContent).toBe('6')
+    fireEvent.click(page.getByRole('button', { name: 'Сбросить приёмку' }))
+    expect(page.getByLabelText('Остаток в остальных экранах').textContent).toBe('0')
+    expect(PRODUCTS[3]!.stock).toBe(0)
+  })
+
+  it('starts the lower-page example ready to use and resets a receipt without autoplay', () => {
+    vi.useFakeTimers()
+    const page = render(<HeroFlight interactive />)
+    act(() => observers[0]!.notify(true))
+    expect(page.container.querySelector('[data-hero-phase]')?.getAttribute('data-hero-phase')).toBe('mobile')
+    expect(page.queryByRole('button', { name: 'Приостановить показ' })).toBeNull()
+    act(() => vi.advanceTimersByTime(60000))
+    fireEvent.click(page.getByRole('button', { name: `Открыть ${PRODUCTS[3]!.short}` }))
+    fireEvent.change(page.getByLabelText('Принято, шт'), { target: { value: '6' } })
+    fireEvent.click(page.getByRole('button', { name: 'Сохранить приёмку' }))
+    expect(page.getByRole('status').textContent).toContain('остаток 0 → 6')
+    fireEvent.click(page.getByRole('button', { name: 'Сбросить приёмку' }))
+    expect(page.getByRole('button', { name: `Открыть ${PRODUCTS[3]!.short}` }).textContent).toContain('0 шт')
+    act(() => vi.advanceTimersByTime(60000))
+    expect(page.getAllByRole('button', { name: /^Открыть / })).toHaveLength(PRODUCTS.length)
+    expect(vi.getTimerCount()).toBe(0)
+    expect(PRODUCTS[3]!.stock).toBe(0)
+  })
+
   function start() {
     vi.useFakeTimers()
     const page = render(<HeroFlight />)

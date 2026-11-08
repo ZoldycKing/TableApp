@@ -31,7 +31,7 @@ export default function OfertaPage() {
         и не является офертой до публикации окончательной редакции с реквизитами
         исполнителя. Сейчас договор заключается в переписке: напишите на{' '}
         <a href="mailto:hello@tableapp.ru" className="underline">hello@tableapp.ru</a>,
-        и мы пришлём счёт и документы.
+        и мы обсудим объём данных и условия подключения.
       </p>
 
       <h2 className="pt-2 text-lg font-semibold">1. Что входит в услугу</h2>

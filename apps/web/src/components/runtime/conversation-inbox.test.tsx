@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ConversationInbox, parseConversationTarget } from './conversation-inbox'
 import { GENERAL_CONVERSATION_TABLE, type ConversationSummary } from '@/lib/conversation-types'
@@ -7,7 +7,7 @@ import { GENERAL_CONVERSATION_TABLE, type ConversationSummary } from '@/lib/conv
 const list = vi.hoisted(() => vi.fn())
 vi.mock('@/app/conversation-actions', () => ({ listConversationInboxAction: list }))
 vi.mock('./conversation-panel', () => ({ ConversationPanel: ({ slug, rowId, business }: { slug: string; rowId: string; business: boolean }) => <p>{slug}:{rowId}:{business ? 'business' : 'client'}</p> }))
-afterEach(() => { cleanup(); vi.resetAllMocks() })
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.resetAllMocks() })
 const item: ConversationSummary = { id: 'thread', slug: 'salon', tableId: 'visits', rowId: 'visit', title: 'Стрижка · 15 октября', customer: 'Анна', appName: 'Салон', detailScreenId: 'visit-details', preview: 'Как подготовиться?', lastAt: '2026-10-13T10:00:00Z', unread: 2, closed: false }
 describe('business and client inbox', () => {
   it('opens the same scoped conversation and its parent, with a mobile return to the list', async () => {
@@ -16,7 +16,7 @@ describe('business and client inbox', () => {
     fireEvent.click(await ui.findByRole('button', { name: /Анна/ }))
     expect(ui.getByText('salon:visit:client')).toBeTruthy()
     expect(ui.getByLabelText('Непрочитанных сообщений: 2')).toBeTruthy()
-    fireEvent.click(ui.getByRole('button', { name: 'Открыть обращение' })); expect(open).toHaveBeenCalledWith(item)
+    fireEvent.click(ui.getByRole('button', { name: 'Открыть запись' })); expect(open).toHaveBeenCalledWith(item)
     fireEvent.click(ui.getByRole('button', { name: 'Все диалоги' })); expect(ui.queryByText('salon:visit:client')).toBeNull()
   })
   it('passes the platform identity explicitly and applies the unread filter on the server', async () => {
@@ -67,11 +67,89 @@ describe('business and client inbox', () => {
     const open = vi.fn(), ui = render(<ConversationInbox slug="salon" initialTarget={{ slug: 'salon', tableId: GENERAL_CONVERSATION_TABLE, rowId: 'self' }} onOpenRecord={open} />)
     await ui.findAllByText('Вопрос бизнесу')
     expect(ui.getByRole('button', { current: true }).textContent).toContain('Анна')
-    expect(ui.queryByRole('button', { name: 'Открыть обращение' })).toBeNull()
-    expect(ui.queryByRole('link', { name: 'Открыть обращение' })).toBeNull()
+    expect(ui.queryByRole('button', { name: 'Открыть запись' })).toBeNull()
+    expect(ui.queryByRole('link', { name: 'Открыть запись' })).toBeNull()
     expect(open).not.toHaveBeenCalled()
     ui.rerender(<ConversationInbox slug="salon" initialTarget={general} business />)
     await ui.findByText(`salon:bcu_anna:business`)
-    expect(ui.queryByRole('link', { name: 'Открыть обращение' })).toBeNull()
+    expect(ui.queryByRole('link', { name: 'Открыть запись' })).toBeNull()
+  })
+  it('revalidates revealed older pages on refresh and updates unread counts without losing the continuation', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+    const older = { ...item, id: 'older', rowId: 'old-visit', customer: 'Старый диалог', unread: 1 }
+    list.mockResolvedValueOnce({ ok: true, value: { items: [item], next: '100~thread' } })
+      .mockResolvedValueOnce({ ok: true, value: { items: [older], next: '50~older' } })
+      .mockResolvedValueOnce({ ok: true, value: { items: [{ ...item, unread: 0, preview: 'Новый ответ' }], next: '110~thread' } })
+      .mockResolvedValueOnce({ ok: true, value: { items: [{ ...older, unread: 0 }], next: '45~older' } })
+      .mockResolvedValueOnce({ ok: true, value: { items: [{ ...item, id: 'oldest', customer: 'Самый старый', rowId: 'oldest-visit' }], next: null } })
+    const ui = render(<ConversationInbox business />)
+    await ui.findByRole('button', { name: /Анна/ })
+    fireEvent.click(ui.getByRole('button', { name: 'Следующие диалоги' }))
+    await ui.findByRole('button', { name: /Старый диалог/ })
+    await act(async () => { vi.advanceTimersByTime(15000) })
+    await ui.findByText('Новый ответ')
+    expect(ui.getByRole('button', { name: /Старый диалог/ })).toBeTruthy()
+    expect(ui.queryByLabelText(/Непрочитанных сообщений/)).toBeNull()
+    expect(list.mock.calls[3]![0].before).toBe('110~thread')
+    fireEvent.click(ui.getByRole('button', { name: 'Следующие диалоги' }))
+    await ui.findByRole('button', { name: /Самый старый/ })
+    expect(list.mock.calls[4]![0].before).toBe('45~older')
+  })
+  it('keeps the oldest revealed range when new dialogs move the page boundary and deduplicates moved dialogs', async () => {
+    const older = { ...item, id: 'older', rowId: 'old', customer: 'Старый диалог' }
+    const latest = { ...item, id: 'latest', rowId: 'new', customer: 'Новый диалог' }
+    list.mockResolvedValueOnce({ ok: true, value: { items: [item], next: '100~thread' } })
+      .mockResolvedValueOnce({ ok: true, value: { items: [older], next: '50~older' } })
+      .mockResolvedValueOnce({ ok: true, value: { items: [latest, { ...older, unread: 0 }], next: '150~latest' } })
+      .mockResolvedValueOnce({ ok: true, value: { items: [item], next: '80~thread' } })
+      .mockResolvedValueOnce({ ok: true, value: { items: [{ ...older, unread: 0 }], next: '50~older' } })
+    const ui = render(<ConversationInbox business />)
+    await ui.findByRole('button', { name: /Анна/ })
+    fireEvent.click(ui.getByRole('button', { name: 'Следующие диалоги' }))
+    await ui.findByRole('button', { name: /Старый диалог/ })
+    await act(async () => { window.dispatchEvent(new Event('tableapp:messages-read')) })
+    await ui.findByRole('button', { name: /Новый диалог/ })
+    expect(ui.getAllByRole('button', { name: /Старый диалог/ })).toHaveLength(1)
+    expect(ui.getByRole('button', { name: /Анна/ })).toBeTruthy()
+    expect(list.mock.calls[4]![0].before).toBe('80~thread')
+  })
+  it('refreshes a fully loaded inbox through its end and removes older metadata no longer authorized', async () => {
+    const older = { ...item, id: 'older', rowId: 'old', customer: 'Отозванный диалог' }
+    list.mockResolvedValueOnce({ ok: true, value: { items: [item], next: '100~thread' } })
+      .mockResolvedValueOnce({ ok: true, value: { items: [older], next: null } })
+      .mockResolvedValueOnce({ ok: true, value: { items: [item], next: '100~thread' } })
+      .mockResolvedValueOnce({ ok: true, value: { items: [], next: null } })
+    const ui = render(<ConversationInbox business />)
+    await ui.findByRole('button', { name: /Анна/ })
+    fireEvent.click(ui.getByRole('button', { name: 'Следующие диалоги' }))
+    fireEvent.click(await ui.findByRole('button', { name: /Отозванный диалог/ }))
+    expect(ui.getByText('salon:old:business')).toBeTruthy()
+    await act(async () => { window.dispatchEvent(new Event('tableapp:messages-read')) })
+    await waitFor(() => expect(ui.queryByText('salon:old:business')).toBeNull())
+    expect(ui.queryByText('Отозванный диалог')).toBeNull()
+    expect(ui.getByRole('button', { name: /Анна/ })).toBeTruthy()
+    expect(ui.queryByRole('button', { name: 'Следующие диалоги' })).toBeNull()
+  })
+  it('clears all revealed pages if access is revoked while an older page is being refreshed', async () => {
+    const older = { ...item, id: 'older', rowId: 'old', customer: 'Старый диалог' }
+    list.mockResolvedValueOnce({ ok: true, value: { items: [item], next: '100~thread' } })
+      .mockResolvedValueOnce({ ok: true, value: { items: [older], next: null } })
+      .mockResolvedValueOnce({ ok: true, value: { items: [item], next: '100~thread' } })
+      .mockResolvedValueOnce({ ok: false, error: 'Доступ отозван' })
+    const ui = render(<ConversationInbox business />)
+    await ui.findByRole('button', { name: /Анна/ })
+    fireEvent.click(ui.getByRole('button', { name: 'Следующие диалоги' }))
+    await ui.findByRole('button', { name: /Старый диалог/ })
+    await act(async () => { window.dispatchEvent(new Event('tableapp:messages-read')) })
+    await ui.findByRole('alert')
+    expect(ui.queryByRole('button', { name: /Старый диалог|Анна/ })).toBeNull()
+  })
+  it('uses operator copy for application staff without switching to platform authentication', async () => {
+    list.mockResolvedValue({ ok: true, value: { items: [], next: null } })
+    const ui = render(<ConversationInbox slug="salon" operator onAskQuestion={vi.fn()} />)
+    expect(ui.getByText('Вопросы клиентов и переписка по заказам и записям, к которым у вас есть доступ.')).toBeTruthy()
+    expect(await ui.findByText('Диалогов пока нет. Они появятся, когда клиент задаст вопрос или начнётся переписка по заказу или записи.')).toBeTruthy()
+    expect(list).toHaveBeenCalledWith(expect.objectContaining({ slug: 'salon' }), false)
+    expect(ui.queryByRole('button', { name: 'Задать вопрос' })).toBeNull()
   })
 })

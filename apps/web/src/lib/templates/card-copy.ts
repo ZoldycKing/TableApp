@@ -1,0 +1,98 @@
+import { STARTER_GROUPS } from './starter-groups'
+import type { TemplateDef } from './types'
+
+type StarterId = typeof STARTER_GROUPS[number]['templateIds'][number]
+type TemplateCardCopy = {
+  description: string
+  features: readonly { name: string; description: string }[]
+  note?: string
+}
+
+/** Decision copy for the owner gallery; technical definitions remain in the catalogue. */
+const CARD_COPY = {
+  zakazy: {
+    description: 'Принимайте заказы на товары и обрабатывайте их вместе с командой.',
+    features: [
+      { name: 'Каталог', description: 'фотографии, описания и цены товаров.' },
+      { name: 'Заказы', description: 'корзина, сумма и обработка командой.' },
+      { name: 'Кабинет клиента', description: 'статусы, история и отмена заказа.' },
+    ],
+    note: 'Оплату и получение согласуете с клиентом. Онлайн-оплаты и автоуведомлений нет.',
+  },
+  salon: {
+    description: 'Дайте клиентам записываться на услуги, а мастерам — видеть своё расписание.',
+    features: [
+      { name: 'Онлайн-запись', description: 'услуги, цены и свободное время мастеров.' },
+      { name: 'Расписание', description: 'рабочие часы, перерывы и выходные.' },
+      { name: 'Кабинет клиента', description: 'свои записи, перенос и отмена.' },
+    ],
+    note: 'Без онлайн-оплаты и автоматических напоминаний о визите.',
+  },
+  service: {
+    description: 'Ведите ремонт от приёма техники до выдачи и согласуйте стоимость с клиентом.',
+    features: [
+      { name: 'Приём техники', description: 'устройство, неисправность и фотографии.' },
+      { name: 'Работа мастера', description: 'этап ремонта, стоимость и срок готовности.' },
+      { name: 'Кабинет клиента', description: 'статус ремонта и согласование стоимости.' },
+    ],
+    note: 'Без автоуведомлений, печати квитанций и учёта остатков запчастей.',
+  },
+  zayavki: {
+    description: 'Принимайте заявки на выезд, назначайте мастеров и следите за выполнением.',
+    features: [
+      { name: 'Заявки', description: 'задача, контакты клиента и адрес.' },
+      { name: 'Выезды', description: 'назначение мастера и календарь работ.' },
+      { name: 'Кабинет клиента', description: 'свои заявки, статусы и история.' },
+    ],
+  },
+  nedvizhimost: {
+    description: 'Показывайте объекты клиентам и договаривайтесь о просмотрах.',
+    features: [
+      { name: 'Объекты', description: 'фотографии, площадь и цена.' },
+      { name: 'Просмотры', description: 'заявка клиента и время, назначенное агентом.' },
+      { name: 'Кабинет клиента', description: 'свои просмотры, отмена и история.' },
+    ],
+    note: 'Без выгрузки на площадки, готовых договоров и синхронизации с внешним календарём.',
+  },
+  dostavka: {
+    description: 'Принимайте заявки на доставку и передавайте их курьерам.',
+    features: [
+      { name: 'Доставки', description: 'адрес, получатель, дата и стоимость.' },
+      { name: 'Курьеры', description: 'назначенные доставки, статусы и фото вручения.' },
+      { name: 'Кабинет клиента', description: 'свои доставки и история.' },
+    ],
+    note: 'Без маршрутов, отслеживания по карте и автоуведомлений. Стоимость задаёте вручную.',
+  },
+  crm: {
+    description: 'Храните контакты, фиксируйте договорённости и следите за продажами.',
+    features: [
+      { name: 'Клиенты', description: 'контакты и заметки после разговоров.' },
+      { name: 'Сделки', description: 'суммы, ответственные и этапы работы.' },
+      { name: 'Календарь', description: 'даты следующих разговоров с клиентами.' },
+    ],
+    note: 'Звонки и письма записываете вручную. Автонапоминаний и отправки счетов нет.',
+  },
+  sklad: {
+    description: 'Ведите остатки товаров и проверяйте, что пора докупить.',
+    features: [
+      { name: 'Товары', description: 'фотографии, артикулы и текущие остатки.' },
+      { name: 'Операции', description: 'приёмка, выдача, списание и возврат.' },
+      { name: 'Закупки', description: 'список товаров, у которых остаток ниже минимума.' },
+    ],
+  },
+  proizvodstvo: {
+    description: 'Записывайте выпуск продукции и учитывайте расход материалов.',
+    features: [
+      { name: 'Выпуск', description: 'сколько произвели за смену и сколько было брака.' },
+      { name: 'Материалы', description: 'расход и списание по заданным нормам.' },
+      { name: 'Остатки', description: 'наличие материалов и позиции ниже минимума.' },
+    ],
+  },
+} satisfies Record<StarterId, TemplateCardCopy>
+
+export function templateCardCopy(template: TemplateDef): TemplateCardCopy {
+  return CARD_COPY[template.id as StarterId] ?? {
+    description: template.tagline,
+    features: template.gives.slice(0, 3).map(description => ({ name: '', description })),
+  }
+}

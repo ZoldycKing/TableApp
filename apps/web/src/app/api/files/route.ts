@@ -10,6 +10,7 @@ import { explainToCustomer } from '@tableapp/schema'
 import { storeAttachment } from '@/lib/file-upload'
 import { validateFileContent, validateFileMetadata } from '@/lib/file-policy'
 import { validateAppReferences } from '@/lib/app-references'
+import { tablePermission } from '@/lib/table-permissions'
 
 /**
  * Загрузка файла. Работает для двух контуров: участник команды грузит в свой
@@ -40,28 +41,17 @@ export async function POST(request: Request) {
    */
   let origin: Origin = 'manual'
 
-  const member = await currentMember()
   if (typeof appId === 'string' && appId) {
-    const [record] = await db.select().from(apps).where(eq(apps.id, appId)).limit(1)
-    if (!record) return NextResponse.json({ ok: false, error: 'Приложение не найдено' }, { status: 404 })
-    if (member?.workspaceId === record.workspaceId && canEdit(member)) {
-      workspaceId = record.workspaceId
-      uploadedBy = member.userId
-    }
-  }
-  if (member && !appId) {
-    if (!canEdit(member)) {
-      return NextResponse.json({ ok: false, error: 'У вас права только на просмотр' }, { status: 403 })
-    }
-    workspaceId = member.workspaceId
-    uploadedBy = member.userId
-  } else if (!workspaceId && typeof appId === 'string' && appId) {
     const [record] = await db.select().from(apps).where(eq(apps.id, appId)).limit(1)
     const parsed = record?.published ? appSchema.safeParse(record.published) : null
     if (!record || !parsed?.success) {
       return NextResponse.json({ ok: false, error: 'Приложение не опубликовано' }, { status: 404 })
     }
     /*
+     * appId задаёт контур приложения, даже когда в другом окне открыт кабинет
+     * владельца. Автор файла должен совпасть с автором последующего сохранения
+     * строки; права участника команды здесь не подменяют права посетителя.
+     *
      * Файл принимается только от того, кому в этом приложении открыта хоть одна
      * форма. Иначе хранилище фирмы — открытая дверь: приложение публичное
      * само по себе не значит, что в него можно грузить что попало.
@@ -77,6 +67,15 @@ export async function POST(request: Request) {
     uploadedBy = viewer?.id ?? null
     workspaceId = record.workspaceId
     origin = 'runtime'
+  } else {
+    const member = await currentMember()
+    if (member) {
+      if (!canEdit(member)&&!Object.keys(member.tableAccess??{}).some(id=>tablePermission(member,id)==='edit')) {
+        return NextResponse.json({ ok: false, error: 'У вас права только на просмотр' }, { status: 403 })
+      }
+      workspaceId = member.workspaceId
+      uploadedBy = member.userId
+    }
   }
 
   if (!workspaceId || !uploadedBy) {

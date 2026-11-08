@@ -22,6 +22,8 @@ describe.skipIf(!process.env.DATABASE_URL)('all customer template workflows in P
   let database: typeof import('@tableapp/db'), runtime: typeof import('./app-runtime'), actions: typeof import('@/app/runtime-actions'), decisions: typeof import('@/app/customer-actions'), mutation: typeof import('./row-mutations'), sessions: typeof import('./app-session'), intake: typeof import('@/app/intake-actions'), auth: typeof import('@/app/auth-actions')
   let customerCookie: string
   const ids = new Map<string, string>()
+  // Cabinet writes use a real workspace member, including fixture setup operations.
+  const ownerActor=(example:ReturnType<typeof templateExample>)=>({id:fixtures.find(fixture=>fixture.example===example)!.userId,kind:'member'})
   beforeAll(async () => {
     database = await import('@tableapp/db'); runtime = await import('./app-runtime'); actions = await import('@/app/runtime-actions'); decisions = await import('@/app/customer-actions'); mutation = await import('./row-mutations'); sessions = await import('./app-session'); intake = await import('@/app/intake-actions'); auth = await import('@/app/auth-actions')
     for (const { example, userId, workspaceId } of fixtures) {
@@ -80,9 +82,14 @@ describe.skipIf(!process.env.DATABASE_URL)('all customer template workflows in P
     customerCookie = state.jar.get(STAFF_SESSION_COOKIE)!
     expect(await own(first)).toHaveLength(0)
     for (const { example } of fixtures) {
-      expect(await actions.appCreateRowAction(example.app.slug, example.app.customer!.tableId, input(example))).toEqual({ ok: true })
+      const created = await actions.appCreateRowAction(example.app.slug, example.app.customer!.tableId, input(example))
+      expect(created).toMatchObject({ ok: true, rowId: expect.any(String) })
       const records = await own(example)
       expect(records).toHaveLength(1); ids.set(example.template.id, records[0]!.id)
+      expect(created.rowId).toBe(records[0]!.id)
+      const saved = await stored(created.rowId!)
+      expect(saved.tableId).toBe(example.app.customer!.tableId)
+      expect((saved.data as Record<string, unknown>)[example.app.customer!.emailFieldId]).toBe(email)
       const access = await sessions.currentAppAccess(example.app), loaded = (await runtime.loadPublishedApp(example.app.slug, access.visitor))!
       expect(loaded.business?.name).toBe(`Бизнес ${example.template.id}`)
       expect(JSON.stringify(loaded)).not.toContain('PRIVATE_WORKSPACE_NAME')
@@ -96,15 +103,21 @@ describe.skipIf(!process.env.DATABASE_URL)('all customer template workflows in P
       const config = example.app.customer!, cart = config.cart!, values = input(example)
       const countBefore = (await own(example)).length
       const results = await Promise.all([actions.appCreateRowAction(example.app.slug, config.tableId, values), actions.appCreateRowAction(example.app.slug, config.tableId, values)])
-      expect(results).toEqual([{ ok: true }, { ok: true }]); expect(await own(example)).toHaveLength(countBefore + 1)
+      expect(results).toMatchObject([{ ok: true, rowId: expect.any(String) }, { ok: true, rowId: expect.any(String) }]); expect(await own(example)).toHaveLength(countBefore + 1)
       const row = (await database.db.select().from(database.rows).where(eq(database.rows.tableId, config.tableId)))
         .find(row => (row.data as Record<string, unknown>)[config.submissionFieldId!] === JSON.parse(String(values[cart.fieldId])).requestId)!
       const original = (await stored(row.id)).data as Record<string, unknown>, positions = original[cart.positionsFieldId] as string[]
+      expect(results.map(result => result.rowId)).toEqual([row.id, row.id])
+      const firstCreatedAt = original[config.createdFieldId!]
+      expect(firstCreatedAt).toEqual(expect.any(String))
+      expect(await actions.appCreateRowAction(example.app.slug, config.tableId, { ...values, [config.createdFieldId!]: '2000-01-01T00:00:00.000Z' })).toMatchObject({ ok: true, rowId: row.id })
+      expect(((await stored(row.id)).data as Record<string, unknown>)[config.createdFieldId!]).toBe(firstCreatedAt)
+      expect(original[config.emailFieldId]).toBe(email)
       expect(positions).toHaveLength(1)
       const item = (await stored(positions[0]!)).data as Record<string, unknown>
       expect(item[cart.quantityFieldId]).toBe(2); expect(item[cart.itemEmailFieldId]).toBe(email)
       const productId = JSON.parse(String(values[cart.fieldId])).items[0].id as string
-      await mutation.writeRows(example.app.workspaceId, context => mutation.updateRow(context, config.catalog!.tableId, productId, { [cart.priceFieldId]: 999 }, { id: null, kind: 'member' }))
+      await mutation.writeRows(example.app.workspaceId, context => mutation.updateRow(context, config.catalog!.tableId, productId, { [cart.priceFieldId]: 999 }, ownerActor(example)))
       expect(((await stored(positions[0]!)).data as Record<string, unknown>)[cart.itemPriceFieldId]).toBe(item[cart.itemPriceFieldId])
       const beforeBad = (await database.db.select().from(database.rows).where(eq(database.rows.tableId, cart.itemsTableId))).length
       const bad = { ...values, [cart.fieldId]: JSON.stringify({ requestId: randomUUID(), items: [{ id: productId, qty: 1 }, { id: 'foreign-row', qty: 1 }] }) }
@@ -116,7 +129,7 @@ describe.skipIf(!process.env.DATABASE_URL)('all customer template workflows in P
   it('allows only assigned workers to edit, restricts fields and rejects client edits of status or internal data', async () => {
     for (const { example } of fixtures) {
       const config = example.app.customer!, id = ids.get(example.template.id)!
-      await mutation.writeRows(example.app.workspaceId, context => mutation.updateRow(context, config.tableId, id, { [config.assignmentFieldId!]: worker }, { id: null, kind: 'member' }))
+      await mutation.writeRows(example.app.workspaceId, context => mutation.updateRow(context, config.tableId, id, { [config.assignmentFieldId!]: worker }, ownerActor(example)))
       await signIn(other)
       expect((await decisions.customerDecisionAction(example.app.slug, id, (await stored(id)).version, 'cancel')).ok).toBe(false)
       expect(await own(example)).toHaveLength(0)
@@ -141,16 +154,16 @@ describe.skipIf(!process.env.DATABASE_URL)('all customer template workflows in P
   })
   it('requires repair approval, checks stale versions and asks again after an estimate changes', async () => {
     const example = fixtures.find(fixture => fixture.example.template.id === 'service')!.example, config = example.app.customer!, approval = config.approval!, id = ids.get('service')!
-    await expect(mutation.writeRows(example.app.workspaceId, context => mutation.updateRow(context, config.tableId, id, { [config.statusFieldId]: approval.approvedStatus }, { id: null, kind: 'member' }))).rejects.toThrow('Дождитесь согласия')
-    for (const status of approval.consentRequiredStatuses ?? []) await expect(mutation.writeRows(example.app.workspaceId, context => mutation.updateRow(context, config.tableId, id, { [config.statusFieldId]: status }, { id: null, kind: 'member' }))).rejects.toThrow('Дождитесь согласия')
-    await expect(mutation.writeRows(example.app.workspaceId, context => mutation.createRow(context, config.tableId, { [config.statusFieldId]: approval.approvedStatus, [approval.priceFieldId]: 5000, [approval.approvedPriceFieldId]: 5000 }, { id: null, kind: 'member' }))).rejects.toThrow('подтверждает клиент')
-    await mutation.writeRows(example.app.workspaceId, context => mutation.updateRow(context, config.tableId, id, { [config.statusFieldId]: approval.waitingStatus, [approval.priceFieldId]: 5000 }, { id: null, kind: 'member' }))
+    await expect(mutation.writeRows(example.app.workspaceId, context => mutation.updateRow(context, config.tableId, id, { [config.statusFieldId]: approval.approvedStatus }, ownerActor(example)))).rejects.toThrow('Дождитесь согласия')
+    for (const status of approval.consentRequiredStatuses ?? []) await expect(mutation.writeRows(example.app.workspaceId, context => mutation.updateRow(context, config.tableId, id, { [config.statusFieldId]: status }, ownerActor(example)))).rejects.toThrow('Дождитесь согласия')
+    await expect(mutation.writeRows(example.app.workspaceId, context => mutation.createRow(context, config.tableId, { [config.statusFieldId]: approval.approvedStatus, [approval.priceFieldId]: 5000, [approval.approvedPriceFieldId]: 5000 }, ownerActor(example)))).rejects.toThrow('подтверждает клиент')
+    await mutation.writeRows(example.app.workspaceId, context => mutation.updateRow(context, config.tableId, id, { [config.statusFieldId]: approval.waitingStatus, [approval.priceFieldId]: 5000 }, ownerActor(example)))
     state.jar.set(STAFF_SESSION_COOKIE, customerCookie)
     const before = await stored(id)
     expect((await decisions.customerDecisionAction(example.app.slug, id, before.version - 1, 'approve')).ok).toBe(false)
     expect(await decisions.customerDecisionAction(example.app.slug, id, before.version, 'approve')).toEqual({ ok: true })
     expect(((await stored(id)).data as Record<string, unknown>)[approval.approvedPriceFieldId]).toBe(5000)
-    await mutation.writeRows(example.app.workspaceId, context => mutation.updateRow(context, config.tableId, id, { [approval.priceFieldId]: 6000 }, { id: null, kind: 'member' }))
+    await mutation.writeRows(example.app.workspaceId, context => mutation.updateRow(context, config.tableId, id, { [approval.priceFieldId]: 6000 }, ownerActor(example)))
     const changed = await stored(id), data = changed.data as Record<string, unknown>
     expect(data[config.statusFieldId]).toBe(approval.waitingStatus); expect(data[approval.approvedPriceFieldId]).toBeNull()
     expect(await decisions.customerDecisionAction(example.app.slug, id, changed.version, 'decline')).toEqual({ ok: true })
@@ -159,15 +172,18 @@ describe.skipIf(!process.env.DATABASE_URL)('all customer template workflows in P
     const example = fixtures.find(fixture => fixture.example.template.id === 'portal')!.example, support = example.app.customerSections![0]!, parent = support.parent!, orderId = ids.get('portal')!
     state.jar.set(STAFF_SESSION_COOKIE, customerCookie)
     const value = { [parent.relationFieldId]: [orderId], [example.field('tickets', 'subject').id]: 'Уточнить выдачу', [example.field('tickets', 'text').id]: 'Можно забрать завтра?', [support.submissionFieldId!]: randomUUID() }
-    expect(await actions.appCreateRowAction(example.app.slug, support.tableId, value)).toEqual({ ok: true })
-    expect(await actions.appCreateRowAction(example.app.slug, support.tableId, value)).toEqual({ ok: true })
+    const created = await actions.appCreateRowAction(example.app.slug, support.tableId, value)
+    const repeated = await actions.appCreateRowAction(example.app.slug, support.tableId, value)
+    expect(created).toMatchObject({ ok: true, rowId: expect.any(String) })
+    expect(repeated).toEqual(created)
     const ownRuntime = (await runtime.loadPublishedApp(example.app.slug, (await sessions.currentAppAccess(example.app)).visitor))!
     expect(ownRuntime.tables[support.tableId]!.rows).toHaveLength(1)
     const ticket = ownRuntime.tables[support.tableId]!.rows[0]!
+    expect(created.rowId).toBe(ticket.id)
     expect(ticket.data[parent.relationFieldId]).toEqual([orderId])
     const foreignOrder = example.rows.find(row => row.tableId === parent.tableId && row.data[parent.emailFieldId] !== email)!
     expect((await actions.appCreateRowAction(example.app.slug, support.tableId, { ...value, [parent.relationFieldId]: [foreignOrder.id], [support.submissionFieldId!]: randomUUID() })).ok).toBe(false)
-    await mutation.writeRows(example.app.workspaceId, context => mutation.updateRow(context, support.tableId, ticket.id, { [support.assignmentFieldId!]: worker }, { id: null, kind: 'member' }))
+    await mutation.writeRows(example.app.workspaceId, context => mutation.updateRow(context, support.tableId, ticket.id, { [support.assignmentFieldId!]: worker }, ownerActor(example)))
     await signIn(worker)
     const answer = example.field('tickets', 'answer').id
     expect(await actions.appUpdateRowAction(example.app.slug, support.tableId, ticket.id, { [answer]: 'Да, завтра после 10:00' }, (await stored(ticket.id)).version)).toEqual({ ok: true })
@@ -180,19 +196,21 @@ describe.skipIf(!process.env.DATABASE_URL)('all customer template workflows in P
   it('never shares line records between two orders, even for the same customer', async () => {
     const example = fixtures.find(fixture => fixture.example.template.id === 'zakazy')!.example, config = example.app.customer!, cart = config.cart!
     const orders = await own(example), first = orders[0]!, second = orders[1]!
-    await expect(mutation.writeRows(example.app.workspaceId, context => mutation.updateRow(context, config.tableId, second.id, { [cart.positionsFieldId]: first.data[cart.positionsFieldId] }, { id: null, kind: 'member' }))).rejects.toThrow('принадлежит другому заказу')
+    await expect(mutation.writeRows(example.app.workspaceId, context => mutation.updateRow(context, config.tableId, second.id, { [cart.positionsFieldId]: first.data[cart.positionsFieldId] }, ownerActor(example)))).rejects.toThrow('принадлежит другому заказу')
   })
   it('prevents overlapping property viewings and cancellation releases the time', async () => {
     const example = fixtures.find(fixture => fixture.example.template.id === 'nedvizhimost')!.example, config = example.app.customer!, appointment = config.appointment!, id = ids.get('nedvizhimost')!
     const start = new Date(Date.now() + 5 * 86_400_000).toISOString()
     state.jar.set(STAFF_SESSION_COOKIE, customerCookie)
-    expect(await actions.appCreateRowAction(example.app.slug, config.tableId, input(example))).toEqual({ ok: true })
+    const created = await actions.appCreateRowAction(example.app.slug, config.tableId, input(example))
+    expect(created).toMatchObject({ ok: true, rowId: expect.any(String) })
     const otherId = (await own(example)).find(row => row.id !== id)!.id
+    expect(created.rowId).toBe(otherId)
     const patch = { [config.assignmentFieldId!]: worker, [appointment.fieldId]: start, [config.statusFieldId]: appointment.confirmedStatus }
-    await mutation.writeRows(example.app.workspaceId, context => mutation.updateRow(context, config.tableId, id, patch, { id: null, kind: 'member' }))
-    await expect(mutation.writeRows(example.app.workspaceId, context => mutation.updateRow(context, config.tableId, otherId, patch, { id: null, kind: 'member' }))).rejects.toThrow('уже назначен просмотр')
+    await mutation.writeRows(example.app.workspaceId, context => mutation.updateRow(context, config.tableId, id, patch, ownerActor(example)))
+    await expect(mutation.writeRows(example.app.workspaceId, context => mutation.updateRow(context, config.tableId, otherId, patch, ownerActor(example)))).rejects.toThrow('уже назначен просмотр')
     expect(await decisions.customerDecisionAction(example.app.slug, id, (await stored(id)).version, 'cancel')).toEqual({ ok: true })
-    await expect(mutation.writeRows(example.app.workspaceId, context => mutation.updateRow(context, config.tableId, otherId, patch, { id: null, kind: 'member' }))).resolves.toBeDefined()
+    await expect(mutation.writeRows(example.app.workspaceId, context => mutation.updateRow(context, config.tableId, otherId, patch, ownerActor(example)))).resolves.toBeDefined()
   })
   it('retains cancellations in every customer history and rejects repeated or foreign decisions', async () => {
     state.jar.set(STAFF_SESSION_COOKIE, customerCookie)
@@ -235,5 +253,21 @@ describe.skipIf(!process.env.DATABASE_URL)('all customer template workflows in P
     expect((await action.saveBusinessProfileAction({ name: 'Не разрешено' })).ok).toBe(false)
     expect((await profile.loadBusinessProfile(fixture.workspaceId))!.name).toBe('Мой салон')
     state.jar.delete(MEMBER_SESSION_COOKIE); state.jar.delete(ACTIVE_WORKSPACE_COOKIE)
+  })
+  it('stamps the creation time on manual staff orders without exposing a generated form field', async () => {
+    const example = fixtures.find(fixture => fixture.example.template.id === 'zakazy')!.example, config = example.app.customer!
+    const updated = { ...example.app, allowlist: [{ email: worker, roleId: 'manager', company: '' }] }
+    await database.db.update(database.apps).set({ published: updated }).where(eq(database.apps.id, example.app.id))
+    await signIn(worker)
+    const before = Date.now()
+    const result = await actions.appCreateRowAction(example.app.slug, config.tableId, {
+      [config.profile!.nameFieldId]: 'Ручной заказ клиента', [config.profile!.phoneFieldId]: '+7 900 000-00-00',
+      [config.createdFieldId!]: '2000-01-01T00:00:00.000Z',
+    })
+    expect(result).toMatchObject({ ok: true, rowId: expect.any(String) })
+    const data = (await stored(result.rowId!)).data as Record<string, unknown>, created = Date.parse(String(data[config.createdFieldId!]))
+    expect(created).toBeGreaterThanOrEqual(before)
+    expect(created).toBeLessThanOrEqual(Date.now())
+    expect(data[config.profile!.nameFieldId]).toBe('Ручной заказ клиента')
   })
 })

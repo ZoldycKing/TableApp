@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "lang": "en",
+  "round": "TableApp — три полных сайта",
+  "nativeViewport": "1440x900",
+  "candidates": [
+    {
+      "id": "tasks",
+      "name": "Сразу к своей задаче",
+      "concept": "Человек узнаёт свою задачу и выбирает подходящий шаблон.",
+      "typography": "Inter · Unbounded · Literata; действующие шрифты TableApp",
+      "palette": [
+        "#fcfaf7",
+        "#25221d",
+        "#618769",
+        "#e8f0e4"
+      ],
+      "traits": [
+        "Три понятные задачи",
+        "Короткие описания",
+        "Прямой путь к шаблону"
+      ],
+      "kind": "url",
+      "url": "http://127.0.0.1:3103/full/tasks/?motion=off"
+    },
+    {
+      "id": "product",
+      "name": "Сначала показать",
+      "concept": "Вместо рассказа об устройстве сервиса — крупный понятный рабочий экран.",
+      "typography": "Inter · Unbounded · Literata; действующие шрифты TableApp",
+      "palette": [
+        "#fcfaf7",
+        "#25221d",
+        "#618769",
+        "#e8f0e4"
+      ],
+      "traits": [
+        "Продукт в первом экране",
+        "Заказ и его детали",
+        "Меньше объяснений"
+      ],
+      "kind": "url",
+      "url": "http://127.0.0.1:3103/full/product/?motion=off"
+    },
+    {
+      "id": "world",
+      "name": "Путь одного заказа",
+      "concept": "Один наглядный сюжет связывает клиента, команду и склад.",
+      "typography": "Inter · Unbounded · Literata; действующие шрифты TableApp",
+      "palette": [
+        "#fcfaf7",
+        "#25221d",
+        "#618769",
+        "#b97a58"
+      ],
+      "traits": [
+        "История одного заказа",
+        "Иллюстрации и анимация на коде",
+        "Без платного видео"
+      ],
+      "kind": "url",
+      "url": "http://127.0.0.1:3103/full/world/?motion=off"
+    }
+  ],
+  "serve": {
+    "command": "python -m http.server 3103 --bind 127.0.0.1 --directory D:/Projects/TableApp/docs/audit/marketing-directions-2026-10-23",
+    "cwd": "D:/Projects/TableApp",
+    "url": "http://127.0.0.1:3103/full/compare.html"
+  }
+}

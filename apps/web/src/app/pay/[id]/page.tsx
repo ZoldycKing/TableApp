@@ -19,7 +19,7 @@ import { PRIVATE_PAGE } from '@/lib/seo'
  * договора с банком.
  */
 
-export const metadata = PRIVATE_PAGE
+export const metadata = { ...PRIVATE_PAGE, title: 'Оплата заказа' }
 export const dynamic = 'force-dynamic'
 
 const money = new Intl.NumberFormat('ru-RU')

@@ -8,6 +8,7 @@ import { authorizeTable, authorizeWorkspace } from '@/lib/authorize'
 import { MAX_FILE_BYTES, tooBig } from '@/lib/import-plan'
 import { runSheetImport, type ImportSheetInput, type SheetOutcome } from '@/lib/import-run'
 import { requireMember } from '@/lib/session'
+import { restrictedTables } from '@/lib/table-permissions'
 
 /**
  * Импорт файла.
@@ -126,6 +127,7 @@ export async function importSheetAction(input: ImportSheetInput): Promise<SheetO
       ? await authorizeWorkspace()
       : await authorizeTable(input.destination.tableId)
   if (!auth.ok) return auth
+  if(restrictedTables(auth.member))return {ok:false,error:'Импорт выполняет участник с полным доступом к пространству'}
 
   const outcome = await runSheetImport(input, {
     workspaceId: auth.member.workspaceId,

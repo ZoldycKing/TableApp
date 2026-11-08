@@ -18,11 +18,12 @@ import { projectRuntime } from '@/lib/runtime-project'
 import { visibleScreensFor, visitorFor } from '@/lib/app-roles'
 import { beginGeneralQuestionAction } from '@/app/question-auth-actions'
 import { sendConversationAction } from '@/app/conversation-actions'
+import { previewConsumptionAction, saveProductionAction } from '@/app/production-actions'
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }))
 vi.mock('@/app/auth-actions', () => ({ signOutAppAction: vi.fn(), consumeAppCodeAction: vi.fn(), requestAppLoginAction: vi.fn() }))
 vi.mock('@/app/question-auth-actions', () => ({ beginGeneralQuestionAction: vi.fn().mockResolvedValue({ ok: true, authenticated: false }) }))
-vi.mock('@/app/production-actions', () => ({ saveMovementAction: vi.fn(), saveProductionAction: vi.fn() }))
+vi.mock('@/app/production-actions', () => ({ saveMovementAction: vi.fn(), saveProductionAction: vi.fn(), previewConsumptionAction: vi.fn() }))
 vi.mock('@/app/runtime-actions', () => ({ appCreateRowAction: vi.fn(), appDeleteRowAction: vi.fn(), appUpdateRowAction: vi.fn() }))
 vi.mock('@/app/booking-actions', () => ({ bookingAvailabilityAction: vi.fn(), cancelBookingAction: vi.fn(), setupBookingMasterAction: vi.fn(), setBookingDayOffAction: vi.fn() }))
 vi.mock('@/app/customer-actions', () => ({ customerDecisionAction: vi.fn() }))
@@ -45,6 +46,35 @@ async function demoLogin(ui: ReturnType<typeof render>) {
   fireEvent.change(await ui.findByLabelText('Код из письма'), { target: { value: '123456' } })
   fireEvent.click(ui.getByRole('button', { name: 'Подтвердить и продолжить' }))
 }
+
+describe('first visit interactive demo', () => {
+  it('previews fictional production consumption and shortages without calling server actions', () => {
+    const example = templateExample('proizvodstvo'), config = example.app.production!
+    const initial = templateAppPreview(example, 'foreman')
+    const ui = render(<TemplatePreviewShell initial={initial} signedIn={null} initialScreenId={config.formScreenId ?? undefined} />)
+    const product = example.rows.find(row => row.tableId === example.table('products').id)!
+    fireEvent.change(ui.getByLabelText('Продукт'), { target: { value: product.id } })
+    fireEvent.change(ui.getByLabelText('Годных изделий'), { target: { value: '100' } })
+    expect(ui.getByText('Расход материалов')).toBeTruthy()
+    expect(ui.getByText('1,2 кг')).toBeTruthy()
+    fireEvent.change(ui.getByLabelText('Годных изделий'), { target: { value: '2000000' } })
+    expect(ui.getByText(/На складе не хватает/)).toBeTruthy()
+    fireEvent.click(ui.getByRole('button', { name: 'Сохранить выпуск' }))
+    expect(vi.mocked(previewConsumptionAction)).not.toHaveBeenCalled()
+    expect(vi.mocked(saveProductionAction)).not.toHaveBeenCalled()
+    expect(example.rows.filter(row => row.tableId === config.tables.production)).toHaveLength(2)
+  })
+  it('starts a newly generated template example with fresh screen IDs', () => {
+    const first = templateExample('proizvodstvo')
+    const initial = templateAppPreview(first, 'director')
+    const ui = render(<TemplatePreviewShell initial={initial} signedIn={null} initialScreenId={first.app.production!.formScreenId ?? undefined} />)
+    expect(ui.getByRole('heading', { name: 'Новый выпуск' })).toBeTruthy()
+    const next = templateAppPreview(templateExample('proizvodstvo'), 'director')
+    ui.rerender(<TemplatePreviewShell initial={next} signedIn={null} />)
+    expect(ui.getByRole('heading', { name: 'Сводка' })).toBeTruthy()
+    expect(ui.queryByText('Экран не найден')).toBeNull()
+  })
+})
 
 function joinExamples(first: ReturnType<typeof templateExample>, second: ReturnType<typeof templateExample>) {
   const views = [...first.views, ...second.views]
@@ -73,6 +103,45 @@ function workshopPreview() {
 }
 
 describe('runtime navigation during live refresh', () => {
+  it('keeps delivery with the order status and preserves the position for custom order layouts', async () => {
+    const example = joinExamples(templateExample('zakazy'), templateExample('dostavka'))
+    const { runtime, viewer } = templateAppPreview(example, 'client', 'irina@example.com')
+    const config = runtime.app.customer!, table = runtime.tables[config.tableId]!, row = table.rows[0]!
+    window.history.replaceState(null, '', `/a/${runtime.app.slug}?e=${config.detailScreenId}&r=${row.id}`)
+    const ui = render(<AppShell runtime={runtime} viewer={viewer} browserHistory />)
+    expect(within(await ui.findByRole('region', { name: 'Состояние заказа' })).getByText('Связь заказа с доставкой')).toBeTruthy()
+    expect(ui.getAllByText('Связь заказа с доставкой')).toHaveLength(1)
+    const custom = structuredClone(runtime)
+    const detail = custom.app.screens.find(screen => screen.id === config.detailScreenId)!
+    if (detail.type !== 'detail') throw new Error('Missing order detail')
+    detail.components.push({ id: 'custom-copy', type: 'heading', source: { kind: 'literal', value: 'Условия заказа' }, size: 'm', position: 'z', roles: null, visibleWhen: null })
+    ui.rerender(<AppShell runtime={custom} viewer={viewer} browserHistory />)
+    expect(ui.queryByRole('region', { name: 'Состояние заказа' })).toBeNull()
+    expect(ui.getByRole('heading', { name: 'Условия заказа' })).toBeTruthy()
+    expect(ui.getAllByText('Связь заказа с доставкой')).toHaveLength(1)
+  })
+  it('keeps a saved shopping cart on catalogue screens and hides its checkout action on work screens', async () => {
+    const { runtime, viewer } = workshopPreview(), app = runtime.app, sales = customerCartWorkflow(app)!
+    const product = runtime.tables[sales.catalog!.tableId]!.rows[0]!
+    sessionStorage.setItem(`tableapp:cart:${app.id}`, JSON.stringify({ requestId: crypto.randomUUID(), items: [{ id: product.id, qty: 1 }] }))
+    const list = app.screens.find(screen => screen.type === 'list' && runtime.views[screen.source.viewId]?.tableId === sales.tableId)!
+    const ui = render(<AppShell runtime={runtime} viewer={viewer} initialScreenId={list.id} />)
+    await waitFor(() => expect(ui.getByRole('heading', { name: 'Заказы' })).toBeTruthy())
+    expect(ui.queryByRole('button', { name: /Оформить заказ ·/ })).toBeNull()
+    fireEvent.click(ui.getByRole('button', { name: 'Каталог' }))
+    await ui.findByRole('button', { name: 'Оформить заказ · 1 поз.' })
+    expect(JSON.parse(sessionStorage.getItem(`tableapp:cart:${app.id}`)!).items).toEqual([{ id: product.id, qty: 1 }])
+  })
+  it.each([true, false])('shows a changed app name beside company identity with editing=%s', (editing) => {
+    const example = templateExample('proizvodstvo')
+    example.app.name = 'Цех Север'
+    example.app.theme.accent = 'orange'
+    const preview = templateAppPreview(example, example.app.roles[0]!.id)
+    const runtime = { ...preview.runtime, business: { name: 'Мастерская Север', location: '', phone: '' } }
+    const ui = render(<AppShell runtime={runtime} viewer={null} editing={editing} />)
+    expect(ui.getByText('Мастерская Север · Цех Север')).toBeTruthy()
+    expect(ui.container.querySelector('.text-orange-700')).toBeTruthy()
+  })
   it('keeps a general question through email verification and sends it only after explicit confirmation, without creating a booking', async () => {
     const example = templateExample('salon')
     example.app.communications = { enabled: true }
@@ -220,6 +289,8 @@ describe('runtime navigation during live refresh', () => {
     expect(calls).toHaveLength(2)
     expect(calls.every(call => call[1] === repair.tableId)).toBe(true)
     expect(calls[0]![2][repair.submissionFieldId!]).not.toBe(calls[1]![2][repair.submissionFieldId!])
+    expect(ui.queryByRole('button', { name: /Оформить заказ.*1/ })).toBeNull()
+    fireEvent.click(ui.getAllByRole('button', { name: 'Каталог' })[0]!)
     fireEvent.click(ui.getByRole('button', { name: /Оформить заказ.*1/ }))
     expect(ui.getByLabelText(`Количество: ${name}`)).toBeTruthy()
     expect(customerWorkflows(example.app).find(config => config.formScreenId === sales.formScreenId)!.tableId).toBe(sales.tableId)
@@ -463,7 +534,7 @@ describe('runtime navigation during live refresh', () => {
     fireEvent.click(ui.getByRole('button', { name: /Шуруповёрт аккумуляторный/ }))
     fireEvent.click(ui.getByRole('button', { name: 'Тестовое изменение' }))
     expect(appUpdateRowAction).not.toHaveBeenCalled()
-    expect(ui.getByText(/Это демонстрация: изменения не сохраняются/)).toBeTruthy()
+    expect(ui.getByText(/В предпросмотре изменения не сохраняются/)).toBeTruthy()
   })
   it('uses native history without Next internal flags and preserves the receipt draft on refresh', () => {
     window.history.replaceState({ __NA: true }, '', '/a/warehouse')

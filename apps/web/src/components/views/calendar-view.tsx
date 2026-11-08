@@ -7,6 +7,7 @@ import { formatCell } from '@/lib/format'
 import type { TableRow } from '@/lib/table-store'
 
 type CalendarProps = {
+  readOnly?: boolean
   view: ViewOf<'calendar'>
   fields: Field[]
   rows: TableRow[]
@@ -34,7 +35,7 @@ function monthGrid(anchor: Date): Date[] {
   return Array.from({ length: 42 }, (_, index) => new Date(start.getTime() + index * 86400000))
 }
 
-export function CalendarView({ view, fields, rows, titleField, onConfigChange }: CalendarProps) {
+export function CalendarView({ view, fields, rows, titleField, onConfigChange, readOnly = false }: CalendarProps) {
   const candidates = fields.filter((field) => DATE_TYPES.has(field.type))
   const dateField = candidates.find((field) => field.id === view.config.dateFieldId) ?? candidates[0]
   const zone = dateField ? fieldTimeZone(dateField) : undefined
@@ -80,8 +81,9 @@ export function CalendarView({ view, fields, rows, titleField, onConfigChange }:
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <span className="text-[var(--color-ink-muted)]">Дата из поля</span>
         <select
+          disabled={readOnly}
           value={dateField.id}
-          onChange={(event) => onConfigChange({ ...view.config, dateFieldId: event.target.value })}
+          onChange={(event) => { if (!readOnly) onConfigChange({ ...view.config, dateFieldId: event.target.value }) }}
           className="rounded border border-[var(--color-border-subtle)] bg-white px-2 py-1 text-sm outline-none focus:border-sage-400"
         >
           {candidates.map((field) => (

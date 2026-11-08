@@ -3,26 +3,20 @@
 import { useRouter } from 'next/navigation'
 import { useRef, useState, useTransition } from 'react'
 import { applyTemplateAction } from '@/app/template-actions'
-import { STARTER_GROUPS } from '@/lib/templates/starter-groups'
+import { templateCardCopy } from '@/lib/templates/card-copy'
+import { installedTemplateHref, STARTER_GROUPS } from '@/lib/templates/starter-groups'
 import type { TemplateDef } from '@/lib/templates/types'
+import { TemplateIcon } from './template-icon'
+import { ownerInput, ownerPrimary } from './owner-ui'
+import { ShellIcon } from './shell/icons'
 
 /**
  * Витрина шаблонов.
  *
- * Главный вопрос человека здесь не «какие бывают шаблоны», а «что со мной
- * произойдёт, если я нажму». Поэтому на карточке написано ровно то, что
- * появится в его рабочем пространстве: какие таблицы, сколько колонок,
- * какие представления и что будет в приложении.
+ * Назначение и конкретные возможности помогают выбрать задачу.
+ * Инструкции появляются в настройке после выбора; технический состав
+ * не мешает знакомству с продуктом.
  */
-
-function plural(count: number, one: string, few: string, many: string): string {
-  const mod100 = count % 100
-  const mod10 = count % 10
-  if (mod100 >= 11 && mod100 <= 14) return `${count} ${many}`
-  if (mod10 === 1) return `${count} ${one}`
-  if (mod10 >= 2 && mod10 <= 4) return `${count} ${few}`
-  return `${count} ${many}`
-}
 
 export function TemplateGallery({
   templates,
@@ -41,11 +35,13 @@ export function TemplateGallery({
 }) {
   const [groupId, setGroupId] = useState<string>(() => STARTER_GROUPS.find(group =>
     group.templateIds.some(id => id === chosen))?.id ?? 'client-apps')
+  const [selection, setSelection] = useState<Record<string, string>>(() => Object.fromEntries(
+    STARTER_GROUPS.map(group => [group.id, group.templateIds.find(id => id === chosen) ?? group.templateIds[0]])))
   const [busy, setBusy] = useState<string | null>(null)
   // Состояние приходит следующим кадром, а второй щелчок — раньше: без этой
   // защёлки двойное нажатие разворачивает шаблон дважды.
   const running = useRef(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<{ templateId: string; message: string } | null>(null)
   const [, startTransition] = useTransition()
   const router = useRouter()
 
@@ -55,120 +51,105 @@ export function TemplateGallery({
     setBusy(templateId)
     setError(null)
     startTransition(async () => {
-      const result = await applyTemplateAction(templateId)
-      if (!result.ok) {
-        setError(result.error)
+      try {
+        const result = await applyTemplateAction(templateId)
+        if (!result.ok) {
+          setError({ templateId, message: result.error })
+          setBusy(null)
+          running.current = false
+          return
+        }
+        router.push(installedTemplateHref(templateId, result.appId))
+      } catch {
+        setError({ templateId, message: 'Не удалось подготовить шаблон. Проверьте соединение и попробуйте ещё раз.' })
         setBusy(null)
         running.current = false
-        return
       }
-      router.push(`/apps/${result.appId}`)
     })
   }
 
-  const picked = compatibilityTemplate ?? templates.find((template) => template.id === chosen)
   const group = STARTER_GROUPS.find(group => group.id === groupId)!
   const visible = templates.filter(template => group.templateIds.some(id => id === template.id))
+  const selected = visible.find(template => template.id === selection[groupId]) ?? visible[0]
+  const copy = selected ? templateCardCopy(selected) : null
+  const select = (id: string) => setSelection(previous => ({ ...previous, [groupId]: id }))
 
   return (
-    <div className="space-y-6">
+    <div className="@container" aria-busy={busy !== null}>
       {compatibilityTemplate ? <p className="rounded-xl border border-sand-200 bg-sand-50 px-5 py-4 text-sm text-ink-soft">
         Вы открыли прежний набор «Клиентский портал». Он сохранён для совместимости. В новых клиентских наборах кабинет уже включён — отдельно устанавливать его не нужно.
       </p> : null}
-      {picked ? (
-        <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-sage-300 bg-sage-50 px-5 py-4">
-          <p className="text-sm text-ink">
-            <span aria-hidden className="mr-1.5">{picked.emoji}</span>
-            Вы выбрали набор <span className="font-semibold">«{picked.name}»</span>. Поставить его
-            в это пространство?
-          </p>
+      {compatibilityTemplate ? (
+        <div className="my-5 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-sage-300 bg-sage-50 px-5 py-4">
+          <p className="text-sm text-ink">Ваш выбор — <span className="font-semibold">«{compatibilityTemplate.name}»</span>.</p>
           <button
             type="button"
-            onClick={() => take(picked.id)}
+            onClick={() => take(compatibilityTemplate.id)}
             disabled={busy !== null}
-            className="rounded-xl bg-ink px-5 py-2.5 text-sm font-medium text-sand-50 transition-opacity hover:opacity-90 disabled:opacity-40"
+            className={ownerPrimary}
           >
-            {busy === picked.id ? 'Создаём…' : `Поставить «${picked.name}»`}
+            {busy === compatibilityTemplate.id ? 'Подготавливаем…' : `Продолжить с шаблоном «${compatibilityTemplate.name}»`}
           </button>
         </div>
       ) : null}
 
-      {error ? (
-        <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
+      {error && error.templateId !== selected?.id ? (
+        <p role="alert" className="my-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error.message}</p>
       ) : null}
 
-      <div className="flex flex-wrap gap-2" aria-label="Назначение приложения">
+      <div className="mb-6 flex flex-wrap gap-x-6 border-b border-sand-200" role="group" aria-label="Кому нужно приложение">
         {STARTER_GROUPS.map(item => <button key={item.id} type="button" aria-pressed={groupId === item.id}
+          disabled={busy !== null}
           onClick={() => setGroupId(item.id)}
-          className={`rounded-xl border px-4 py-2.5 text-sm font-medium transition-colors ${groupId === item.id ? 'border-ink bg-ink text-sand-50' : 'border-sand-200 bg-white text-ink-soft hover:border-sage-300'}`}>
-          {item.name}
+          className={`-mb-px min-h-11 border-b-2 px-1 py-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sage-400 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40 ${groupId === item.id ? 'border-sage-600 text-sage-800' : 'border-transparent text-ink-soft hover:text-ink'}`}>
+          {item.id === 'client-apps' ? 'Для клиентов' : 'Для команды'}
         </button>)}
       </div>
-      <div>
-        <h2 className="text-lg font-semibold text-ink">{group.name}</h2>
-        <p className="mt-2 max-w-3xl text-sm leading-relaxed text-ink-soft">{group.description}</p>
-        {groupId === 'client-apps' ? <p className="mt-2 text-sm text-ink-muted">Каталог доступен без входа. При оформлении клиент подтверждает почту; затем видит свои обращения и историю. Оплату согласует бизнес.</p> : null}
-      </div>
-
-      <div className="grid gap-5 lg:grid-cols-2">
-        {visible.map((template) => {
-          const rowCount = template.tables.reduce((total, table) => total + table.rows.length, 0)
-          return (
-            <article
-              key={template.id}
-              id={`template-${template.id}`}
-              className={`flex flex-col rounded-2xl border bg-white p-6 shadow-soft ${
-                template.id === chosen ? 'border-sage-400 ring-2 ring-sage-200' : 'border-sand-200'
-              }`}
-            >
-              <div className="flex items-start gap-4">
-                <span aria-hidden className="text-3xl leading-none">{template.emoji}</span>
-                <div className="min-w-0">
-                  <h3 className="text-lg font-semibold text-ink">{template.name}</h3>
-                  <p className="mt-1 text-sm text-ink-soft">{template.tagline}</p>
-                </div>
-              </div>
-
-              <p className="mt-4 text-xs text-ink-muted">{template.audience}</p>
-
-              <ul className="mt-4 space-y-1.5 text-sm text-ink-soft">
-                {template.gives.map((line) => (
-                  <li key={line} className="flex gap-2">
-                    <span aria-hidden className="mt-2 size-1.5 shrink-0 rounded-full bg-sage-400" />
-                    <span>{line}</span>
-                  </li>
-                ))}
-              </ul>
-
-              <details className="mt-5 rounded-xl bg-sand-50 p-4 text-xs text-ink-soft">
-                <summary className="cursor-pointer font-medium text-ink">Таблицы и настройки набора</summary>
-                <div className="mt-3 space-y-2">
-                {template.tables.map((table) => (
-                  <p key={table.key}>
-                    Таблица «{table.name}» — {plural(table.fields.length, 'колонка', 'колонки', 'колонок')}.
-                    Представления: {table.views.map((view) => view.name.toLowerCase()).join(', ')}
-                  </p>
-                ))}
-                <p>
-                  Черновик приложения «{template.appName}» и {plural(rowCount, 'учебная запись', 'учебные записи', 'учебных записей')}. Неизменённые примеры можно удалить отдельно в каждой таблице.
-                </p>
-                <p>После установки откроется настройка приложения. Замените примеры, проверьте доступ и опубликуйте черновик.</p>
-                {!template.customer && template.id !== 'salon' && !template.portal && !template.inventory && !template.production && template.id !== 'zayavki' ? <p>Роли пока видят одинаковые экраны и записи. Ограничение по сотруднику или клиенту нужно настроить.</p> : null}
-                </div>
-              </details>
-
-              <button
-                type="button"
-                onClick={() => take(template.id)}
-                disabled={busy !== null}
-                className="mt-5 self-start rounded-xl bg-ink px-5 py-2.5 text-sm font-medium text-sand-50 transition-opacity hover:opacity-90 disabled:opacity-40"
-              >
-                {busy === template.id ? 'Создаём…' : 'Начать с этого набора'}
+      {selected && copy ? <div className="grid min-w-0 overflow-hidden rounded-2xl border border-sand-200 bg-white @min-[800px]:grid-cols-[264px_minmax(0,1fr)]">
+        <nav aria-label="Выбор шаблона" className="hidden border-r border-sand-200 bg-sand-50 p-3 @min-[800px]:block">
+          <div className="space-y-1">
+            {visible.map(template => <button key={template.id} type="button" disabled={busy !== null}
+              aria-label={`Посмотреть шаблон «${template.name}»`} aria-pressed={selected.id === template.id} aria-controls="template-detail"
+              onClick={() => select(template.id)}
+              className={`flex min-h-16 w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sage-400 disabled:cursor-not-allowed disabled:opacity-40 ${selected.id === template.id ? 'bg-sage-100 font-medium text-sage-900' : 'text-ink-soft hover:bg-sand-100 hover:text-ink'}`}>
+              <TemplateIcon id={template.id} className="size-9" />
+              <span className="min-w-0 flex-1">{template.name}</span>
+              {selected.id === template.id ? <ShellIcon name="chevron" className="size-4 shrink-0 -rotate-90 text-sage-700" /> : null}
+            </button>)}
+          </div>
+        </nav>
+        <div className="min-w-0 @min-[800px]:col-start-2">
+          <div className="border-b border-sand-200 bg-sand-50 px-5 py-4 @min-[800px]:hidden">
+            <label htmlFor="template-choice" className="block text-xs font-medium text-ink-soft">Выберите задачу</label>
+            <select id="template-choice" value={selected.id} disabled={busy !== null} onChange={event => select(event.target.value)} className={`${ownerInput} text-base!`}>
+              {visible.map(template => <option key={template.id} value={template.id}>{template.name}</option>)}
+            </select>
+          </div>
+          <article id="template-detail" aria-labelledby={`template-title-${selected.id}`} className="p-5 @min-[800px]:p-8">
+            <header className="flex items-center gap-4">
+              <TemplateIcon id={selected.id} className="size-14" />
+              <h2 id={`template-title-${selected.id}`} className="min-w-0 break-words text-2xl font-semibold tracking-tight text-ink">{selected.name}</h2>
+            </header>
+            <p className="mt-5 max-w-xl text-base leading-7 text-ink-soft">{copy.description}</p>
+            <dl className="my-7 space-y-5">
+              {copy.features.map(feature => <div key={feature.name || feature.description}>
+                {feature.name ? <dt className="text-sm font-medium text-ink">{feature.name}</dt> : null}
+                <dd className="mt-1 text-sm leading-6 text-ink-soft">{feature.description.charAt(0).toUpperCase() + feature.description.slice(1)}</dd>
+              </div>)}
+            </dl>
+            {copy.note ? <p className="mb-6 max-w-xl text-xs leading-5 text-ink-soft">{copy.note}</p> : null}
+            <footer className="flex flex-wrap items-center justify-between gap-x-5 gap-y-3 border-t border-sand-200 pt-5">
+              <button type="button" onClick={() => take(selected.id)} disabled={busy !== null}
+                aria-label={busy === selected.id ? `Подготавливаем шаблон «${selected.name}»` : `Начать настройку «${selected.name}»`} className={`${ownerPrimary} w-full @min-[800px]:w-auto`}>
+                {busy === selected.id ? 'Подготавливаем…' : 'Начать настройку'}
+                {busy === null ? <ShellIcon name="chevron" className="size-4 -rotate-90" /> : null}
               </button>
-            </article>
-          )
-        })}
-      </div>
+              <p className="text-xs leading-5 text-ink-soft">Внутри будут учебные примеры. Их можно убрать при настройке.</p>
+            </footer>
+            {error?.templateId === selected.id ? <p role="alert" className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm leading-6 text-red-700">{error.message}</p> : null}
+          </article>
+        </div>
+      </div> : <p className="py-10 text-sm text-ink-soft">В этой группе пока нет шаблонов. Выберите другую группу.</p>}
     </div>
   )
 }

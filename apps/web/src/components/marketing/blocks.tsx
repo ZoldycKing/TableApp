@@ -1,9 +1,11 @@
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { Reveal } from './reveal'
-import { Underline } from './icons'
 import { SiteFooter } from './site-footer'
 import { SiteHeader } from './site-header'
+import elaya from './elaya/site.module.css'
+import content from './elaya/content-pages.module.css'
+import controls from './elaya/inner-pages.module.css'
 
 /**
  * Общие блоки публичных страниц.
@@ -26,7 +28,7 @@ export function MarketingShell({
   children: ReactNode
 }) {
   return (
-    <div className="min-h-dvh bg-sand-50 text-ink">
+    <div className={elaya.shell}>
       {/*
         Переход к содержимому для тех, кто ходит клавишей: иначе каждый раз
         приходится проходить всю шапку с двумя выпадающими списками.
@@ -81,6 +83,7 @@ export function Breadcrumbs({ trail }: { trail: { href?: string; label: string }
 export function PageHero({
   trail,
   emoji,
+  icon,
   title,
   lead,
   note,
@@ -88,22 +91,18 @@ export function PageHero({
 }: {
   trail?: { href?: string; label: string }[]
   emoji?: string
+  icon?: ReactNode
   title: ReactNode
   lead: string
   note?: string
   actions?: ReactNode
 }) {
   return (
-    <section className="relative overflow-hidden border-b border-sand-200">
-      <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
-        <div className="dot-grid absolute inset-0 opacity-50" />
-        <div className="animate-drift absolute -left-40 -top-40 h-[28rem] w-[28rem] rounded-full bg-sage-100 opacity-70 blur-3xl" />
-      </div>
-
-      <div className="mx-auto w-full max-w-4xl px-5 py-20 sm:px-8">
+    <section className={content.hero}>
+      <div>
         {trail ? <Breadcrumbs trail={trail} /> : null}
 
-        {emoji ? (
+        {icon ? <div className={content.heroIcon}>{icon}</div> : emoji ? (
           <p className="mt-8 text-4xl" aria-hidden>
             {emoji}
           </p>
@@ -115,12 +114,12 @@ export function PageHero({
           высотой не помещался в строку и обрезался краем блока — видно было
           «Производственн».
         */}
-        <h1 className="mt-4 hyphens-auto font-display text-[1.6rem] font-extrabold leading-[1.15] [overflow-wrap:break-word] sm:text-[2.25rem] sm:leading-[1.08] lg:text-[3rem]">
+        <h1>
           {title}
         </h1>
-        <p className="mt-6 max-w-2xl text-lg leading-relaxed text-ink-soft">{lead}</p>
-        {note ? <p className="mt-4 max-w-2xl text-sm text-ink-muted">{note}</p> : null}
-        {actions ? <div className="mt-9 flex flex-wrap items-center gap-3">{actions}</div> : null}
+        <p className={content.heroLead}>{lead}</p>
+        {note ? <p className={content.heroNote}>{note}</p> : null}
+        {actions ? <div className={content.actions}>{actions}</div> : null}
       </div>
     </section>
   )
@@ -131,7 +130,7 @@ export function PrimaryLink({ href, children }: { href: string; children: ReactN
   return (
     <Link
       href={href}
-      className="rounded-xl bg-ink px-6 py-3.5 text-sm font-medium text-sand-50 shadow-soft transition-all hover:-translate-y-0.5 hover:bg-ink/90 hover:shadow-lift"
+      className={controls.primary}
     >
       {children}
     </Link>
@@ -144,7 +143,7 @@ export function SecondaryLink({ href, children }: { href: string; children: Reac
   return (
     <Element
       href={href}
-      className="group rounded-xl border border-sand-300 bg-white/60 px-6 py-3.5 text-sm font-medium transition-all hover:-translate-y-0.5 hover:border-ink/25 hover:bg-white"
+      className={controls.secondary}
     >
       {children}
       <span className="ml-1.5 inline-block transition-transform group-hover:translate-x-1">→</span>
@@ -173,25 +172,16 @@ export function Section({
   width?: 'narrow' | 'wide' | 'plans'
   children: ReactNode
 }) {
-  const shell =
-    tone === 'white'
-      ? 'border-y border-sand-200 bg-white/70'
-      : tone === 'sand'
-        ? 'border-y border-sand-200 bg-sand-100/60'
-        : ''
-  const inner =
-    width === 'narrow' ? 'max-w-4xl' : width === 'plans' ? 'max-w-[75rem]' : 'max-w-5xl'
-
   return (
-    <section id={id} className={`${shell} ${id ? 'scroll-mt-20' : ''}`}>
-      <div className={`mx-auto w-full ${inner} px-5 py-20 sm:px-8`}>
+    <section id={id} className={content.section} data-width={width} data-tone={tone}>
+      <div>
         {title ? (
           <Reveal>
-            <h2 className="font-display text-2xl font-extrabold sm:text-3xl">{title}</h2>
-            {lead ? <p className="mt-3 max-w-2xl text-ink-soft">{lead}</p> : null}
+            <h2 className={content.sectionHeading}>{title}</h2>
+            {lead ? <p className={content.sectionLead}>{lead}</p> : null}
           </Reveal>
         ) : null}
-        <div className={title ? 'mt-10' : ''}>{children}</div>
+        <div className={title ? content.sectionBody : ''}>{children}</div>
       </div>
     </section>
   )
@@ -209,7 +199,7 @@ export function CardGrid({
     <div className={`grid gap-5 sm:grid-cols-2 ${columns === 3 ? 'lg:grid-cols-3' : ''}`}>
       {items.map((item, index) => (
         <Reveal key={item.title} delay={(index % columns) * 100}>
-          <div className="h-full rounded-2xl border border-sand-200 bg-white p-7 shadow-soft transition-all duration-300 hover:-translate-y-1 hover:border-sage-300 hover:shadow-lift">
+          <div className={content.card}>
             <h3 className="font-display text-base font-bold">{item.title}</h3>
             <p className="mt-3 text-sm leading-relaxed text-ink-muted">{item.text}</p>
           </div>
@@ -315,17 +305,11 @@ export function CtaSection({
   secondary?: { href: string; label: string }
 }) {
   return (
-    <section className="mx-auto w-full max-w-4xl px-5 py-20 sm:px-8">
-      <div className="rounded-[2rem] border border-sand-200 bg-white px-8 py-16 text-center shadow-soft sm:px-14">
-        <h2 className="font-display text-2xl font-extrabold leading-tight sm:text-[2.2rem]">
-          {title}{' '}
-          <span className="relative inline-block text-sage-700">
-            <span className="accent-word">{accent}</span>
-            <Underline className="text-sage-400/70" />
-          </span>
-        </h2>
-        <p className="mx-auto mt-5 max-w-lg text-ink-soft">{text}</p>
-        <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+    <section className={content.closing}>
+      <div>
+        <h2>{title} {accent}</h2>
+        <p>{text}</p>
+        <div className={content.actions}>
           <PrimaryLink href={href}>{label}</PrimaryLink>
           {secondary ? <SecondaryLink href={secondary.href}>{secondary.label}</SecondaryLink> : null}
         </div>

@@ -41,7 +41,7 @@ export async function GET(
   const viewId = url.searchParams.get('view') ?? ''
 
   // Проверка та же, что у страницы таблицы: чужое пространство не откроется.
-  const table = await loadTable(tableId, member.workspaceId)
+  const table = await loadTable(tableId, member.workspaceId,member)
   if (!table) return new Response('Таблица не найдена', { status: 404 })
 
   const view = table.views.find((item) => item.id === viewId) ?? table.views[0]

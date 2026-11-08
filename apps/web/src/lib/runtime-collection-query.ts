@@ -7,6 +7,7 @@ import type { RelatedTitles } from './queries'
 import { canAccessRow, rulesFor } from './row-access'
 import { runtimeQuery, type RuntimePageRequest } from './runtime-page-types'
 import type { RuntimeSourceRow } from './runtime-project'
+import { collectionSearchFields } from './collection-search-fields'
 
 type CollectionScreen = ScreenOf<'list'> | ScreenOf<'tiles'>
 type Sortable = Pick<RuntimeSourceRow, 'id' | 'position' | 'data'>
@@ -32,9 +33,7 @@ export function runtimeCollectionPlan(app: App, visitor: Visitor, screen: Collec
     ...(booking ? { bookingSection: request.bookingSection ?? 'upcoming' } : customer ? { customerSection: request.customerSection ?? 'active' } : {}) })
   const statusField = screen.statusFieldId && policy.fields.has(screen.statusFieldId) ? index.get(screen.statusFieldId) : undefined
   const choices = statusField?.type === 'single_select' || statusField?.type === 'multi_select' ? statusField.options.choices : []
-  const searchFields = screen.source.searchFieldIds.flatMap(id => {
-    const field = index.get(id)
-    if (!field || !policy.fields.has(id)) return []
+  const searchFields = collectionSearchFields(screen, fields.filter(field => policy.fields.has(field.id))).flatMap(field => {
     // The visit history deliberately displays overdue unmarked outcomes with this label.
     if (booking && query.bookingSection === 'history' && field.id === booking.visit.status && field.type === 'single_select') return [{ ...field,
       options: { ...field.options, choices: field.options.choices.map(choice => [booking.statuses.booked, booking.statuses.arrived].includes(choice.id)

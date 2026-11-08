@@ -12,6 +12,9 @@ import {
   workspaces,
 } from '@tableapp/db'
 import { appSchema, newId } from '@tableapp/schema'
+import {readAppDefinition} from '@tableapp/schema/app-definition'
+import {publishedV2Roles} from '@/lib/builder-v2-published'
+import {builderV2Enabled} from '@/lib/builder-v2'
 import { and, eq, isNull, sql } from 'drizzle-orm'
 import { cookies } from 'next/headers'
 import {
@@ -47,6 +50,7 @@ import {
 } from '@/lib/auth-challenge'
 import { PER_EMAIL, PER_IP, takeAttempt } from '@/lib/auth-rate'
 import { maySendAppCode } from '@/lib/app-roles'
+import { appEntry, type AppEntry } from '@/lib/app-entry'
 import { mailHintFor, sendMagicLink, type MailResult } from '@/lib/mailer'
 import { hashRecoveryCode, verifyTotp } from '@/lib/totp'
 import { questionAppFor } from '@/lib/app-session'
@@ -127,7 +131,7 @@ async function tooOften(email: string, ip: string): Promise<string | null> {
 }
 
 /** Запрос ссылки для входа в приложение. */
-export async function requestAppLoginAction(slug: string, rawEmail: string, purpose: 'default' | 'question' = 'default'): Promise<LoginRequestResult> {
+export async function requestAppLoginAction(slug: string, rawEmail: string, purpose: 'default' | 'question' = 'default', entry?: AppEntry): Promise<LoginRequestResult> {
   if (purpose !== 'default' && purpose !== 'question') return { ok: false, error: 'Неизвестный способ входа' }
   const email = normalizeEmail(rawEmail)
   if (!isValidEmail(email)) return { ok: false, error: 'Введите корректный адрес почты' }
@@ -136,8 +140,9 @@ export async function requestAppLoginAction(slug: string, rawEmail: string, purp
   if (!record?.published) return { ok: false, error: 'Приложение не опубликовано' }
 
   const parsed = appSchema.safeParse(record.published)
-  if (!parsed.success) return { ok: false, error: 'Приложение собрано с ошибкой' }
-  const app = parsed.data
+  const definition=readAppDefinition(record.published), v2=builderV2Enabled()&&definition.ok&&definition.formatVersion===2?definition.app:null
+  if (!parsed.success&&!v2) return { ok: false, error: 'Приложение собрано с ошибкой' }
+  const app = parsed.success?parsed.data:v2!
   if (purpose === 'question' && !await questionAppFor(slug)) return { ok: false, error: 'Вопросы этому бизнесу сейчас недоступны' }
 
   const ip = await requestIp()
@@ -154,14 +159,15 @@ export async function requestAppLoginAction(slug: string, rawEmail: string, purp
    * собственный кабинет. Что он там увидит, решают роли и правило на строки,
    * а не сам факт входа.
    */
-  if (app.accessMode === 'allowlist' && purpose !== 'question') {
+  if(v2&&!publishedV2Roles(v2,email).roleIds.length)return {ok:true,delivered:true,hint:null,via:'sent'}
+  if (!v2&&'accessMode' in app&&app.accessMode === 'allowlist' && purpose !== 'question') {
     const [existing] = await db
       .select({ id: appUsers.id, roleId: appUsers.roleId })
       .from(appUsers)
       .where(and(eq(appUsers.appId, record.id), eq(appUsers.email, email)))
       .limit(1)
 
-    if (!maySendAppCode(app, email, existing?.roleId ?? null)) {
+    if (!maySendAppCode(app as import('@tableapp/schema').App, email, existing?.roleId ?? null)) {
       /*
        * Ответ такой же, как при успехе. Прежний «этого адреса нет в списке»
        * подтверждал, какие адреса в списке есть, — по нему можно было собрать
@@ -193,7 +199,9 @@ export async function requestAppLoginAction(slug: string, rawEmail: string, purp
     expiresAt: expiresAt(TOKEN_TTL_MS),
   })
 
-  const link = `${await originUrl()}/a/${slug}/auth?token=${token}`
+  const destination = purpose === 'default' && parsed.success ? appEntry(entry?.e, entry?.r) : undefined
+  const screen = destination && parsed.success && parsed.data.screens.some(item => item.id === destination.e) ? destination : undefined
+  const link = `${await originUrl()}/a/${slug}/auth?${new URLSearchParams({ token, ...screen })}`
   const businessName = (await (await import('@/lib/business-profile')).loadBusinessProfile(app.workspaceId))?.name ?? app.name
   const result = await sendMagicLink({
     to: email,
@@ -403,7 +411,7 @@ async function completeMemberLogin(found: AuthToken): Promise<{ ok: boolean; err
       const workspaceId = newId('workspace')
       await tx.insert(workspaces).values({
         id: workspaceId,
-        name: `Воркспейс ${found.email.split('@')[0]}`,
+        name: 'Моё пространство',
         slug: `${found.email.split('@')[0]!.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-${workspaceId.slice(4, 10)}`,
         ownerId: userId,
       })

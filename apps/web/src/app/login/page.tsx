@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { Logo } from '@/components/marketing/logo'
+import { TemplateIcon } from '@/components/template-icon'
 import { MemberLogin } from '@/components/member-login'
 import { safeNext } from '@/lib/safe-next'
 import { findStarter, TEMPLATES } from '@/lib/templates/catalog'
@@ -34,25 +35,20 @@ export default async function LoginPage({
   const chosen = findStarter(previousChoice?.id) ?? previousChoice
 
   return (
-    <div className="relative min-h-dvh overflow-hidden bg-sand-50">
-      <div aria-hidden className="pointer-events-none absolute inset-0">
-        <div className="animate-drift absolute -left-40 -top-32 h-[28rem] w-[28rem] rounded-full bg-sage-100 opacity-70 blur-3xl" />
-        <div className="animate-drift absolute -bottom-40 -right-32 h-[26rem] w-[26rem] rounded-full bg-clay-400 opacity-[0.14] blur-3xl" />
-      </div>
-
-      <div className="relative mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center px-5 py-12">
+    <div className="platform-surface">
+      <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center px-6 py-12">
         <Link href="/" className="mb-8 self-start transition-opacity hover:opacity-80">
           <Logo />
         </Link>
 
         {chosen ? (
-          <p className="mb-4 rounded-xl border border-sage-300 bg-sage-50 px-4 py-3 text-sm text-ink">
-            <span aria-hidden className="mr-1.5">{chosen.emoji}</span>
-            После входа вернём вас к шаблону <span className="font-semibold">«{chosen.name}»</span>.
-          </p>
+          <div className="mb-4 flex items-center gap-3 rounded-2xl border border-sand-200 bg-sand-100 p-4 text-sm text-ink">
+            <TemplateIcon id={chosen.id} className="size-8 shrink-0" />
+            <p>Продолжите с шаблоном <span className="font-semibold">«{chosen.name}»</span> после входа.</p>
+          </div>
         ) : null}
 
-        <div className="rounded-2xl border border-sand-200 bg-white p-7 shadow-lift">
+        <div className="rounded-3xl border border-sand-200 bg-white p-6 sm:p-8">
           <MemberLogin initialError={error ?? null} next={target} />
         </div>
 

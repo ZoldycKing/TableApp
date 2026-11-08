@@ -40,6 +40,8 @@ import type { TableRow } from './table-store'
 
 export type MetricResult = {
   kind: 'metric'
+  /** No numeric observations; keep the empty-state explanation visible. */
+  empty?: boolean
   /** Готовая строка: «187 400 ₽». Число не отправляем — показывать его нечем. */
   text: string
   /** Рост в процентах или null. */
@@ -242,11 +244,12 @@ export function computeBlocks(args: ComputeArgs): DashboardResults {
 
       out[block.id] = {
         kind: 'metric',
+        empty: result.value === null,
         text: countLike
           ? new Intl.NumberFormat('ru-RU').format(result.value ?? 0)
           : showNumber(result.value, field, block.format),
         delta: result.delta,
-        caption: result.delta !== null ? RANGE_COMPARE[block.range] : RANGE_LABELS[block.range],
+        caption: result.value === null ? 'Нет данных для расчёта' : result.delta !== null ? RANGE_COMPARE[block.range] : RANGE_LABELS[block.range],
         compared: result.previous !== null,
       }
       continue

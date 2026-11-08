@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import { MarketingShell } from '@/components/marketing/blocks'
 import { SOLUTIONS } from '@/lib/solutions'
+import { TemplateIcon } from '@/components/template-icon'
+import { PrimaryLink, SecondaryLink } from '@/components/marketing/blocks'
 
 export const metadata = {
   title: 'Страница не найдена',
@@ -22,26 +24,16 @@ export default function NotFound() {
     <MarketingShell signedIn={false}>
       <section className="mx-auto w-full max-w-3xl px-5 py-24 text-center sm:px-8">
         <p className="font-display text-6xl font-extrabold text-sage-300">404</p>
-        <h1 className="mt-6 font-display text-[2rem] font-extrabold leading-tight sm:text-[2.6rem]">
+        <h1 className="mt-6 text-3xl font-semibold sm:text-4xl">
           Такой страницы нет
         </h1>
         <p className="mx-auto mt-5 max-w-lg text-ink-soft">
-          Возможно, в адресе опечатка или страница переехала. Вот куда ходят чаще всего.
+          Проверьте адрес или вернитесь на главную.
         </p>
 
         <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
-          <Link
-            href="/"
-            className="rounded-xl bg-ink px-6 py-3.5 text-sm font-medium text-sand-50 shadow-soft transition-all hover:-translate-y-0.5 hover:bg-ink/90"
-          >
-            На главную
-          </Link>
-          <Link
-            href="/templates"
-            className="rounded-xl border border-sand-300 bg-white/60 px-6 py-3.5 text-sm font-medium transition-all hover:-translate-y-0.5 hover:border-ink/25 hover:bg-white"
-          >
-            Шаблоны
-          </Link>
+          <PrimaryLink href="/">На главную</PrimaryLink>
+          <SecondaryLink href="/templates">Шаблоны</SecondaryLink>
         </div>
 
         <div className="mt-14 text-left">
@@ -53,9 +45,7 @@ export default function NotFound() {
                 href={`/solutions/${solution.slug}`}
                 className="group flex items-center gap-3 rounded-2xl border border-sand-200 bg-white px-5 py-4 transition-all hover:-translate-y-0.5 hover:border-sage-300 hover:shadow-lift"
               >
-                <span aria-hidden className="text-2xl">
-                  {solution.emoji}
-                </span>
+                <TemplateIcon id={solution.templateId ?? 'portal'} className="size-10" />
                 <span className="text-sm font-medium">{solution.name}</span>
               </Link>
             ))}

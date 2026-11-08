@@ -1,7 +1,7 @@
 import { customerWorkflows, type App, type AppModule, type ModuleAccess } from '@tableapp/schema'
 import type { Visitor } from './app-roles'
 
-export type ModuleAccessApp = Pick<App, 'id' | 'accessMode' | 'allowlist' | 'roles' | 'modules' | 'moduleAccess'>
+export type ModuleAccessApp = Pick<App, 'id' | 'purpose' | 'accessMode' | 'allowlist' | 'roles' | 'modules' | 'moduleAccess'>
 
 export function hasRole(visitor: Visitor, roleId: string): boolean {
   return visitor.authenticated && (visitor.roleIds ?? (visitor.roleId ? [visitor.roleId] : [])).includes(roleId)

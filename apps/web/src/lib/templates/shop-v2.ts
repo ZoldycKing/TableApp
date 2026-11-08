@@ -123,7 +123,7 @@ export function buildShopV2App(built: BuiltTemplate, meta: { id: string; workspa
       { id: ordersNode, name: 'Заказы', type: 'collection', visibleTo: null, visibleWhen: null, sourceId: ordersSource, layout: 'list', titleFieldId: shop.orderTitleFieldId, subtitleFieldId: status, itemIds: [], events: { itemPress: openOrder } },
       ...orderFields.map(fieldId => node(`order_${fieldId}`, columns(ordersTableId).find(item => item.id === fieldId)!.name, fieldId)),
       { id: cancelButton, name: 'Отменить заказ', type: 'button', label: 'Отменить заказ', variant: 'danger', visibleTo: { ...roles, roleIds: ['client'] }, visibleWhen: null, events: { press: cancelOrder } },
-      { id: statusFormId, name: 'Статус заказа', type: 'form', visibleTo: team, visibleWhen: null, tableId: ordersTableId, mode: 'edit', childIds: statusInputs.map(item => item.id), events: { submit: saveStatus }, submitLabel: 'Сохранить' },
+      { id: statusFormId, name: 'Статус заказа', type: 'form', visibleTo: team, visibleWhen: null, tableId: ordersTableId, mode: 'edit', childIds: statusInputs.map(item => item.id), events: { submit: saveStatus }, submitLabel: 'Сохранить изменения' },
       ...statusInputs,
     ],
     sources: [

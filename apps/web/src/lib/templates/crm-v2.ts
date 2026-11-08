@@ -86,11 +86,13 @@ export function buildCrmV2App(built: BuiltTemplate, meta: { id: string; workspac
   const contactInputs = [
     input(stage, 'Этап', true),
     input(due, 'Вернуться к разговору', true),
-    input(note, 'Новая запись', true),
+    // Empty draft: history already shows past lines; do not re-offer the last note for a duplicate save.
+    input(note, 'Новая запись', true, { kind: 'literal', value: '' }),
     input(sum, 'Сумма', false),
   ]
-  // Read-only facts: context not edited in the action form (shop: delivery facts ≠ status form fields).
-  const dealFieldIds = [clientRelation, assignment]
+  // Shop manage: amount/status feed Identity only; delivery date stays a fact; form edits separately.
+  const dealIdentityFieldIds = [stage, sum]
+  const dealFieldIds = [clientRelation, assignment, due]
   const clientFieldIds = ['contact', 'phone', 'email', 'city', 'note'].map(key => field('clients', key))
 
   const crm: NonNullable<AppV2['crm']> = {
@@ -128,7 +130,7 @@ export function buildCrmV2App(built: BuiltTemplate, meta: { id: string; workspac
       { id: clientsScreenId, name: 'Клиенты', icon: 'users', navigation: true, audience: team, contextTableId: null, rootIds: [newClientButton, clientsNode], events: { enter: null } },
       { id: createDealScreenId, name: 'Новая сделка', icon: 'deal', navigation: false, audience: team, contextTableId: null, rootIds: [createDealFormId], events: { enter: null } },
       { id: createClientScreenId, name: 'Новый клиент', icon: 'users', navigation: false, audience: team, contextTableId: null, rootIds: [createClientFormId], events: { enter: null } },
-      { id: dealScreenId, name: 'Сделка', icon: 'deal', navigation: false, audience: team, contextTableId: dealsTableId, recordTitleFieldId: title, rootIds: [...dealFieldIds.map(id => `deal_${id}`), dealContactsNode, contactFormId], events: { enter: null } },
+      { id: dealScreenId, name: 'Сделка', icon: 'deal', navigation: false, audience: team, contextTableId: dealsTableId, recordTitleFieldId: title, rootIds: [...dealIdentityFieldIds.map(id => `deal_${id}`), ...dealFieldIds.map(id => `deal_${id}`), dealContactsNode, contactFormId], events: { enter: null } },
       { id: clientScreenId, name: 'Клиент', icon: 'users', navigation: false, audience: team, contextTableId: clientsTableId, recordTitleFieldId: crm.clientTitleFieldId, rootIds: [...clientFieldIds.map(id => `client_${id}`), relatedDealsNode, clientContactsNode], events: { enter: null } },
     ],
     nodes: [
@@ -141,7 +143,7 @@ export function buildCrmV2App(built: BuiltTemplate, meta: { id: string; workspac
       { id: createClientFormId, name: 'Создать клиента', type: 'form', visibleTo: team, visibleWhen: null, tableId: clientsTableId, mode: 'create', childIds: createClientInputs.map(item => item.id), events: { submit: createClient }, submitLabel: 'Сохранить клиента' },
       ...createClientInputs,
       { id: clientsNode, name: 'Клиенты', type: 'collection', visibleTo: null, visibleWhen: null, sourceId: clientsSource, layout: 'list', titleFieldId: crm.clientTitleFieldId, subtitleFieldId: crm.clientPhoneFieldId, itemIds: [], events: { itemPress: openClient } },
-      ...dealFieldIds.map(fieldId => node(`deal_${fieldId}`, columns(dealsTableId).find(item => item.id === fieldId)!.name, fieldId)),
+      ...[...dealIdentityFieldIds, ...dealFieldIds].map(fieldId => node(`deal_${fieldId}`, columns(dealsTableId).find(item => item.id === fieldId)!.name, fieldId)),
       { id: dealContactsNode, name: 'История общения', type: 'collection', visibleTo: null, visibleWhen: null, sourceId: dealContactsSource, layout: 'list', titleFieldId: contactSummary, subtitleFieldId: contactLoggedAt, cardDetailFieldId: contactNextDue, itemIds: [], events: { itemPress: null } },
       { id: contactFormId, name: 'Добавить запись', type: 'form', visibleTo: team, visibleWhen: null, tableId: dealsTableId, mode: 'edit', childIds: contactInputs.map(item => item.id), events: { submit: saveContact }, submitLabel: 'Сохранить запись' },
       ...contactInputs,

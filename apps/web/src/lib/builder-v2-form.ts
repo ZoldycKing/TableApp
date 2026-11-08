@@ -47,8 +47,11 @@ export async function inspectBuilderV2Form(app: AppV2, member: Member, request: 
     const initial: Record<string, unknown> = {}
     for (const input of inputs) {
       const field = fields.find(field => field.id === input.fieldId)!
-      if (form.mode === 'edit') initial[field.id] = context.row?.values[field.id] ?? emptyValue(field.type)
-      else if (input.initialValue) { const result = resolveAppV2Binding(input.initialValue, context); if (!result.ok) error(`Поле «${input.label || field.name}»: ${result.error}`); else initial[field.id] = result.value }
+      if (input.initialValue) {
+        const result = resolveAppV2Binding(input.initialValue, context)
+        if (!result.ok) error(`Поле «${input.label || field.name}»: ${result.error}`)
+        else initial[field.id] = result.value
+      } else if (form.mode === 'edit') initial[field.id] = context.row?.values[field.id] ?? emptyValue(field.type)
       else initial[field.id] = emptyValue(field.type)
     }
     const defaults = await withInitialValues(fields, initial, async (tableId, rowId, fieldId) => {

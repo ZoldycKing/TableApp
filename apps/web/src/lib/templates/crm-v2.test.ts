@@ -54,6 +54,8 @@ describe('crm template v2 installation', () => {
     expect(dealContacts.filter).toMatchObject({ op: 'includes', left: { fieldId: app.crm!.contactDealFieldId }, right: { kind: 'screen_row_id' } })
     const contact = app.nodes.find(node => node.type === 'form' && node.id === app.crm!.contactFormId)
     expect(contact).toMatchObject({ type: 'form', mode: 'edit', name: 'Добавить запись', submitLabel: 'Сохранить запись' })
+    const noteInput = contact && contact.type === 'form' ? app.nodes.find(node => node.type === 'input' && contact.childIds.includes(node.id) && node.fieldId === app.crm!.noteFieldId) : undefined
+    expect(noteInput).toMatchObject({ label: 'Новая запись', initialValue: { kind: 'literal', value: '' } })
     const save = app.workflows.find(flow => flow.id === (contact && contact.type === 'form' ? contact.events.submit : null))!
     expect(save.steps.some(step => step.type === 'create_row' && step.tableId === app.crm!.contactsTableId)).toBe(true)
     expect(save.steps.some(step => step.type === 'update_row' && step.tableId === app.crm!.dealsTableId)).toBe(true)
@@ -64,7 +66,18 @@ describe('crm template v2 installation', () => {
       return node?.type === 'collection' && node.name === 'Сделки'
     })).toBe(true)
     const dealRoots = app.screens.find(screen => screen.id === app.crm!.dealScreenId)!.rootIds
-    expect(dealRoots.some(id => id === `deal_${app.crm!.noteFieldId}` || id === `deal_${app.crm!.dueFieldId}`)).toBe(false)
+    expect(dealRoots).toEqual(expect.arrayContaining([
+      `deal_${app.crm!.stageFieldId}`,
+      `deal_${app.crm!.sumFieldId}`,
+      `deal_${app.crm!.dueFieldId}`,
+      `deal_${app.crm!.clientRelationFieldId}`,
+    ]))
+    expect(dealRoots).not.toContain(`deal_${app.crm!.noteFieldId}`)
+    expect(save.steps.some(step => {
+      if (step.type !== 'update_row') return false
+      const cleared = step.values[app.crm!.noteFieldId]
+      return cleared?.kind === 'literal' && cleared.value === ''
+    })).toBe(true)
   })
 
   it('keeps crm private and isolates staff deals by assignment', () => {

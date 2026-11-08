@@ -535,13 +535,42 @@ button.recordButton:hover strong { color: var(--v2-accent, #456849); }
 .screenEnter > p { margin: 0; }
 .screenEnter > button { justify-self: start; }
 
-.shopBasket, .shopActions { display: grid; gap: 12px; min-width: 0; }
-.shopBasket { margin-bottom: 20px; }
-.shopBasket h2, .shopLine p, .shopTotal { margin: 0; }
-.shopLine { display: grid; gap: 8px; padding-bottom: 12px; border-bottom: 1px solid var(--v2-line, #dce2d6); }
-.shopLine div, .shopTotal { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
-.shopLine label { display: flex; gap: 8px; align-items: center; color: var(--v2-muted, #5c6658); font-size: 13px; }
-.shopLine input { width: 4.5rem; min-height: 44px; padding: 8px; border: 1px solid var(--v2-line, #dce2d6); border-radius: 8px; font-size: 16px; }
-.shopLine button { min-height: 44px; padding: 0; border: 0; background: transparent; color: var(--v2-muted, #5c6658); }
-.shopTotal { justify-content: space-between; font-weight: 650; }
-.shopActions .primary, .shopBasket .primary { justify-self: start; }
+.shopBasket, .shopActions { display: grid; gap: 14px; min-width: 0; }
+.shopBasket { padding: clamp(16px, 2.4cqw, 22px); border-color: transparent; box-shadow: var(--v2-panel-shadow); }
+.shopLineList { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
+.shopLine { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: start; padding-block: 14px; border-top: 1px solid var(--v2-line); }
+.shopLine:first-child { border-top: 0; padding-top: 0; }
+.shopLineThumb { width: 56px; height: 56px; border-radius: calc(var(--radius-control, 10px) - 2px); overflow: hidden; background: var(--v2-control); flex: none; }
+.shopLineThumb :is(img, picture) { display: block; width: 100%; height: 100%; object-fit: cover; }
+.shopLineCopy { display: grid; gap: 8px; min-width: 0; }
+.shopLineCopy strong { font-size: 15px; font-weight: 700; overflow-wrap: anywhere; }
+.shopLineCopy small { color: var(--v2-muted); font-size: 13px; }
+.shopLineAmount { font-size: 15px; font-weight: 740; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.shopQty { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.shopQty input { width: 3.75rem; min-height: 44px; padding: 8px; border: 1px solid var(--v2-line); border-radius: var(--radius-control, 10px); background: var(--v2-surface); color: var(--v2-ink); font-size: 16px; font-variant-numeric: tabular-nums; text-align: center; }
+.shopQtyButton, .shopRemove { min-width: 44px; min-height: 44px; padding: 0 12px; border: 1px solid var(--v2-line); border-radius: var(--radius-control, 10px); background: var(--v2-control); color: var(--v2-ink); font-size: 16px; font-weight: 650; cursor: pointer; }
+.shopQtyButton:disabled { opacity: 0.45; cursor: not-allowed; }
+.shopRemove { border-color: transparent; background: transparent; color: var(--v2-muted); font-size: 14px; font-weight: 600; }
+.shopActions .primary, .shopBasket .primary, .shopBasket .secondary { justify-self: start; }
+.commerceLayout { display: grid; gap: clamp(14px, 2cqw, 22px); align-items: start; min-width: 0; }
+.commerceCheckout { display: grid; gap: clamp(14px, 2cqw, 22px); min-width: 0; }
+.commerceForm { width: 100%; max-width: none; padding: clamp(16px, 2.4cqw, 22px); border: 0; border-radius: var(--v2-card-radius, 14px); background: var(--v2-surface); box-shadow: var(--v2-panel-shadow); }
+.commerceForm > div { display: grid; gap: 14px; }
+.commerceForm :is(input:not([type="checkbox"]), textarea, select) { min-height: 44px; font-size: 16px; }
+.commerceForm textarea { min-height: 96px; }
+.commerceForm [data-kind="contact"] + [data-kind="delivery"],
+.commerceForm [data-kind="delivery"] + [data-kind="note"] { margin-top: 4px; padding-top: 14px; border-top: 1px solid var(--v2-line); }
+.catalogRows .catalogDetail { color: var(--v2-ink); }
+@container builder-app (min-width: 900px) {
+  .commerceLayout { grid-template-columns: minmax(0, 1.35fr) minmax(17rem, 0.9fr); }
+  .commerceForm > div:has(> [data-kind="contact"] + [data-kind="contact"]) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 16px;
+  }
+  .commerceForm > div > [data-kind="contact"]:nth-child(1),
+  .commerceForm > div > [data-kind="contact"]:nth-child(2) { grid-column: auto; }
+  .commerceForm > div > :not([data-kind="contact"]) { grid-column: 1 / -1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shopQtyButton, .shopRemove, .catalogRows .row:has(button) { transition: none; }
+}

@@ -85,5 +85,25 @@ export const crm: TemplateDef = {
         { key: 'd6', values: { what: 'Обслуживание на второй точке', client: { rowKey: 'vektor' }, stage: 'Новая', sum: 96000, due: inDays(8), owner: 'Сергей' } },
       ],
     },
+    {
+      key: 'contacts',
+      name: 'Контакты по сделкам',
+      icon: 'clipboard',
+      primary: 'summary',
+      fields: [
+        { key: 'summary', name: 'Что обсудили', type: 'long_text', help: 'Короткая запись после разговора. Каждая отправка добавляет строку — прошлые не затираются.' },
+        { key: 'deal', name: 'Сделка', type: 'relation', relationTable: 'deals', allowMultiple: false, help: 'К какой сделке относится этот контакт.' },
+        { key: 'client', name: 'Клиент', type: 'relation', relationTable: 'clients', allowMultiple: false, help: 'Клиент сделки — чтобы история была видна и в его карточке.' },
+        { key: 'loggedAt', name: 'Дата контакта', type: 'date', options: { defaultToday: true }, help: 'Когда состоялся разговор. Для новой записи подставляется сегодня.' },
+        { key: 'nextDue', name: 'Вернуться к разговору', type: 'date', help: 'Какую дату следующего шага зафиксировали в этом контакте.' },
+      ],
+      views: [{ name: 'Все контакты', type: 'grid' }],
+      rows: [
+        { key: 'c1', values: { summary: 'Согласовали спецификацию, ждут счёт у директора.', deal: { rowKey: 'd1' }, client: { rowKey: 'vektor' }, loggedAt: inDays(-4), nextDue: inDays(3) } },
+        { key: 'c2', values: { summary: 'Отправили счёт на 778 000 ₽.', deal: { rowKey: 'd1' }, client: { rowKey: 'vektor' }, loggedAt: inDays(-1), nextDue: inDays(3) } },
+        { key: 'c3', values: { summary: 'Просят разбить обслуживание на два платежа.', deal: { rowKey: 'd2' }, client: { rowKey: 'ogonek' }, loggedAt: inDays(-2), nextDue: inDays(1) } },
+        { key: 'c4', values: { summary: 'Оплатили в день счёта. Спросить про второй объект.', deal: { rowKey: 'd4' }, client: { rowKey: 'sokolov' }, loggedAt: inDays(-6), nextDue: inDays(-6) } },
+      ],
+    },
   ],
 }

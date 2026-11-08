@@ -333,12 +333,21 @@ export function validateAppV2(app: AppV2, catalog: AppV2Catalog, options: { mode
   if (app.crm) {
     const crm = app.crm, path = 'crm'
     table(crm.dealsTableId, path); table(crm.clientsTableId, path)
-    for (const screenId of [crm.boardScreenId, crm.dealScreenId, crm.clientsScreenId, crm.clientScreenId, crm.calendarScreenId]) if (!screens.has(screenId)) issue('crm_screen', path, 'Экран CRM удалён')
+    if (crm.contactsTableId) table(crm.contactsTableId, path)
+    for (const screenId of [crm.boardScreenId, crm.dealScreenId, crm.clientsScreenId, crm.clientScreenId, crm.calendarScreenId, ...(crm.createDealScreenId ? [crm.createDealScreenId] : []), ...(crm.createClientScreenId ? [crm.createClientScreenId] : [])]) if (!screens.has(screenId)) issue('crm_screen', path, 'Экран CRM удалён')
     for (const formId of [crm.createDealFormId, crm.createClientFormId, crm.contactFormId]) if (nodes.get(formId)?.type !== 'form') issue('crm_form', path, 'Форма CRM удалена')
     const deal = (fieldId: string) => field(fieldId, crm.dealsTableId, path)
     const client = (fieldId: string) => field(fieldId, crm.clientsTableId, path)
     for (const fieldId of [crm.titleFieldId, crm.stageFieldId, crm.dueFieldId, crm.noteFieldId, crm.sumFieldId, crm.clientRelationFieldId, crm.assignmentFieldId, crm.clientNameFieldId]) deal(fieldId)
     for (const fieldId of [crm.clientTitleFieldId, crm.clientPhoneFieldId, crm.clientEmailFieldId, crm.clientNoteFieldId]) client(fieldId)
+    if (crm.contactsTableId) {
+      const contact = (fieldId: string | undefined) => { if (fieldId) field(fieldId, crm.contactsTableId!, path) }
+      contact(crm.contactSummaryFieldId); contact(crm.contactLoggedAtFieldId); contact(crm.contactDealFieldId); contact(crm.contactClientFieldId); contact(crm.contactNextDueFieldId)
+      const dealLink = crm.contactDealFieldId ? catalog.fields.get(crm.contactDealFieldId) : undefined
+      if (dealLink && dealLink.relationTableId !== crm.dealsTableId) issue('crm_contact_deal', path, 'Контакт должен ссылаться на сделки')
+      const clientLink = crm.contactClientFieldId ? catalog.fields.get(crm.contactClientFieldId) : undefined
+      if (clientLink && clientLink.relationTableId !== crm.clientsTableId) issue('crm_contact_client', path, 'Контакт должен ссылаться на клиентов')
+    }
     const relation = catalog.fields.get(crm.clientRelationFieldId)
     if (relation && relation.relationTableId !== crm.clientsTableId) issue('crm_client_relation', path, 'Сделка должна ссылаться на клиентов')
     const stage = catalog.fields.get(crm.stageFieldId)

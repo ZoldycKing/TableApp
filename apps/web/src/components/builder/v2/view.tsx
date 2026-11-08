@@ -31,7 +31,7 @@ import { builderV2CardLayout, builderV2CatalogPrice, builderV2FormattedAmount } 
 import presentation from '@/components/runtime/app-presentation.module.css'
 import { BuilderV2CatalogDetail } from './catalog-detail'
 import { ShopAddToBasket, ShopBasketPanel } from './shop-basket'
-import { builderV2ContactHref, isBuilderV2ContactProfile, isBuilderV2ContactTable, isBuilderV2OrderTable } from './record-presentation'
+import { builderV2ContactHref, isBuilderV2BusinessDetail, isBuilderV2ContactProfile, isBuilderV2ContactTable, isBuilderV2OrderTable } from './record-presentation'
 import { RecordFieldLabel } from '@/components/runtime/record-field-label'
 import { BuilderV2OrderHero, BuilderV2RecordAvatar } from './record-visuals'
 import { BuilderV2OrderActionPanel, BuilderV2OrderFacts, BuilderV2OrderIdentity, BuilderV2OrderSummaryCard, BuilderV2ShopOrderLines, builderV2BlankFact, builderV2OrderStatusChoices } from './order-detail'
@@ -54,6 +54,8 @@ export function AppV2Renderer(props: AppV2RendererProps) {
     return !result || (result.ok && result.value)
   }
   const order = props.record && !screen?.catalog && isBuilderV2OrderTable(recordTable) && !props.rootNodeIds
+  const crm = props.app.crm
+  const detail = Boolean(props.record && !screen?.catalog && !props.rootNodeIds && screen && isBuilderV2BusinessDetail(props.app, screen.id, recordTable))
   const composition = order && rootIds.map(id => nodes.get(id)).flatMap(node => {
     if (node?.type !== 'collection' || !visible(node)) return []
     const source = props.app.sources.find(source => source.id === node.sourceId)
@@ -67,8 +69,9 @@ export function AppV2Renderer(props: AppV2RendererProps) {
     setSummary(old => old.key === summaryKey && old.value === page?.orderSummary && old.pending === pending ? old : { key: summaryKey, value: page?.orderSummary, pending })
   }, [summaryKey])
   const summary = summaryKey && summaryState.key === summaryKey ? summaryState.value : undefined
-  const statusColumn = order ? recordTable?.fields.find(builderV2StatusColumn) : undefined
-  const facts = order ? rootIds.flatMap(id => {
+  const statusColumn = order ? recordTable?.fields.find(builderV2StatusColumn)
+    : detail && crm && screen?.id === crm.dealScreenId ? recordTable?.fields.find(field => field.id === crm.stageFieldId) : undefined
+  const facts = detail ? rootIds.flatMap(id => {
     const node = nodes.get(id)
     if (!node || !visible(node)) return []
     return node.type === 'field' ? [node] : node.type === 'columns' ? node.childIds.flatMap(child => {
@@ -77,9 +80,12 @@ export function AppV2Renderer(props: AppV2RendererProps) {
     }) : []
   }) : []
   const statusNode = facts.find(node => 'fieldId' in node.value && node.value.fieldId === statusColumn?.id)
-  const amountColumn = order && !lines && !orderGroup ? recordTable?.fields.find(field =>
-    ['number', 'formula', 'rollup'].includes(field.type) && /^(?:сумма(?: заказа)?|итого|order total|total)(?:\s|[,(_]|$)/iu.test(field.name.trim()) &&
-    !/^(?:сумма (?:позиции|строки))/iu.test(field.name.trim())) : undefined
+  const amountColumn = detail && !lines && !orderGroup ? (
+    crm && screen?.id === crm.dealScreenId ? recordTable?.fields.find(field => field.id === crm.sumFieldId)
+      : recordTable?.fields.find(field =>
+        ['number', 'formula', 'rollup'].includes(field.type) && /^(?:сумма(?: заказа)?|итого|order total|total)(?:\s|[,(_]|$)/iu.test(field.name.trim()) &&
+        !/^(?:сумма (?:позиции|строки))/iu.test(field.name.trim()))
+  ) : undefined
   const amountNode = facts.find(node => 'fieldId' in node.value && node.value.fieldId === amountColumn?.id)
   const rawTotal = amountNode && amountColumn && props.record?.values[amountColumn.id]
   const amount = summary?.amount != null && lines ? builderV2FormattedAmount(summary.amount, lines.amount.name)
@@ -88,10 +94,13 @@ export function AppV2Renderer(props: AppV2RendererProps) {
     ? lines ? summary?.scoped ? undefined : summary?.status?.kind === 'mixed' ? 'Разные статусы позиций' : summary?.status?.label
       : !orderGroup ? cell(props.record, statusColumn.id) : undefined
     : undefined
-  const statusFormId = published ? props.statusFormId : order && !lines && !orderGroup && statusColumn?.type === 'single_select' && !props.editing
+  const statusFormId = published ? props.statusFormId : detail && !lines && !orderGroup && statusColumn?.type === 'single_select' && !props.editing
     ? rootIds.find(id => {
       const form = nodes.get(id)
-      return form?.type === 'form' && form.tableId === recordTable?.id && visible(form) && builderV2StatusForm(props.app, form, props.actor, statusColumn.id)
+      return form?.type === 'form' && form.tableId === recordTable?.id && visible(form) && (
+        order ? builderV2StatusForm(props.app, form, props.actor, statusColumn.id)
+          : crm && form.id === crm.contactFormId
+      )
     }) : undefined
   const resolve = (value: AppV2Binding, record: AppV2Record | undefined): string => {
     const result = resolveAppV2Binding(value, { actor: props.actor, row: record, screenRow: props.record })
@@ -141,7 +150,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
         const facts = node.type === 'columns' && screen?.contextTableId && screen.rootIds.includes(node.id) && children.length > 0 && children.every(id => nodes.get(id)?.type === 'field')
         const items = render(children, record, formTableId,itemId,itemLabel)
         if (facts && !props.editing && !items.some(Boolean)) return null
-        content = <div className={facts ? `${presentation.panel} ${ui.facts}` : node.type === 'columns' ? ui.columns : ui.group} style={node.type === 'columns' ? { '--columns': node.columns } as CSSProperties : undefined} data-plain={node.type === 'group' && node.appearance === 'plain'} data-order-facts={facts && order || undefined}>
+        content = <div className={facts ? `${presentation.panel} ${ui.facts}` : node.type === 'columns' ? ui.columns : ui.group} style={node.type === 'columns' ? { '--columns': node.columns } as CSSProperties : undefined} data-plain={node.type === 'group' && node.appearance === 'plain'} data-order-facts={facts && detail || undefined}>
           {facts && <h2 className={presentation.sectionTitle}>{node.name}</h2>}
           <div className={node.type === 'columns' ? ui.columns : styles.canvasBlocks} style={node.type === 'columns' ? { '--columns': node.columns, gridColumn: '1 / -1' } as CSSProperties : undefined}>{items}</div>
           {props.editing && <button type="button" className={styles.addInside} style={{ gridColumn: '1 / -1' }} onClick={() => props.onAdd?.(node.id)}><ProtoIcon name="plus" />Добавить элемент</button>}
@@ -275,7 +284,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
       {render(blocks)}
     </div>
   }
-  if (order && !props.editing && props.record) {
+  if (detail && !props.editing && props.record) {
     const titleFieldId = screen?.recordTitleFieldId ?? recordTable?.primaryFieldId
     const title = titleFieldId ? cell(props.record, titleFieldId) : screen?.name
     const parts = builderV2OrderDetailParts({
@@ -285,7 +294,8 @@ export function AppV2Renderer(props: AppV2RendererProps) {
     const manage = Boolean(parts.processingFormId)
     const statusValue = statusColumn && props.record.values[statusColumn.id]
     const choices = builderV2OrderStatusChoices(recordTable, statusColumn?.id)
-    const progress = !manage && choices.length ? builderV2StatusProgress(choices, typeof statusValue === 'string' ? statusValue : null, props.app.shop?.terminalStatuses ?? []) : undefined
+    const terminals = props.app.shop?.terminalStatuses ?? crm?.terminalStages ?? []
+    const progress = !manage && choices.length ? builderV2StatusProgress(choices, typeof statusValue === 'string' ? statusValue : null, terminals) : undefined
     const factItems = parts.factIds.flatMap(id => {
       const node = nodes.get(id)
       if (!node || node.type !== 'field' || !visible(node)) return []
@@ -306,21 +316,26 @@ export function AppV2Renderer(props: AppV2RendererProps) {
       : parts.collectionIds.length ? render(parts.collectionIds) : null
     const deliveryFacts = factItems.filter(item => item.kind !== 'reply')
     const replyFacts = factItems.filter(item => item.kind === 'reply')
+    const crmClient = Boolean(crm && screen?.id === crm.clientScreenId)
+    const factsTitle = crm ? (crmClient ? 'О клиенте' : 'Клиент и условия') : 'Клиент и доставка'
+    const sideFactsTitle = crm ? (crmClient ? 'О клиенте' : 'Сделка') : 'Доставка'
+    const actionTitle = crm ? 'Записать контакт' : 'Обработка заказа'
     return <div className={`${styles.canvasBlocks} ${ui.screenBlocks} ${ui.businessDetail} ${ui.orderDetail}`} data-manage={manage || undefined}>
       {!manage && <BuilderV2OrderIdentity title={title || undefined} status={status} amount={undefined} scoped={summary?.scoped} progress={progress} manage={false} />}
       <div className={ui.orderDetailBody}>
         <div className={ui.orderDetailMain}>
           {manage && <BuilderV2OrderIdentity status={status} amount={amount} scoped={summary?.scoped} manage />}
           {linesBlock}
-          {manage && <BuilderV2OrderFacts items={deliveryFacts} title="Клиент и доставка" />}
+          {manage && <BuilderV2OrderFacts items={deliveryFacts} title={factsTitle} />}
           {manage && render([...parts.buttonIds, ...parts.otherIds])}
         </div>
         {manage && parts.processingFormId
-          ? <BuilderV2OrderActionPanel>{render([parts.processingFormId])}</BuilderV2OrderActionPanel>
+          ? <BuilderV2OrderActionPanel title={actionTitle}>{render([parts.processingFormId])}</BuilderV2OrderActionPanel>
           : <div className={ui.orderDetailSide}>
-            <BuilderV2OrderSummaryCard amount={amount} scoped={summary?.scoped} />
-            <BuilderV2OrderFacts items={deliveryFacts} title="Доставка" />
-            <BuilderV2OrderFacts items={replyFacts} title="Сообщение магазина" />
+            {!crm && <BuilderV2OrderSummaryCard amount={amount} scoped={summary?.scoped} />}
+            {crm && amount && <BuilderV2OrderSummaryCard amount={amount} scoped={summary?.scoped} />}
+            <BuilderV2OrderFacts items={deliveryFacts} title={sideFactsTitle} />
+            {!crm && <BuilderV2OrderFacts items={replyFacts} title="Сообщение магазина" />}
             {render([...parts.buttonIds, ...parts.otherIds])}
           </div>}
       </div>

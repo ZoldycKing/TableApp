@@ -10,8 +10,17 @@ export function isBuilderV2OrderTable(table?: BuilderV2Table) {
 }
 
 export function isBuilderV2ContactProfile(app: AppV2, screenId: string, tables: readonly BuilderV2Table[]) {
+  // CRM client/deal cards reuse the shared order-detail composition, not the stacked profile shell.
+  if (app.crm && (screenId === app.crm.clientScreenId || screenId === app.crm.dealScreenId)) return false
   const screen = app.screens.find(screen => screen.id === screenId)
   return Boolean(screen?.recordTitleFieldId && isBuilderV2ContactTable(tables.find(table => table.id === screen.contextTableId)))
+}
+
+/** Record screens that share the shop order-detail layout (orders + CRM deal/client). */
+export function isBuilderV2BusinessDetail(app: AppV2, screenId: string, table?: BuilderV2Table) {
+  if (isBuilderV2OrderTable(table)) return true
+  const crm = app.crm
+  return Boolean(crm && (screenId === crm.dealScreenId || screenId === crm.clientScreenId))
 }
 
 export function builderV2Initials(name: string) {

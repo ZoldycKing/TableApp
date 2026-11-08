@@ -3,9 +3,9 @@ import type { BuilderV2Table } from '@/lib/builder-v2'
 
 export type OrderDetailFactKind = 'contact' | 'delivery' | 'note' | 'reply' | 'other'
 
-const CONTACT = /^(?:имя(?: клиента)?|телефон(?: клиента)?|email|e-mail|почта|клиент|customer|client|phone|name)$/iu
-const DELIVERY = /^(?:адрес(?: доставки| получения)?|дата отгрузки|доставка|address|shipping|delivery)$/iu
-const NOTE = /^(?:комментарий|примечание|comment|note)$/iu
+const CONTACT = /^(?:имя(?: клиента)?|телефон(?: клиента)?|email|e-mail|почта|клиент|customer|client|phone|name|контактное лицо|город)$/iu
+const DELIVERY = /^(?:адрес(?: доставки| получения)?|дата отгрузки|доставка|address|shipping|delivery|вернуться к разговору)$/iu
+const NOTE = /^(?:комментарий|примечание|заметки|что обсудили|comment|note)$/iu
 const REPLY = /^(?:ответ клиенту|сообщение(?: магазина| клиенту)?|reply|response)$/iu
 
 export function builderV2OrderFactKind(label: string): OrderDetailFactKind {

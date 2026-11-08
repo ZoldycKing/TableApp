@@ -50,6 +50,9 @@ describe.skipIf(!process.env.DATABASE_URL)('installed crm v2 deals', () => {
     const clients = await database.db.select().from(database.rows).where(and(eq(database.rows.tableId, crm.clientsTableId), isNull(database.rows.deletedAt)))
     expect(deals.length).toBeGreaterThan(0)
     expect(clients.length).toBeGreaterThan(0)
+    expect(crm.contactsTableId).toBeTruthy()
+    const contactsBefore = await database.db.select().from(database.rows).where(and(eq(database.rows.tableId, crm.contactsTableId!), isNull(database.rows.deletedAt)))
+    expect(contactsBefore.length).toBeGreaterThan(0)
     const deal = deals[0]!
     const stageField = catalog.fields.get(crm.stageFieldId)!
     const nextStage = (await database.db.select().from(database.fields).where(eq(database.fields.id, crm.stageFieldId)))[0]
@@ -69,5 +72,7 @@ describe.skipIf(!process.env.DATABASE_URL)('installed crm v2 deals', () => {
     expect(data[crm.noteFieldId]).toBe(note)
     expect(String(data[crm.dueFieldId])).toContain('2030-05')
     expect(stageField.type).toBe('single_select')
+    const board = read.app.screens.find(screen => screen.id === crm.boardScreenId)!
+    expect(board.rootIds.some(id => read.app.nodes.find(node => node.id === id)?.type === 'form')).toBe(false)
   })
 })

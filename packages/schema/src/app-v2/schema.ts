@@ -111,12 +111,18 @@ export const appV2Schema = z.strictObject({
   /** Explicit CRM bindings for the internal deals starter. Absent outside that install. */
   crm: z.strictObject({
     dealsTableId: id, clientsTableId: id,
+    /** Append-only contact log for new installs only; absent on older drafts without the table. */
+    contactsTableId: id.optional(),
     boardScreenId: id, dealScreenId: id, clientsScreenId: id, clientScreenId: id, calendarScreenId: id,
+    createDealScreenId: id.optional(), createClientScreenId: id.optional(),
     createDealFormId: id, createClientFormId: id, contactFormId: id,
     titleFieldId: id, stageFieldId: id, dueFieldId: id, noteFieldId: id, sumFieldId: id,
     clientRelationFieldId: id, assignmentFieldId: id, clientNameFieldId: id,
     clientTitleFieldId: id, clientPhoneFieldId: id, clientEmailFieldId: id, clientNoteFieldId: id,
+    contactSummaryFieldId: id.optional(), contactLoggedAtFieldId: id.optional(),
+    contactDealFieldId: id.optional(), contactClientFieldId: id.optional(), contactNextDueFieldId: id.optional(),
     initialStage: z.string().min(1).max(80),
+    terminalStages: z.array(z.string().min(1).max(80)).max(20).optional(),
   }).optional(),
 })
 export type AppV2 = z.infer<typeof appV2Schema>

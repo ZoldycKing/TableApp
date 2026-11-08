@@ -1,5 +1,7 @@
 import { apps, rows } from '@tableapp/db'
 import { appSchema, customerWorkflows, dateInstant, type CustomerWorkflow } from '@tableapp/schema'
+import { readAppDefinition } from '@tableapp/schema/app-definition'
+import { shopCustomerWorkflow } from './templates/shop-v2'
 import { and, eq, isNull, ne } from 'drizzle-orm'
 import { RowWriteError, type RowActor, type RowTransaction } from './row-mutations'
 
@@ -9,7 +11,10 @@ export async function prepareCustomerWrite(context: RowTransaction, tableId: str
     const records = await context.tx.select({ draft: apps.draft, published: apps.published }).from(apps).where(eq(apps.workspaceId, context.workspaceId))
     context.customerConfigCache = records.flatMap(record => [record.draft, record.published].flatMap(value => {
       const parsed = appSchema.safeParse(value)
-      return parsed.success ? customerWorkflows(parsed.data) : []
+      const legacy = parsed.success ? customerWorkflows(parsed.data) : []
+      const read = readAppDefinition(value)
+      const shop = read.ok && read.formatVersion === 2 ? shopCustomerWorkflow(read.app) : null
+      return shop ? [...legacy, shop] : legacy
     }))
   }
   const configs = context.customerConfigCache.filter(config => config.tableId === tableId)

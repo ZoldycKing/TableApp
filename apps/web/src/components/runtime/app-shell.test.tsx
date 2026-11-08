@@ -18,8 +18,6 @@ import { projectRuntime } from '@/lib/runtime-project'
 import { visibleScreensFor, visitorFor } from '@/lib/app-roles'
 import { beginGeneralQuestionAction } from '@/app/question-auth-actions'
 import { sendConversationAction } from '@/app/conversation-actions'
-import { InteractiveDemo } from '@/components/marketing/interactive-demo'
-import { loadDemoWorkspace } from '@/lib/demo-runtime'
 import { previewConsumptionAction, saveProductionAction } from '@/app/production-actions'
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }))
@@ -75,36 +73,6 @@ describe('first visit interactive demo', () => {
     ui.rerender(<TemplatePreviewShell initial={next} signedIn={null} />)
     expect(ui.getByRole('heading', { name: 'Сводка' })).toBeTruthy()
     expect(ui.queryByText('Экран не найден')).toBeNull()
-  })
-  it('saves locally, shows the same status to the client and resets without a server write', async () => {
-    const data = loadDemoWorkspace(), status = data.fields.find(field => field.id === data.order.status)!
-    if (status.type !== 'single_select') throw new Error('fixture')
-    const original = data.rows.find(row => row.id === data.order.rowId)!.data[status.id]
-    const ready = status.options.choices.find(choice => choice.name === 'Готов к выдаче')!
-    vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} })
-    const writes = vi.mocked(appUpdateRowAction).mock.calls.length
-    try {
-      const ui = render(<InteractiveDemo data={data} initialRole="staff" device="desktop" deviceChosen roles={[{ id: 'anonymous', name: 'Гость' }, { id: 'staff', name: 'Сотрудник' }, { id: 'client', name: 'Клиент' }]} />)
-      expect(ui.getByText('Мастерская · Экран сотрудника')).toBeTruthy()
-      expect(ui.queryByText('Кабинет клиента')).toBeNull()
-      fireEvent.click(ui.getByRole('button', { name: 'Изменить' }))
-      fireEvent.change(ui.getByRole('combobox', { name: 'Статус' }), { target: { value: ready.id } })
-      fireEvent.click(ui.getByRole('button', { name: 'Сохранить' }))
-      const shared = ui.getByRole('region', { name: 'Общая таблица владельца' })
-      await waitFor(() => expect(within(shared).getByText('Готов к выдаче')).toBeTruthy())
-      fireEvent.click(ui.getByRole('button', { name: 'Посмотреть результат у клиента' }))
-      await waitFor(() => expect(ui.getByRole('link', { name: 'Клиент' }).getAttribute('aria-current')).toBe('page'))
-      expect(ui.getAllByText('Готов к выдаче').length).toBeGreaterThan(1)
-      expect(ui.queryByRole('button', { name: 'Изменить' })).toBeNull()
-      expect(ui.getByText('Мастерская · Кабинет клиента')).toBeTruthy()
-      fireEvent.click(ui.getByRole('button', { name: 'Сбросить демо' }))
-      await waitFor(() => expect(within(shared).queryByText('Готов к выдаче')).toBeNull())
-      expect(data.rows.find(row => row.id === data.order.rowId)!.data[status.id]).toBe(original)
-      expect(vi.mocked(appUpdateRowAction).mock.calls.length).toBe(writes)
-      fireEvent.click(ui.getByRole('link', { name: 'Гость' }))
-      expect(ui.getByText('Мастерская · Для посетителей')).toBeTruthy()
-      expect(ui.queryByText('Кабинет клиента')).toBeNull()
-    } finally { vi.unstubAllGlobals() }
   })
 })
 

@@ -32,7 +32,7 @@ describe('starter choice', () => {
     expect(mocks.apply).toHaveBeenCalledOnce()
     expect(mocks.apply).toHaveBeenCalledWith('zakazy')
     resolve({ ok: true, tableId: 'table-new', appId: 'app-new' })
-    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith('/setup?app=app-new&step=review'))
+    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith('/apps/app-new'))
   })
 
   it('preserves an explicitly selected old portal outside the main choice', () => {

@@ -29,6 +29,7 @@ import type { BuilderBusinessApp, BuilderBusinessLink } from '@/lib/builder-v2-b
 import { builderV2CardLayout, builderV2CatalogPrice, builderV2FormattedAmount } from '@/lib/builder-v2-catalog'
 import presentation from '@/components/runtime/app-presentation.module.css'
 import { BuilderV2CatalogDetail } from './catalog-detail'
+import { ShopAddToBasket, ShopBasketPanel } from './shop-basket'
 import { builderV2ContactHref, isBuilderV2ContactProfile, isBuilderV2ContactTable, isBuilderV2OrderTable } from './record-presentation'
 import { RecordFieldLabel } from '@/components/runtime/record-field-label'
 import { BuilderV2OrderHero, BuilderV2RecordAvatar } from './record-visuals'
@@ -267,11 +268,13 @@ export function AppV2Renderer(props: AppV2RendererProps) {
     return <div className={`${styles.canvasBlocks} ${ui.catalogPage}`}>
       <BuilderV2CatalogDetail catalog={screen.catalog} record={props.record} table={props.tables.find(table => table.id === screen.contextTableId)} slug={published?.slug} editing={props.editing}>
         {attributes.some(Boolean) && <section className={ui.catalogSpecs}><h2>Характеристики</h2><div>{attributes}</div></section>}
+        {!props.editing && props.app.shop?.detailScreenId === screen.id && props.record && <ShopAddToBasket app={props.app} productId={props.record.id} actor={props.actor} />}
       </BuilderV2CatalogDetail>
       {render(blocks)}
     </div>
   }
   return <div className={`${styles.canvasBlocks} ${ui.screenBlocks} ${screen?.contextTableId ? ui.businessDetail : ''}`} data-profile={profile || undefined}>
+    {!props.editing && props.app.shop?.basketScreenId === screen?.id && <ShopBasketPanel app={props.app} tables={props.tables} actor={props.actor} onCheckout={() => document.getElementById('shop-checkout')?.querySelector<HTMLElement>('input,textarea,select')?.focus()} />}
     <BuilderV2OrderHero status={status} amount={amount} scoped={summary?.scoped} loading={Boolean(props.live && summaryKey && (summaryState.key !== summaryKey || summaryState.pending))} editor={statusFormId ? render([statusFormId]) : undefined} />
     {render(statusFormId ? rootIds.filter(id => id !== statusFormId) : rootIds)}
     {!rootIds.length && (props.editing ? <button type="button" className={styles.emptyCanvas} onClick={() => props.onAdd?.(null)}><ProtoIcon name="plus" size={24} /><strong>Добавьте первый элемент</strong><span>Текст, список или форму</span></button> : <p className={styles.empty}>На этом экране пока нет элементов</p>)}

@@ -269,8 +269,14 @@ export function validateAppV2(app: AppV2, catalog: AppV2Catalog, options: { mode
         if (step.type === 'branch') {
           steps(step.then, current, `${ownPath}.then`, depth + 1); steps(step.else, current, `${ownPath}.else`, depth + 1)
           // A result created in one branch is not definitely available after that branch.
-        } else if (step.type === 'create_row' || step.type === 'update_row') {
+        } else if (step.type === 'create_row' || step.type === 'update_row' || step.type === 'place_shop_order') {
           table(step.tableId, ownPath)
+          if (step.type === 'place_shop_order') {
+            if (!app.shop) issue('missing_shop', ownPath, 'Оформление заказа доступно только в установленном магазине')
+            else if (step.tableId !== app.shop.ordersTableId) issue('shop_order_table', ownPath, 'Оформление заказа записывает таблицу заказов')
+            else if (step.values[app.shop.emailFieldId] || step.values[app.shop.statusFieldId] || step.values[app.shop.positionsFieldId]) issue('shop_server_field', ownPath, 'Почту, статус и состав заказа заполняет сервер')
+            else if (step.values[app.shop.cartFieldId]?.kind !== 'form' || step.values[app.shop.submissionFieldId]?.kind !== 'form') issue('shop_cart_binding', ownPath, 'Корзина и ключ оформления берутся из формы')
+          }
           if (step.type === 'update_row' && targetTable(step.target, current, ownPath) !== step.tableId) issue('record_table_mismatch', ownPath, 'Запись относится к другой таблице')
           if (!Object.keys(step.values).length) issue('empty_write', ownPath, 'Укажите значения полей для изменения')
           for (const [id, value] of Object.entries(step.values)) {
@@ -306,6 +312,23 @@ export function validateAppV2(app: AppV2, catalog: AppV2Catalog, options: { mode
       const found = field(value.fieldId, tableId, path)
       if (found && !['text', 'email', 'created_by', 'updated_by'].includes(found.type)) issue('owner_field_type', path, 'Для владельца записи нужно текстовое поле или почта')
     }
+  }
+  if (app.shop) {
+    const shop = app.shop, path = 'shop'
+    table(shop.catalogTableId, path); table(shop.ordersTableId, path); table(shop.itemsTableId, path)
+    if (catalog.views.get(shop.catalogViewId)?.tableId !== shop.catalogTableId) issue('shop_catalog_view', path, 'Витрина магазина ссылается на чужое представление')
+    for (const screenId of [shop.catalogScreenId, shop.detailScreenId, shop.basketScreenId, shop.ordersScreenId, shop.orderScreenId]) if (!screens.has(screenId)) issue('shop_screen', path, 'Экран магазина удалён')
+    if (nodes.get(shop.checkoutFormId)?.type !== 'form') issue('shop_form', path, 'Форма оформления заказа удалена')
+    const product = (fieldId: string, tableId: string) => field(fieldId, tableId, path)
+    product(shop.activeFieldId, shop.catalogTableId); product(shop.productTitleFieldId, shop.catalogTableId); product(shop.priceFieldId, shop.catalogTableId)
+    if (shop.imageFieldId) { const image = product(shop.imageFieldId, shop.catalogTableId); if (image && !['image', 'url'].includes(image.type)) issue('shop_image', path, 'Фото каталога должно быть изображением или ссылкой') }
+    if (shop.descriptionFieldId) product(shop.descriptionFieldId, shop.catalogTableId)
+    for (const fieldId of [shop.emailFieldId, shop.statusFieldId, shop.assignmentFieldId, shop.submissionFieldId, shop.createdFieldId, shop.cartFieldId, shop.positionsFieldId, shop.orderTitleFieldId, shop.addressFieldId]) product(fieldId, shop.ordersTableId)
+    for (const fieldId of [shop.itemNameFieldId, shop.itemQtyFieldId, shop.itemPriceFieldId, shop.itemEmailFieldId, shop.itemAssignmentFieldId, shop.productFieldId]) product(fieldId, shop.itemsTableId)
+    const productRelation = catalog.fields.get(shop.productFieldId)
+    if (productRelation && productRelation.relationTableId !== shop.catalogTableId) issue('shop_product_relation', path, 'Позиция заказа должна ссылаться на каталог')
+    const positions = catalog.fields.get(shop.positionsFieldId)
+    if (positions && positions.relationTableId !== shop.itemsTableId) issue('shop_positions_relation', path, 'Состав заказа должен ссылаться на позиции')
   }
   for (const rule of app.policy.tables) {
     const path = `policy.tables.${rule.tableId}`

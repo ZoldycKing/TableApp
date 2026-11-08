@@ -13,6 +13,7 @@ import ui from './view.module.css'
 import {WorkflowConfirmation} from './workflow-confirmation'
 import type {BuilderV2WorkflowConfirmation} from '@/lib/builder-v2-workflow-types'
 import { BuilderV2WorkflowFeedback } from './workflow-feedback'
+import { clearShopBasket, readShopBasket, shopBasketPayload } from '@/lib/shop-basket'
 import {usePublishedV2} from './published-context'
 import type { BuilderV2WorkflowEffect, BuilderV2WorkflowTrace } from '@/lib/builder-v2-workflow-types'
 
@@ -71,6 +72,7 @@ export function BuilderV2FormPreview({ app, form, screenId, recordId, enabled, e
         const result = published ? await published.submitForm({ ...scope, ...attempt.current }) : await submitBuilderV2FormAction(app.id, { ...scope, ...attempt.current })
         if (version !== generation.current || current.current.key !== key) return
         if (result.ok) {
+          if (app.shop?.checkoutFormId === form.id) clearShopBasket(app.id)
           const notice = published && form.mode === 'edit' && recordId ? editSaveNotice(result.effects) : undefined
           setData({ ...visible, checking: false, success: true, refreshingCard: Boolean(notice), uncertain: false, confirmation:undefined, errors: {}, error: '', effects: notice ? undefined : result.effects, trace: result.trace, requestKey: attempt.current.requestId })
           if (notice) published?.refresh(notice)
@@ -101,7 +103,8 @@ export function BuilderV2FormPreview({ app, form, screenId, recordId, enabled, e
     return parsed.data
   }:undefined
   return <Context.Provider value={{ app, scope, inspect, state: visible.state, values: visible.values, errors: visible.errors, disabled, key:key+':'+refresh,upload,onPending, change: (id, value) => { if (disabled) return; generation.current++; setData(old=>old.key===key?{...old,values:{...old.values,[id]:value},errors:{},error:'',success:false}:old) } }}><form ref={formRef} className={`${styles.formBlock} ${ui.form}`} noValidate onSubmit={event => { event.preventDefault(); void check() }} aria-label={formTitle} aria-busy={!editing && enabled && (visible.loading || visible.checking || pendingCount>0)}>
-    <h3 className={ui.formTitle}>{formTitle}</h3>
+    <h3 className={ui.formTitle} id={app.shop?.checkoutFormId === form.id ? 'shop-checkout' : undefined}>{formTitle}</h3>
+    <ShopCheckoutSync />
     {!editing && enabled && visible.loading && <p role="status" className={ui.hint}>Подготавливаем форму…</p>}
     <div className={styles.canvasBlocks}>{children}</div>
     {!visible.confirmation&&visible.error && <div className={ui.liveData}><p role="alert" className={ui.dataError}>{visible.error}</p>{(!visible.state || visible.stale) && <button type="button" className={styles.textButton} onClick={() => working ? window.location.reload() : setRefresh(value => value + 1)}>Обновить форму</button>}</div>}
@@ -133,8 +136,24 @@ function RelationInput({ context, field, id, errorId }: { context: FormContext; 
   return <div className={ui.relationInput}><input type="search" disabled={context.disabled} value={search} placeholder="Найти запись" aria-label={`Найти: ${field.label}`} onChange={event => setSearch(event.target.value)} /><select id={id} aria-describedby={errorId} aria-invalid={Boolean(errorId)} multiple={field.allowMultiple} disabled={context.disabled} value={field.allowMultiple ? selected : selected[0] ?? ''} onChange={event => context.change(field.fieldId, field.allowMultiple ? Array.from(event.target.selectedOptions).map(option => option.value).filter(Boolean) : event.target.value ? [event.target.value] : [])}>{!field.allowMultiple && <option value="">Выберите запись</option>}{selected.filter(id => !visible.values.some(item => item.id === id)).map(id => <option key={id} value={id}>{known.current.labels.get(id) || (Array.isArray(context.state?.values[field.fieldId]) && (context.state.values[field.fieldId] as string[]).includes(id) ? context.state?.labels[field.fieldId] : '') || 'Выбранная запись'}</option>)}{visible.values.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}</select>{visible.loading && !context.disabled && <span role="status" className={ui.hint}>Загружаем записи…</span>}{visible.error && <><span role="alert" className={ui.dataError}>{visible.error}</span><button type="button" className={styles.textButton} onClick={() => setRefresh(value => value + 1)}>Повторить</button></>}{visible.next && <button type="button" className={styles.textButton} disabled={visible.loading} onClick={() => void more()}>Показать ещё записи</button>}</div>
 }
 
+function ShopCheckoutSync() {
+  const context = useContext(Context)
+  const shop = context?.app.shop
+  const cart = shop ? context.values[shop.cartFieldId] : undefined
+  const token = shop ? context.values[shop.submissionFieldId] : undefined
+  useEffect(() => {
+    if (!context || !shop || context.scope.formId !== shop.checkoutFormId || !context.state || context.disabled) return
+    const basket = readShopBasket(context.app.id)
+    const payload = shopBasketPayload(basket)
+    if (cart !== payload) context.change(shop.cartFieldId, payload)
+    if (token !== basket.requestId) context.change(shop.submissionFieldId, basket.requestId)
+  }, [context, shop, cart, token])
+  return null
+}
+
 export function BuilderV2FormInput({ node, table }: { node: BuilderV2Input; table?: BuilderV2Table }) {
   const context = useContext(Context), published=usePublishedV2(), unique = useId(), field = context?.state?.fields.find(field => field.nodeId === node.id), column = table?.fields.find(field => field.id === node.fieldId)
+  if (context?.app.shop && (node.fieldId === context.app.shop.cartFieldId || node.fieldId === context.app.shop.submissionFieldId)) return null
   const type = field?.type ?? column?.type ?? 'text', value = context?.values[node.fieldId] ?? null, error = context?.errors[node.id], errorId = error ? `${unique}-error` : undefined, disabled = !context || context.disabled || Boolean(node.readOnly), label = node.label || column?.name || 'Поле'
   const common = { id: unique, disabled, 'aria-describedby': errorId, 'aria-invalid': Boolean(error), 'aria-required': node.required, 'aria-label': label }
   const change = (value: AppV2Json) => context?.change(node.fieldId, value)

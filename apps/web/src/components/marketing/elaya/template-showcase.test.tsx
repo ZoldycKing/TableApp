@@ -29,7 +29,7 @@ describe('public template choice', () => {
     fireEvent.click(button); fireEvent.click(button)
     expect(mocks.apply).toHaveBeenCalledExactlyOnceWith('zakazy')
     resolve({ok:true,appId:'new-app'})
-    await waitFor(()=>expect(mocks.push).toHaveBeenCalledWith('/setup?app=new-app&step=review'))
+    await waitFor(()=>expect(mocks.push).toHaveBeenCalledWith('/apps/new-app'))
   })
   it('shows installation failure inline and allows a retry', async () => {
     mocks.apply.mockResolvedValue({ok:false,error:'Не удалось создать приложение'})
@@ -39,6 +39,6 @@ describe('public template choice', () => {
     await waitFor(()=>expect((ui.getByRole('button',{name:'Начать с этого шаблона'}) as HTMLButtonElement).disabled).toBe(false))
     mocks.apply.mockResolvedValue({ok:true,appId:'retry-app'})
     fireEvent.click(ui.getByRole('button',{name:'Начать с этого шаблона'}))
-    await waitFor(()=>expect(mocks.push).toHaveBeenCalledWith('/setup?app=retry-app&step=review'))
+    await waitFor(()=>expect(mocks.push).toHaveBeenCalledWith('/apps/retry-app'))
   })
 })

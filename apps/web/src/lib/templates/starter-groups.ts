@@ -13,6 +13,6 @@ export const STARTER_GROUPS = [
 ] as const
 
 export function installedTemplateHref(templateId: string, appId: string) {
-  const step = templateId === 'zakazy' ? 'review' : 'business'
-  return `/setup?app=${encodeURIComponent(appId)}&step=${step}`
+  if (templateId === 'zakazy') return `/apps/${encodeURIComponent(appId)}`
+  return `/setup?app=${encodeURIComponent(appId)}&step=business`
 }

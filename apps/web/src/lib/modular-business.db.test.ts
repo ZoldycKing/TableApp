@@ -4,6 +4,7 @@ import { resolve } from 'node:path'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { and, eq, inArray } from 'drizzle-orm'
 import { appSchema, customerCartWorkflow, customerWorkflows, instantToWallClock, newId, type App } from '@tableapp/schema'
+import { templateExample } from './templates/presentation'
 
 const envFile = resolve(import.meta.dirname, '../../../../.env')
 if (!process.env.DATABASE_URL && existsSync(envFile)) process.loadEnvFile(envFile)
@@ -348,7 +349,17 @@ describe.skipIf(!process.env.DATABASE_URL)('modular business scenarios in Postgr
     for (const config of customerWorkflows(app).filter(config => config !== app.customer)) expect(other.tables[config.tableId]!.rows).toHaveLength(0)
   }, 15000)
   it('retries a legacy UUID record without changing its identifier or accepting another customer', async () => {
-    const first = await business('zakazy'), app = await definition(first.appId), config = app.customer!
+    const example = templateExample('zakazy'), workspaceId = newId('workspace'); spaces.push(workspaceId)
+    const app = { ...example.app, workspaceId, slug: `legacy-shop-${workspaceId}` }
+    await database.db.insert(database.workspaces).values({ id: workspaceId, ownerId: owner, slug: workspaceId, name: 'Synthetic business', plan: 'business', businessProfile: { name: workspaceId, location: '', phone: '' } })
+    await database.db.insert(database.workspaceMembers).values({ workspaceId, userId: owner, role: 'editor' })
+    await database.db.insert(database.tables).values(example.built.tables.map(table => ({ ...table, workspaceId })))
+    await database.db.insert(database.fields).values(example.fields)
+    await database.db.insert(database.views).values(example.views)
+    await database.db.insert(database.rows).values(example.rows)
+    await database.db.insert(database.apps).values({ id: app.id, workspaceId, name: app.name, slug: app.slug, draft: app, published: app, theme: app.theme, accessMode: app.accessMode, allowlist: app.allowlist, rowAccessRules: app.rowAccessRules, homeScreenId: app.homeScreenId })
+    state.member = { userId: owner, email: ownerEmail, workspaceId, workspaceName: 'Synthetic business', role: 'editor', name: 'Test' }
+    const first = { workspaceId, appId: app.id, slug: app.slug }, config = app.customer!
     expect(await appActions.publishAppAction(first.appId)).toMatchObject({ ok: true })
     const token = randomUUID(), legacyId = `row_${token}`, { writeRows, createRow } = await import('./row-mutations')
     await writeRows(first.workspaceId, context => createRow(context, config.tableId, {

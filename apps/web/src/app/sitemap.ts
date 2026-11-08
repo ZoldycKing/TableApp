@@ -39,6 +39,5 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.7,
     })),
     { url: absolute(PUBLIC_ROUTES.pricing), lastModified: now, changeFrequency: 'monthly', priority: 0.9 },
-    { url: absolute(PUBLIC_ROUTES.demo), lastModified: now, changeFrequency: 'monthly', priority: 0.7 },
   ]
 }

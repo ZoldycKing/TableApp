@@ -48,28 +48,13 @@ describe.skipIf(!process.env.DATABASE_URL)('first launch of every starter in Pos
     const [record] = await database.db.select().from(database.apps).where(eq(database.apps.id, result.appId))
     return { ...result, app: appSchema.parse(record!.draft) }
   }
-  it.each(['salon', 'zakazy', 'service', 'zayavki', 'nedvizhimost', 'dostavka', 'crm', 'sklad', 'proizvodstvo'])('%s starts empty without losing its roles, screens or configuration', async id => {
+  it.each(['salon', 'service', 'zayavki', 'nedvizhimost', 'dostavka', 'crm', 'sklad', 'proizvodstvo'])('%s starts empty without losing its roles, screens or configuration', async id => {
     const installed = await install(id)
     expect(installed.app.allowlist).toContainEqual({ email, roleId: id === 'proizvodstvo' ? 'director' : 'manager', company: '' })
     const creatorRole = installed.app.allowlist.find(entry => entry.email === email)!.roleId
     expect(installed.app.roles.some(role => role.id === creatorRole)).toBe(true)
     expect(visibleScreensFor(installed.app, visitorFor(installed.app, email)).some(screen => screen.tab)).toBe(true)
     const before = await database.db.select().from(database.rows).where(inArray(database.rows.tableId, installed.tableIds))
-    if (id === 'zakazy') {
-      const catalogTableId = installed.app.customer!.catalog!.tableId
-      const products = before.filter(row => row.tableId === catalogTableId)
-      const files = await database.db.select().from(database.attachments).where(eq(database.attachments.tableId, catalogTableId))
-      expect(files).toHaveLength(6)
-      const { getFile } = await import('./storage')
-      for (const file of files) {
-        expect(file).toMatchObject({ referenced: true, state: 'ready', workspaceId, mime: 'image/webp' })
-        const data = products.find(row => row.id === file.rowId)?.data as Record<string, unknown> | undefined
-        expect(data?.[file.fieldId!]).toEqual([expect.objectContaining({ key: file.key })])
-        const stored = await getFile(file.key)
-        expect(stored?.mime).toBe('image/webp')
-        expect((await new Response(stored!.body).arrayBuffer()).byteLength).toBe(file.size)
-      }
-    }
     const state = await prepare.templatePreparation(workspaceId, installed.appId)
     expect(state!.samples).toBe(before.length)
     expect(await actions.clearTemplateSamplesAction(installed.appId)).toEqual({ ok: true })

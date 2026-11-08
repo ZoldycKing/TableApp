@@ -49,17 +49,22 @@ try {
   assert.equal(exported.status, 200)
   const csv = await exported.text()
   assert.ok(csv.includes(first.rows[0].id)); assert.ok(csv.includes('14.03.2026')); assert.ok(!csv.includes('FORGED_SYSTEM_ID'))
-  for (const role of ['anonymous', 'client', 'staff', 'manager']) {
-    const demo = await fetch(`${base}/demo?role=${role}`)
-    assert.equal(demo.status, 200)
-    const html = await demo.text()
-    assert.ok(html.includes('Услуги и цены'))
-    // Use cell values absent from field help text, which mentions example titles.
-    if (role === 'anonymous') assert.ok(!html.includes('Если можно, сохраните данные с диска.'))
-    if (role === 'client' || role === 'staff') assert.ok(html.includes('Если можно, сохраните данные с диска.'))
-    if (role === 'client') assert.ok(!html.includes('Забрать до конца недели, иначе на склад.'))
-    if (role === 'staff') assert.ok(html.includes('Забрать до конца недели, иначе на склад.'))
+  for (const path of ['/demo', '/demo?role=anonymous', '/demo?role=client', '/demo?role=staff', '/demo?role=manager', '/demo/modular', '/demo?mode=personal']) {
+    const demo = await fetch(`${base}${path}`, { redirect: 'manual' })
+    assert.equal(demo.status, 308)
+    const location = new URL(demo.headers.get('location') ?? '', base)
+    assert.equal(location.pathname, '/templates')
+    const body = await demo.text()
+    assert.ok(!body.includes('Если можно, сохраните данные с диска.'))
+    assert.ok(!body.includes('Забрать до конца недели, иначе на склад.'))
+    assert.ok(!body.includes('Услуги и цены'))
   }
+  const templates = await fetch(`${base}/templates`)
+  assert.equal(templates.status, 200)
+  const catalogue = await templates.text()
+  assert.ok(catalogue.includes('Продажа товаров'))
+  assert.ok(!catalogue.includes('Если можно, сохраните данные с диска.'))
+  assert.ok(!catalogue.includes('Забрать до конца недели, иначе на склад.'))
   const denied = await fetch(`${base}/api/sync`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ tableId: id.table, deviceId: 'unknown' }) })
   assert.equal(denied.status, 403)
   const form = new FormData(); form.append('file', new File(['Stage4 real MinIO smoke'], 'smoke.txt', { type: 'text/plain' }))
@@ -83,7 +88,7 @@ try {
   assert.equal(await getFile(uploaded!.key), null)
   uploaded = undefined
   console.log(JSON.stringify({ status: 'passed', http: true, postgres: true, minio: true, rows: 501,
-    checked: ['pagination', 'incremental write', 'system fields', 'date export', 'demo roles', 'access denied', 'role revocation', 'upload/download', 'cleanup', 'quota release'] }))
+    checked: ['pagination', 'incremental write', 'system fields', 'date export', 'demo redirect', 'access denied', 'role revocation', 'upload/download', 'cleanup', 'quota release'] }))
 } finally {
   if (uploaded) {
     await db.update(attachments).set({ state: 'deleting' }).where(eq(attachments.id, uploaded.id))

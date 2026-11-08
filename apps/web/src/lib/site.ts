@@ -30,7 +30,6 @@ export const PUBLIC_ROUTES = {
   solutions: '/solutions',
   templates: '/templates',
   pricing: '/pricing',
-  demo: '/demo',
   privacy: '/legal/privacy',
   terms: '/legal/terms',
   offer: '/legal/offer',
@@ -39,13 +38,14 @@ export const PUBLIC_ROUTES = {
 /**
  * Разделы шапки.
  *
- * Шапка ведёт прямо к возможностям, шаблонам, тарифам и демо.
+ * Шапка ведёт к возможностям, шаблонам и тарифам.
+ * Интерактивные примеры открываются на страницах шаблонов.
  * Подробные объяснения и решения доступны из содержимого и подвала.
  */
 export const NAV_PRODUCT: SiteLink[] = [
   { href: PUBLIC_ROUTES.features, label: 'Возможности', hint: 'Таблицы, формулы, приложения, права' },
   { href: PUBLIC_ROUTES.howItWorks, label: 'Как это работает', hint: 'От своей таблицы к своему приложению' },
-  { href: PUBLIC_ROUTES.demo, label: 'Живое демо', hint: 'Личный и рабочий примеры без регистрации' },
+  { href: PUBLIC_ROUTES.templates, label: 'Шаблоны', hint: 'Интерактивные примеры на учебных данных' },
 ]
 
 export const NAV_SOLUTIONS: SiteLink[] = [
@@ -66,7 +66,6 @@ export const NAV_MAIN: SiteLink[] = [
 export const NAV_HEADER: SiteLink[] = [
   { href: PUBLIC_ROUTES.features, label: 'Возможности' },
   ...NAV_MAIN,
-  { href: PUBLIC_ROUTES.demo, label: 'Демо' },
 ]
 
 /** Подвал: те же адреса, разложенные по смыслу, без повторения всей шапки. */
@@ -77,7 +76,6 @@ export const FOOTER_COLUMNS: { title: string; links: SiteLink[] }[] = [
       { href: PUBLIC_ROUTES.features, label: 'Возможности' },
       { href: PUBLIC_ROUTES.howItWorks, label: 'Как это работает' },
       { href: PUBLIC_ROUTES.pricing, label: 'Тарифы' },
-      { href: PUBLIC_ROUTES.demo, label: 'Живое демо' },
     ],
   },
   {

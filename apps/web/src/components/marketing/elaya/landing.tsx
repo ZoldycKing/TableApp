@@ -62,7 +62,7 @@ export function ElayaLanding({ signedIn, entry, freeRows, startPrice }: { signed
       <section className={styles.benefits} id="dlya-biznesa" aria-labelledby="business-title">
         <Appear className={styles.sectionTop}><div><span className={styles.eyebrow}>Работа с общими данными</span><h2 id="business-title">Команда работает.<br />Данные обновляются.</h2></div><p>Один сотрудник принимает товар, другой смотрит остаток. Все работают с актуальными данными в TableApp.</p></Appear>
         <div className={styles.feature}>
-          <Appear className={styles.featureCopy}><span className={styles.featureNumber}>Общие данные</span><h2>Приняли товар.<br />Остаток уже в таблице.</h2><p>Сотрудник работает с телефона. Вы видите результат в общей таблице TableApp. Переносить записи вручную не нужно.</p><Link href="/demo?mode=business" className={styles.textLink}>Открыть пример для бизнеса<ArrowUpRightIcon size={20} aria-hidden /></Link></Appear>
+          <Appear className={styles.featureCopy}><span className={styles.featureNumber}>Общие данные</span><h2>Приняли товар.<br />Остаток уже в таблице.</h2><p>Сотрудник работает с телефона. Вы видите результат в общей таблице TableApp. Переносить записи вручную не нужно.</p><Link href="/templates/zakazy" className={styles.textLink}>Открыть пример магазина<ArrowUpRightIcon size={20} aria-hidden /></Link></Appear>
           <Appear delay={80}><ReceiptDemo /></Appear>
         </div>
       </section>

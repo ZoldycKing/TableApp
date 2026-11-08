@@ -85,8 +85,9 @@
 .orderProgress li[data-state="done"] { color: var(--v2-accent); }
 .orderLinesPanel, .orderFacts, .orderActionPanel { display: grid; gap: 14px; padding: clamp(16px, 2.4cqw, 22px); min-width: 0; }
 .orderLineList { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
-.orderLineList li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: start; padding-block: 10px; border-top: 1px solid var(--v2-line); }
+.orderLineList li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; padding-block: 10px; border-top: 1px solid var(--v2-line); }
 .orderLineList li:first-child { border-top: 0; padding-top: 0; }
+.orderLineThumb { width: 48px; height: 48px; border-radius: calc(var(--radius-control, 10px) - 2px); object-fit: cover; background: var(--v2-control); flex: none; }
 .orderLineList li > div { display: grid; gap: 4px; min-width: 0; }
 .orderLineList strong { font-size: 15px; font-weight: 700; overflow-wrap: anywhere; }
 .orderLineList small { color: var(--v2-muted); font-size: 13px; }

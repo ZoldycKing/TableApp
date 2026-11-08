@@ -3,11 +3,12 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import type { AppV2, AppV2Record } from '@tableapp/schema/app-v2'
 import { builderV2CatalogPrice, builderV2FormattedAmount } from '@/lib/builder-v2-catalog'
-import { builderV2OrderFactKind, builderV2StatusProgress } from '@/lib/builder-v2-order-detail'
+import { builderV2OrderFactKind, builderV2OrderLineProductId, builderV2StatusProgress } from '@/lib/builder-v2-order-detail'
 import type { BuilderV2DataRecord } from '@/lib/builder-v2-data-types'
 import type { BuilderV2Table } from '@/lib/builder-v2'
 import { ProtoIcon } from '../prototype/icons'
 import presentation from '@/components/runtime/app-presentation.module.css'
+import { builderV2MediaItems } from './media-values'
 import { builderV2StatusTone } from './record-presentation'
 import { usePublishedV2 } from './published-context'
 import ui from './view.module.css'
@@ -66,6 +67,21 @@ export function BuilderV2OrderFacts({
   </section>
 }
 
+export type BuilderV2OrderLine = {
+  id: string
+  name: string
+  qty?: string
+  price?: string
+  lineTotal?: string
+  imageUrl?: string
+}
+
+function BuilderV2OrderLineThumb({ url, alt }: { url: string; alt: string }) {
+  const [failed, setFailed] = useState(false)
+  if (failed) return null
+  return <img className={ui.orderLineThumb} src={url} alt={alt} loading="lazy" decoding="async" onError={() => setFailed(true)} />
+}
+
 export function BuilderV2OrderLinesPanel({
   title = 'Состав заказа',
   lines,
@@ -73,7 +89,7 @@ export function BuilderV2OrderLinesPanel({
   loading = false,
 }: {
   title?: string
-  lines: readonly { id: string; name: string; qty?: string; price?: string; lineTotal?: string }[]
+  lines: readonly BuilderV2OrderLine[]
   total?: string
   loading?: boolean
 }) {
@@ -81,6 +97,7 @@ export function BuilderV2OrderLinesPanel({
     <h2 className={presentation.sectionTitle}>{title}</h2>
     {loading && !lines.length ? <p className={ui.hint}>Загружаем позиции…</p> : !lines.length ? <p className={ui.hint}>Позиций пока нет</p> : <ul className={ui.orderLineList}>
       {lines.map(line => <li key={line.id}>
+        {line.imageUrl ? <BuilderV2OrderLineThumb url={line.imageUrl} alt="" /> : null}
         <div>
           <strong>{line.name}</strong>
           {line.qty && <small>{line.qty}</small>}
@@ -109,7 +126,7 @@ export function BuilderV2ShopOrderLines({
 }) {
   const shop = app.shop
   const published = usePublishedV2()
-  const [lines, setLines] = useState<{ id: string; name: string; qty?: string; price?: string; lineTotal?: string }[]>([])
+  const [lines, setLines] = useState<BuilderV2OrderLine[]>([])
   const [loading, setLoading] = useState(false)
   const ids = shop && Array.isArray(record.values[shop.positionsFieldId])
     ? (record.values[shop.positionsFieldId] as string[]).filter((id): id is string => typeof id === 'string')
@@ -124,7 +141,30 @@ export function BuilderV2ShopOrderLines({
       })
       if (cancelled) return
       if (!result.ok) { setLines([]); setLoading(false); return }
-      setLines(result.rows.map(row => projectShopLine(row, shop)))
+      const projected = result.rows.map(row => projectShopLine(row, shop))
+      const productIds = [...new Set(result.rows.flatMap(row => {
+        const id = builderV2OrderLineProductId(row.values[shop.productFieldId])
+        return id ? [id] : []
+      }))]
+      let images = new Map<string, string>()
+      if (shop.imageFieldId && productIds.length) {
+        const products = await readPublishedV2RelatedRowsAction(published.slug, {
+          revision: published.revision, tableId: shop.catalogTableId, recordIds: productIds,
+        })
+        if (cancelled) return
+        if (products.ok) {
+          images = new Map(products.rows.flatMap(row => {
+            const url = builderV2MediaItems(row.values[shop.imageFieldId!], published.slug).find(item => item.image)?.url
+            return url ? [[row.id, url] as const] : []
+          }))
+        }
+      }
+      if (cancelled) return
+      setLines(projected.map((line, index) => {
+        const productId = builderV2OrderLineProductId(result.rows[index]?.values[shop.productFieldId])
+        const imageUrl = productId ? images.get(productId) : undefined
+        return imageUrl ? { ...line, imageUrl } : line
+      }))
       setLoading(false)
     })
     return () => { cancelled = true }
@@ -133,7 +173,7 @@ export function BuilderV2ShopOrderLines({
   return <BuilderV2OrderLinesPanel lines={lines} total={amount} loading={loading} />
 }
 
-function projectShopLine(row: BuilderV2DataRecord, shop: NonNullable<AppV2['shop']>) {
+function projectShopLine(row: BuilderV2DataRecord, shop: NonNullable<AppV2['shop']>): BuilderV2OrderLine {
   const qty = row.values[shop.itemQtyFieldId]
   const price = row.values[shop.itemPriceFieldId]
   const name = row.display[shop.itemNameFieldId] || String(row.values[shop.itemNameFieldId] ?? 'Товар')

@@ -58,6 +58,20 @@ export function builderV2OrderDetailParts(args: {
   return { factIds, collectionIds, buttonIds, otherIds, positionsNodeId, processingFormId }
 }
 
+/** First related product id from an order-item relation cell (string or string[]). */
+export function builderV2OrderLineProductId(value: unknown): string | undefined {
+  if (typeof value === 'string') {
+    const id = value.trim()
+    return id || undefined
+  }
+  if (!Array.isArray(value)) return undefined
+  for (const item of value) {
+    if (typeof item !== 'string') continue
+    const id = item.trim()
+    if (id) return id
+  }
+}
+
 export function builderV2StatusProgress(choices: readonly { id: string; label: string }[], currentId: string | null | undefined, terminalIds: readonly string[] = []) {
   const active = typeof currentId === 'string' ? currentId : null
   const successTerminal = terminalIds[0]

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { builderV2OrderDetailParts, builderV2OrderFactKind, builderV2StatusProgress } from './builder-v2-order-detail'
+import { builderV2OrderDetailParts, builderV2OrderFactKind, builderV2OrderLineProductId, builderV2StatusProgress } from './builder-v2-order-detail'
 import type { AppV2, AppV2Node } from '@tableapp/schema/app-v2'
 
 describe('builder v2 order detail composition', () => {
@@ -55,5 +55,13 @@ describe('builder v2 order detail composition', () => {
       processingFormId: 'form',
       buttonIds: ['cancel'],
     })
+  })
+
+  it('reads product relation ids for optional line photos and skips blanks', () => {
+    expect(builderV2OrderLineProductId(['row_product'])).toBe('row_product')
+    expect(builderV2OrderLineProductId('row_product')).toBe('row_product')
+    expect(builderV2OrderLineProductId('')).toBeUndefined()
+    expect(builderV2OrderLineProductId([])).toBeUndefined()
+    expect(builderV2OrderLineProductId([null, '  '])).toBeUndefined()
   })
 })

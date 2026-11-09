@@ -159,9 +159,11 @@
   .orderIdentity[data-variant="pipeline"] .orderIdentityMeta { justify-content: flex-end; text-align: end; }
   .orderContactRow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .orderActionPanel:not([data-sheet]), .orderDetailSide { position: sticky; top: 0; align-self: start; }
-  .orderActionDock[data-mode="reveal"] { position: static; bottom: auto; padding: 0; border-radius: 0; background: transparent; box-shadow: none; backdrop-filter: none; }
-  .orderActionPanel[data-sheet] { position: sticky; inset: auto; top: 0; width: min(100%, 28rem); max-height: none; margin-inline: 0; border-radius: var(--v2-card-radius, 12px); justify-self: start; }
-  .orderActionScrim { display: none; }
+  .orderDetail[data-layout="stack"] .orderActionDock[data-mode="reveal"] { position: sticky; bottom: 12px; }
+  .orderDetail:not([data-layout="stack"]) .orderActionDock[data-mode="reveal"] { position: static; bottom: auto; padding: 0; border-radius: 0; background: transparent; box-shadow: none; backdrop-filter: none; }
+  .orderDetail:not([data-layout="stack"]) .orderActionPanel[data-sheet] { position: sticky; inset: auto; top: 0; width: min(100%, 28rem); max-height: none; margin-inline: 0; border-radius: var(--v2-card-radius, 12px); justify-self: start; }
+  .orderDetail:not([data-layout="stack"]) .orderActionScrim { display: none; }
+  .orderDetail[data-layout="stack"] .orderActionPanel[data-sheet] { width: min(100%, 36rem); border-radius: 16px 16px 0 0; }
   .timelineItem { grid-template-columns: minmax(7rem, 9rem) minmax(0, 1fr); }
 }
 @media (max-width: 720px) {

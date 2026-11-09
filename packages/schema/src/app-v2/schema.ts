@@ -71,7 +71,7 @@ export const appV2NodeSchema = z.discriminatedUnion('type', [
   z.strictObject({ ...base, type: z.literal('divider') }),
   z.strictObject({ ...base, type: z.literal('group'), appearance: z.enum(['plain', 'card']).default('plain'), childIds: z.array(id).max(500) }),
   z.strictObject({ ...base, type: z.literal('columns'), columns: z.number().int().min(1).max(4), childIds: z.array(id).max(500) }),
-  z.strictObject({ ...base, type: z.literal('collection'), sourceId: id, layout: z.enum(['list', 'cards', 'tiles', 'catalog', 'table', 'calendar', 'kanban']), listGroupFieldId: id.optional(), recordGroup: z.strictObject({ fieldId: id, amountFieldId: id.optional() }).optional(), dateFieldId:id.optional(),groupFieldId:id.optional(),kanbanMoveRoleIds:z.array(id).min(1).max(100).optional(), titleFieldId: id, subtitleFieldId: id.nullable(), cardImageFieldId: id.optional(), cardDetailFieldId: id.optional(), itemIds: z.array(id).max(100), events: z.strictObject({ itemPress: id.nullable() }) }),
+  z.strictObject({ ...base, type: z.literal('collection'), sourceId: id, layout: z.enum(['list', 'cards', 'tiles', 'catalog', 'table', 'calendar', 'kanban', 'timeline']), listGroupFieldId: id.optional(), recordGroup: z.strictObject({ fieldId: id, amountFieldId: id.optional() }).optional(), dateFieldId:id.optional(),groupFieldId:id.optional(),kanbanMoveRoleIds:z.array(id).min(1).max(100).optional(), titleFieldId: id, subtitleFieldId: id.nullable(), cardImageFieldId: id.optional(), cardDetailFieldId: id.optional(), itemIds: z.array(id).max(100), events: z.strictObject({ itemPress: id.nullable() }) }),
   z.strictObject({ ...base, type: z.literal('chart'), sourceId:id, chartType:z.enum(['bar','line','donut']), groupFieldId:id, operation:z.enum(['count','sum','avg']), fieldId:id.nullable(), dateGrouping:z.enum(['day','month']), limit:z.number().int().min(3).max(24) }),
   z.strictObject({ ...base, type: z.literal('metric'), sourceId: id, operation: z.enum(['count', 'sum', 'avg', 'min', 'max']), fieldId: id.nullable() }),
   z.strictObject({ ...base, type: z.literal('form'), tableId: id, mode: z.enum(['create', 'edit']), childIds: z.array(id).max(500), events: z.strictObject({ submit: id.nullable() }), submitLabel: z.string().min(1).max(100).optional() }),
@@ -116,6 +116,8 @@ export const appV2Schema = z.strictObject({
     boardScreenId: id, dealScreenId: id, clientsScreenId: id, clientScreenId: id, calendarScreenId: id,
     createDealScreenId: id.optional(), createClientScreenId: id.optional(),
     createDealFormId: id, createClientFormId: id, contactFormId: id,
+    /** Compact stage/due/sum editor; absent on older drafts that only had the journal form. */
+    dealEditFormId: id.optional(),
     titleFieldId: id, stageFieldId: id, dueFieldId: id, noteFieldId: id, sumFieldId: id,
     clientRelationFieldId: id, assignmentFieldId: id, clientNameFieldId: id,
     clientTitleFieldId: id, clientPhoneFieldId: id, clientEmailFieldId: id, clientNoteFieldId: id,

@@ -187,6 +187,7 @@ export function validateAppV2(app: AppV2, catalog: AppV2Catalog, options: { mode
         }
         if(node.kanbanMoveRoleIds)for(const id of node.kanbanMoveRoleIds)if(!roles.has(id))issue('missing_role',ownPath,'Выберите существующую роль для смены статуса')
         if(node.layout==='calendar'&&!node.dateFieldId)issue('missing_calendar_field',ownPath,'Выберите поле даты для календаря')
+        if(node.layout==='timeline'&&!node.dateFieldId)issue('missing_timeline_field',ownPath,'Выберите поле даты для ленты')
         if(node.layout==='kanban'&&!node.groupFieldId)issue('missing_board_field',ownPath,'Выберите поле статуса для канбана')
         if (node.subtitleFieldId) field(node.subtitleFieldId, source.tableId, ownPath)
         if (node.cardImageFieldId) {
@@ -335,7 +336,7 @@ export function validateAppV2(app: AppV2, catalog: AppV2Catalog, options: { mode
     table(crm.dealsTableId, path); table(crm.clientsTableId, path)
     if (crm.contactsTableId) table(crm.contactsTableId, path)
     for (const screenId of [crm.boardScreenId, crm.dealScreenId, crm.clientsScreenId, crm.clientScreenId, crm.calendarScreenId, ...(crm.createDealScreenId ? [crm.createDealScreenId] : []), ...(crm.createClientScreenId ? [crm.createClientScreenId] : [])]) if (!screens.has(screenId)) issue('crm_screen', path, 'Экран CRM удалён')
-    for (const formId of [crm.createDealFormId, crm.createClientFormId, crm.contactFormId]) if (nodes.get(formId)?.type !== 'form') issue('crm_form', path, 'Форма CRM удалена')
+    for (const formId of [crm.createDealFormId, crm.createClientFormId, crm.contactFormId, ...(crm.dealEditFormId ? [crm.dealEditFormId] : [])]) if (nodes.get(formId)?.type !== 'form') issue('crm_form', path, 'Форма CRM удалена')
     const deal = (fieldId: string) => field(fieldId, crm.dealsTableId, path)
     const client = (fieldId: string) => field(fieldId, crm.clientsTableId, path)
     for (const fieldId of [crm.titleFieldId, crm.stageFieldId, crm.dueFieldId, crm.noteFieldId, crm.sumFieldId, crm.clientRelationFieldId, crm.assignmentFieldId, crm.clientNameFieldId]) deal(fieldId)

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { builderV2OrderDetailParts, builderV2OrderFactKind, builderV2OrderLineProductId, builderV2StatusProgress } from './builder-v2-order-detail'
+import { builderV2DueTone, builderV2OrderDetailParts, builderV2OrderFactKind, builderV2OrderLineProductId, builderV2StatusProgress } from './builder-v2-order-detail'
 import type { AppV2, AppV2Node } from '@tableapp/schema/app-v2'
 
 describe('builder v2 order detail composition', () => {
@@ -63,5 +63,39 @@ describe('builder v2 order detail composition', () => {
     expect(builderV2OrderLineProductId('')).toBeUndefined()
     expect(builderV2OrderLineProductId([])).toBeUndefined()
     expect(builderV2OrderLineProductId([null, '  '])).toBeUndefined()
+  })
+
+  it('marks overdue and today due dates from calendar days', () => {
+    const now = new Date('2026-11-09T12:00:00')
+    expect(builderV2DueTone('2026-11-08', now)).toBe('overdue')
+    expect(builderV2DueTone('2026-11-09T18:00:00', now)).toBe('today')
+    expect(builderV2DueTone('2026-11-10', now)).toBeUndefined()
+  })
+
+  it('parks both journal and pencil edit forms outside facts', () => {
+    const nodes = new Map<string, AppV2Node>([
+      ['client', { id: 'client', name: 'Клиент', type: 'field', label: 'Клиент', visibleTo: null, visibleWhen: null, value: { kind: 'row', fieldId: 'fld_client' } }],
+      ['due', { id: 'due', name: 'Срок', type: 'field', label: 'Вернуться к разговору', visibleTo: null, visibleWhen: null, value: { kind: 'row', fieldId: 'fld_due' } }],
+      ['stage', { id: 'stage', name: 'Этап', type: 'field', label: 'Этап', visibleTo: null, visibleWhen: null, value: { kind: 'row', fieldId: 'fld_stage' } }],
+      ['sum', { id: 'sum', name: 'Сумма', type: 'field', label: 'Сумма, ₽', visibleTo: null, visibleWhen: null, value: { kind: 'row', fieldId: 'fld_sum' } }],
+      ['journal', { id: 'journal', name: 'Добавить запись', type: 'form', visibleTo: null, visibleWhen: null, tableId: 'tbl_deals', mode: 'edit', childIds: [], events: { submit: 'act_log' }, submitLabel: 'Сохранить запись' }],
+      ['edit', { id: 'edit', name: 'Изменить сделку', type: 'form', visibleTo: null, visibleWhen: null, tableId: 'tbl_deals', mode: 'edit', childIds: [], events: { submit: 'act_edit' }, submitLabel: 'Сохранить' }],
+    ])
+    const parts = builderV2OrderDetailParts({
+      app: { nodes: [...nodes.values()] } as AppV2,
+      rootIds: ['client', 'due', 'stage', 'sum', 'journal', 'edit'],
+      nodes,
+      recordTable: { id: 'tbl_deals', name: 'Сделки', primaryFieldId: null, fields: [], views: [] },
+      statusFieldId: 'fld_stage',
+      amountFieldId: 'fld_sum',
+      dueFieldId: 'fld_due',
+      statusFormId: 'journal',
+      editFormId: 'edit',
+    })
+    expect(parts).toMatchObject({
+      factIds: ['client'],
+      processingFormId: 'journal',
+      editFormId: 'edit',
+    })
   })
 })

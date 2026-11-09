@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { FieldType } from '@tableapp/schema'
-import { canInvokeAppV2Workflow, canOpenAppV2Screen, projectAppV2Row, validateAppV2, type AppV2Actor, type AppV2Catalog } from '@tableapp/schema/app-v2'
+import { authorizeAppV2Write, canInvokeAppV2Workflow, canOpenAppV2Screen, projectAppV2Row, validateAppV2, type AppV2Actor, type AppV2Catalog } from '@tableapp/schema/app-v2'
 import { buildTemplate } from './build'
 import { findTemplate } from './catalog'
 import { buildCrmV2App, isCrmTemplate } from './crm-v2'
@@ -56,14 +56,27 @@ describe('crm template v2 installation', () => {
     expect(contact).toMatchObject({ type: 'form', mode: 'edit', name: 'Добавить запись', submitLabel: 'Сохранить запись' })
     const noteInput = contact && contact.type === 'form' ? app.nodes.find(node => node.type === 'input' && contact.childIds.includes(node.id) && node.fieldId === app.crm!.noteFieldId) : undefined
     expect(noteInput).toMatchObject({ label: 'Новая запись', initialValue: { kind: 'literal', value: '' } })
+    expect(contact && contact.type === 'form' ? contact.childIds.every(id => {
+      const input = app.nodes.find(node => node.id === id)
+      return input?.type === 'input' && (input.fieldId === app.crm!.noteFieldId || input.fieldId === app.crm!.dueFieldId)
+    }) : false).toBe(true)
+    const edit = app.nodes.find(node => node.type === 'form' && node.id === app.crm!.dealEditFormId)
+    expect(edit).toMatchObject({ type: 'form', mode: 'edit', name: 'Изменить сделку', submitLabel: 'Сохранить' })
+    expect(edit && edit.type === 'form' ? edit.childIds.map(id => {
+      const input = app.nodes.find(node => node.id === id)
+      return input?.type === 'input' ? input.fieldId : null
+    }) : []).toEqual([app.crm!.stageFieldId, app.crm!.dueFieldId, app.crm!.sumFieldId])
     const save = app.workflows.find(flow => flow.id === (contact && contact.type === 'form' ? contact.events.submit : null))!
     expect(save.steps.some(step => step.type === 'create_row' && step.tableId === app.crm!.contactsTableId)).toBe(true)
     expect(save.steps.some(step => step.type === 'update_row' && step.tableId === app.crm!.dealsTableId)).toBe(true)
     expect(save.steps.some(step => step.type === 'notify' && step.message.kind === 'literal' && String(step.message.value).includes('историю общения'))).toBe(true)
-    expect(app.nodes.filter(node => node.type === 'collection' && node.name === 'История общения')).toHaveLength(2)
+    const saveEdit = app.workflows.find(flow => flow.id === (edit && edit.type === 'form' ? edit.events.submit : null))!
+    expect(saveEdit.steps.some(step => step.type === 'create_row')).toBe(false)
+    expect(saveEdit.steps.some(step => step.type === 'update_row' && step.tableId === app.crm!.dealsTableId)).toBe(true)
+    expect(app.nodes.filter(node => node.type === 'collection' && node.name === 'История общения' && node.layout === 'timeline')).toHaveLength(2)
     expect(app.screens.find(screen => screen.id === app.crm!.clientScreenId)!.rootIds.some(id => {
       const node = app.nodes.find(item => item.id === id)
-      return node?.type === 'collection' && node.name === 'Сделки'
+      return node?.type === 'collection' && node.name === 'Сделки' && node.subtitleFieldId === app.crm!.stageFieldId
     })).toBe(true)
     const dealRoots = app.screens.find(screen => screen.id === app.crm!.dealScreenId)!.rootIds
     expect(dealRoots).toEqual(expect.arrayContaining([
@@ -71,6 +84,8 @@ describe('crm template v2 installation', () => {
       `deal_${app.crm!.sumFieldId}`,
       `deal_${app.crm!.dueFieldId}`,
       `deal_${app.crm!.clientRelationFieldId}`,
+      app.crm!.dealEditFormId,
+      app.crm!.contactFormId,
     ]))
     expect(dealRoots).not.toContain(`deal_${app.crm!.noteFieldId}`)
     expect(save.steps.some(step => {
@@ -103,6 +118,20 @@ describe('crm template v2 installation', () => {
     if (contact?.type !== 'form' || !contact.events.submit) throw new Error('missing contact form')
     expect(canInvokeAppV2Workflow(app, staff, contact.events.submit)).toBe(true)
     expect(canInvokeAppV2Workflow(app, guest, contact.events.submit)).toBe(false)
+    const edit = app.nodes.find(node => node.type === 'form' && node.id === crm.dealEditFormId)
+    if (edit?.type !== 'form' || !edit.events.submit) throw new Error('missing deal edit form')
+    expect(canInvokeAppV2Workflow(app, staff, edit.events.submit)).toBe(true)
+    expect(canInvokeAppV2Workflow(app, owner, edit.events.submit)).toBe(true)
+    expect(canInvokeAppV2Workflow(app, guest, edit.events.submit)).toBe(false)
+    const patch = { [crm.stageFieldId]: crm.initialStage, [crm.dueFieldId]: '2030-01-15', [crm.sumFieldId]: 1000 }
+    expect(authorizeAppV2Write(app, staff, { operation: 'update', row: record, values: patch }).ok).toBe(true)
+    expect(authorizeAppV2Write(app, stranger, { operation: 'update', row: record, values: patch }).ok).toBe(false)
+    expect(authorizeAppV2Write(app, owner, { operation: 'update', row: other, values: patch }).ok).toBe(true)
+    expect(authorizeAppV2Write(app, staff, { operation: 'update', row: other, values: patch }).ok).toBe(false)
+    expect(authorizeAppV2Write(app, guest, { operation: 'update', row: record, values: patch }).ok).toBe(false)
+    expect(authorizeAppV2Write(app, staff, {
+      operation: 'update', row: record, values: { ...patch, [crm.assignmentFieldId]: 'hijack@example.invalid' },
+    })).toMatchObject({ ok: false })
     const save = app.workflows.find(flow => flow.id === contact.events.submit)!
     const log = save.steps.find(step => step.type === 'create_row' && step.tableId === crm.contactsTableId)
     if (!log || log.type !== 'create_row') throw new Error('missing contact log step')

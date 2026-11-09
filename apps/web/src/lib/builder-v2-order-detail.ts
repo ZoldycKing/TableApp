@@ -24,25 +24,29 @@ export function builderV2OrderDetailParts(args: {
   recordTable?: BuilderV2Table
   statusFieldId?: string
   amountFieldId?: string
+  dueFieldId?: string
   positionsFieldId?: string
   statusFormId?: string
+  editFormId?: string
 }) {
   const fieldIds: string[] = []
   const collectionIds: string[] = []
   const buttonIds: string[] = []
   const otherIds: string[] = []
   let processingFormId = args.statusFormId
+  const editFormId = args.editFormId
   for (const id of args.rootIds) {
     const node = args.nodes.get(id)
     if (!node) continue
     if (processingFormId && id === processingFormId) continue
+    if (editFormId && id === editFormId) continue
     if (node.type === 'form' && !processingFormId && node.tableId === args.recordTable?.id) {
       processingFormId = id
       continue
     }
     if (node.type === 'field') {
       const fieldId = 'fieldId' in node.value ? node.value.fieldId : undefined
-      if (fieldId && (fieldId === args.statusFieldId || fieldId === args.amountFieldId)) continue
+      if (fieldId && (fieldId === args.statusFieldId || fieldId === args.amountFieldId || fieldId === args.dueFieldId)) continue
       fieldIds.push(id)
       continue
     }
@@ -55,7 +59,17 @@ export function builderV2OrderDetailParts(args: {
     return node?.type === 'field' && 'fieldId' in node.value && node.value.fieldId === args.positionsFieldId
   })
   const factIds = fieldIds.filter(id => id !== positionsNodeId)
-  return { factIds, collectionIds, buttonIds, otherIds, positionsNodeId, processingFormId }
+  return { factIds, collectionIds, buttonIds, otherIds, positionsNodeId, processingFormId, editFormId }
+}
+
+/** Cheap calendar-day comparison for due chips (YYYY-MM-DD or ISO datetime). */
+export function builderV2DueTone(value: unknown, now = new Date()): 'overdue' | 'today' | undefined {
+  if (typeof value !== 'string') return
+  const day = value.match(/^(\d{4}-\d{2}-\d{2})/)?.[1]
+  if (!day) return
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  if (day < today) return 'overdue'
+  if (day === today) return 'today'
 }
 
 /** First related product id from an order-item relation cell (string or string[]). */

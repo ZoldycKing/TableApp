@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState, useTransition } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { BusinessProfile } from '@tableapp/schema'
 import { saveBusinessProfileAction } from '@/app/business-actions'
@@ -12,7 +12,9 @@ export function BusinessSettings({ profile, canEdit = true, nextHref, setup = fa
   const [value, setValue] = useState(profile ?? emptyProfile)
   const [saved, setSaved] = useState(profile ?? emptyProfile)
   const [message, setMessage] = useState<{ kind: 'error' | 'success'; text: string } | null>(null)
-  const [pending, startTransition] = useTransition()
+  // Explicit busy flag: useTransition pending can lag behind an error alert and leave
+  // the form stuck on «Сохраняем…» / disabled, so the user cannot retry.
+  const [pending, setPending] = useState(false)
   const saving = useRef(false)
   const dirty = canEdit && profileKey(value) !== profileKey(saved)
   const dirtyRef = useRef(dirty)
@@ -73,9 +75,10 @@ export function BusinessSettings({ profile, canEdit = true, nextHref, setup = fa
     if (!canEdit || saving.current) return
     if (!dirty) { if (nextHref && saved.name.trim()) router.push(nextHref); return }
     saving.current = true
+    setPending(true)
     setMessage(null)
     const snapshot = { name: value.name.trim(), location: value.location.trim(), phone: value.phone.trim() }
-    startTransition(async () => {
+    void (async () => {
       try {
         const result = await saveBusinessProfileAction(snapshot)
         if (!result.ok) {
@@ -92,8 +95,9 @@ export function BusinessSettings({ profile, canEdit = true, nextHref, setup = fa
         setMessage({ kind: 'error', text: 'Не удалось сохранить данные компании. Проверьте соединение и повторите попытку. Введённые данные остались в форме.' })
       } finally {
         saving.current = false
+        setPending(false)
       }
-    })
+    })()
   }}>
     {!setup ? <><h2 className="text-sm font-semibold">Данные компании</h2><p className="text-xs text-ink-muted">Название и контакты видны пользователям приложений этого пространства. После сохранения изменения появятся во всех приложениях.</p></> : null}
     {!canEdit ? <p className="text-xs text-ink-muted">Изменить данные может владелец или редактор рабочего пространства.</p> : null}

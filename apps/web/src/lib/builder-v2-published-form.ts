@@ -35,7 +35,15 @@ export async function inspectPublishedV2Form(current:Awaited<ReturnType<typeof p
     if(fields.some(field=>!readable.has(field.id)))throw new RowWriteError('denied','Одно из полей формы недоступно для чтения')
   }
   const context:AppV2Context={actor,row:selected?.record,screenRow:selected?.record},initial:Record<string,unknown>={}
-  for(const input of inputs){const field=fields.find(field=>field.id===input.fieldId)!;if(form.mode==='edit')initial[field.id]=selected?.record.values[field.id]??emptyValue(field.type);else if(input.initialValue){const value=resolveAppV2Binding(input.initialValue,context);if(!value.ok)throw new RowWriteError('denied','Начальное значение поля недоступно');initial[field.id]=value.value}else initial[field.id]=emptyValue(field.type)}
+  for(const input of inputs){
+    const field=fields.find(field=>field.id===input.fieldId)!
+    if(input.initialValue){
+      const value=resolveAppV2Binding(input.initialValue,context)
+      if(!value.ok)throw new RowWriteError('denied','Начальное значение поля недоступно')
+      initial[field.id]=value.value
+    }else if(form.mode==='edit')initial[field.id]=selected?.record.values[field.id]??emptyValue(field.type)
+    else initial[field.id]=emptyValue(field.type)
+  }
   const now=new Date(),defaults=await withInitialValues(fields,initial,async(tableId,rowId,fieldId)=>{const loaded=await publishedV2Row(meta,app,actor,tableId,rowId);const value=loaded.record.values[fieldId];return typeof value==='number'?value:undefined},{creating:form.mode==='create',now})
   const fingerprint=builderV2Revision([revision,actor,screen.id,form,inputs,fields,selected?.stored.version??null,request.recordId??null])
   if(request.mode==='options'){

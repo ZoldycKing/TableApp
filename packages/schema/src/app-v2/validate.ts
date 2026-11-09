@@ -187,6 +187,7 @@ export function validateAppV2(app: AppV2, catalog: AppV2Catalog, options: { mode
         }
         if(node.kanbanMoveRoleIds)for(const id of node.kanbanMoveRoleIds)if(!roles.has(id))issue('missing_role',ownPath,'Выберите существующую роль для смены статуса')
         if(node.layout==='calendar'&&!node.dateFieldId)issue('missing_calendar_field',ownPath,'Выберите поле даты для календаря')
+        if(node.layout==='timeline'&&!node.dateFieldId)issue('missing_timeline_field',ownPath,'Выберите поле даты для ленты')
         if(node.layout==='kanban'&&!node.groupFieldId)issue('missing_board_field',ownPath,'Выберите поле статуса для канбана')
         if (node.subtitleFieldId) field(node.subtitleFieldId, source.tableId, ownPath)
         if (node.cardImageFieldId) {
@@ -329,6 +330,29 @@ export function validateAppV2(app: AppV2, catalog: AppV2Catalog, options: { mode
     if (productRelation && productRelation.relationTableId !== shop.catalogTableId) issue('shop_product_relation', path, 'Позиция заказа должна ссылаться на каталог')
     const positions = catalog.fields.get(shop.positionsFieldId)
     if (positions && positions.relationTableId !== shop.itemsTableId) issue('shop_positions_relation', path, 'Состав заказа должен ссылаться на позиции')
+  }
+  if (app.crm) {
+    const crm = app.crm, path = 'crm'
+    table(crm.dealsTableId, path); table(crm.clientsTableId, path)
+    if (crm.contactsTableId) table(crm.contactsTableId, path)
+    for (const screenId of [crm.boardScreenId, crm.dealScreenId, crm.clientsScreenId, crm.clientScreenId, crm.calendarScreenId, ...(crm.createDealScreenId ? [crm.createDealScreenId] : []), ...(crm.createClientScreenId ? [crm.createClientScreenId] : [])]) if (!screens.has(screenId)) issue('crm_screen', path, 'Экран CRM удалён')
+    for (const formId of [crm.createDealFormId, crm.createClientFormId, crm.contactFormId, ...(crm.dealEditFormId ? [crm.dealEditFormId] : [])]) if (nodes.get(formId)?.type !== 'form') issue('crm_form', path, 'Форма CRM удалена')
+    const deal = (fieldId: string) => field(fieldId, crm.dealsTableId, path)
+    const client = (fieldId: string) => field(fieldId, crm.clientsTableId, path)
+    for (const fieldId of [crm.titleFieldId, crm.stageFieldId, crm.dueFieldId, crm.noteFieldId, crm.sumFieldId, crm.clientRelationFieldId, crm.assignmentFieldId, crm.clientNameFieldId]) deal(fieldId)
+    for (const fieldId of [crm.clientTitleFieldId, crm.clientPhoneFieldId, crm.clientEmailFieldId, crm.clientNoteFieldId]) client(fieldId)
+    if (crm.contactsTableId) {
+      const contact = (fieldId: string | undefined) => { if (fieldId) field(fieldId, crm.contactsTableId!, path) }
+      contact(crm.contactSummaryFieldId); contact(crm.contactLoggedAtFieldId); contact(crm.contactDealFieldId); contact(crm.contactClientFieldId); contact(crm.contactNextDueFieldId)
+      const dealLink = crm.contactDealFieldId ? catalog.fields.get(crm.contactDealFieldId) : undefined
+      if (dealLink && dealLink.relationTableId !== crm.dealsTableId) issue('crm_contact_deal', path, 'Контакт должен ссылаться на сделки')
+      const clientLink = crm.contactClientFieldId ? catalog.fields.get(crm.contactClientFieldId) : undefined
+      if (clientLink && clientLink.relationTableId !== crm.clientsTableId) issue('crm_contact_client', path, 'Контакт должен ссылаться на клиентов')
+    }
+    const relation = catalog.fields.get(crm.clientRelationFieldId)
+    if (relation && relation.relationTableId !== crm.clientsTableId) issue('crm_client_relation', path, 'Сделка должна ссылаться на клиентов')
+    const stage = catalog.fields.get(crm.stageFieldId)
+    if (stage && stage.type !== 'single_select') issue('crm_stage_type', path, 'Этап сделки должен быть одиночным выбором')
   }
   for (const rule of app.policy.tables) {
     const path = `policy.tables.${rule.tableId}`

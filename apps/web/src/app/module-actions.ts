@@ -218,7 +218,10 @@ export async function setPrimaryClientAppAction(appId: string) {
     await writeRows(auth.member.workspaceId, async context => {
       const [record] = await context.tx.select().from(apps).where(and(eq(apps.id, appId), eq(apps.workspaceId, context.workspaceId))).for('update')
       if (!record) throw new RowWriteError('invalid', 'Выберите приложение с клиентским сценарием')
-      const candidate = ownedApp(record)
+      // Builder v2 drafts (shop/CRM) are not legacy client cabinets.
+      const parsed = appSchema.safeParse(record.draft)
+      if (!parsed.success) throw new RowWriteError('invalid', 'Выберите приложение с клиентским сценарием')
+      const candidate = { ...parsed.data, id: record.id, workspaceId: record.workspaceId, slug: record.slug }
       if (!(candidate.booking || candidate.customer) || !candidate.screens.some(screen => screen.access.public || screen.access.roles.includes('client'))) throw new RowWriteError('invalid', 'Выберите приложение с клиентским сценарием')
       await context.tx.insert(workspaceClientApps).values({ workspaceId: context.workspaceId, appId })
         .onConflictDoUpdate({ target: workspaceClientApps.workspaceId, set: { appId } })

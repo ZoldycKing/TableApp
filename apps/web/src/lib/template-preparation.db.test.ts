@@ -48,7 +48,7 @@ describe.skipIf(!process.env.DATABASE_URL)('first launch of every starter in Pos
     const [record] = await database.db.select().from(database.apps).where(eq(database.apps.id, result.appId))
     return { ...result, app: appSchema.parse(record!.draft) }
   }
-  it.each(['salon', 'service', 'zayavki', 'nedvizhimost', 'dostavka', 'crm', 'sklad', 'proizvodstvo'])('%s starts empty without losing its roles, screens or configuration', async id => {
+  it.each(['salon', 'service', 'zayavki', 'nedvizhimost', 'dostavka', 'sklad', 'proizvodstvo'])('%s starts empty without losing its roles, screens or configuration', async id => {
     const installed = await install(id)
     expect(installed.app.allowlist).toContainEqual({ email, roleId: id === 'proizvodstvo' ? 'director' : 'manager', company: '' })
     const creatorRole = installed.app.allowlist.find(entry => entry.email === email)!.roleId
@@ -64,19 +64,6 @@ describe.skipIf(!process.env.DATABASE_URL)('first launch of every starter in Pos
     expect(appSchema.parse(after!.draft)).toEqual(installed.app)
     expect(after!.published).toBeNull()
     expect(await actions.clearTemplateSamplesAction(installed.appId)).toEqual({ ok: true })
-  })
-  it('retains a client, its deals and an incoming real reference while removing unrelated examples', async () => {
-    const installed = await install('crm'), { db, rows } = database
-    const clientsId = installed.app.customer!.crm!.clientsTableId
-    const [client] = await db.select().from(rows).where(eq(rows.tableId, clientsId)).limit(1)
-    await db.update(rows).set({ sample: false }).where(eq(rows.id, client!.id))
-    const state = await prepare.templatePreparation(workspaceId, installed.appId)
-    expect(state!.samples).toBeGreaterThan(0)
-    expect(state!.removable.some(row => row.id === client!.id)).toBe(false)
-    expect(await actions.clearTemplateSamplesAction(installed.appId)).toEqual({ ok: true })
-    const remaining = await db.select().from(rows).where(and(inArray(rows.tableId, installed.tableIds), isNull(rows.deletedAt)))
-    expect(remaining.some(row => row.id === client!.id)).toBe(true)
-    expect(remaining.some(row => row.tableId === installed.app.customer!.tableId)).toBe(true)
   })
   it('protects source data referenced by a real row outside the app and never touches another installation', async () => {
     const installed = await install('salon'), { db, tables, fields, rows } = database

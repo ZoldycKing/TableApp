@@ -4,7 +4,10 @@ import { resolve } from 'node:path'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { and, eq, inArray } from 'drizzle-orm'
 import { appSchema, customerCartWorkflow, customerWorkflows, instantToWallClock, newId, type App } from '@tableapp/schema'
+import { readAppDefinition } from '@tableapp/schema/app-definition'
 import { templateExample } from './templates/presentation'
+import { builderV2Revision } from './builder-v2-revision'
+import { writeRows, createRow } from './row-mutations'
 
 const envFile = resolve(import.meta.dirname, '../../../../.env')
 if (!process.env.DATABASE_URL && existsSync(envFile)) process.loadEnvFile(envFile)
@@ -61,28 +64,37 @@ describe.skipIf(!process.env.DATABASE_URL)('modular business scenarios in Postgr
   })
   it('publishes CRM as an internal workflow without selecting it as the customer app', async () => {
     const first = await business('crm')
-    expect(await appActions.publishAppAction(first.appId)).toMatchObject({ ok: true })
+    const [record] = await database.db.select().from(database.apps).where(eq(database.apps.id, first.appId))
+    const read = readAppDefinition(record!.draft)
+    if (!read.ok || read.formatVersion !== 2 || !read.app.crm) throw new Error('CRM draft is not builder v2')
+    const crm = read.app.crm
+    const publish = await import('@/app/builder-v2-publish-actions')
+    expect(await publish.publishBuilderV2Action(first.appId, builderV2Revision(read.app))).toMatchObject({ ok: true })
     expect(await moduleActions.setPrimaryClientAppAction(first.appId)).toMatchObject({ ok: false })
-    const app = await definition(first.appId)
-    expect(app.allowlist).toContainEqual({ email: ownerEmail, roleId: 'manager', company: '' })
-    const { canEnter, ANONYMOUS, asRole } = await import('./app-roles')
-    expect(canEnter(app, ANONYMOUS)).toBe(false)
-    expect(canEnter(app, asRole('client', clientEmail))).toBe(false)
-    expect(canEnter(app, asRole('manager', ownerEmail))).toBe(true)
-    await session(ownerEmail)
-    const runtimeActions = await import('@/app/runtime-actions'), config = app.customer!, crm = config.crm!
-    const createdClient = await runtimeActions.appCreateRowAction(first.slug, crm.clientsTableId, {
-      [crm.nameFieldId]: 'Synthetic CRM contact', [crm.emailFieldId]: 'crm-contact@example.invalid', [crm.phoneFieldId]: '+79000002102',
+    expect(read.app.authentication.members).toContainEqual({ email: ownerEmail, roleIds: ['owner'], company: '' })
+    const { canOpenAppV2Screen, projectAppV2Row } = await import('@tableapp/schema/app-v2')
+    type AppV2Actor = import('@tableapp/schema/app-v2').AppV2Actor
+    const actor = (roleIds: string[], email: string | null, authenticated = true): AppV2Actor => ({
+      authenticated, roleIds, id: authenticated ? owner : null, email, company: '',
     })
-    expect(createdClient).toMatchObject({ ok: true })
-    const fields = await database.db.select().from(database.fields).where(eq(database.fields.tableId, config.tableId))
-    const title = fields.find(field => field.name === 'О чём сделка')!, sum = fields.find(field => field.name === 'Сумма')!
-    const createdDeal = await runtimeActions.appCreateRowAction(first.slug, config.tableId, {
-      [title.id]: 'Synthetic internal deal', [crm.relationFieldId]: [createdClient.rowId!], [sum.id]: 42000, [config.statusFieldId]: config.initialStatus,
-    })
-    expect(createdDeal).toMatchObject({ ok: true })
-    const [stored] = await database.db.select().from(database.rows).where(eq(database.rows.id, createdDeal.rowId!))
-    expect(stored!.data).toMatchObject({ [crm.relationFieldId]: [createdClient.rowId!], [sum.id]: 42000 })
+    expect(canOpenAppV2Screen(read.app, actor([], null, false), crm.boardScreenId)).toBe(false)
+    expect(canOpenAppV2Screen(read.app, actor(['staff'], clientEmail), crm.boardScreenId)).toBe(true)
+    expect(canOpenAppV2Screen(read.app, actor(['owner'], ownerEmail), crm.boardScreenId)).toBe(true)
+    const client = await writeRows(first.workspaceId, context => createRow(context, crm.clientsTableId, {
+      [crm.clientTitleFieldId]: 'Synthetic CRM contact',
+      [crm.clientEmailFieldId]: 'crm-contact@example.invalid',
+      [crm.clientPhoneFieldId]: '+79000002102',
+    }, { id: owner, kind: 'member' }))
+    const deal = await writeRows(first.workspaceId, context => createRow(context, crm.dealsTableId, {
+      [crm.titleFieldId]: 'Synthetic internal deal',
+      [crm.clientRelationFieldId]: [client.id],
+      [crm.sumFieldId]: 42000,
+      [crm.stageFieldId]: crm.initialStage,
+      [crm.assignmentFieldId]: ownerEmail,
+    }, { id: owner, kind: 'member' }))
+    const [stored] = await database.db.select().from(database.rows).where(eq(database.rows.id, deal.id))
+    expect(stored!.data).toMatchObject({ [crm.clientRelationFieldId]: [client.id], [crm.sumFieldId]: 42000 })
+    expect(projectAppV2Row(read.app, actor(['owner'], ownerEmail), { id: deal.id, tableId: crm.dealsTableId, values: stored!.data as Record<string, string | number | boolean | null> })).toHaveProperty(crm.titleFieldId)
   })
   async function session(email: string) {
     const id = newId('session'); sessions.push(id)
@@ -284,7 +296,18 @@ describe.skipIf(!process.env.DATABASE_URL)('modular business scenarios in Postgr
     expect(await definition(first.appId)).toEqual(original)
   })
   it('runs seven modules with secondary sales, isolated records, repair consent and per-module pause', async () => {
-    const first = await business('crm'), internal = (await definition(first.appId)).customer!
+    // Native CRM installs as App V2; keep this modular host on the legacy v1 CRM fixture.
+    const example = templateExample('crm'), workspaceId = newId('workspace'); spaces.push(workspaceId)
+    const appSeed = { ...example.app, workspaceId, slug: `legacy-crm-${workspaceId}`, allowlist: [{ email: ownerEmail, roleId: 'manager', company: '' }] }
+    await database.db.insert(database.workspaces).values({ id: workspaceId, ownerId: owner, slug: workspaceId, name: 'Synthetic business', plan: 'business', businessProfile: { name: workspaceId, location: '', phone: '' } })
+    await database.db.insert(database.workspaceMembers).values({ workspaceId, userId: owner, role: 'editor' })
+    await database.db.insert(database.tables).values(example.built.tables.map(table => ({ ...table, workspaceId })))
+    await database.db.insert(database.fields).values(example.fields)
+    await database.db.insert(database.views).values(example.views)
+    await database.db.insert(database.rows).values(example.rows)
+    await database.db.insert(database.apps).values({ id: appSeed.id, workspaceId, name: appSeed.name, slug: appSeed.slug, draft: appSeed, published: null, theme: appSeed.theme, accessMode: appSeed.accessMode, allowlist: appSeed.allowlist, rowAccessRules: appSeed.rowAccessRules, homeScreenId: appSeed.homeScreenId })
+    state.member = { userId: owner, email: ownerEmail, workspaceId, workspaceName: 'Synthetic business', role: 'editor', name: 'Test' }
+    const first = { workspaceId, appId: appSeed.id, slug: appSeed.slug }, internal = (await definition(first.appId)).customer!
     for (const template of ['service', 'dostavka', 'zayavki', 'nedvizhimost', 'salon', 'zakazy']) {
       const preview = await moduleActions.previewModuleConnectionAction(first.appId, template)
       if (!preview.ok) throw new Error(preview.error)

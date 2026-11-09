@@ -25,6 +25,7 @@ import { templatePreparation } from '@/lib/template-preparation'
 import { buildTemplate } from '@/lib/templates/build'
 import { findTemplate } from '@/lib/templates/catalog'
 import { templatePreset } from '@/lib/templates/presets'
+import { buildCrmV2App, isCrmTemplate } from '@/lib/templates/crm-v2'
 import { buildShopV2App, isShopTemplate } from '@/lib/templates/shop-v2'
 import { discardShopSampleFiles, stageShopSampleFile } from '@/lib/templates/shop-sample-files'
 import { linkAttachments } from '@/lib/attachments'
@@ -87,8 +88,9 @@ export async function applyTemplateAction(
    * производственный учёт, склад с приёмками и заявки с ролями мастера и диспетчера.
    */
   const draft = templatePreset(generated, built)
+  const nativeV2 = isShopTemplate(template.id) || isCrmTemplate(template.id)
   // Production uses "director" for the creator's existing owner role.
-  if (!isShopTemplate(template.id) && (draft.booking || draft.customer || draft.inventory || draft.production || template.id === 'crm')) draft.allowlist = [{ email: auth.member.email, roleId: draft.production ? 'director' : 'manager', company: '' }]
+  if (!nativeV2 && (draft.booking || draft.customer || draft.inventory || draft.production || template.id === 'crm')) draft.allowlist = [{ email: auth.member.email, roleId: draft.production ? 'director' : 'manager', company: '' }]
 
   const sampleFiles: { tableId: string; rowId: string; fieldId: string; file: NonNullable<Awaited<ReturnType<typeof stageShopSampleFile>>> }[] = []
   try {
@@ -118,22 +120,23 @@ export async function applyTemplateAction(
       for (const { file, ...cell } of sampleFiles) await linkAttachments(cell, [file], tx)
       await lockAppSlugs(tx)
       draft.slug = await uniqueSlug(slugify(built.appName), undefined, tx)
-      const shop = isShopTemplate(template.id) ? buildShopV2App(built, { id: appId, workspaceId, name: built.appName, slug: draft.slug, email: auth.member.email }) : null
-      if (shop) {
+      const meta = { id: appId, workspaceId, name: built.appName, slug: draft.slug, email: auth.member.email }
+      const native = isShopTemplate(template.id) ? buildShopV2App(built, meta) : isCrmTemplate(template.id) ? buildCrmV2App(built, meta) : null
+      if (native) {
         const { catalog } = await loadBuilderV2Catalog(workspaceId, tx)
-        const valid = validateAppV2Definition(shop, catalog)
-        if (!valid.ok) throw new Error(valid.issues[0]?.message ?? 'Магазин не прошёл проверку')
+        const valid = validateAppV2Definition(native, catalog)
+        if (!valid.ok) throw new Error(valid.issues[0]?.message ?? 'Приложение не прошло проверку')
       }
-      const stored = shop ?? draft
+      const stored = native ?? draft
       await tx.insert(apps).values({
         id: appId,
         workspaceId,
         name: stored.name,
         slug: draft.slug,
         theme: stored.theme,
-        accessMode: shop ? 'allowlist' : draft.accessMode,
-        allowlist: shop ? [] : draft.allowlist,
-        rowAccessRules: shop ? [] : draft.rowAccessRules,
+        accessMode: native ? 'allowlist' : draft.accessMode,
+        allowlist: native ? [] : draft.allowlist,
+        rowAccessRules: native ? [] : draft.rowAccessRules,
         homeScreenId: stored.homeScreenId,
         draft: stored,
       })

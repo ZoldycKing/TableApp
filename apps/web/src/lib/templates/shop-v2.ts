@@ -8,7 +8,7 @@ const team: AppV2Audience = { ...roles, roleIds: ['owner', 'staff'] }
 const shoppers: AppV2Audience = { ...roles, roleIds: ['owner', 'staff', 'client'] }
 const buyers: AppV2Audience = { ...roles, roleIds: ['client', 'owner'] }
 
-/** The sales starter is the only template installed as an editable builder v2 app. */
+/** Sales starter installs as an editable builder v2 app (CRM has its own installer). */
 export function isShopTemplate(templateId: string) {
   return templateId === 'zakazy'
 }

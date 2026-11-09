@@ -46,7 +46,7 @@ export function BuilderV2OrderIdentity({
   variant?: BuilderV2OrderIdentityVariant
   amountLabel?: string
   due?: { label: string; value: string; tone?: 'overdue' | 'today' }
-  client?: string
+  client?: ReactNode
   actions?: ReactNode
 }) {
   if (!title && !status && !amount && !progress?.length && !due && !client && !actions) return null
@@ -54,11 +54,11 @@ export function BuilderV2OrderIdentity({
   const moneyLabel = amountLabel === undefined ? (scoped ? 'Сумма доступных позиций' : 'Итого') : amountLabel
   if (pipeline) {
     const facts = [
-      status ? { id: 'stage', label: 'Этап', value: status, tone: builderV2StatusTone(status) } : null,
-      due ? { id: 'due', label: due.label, value: due.value, tone: due.tone } : null,
-      amount ? { id: 'amount', label: moneyLabel || 'Сумма', value: amount, tone: 'amount' as const } : null,
+      status ? { id: 'stage', label: 'Этап', value: status as ReactNode, tone: builderV2StatusTone(status) } : null,
+      due ? { id: 'due', label: due.label, value: due.value as ReactNode, tone: due.tone } : null,
+      amount ? { id: 'amount', label: moneyLabel || 'Сумма', value: amount as ReactNode, tone: 'amount' as const } : null,
       client ? { id: 'client', label: 'Клиент', value: client } : null,
-    ].filter(Boolean) as { id: string; label: string; value: string; tone?: string }[]
+    ].filter(Boolean) as { id: string; label: string; value: ReactNode; tone?: string }[]
     return <section className={`${presentation.panel} ${ui.orderIdentity}`} data-manage data-variant="pipeline" aria-label="Главное о сделке">
       <div className={ui.orderIdentityMain}>
         {facts.length > 0 && <div className={ui.orderIdentityFacts}>
@@ -199,7 +199,7 @@ export function BuilderV2OrderActionPanel({
     amount?: string
     amountLabel?: string
     due?: { label: string; value: string; tone?: 'overdue' | 'today' }
-    client?: string
+    client?: ReactNode
   }
 }) {
   const multi = Boolean(triggers?.length)

@@ -348,12 +348,30 @@ export function AppV2Renderer(props: AppV2RendererProps) {
     const linesBlock = props.app.shop?.positionsFieldId
       ? <BuilderV2ShopOrderLines app={props.app} record={props.record} amount={manage ? amount : undefined} />
       : parts.collectionIds.length ? render(parts.collectionIds) : null
-    const deliveryFacts = factItems.filter(item => item.kind !== 'reply')
     const replyFacts = factItems.filter(item => item.kind === 'reply')
+    const clientRaw = crmDeal && crm ? props.record.values[crm.clientRelationFieldId] : undefined
+    const clientId = typeof clientRaw === 'string' ? clientRaw : Array.isArray(clientRaw) ? clientRaw.find((id): id is string => typeof id === 'string' && Boolean(id.trim())) : undefined
     const clientText = crmDeal && crm && Object.hasOwn(props.record.values, crm.clientRelationFieldId)
       ? cell(props.record, crm.clientRelationFieldId) || undefined
       : undefined
-    const factsTitle = crm ? (crmClient ? 'О клиенте' : 'Клиент') : 'Клиент и доставка'
+    const openClient = clientId && crm ? () => {
+      if (published) published.navigate(crm.clientScreenId, clientId)
+      else props.onNavigate?.(crm.clientScreenId, clientId)
+    } : undefined
+    const clientFact = clientText
+      ? openClient
+        ? <button type="button" className={ui.contactLink} onClick={openClient}>{clientText}</button>
+        : clientText
+      : undefined
+    // Identity already shows the client; keep only non-duplicated facts (assignee email, etc.).
+    const deliveryFacts = factItems.filter(item => {
+      if (item.kind === 'reply') return false
+      if (!crmDeal || !crm) return true
+      const node = nodes.get(item.id)
+      const fieldId = node?.type === 'field' && 'fieldId' in node.value ? node.value.fieldId : undefined
+      return fieldId !== crm.clientRelationFieldId
+    })
+    const factsTitle = crmDeal ? 'Исполнитель' : crm ? (crmClient ? 'О клиенте' : 'Клиент') : 'Клиент и доставка'
     const sideFactsTitle = crm ? (crmClient ? 'О клиенте' : 'Клиент') : 'Доставка'
     const actionTitle = crm ? 'Добавить запись' : 'Обработка заказа'
     // Shop keeps the processing form open; CRM deal forms open on demand (pencil + journal).
@@ -370,7 +388,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
       <div className={ui.orderDetailBody}>
         <div className={ui.orderDetailMain}>
           {manage && crmDeal && triggers
-            ? <BuilderV2OrderActionPanel title={actionTitle} mode="reveal" triggers={triggers} identity={{ status, amount, amountLabel: 'Сумма', due, client: clientText }} />
+            ? <BuilderV2OrderActionPanel title={actionTitle} mode="reveal" triggers={triggers} identity={{ status, amount, amountLabel: 'Сумма', due, client: clientFact }} />
             : null}
           {manage && !crmDeal && <BuilderV2OrderIdentity status={status} amount={amount} scoped={summary?.scoped} manage />}
           {linesBlock}

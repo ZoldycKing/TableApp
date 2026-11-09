@@ -17,7 +17,7 @@ it('adds a complete create workflow without widening unrelated permissions, and 
   const next = configureBuilderV2FormCreate(app, 'create_form', ['owner'])
   expect(validateAppV2Definition(next, v2Catalog).ok).toBe(true)
   const form = next.nodes.find(node => node.id === 'create_form') as BuilderV2Form
-  expect(builderV2CreateFormAction(next, form)?.step.tableId).toBe('requests')
+  expect(builderV2CreateFormAction(next, form)?.step).toMatchObject({ type: 'create_row', tableId: 'requests' })
   expect(app).toEqual(before)
   expect(next.policy.tables).toEqual(app.policy.tables)
   expect(next.workflows.filter(flow => flow.id !== form.events.submit)).toEqual(app.workflows)

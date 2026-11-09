@@ -320,6 +320,8 @@ export function AppV2Renderer(props: AppV2RendererProps) {
     const factsTitle = crm ? (crmClient ? 'О клиенте' : 'Клиент') : 'Клиент и доставка'
     const sideFactsTitle = crm ? (crmClient ? 'О клиенте' : 'Клиент') : 'Доставка'
     const actionTitle = crm ? 'Добавить запись' : 'Обработка заказа'
+    // Shop keeps the processing form open; CRM journal opens only on the primary action.
+    const actionMode = crm && !crmClient ? 'reveal' as const : 'persistent' as const
     // Shop manage identity is amount/status only (title stays in the frame). Skip a title-only plate.
     const showCustomerIdentity = Boolean(status || amount || (progress && progress.length > 1))
     return <div className={`${styles.canvasBlocks} ${ui.screenBlocks} ${ui.businessDetail} ${ui.orderDetail}`} data-manage={manage || undefined}>
@@ -332,7 +334,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
           {manage && render([...parts.buttonIds, ...parts.otherIds])}
         </div>
         {manage && parts.processingFormId
-          ? <BuilderV2OrderActionPanel title={actionTitle}>{render([parts.processingFormId])}</BuilderV2OrderActionPanel>
+          ? <BuilderV2OrderActionPanel title={actionTitle} mode={actionMode}>{render([parts.processingFormId])}</BuilderV2OrderActionPanel>
           : <div className={ui.orderDetailSide}>
             {!crm && <BuilderV2OrderSummaryCard amount={amount} scoped={summary?.scoped} />}
             <BuilderV2OrderFacts items={deliveryFacts} title={sideFactsTitle} />

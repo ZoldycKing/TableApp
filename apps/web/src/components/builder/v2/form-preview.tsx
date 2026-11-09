@@ -16,6 +16,7 @@ import { BuilderV2WorkflowFeedback } from './workflow-feedback'
 import { builderV2OrderFactKind } from '@/lib/builder-v2-order-detail'
 import { clearShopBasket, readShopBasket, shopBasketPayload } from '@/lib/shop-basket'
 import {usePublishedV2} from './published-context'
+import { useBuilderV2OrderActionPanel } from './order-detail'
 import type { BuilderV2WorkflowEffect, BuilderV2WorkflowTrace } from '@/lib/builder-v2-workflow-types'
 
 export type WorkingFormOptions = { tableName: string; listHref: string; recordHref?: string; learning?:boolean; revision?: string }
@@ -26,6 +27,7 @@ const editSaveNotice = (effects: BuilderV2WorkflowEffect[] = []) => effects.leng
 
 export function BuilderV2FormPreview({ app, form, screenId, recordId, enabled, editing, working, children }: { app: AppV2; form: BuilderV2Form; screenId: string; recordId?: string; enabled: boolean; editing: boolean; working?: WorkingFormOptions; children: ReactNode }) {
   const published=usePublishedV2()
+  const actionPanel = useBuilderV2OrderActionPanel()
   const formTitle=form.mode==='edit'&&(!form.name||form.name==='Новая запись')?'Изменить запись':form.name||'Новая запись'
   if(published) working??={tableName:published.tableName(form.tableId),listHref:`/a/${encodeURIComponent(published.slug)}`,revision:published.revision}
   const key = JSON.stringify([builderV2FormKey(app, form, screenId, recordId), Boolean(working), working?.revision]), current = useRef({ app, key }); current.current = { app, key }
@@ -75,8 +77,10 @@ export function BuilderV2FormPreview({ app, form, screenId, recordId, enabled, e
         if (result.ok) {
           if (app.shop?.checkoutFormId === form.id) clearShopBasket(app.id)
           const notice = published && form.mode === 'edit' && recordId ? editSaveNotice(result.effects) : undefined
-          setData({ ...visible, checking: false, success: true, refreshingCard: Boolean(notice), uncertain: false, confirmation:undefined, errors: {}, error: '', effects: notice ? undefined : result.effects, trace: result.trace, requestKey: attempt.current.requestId })
-          if (notice) published?.refresh(notice)
+          const dismissReveal = actionPanel?.mode === 'reveal'
+          setData({ ...visible, checking: false, success: true, refreshingCard: Boolean(notice) || dismissReveal, uncertain: false, confirmation:undefined, errors: {}, error: '', effects: notice || dismissReveal ? undefined : result.effects, trace: result.trace, requestKey: attempt.current.requestId })
+          if (dismissReveal) actionPanel.close()
+          if (notice || dismissReveal) published?.refresh(notice)
         }
         else if(result.confirmation){setData({...visible,checking:false,confirmation:result.confirmation,error:'',uncertain:false})}
         else {

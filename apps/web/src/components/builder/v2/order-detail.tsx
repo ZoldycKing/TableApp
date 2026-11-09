@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import type { AppV2, AppV2Record } from '@tableapp/schema/app-v2'
 import { builderV2CatalogPrice, builderV2FormattedAmount } from '@/lib/builder-v2-catalog'
 import { builderV2OrderFactKind, builderV2OrderLineProductId, builderV2StatusProgress } from '@/lib/builder-v2-order-detail'
@@ -8,10 +8,21 @@ import type { BuilderV2DataRecord } from '@/lib/builder-v2-data-types'
 import type { BuilderV2Table } from '@/lib/builder-v2'
 import { ProtoIcon } from '../prototype/icons'
 import presentation from '@/components/runtime/app-presentation.module.css'
+import styles from '../prototype/prototype.module.css'
 import { builderV2MediaItems } from './media-values'
 import { builderV2StatusTone } from './record-presentation'
 import { usePublishedV2 } from './published-context'
 import ui from './view.module.css'
+
+export type BuilderV2OrderActionMode = 'persistent' | 'reveal'
+
+type OrderActionPanelContextValue = { mode: BuilderV2OrderActionMode; close: () => void }
+const OrderActionPanelContext = createContext<OrderActionPanelContextValue | null>(null)
+
+/** Shared action-panel controls for order/deal detail forms (persistent shop vs reveal-on-demand). */
+export function useBuilderV2OrderActionPanel() {
+  return useContext(OrderActionPanelContext)
+}
 
 export function BuilderV2OrderIdentity({
   title, status, amount, scoped = false, progress, manage = false,
@@ -111,12 +122,46 @@ export function BuilderV2OrderLinesPanel({
   </section>
 }
 
-export function BuilderV2OrderActionPanel({ title = 'Обработка заказа', children }: { title?: string; children: ReactNode }) {
+export function BuilderV2OrderActionPanel({
+  title = 'Обработка заказа',
+  mode = 'persistent',
+  children,
+}: {
+  title?: string
+  mode?: BuilderV2OrderActionMode
+  children: ReactNode
+}) {
+  const [open, setOpen] = useState(mode === 'persistent')
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const panelRef = useRef<HTMLElement>(null)
+  const titleId = useId()
+  const close = useCallback(() => {
+    setOpen(false)
+    queueMicrotask(() => triggerRef.current?.focus())
+  }, [])
+  useEffect(() => {
+    if (mode === 'persistent') setOpen(true)
+  }, [mode])
+  useEffect(() => {
+    if (!open || mode !== 'reveal') return
+    const focusable = panelRef.current?.querySelector<HTMLElement>('input:not([type="hidden"]), textarea, select, button:not([data-action-cancel])')
+    queueMicrotask(() => focusable?.focus())
+  }, [open, mode])
   if (!children) return null
-  return <aside className={`${presentation.panel} ${ui.orderActionPanel}`} aria-label={title}>
-    <h2 className={presentation.sectionTitle}>{title}</h2>
-    <div className={ui.orderActionBody}>{children}</div>
-  </aside>
+  if (mode === 'reveal' && !open) {
+    return <aside className={`${presentation.panel} ${ui.orderActionPanel}`} data-mode="reveal" data-open="false" aria-label={title}>
+      <button ref={triggerRef} type="button" className={`${styles.primary} ${ui.orderActionTrigger}`} onClick={() => setOpen(true)}>{title}</button>
+    </aside>
+  }
+  return <OrderActionPanelContext.Provider value={{ mode, close }}>
+    <aside ref={panelRef} className={`${presentation.panel} ${ui.orderActionPanel}`} data-mode={mode} data-open={open || undefined} aria-labelledby={titleId}>
+      <div className={ui.orderActionHeader}>
+        <h2 className={presentation.sectionTitle} id={titleId}>{title}</h2>
+        {mode === 'reveal' && <button type="button" className={styles.textButton} data-action-cancel onClick={close}>Отмена</button>}
+      </div>
+      <div className={ui.orderActionBody}>{children}</div>
+    </aside>
+  </OrderActionPanelContext.Provider>
 }
 
 export function BuilderV2ShopOrderLines({

@@ -93,6 +93,9 @@
 .orderProgress li[data-state="done"] { color: var(--v2-accent); }
 .orderProgress li[aria-current="step"] span { font-weight: 780; }
 .orderLinesPanel, .orderFacts, .orderActionPanel { display: grid; gap: 14px; padding: clamp(16px, 2.4cqw, 22px); min-width: 0; }
+.orderActionHeader { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; }
+.orderActionHeader .sectionTitle, .orderActionHeader :global(.sectionTitle) { margin: 0; min-width: 0; }
+.orderActionTrigger { width: 100%; min-height: 44px; justify-content: center; }
 .orderLineList { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
 .orderLineList li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; padding-block: 10px; border-top: 1px solid var(--v2-line); }
 .orderLineList li:first-child { border-top: 0; padding-top: 0; }

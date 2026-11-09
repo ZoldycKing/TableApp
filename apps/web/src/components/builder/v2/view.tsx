@@ -319,6 +319,21 @@ export function AppV2Renderer(props: AppV2RendererProps) {
                 return local
               })(),
             ].filter(Boolean).join(' · ') : ''
+            const lowBadge = inventoryStockList && row && row.values[inventory!.itemLowFieldId] === true
+              ? <span className={ui.statusBadge} data-tone="rose">Мало</span>
+              : null
+            if (inventoryStockList) {
+              return <>
+                <div className={ui.recordStockCopy}>
+                  <strong>{label}</strong>
+                  <span className={ui.recordSkuLine}>
+                    {subtitleValue ? <span>{subtitleValue}</span> : null}
+                    {lowBadge}
+                  </span>
+                </div>
+                {detailNode}
+              </>
+            }
             return <>
               {cardLayout && <span className={catalog ? presentation.photo : ui.catalogPhoto} data-illustrated={Boolean(image)} aria-hidden="true">
                 {image ? <BuilderV2Picture item={image} /> : <BuilderV2RecordAvatar id={row?.id ?? node.id} name={row && label !== 'Без названия' ? label : undefined} icon={catalog ? 'box' : 'apps'} />}
@@ -392,7 +407,6 @@ export function AppV2Renderer(props: AppV2RendererProps) {
               {defaultCard ? <RecordControl className={ui.recordButton} data-compact={compact || undefined} data-status={(statusSubtitle && !inventoryStockList && !inventoryJournalList) || undefined} data-stock={inventoryStockList || undefined} data-journal={inventoryJournalList || undefined} data-low={lowStock || undefined} {...(cardScreen ? { type: 'button' as const, onClick: () => open(row) } : {})}>
                 {compact && !inventoryJournalList && !(statusSubtitle && !inventoryStockList) && <BuilderV2RecordAvatar id={row.id} name={orders ? undefined : cell(row, node.titleFieldId)} icon={orders ? 'receipt' : contacts ? 'users' : inventory ? 'box' : 'list'} />}
                 {item(row)}
-                {lowStock ? <span className={ui.statusBadge} data-tone="rose">Мало</span> : null}
                 {!catalog && (cardScreen || props.editing && cardTarget) && <ProtoIcon name="arrow" size={16} />}
               </RecordControl> : <>{item(row)}{openRecord(row)}</>}
             </div>

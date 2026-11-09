@@ -249,7 +249,7 @@ describe.skipIf(!process.env.DATABASE_URL)('orders and stock reservations in Pos
     await database.db.insert(database.apps).values({ id: sales.app.id, workspaceId, name: sales.app.name, slug: sales.app.slug, draft: sales.app, published: sales.app })
     identity.member = { userId: ownerId, email: ownerEmail, workspaceId, workspaceName: '', role: 'owner', name: 'Owner' }
     const actions = await import('@/app/module-actions'), preview = await actions.previewModuleConnectionAction(sales.app.id, 'sklad')
-    expect(preview).toMatchObject({ ok: true, newTables: 1 })
+    expect(preview).toMatchObject({ ok: true, newTables: 2 })
     if (!preview.ok) throw new Error(preview.error)
     expect(await actions.connectModuleAction(sales.app.id, 'sklad', preview.expectedHash)).toMatchObject({ ok: true, already: false })
     const [record] = await database.db.select().from(database.apps).where(eq(database.apps.id, sales.app.id))

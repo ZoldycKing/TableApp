@@ -146,11 +146,23 @@ describe.skipIf(!process.env.DATABASE_URL)('row writes against Postgres', () => 
   }
   async function inventory() {
     // V1 stock actions still exercise the classic inventory app; native install is App V2.
+    // Use opening-balance seed with an empty journal so these tests stay deterministic.
     const { buildTemplate } = await import('./templates/build')
     const { sklad } = await import('./templates/defs/sklad')
     const { generateApp } = await import('./app-builder')
     const { asInventory } = await import('./templates/inventory-app')
-    const built = buildTemplate({ template: sklad, workspaceId: ids.workspace })
+    const openings: Record<string, number> = { s1: 4, s2: 12, s3: 2, s4: 3, s5: 18, s6: 1, s7: 140, s8: 25 }
+    const template = structuredClone(sklad)
+    for (const table of template.tables) {
+      if (table.key === template.inventory!.tables.movements) table.rows = []
+      if (table.key === template.inventory!.tables.items) {
+        table.rows = table.rows.map(row => ({
+          ...row,
+          values: { ...row.values, opening: openings[row.key] ?? 0, receipts: { rowKeys: [] } },
+        }))
+      }
+    }
+    const built = buildTemplate({ template, workspaceId: ids.workspace })
     const table = built.tables.find(item => item.id === built.appTableId)!
     const generated = generateApp({
       appId: newId('app'), workspaceId: ids.workspace, name: built.appName, slug: `inventory-v1-${Date.now()}`,
@@ -169,6 +181,7 @@ describe.skipIf(!process.env.DATABASE_URL)('row writes against Postgres', () => 
       rowAccessRules: definition.rowAccessRules, homeScreenId: definition.homeScreenId,
       draft: definition, published: definition,
     })
+    await usage.recountWorkspace(ids.workspace)
     identity.roleId = 'staff'
     const config = definition.inventory!
     const [item] = await database.db.select().from(database.rows).where(eq(database.rows.tableId, config.tables.items)).orderBy(asc(database.rows.position))
@@ -676,7 +689,7 @@ describe.skipIf(!process.env.DATABASE_URL)('row writes against Postgres', () => 
     expect((record!.published as App).inventory).toBeNull()
     expect((await read(test.item.id)).data).toEqual(before)
     expect((await read(test.item.id)).version).toBe(0)
-    expect((await db.select().from(tables).where(eq(tables.workspaceId, ids.workspace))).length).toBe(tableCount + 1)
+    expect((await db.select().from(tables).where(eq(tables.workspaceId, ids.workspace))).length).toBe(tableCount + 2)
     expect((await db.select().from(fields).where(eq(fields.id, test.config.item.opening)))[0]!.name).toBe('Начальный остаток')
     const { publishAppAction } = await import('@/app/app-actions')
     expect((await publishAppAction(test.appId)).ok).toBe(true)

@@ -17,6 +17,8 @@ import { builderV2OrderFactKind } from '@/lib/builder-v2-order-detail'
 import { clearShopBasket, readShopBasket, shopBasketPayload } from '@/lib/shop-basket'
 import {usePublishedV2} from './published-context'
 import { useBuilderV2OrderActionPanel } from './order-detail'
+import { BuilderV2MoneyInput } from './money-input'
+import { builderV2IsMoneyFieldLabel, builderV2ParseMoneyInput } from '@/lib/builder-v2-money'
 import type { BuilderV2WorkflowEffect, BuilderV2WorkflowTrace } from '@/lib/builder-v2-workflow-types'
 
 export type WorkingFormOptions = { tableName: string; listHref: string; recordHref?: string; learning?:boolean; revision?: string }
@@ -65,7 +67,12 @@ export function BuilderV2FormPreview({ app, form, screenId, recordId, enabled, e
   const check = async (approval?:string) => {
     if (unavailable || busy.current || pendingFiles.current.size || working && visible.success || !visible.state || visible.confirmation&&!approval) return
     busy.current = true
-    const version = ++generation.current, values = Object.fromEntries(visible.state.fields.filter(field => !field.readOnly).map(field => { const raw = visible.values[field.fieldId] ?? null; return [field.fieldId, field.type === 'number' && typeof raw === 'string' ? !raw.trim() ? null : Number.isFinite(Number(raw.trim().replace(',', '.'))) ? Number(raw.trim().replace(',', '.')) : raw : raw] }))
+    const version = ++generation.current, values = Object.fromEntries(visible.state.fields.filter(field => !field.readOnly).map(field => {
+      const raw = visible.values[field.fieldId] ?? null
+      if (field.type !== 'number' || typeof raw !== 'string') return [field.fieldId, raw]
+      const parsed = builderV2ParseMoneyInput(raw)
+      return [field.fieldId, parsed == null ? null : Number.isFinite(parsed) ? parsed : raw]
+    }))
     setData({ ...visible, checking: true, errors: {}, error: '', success: false })
     try {
       if (working) {
@@ -171,6 +178,8 @@ export function BuilderV2FormInput({ node, table }: { node: BuilderV2Input; tabl
     : type === 'long_text' ? <textarea {...common} rows={3} value={String(value ?? '')} maxLength={10000} onChange={event => change(event.target.value)} />
     : type === 'date' || type === 'datetime' ? <input {...common} type={type === 'date' ? 'date' : 'datetime-local'} value={typeof value === 'string' ? value.includes('T') && value.endsWith('Z') ? (() => { const wall = instantToWallClock(value, field?.timeZone ?? 'Europe/Moscow'); return wall ? type === 'date' ? wall.date : `${wall.date}T${wall.time}` : '' })() : value : ''} onChange={event => change(event.target.value || null)} />
     : type==='member' ? <span className={ui.hint}>Этот тип поля появится в форме позже.</span>
+    : type === 'number' && builderV2IsMoneyFieldLabel(label)
+      ? <BuilderV2MoneyInput {...common} value={value} onValueChange={change} maxLength={32} />
     : <input {...common} type={type === 'email' ? 'email' : type === 'phone' ? 'tel' : type === 'url' ? 'url' : 'text'} inputMode={type === 'number' ? 'decimal' : undefined} value={String(value ?? '')} maxLength={10000} onChange={event => change(event.target.value)} />
   return <div className={`${ui.input} ${type === 'checkbox' ? ui.checkInput : ''}`} data-kind={builderV2OrderFactKind(label)}><label htmlFor={unique}>{label}{node.required ? ' *' : ''}</label>{control}{error && <span className={ui.dataError} id={errorId}>{error}</span>}</div>
 }

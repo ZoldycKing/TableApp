@@ -315,7 +315,7 @@ export function CollectionView({
         </div>
       )}
       {page && <div className="space-y-2">
-        {shown.length > 0 && <p className="text-center text-xs text-ink-muted">Показано {shown.length} из {page.matched}</p>}
+        {shown.length > 0 && shown.length < page.matched && <p className="text-center text-xs text-ink-muted">Показано {shown.length} из {page.matched}</p>}
         {pageControls?.error ? <div className="space-y-2 rounded-xl border border-sand-200 bg-white p-4 text-sm"><p role="alert">{pageControls.error}</p><button type="button" disabled={pageControls.loading} onClick={pageControls.onRetry} className="rounded-lg border border-sand-200 px-3 py-2 disabled:opacity-50">Попробовать ещё раз</button></div> :
           page.next && pageControls ? <button type="button" disabled={pageControls.loading} onClick={pageControls.onMore} className="w-full rounded-xl border border-sand-200 bg-white px-4 py-2.5 text-sm font-medium transition-colors hover:bg-sand-50 disabled:opacity-50">{pageControls.loading ? 'Загружаем…' : 'Показать ещё'}</button> : null}
       </div>}

@@ -215,7 +215,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
                   {detailNode}
                 </span>
                 : <small data-money={moneySubtitle || undefined}>{subtitleValue}</small>)}
-              {detailNode && !statusSubtitle && (cardLayout || !subtitleValue) ? detailNode : null}
+              {detailNode && !statusSubtitle && (cardLayout || !subtitleValue || inventory) ? detailNode : null}
               {summary && <span className={ui.recordSummary}><span>Позиций: {summary.count}</span>{total && <strong>{total}</strong>}</span>}
             </>
           }
@@ -414,6 +414,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
     const showCustomerIdentity = Boolean(inventoryStatus || amount || (progress && progress.length > 1) || (crmDeal && (due || clientText)) || (inventoryItem && (due || clientText)))
     const revealIdentity = {
       status: inventoryStatus,
+      statusLabel: inventoryItem ? 'Запас' : undefined,
       amount,
       amountLabel: inventoryItem ? 'Остаток' : 'Сумма',
       due,

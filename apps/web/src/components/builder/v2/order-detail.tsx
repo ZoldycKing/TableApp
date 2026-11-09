@@ -35,7 +35,7 @@ export function useBuilderV2OrderActionPanel() {
 
 export function BuilderV2OrderIdentity({
   title, status, amount, scoped = false, progress, manage = false,
-  variant = 'order', amountLabel, due, client, actions,
+  variant = 'order', amountLabel, statusLabel, due, client, actions,
 }: {
   title?: string
   status?: string
@@ -45,6 +45,7 @@ export function BuilderV2OrderIdentity({
   manage?: boolean
   variant?: BuilderV2OrderIdentityVariant
   amountLabel?: string
+  statusLabel?: string
   due?: { label: string; value: string; tone?: 'overdue' | 'today' }
   client?: ReactNode
   actions?: ReactNode
@@ -54,12 +55,12 @@ export function BuilderV2OrderIdentity({
   const moneyLabel = amountLabel === undefined ? (scoped ? 'Сумма доступных позиций' : 'Итого') : amountLabel
   if (pipeline) {
     const facts = [
-      status ? { id: 'stage', label: 'Этап', value: status as ReactNode, tone: builderV2StatusTone(status) } : null,
+      status ? { id: 'stage', label: statusLabel || 'Этап', value: status as ReactNode, tone: builderV2StatusTone(status) } : null,
       due ? { id: 'due', label: due.label, value: due.value as ReactNode, tone: due.tone } : null,
       amount ? { id: 'amount', label: moneyLabel || 'Сумма', value: amount as ReactNode, tone: 'amount' as const } : null,
       client ? { id: 'client', label: 'Клиент', value: client } : null,
     ].filter(Boolean) as { id: string; label: string; value: ReactNode; tone?: string }[]
-    return <section className={`${presentation.panel} ${ui.orderIdentity}`} data-manage data-variant="pipeline" aria-label="Главное о сделке">
+    return <section className={`${presentation.panel} ${ui.orderIdentity}`} data-manage data-variant="pipeline" aria-label={statusLabel ? 'Главное о товаре' : 'Главное о сделке'}>
       <div className={ui.orderIdentityMain}>
         {facts.length > 0 && <div className={ui.orderIdentityFacts}>
           {facts.map(fact => <div key={fact.id} className={ui.orderIdentityFact} data-tone={fact.tone} data-kind={fact.id}>
@@ -196,6 +197,7 @@ export function BuilderV2OrderActionPanel({
   children?: ReactNode
   identity?: {
     status?: string
+    statusLabel?: string
     amount?: string
     amountLabel?: string
     due?: { label: string; value: string; tone?: 'overdue' | 'today' }
@@ -261,7 +263,7 @@ export function BuilderV2OrderActionPanel({
     </OrderActionPanelContext.Provider> : null
     if (identity) {
       return <>
-        <BuilderV2OrderIdentity variant="pipeline" manage status={identity.status} amount={identity.amount} amountLabel={identity.amountLabel ?? ''} due={identity.due} client={identity.client}
+        <BuilderV2OrderIdentity variant="pipeline" manage status={identity.status} statusLabel={identity.statusLabel} amount={identity.amount} amountLabel={identity.amountLabel ?? ''} due={identity.due} client={identity.client}
           actions={<BuilderV2OrderActionToolbar items={toolbarItems} onOpen={open} placement="desktop" />} />
         {!active && <BuilderV2OrderActionToolbar items={toolbarItems} onOpen={open} dockRef={dockRef} placement="mobile" />}
         {dialog}

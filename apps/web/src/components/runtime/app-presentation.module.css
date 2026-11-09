@@ -10,7 +10,9 @@
   font-weight: 650;
   line-height: 1.17;
   letter-spacing: -.025em;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
+  hyphens: none;
 }
 
 .iconControl {

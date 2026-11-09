@@ -53,6 +53,9 @@ export async function inspectBuilderV2Form(app: AppV2, member: Member, request: 
         else initial[field.id] = result.value
       } else if (form.mode === 'edit') initial[field.id] = context.row?.values[field.id] ?? emptyValue(field.type)
       else initial[field.id] = emptyValue(field.type)
+      if (app.inventory && form.mode === 'create' && input.fieldId === app.inventory.movementDateFieldId && blank(initial[field.id])) {
+        initial[field.id] = now.toISOString()
+      }
     }
     const defaults = await withInitialValues(fields, initial, async (tableId, rowId, fieldId) => {
       if (!meta.fieldsByTable.get(tableId)?.some(field => field.id === fieldId && field.type === 'number')) return undefined
@@ -98,6 +101,12 @@ export async function inspectBuilderV2Form(app: AppV2, member: Member, request: 
       }
     }
     if (Object.keys(errors).length) return { ok: false, error: request.mode === 'check' ? 'Проверьте отмеченные поля' : 'Проверьте начальные значения формы', errors }
+    if (app.inventory && context.screenRow) {
+      const stock = context.screenRow.values[app.inventory.itemStockFieldId]
+      const unit = context.screenRow.values[app.inventory.itemUnitFieldId]
+      if (typeof stock === 'number' && Number.isFinite(stock)) labels[app.inventory.itemStockFieldId] = String(stock)
+      if (typeof unit === 'string' && unit.trim()) labels[app.inventory.itemUnitFieldId] = unit.trim()
+    }
     const state: BuilderV2FormState = { values: builderV2Json(values) as Record<string, AppV2Json>, labels, fingerprint, fields: inputs.map(input => { const field = fields.find(field => field.id === input.fieldId)!; return { nodeId: input.id, fieldId: field.id, label: input.label || field.name, type: field.type, required: input.required, readOnly: Boolean(input.readOnly), supported: BUILDER_V2_FORM_TYPES.includes(field.type), ...('choices' in field.options ? { choices: field.options.choices } : {}), ...(field.type === 'relation' ? { allowMultiple: field.options.allowMultiple } : {}), ...(field.type==='image'||field.type==='attachment'?{maxCount:field.options.maxCount}:{}), ...(field.type === 'date' || field.type === 'datetime' ? { timeZone: fieldTimeZone(field) } : {}) } }) }
     return { ok: true, state }
   }

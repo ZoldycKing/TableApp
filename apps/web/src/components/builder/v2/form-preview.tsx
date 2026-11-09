@@ -131,8 +131,10 @@ export function BuilderV2FormPreview({ app, form, screenId, recordId, enabled, e
 function ProtoArrow() { return <span aria-hidden>↗</span> }
 
 function RelationInput({ context, field, id, errorId }: { context: FormContext; field: BuilderV2FormField; id: string; errorId?: string }) {
+  const inventory = context.app.inventory
+  const warehouseField = Boolean(inventory && (field.fieldId === inventory.movementWarehouseFieldId || field.fieldId === inventory.movementWarehouseToFieldId || field.fieldId === inventory.itemWarehouseFieldId))
   const [search, setSearch] = useState(''), [options, setOptions] = useState<{ key: string; values: { id: string; label: string }[]; next: string | null; loading: boolean; error: string }>({ key: '', values: [], next: null, loading: true, error: '' }), [refresh, setRefresh] = useState(0), generation = useRef(0)
-  const key = JSON.stringify([context.scope, field.fieldId, search]), current = useRef({ context, key }); current.current = { context, key }
+  const key = JSON.stringify([context.scope, field.fieldId, warehouseField ? '' : search]), current = useRef({ context, key }); current.current = { context, key }
   const known = useRef<{ key: string; labels: Map<string, string> }>({ key: '', labels: new Map() }), scopeKey = JSON.stringify([context.app.id, context.scope, field.fieldId])
   if (known.current.key !== scopeKey) known.current = { key: scopeKey, labels: new Map() }
   const selected = Array.isArray(context.values[field.fieldId]) ? context.values[field.fieldId] as string[] : []
@@ -140,13 +142,28 @@ function RelationInput({ context, field, id, errorId }: { context: FormContext; 
     const version = ++generation.current
     if (context.disabled || field.readOnly) return
     setOptions({ key, values: [], next: null, loading: true, error: '' })
-    const timer = setTimeout(async () => { try { const ctx = current.current.context, result = await ctx.inspect({ ...ctx.scope, mode: 'options', fieldId: field.fieldId, search }); if (version !== generation.current) return; setOptions(result.ok && 'options' in result ? { key, values: result.options, next: result.next, loading: false, error: '' } : { key, values: [], next: null, loading: false, error: result.ok ? 'Нет списка записей' : result.error }) } catch { if (version === generation.current) setOptions({ key, values: [], next: null, loading: false, error: 'Не удалось загрузить записи' }) } }, 300)
+    const timer = setTimeout(async () => { try { const ctx = current.current.context, result = await ctx.inspect({ ...ctx.scope, mode: 'options', fieldId: field.fieldId, search: warehouseField ? '' : search }); if (version !== generation.current) return; setOptions(result.ok && 'options' in result ? { key, values: result.options, next: result.next, loading: false, error: '' } : { key, values: [], next: null, loading: false, error: result.ok ? 'Нет списка' : result.error }) } catch { if (version === generation.current) setOptions({ key, values: [], next: null, loading: false, error: 'Не удалось загрузить список' }) } }, warehouseField ? 0 : 300)
     return () => { clearTimeout(timer); generation.current++ }
-  }, [key, context.disabled, field.readOnly, refresh])
+  }, [key, context.disabled, field.readOnly, refresh, warehouseField, search])
   const visible = options.key === key ? options : { key, values: [], next: null, loading: true, error: '' }
   visible.values.forEach(option => known.current.labels.set(option.id, option.label))
-  const more = async () => { if (!visible.next || visible.loading || context.disabled) return; const version = ++generation.current; setOptions({ ...visible, loading: true }); try { const result = await context.inspect({ ...context.scope, mode: 'options', fieldId: field.fieldId, search, after: visible.next }); if (version !== generation.current || current.current.key !== key) return; setOptions(result.ok && 'options' in result ? { key, values: [...visible.values, ...result.options.filter(item => !visible.values.some(old => old.id === item.id))], next: result.next, loading: false, error: '' } : { ...visible, loading: false, error: result.ok ? 'Нет списка записей' : result.error }) } catch { if (version === generation.current) setOptions({ ...visible, loading: false, error: 'Не удалось загрузить записи' }) } }
-  return <div className={ui.relationInput}><input type="search" disabled={context.disabled} value={search} placeholder="Найти запись" aria-label={`Найти: ${field.label}`} onChange={event => setSearch(event.target.value)} /><select id={id} aria-describedby={errorId} aria-invalid={Boolean(errorId)} multiple={field.allowMultiple} disabled={context.disabled} value={field.allowMultiple ? selected : selected[0] ?? ''} onChange={event => context.change(field.fieldId, field.allowMultiple ? Array.from(event.target.selectedOptions).map(option => option.value).filter(Boolean) : event.target.value ? [event.target.value] : [])}>{!field.allowMultiple && <option value="">Выберите запись</option>}{selected.filter(id => !visible.values.some(item => item.id === id)).map(id => <option key={id} value={id}>{known.current.labels.get(id) || (Array.isArray(context.state?.values[field.fieldId]) && (context.state.values[field.fieldId] as string[]).includes(id) ? context.state?.labels[field.fieldId] : '') || 'Выбранная запись'}</option>)}{visible.values.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}</select>{visible.loading && !context.disabled && <span role="status" className={ui.hint}>Загружаем записи…</span>}{visible.error && <><span role="alert" className={ui.dataError}>{visible.error}</span><button type="button" className={styles.textButton} onClick={() => setRefresh(value => value + 1)}>Повторить</button></>}{visible.next && <button type="button" className={styles.textButton} disabled={visible.loading} onClick={() => void more()}>Показать ещё записи</button>}</div>
+  useEffect(() => {
+    if (!warehouseField || context.disabled || field.readOnly || field.allowMultiple || selected.length || visible.loading || visible.error) return
+    if (visible.values.length === 1) context.change(field.fieldId, [visible.values[0]!.id])
+  }, [warehouseField, context, field.fieldId, field.allowMultiple, field.readOnly, selected.length, visible.loading, visible.error, visible.values])
+  const more = async () => { if (!visible.next || visible.loading || context.disabled) return; const version = ++generation.current; setOptions({ ...visible, loading: true }); try { const result = await context.inspect({ ...context.scope, mode: 'options', fieldId: field.fieldId, search: warehouseField ? '' : search, after: visible.next }); if (version !== generation.current || current.current.key !== key) return; setOptions(result.ok && 'options' in result ? { key, values: [...visible.values, ...result.options.filter(item => !visible.values.some(old => old.id === item.id))], next: result.next, loading: false, error: '' } : { ...visible, loading: false, error: result.ok ? 'Нет списка' : result.error }) } catch { if (version === generation.current) setOptions({ ...visible, loading: false, error: 'Не удалось загрузить список' }) } }
+  const emptyLabel = warehouseField ? 'Выберите склад' : 'Выберите запись'
+  return <div className={ui.relationInput} data-warehouse={warehouseField || undefined}>
+    {!warehouseField && <input type="search" disabled={context.disabled} value={search} placeholder="Найти запись" aria-label={`Найти: ${field.label}`} onChange={event => setSearch(event.target.value)} />}
+    <select id={id} aria-describedby={errorId} aria-invalid={Boolean(errorId)} multiple={field.allowMultiple} disabled={context.disabled} value={field.allowMultiple ? selected : selected[0] ?? ''} onChange={event => context.change(field.fieldId, field.allowMultiple ? Array.from(event.target.selectedOptions).map(option => option.value).filter(Boolean) : event.target.value ? [event.target.value] : [])}>
+      {!field.allowMultiple && <option value="">{emptyLabel}</option>}
+      {selected.filter(id => !visible.values.some(item => item.id === id)).map(id => <option key={id} value={id}>{known.current.labels.get(id) || (Array.isArray(context.state?.values[field.fieldId]) && (context.state.values[field.fieldId] as string[]).includes(id) ? context.state?.labels[field.fieldId] : '') || (warehouseField ? 'Выбранный склад' : 'Выбранная запись')}</option>)}
+      {visible.values.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
+    </select>
+    {visible.loading && !context.disabled && <span role="status" className={ui.hint}>{warehouseField ? 'Загружаем склады…' : 'Загружаем записи…'}</span>}
+    {visible.error && <><span role="alert" className={ui.dataError}>{visible.error}</span><button type="button" className={styles.textButton} onClick={() => setRefresh(value => value + 1)}>Повторить</button></>}
+    {visible.next && !warehouseField && <button type="button" className={styles.textButton} disabled={visible.loading} onClick={() => void more()}>Показать ещё записи</button>}
+  </div>
 }
 
 function ShopCheckoutSync() {
@@ -167,19 +184,39 @@ function ShopCheckoutSync() {
 export function BuilderV2FormInput({ node, table }: { node: BuilderV2Input; table?: BuilderV2Table }) {
   const context = useContext(Context), published=usePublishedV2(), unique = useId(), field = context?.state?.fields.find(field => field.nodeId === node.id), column = table?.fields.find(field => field.id === node.fieldId)
   if (context?.app.shop && (node.fieldId === context.app.shop.cartFieldId || node.fieldId === context.app.shop.submissionFieldId)) return null
+  const inventory = context?.app.inventory
+  const inventoryDate = Boolean(inventory && node.fieldId === inventory.movementDateFieldId)
+  const inventoryQty = Boolean(inventory && node.fieldId === inventory.movementQtyFieldId)
   const type = field?.type ?? column?.type ?? 'text', value = context?.values[node.fieldId] ?? null, error = context?.errors[node.id], errorId = error ? `${unique}-error` : undefined, disabled = !context || context.disabled || Boolean(node.readOnly), label = node.label || column?.name || 'Поле'
   const common = { id: unique, disabled, 'aria-describedby': errorId, 'aria-invalid': Boolean(error), 'aria-required': node.required, 'aria-label': label }
   const change = (value: AppV2Json) => context?.change(node.fieldId, value)
+  const stockHint = (() => {
+    if (!inventoryQty || !inventory || !context?.state) return null
+    const fromLabel = context.state.labels[inventory.itemStockFieldId]
+    const qty = fromLabel && /^-?\d+/.test(fromLabel) ? Number(fromLabel.match(/-?\d+/)?.[0]) : null
+    if (qty == null || !Number.isFinite(qty)) return null
+    const unit = context.state.labels[inventory.itemUnitFieldId]?.trim() || 'шт.'
+    return `На складе: ${qty} ${unit}`
+  })()
   const readonly = field?.readOnly && context?.state
+  const dateValue = typeof value === 'string' ? value.includes('T') && (value.endsWith('Z') || inventoryDate) ? (() => {
+    const wall = value.endsWith('Z') ? instantToWallClock(value, field?.timeZone ?? 'Europe/Moscow') : { date: value.slice(0, 10), time: value.includes('T') ? value.slice(11, 16) : '12:00' }
+    return wall ? inventoryDate || type === 'date' ? wall.date : `${wall.date}T${wall.time}` : ''
+  })() : value : ''
   const control = type==='image'||type==='attachment'?<BuilderV2AttachmentInput key={context?.key+':'+node.fieldId} id={unique} field={field??{nodeId:node.id,fieldId:node.fieldId,label,type,required:node.required,readOnly:Boolean(node.readOnly),supported:true}} value={value} disabled={disabled||Boolean(field?.readOnly)} errorId={errorId} slug={published?.slug} upload={context?.upload?(file,signal)=>context.upload!(node.fieldId,file,signal):undefined} onChange={change} onPending={context?.onPending??(()=>{})}/>:readonly ? <output id={unique} className={ui.autoValue}>{context.state?.labels[node.fieldId] || (type === 'checkbox' ? value ? 'Да' : 'Нет' : Array.isArray(value) ? value.join(', ') : String(value ?? 'Не заполнено'))}<small>Заполняется автоматически</small></output>
     : type === 'relation' && field && context ? <RelationInput context={context} field={field} id={unique} errorId={errorId} />
     : type === 'checkbox' ? <input {...common} type="checkbox" checked={value === true} onChange={event => change(event.target.checked)} />
     : type === 'single_select' || type === 'multi_select' ? <select {...common} multiple={type === 'multi_select'} value={type === 'multi_select' ? Array.isArray(value) ? value as string[] : [] : String(value ?? '')} onChange={event => change(type === 'multi_select' ? Array.from(event.target.selectedOptions).map(option => option.value) : event.target.value || null)}>{type === 'single_select' && <option value="">Выберите значение</option>}{(field?.choices ?? column?.choices)?.map(choice => <option key={choice.id} value={choice.id}>{choice.name}</option>)}</select>
     : type === 'long_text' ? <textarea {...common} rows={3} value={String(value ?? '')} maxLength={10000} onChange={event => change(event.target.value)} />
-    : type === 'date' || type === 'datetime' ? <input {...common} type={type === 'date' ? 'date' : 'datetime-local'} value={typeof value === 'string' ? value.includes('T') && value.endsWith('Z') ? (() => { const wall = instantToWallClock(value, field?.timeZone ?? 'Europe/Moscow'); return wall ? type === 'date' ? wall.date : `${wall.date}T${wall.time}` : '' })() : value : ''} onChange={event => change(event.target.value || null)} />
+    : type === 'date' || type === 'datetime' ? <input {...common} type={inventoryDate || type === 'date' ? 'date' : 'datetime-local'} value={dateValue} onChange={event => {
+      const next = event.target.value
+      if (!next) { change(null); return }
+      if (inventoryDate || type === 'date') change(type === 'datetime' || inventoryDate ? `${next}T12:00` : next)
+      else change(next)
+    }} />
     : type==='member' ? <span className={ui.hint}>Этот тип поля появится в форме позже.</span>
     : type === 'number' && builderV2IsMoneyFieldLabel(label)
       ? <BuilderV2MoneyInput {...common} value={value} onValueChange={change} maxLength={32} />
-    : <input {...common} type={type === 'email' ? 'email' : type === 'phone' ? 'tel' : type === 'url' ? 'url' : 'text'} inputMode={type === 'number' ? 'decimal' : undefined} value={String(value ?? '')} maxLength={10000} onChange={event => change(event.target.value)} />
-  return <div className={`${ui.input} ${type === 'checkbox' ? ui.checkInput : ''}`} data-kind={builderV2OrderFactKind(label)}><label htmlFor={unique}>{label}{node.required ? ' *' : ''}</label>{control}{error && <span className={ui.dataError} id={errorId}>{error}</span>}</div>
+    : <input {...common} type={type === 'email' ? 'email' : type === 'phone' ? 'tel' : type === 'url' ? 'url' : type === 'number' ? 'number' : 'text'} inputMode={type === 'number' ? 'decimal' : undefined} value={String(value ?? '')} maxLength={10000} onChange={event => change(type === 'number' ? (event.target.value === '' ? null : Number(event.target.value)) : event.target.value)} />
+  return <div className={`${ui.input} ${type === 'checkbox' ? ui.checkInput : ''}`} data-kind={builderV2OrderFactKind(label)}><label htmlFor={unique}>{label}{node.required ? ' *' : ''}</label>{control}{stockHint && <p className={ui.stockHint}>{stockHint}</p>}{error && <span className={ui.dataError} id={errorId}>{error}</span>}</div>
 }

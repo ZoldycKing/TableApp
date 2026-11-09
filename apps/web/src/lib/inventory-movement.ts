@@ -85,7 +85,8 @@ export async function recordInventoryMovement(
   })
   const opening = Number(itemData[inv.itemOpeningFieldId] ?? 0)
   const stockAt = (warehouse: string) => opening + inventoryStockFromMovements(movements, warehouse)
-  const now = new Date().toISOString()
+  const dateRaw = formValues[inv.movementDateFieldId]
+  const when = typeof dateRaw === 'string' && dateRaw.trim() ? dateRaw.trim() : new Date().toISOString()
   const kind = typeId(inv, operation)
   const actorKind = { id: actor.id, kind: 'app_user' as const }
   const createdIds: string[] = []
@@ -104,7 +105,7 @@ export async function recordInventoryMovement(
       [inv.movementQtyFieldId]: args.delta,
       [inv.movementTypeFieldId]: kind,
       [inv.movementWarehouseFieldId]: [args.warehouse],
-      [inv.movementDateFieldId]: now,
+      [inv.movementDateFieldId]: when,
       [inv.movementNoteFieldId]: note,
       [inv.movementAuthorFieldId]: actor.email,
       ...(inv.movementBeforeFieldId ? { [inv.movementBeforeFieldId]: args.before } : {}),

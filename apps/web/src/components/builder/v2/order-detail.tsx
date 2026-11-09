@@ -64,11 +64,13 @@ export function BuilderV2OrderIdentity({
       <div className={ui.orderIdentityMain}>
         {facts.length > 0 && <div className={ui.orderIdentityFacts}>
           {facts.map(fact => <div key={fact.id} className={ui.orderIdentityFact} data-tone={fact.tone} data-kind={fact.id}>
-            <span>{fact.label}</span>
-            <strong>{fact.value}</strong>
+            {fact.label ? <span>{fact.label}</span> : null}
+            {fact.id === 'stage' && fact.tone === 'rose'
+              ? <strong className={ui.warningBadge}>{fact.value}</strong>
+              : <strong>{fact.value}</strong>}
           </div>)}
         </div>}
-        {actions && <div className={ui.orderIdentityActions} data-placement="desktop">{actions}</div>}
+        {actions}
       </div>
     </section>
   }
@@ -171,16 +173,26 @@ function BuilderV2OrderActionToolbar({
   onOpen,
   dockRef,
   placement,
+  iconsOnly = false,
+  textOnly = false,
 }: {
   items: readonly { id: string; title: string; icon?: string; primary?: boolean }[]
   onOpen: (id: string) => void
   dockRef?: Ref<HTMLDivElement>
   placement?: 'desktop' | 'mobile'
+  iconsOnly?: boolean
+  textOnly?: boolean
 }) {
-  return <div ref={dockRef} className={placement === 'desktop' ? ui.orderIdentityActions : ui.orderActionDock} data-mode={placement === 'mobile' ? 'reveal' : undefined} data-placement={placement} aria-label="Действия">
-    {items.map(item => item.primary || !item.icon
-      ? <button key={item.id} type="button" className={`${styles.primary} ${ui.orderActionTrigger}`} onClick={() => onOpen(item.id)}>{item.title}</button>
-      : <button key={item.id} type="button" className={ui.orderActionIcon} aria-label={item.title} title={item.title} onClick={() => onOpen(item.id)}><ProtoIcon name={item.icon!} size={20} /></button>)}
+  const rendered = iconsOnly
+    ? items.filter(item => Boolean(item.icon) && !item.primary)
+    : textOnly
+      ? items.filter(item => !(item.icon && !item.primary))
+      : items
+  const inIdentity = placement === 'desktop' || iconsOnly
+  return <div ref={dockRef} className={inIdentity ? ui.orderIdentityActions : ui.orderActionDock} data-mode={!inIdentity && placement === 'mobile' ? 'reveal' : undefined} data-placement={placement} aria-label="Действия">
+    {rendered.map(item => item.icon && !item.primary
+      ? <button key={item.id} type="button" className={ui.orderActionIcon} aria-label={item.title} title={item.title} onClick={() => onOpen(item.id)}><ProtoIcon name={item.icon} size={20} /></button>
+      : <button key={item.id} type="button" data-primary={item.primary || undefined} className={`${item.primary ? styles.primary : styles.secondary} ${ui.orderActionTrigger}`} onClick={() => onOpen(item.id)}>{item.title}</button>)}
   </div>
 }
 
@@ -264,8 +276,11 @@ export function BuilderV2OrderActionPanel({
     if (identity) {
       return <>
         <BuilderV2OrderIdentity variant="pipeline" manage status={identity.status} statusLabel={identity.statusLabel} amount={identity.amount} amountLabel={identity.amountLabel ?? ''} due={identity.due} client={identity.client}
-          actions={<BuilderV2OrderActionToolbar items={toolbarItems} onOpen={open} placement="desktop" />} />
-        {!active && <BuilderV2OrderActionToolbar items={toolbarItems} onOpen={open} dockRef={dockRef} placement="mobile" />}
+          actions={<>
+            <BuilderV2OrderActionToolbar items={toolbarItems} onOpen={open} placement="desktop" />
+            <BuilderV2OrderActionToolbar items={toolbarItems} onOpen={open} placement="mobile" iconsOnly />
+          </>} />
+        {!active && <BuilderV2OrderActionToolbar items={toolbarItems} onOpen={open} dockRef={dockRef} placement="mobile" textOnly />}
         {dialog}
       </>
     }

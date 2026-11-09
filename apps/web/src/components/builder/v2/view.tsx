@@ -6,7 +6,91 @@ import {BuilderV2Chart} from './chart'
 import {BuilderV2Video} from './video'
 import {builderV2ButtonAction,builderV2NodeAction} from '@/lib/builder-v2-button-action'
 import {builderCalendarTime} from '@/lib/builder-v2-calendar'
-import { useCallback, useState, type CSSProperties, type ReactNode } from 'react'
+import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } from 'react'
+
+function InventoryTypeFilter({ choices, value, onChange }: { choices: readonly { id: string; name: string }[]; value: string; onChange: (id: string) => void }) {
+  if (!choices.length) return null
+  return <div className={ui.typeFilter} role="group" aria-label="Фильтр по виду операции">
+    <button type="button" aria-pressed={!value} onClick={() => onChange('')}>Все</button>
+    {choices.map(choice => <button key={choice.id} type="button" aria-pressed={value === choice.id} onClick={() => onChange(choice.id)}>{choice.name}</button>)}
+  </div>
+}
+
+function InventoryJournalRows({ rows, typeFieldId, choices, renderRows }: {
+  rows: readonly AppV2Record[]
+  typeFieldId: string
+  choices: readonly { id: string; name: string }[]
+  renderRows: (rows: readonly AppV2Record[]) => ReactNode
+}) {
+  const [type, setType] = useState('')
+  const visible = type ? rows.filter(row => row.values[typeFieldId] === type) : rows
+  return <>
+    <InventoryTypeFilter choices={choices} value={type} onChange={setType} />
+    {visible.length ? renderRows(visible) : <div className={ui.collectionEmpty}><p>Нет операций этого вида.</p></div>}
+  </>
+}
+
+function InventoryWarehouseFacts({ record, inventory, unit }: {
+  record: AppV2Record
+  inventory: NonNullable<AppV2['inventory']>
+  unit: string
+}) {
+  const published = usePublishedV2()
+  const [rows, setRows] = useState<{ id: string; name: string; qty: number }[]>([])
+  useEffect(() => {
+    if (!published) return
+    const linked = Array.isArray(record.values[inventory.itemMovementsFieldId])
+      ? (record.values[inventory.itemMovementsFieldId] as unknown[]).filter((id): id is string => typeof id === 'string')
+      : []
+    if (!linked.length) { setRows([]); return }
+    let cancelled = false
+    void import('@/app/builder-v2-published-actions').then(async ({ readPublishedV2RelatedRowsAction }) => {
+      const result = await readPublishedV2RelatedRowsAction(published.slug, {
+        revision: published.revision, tableId: inventory.movementsTableId, recordIds: linked,
+      })
+      if (cancelled || !result.ok) return
+      const balances = new Map<string, number>()
+      const names = new Map<string, string>()
+      for (const row of result.rows) {
+        const warehouseRaw = row.values[inventory.movementWarehouseFieldId]
+        const warehouseId = typeof warehouseRaw === 'string' ? warehouseRaw
+          : Array.isArray(warehouseRaw) ? warehouseRaw.find((id): id is string => typeof id === 'string') : undefined
+        if (!warehouseId) continue
+        const qty = Number(row.values[inventory.movementQtyFieldId] ?? 0)
+        if (!Number.isFinite(qty)) continue
+        balances.set(warehouseId, (balances.get(warehouseId) ?? 0) + qty)
+        const label = row.display?.[inventory.movementWarehouseFieldId]
+        if (label) names.set(warehouseId, label)
+      }
+      const warehouseIds = [...balances.keys()]
+      if (warehouseIds.length > 1 && inventory.warehousesTableId) {
+        const warehouses = await readPublishedV2RelatedRowsAction(published.slug, {
+          revision: published.revision, tableId: inventory.warehousesTableId, recordIds: warehouseIds,
+        })
+        if (!cancelled && warehouses.ok) {
+          for (const row of warehouses.rows) {
+            const label = row.display?.[inventory.warehouseNameFieldId] ?? String(row.values[inventory.warehouseNameFieldId] ?? '')
+            if (label) names.set(row.id, label)
+          }
+        }
+      }
+      if (cancelled) return
+      const list = [...balances.entries()]
+        .map(([id, qty]) => ({ id, name: names.get(id) || 'Склад', qty }))
+        .filter(item => item.qty !== 0)
+        .sort((left, right) => right.qty - left.qty || left.name.localeCompare(right.name, 'ru'))
+      setRows(list.length > 1 ? list : [])
+    })
+    return () => { cancelled = true }
+  }, [published, record.id, record.values, inventory, unit])
+  if (rows.length < 2) return null
+  return <section className={`${presentation.panel} ${ui.orderFacts}`} aria-label="По складам">
+    <h2 className={presentation.sectionTitle}>По складам</h2>
+    <ul className={ui.warehouseBreakdown}>
+      {rows.map(row => <li key={row.id}><span>{row.name}</span><strong>{row.qty} {unit}</strong></li>)}
+    </ul>
+  </section>
+}
 import { appV2ChildIds, appV2NavigationUrl, evaluateAppV2Condition, matchesAppV2Audience, resolveAppV2Binding, type AppV2, type AppV2Actor, type AppV2Binding, type AppV2Node, type AppV2Record } from '@tableapp/schema/app-v2'
 import type { BuilderV2Table } from '@/lib/builder-v2'
 import { ProtoIcon } from '../prototype/icons'
@@ -38,7 +122,7 @@ import { BuilderV2OrderActionPanel, BuilderV2OrderFacts, BuilderV2OrderIdentity,
 
 const cell = (row: AppV2Record, fieldId: string) => (row as Partial<BuilderV2DataRecord>).display?.[fieldId] ?? String(row.values[fieldId] ?? '')
 
-export type AppV2RendererProps = { app: AppV2; screenId: string; tables: readonly BuilderV2Table[]; actor: AppV2Actor; rows?: Readonly<Record<string, readonly AppV2Record[]>>; record?: AppV2Record; live?: boolean; editing?: boolean; selectedId?: string | null; onSelect?: (id: string) => void; onAdd?: (parentId: string | null) => void; onNavigate?: (screenId: string, recordId: string) => void; workingForm?: WorkingFormOptions & { formId: string }; rootNodeIds?: readonly string[]; businessApps?: readonly BuilderBusinessApp[]; businessLinks?: Readonly<Record<string, BuilderBusinessLink>>; statusFormId?: string }
+export type AppV2RendererProps = { app: AppV2; screenId: string; tables: readonly BuilderV2Table[]; actor: AppV2Actor; rows?: Readonly<Record<string, readonly AppV2Record[]>>; record?: AppV2Record; live?: boolean; editing?: boolean; selectedId?: string | null; onSelect?: (id: string) => void; onAdd?: (parentId: string | null) => void; onNavigate?: (screenId: string, recordId?: string) => void; workingForm?: WorkingFormOptions & { formId: string }; rootNodeIds?: readonly string[]; businessApps?: readonly BuilderBusinessApp[]; businessLinks?: Readonly<Record<string, BuilderBusinessLink>>; statusFormId?: string }
 
 /** One component tree for the editor and authenticated preview; no mutation engine lives here. */
 export function AppV2Renderer(props: AppV2RendererProps) {
@@ -186,14 +270,36 @@ export function AppV2Renderer(props: AppV2RendererProps) {
           const subtitle = subtitleField?.name
           const moneySubtitle = Boolean(subtitle && /[₽$€£₸]/u.test(subtitle))
           const time=(row?:AppV2Record)=>node.layout==='calendar'&&table?.fields.find(field=>field.id===node.dateFieldId)?.type==='datetime'?builderCalendarTime(row?.values[node.dateFieldId!],page?.calendar?.timeZone??table?.fields.find(field=>field.id===node.dateFieldId)?.timeZone):null
+          const inventoryStockList = Boolean(inventory && node.cardDetailFieldId === inventory.itemStockFieldId)
+          const inventoryJournalList = Boolean(inventory && screen?.id === inventory.movementsScreenId && node.layout === 'list')
+          const inventoryHistory = Boolean(inventory && node.layout === 'timeline' && node.dateFieldId === inventory.movementDateFieldId)
+          const unitOf = (row?: AppV2Record) => {
+            if (!inventory || !row) return 'шт.'
+            if (inventoryStockList) {
+              const unit = cell(row, inventory.itemUnitFieldId)
+              return unit || 'шт.'
+            }
+            return 'шт.'
+          }
+          const signedQty = (row: AppV2Record, raw: string) => {
+            const qty = Number(row.values[node.cardDetailFieldId!])
+            if (!Number.isFinite(qty)) return raw ? `${raw} шт.` : ''
+            const sign = qty > 0 ? '+' : ''
+            return `${sign}${qty} шт.`
+          }
           const item = (row?: AppV2Record) => {
             if (node.itemIds.length) return render(node.itemIds, row, null, row?.id, row ? cell(row, node.titleFieldId) : undefined)
             const image = cardLayout && node.cardImageFieldId && row
               ? builderV2MediaItems(row.values[node.cardImageFieldId], published?.slug).find(item => item.image)
               : undefined
-            const detail = node.cardDetailFieldId && row
+            const rawDetail = node.cardDetailFieldId && row
               ? catalog ? builderV2CatalogPrice(row, table?.fields.find(field => field.id === node.cardDetailFieldId)) : cell(row, node.cardDetailFieldId)
               : ''
+            const detail = row && inventoryStockList && rawDetail !== ''
+              ? `${rawDetail} ${unitOf(row)}`
+              : row && (inventoryJournalList || inventoryHistory) && node.cardDetailFieldId
+                ? signedQty(row, String(rawDetail))
+                : rawDetail
             const detailNode = detail
               ? <span className={cardLayout ? ui.catalogDetail : ui.recordMetaDetail}>{detail}</span>
               : null
@@ -203,6 +309,16 @@ export function AppV2Renderer(props: AppV2RendererProps) {
               ? moneySubtitle ? builderV2CatalogPrice(row, subtitleField) : cell(row, subtitleField.id)
               : subtitle
             const label = row ? cell(row, node.titleFieldId) || 'Без названия' : title
+            const journalMeta = inventoryJournalList && row && inventory ? [
+              cell(row, inventory.movementWarehouseFieldId),
+              cell(row, inventory.movementDateFieldId),
+              (() => {
+                const author = cell(row, inventory.movementAuthorFieldId)
+                if (!author) return ''
+                const local = author.includes('@') ? author.split('@')[0]! : author
+                return local
+              })(),
+            ].filter(Boolean).join(' · ') : ''
             return <>
               {cardLayout && <span className={catalog ? presentation.photo : ui.catalogPhoto} data-illustrated={Boolean(image)} aria-hidden="true">
                 {image ? <BuilderV2Picture item={image} /> : <BuilderV2RecordAvatar id={row?.id ?? node.id} name={row && label !== 'Без названия' ? label : undefined} icon={catalog ? 'box' : 'apps'} />}
@@ -212,15 +328,31 @@ export function AppV2Renderer(props: AppV2RendererProps) {
               {subtitleValue && node.subtitleFieldId !== node.dateFieldId && (statusSubtitle
                 ? <span className={ui.recordMeta}>
                   <span className={ui.statusBadge} data-tone={builderV2StatusTone(subtitleValue)}>{subtitleValue}</span>
-                  {detailNode}
+                  {detailNode && !inventoryJournalList ? detailNode : null}
                 </span>
                 : <small data-money={moneySubtitle || undefined}>{subtitleValue}</small>)}
-              {detailNode && !statusSubtitle && (cardLayout || !subtitleValue || inventory) ? detailNode : null}
+              {journalMeta ? <small>{journalMeta}</small> : null}
+              {detailNode && (!statusSubtitle || inventoryJournalList) && (cardLayout || !subtitleValue || inventory) ? detailNode : null}
               {summary && <span className={ui.recordSummary}><span>Позиций: {summary.count}</span>{total && <strong>{total}</strong>}</span>}
             </>
           }
           const timelineItem = (row: AppV2Record) => {
             const when = node.dateFieldId ? cell(row, node.dateFieldId) : ''
+            if (inventoryHistory && inventory) {
+              const type = cell(row, inventory.movementTypeFieldId) || cell(row, node.titleFieldId) || 'Операция'
+              const qty = Number(row.values[inventory.movementQtyFieldId])
+              const qtyLabel = Number.isFinite(qty) ? `${qty > 0 ? '+' : ''}${qty} шт.` : ''
+              const warehouse = cell(row, inventory.movementWarehouseFieldId)
+              const authorRaw = cell(row, inventory.movementAuthorFieldId)
+              const author = authorRaw.includes('@') ? authorRaw.split('@')[0]! : authorRaw
+              return <li key={row.id} className={ui.timelineItem}>
+                <time className={ui.timelineDate}>{when || 'Без даты'}</time>
+                <div className={ui.timelineBody}>
+                  <p className={ui.timelineText}>{[type, qtyLabel].filter(Boolean).join(' ')}</p>
+                  {(warehouse || author) && <p className={ui.timelineMeta}>{[warehouse, author].filter(Boolean).join(' · ')}</p>}
+                </div>
+              </li>
+            }
             const text = cell(row, node.titleFieldId) || '—'
             const meta = node.subtitleFieldId ? cell(row, node.subtitleFieldId) : ''
             const detail = node.cardDetailFieldId ? cell(row, node.cardDetailFieldId) : ''
@@ -255,18 +387,36 @@ export function AppV2Renderer(props: AppV2RendererProps) {
           const listRow = (row: AppV2Record) => {
             const defaultCard = !node.itemIds.length && (cardScreen || props.editing && cardTarget || cardLayout || compact)
             const RecordControl = cardScreen ? 'button' : 'div'
-            const lowStock = Boolean(inventory && node.cardDetailFieldId === inventory.itemStockFieldId && row.values[inventory.itemLowFieldId] === true)
+            const lowStock = Boolean(inventoryStockList && row.values[inventory!.itemLowFieldId] === true)
             const body = rowAction ? actionRow(row, 'div') : <div key={row.id} className={catalog ? `${ui.row} ${presentation.catalogCard}` : ui.row} data-low={lowStock || undefined}>
-              {defaultCard ? <RecordControl className={ui.recordButton} data-compact={compact || undefined} data-status={statusSubtitle || lowStock || undefined} data-low={lowStock || undefined} {...(cardScreen ? { type: 'button' as const, onClick: () => open(row) } : {})}>
-                {compact && !statusSubtitle && <BuilderV2RecordAvatar id={row.id} name={orders ? undefined : cell(row, node.titleFieldId)} icon={orders ? 'receipt' : contacts ? 'users' : inventory ? 'box' : 'list'} />}
+              {defaultCard ? <RecordControl className={ui.recordButton} data-compact={compact || undefined} data-status={(statusSubtitle && !inventoryStockList && !inventoryJournalList) || undefined} data-stock={inventoryStockList || undefined} data-journal={inventoryJournalList || undefined} data-low={lowStock || undefined} {...(cardScreen ? { type: 'button' as const, onClick: () => open(row) } : {})}>
+                {compact && !inventoryJournalList && !(statusSubtitle && !inventoryStockList) && <BuilderV2RecordAvatar id={row.id} name={orders ? undefined : cell(row, node.titleFieldId)} icon={orders ? 'receipt' : contacts ? 'users' : inventory ? 'box' : 'list'} />}
                 {item(row)}
-                {lowStock && !statusSubtitle ? <span className={ui.statusBadge} data-tone="rose">Мало</span> : null}
+                {lowStock ? <span className={ui.statusBadge} data-tone="rose">Мало</span> : null}
                 {!catalog && (cardScreen || props.editing && cardTarget) && <ProtoIcon name="arrow" size={16} />}
               </RecordControl> : <>{item(row)}{openRecord(row)}</>}
             </div>
             return node.layout === 'kanban' ? <BoardMoveRow key={row.id} row={row as BuilderV2DataRecord} label={cell(row, node.titleFieldId)}>{body}</BoardMoveRow> : body
           }
           const rowsClass = catalog ? `${ui.catalogRows} ${presentation.catalogGrid}` : cardLayout ? ui.cards : timeline ? ui.timelineList : node.layout === 'list' && !rowAction ? (node.recordGroup ? ui.groupedRecords : ui.plainList) : styles.collectionRows
+          const typeChoices = inventoryJournalList && inventory
+            ? (table?.fields.find(field => field.id === inventory.movementTypeFieldId)?.choices ?? [])
+              .filter(choice => ['Приход', 'Расход', 'Списание', 'Перемещение'].includes(choice.name))
+            : []
+          const renderListGroups = (listRows: readonly AppV2Record[]) => {
+            const buckets = new Map<string, { label?: string; rows: AppV2Record[] }>()
+            for (const row of listRows) {
+              const group = (row as BuilderV2DataRecord).group
+              const key = group?.key ?? 'all'
+              const bucket = buckets.get(key) ?? { label: group?.label, rows: [] }
+              bucket.rows.push(row)
+              buckets.set(key, bucket)
+            }
+            return [...buckets].map(([key, group]) => <div key={key} className={group.label ? ui.listGroup : undefined}>
+              {group.label && <GroupHeading className={ui.listGroupHeading}>{group.label}</GroupHeading>}
+              <div className={rowsClass}>{group.rows.map(listRow)}</div>
+            </div>)
+          }
           const collection = node.layout === 'table' ? <div className={ui.tableScroll}><table className={ui.table} aria-label={node.name}>
             <thead><tr><th scope="col">{title}</th>{subtitle && <th scope="col">{subtitle}</th>}</tr></thead>
             {rows ? [...groups].map(([key, group]) => <tbody key={key}>
@@ -275,15 +425,36 @@ export function AppV2Renderer(props: AppV2RendererProps) {
           </table></div> : timeline ? (rows
             ? <ol className={ui.timelineList} aria-label={node.name}>{rows.map(timelineItem)}</ol>
             : <div className={ui.placeholder}><span>Здесь появится хронология записей</span></div>)
-          : rows ? [...groups].map(([key, group]) => <div key={key} className={group.label ? ui.listGroup : undefined}>
-            {group.label && <GroupHeading className={ui.listGroupHeading}>{group.label}</GroupHeading>}
-            <div className={rowsClass}>{group.rows.map(listRow)}</div>
-          </div>) : <div className={rowsClass}>
+          : rows ? (inventoryJournalList && inventory && typeChoices.length
+            ? <InventoryJournalRows rows={rows} typeFieldId={inventory.movementTypeFieldId} choices={typeChoices} renderRows={renderListGroups} />
+            : renderListGroups(rows))
+          : <div className={rowsClass}>
             {Array.from({ length: cardLayout && !node.itemIds.length ? 2 : 1 }, (_, index) => <div key={index} className={ui.placeholder}>{item()}<span>Здесь будут записи из этой таблицы</span></div>)}
           </div>
+          const emptyCopy = (() => {
+            if (node.layout === 'calendar') return page?.calendar?.month === 'undated' ? 'Записей без даты нет' : 'На этот день записей нет'
+            if (node.layout === 'kanban') return 'В этой колонке записей нет'
+            if (timeline) return inventoryHistory ? 'Операций по этому товару пока нет' : 'Записей в истории пока нет'
+            if (catalog) return 'В каталоге пока ничего нет'
+            if (inventoryStockList) return null
+            if (inventoryJournalList) return null
+            return 'Нет доступных записей'
+          })()
+          const emptyState = rows?.length === 0 ? (
+            inventoryStockList ? <div className={ui.collectionEmpty}>
+              <p>В складе пока нет товаров. Добавьте первую позицию, чтобы вести остатки.</p>
+              {!props.editing && inventory?.createItemScreenId && <button type="button" className={styles.primary} onClick={() => {
+                const screenId = inventory.createItemScreenId!
+                if (published) published.navigate(screenId)
+                else props.onNavigate?.(screenId)
+              }}>Добавить товар</button>}
+            </div>
+            : inventoryJournalList ? <div className={ui.collectionEmpty}><p>Операций пока нет. Откройте товар и оформите приход, расход или перемещение.</p></div>
+            : <p className={ui.hint}>{emptyCopy}</p>
+          ) : null
           body = <div className={`${styles.collection} ${catalog ? presentation.catalog : cardLayout ? ui.cardCollection : timeline ? `${presentation.panel} ${ui.timelineCollection}` : ''} ${id === lines?.id ? `${presentation.panel} ${ui.orderLines}` : ''}`} data-catalog={catalog || undefined} data-tiles={node.layout === 'tiles' || undefined} data-timeline={timeline || undefined}>
             {showHeading && <div className={styles.collectionHeading}><h2 className={presentation.sectionTitle}>{node.name}</h2>{props.editing && table?.name !== node.name && <span>{table?.name ?? 'Таблица удалена'}</span>}</div>}
-            {rows?.length === 0 ? <p className={ui.hint}>{node.layout==='calendar'?page?.calendar?.month==='undated'?'Записей без даты нет':'На этот день записей нет':node.layout==='kanban'?'В этой колонке записей нет':timeline?'Записей в истории пока нет':catalog?'В каталоге пока ничего нет':'Нет доступных записей'}</p> : collection}
+            {emptyState ?? collection}
             {props.editing && node.layout!=='kanban' && <button type="button" className={styles.addInside} onClick={() => props.onAdd?.(node.id)}><ProtoIcon name="plus" />{catalog?'Добавить элемент карточки':timeline?'Настроить запись ленты':'Настроить строку списка'}</button>}
           </div>
         }
@@ -341,10 +512,20 @@ export function AppV2Renderer(props: AppV2RendererProps) {
       : inventoryItem && inventory ? recordTable?.fields.find(field => field.id === inventory.itemMinFieldId) : undefined
     const dueRaw = dueColumn ? props.record.values[dueColumn.id] : undefined
     const dueValue = dueColumn && Object.hasOwn(props.record.values, dueColumn.id) ? cell(props.record, dueColumn.id) : ''
-    const due = crmDeal && dueValue ? { label: dueColumn?.name || 'Вернуться к разговору', value: dueValue, tone: builderV2DueTone(dueRaw) }
-      : inventoryItem && dueValue ? { label: 'Минимум', value: dueValue } : undefined
+    const due = crmDeal && dueValue ? { label: dueColumn?.name || 'Вернуться к разговору', value: dueValue, tone: builderV2DueTone(dueRaw) } : undefined
     const inventoryLow = inventoryItem && inventory ? props.record.values[inventory.itemLowFieldId] === true : false
-    const inventoryStatus = inventoryItem ? (inventoryLow ? 'Мало' : undefined) : status
+    const inventoryUnit = inventoryItem && inventory ? (cell(props.record, inventory.itemUnitFieldId) || 'шт.') : 'шт.'
+    const inventoryMin = inventoryItem && dueValue ? dueValue : ''
+    const inventoryStatus = inventoryItem
+      ? (inventoryLow ? `Ниже минимума (${inventoryMin || '—'})` : undefined)
+      : status
+    const inventoryAmount = inventoryItem && amount
+      ? `${amount.replace(/[^\d\s−-]/g, '').trim() || String(rawTotal ?? '')} ${inventoryUnit}`.replace(/\s+/g, ' ').trim()
+      : amount
+    // Prefer explicit stock number + unit for inventory identity.
+    const inventoryStockLabel = inventoryItem && inventory && typeof rawTotal === 'number' && Number.isFinite(rawTotal)
+      ? `${rawTotal} ${inventoryUnit}`
+      : inventoryAmount
     const factItems = parts.factIds.flatMap(id => {
       const node = nodes.get(id)
       if (!node || node.type !== 'field' || !visible(node)) return []
@@ -411,11 +592,11 @@ export function AppV2Renderer(props: AppV2RendererProps) {
       ...(parts.processingFormId ? [{ id: 'journal', title: 'Добавить запись', primary: true as const, children: render([parts.processingFormId]) }] : []),
     ] : undefined)
     // Shop manage identity is amount/status only (title stays in the frame). Skip a title-only plate.
-    const showCustomerIdentity = Boolean(inventoryStatus || amount || (progress && progress.length > 1) || (crmDeal && (due || clientText)) || (inventoryItem && (due || clientText)))
+    const showCustomerIdentity = Boolean(inventoryStatus || inventoryStockLabel || amount || (progress && progress.length > 1) || (crmDeal && (due || clientText)))
     const revealIdentity = {
       status: inventoryStatus,
-      statusLabel: inventoryItem ? 'Запас' : undefined,
-      amount,
+      statusLabel: inventoryItem ? (inventoryLow ? 'Внимание' : undefined) : undefined,
+      amount: inventoryItem ? inventoryStockLabel : amount,
       amountLabel: inventoryItem ? 'Остаток' : 'Сумма',
       due,
       client: inventoryItem ? undefined : clientFact,
@@ -428,6 +609,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
             ? <BuilderV2OrderActionPanel title={actionTitle} mode="reveal" triggers={triggers} identity={revealIdentity} />
             : null}
           {manage && !crmDeal && !inventoryItem && <BuilderV2OrderIdentity status={status} amount={amount} scoped={summary?.scoped} manage />}
+          {inventoryItem && inventory ? <InventoryWarehouseFacts record={props.record} inventory={inventory} unit={inventoryUnit} /> : null}
           {linesBlock}
           {manage && <BuilderV2OrderFacts items={deliveryFacts} title={factsTitle} />}
           {manage && render([...parts.buttonIds, ...parts.otherIds])}

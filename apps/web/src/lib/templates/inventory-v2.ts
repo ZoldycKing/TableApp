@@ -38,7 +38,7 @@ export function buildInventoryV2App(built: BuiltTemplate, meta: { id: string; wo
   const editable = (tableId: string) => columns(tableId).filter(item => writable.has(item.type)).map(item => item.id)
   const grant = (audience: AppV2Audience, permission: Omit<AppV2Grant, 'audience'>): AppV2Grant => ({ audience, ...permission })
   const node = (id: string, name: string, fieldId: string) => ({ id, name, type: 'field' as const, label: name, visibleTo: null, visibleWhen: null, value: { kind: 'row' as const, fieldId } })
-  const input = (fieldId: string, name: string, required: boolean, initialValue: null | { kind: 'literal'; value: string | number } = null) => ({
+  const input = (fieldId: string, name: string, required: boolean, initialValue: null | AppV2Binding = null) => ({
     id: newId('component'), name, type: 'input' as const, fieldId, label: name, required, visibleTo: null, visibleWhen: null, initialValue,
   })
 
@@ -79,20 +79,24 @@ export function buildInventoryV2App(built: BuiltTemplate, meta: { id: string; wo
   const itemsSource = newId('component'), movementsSource = newId('component'), historySource = newId('component')
   const receiptFormId = newId('component'), issueFormId = newId('component'), writeOffFormId = newId('component'), transferFormId = newId('component')
   const itemEditFormId = newId('component'), createItemFormId = newId('component')
-  const newItemButton = newId('component')
-  const openItem = newId('action'), openCreateItem = newId('action')
+  const newItemButton = newId('component'), newOperationButton = newId('component')
+  const openItem = newId('action'), openCreateItem = newId('action'), openItemsForOperation = newId('action')
   const saveReceipt = newId('action'), saveIssue = newId('action'), saveWriteOff = newId('action'), saveTransfer = newId('action')
   const saveItemEdit = newId('action'), createItem = newId('action')
   const receiptStep = newId('action'), issueStep = newId('action'), writeOffStep = newId('action'), transferStep = newId('action'), createItemStep = newId('action')
 
   const qtyInput = (label: string) => input(movementQty, label, true, { kind: 'literal', value: 1 })
-  const receiptInputs = [qtyInput(INVENTORY_V2_COPY.receipt.quantity), input(movementWarehouse, 'Склад', true), input(movementNote, 'Комментарий', false)]
-  const issueInputs = [qtyInput(INVENTORY_V2_COPY.issue.quantity), input(movementWarehouse, 'Склад', true), input(movementNote, 'Комментарий', false)]
-  const writeOffInputs = [qtyInput(INVENTORY_V2_COPY.write_off.quantity), input(movementWarehouse, 'Склад', true), input(movementNote, 'Причина списания', true)]
+  const dateInput = () => input(movementDate, 'Дата', true)
+  const warehouseInput = (label: string) => input(movementWarehouse, label, true, { kind: 'screen_row', fieldId: itemWarehouse })
+  const warehouseToInput = () => input(movementWarehouseTo, 'Куда', true)
+  const receiptInputs = [qtyInput(INVENTORY_V2_COPY.receipt.quantity), warehouseInput('Склад'), dateInput(), input(movementNote, 'Комментарий', false)]
+  const issueInputs = [qtyInput(INVENTORY_V2_COPY.issue.quantity), warehouseInput('Склад'), dateInput(), input(movementNote, 'Комментарий', false)]
+  const writeOffInputs = [qtyInput(INVENTORY_V2_COPY.write_off.quantity), warehouseInput('Склад'), dateInput(), input(movementNote, 'Причина списания', true)]
   const transferInputs = [
     qtyInput(INVENTORY_V2_COPY.transfer.quantity),
-    input(movementWarehouse, 'Откуда', true),
-    input(movementWarehouseTo, 'Куда', true),
+    warehouseInput('Откуда'),
+    warehouseToInput(),
+    dateInput(),
     input(movementNote, 'Комментарий', false),
   ]
   const productFields = () => [
@@ -146,14 +150,14 @@ export function buildInventoryV2App(built: BuiltTemplate, meta: { id: string; wo
 
   const app: AppV2 = {
     formatVersion: 2, id: meta.id, workspaceId: meta.workspaceId, name: meta.name, slug: meta.slug, purpose: 'business',
-    appearance: { navigation: 'bottom', icon: 'box', density: 'regular', corners: 'rounded' },
+    appearance: { navigation: 'tabs', icon: 'box', density: 'regular', corners: 'rounded' },
     theme: { accent: 'green', scheme: 'light', logoKey: null, iconKey: null },
     roles: [{ id: 'owner', name: 'Владелец' }, { id: 'staff', name: 'Кладовщик' }],
     authentication: { mode: 'invite_only', defaultRoleId: null, members: [{ email: meta.email.trim().toLowerCase(), roleIds: ['owner'], company: '' }] },
     homeScreenId: itemsScreenId,
     screens: [
       { id: itemsScreenId, name: 'Товары', menuLabel: 'Товары', icon: 'box', navigation: true, audience: team, contextTableId: null, rootIds: [newItemButton, itemsNode], events: { enter: null } },
-      { id: movementsScreenId, name: 'Движения', menuLabel: 'Движения', icon: 'truck', navigation: true, audience: team, contextTableId: null, rootIds: [movementsNode], events: { enter: null } },
+      { id: movementsScreenId, name: 'Движения', menuLabel: 'Движения', icon: 'truck', navigation: true, audience: team, contextTableId: null, rootIds: [newOperationButton, movementsNode], events: { enter: null } },
       { id: createItemScreenId, name: 'Новый товар', icon: 'box', navigation: false, audience: owners, contextTableId: null, rootIds: [createItemFormId], events: { enter: null } },
       { id: itemScreenId, name: 'Товар', icon: 'box', navigation: false, audience: team, contextTableId: itemsTableId, recordTitleFieldId: itemName, rootIds: [
         ...identityFieldIds.map(id => `item_${id}`),
@@ -163,14 +167,15 @@ export function buildInventoryV2App(built: BuiltTemplate, meta: { id: string; wo
     ],
     nodes: [
       { id: newItemButton, name: 'Новый товар', type: 'button', label: 'Новый товар', variant: 'primary', visibleTo: owners, visibleWhen: null, events: { press: openCreateItem } },
+      { id: newOperationButton, name: 'Новая операция', type: 'button', label: 'Новая операция', variant: 'primary', visibleTo: team, visibleWhen: null, events: { press: openItemsForOperation } },
       { id: itemsNode, name: 'Товары', type: 'collection', visibleTo: null, visibleWhen: null, sourceId: itemsSource, layout: 'list', titleFieldId: itemName, subtitleFieldId: itemSku, cardDetailFieldId: itemStock, itemIds: [], events: { itemPress: openItem } },
-      { id: movementsNode, name: 'Журнал движений', type: 'collection', visibleTo: null, visibleWhen: null, sourceId: movementsSource, layout: 'list', titleFieldId: movementName, subtitleFieldId: movementType, cardDetailFieldId: movementQty, itemIds: [], events: { itemPress: null } },
+      { id: movementsNode, name: 'Журнал движений', type: 'collection', visibleTo: null, visibleWhen: null, sourceId: movementsSource, layout: 'list', titleFieldId: movementItem, subtitleFieldId: movementType, cardDetailFieldId: movementQty, itemIds: [], events: { itemPress: null } },
       ...[...identityFieldIds, ...factFieldIds].map(fieldId => {
         const column = columns(itemsTableId).find(item => item.id === fieldId)!
         const label = fieldId === itemCost ? 'Себестоимость, ₽' : column.name
         return node(`item_${fieldId}`, label, fieldId)
       }),
-      { id: historyNode, name: 'История движений', type: 'collection', visibleTo: null, visibleWhen: null, sourceId: historySource, layout: 'timeline', dateFieldId: movementDate, titleFieldId: movementName, subtitleFieldId: movementWarehouse, cardDetailFieldId: movementQty, itemIds: [], events: { itemPress: null } },
+      { id: historyNode, name: 'История движений', type: 'collection', visibleTo: null, visibleWhen: null, sourceId: historySource, layout: 'timeline', dateFieldId: movementDate, titleFieldId: movementType, subtitleFieldId: movementWarehouse, cardDetailFieldId: movementQty, itemIds: [], events: { itemPress: null } },
       { id: receiptFormId, name: INVENTORY_V2_COPY.receipt.name, type: 'form', visibleTo: team, visibleWhen: null, tableId: movementsTableId, mode: 'create', childIds: receiptInputs.map(item => item.id), events: { submit: saveReceipt }, submitLabel: INVENTORY_V2_COPY.receipt.action },
       ...receiptInputs,
       { id: issueFormId, name: INVENTORY_V2_COPY.issue.name, type: 'form', visibleTo: team, visibleWhen: null, tableId: movementsTableId, mode: 'create', childIds: issueInputs.map(item => item.id), events: { submit: saveIssue }, submitLabel: INVENTORY_V2_COPY.issue.action },
@@ -186,12 +191,16 @@ export function buildInventoryV2App(built: BuiltTemplate, meta: { id: string; wo
     ],
     sources: [
       { id: itemsSource, tableId: itemsTableId, viewId: null, filter: null, sorts: [], searchFieldIds: [itemName, itemSku], pageSize: 30 },
-      { id: movementsSource, tableId: movementsTableId, viewId: null, filter: null, sorts: [{ fieldId: movementDate, direction: 'desc' }], searchFieldIds: [movementName], pageSize: 40 },
+      { id: movementsSource, tableId: movementsTableId, viewId: null, filter: null, sorts: [{ fieldId: movementDate, direction: 'desc' }], searchFieldIds: [movementName, movementType], pageSize: 40 },
       { id: historySource, tableId: movementsTableId, screenTableId: itemsTableId, viewId: null, filter: { op: 'includes', left: { kind: 'row', fieldId: movementItem }, right: { kind: 'screen_row_id' } }, sorts: [{ fieldId: movementDate, direction: 'desc' }], searchFieldIds: [], pageSize: 30 },
     ],
     workflows: [
       { id: openItem, name: 'Открыть товар', input: { rowTableId: itemsTableId, formId: null, screenTableId: null }, steps: [{ id: newId('action'), type: 'open_screen', screenId: itemScreenId, record: { kind: 'current' } }] },
       { id: openCreateItem, name: 'Новый товар', input: { rowTableId: null, formId: null, screenTableId: null }, steps: [{ id: newId('action'), type: 'open_screen', screenId: createItemScreenId, record: null }] },
+      { id: openItemsForOperation, name: 'Новая операция', input: { rowTableId: null, formId: null, screenTableId: null }, steps: [
+        { id: newId('action'), type: 'notify', message: { kind: 'literal', value: 'Откройте товар и выберите операцию.' } },
+        { id: newId('action'), type: 'open_screen', screenId: itemsScreenId, record: null },
+      ] },
       movementWorkflow(saveReceipt, 'Приход', receiptFormId, 'receipt', receiptStep, receiptInputs),
       movementWorkflow(saveIssue, 'Расход', issueFormId, 'issue', issueStep, issueInputs),
       movementWorkflow(saveWriteOff, 'Списание', writeOffFormId, 'write_off', writeOffStep, writeOffInputs),
@@ -236,6 +245,7 @@ export function buildInventoryV2App(built: BuiltTemplate, meta: { id: string; wo
       workflows: [
         { workflowId: openItem, audience: team },
         { workflowId: openCreateItem, audience: owners },
+        { workflowId: openItemsForOperation, audience: team },
         { workflowId: saveReceipt, audience: team },
         { workflowId: saveIssue, audience: team },
         { workflowId: saveWriteOff, audience: owners },

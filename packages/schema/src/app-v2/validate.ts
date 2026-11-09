@@ -287,12 +287,12 @@ export function validateAppV2(app: AppV2, catalog: AppV2Catalog, options: { mode
           }
           if (step.type === 'record_inventory_movement' && app.inventory) {
             const inv = app.inventory
-            const required = [inv.movementQtyFieldId, inv.movementWarehouseFieldId, inv.movementNoteFieldId]
+            const required = [inv.movementQtyFieldId, inv.movementWarehouseFieldId, inv.movementNoteFieldId, inv.movementDateFieldId]
             if (step.operation === 'transfer') required.push(inv.movementWarehouseToFieldId)
             for (const fieldId of required) {
-              if (!step.values[fieldId] || step.values[fieldId]?.kind !== 'form') issue('inventory_form_binding', ownPath, 'Количество, склад и комментарий берутся из формы')
+              if (!step.values[fieldId] || step.values[fieldId]?.kind !== 'form') issue('inventory_form_binding', ownPath, 'Количество, склад, дата и комментарий берутся из формы')
             }
-            for (const fieldId of [inv.movementTypeFieldId, inv.movementItemFieldId, inv.movementAuthorFieldId, inv.movementDateFieldId, inv.movementNameFieldId, inv.movementBeforeFieldId, inv.movementAfterFieldId]) {
+            for (const fieldId of [inv.movementTypeFieldId, inv.movementItemFieldId, inv.movementAuthorFieldId, inv.movementNameFieldId, inv.movementBeforeFieldId, inv.movementAfterFieldId]) {
               if (fieldId && step.values[fieldId]) issue('inventory_server_field', ownPath, 'Тип, товар, автора и остатки заполняет сервер')
             }
           }

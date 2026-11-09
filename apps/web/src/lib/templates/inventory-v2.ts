@@ -51,7 +51,7 @@ export function buildInventoryV2App(built: BuiltTemplate, meta: { id: string; wo
   const itemCategory = fieldByName(itemsTableId, 'Категория')
   const itemUnit = fieldByName(itemsTableId, 'Единица')
   const itemMin = fieldByName(itemsTableId, 'Минимальный остаток')
-  const itemCost = fieldByName(itemsTableId, 'Себестоимость, ₽')
+  const itemCost = fieldByName(itemsTableId, 'Цена')
   const itemWarehouse = fieldByName(itemsTableId, 'Склад')
   const itemLow = fieldByName(itemsTableId, 'Пора докупать')
   const itemPhoto = inventory.item.image

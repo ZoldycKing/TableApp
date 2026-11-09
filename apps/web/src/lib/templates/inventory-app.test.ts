@@ -9,7 +9,7 @@ import { prepareStockOperationsUpgrade } from './inventory-upgrade'
 
 describe('warehouse preset and safe upgrade', () => {
   it('opens goods and receipts to the worker, while owner screens and prices stay private', () => {
-    const { app, runtime, fields } = inventoryFixture()
+    const { app, runtime, fields, built } = inventoryFixture()
     const config = app.inventory!
     expect(app.roles.find(role => role.isDefault)?.name).toBe('Кладовщик')
     expect(runtime.app.screens.filter(screen => screen.tab).map(screen => screen.name)).toEqual(['Товары'])
@@ -20,7 +20,7 @@ describe('warehouse preset and safe upgrade', () => {
     expect(itemTable.fields.map(field => field.id)).not.toContain(config.item.opening)
     expect(itemTable.rows.every(row => !(price.id in row.data))).toBe(true)
     expect(itemTable.rows[0]!.data[config.item.stock]).toBe(4)
-    expect(runtime.tables[config.tables.movements]?.rows ?? []).toHaveLength(0)
+    expect(built.rows.filter(row => row.tableId === config.tables.movements).length).toBeGreaterThan(0)
     expect(writableFields(app, config.tables.items, asRole('staff'), 'update').size).toBe(0)
     expect(writableFields(app, config.tables.items, asRole('manager'), 'update').has(price.id)).toBe(true)
   })
@@ -48,12 +48,12 @@ describe('warehouse preset and safe upgrade', () => {
     const upgraded = prepareInventoryUpgrade(legacy, table, oldFields, views, 'a9')
     expect(upgraded.app.inventory!.item.opening).toBe(config.item.opening)
     expect(upgraded.app.inventory!.tables.items).toBe(table.id)
-    expect(upgraded.tables).toHaveLength(1)
+    expect(upgraded.tables.map(item => item.name).sort()).toEqual(['Движения', 'Склады'])
     expect(upgraded.fields.filter(field => field.tableId === table.id)).toHaveLength(3)
     expect(upgraded.app.screens.some(screen => screen.id === legacy.homeScreenId)).toBe(true)
     const upgradedDetail = upgraded.app.screens.find(screen => screen.type === 'detail' && screen.tableId === table.id)!
     expect(upgradedDetail.type === 'detail' && upgradedDetail.components.some(c => c.type === 'field' && c.fieldId === upgraded.app.inventory!.item.stock)).toBe(true)
-    expect(built.rows[0]!.data[config.item.opening]).toBe(4)
+    expect(built.rows.find(row => row.tableId === table.id)!.data[config.item.opening]).toBe(0)
     const allFields = [...oldFields.map(field => field.id === config.item.opening ? { ...field, name: 'Начальный остаток' } : field), ...upgraded.fields] as typeof fields
     expect(checkAppReferences(upgraded.app, { tableIds: new Set([table.id, ...upgraded.tables.map(table => table.id)]), fields: new Map(allFields.map(field => [field.id, field])), views: new Map([...views, ...upgraded.views].map(view => [view.id, view])) })).toBeNull()
   })

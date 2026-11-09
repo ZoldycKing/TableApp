@@ -21,23 +21,12 @@ export const sklad: TemplateDef = {
     tables: { items: 'items', movements: 'receipts' },
     item: { name: 'name', opening: 'opening', movements: 'receipts', stock: 'qty', image: 'photo', sku: 'sku' },
     movement: { name: 'name', item: 'item', qty: 'qty', date: 'date', note: 'note', author: 'author' },
+    // V1 operations remain for module composition / upgrades; V2 uses Приход/Расход/Перемещение kinds below.
+    operations: { fields: { kind: 'kind', before: 'before', after: 'after' }, kinds: {
+      receipt: 'Приёмка', issue: 'Выдача', writeOff: 'Списание', returnIn: 'Возврат на склад', returnOut: 'Возврат поставщику', stocktake: 'Инвентаризация',
+    } },
   },
   tables: [
-    {
-      key: 'warehouses',
-      name: 'Склады',
-      icon: 'home',
-      primary: 'name',
-      fields: [
-        { key: 'name', name: 'Склад', type: 'text', help: 'Название места хранения: основной склад, инструменталка, витрина.' },
-        { key: 'note', name: 'Заметка', type: 'text', help: 'Адрес, режим или кто отвечает за этот склад.' },
-      ],
-      views: [{ name: 'Все склады', type: 'grid' }],
-      rows: [
-        { key: 'wh1', values: { name: 'Главный склад', note: 'Цех, стеллажи А–В' } },
-        { key: 'wh2', values: { name: 'Инструменталка', note: 'Кабинет мастера' } },
-      ],
-    },
     {
       key: 'items',
       name: 'Товары',
@@ -83,14 +72,14 @@ export const sklad: TemplateDef = {
           name: 'Минимальный остаток',
           type: 'number',
           options: { format: 'plain', precision: 0 },
-          help: 'Порог: товар подсвечивается, когда остаток ниже этого числа.',
+          help: 'Порог: товар подсвечивается, когда остаток не выше этого числа.',
         },
         {
           key: 'price',
-          name: 'Себестоимость, ₽',
+          name: 'Цена',
           type: 'number',
           options: { format: 'currency', precision: 2, currency: 'RUB' },
-          help: 'Закупочная цена за единицу. Видна владельцу.',
+          help: 'Закупочная цена за единицу. В карточке V2 показывается как себестоимость.',
         },
         {
           key: 'unit',
@@ -129,15 +118,15 @@ export const sklad: TemplateDef = {
           key: 'low',
           name: 'Пора докупать',
           type: 'formula',
-          expression: '{Остаток} < {Минимальный остаток}',
-          help: 'Отметка появляется, когда остаток строго ниже минимума.',
+          expression: '{Остаток} <= {Минимальный остаток}',
+          help: 'Отметка появляется, когда остаток опустился до порога или ниже.',
         },
         {
           key: 'total',
           name: 'Стоимость остатка',
           type: 'formula',
-          expression: '{Остаток} * {Себестоимость, ₽}',
-          help: 'Остаток × текущая себестоимость. Учёта партий нет.',
+          expression: '{Остаток} * {Цена}',
+          help: 'Остаток × текущая закупочная цена. Учёта партий нет.',
         },
       ],
       views: [
@@ -163,8 +152,13 @@ export const sklad: TemplateDef = {
         { key: 'item', name: 'Товар', type: 'relation', relationTable: 'items', allowMultiple: false, help: 'Товар, выбранный в карточке перед операцией.' },
         { key: 'qty', name: 'Изменение, шт', type: 'number', options: { format: 'plain', precision: 0 }, help: 'Поступление со знаком плюс, расход со знаком минус. Для перемещения — две строки.' },
         { key: 'kind', name: 'Вид операции', type: 'single_select', choices: [
+          // V2 stage 1
           { name: 'Приход', color: 'green' }, { name: 'Расход', color: 'blue' }, { name: 'Списание', color: 'red' },
           { name: 'Перемещение', color: 'violet' },
+          // V1 compatibility for module composition and upgrades
+          { name: 'Приёмка', color: 'green' }, { name: 'Выдача', color: 'blue' },
+          { name: 'Возврат на склад', color: 'teal' }, { name: 'Возврат поставщику', color: 'orange' },
+          { name: 'Инвентаризация', color: 'violet' },
         ], help: 'Заполняется сервером при сохранении из карточки товара.' },
         { key: 'warehouse', name: 'Склад', type: 'relation', relationTable: 'warehouses', allowMultiple: false, help: 'Склад, на котором меняется остаток. Для перемещения — склад списания.' },
         { key: 'warehouseTo', name: 'Склад назначения', type: 'relation', relationTable: 'warehouses', allowMultiple: false, help: 'Куда перемещаем. Заполняется только для перемещения.' },
@@ -186,6 +180,21 @@ export const sklad: TemplateDef = {
         { key: 'mv8', values: { name: 'Приход · Перчатки рабочие, пара', item: { rowKey: 's8' }, qty: 40, kind: 'Приход', warehouse: { rowKey: 'wh1' }, before: 0, after: 40, date: inDays(-5), note: '', author: 'owner@example.invalid' } },
         { key: 'mv9', values: { name: 'Расход · Фильтр воздушный FA-120', item: { rowKey: 's1' }, qty: -6, kind: 'Расход', warehouse: { rowKey: 'wh1' }, before: 10, after: 4, date: inDays(-2), note: 'Выдача на объект «Вектор»', author: 'owner@example.invalid' } },
         { key: 'mv10', values: { name: 'Расход · Перчатки рабочие, пара', item: { rowKey: 's8' }, qty: -15, kind: 'Расход', warehouse: { rowKey: 'wh1' }, before: 40, after: 25, date: inDays(-1), note: 'Смена мастеров', author: 'owner@example.invalid' } },
+      ],
+    },
+    {
+      key: 'warehouses',
+      name: 'Склады',
+      icon: 'home',
+      primary: 'name',
+      fields: [
+        { key: 'name', name: 'Склад', type: 'text', help: 'Название места хранения: основной склад, инструменталка, витрина.' },
+        { key: 'note', name: 'Заметка', type: 'text', help: 'Адрес, режим или кто отвечает за этот склад.' },
+      ],
+      views: [{ name: 'Все склады', type: 'grid' }],
+      rows: [
+        { key: 'wh1', values: { name: 'Главный склад', note: 'Цех, стеллажи А–В' } },
+        { key: 'wh2', values: { name: 'Инструменталка', note: 'Кабинет мастера' } },
       ],
     },
   ],

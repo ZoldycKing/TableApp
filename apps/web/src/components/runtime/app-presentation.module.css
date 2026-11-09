@@ -10,9 +10,11 @@
   font-weight: 650;
   line-height: 1.17;
   letter-spacing: -.025em;
-  overflow-wrap: break-word;
+  /* Wrap on spaces only — never mid-token (FA-/120). */
+  overflow-wrap: normal;
   word-break: normal;
   hyphens: none;
+  line-break: strict;
 }
 
 .iconControl {

@@ -83,7 +83,7 @@ export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,childre
       {back ? <button type="button" className={presentation.iconControl} onClick={back} aria-label="Назад" title="Назад"><ProtoIcon name="back" /></button> : <span className={css.headerMark}>{mark}</span>}
       {profile && <BuilderV2RecordAvatar name={title} id={scrollKey || screenId} icon="users" />}
       {catalogDetail ? <span className={css.catalogIdentity}>{sectionScreen?.name ?? appName}</span>
-        : <div><span className={css.headerIdentity}>{headerEyebrow}</span><h1 className={presentation.pageTitle}>{title}</h1></div>}
+        : <div><span className={css.headerIdentity}>{headerEyebrow}</span><h1 className={presentation.pageTitle}>{title.replaceAll('-', '\u2011')}</h1></div>}
       {headerAction&&<span className={css.headerAction}>{headerAction}</span>}
     </header>
     <div ref={body} className={css.body} role={contained ? 'region' : undefined} aria-label={contained ? 'Содержимое экрана' : undefined} tabIndex={contained ? 0 : undefined}>{notice}<div ref={contents} className={`${styles.appContent} ${css.content} ${presentation.contentWidth}`}>{children}</div></div>

@@ -84,7 +84,7 @@
 .orderIdentity[data-manage] .heroAmount { flex: 1 1 auto; text-align: start; min-width: 0; }
 .orderIdentity[data-manage] .heroAmount > strong { font-size: clamp(1.5rem, 4.2cqw, 1.9rem); overflow-wrap: break-word; word-break: normal; }
 .orderIdentity[data-manage] .heroStatus { flex: 0 1 auto; margin-inline-start: auto; max-width: 100%; text-align: end; }
-.orderIdentity[data-variant="pipeline"] .orderIdentityMain { gap: 14px; align-items: stretch; }
+.orderIdentity[data-variant="pipeline"] .orderIdentityMain { display: grid; gap: 14px; align-items: start; }
 .orderIdentityFacts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 18px; width: 100%; min-width: 0; align-items: start; }
 .orderIdentityFact { display: grid; gap: 4px; min-width: 0; align-content: start; }
 .orderIdentityFact > span { color: var(--v2-muted); font-size: 12px; line-height: 1.3; font-weight: 650; }
@@ -197,9 +197,9 @@
   .orderDetailBody { grid-template-columns: minmax(0, 1.45fr) minmax(17rem, 0.85fr); }
   .orderDetail[data-layout="stack"] .orderDetailBody { grid-template-columns: minmax(0, 1fr); }
   .orderIdentity:not([data-manage]) .orderIdentityMain { flex-direction: row; justify-content: space-between; align-items: end; }
-  .orderIdentity[data-variant="pipeline"] .orderIdentityMain { flex-direction: row; justify-content: space-between; align-items: start; gap: 16px 24px; }
-  .orderIdentityFacts { grid-template-columns: repeat(4, minmax(0, 1fr)); flex: 1 1 auto; }
-  .orderIdentityActions[data-placement="desktop"] { display: flex; flex: 0 0 auto; }
+  .orderIdentity[data-variant="pipeline"] .orderIdentityMain { grid-template-columns: minmax(0, 1fr) auto; gap: 16px 24px; align-items: start; }
+  .orderIdentityFacts { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .orderIdentityActions[data-placement="desktop"] { display: flex; }
   .orderDetail[data-layout="stack"][data-manage] { padding-bottom: 0; }
   .orderDetail[data-layout="stack"] .orderActionDock[data-placement="mobile"] { display: none; }
   .orderContactRow { grid-template-columns: repeat(2, minmax(0, 1fr)); }

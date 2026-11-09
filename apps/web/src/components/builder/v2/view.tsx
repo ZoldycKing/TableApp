@@ -189,9 +189,12 @@ export function AppV2Renderer(props: AppV2RendererProps) {
             const image = cardLayout && node.cardImageFieldId && row
               ? builderV2MediaItems(row.values[node.cardImageFieldId], published?.slug).find(item => item.image)
               : undefined
-            const detail = cardLayout && node.cardDetailFieldId && row
+            const detail = node.cardDetailFieldId && row
               ? catalog ? builderV2CatalogPrice(row, table?.fields.find(field => field.id === node.cardDetailFieldId)) : cell(row, node.cardDetailFieldId)
               : ''
+            const detailNode = detail
+              ? <span className={cardLayout ? ui.catalogDetail : ui.recordMetaDetail}>{detail}</span>
+              : null
             const summary = (row as BuilderV2DataRecord | undefined)?.summary
             const total = summary?.amount != null && amountField ? builderV2FormattedAmount(summary.amount, amountField.name) : ''
             const subtitleValue = row && subtitleField
@@ -207,10 +210,10 @@ export function AppV2Renderer(props: AppV2RendererProps) {
               {subtitleValue && node.subtitleFieldId !== node.dateFieldId && (statusSubtitle
                 ? <span className={ui.recordMeta}>
                   <span className={ui.statusBadge} data-tone={builderV2StatusTone(subtitleValue)}>{subtitleValue}</span>
-                  {detail ? <span className={ui.recordMetaDetail}>{detail}</span> : null}
+                  {detailNode}
                 </span>
                 : <small data-money={moneySubtitle || undefined}>{subtitleValue}</small>)}
-              {detail && !statusSubtitle && <span className={ui.catalogDetail}>{detail}</span>}
+              {detailNode && !statusSubtitle && (cardLayout || !subtitleValue) ? detailNode : null}
               {summary && <span className={ui.recordSummary}><span>Позиций: {summary.count}</span>{total && <strong>{total}</strong>}</span>}
             </>
           }

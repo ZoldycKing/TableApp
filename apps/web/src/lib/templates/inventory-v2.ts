@@ -165,7 +165,11 @@ export function buildInventoryV2App(built: BuiltTemplate, meta: { id: string; wo
       { id: newItemButton, name: 'Новый товар', type: 'button', label: 'Новый товар', variant: 'primary', visibleTo: owners, visibleWhen: null, events: { press: openCreateItem } },
       { id: itemsNode, name: 'Товары', type: 'collection', visibleTo: null, visibleWhen: null, sourceId: itemsSource, layout: 'list', titleFieldId: itemName, subtitleFieldId: itemSku, cardDetailFieldId: itemStock, itemIds: [], events: { itemPress: openItem } },
       { id: movementsNode, name: 'Журнал движений', type: 'collection', visibleTo: null, visibleWhen: null, sourceId: movementsSource, layout: 'list', titleFieldId: movementName, subtitleFieldId: movementType, cardDetailFieldId: movementQty, itemIds: [], events: { itemPress: null } },
-      ...[...identityFieldIds, ...factFieldIds].map(fieldId => node(`item_${fieldId}`, columns(itemsTableId).find(item => item.id === fieldId)!.name, fieldId)),
+      ...[...identityFieldIds, ...factFieldIds].map(fieldId => {
+        const column = columns(itemsTableId).find(item => item.id === fieldId)!
+        const label = fieldId === itemCost ? 'Себестоимость, ₽' : column.name
+        return node(`item_${fieldId}`, label, fieldId)
+      }),
       { id: historyNode, name: 'История движений', type: 'collection', visibleTo: null, visibleWhen: null, sourceId: historySource, layout: 'timeline', dateFieldId: movementDate, titleFieldId: movementName, subtitleFieldId: movementWarehouse, cardDetailFieldId: movementQty, itemIds: [], events: { itemPress: null } },
       { id: receiptFormId, name: INVENTORY_V2_COPY.receipt.name, type: 'form', visibleTo: team, visibleWhen: null, tableId: movementsTableId, mode: 'create', childIds: receiptInputs.map(item => item.id), events: { submit: saveReceipt }, submitLabel: INVENTORY_V2_COPY.receipt.action },
       ...receiptInputs,

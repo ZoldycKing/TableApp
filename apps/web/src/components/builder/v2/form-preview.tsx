@@ -181,6 +181,37 @@ function ShopCheckoutSync() {
   return null
 }
 
+function InventoryDateInput({ id, disabled, errorId, required, label, value, onChange }: {
+  id: string
+  disabled: boolean
+  errorId?: string
+  required: boolean
+  label: string
+  value: string
+  onChange: (value: AppV2Json) => void
+}) {
+  const formatted = (() => {
+    if (!value) return ''
+    const [y = '', m = '', d = ''] = value.split('-')
+    return y && m && d ? `${d}.${m}.${y}` : ''
+  })()
+  const [draft, setDraft] = useState(formatted)
+  useEffect(() => { setDraft(formatted) }, [formatted])
+  const commit = (raw: string) => {
+    const trimmed = raw.trim()
+    if (!trimmed) { onChange(null); return }
+    const match = trimmed.match(/^(\d{2})\.(\d{2})\.(\d{4})$/)
+    if (match) onChange(`${match[3]}-${match[2]}-${match[1]}T12:00`)
+  }
+  return <input id={id} disabled={disabled} aria-describedby={errorId} aria-invalid={Boolean(errorId)} aria-required={required} aria-label={label} type="text" inputMode="numeric" placeholder="дд.мм.гггг" autoComplete="off" value={draft} onChange={event => {
+    const digits = event.target.value.replace(/\D/g, '').slice(0, 8)
+    const next = digits.length <= 2 ? digits : digits.length <= 4 ? `${digits.slice(0, 2)}.${digits.slice(2)}` : `${digits.slice(0, 2)}.${digits.slice(2, 4)}.${digits.slice(4)}`
+    setDraft(next)
+    if (!digits.length) onChange(null)
+    else if (digits.length === 8) commit(next)
+  }} onBlur={event => commit(event.target.value)} />
+}
+
 export function BuilderV2FormInput({ node, table }: { node: BuilderV2Input; table?: BuilderV2Table }) {
   const context = useContext(Context), published=usePublishedV2(), unique = useId(), field = context?.state?.fields.find(field => field.nodeId === node.id), column = table?.fields.find(field => field.id === node.fieldId)
   if (context?.app.shop && (node.fieldId === context.app.shop.cartFieldId || node.fieldId === context.app.shop.submissionFieldId)) return null
@@ -208,11 +239,11 @@ export function BuilderV2FormInput({ node, table }: { node: BuilderV2Input; tabl
     : type === 'checkbox' ? <input {...common} type="checkbox" checked={value === true} onChange={event => change(event.target.checked)} />
     : type === 'single_select' || type === 'multi_select' ? <select {...common} multiple={type === 'multi_select'} value={type === 'multi_select' ? Array.isArray(value) ? value as string[] : [] : String(value ?? '')} onChange={event => change(type === 'multi_select' ? Array.from(event.target.selectedOptions).map(option => option.value) : event.target.value || null)}>{type === 'single_select' && <option value="">Выберите значение</option>}{(field?.choices ?? column?.choices)?.map(choice => <option key={choice.id} value={choice.id}>{choice.name}</option>)}</select>
     : type === 'long_text' ? <textarea {...common} rows={3} value={String(value ?? '')} maxLength={10000} onChange={event => change(event.target.value)} />
-    : type === 'date' || type === 'datetime' ? <input {...common} type={inventoryDate || type === 'date' ? 'date' : 'datetime-local'} value={dateValue} onChange={event => {
+    : inventoryDate ? <InventoryDateInput id={unique} disabled={disabled} errorId={errorId} required={node.required} label={label} value={dateValue} onChange={change} />
+    : type === 'date' || type === 'datetime' ? <input {...common} type={type === 'date' ? 'date' : 'datetime-local'} value={dateValue} onChange={event => {
       const next = event.target.value
       if (!next) { change(null); return }
-      if (inventoryDate || type === 'date') change(type === 'datetime' || inventoryDate ? `${next}T12:00` : next)
-      else change(next)
+      change(next)
     }} />
     : type==='member' ? <span className={ui.hint}>Этот тип поля появится в форме позже.</span>
     : type === 'number' && builderV2IsMoneyFieldLabel(label)

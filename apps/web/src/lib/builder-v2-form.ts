@@ -101,11 +101,21 @@ export async function inspectBuilderV2Form(app: AppV2, member: Member, request: 
       }
     }
     if (Object.keys(errors).length) return { ok: false, error: request.mode === 'check' ? 'Проверьте отмеченные поля' : 'Проверьте начальные значения формы', errors }
-    if (app.inventory && context.screenRow) {
+    if (app.inventory && context.screenRow && screen.contextTableId) {
       const stock = context.screenRow.values[app.inventory.itemStockFieldId]
-      const unit = context.screenRow.values[app.inventory.itemUnitFieldId]
+      const unitValue = context.screenRow.values[app.inventory.itemUnitFieldId]
+      const itemFields = meta.fieldsByTable.get(screen.contextTableId) ?? []
+      const stockField = itemFields.find(field => field.id === app.inventory!.itemStockFieldId)
+      const unitField = itemFields.find(field => field.id === app.inventory!.itemUnitFieldId)
       if (typeof stock === 'number' && Number.isFinite(stock)) labels[app.inventory.itemStockFieldId] = String(stock)
-      if (typeof unit === 'string' && unit.trim()) labels[app.inventory.itemUnitFieldId] = unit.trim()
+      else if (stockField) {
+        const formatted = formatCell(stockField, stock)
+        if (formatted && /^-?\d+/.test(formatted)) labels[app.inventory.itemStockFieldId] = formatted.match(/-?\d+/)![0]!
+      }
+      if (unitField) {
+        const formatted = formatCell(unitField, unitValue).trim()
+        if (formatted) labels[app.inventory.itemUnitFieldId] = formatted
+      }
     }
     const state: BuilderV2FormState = { values: builderV2Json(values) as Record<string, AppV2Json>, labels, fingerprint, fields: inputs.map(input => { const field = fields.find(field => field.id === input.fieldId)!; return { nodeId: input.id, fieldId: field.id, label: input.label || field.name, type: field.type, required: input.required, readOnly: Boolean(input.readOnly), supported: BUILDER_V2_FORM_TYPES.includes(field.type), ...('choices' in field.options ? { choices: field.options.choices } : {}), ...(field.type === 'relation' ? { allowMultiple: field.options.allowMultiple } : {}), ...(field.type==='image'||field.type==='attachment'?{maxCount:field.options.maxCount}:{}), ...(field.type === 'date' || field.type === 'datetime' ? { timeZone: fieldTimeZone(field) } : {}) } }) }
     return { ok: true, state }

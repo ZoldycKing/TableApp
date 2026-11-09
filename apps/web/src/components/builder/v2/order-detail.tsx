@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type ReactNode, type Ref } from 'react'
 import type { AppV2, AppV2Record } from '@tableapp/schema/app-v2'
 import { builderV2CatalogPrice, builderV2FormattedAmount } from '@/lib/builder-v2-catalog'
 import { builderV2OrderFactKind, builderV2OrderLineProductId, builderV2StatusProgress } from '@/lib/builder-v2-order-detail'
@@ -51,21 +51,38 @@ export function BuilderV2OrderIdentity({
 }) {
   if (!title && !status && !amount && !progress?.length && !due && !client && !actions) return null
   const pipeline = variant === 'pipeline' && manage
-  const showCopy = Boolean(title || (status && !manage) || (pipeline && status))
-  const showMeta = Boolean((status && manage && !pipeline) || amount || due || client)
   const moneyLabel = amountLabel === undefined ? (scoped ? 'Сумма доступных позиций' : 'Итого') : amountLabel
-  return <section className={`${presentation.panel} ${ui.orderIdentity}`} data-manage={manage || undefined} data-variant={pipeline ? 'pipeline' : undefined} aria-label="Главное о заказе">
+  if (pipeline) {
+    const facts = [
+      status ? { id: 'stage', label: 'Этап', value: status, tone: builderV2StatusTone(status) } : null,
+      due ? { id: 'due', label: due.label, value: due.value, tone: due.tone } : null,
+      amount ? { id: 'amount', label: moneyLabel || 'Сумма', value: amount, tone: 'amount' as const } : null,
+      client ? { id: 'client', label: 'Клиент', value: client } : null,
+    ].filter(Boolean) as { id: string; label: string; value: string; tone?: string }[]
+    return <section className={`${presentation.panel} ${ui.orderIdentity}`} data-manage data-variant="pipeline" aria-label="Главное о сделке">
+      <div className={ui.orderIdentityMain}>
+        {facts.length > 0 && <div className={ui.orderIdentityFacts}>
+          {facts.map(fact => <div key={fact.id} className={ui.orderIdentityFact} data-tone={fact.tone} data-kind={fact.id}>
+            <span>{fact.label}</span>
+            <strong>{fact.value}</strong>
+          </div>)}
+        </div>}
+        {actions && <div className={ui.orderIdentityActions} data-placement="desktop">{actions}</div>}
+      </div>
+    </section>
+  }
+  const showCopy = Boolean(title || (status && !manage))
+  const showMeta = Boolean((status && manage) || amount || due)
+  return <section className={`${presentation.panel} ${ui.orderIdentity}`} data-manage={manage || undefined} aria-label="Главное о заказе">
     <div className={ui.orderIdentityMain}>
       {showCopy && <div className={ui.orderIdentityCopy}>
         {title && <h2 className={ui.orderTitle}>{title}</h2>}
-        {status && (!manage || pipeline) && <p className={ui.orderStatusLead} data-tone={builderV2StatusTone(status)}>{status}</p>}
-        {pipeline && client && <p className={ui.orderIdentityClient}>{client}</p>}
+        {status && !manage && <p className={ui.orderStatusLead} data-tone={builderV2StatusTone(status)}>{status}</p>}
       </div>}
       {showMeta && <div className={ui.orderIdentityMeta}>
-        {pipeline && due && <div className={ui.orderDue} data-tone={due.tone}><span>{due.label}</span><strong>{due.value}</strong></div>}
-        {amount && <div className={ui.heroAmount} data-secondary={pipeline || undefined} data-bare={!moneyLabel || undefined}>{moneyLabel ? <span>{moneyLabel}</span> : null}<strong>{amount}</strong></div>}
-        {status && manage && !pipeline && <span className={ui.heroStatus} data-tone={builderV2StatusTone(status)}><ProtoIcon name="box" size={18} />{status}</span>}
-        {!pipeline && due && <div className={ui.orderDue} data-tone={due.tone}><span>{due.label}</span><strong>{due.value}</strong></div>}
+        {amount && <div className={ui.heroAmount} data-bare={!moneyLabel || undefined}>{moneyLabel ? <span>{moneyLabel}</span> : null}<strong>{amount}</strong></div>}
+        {status && manage && <span className={ui.heroStatus} data-tone={builderV2StatusTone(status)}><ProtoIcon name="box" size={18} />{status}</span>}
+        {due && <div className={ui.orderDue} data-tone={due.tone}><span>{due.label}</span><strong>{due.value}</strong></div>}
       </div>}
       {actions && <div className={ui.orderIdentityActions}>{actions}</div>}
     </div>
@@ -143,26 +160,65 @@ export function BuilderV2OrderLinesPanel({
   </section>
 }
 
+function orderActionFocusables(root: HTMLElement) {
+  return [...root.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), [tabindex]:not([tabindex="-1"])')]
+    .filter(node => node.getAttribute('aria-hidden') !== 'true' && !node.hasAttribute('disabled') && node.tabIndex !== -1)
+}
+
+function BuilderV2OrderActionToolbar({
+  items,
+  onOpen,
+  dockRef,
+  placement,
+}: {
+  items: readonly { id: string; title: string; icon?: string; primary?: boolean }[]
+  onOpen: (id: string) => void
+  dockRef?: Ref<HTMLDivElement>
+  placement?: 'desktop' | 'mobile'
+}) {
+  return <div ref={dockRef} className={placement === 'desktop' ? ui.orderIdentityActions : ui.orderActionDock} data-mode={placement === 'mobile' ? 'reveal' : undefined} data-placement={placement} aria-label="Действия">
+    {items.map(item => item.primary || !item.icon
+      ? <button key={item.id} type="button" className={`${styles.primary} ${ui.orderActionTrigger}`} onClick={() => onOpen(item.id)}>{item.title}</button>
+      : <button key={item.id} type="button" className={ui.orderActionIcon} aria-label={item.title} title={item.title} onClick={() => onOpen(item.id)}><ProtoIcon name={item.icon!} size={20} /></button>)}
+  </div>
+}
+
 export function BuilderV2OrderActionPanel({
   title = 'Обработка заказа',
   mode = 'persistent',
   triggers,
   children,
+  identity,
 }: {
   title?: string
   mode?: BuilderV2OrderActionMode
   triggers?: readonly BuilderV2OrderActionTrigger[]
   children?: ReactNode
+  identity?: {
+    status?: string
+    amount?: string
+    amountLabel?: string
+    due?: { label: string; value: string; tone?: 'overdue' | 'today' }
+    client?: string
+  }
 }) {
   const multi = Boolean(triggers?.length)
   const [openId, setOpenId] = useState<string | null>(mode === 'persistent' && !multi ? 'default' : null)
   const dockRef = useRef<HTMLDivElement>(null)
+  const lastTrigger = useRef<HTMLElement | null>(null)
   const panelRef = useRef<HTMLElement>(null)
   const titleId = useId()
   const active = multi ? triggers!.find(item => item.id === openId) : openId ? { id: 'default', title, children } : null
   const close = useCallback(() => {
     setOpenId(null)
-    queueMicrotask(() => dockRef.current?.querySelector<HTMLButtonElement>('button')?.focus())
+    queueMicrotask(() => (lastTrigger.current ?? dockRef.current?.querySelector<HTMLButtonElement>('button'))?.focus())
+  }, [])
+  const open = useCallback((id: string) => {
+    lastTrigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    setOpenId(id)
+  }, [])
+  const submitForm = useCallback(() => {
+    panelRef.current?.querySelector<HTMLButtonElement>('form button[type="submit"]')?.click()
   }, [])
   useEffect(() => {
     if (mode === 'persistent' && !multi) setOpenId('default')
@@ -174,25 +230,50 @@ export function BuilderV2OrderActionPanel({
   }, [active, mode, openId])
   useEffect(() => {
     if (!active || mode !== 'reveal') return
-    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') close() }
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { event.preventDefault(); close(); return }
+      if (event.key !== 'Tab' || !panelRef.current) return
+      const nodes = orderActionFocusables(panelRef.current)
+      if (!nodes.length) return
+      const first = nodes[0]!, last = nodes[nodes.length - 1]!
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
+    }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [active, mode, close])
   if (!multi && !children) return null
-  if (mode === 'reveal' && !active) {
-    const items = multi ? triggers! : [{ id: 'default', title, primary: true as const, children }]
-    return <div ref={dockRef} className={ui.orderActionDock} data-mode="reveal" data-open="false" aria-label="Действия">
-      {items.map(item => item.primary || !item.icon
-        ? <button key={item.id} type="button" className={`${styles.primary} ${ui.orderActionTrigger}`} onClick={() => setOpenId(item.id)}>{item.title}</button>
-        : <button key={item.id} type="button" className={ui.orderActionIcon} aria-label={item.title} title={item.title} onClick={() => setOpenId(item.id)}><ProtoIcon name={item.icon!} size={20} /></button>)}
-    </div>
+  const items = multi ? triggers! : [{ id: 'default', title, primary: true as const, children }]
+  const toolbarItems = items.map(({ id, title: itemTitle, icon, primary }) => ({ id, title: itemTitle, icon, primary }))
+  if (mode === 'reveal') {
+    const dialog = active ? <OrderActionPanelContext.Provider value={{ mode, close }}>
+      <button type="button" className={ui.orderActionScrim} aria-label="Закрыть" onClick={close} />
+      <aside ref={panelRef} className={ui.orderActionPanel} data-mode={mode} data-open="true" data-dialog aria-labelledby={titleId} role="dialog" aria-modal="true">
+        <div className={ui.orderActionHeader}>
+          <h2 className={presentation.sectionTitle} id={titleId}>{active.title}</h2>
+        </div>
+        <div className={ui.orderActionBody}>{active.children}</div>
+        <div className={ui.orderActionFooter}>
+          <button type="button" className={styles.secondary} data-action-cancel onClick={close}>Отмена</button>
+          <button type="button" className={styles.primary} onClick={submitForm}>Сохранить</button>
+        </div>
+      </aside>
+    </OrderActionPanelContext.Provider> : null
+    if (identity) {
+      return <>
+        <BuilderV2OrderIdentity variant="pipeline" manage status={identity.status} amount={identity.amount} amountLabel={identity.amountLabel ?? ''} due={identity.due} client={identity.client}
+          actions={<BuilderV2OrderActionToolbar items={toolbarItems} onOpen={open} placement="desktop" />} />
+        {!active && <BuilderV2OrderActionToolbar items={toolbarItems} onOpen={open} dockRef={dockRef} placement="mobile" />}
+        {dialog}
+      </>
+    }
+    if (!active) return <BuilderV2OrderActionToolbar items={toolbarItems} onOpen={open} dockRef={dockRef} placement="mobile" />
+    return dialog
   }
   return <OrderActionPanelContext.Provider value={{ mode, close }}>
-    {mode === 'reveal' && <button type="button" className={ui.orderActionScrim} aria-label="Закрыть" onClick={close} />}
-    <aside ref={panelRef} className={`${presentation.panel} ${ui.orderActionPanel}`} data-mode={mode} data-open={active ? 'true' : undefined} data-sheet={mode === 'reveal' || undefined} aria-labelledby={titleId} role={mode === 'reveal' ? 'dialog' : undefined} aria-modal={mode === 'reveal' || undefined}>
+    <aside ref={panelRef} className={`${presentation.panel} ${ui.orderActionPanel}`} data-mode={mode} data-open={active ? 'true' : undefined} aria-labelledby={titleId}>
       <div className={ui.orderActionHeader}>
         <h2 className={presentation.sectionTitle} id={titleId}>{active?.title ?? title}</h2>
-        {mode === 'reveal' && <button type="button" className={styles.textButton} data-action-cancel onClick={close}>Отмена</button>}
       </div>
       <div className={ui.orderActionBody}>{active?.children}</div>
     </aside>

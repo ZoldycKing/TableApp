@@ -205,9 +205,12 @@ export function AppV2Renderer(props: AppV2RendererProps) {
               <strong>{label}</strong>
               {time(row) && <small>{time(row)}</small>}
               {subtitleValue && node.subtitleFieldId !== node.dateFieldId && (statusSubtitle
-                ? <span className={ui.statusBadge} data-tone={builderV2StatusTone(subtitleValue)}>{subtitleValue}</span>
+                ? <span className={ui.recordMeta}>
+                  <span className={ui.statusBadge} data-tone={builderV2StatusTone(subtitleValue)}>{subtitleValue}</span>
+                  {detail ? <span className={ui.recordMetaDetail}>{detail}</span> : null}
+                </span>
                 : <small data-money={moneySubtitle || undefined}>{subtitleValue}</small>)}
-              {detail && <span className={ui.catalogDetail}>{detail}</span>}
+              {detail && !statusSubtitle && <span className={ui.catalogDetail}>{detail}</span>}
               {summary && <span className={ui.recordSummary}><span>Позиций: {summary.count}</span>{total && <strong>{total}</strong>}</span>}
             </>
           }
@@ -363,14 +366,16 @@ export function AppV2Renderer(props: AppV2RendererProps) {
       {!manage && showCustomerIdentity && <BuilderV2OrderIdentity title={title || undefined} status={status} amount={undefined} scoped={summary?.scoped} progress={progress} manage={false} />}
       <div className={ui.orderDetailBody}>
         <div className={ui.orderDetailMain}>
-          {manage && crmDeal && <BuilderV2OrderIdentity variant="pipeline" title={title || undefined} status={status} amount={amount} amountLabel="" due={due} client={clientText} scoped={summary?.scoped} manage />}
+          {manage && crmDeal && triggers
+            ? <BuilderV2OrderActionPanel title={actionTitle} mode="reveal" triggers={triggers} identity={{ status, amount, amountLabel: 'Сумма', due, client: clientText }} />
+            : null}
           {manage && !crmDeal && <BuilderV2OrderIdentity status={status} amount={amount} scoped={summary?.scoped} manage />}
           {linesBlock}
           {manage && <BuilderV2OrderFacts items={deliveryFacts} title={factsTitle} />}
           {manage && render([...parts.buttonIds, ...parts.otherIds])}
         </div>
-        {manage && (parts.processingFormId || parts.editFormId)
-          ? <BuilderV2OrderActionPanel title={actionTitle} mode={actionMode} triggers={triggers}>{!triggers && parts.processingFormId ? render([parts.processingFormId]) : null}</BuilderV2OrderActionPanel>
+        {manage && crmDeal ? null : manage && parts.processingFormId
+          ? <BuilderV2OrderActionPanel title={actionTitle} mode={actionMode}>{render([parts.processingFormId])}</BuilderV2OrderActionPanel>
           : <div className={ui.orderDetailSide}>
             {!crm && <BuilderV2OrderSummaryCard amount={amount} scoped={summary?.scoped} />}
             <BuilderV2OrderFacts items={deliveryFacts} title={sideFactsTitle} />

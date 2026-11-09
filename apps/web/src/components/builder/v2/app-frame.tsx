@@ -70,6 +70,9 @@ export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,childre
   const navButton=(screen:AppV2['screens'][number],extra=false)=><button type="button" key={screen.id} title={builderV2MenuLabel(screen)} aria-current={screen.id===sectionId?'page':undefined} className={extra?css.extraItem:undefined} onClick={()=>choose(screen.id)}><ProtoIcon name={screen.icon}/><span>{builderV2MenuLabel(screen)}</span></button>
   const overflow=screens.length>5,rest=screens.slice(4),activeExtra=rest.some(screen=>screen.id===sectionId)
   const appName = app.name || 'Моё приложение'
+  const sectionScreen = app.screens.find(screen => screen.id === sectionId)
+  // Record cards show the parent section (Клиенты / Сделки), not the app name.
+  const headerEyebrow = back ? (sectionScreen?.name ?? appName) : appName
   const mark = <BuilderV2AppMark logo={builderV2LogoUrl(app, draftLogo)} icon={app.appearance?.icon} />
   return <div className={`${css.stage} ${centered && !phone ? css.centeredStage : ''}`} data-frame-stage data-fullscreen={fullScreen || undefined}>
     <div className={css.container} data-app-frame="" data-phone={phone} data-contained={contained || undefined} data-fullscreen={fullScreen || undefined}>
@@ -78,8 +81,8 @@ export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,childre
     <header className={`${styles.appHeader} ${css.header}`}>
       {back ? <button type="button" className={presentation.iconControl} onClick={back} aria-label="Назад" title="Назад"><ProtoIcon name="back" /></button> : <span className={css.headerMark}>{mark}</span>}
       {profile && <BuilderV2RecordAvatar name={title} id={scrollKey || screenId} icon="users" />}
-      {catalogDetail ? <span className={css.catalogIdentity}>{screens.find(screen => screen.id === sectionId)?.name ?? appName}</span>
-        : <div><span className={css.headerIdentity}>{appName}</span><h1 className={presentation.pageTitle}>{title}</h1></div>}
+      {catalogDetail ? <span className={css.catalogIdentity}>{sectionScreen?.name ?? appName}</span>
+        : <div><span className={css.headerIdentity}>{headerEyebrow}</span><h1 className={presentation.pageTitle}>{title}</h1></div>}
       {headerAction&&<span className={css.headerAction}>{headerAction}</span>}
     </header>
     <div ref={body} className={css.body} role={contained ? 'region' : undefined} aria-label={contained ? 'Содержимое экрана' : undefined} tabIndex={contained ? 0 : undefined}>{notice}<div ref={contents} className={`${styles.appContent} ${css.content} ${presentation.contentWidth}`}>{children}</div></div>

@@ -11,6 +11,8 @@ if (existsSync(rootEnv)) process.loadEnvFile(rootEnv)
 const config: NextConfig = {
   // The dev server also opens from the in-app browser at this loopback address.
   allowedDevOrigins: ['127.0.0.1'],
+  // Hide the Next.js “N” badge so QA screenshots are not covered by it.
+  devIndicators: false,
 
   // Пакеты монорепозитория поставляются исходниками на TypeScript.
   transpilePackages: ['@tableapp/schema', '@tableapp/formula', '@tableapp/import', '@tableapp/db'],

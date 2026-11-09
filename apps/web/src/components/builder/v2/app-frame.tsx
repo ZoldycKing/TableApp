@@ -71,8 +71,9 @@ export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,childre
   const overflow=screens.length>5,rest=screens.slice(4),activeExtra=rest.some(screen=>screen.id===sectionId)
   const appName = app.name || 'Моё приложение'
   const sectionScreen = app.screens.find(screen => screen.id === sectionId)
-  // Record cards show the parent section (Клиенты / Сделки), not the app name.
-  const headerEyebrow = back ? (sectionScreen?.name ?? appName) : appName
+  // Record cards show the parent section (Клиенты / Сделки). If the parent is
+  // unknown, sectionId falls back to the card itself — keep the app name then.
+  const headerEyebrow = back && sectionScreen && sectionId !== screenId ? sectionScreen.name : appName
   const mark = <BuilderV2AppMark logo={builderV2LogoUrl(app, draftLogo)} icon={app.appearance?.icon} />
   return <div className={`${css.stage} ${centered && !phone ? css.centeredStage : ''}`} data-frame-stage data-fullscreen={fullScreen || undefined}>
     <div className={css.container} data-app-frame="" data-phone={phone} data-contained={contained || undefined} data-fullscreen={fullScreen || undefined}>

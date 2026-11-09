@@ -28,6 +28,8 @@ export function builderV2OrderDetailParts(args: {
   positionsFieldId?: string
   statusFormId?: string
   editFormId?: string
+  /** Extra reveal forms parked out of the body (inventory stock ops, etc.). */
+  actionFormIds?: readonly string[]
 }) {
   const fieldIds: string[] = []
   const collectionIds: string[] = []
@@ -35,11 +37,13 @@ export function builderV2OrderDetailParts(args: {
   const otherIds: string[] = []
   let processingFormId = args.statusFormId
   const editFormId = args.editFormId
+  const actionForms = new Set(args.actionFormIds ?? [])
   for (const id of args.rootIds) {
     const node = args.nodes.get(id)
     if (!node) continue
     if (processingFormId && id === processingFormId) continue
     if (editFormId && id === editFormId) continue
+    if (actionForms.has(id)) continue
     if (node.type === 'form' && !processingFormId && node.tableId === args.recordTable?.id) {
       processingFormId = id
       continue

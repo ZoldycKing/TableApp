@@ -11,6 +11,7 @@ import { builderV2ExecutableWorkflow, builderV2StepLabel, builderV2WorkflowSteps
 import { builderV2WorkflowValues } from './builder-v2-workflow-values'
 import {derivePublishedV2Rows,canReadPublishedV2Row} from './builder-v2-published-rows'
 import { placeShopOrder } from './shop-order'
+import { recordInventoryMovement } from './inventory-movement'
 
 export class BuilderV2WorkflowError extends Error {
   readonly trace: BuilderV2WorkflowTrace
@@ -30,7 +31,14 @@ export class BuilderV2WorkflowConfirmationRequired extends Error {
 export async function executeBuilderV2Workflow(options: { write: RowTransaction; app: AppV2; actor: AppV2Actor; userId: string; flow: BuilderV2Workflow; tables: readonly { id: string; name: string }[]; selected?: StoredRow; screenSelected?:StoredRow|null; form?: { id: string; tableId: string; values: Record<string, AppV2Json> }; primaryStepId?: string; published?:boolean; confirmation?:string }) {
   const { write, app, actor, userId, flow, tables, selected, form, primaryStepId } = options
   if (!builderV2ExecutableWorkflow(flow)) throw new RowWriteError('invalid', 'В этом действии есть шаг, который пока нельзя выполнить')
-  const all = builderV2WorkflowSteps(flow.steps), roots = [...new Set([...(selected ? [selected.tableId] : []),...(options.screenSelected?[options.screenSelected.tableId]:[]), ...all.flatMap(step => 'tableId' in step ? [step.tableId] : [])])]
+  const all = builderV2WorkflowSteps(flow.steps), roots = [...new Set([
+    ...(selected ? [selected.tableId] : []),
+    ...(options.screenSelected ? [options.screenSelected.tableId] : []),
+    ...all.flatMap(step => 'tableId' in step ? [step.tableId] : []),
+    ...(app.inventory && all.some(step => step.type === 'record_inventory_movement')
+      ? [app.inventory.itemsTableId, app.inventory.movementsTableId, app.inventory.warehousesTableId]
+      : []),
+  ])]
   const meta = await loadBuilderV2ReadMetadata(write.tx, app.workspaceId, roots), needed = new Map<string, Set<string>>()
   const need = (id: string) => { const field = meta.allFields.find(field => field.id === id); if (field) { const ids = needed.get(field.tableId) ?? new Set<string>(); ids.add(id); needed.set(field.tableId, ids) } }
   const scan = (value: unknown): void => { if (!value || typeof value !== 'object') return; if (Array.isArray(value)) { value.forEach(scan); return } const object = value as Record<string, unknown>; if (object.kind === 'literal') return; if (typeof object.fieldId === 'string') need(object.fieldId); Object.values(object).forEach(scan) }
@@ -61,6 +69,15 @@ export async function executeBuilderV2Workflow(options: { write: RowTransaction;
           const next = await record(await workingBuilderV2Record(write.tx, step.tableId, placed.id))
           results.set(step.id, next)
           if (context.row?.id === next.id && context.row.tableId === step.tableId) context.row = next
+        } else if (step.type === 'record_inventory_movement') {
+          const inv = app.inventory
+          if (!inv) throw new RowWriteError('denied', 'Складская операция не настроена')
+          const product = context.screenRow ?? context.row
+          if (!product || product.tableId !== inv.itemsTableId) throw new RowWriteError('invalid', 'Откройте карточку товара для складской операции')
+          const values = await builderV2WorkflowValues(meta, inv.movementsTableId, Object.fromEntries(Object.entries(step.values).map(([id, value]) => [id, resolve(value)])), options.published ? { app, actor } : undefined)
+          const placed = await recordInventoryMovement(write, app, actor, step.operation, values, product.id)
+          const next = await record(await workingBuilderV2Record(write.tx, inv.movementsTableId, placed.id))
+          results.set(step.id, next)
         } else if (step.type === 'create_row' || step.type === 'update_row') {
           const values = await builderV2WorkflowValues(meta, step.tableId, Object.fromEntries(Object.entries(step.values).map(([id, value]) => [id, resolve(value)])),options.published?{app,actor}:undefined), row = step.type === 'update_row' ? target(step.target) : undefined
           if (row && row.tableId !== step.tableId) throw new RowWriteError('denied', 'Запись относится к другой таблице')

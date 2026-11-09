@@ -146,6 +146,9 @@
 .timelineText { margin: 0; font-size: 15px; line-height: 1.45; font-weight: 560; overflow-wrap: anywhere; }
 .timelineMeta { margin: 0; color: var(--v2-muted); font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; }
 .statusBadge { display: inline-flex; align-items: center; flex: none; width: max-content; max-width: 100%; margin-top: 0; padding: 3px 8px; border-radius: var(--radius-badge, 999px); background: var(--v2-control); color: var(--v2-muted); font-size: 12px; line-height: 16px; font-weight: 700; white-space: nowrap; overflow-wrap: normal; word-break: normal; }
+.recordButton[data-low='true'] .statusBadge[data-tone='rose'],
+.row[data-low='true'] .statusBadge[data-tone='rose'] { background: color-mix(in srgb, #e11d48 14%, var(--v2-surface, #fff)); color: #be123c; }
+.recordButton[data-low='true'] { box-shadow: inset 3px 0 0 #e11d48; }
 .statusBadge[data-tone="sky"] { color: light-dark(#075985,#b7def9); background: light-dark(#e0f2fe,#19374d); }
 .statusBadge[data-tone="mint"] { color: light-dark(#065f46,#abebcf); background: light-dark(#dcfce7,#183d33); }
 .statusBadge[data-tone="amber"] { color: light-dark(#854d0e,#f9d696); background: light-dark(#fef3c7,#4a3620); }

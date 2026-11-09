@@ -16,11 +16,12 @@ export function isBuilderV2ContactProfile(app: AppV2, screenId: string, tables: 
   return Boolean(screen?.recordTitleFieldId && isBuilderV2ContactTable(tables.find(table => table.id === screen.contextTableId)))
 }
 
-/** Record screens that share the shop order-detail layout (orders + CRM deal/client). */
+/** Record screens that share the shop order-detail layout (orders + CRM deal/client + inventory item). */
 export function isBuilderV2BusinessDetail(app: AppV2, screenId: string, table?: BuilderV2Table) {
   if (isBuilderV2OrderTable(table)) return true
   const crm = app.crm
-  return Boolean(crm && (screenId === crm.dealScreenId || screenId === crm.clientScreenId))
+  if (crm && (screenId === crm.dealScreenId || screenId === crm.clientScreenId)) return true
+  return Boolean(app.inventory && screenId === app.inventory.itemScreenId)
 }
 
 export function builderV2Initials(name: string) {

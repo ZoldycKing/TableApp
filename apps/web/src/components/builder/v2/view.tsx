@@ -55,6 +55,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
   }
   const order = props.record && !screen?.catalog && isBuilderV2OrderTable(recordTable) && !props.rootNodeIds
   const crm = props.app.crm
+  const inventory = props.app.inventory
   const detail = Boolean(props.record && !screen?.catalog && !props.rootNodeIds && screen && isBuilderV2BusinessDetail(props.app, screen.id, recordTable))
   const composition = order && rootIds.map(id => nodes.get(id)).flatMap(node => {
     if (node?.type !== 'collection' || !visible(node)) return []
@@ -82,6 +83,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
   const statusNode = facts.find(node => 'fieldId' in node.value && node.value.fieldId === statusColumn?.id)
   const amountColumn = detail && !lines && !orderGroup ? (
     crm && screen?.id === crm.dealScreenId ? recordTable?.fields.find(field => field.id === crm.sumFieldId)
+      : inventory && screen?.id === inventory.itemScreenId ? recordTable?.fields.find(field => field.id === inventory.itemStockFieldId)
       : recordTable?.fields.find(field =>
         ['number', 'formula', 'rollup'].includes(field.type) && /^(?:сумма(?: заказа)?|итого|order total|total)(?:\s|[,(_]|$)/iu.test(field.name.trim()) &&
         !/^(?:сумма (?:позиции|строки))/iu.test(field.name.trim()))
@@ -222,11 +224,12 @@ export function AppV2Renderer(props: AppV2RendererProps) {
             const text = cell(row, node.titleFieldId) || '—'
             const meta = node.subtitleFieldId ? cell(row, node.subtitleFieldId) : ''
             const detail = node.cardDetailFieldId ? cell(row, node.cardDetailFieldId) : ''
+            const detailLabel = inventory ? (detail ? `${detail} шт.` : '') : detail ? `Следующий контакт: ${detail}` : ''
             return <li key={row.id} className={ui.timelineItem}>
               <time className={ui.timelineDate}>{when || 'Без даты'}</time>
               <div className={ui.timelineBody}>
                 <p className={ui.timelineText}>{text}</p>
-                {(meta || detail) && <p className={ui.timelineMeta}>{[meta, detail && `Следующий контакт: ${detail}`].filter(Boolean).join(' · ')}</p>}
+                {(meta || detailLabel) && <p className={ui.timelineMeta}>{[meta, detailLabel].filter(Boolean).join(' · ')}</p>}
               </div>
             </li>
           }
@@ -252,10 +255,13 @@ export function AppV2Renderer(props: AppV2RendererProps) {
           const listRow = (row: AppV2Record) => {
             const defaultCard = !node.itemIds.length && (cardScreen || props.editing && cardTarget || cardLayout || compact)
             const RecordControl = cardScreen ? 'button' : 'div'
-            const body = rowAction ? actionRow(row, 'div') : <div key={row.id} className={catalog ? `${ui.row} ${presentation.catalogCard}` : ui.row}>
-              {defaultCard ? <RecordControl className={ui.recordButton} data-compact={compact || undefined} data-status={statusSubtitle || undefined} {...(cardScreen ? { type: 'button' as const, onClick: () => open(row) } : {})}>
-                {compact && !statusSubtitle && <BuilderV2RecordAvatar id={row.id} name={orders ? undefined : cell(row, node.titleFieldId)} icon={orders ? 'receipt' : contacts ? 'users' : 'list'} />}
-                {item(row)}{!catalog && (cardScreen || props.editing && cardTarget) && <ProtoIcon name="arrow" size={16} />}
+            const lowStock = Boolean(inventory && node.cardDetailFieldId === inventory.itemStockFieldId && row.values[inventory.itemLowFieldId] === true)
+            const body = rowAction ? actionRow(row, 'div') : <div key={row.id} className={catalog ? `${ui.row} ${presentation.catalogCard}` : ui.row} data-low={lowStock || undefined}>
+              {defaultCard ? <RecordControl className={ui.recordButton} data-compact={compact || undefined} data-status={statusSubtitle || lowStock || undefined} data-low={lowStock || undefined} {...(cardScreen ? { type: 'button' as const, onClick: () => open(row) } : {})}>
+                {compact && !statusSubtitle && <BuilderV2RecordAvatar id={row.id} name={orders ? undefined : cell(row, node.titleFieldId)} icon={orders ? 'receipt' : contacts ? 'users' : inventory ? 'box' : 'list'} />}
+                {item(row)}
+                {lowStock && !statusSubtitle ? <span className={ui.statusBadge} data-tone="rose">Мало</span> : null}
+                {!catalog && (cardScreen || props.editing && cardTarget) && <ProtoIcon name="arrow" size={16} />}
               </RecordControl> : <>{item(row)}{openRecord(row)}</>}
             </div>
             return node.layout === 'kanban' ? <BoardMoveRow key={row.id} row={row as BuilderV2DataRecord} label={cell(row, node.titleFieldId)}>{body}</BoardMoveRow> : body
@@ -315,21 +321,30 @@ export function AppV2Renderer(props: AppV2RendererProps) {
     const title = titleFieldId ? cell(props.record, titleFieldId) : screen?.name
     const crmDeal = Boolean(crm && screen?.id === crm.dealScreenId)
     const crmClient = Boolean(crm && screen?.id === crm.clientScreenId)
-    const editFormId = crmDeal ? crm?.dealEditFormId : undefined
+    const inventoryItem = Boolean(inventory && screen?.id === inventory.itemScreenId)
+    const editFormId = crmDeal ? crm?.dealEditFormId : inventoryItem ? inventory?.itemEditFormId : undefined
+    const inventoryActionForms = inventoryItem && inventory
+      ? [inventory.receiptFormId, inventory.issueFormId, inventory.writeOffFormId, inventory.transferFormId]
+      : []
     const parts = builderV2OrderDetailParts({
       app: props.app, rootIds, nodes, recordTable, statusFieldId: statusColumn?.id, amountFieldId: amountColumn?.id,
-      dueFieldId: crmDeal ? crm?.dueFieldId : undefined,
+      dueFieldId: crmDeal ? crm?.dueFieldId : inventoryItem ? inventory?.itemMinFieldId : undefined,
       positionsFieldId: props.app.shop?.positionsFieldId, statusFormId, editFormId,
+      actionFormIds: inventoryActionForms,
     })
-    const manage = Boolean(parts.processingFormId || parts.editFormId)
+    const manage = Boolean(parts.processingFormId || parts.editFormId || inventoryActionForms.length)
     const statusValue = statusColumn && props.record.values[statusColumn.id]
     const choices = builderV2OrderStatusChoices(recordTable, statusColumn?.id)
     const terminals = props.app.shop?.terminalStatuses ?? crm?.terminalStages ?? []
     const progress = !manage && choices.length ? builderV2StatusProgress(choices, typeof statusValue === 'string' ? statusValue : null, terminals) : undefined
-    const dueColumn = crmDeal && crm ? recordTable?.fields.find(field => field.id === crm.dueFieldId) : undefined
+    const dueColumn = crmDeal && crm ? recordTable?.fields.find(field => field.id === crm.dueFieldId)
+      : inventoryItem && inventory ? recordTable?.fields.find(field => field.id === inventory.itemMinFieldId) : undefined
     const dueRaw = dueColumn ? props.record.values[dueColumn.id] : undefined
     const dueValue = dueColumn && Object.hasOwn(props.record.values, dueColumn.id) ? cell(props.record, dueColumn.id) : ''
-    const due = crmDeal && dueValue ? { label: dueColumn?.name || 'Вернуться к разговору', value: dueValue, tone: builderV2DueTone(dueRaw) } : undefined
+    const due = crmDeal && dueValue ? { label: dueColumn?.name || 'Вернуться к разговору', value: dueValue, tone: builderV2DueTone(dueRaw) }
+      : inventoryItem && dueValue ? { label: 'Минимум', value: dueValue } : undefined
+    const inventoryLow = inventoryItem && inventory ? props.record.values[inventory.itemLowFieldId] === true : false
+    const inventoryStatus = inventoryItem ? (inventoryLow ? 'Мало' : undefined) : status
     const factItems = parts.factIds.flatMap(id => {
       const node = nodes.get(id)
       if (!node || node.type !== 'field' || !visible(node)) return []
@@ -337,6 +352,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
       const field = recordTable?.fields.find(item => item.id === fieldId)
       const rawValue = fieldId ? props.record!.values[fieldId] : null
       if (published && fieldId && !Object.hasOwn(props.record!.values, fieldId)) return []
+      if (inventoryItem && inventory && fieldId && (fieldId === inventory.itemLowFieldId || fieldId === inventory.itemMinFieldId || fieldId === inventory.itemStockFieldId)) return []
       const value = resolve(node.value, props.record)
       const href = builderV2ContactHref(field?.type, rawValue)
       const label = node.label || field?.name || node.name
@@ -366,41 +382,61 @@ export function AppV2Renderer(props: AppV2RendererProps) {
     // Identity already shows the client; keep only non-duplicated facts (assignee email, etc.).
     const deliveryFacts = factItems.filter(item => {
       if (item.kind === 'reply') return false
-      if (!crmDeal || !crm) return true
-      const node = nodes.get(item.id)
-      const fieldId = node?.type === 'field' && 'fieldId' in node.value ? node.value.fieldId : undefined
-      return fieldId !== crm.clientRelationFieldId
+      if (crmDeal && crm) {
+        const node = nodes.get(item.id)
+        const fieldId = node?.type === 'field' && 'fieldId' in node.value ? node.value.fieldId : undefined
+        return fieldId !== crm.clientRelationFieldId
+      }
+      return true
     })
-    const factsTitle = crmDeal ? 'Исполнитель' : crm ? (crmClient ? 'О клиенте' : 'Клиент') : 'Клиент и доставка'
+    const factsTitle = inventoryItem ? 'О товаре' : crmDeal ? 'Исполнитель' : crm ? (crmClient ? 'О клиенте' : 'Клиент') : 'Клиент и доставка'
     const sideFactsTitle = crm ? (crmClient ? 'О клиенте' : 'Клиент') : 'Доставка'
-    const actionTitle = crm ? 'Добавить запись' : 'Обработка заказа'
-    // Shop keeps the processing form open; CRM deal forms open on demand (pencil + journal).
-    const actionMode = crmDeal ? 'reveal' as const : 'persistent' as const
-    const stack = Boolean(crm)
-    const triggers: BuilderV2OrderActionTrigger[] | undefined = crmDeal ? [
+    const actionTitle = inventoryItem ? 'Складская операция' : crm ? 'Добавить запись' : 'Обработка заказа'
+    // Shop keeps the processing form open; CRM/inventory forms open on demand.
+    const actionMode = crmDeal || inventoryItem ? 'reveal' as const : 'persistent' as const
+    const stack = Boolean(crm || inventoryItem)
+    const formVisible = (id: string) => {
+      const node = nodes.get(id)
+      return Boolean(node && visible(node))
+    }
+    const inventoryTriggers: BuilderV2OrderActionTrigger[] | undefined = inventoryItem && inventory ? [
+      ...(parts.editFormId && formVisible(parts.editFormId) ? [{ id: 'edit', title: 'Изменить товар', icon: 'edit', children: render([parts.editFormId]) }] : []),
+      ...(formVisible(inventory.receiptFormId) ? [{ id: 'receipt', title: 'Приход', primary: true as const, children: render([inventory.receiptFormId]) }] : []),
+      ...(formVisible(inventory.issueFormId) ? [{ id: 'issue', title: 'Расход', children: render([inventory.issueFormId]) }] : []),
+      ...(formVisible(inventory.writeOffFormId) ? [{ id: 'write_off', title: 'Списание', children: render([inventory.writeOffFormId]) }] : []),
+      ...(formVisible(inventory.transferFormId) ? [{ id: 'transfer', title: 'Переместить', children: render([inventory.transferFormId]) }] : []),
+    ] : undefined
+    const triggers: BuilderV2OrderActionTrigger[] | undefined = inventoryTriggers ?? (crmDeal ? [
       ...(parts.editFormId ? [{ id: 'edit', title: 'Изменить сделку', icon: 'edit', children: render([parts.editFormId]) }] : []),
       ...(parts.processingFormId ? [{ id: 'journal', title: 'Добавить запись', primary: true as const, children: render([parts.processingFormId]) }] : []),
-    ] : undefined
+    ] : undefined)
     // Shop manage identity is amount/status only (title stays in the frame). Skip a title-only plate.
-    const showCustomerIdentity = Boolean(status || amount || (progress && progress.length > 1) || (crmDeal && (due || clientText)))
+    const showCustomerIdentity = Boolean(inventoryStatus || amount || (progress && progress.length > 1) || (crmDeal && (due || clientText)) || (inventoryItem && (due || clientText)))
+    const revealIdentity = {
+      status: inventoryStatus,
+      amount,
+      amountLabel: inventoryItem ? 'Остаток' : 'Сумма',
+      due,
+      client: inventoryItem ? undefined : clientFact,
+    }
     return <div className={`${styles.canvasBlocks} ${ui.screenBlocks} ${ui.businessDetail} ${ui.orderDetail}`} data-manage={manage || undefined} data-layout={stack ? 'stack' : undefined}>
-      {!manage && showCustomerIdentity && <BuilderV2OrderIdentity title={title || undefined} status={status} amount={undefined} scoped={summary?.scoped} progress={progress} manage={false} />}
+      {!manage && showCustomerIdentity && <BuilderV2OrderIdentity title={title || undefined} status={inventoryStatus} amount={undefined} scoped={summary?.scoped} progress={progress} manage={false} />}
       <div className={ui.orderDetailBody}>
         <div className={ui.orderDetailMain}>
-          {manage && crmDeal && triggers
-            ? <BuilderV2OrderActionPanel title={actionTitle} mode="reveal" triggers={triggers} identity={{ status, amount, amountLabel: 'Сумма', due, client: clientFact }} />
+          {manage && (crmDeal || inventoryItem) && triggers
+            ? <BuilderV2OrderActionPanel title={actionTitle} mode="reveal" triggers={triggers} identity={revealIdentity} />
             : null}
-          {manage && !crmDeal && <BuilderV2OrderIdentity status={status} amount={amount} scoped={summary?.scoped} manage />}
+          {manage && !crmDeal && !inventoryItem && <BuilderV2OrderIdentity status={status} amount={amount} scoped={summary?.scoped} manage />}
           {linesBlock}
           {manage && <BuilderV2OrderFacts items={deliveryFacts} title={factsTitle} />}
           {manage && render([...parts.buttonIds, ...parts.otherIds])}
         </div>
-        {manage && crmDeal ? null : manage && parts.processingFormId
+        {manage && (crmDeal || inventoryItem) ? null : manage && parts.processingFormId
           ? <BuilderV2OrderActionPanel title={actionTitle} mode={actionMode}>{render([parts.processingFormId])}</BuilderV2OrderActionPanel>
           : <div className={ui.orderDetailSide}>
-            {!crm && <BuilderV2OrderSummaryCard amount={amount} scoped={summary?.scoped} />}
+            {!crm && !inventoryItem && <BuilderV2OrderSummaryCard amount={amount} scoped={summary?.scoped} />}
             <BuilderV2OrderFacts items={deliveryFacts} title={sideFactsTitle} />
-            {!crm && <BuilderV2OrderFacts items={replyFacts} title="Сообщение магазина" />}
+            {!crm && !inventoryItem && <BuilderV2OrderFacts items={replyFacts} title="Сообщение магазина" />}
             {render([...parts.buttonIds, ...parts.otherIds])}
           </div>}
       </div>

@@ -85,14 +85,14 @@
 .orderIdentity[data-manage] .heroAmount > strong { font-size: clamp(1.5rem, 4.2cqw, 1.9rem); overflow-wrap: anywhere; }
 .orderIdentity[data-manage] .heroStatus { flex: 0 1 auto; margin-inline-start: auto; max-width: 100%; text-align: end; }
 .orderIdentity[data-variant="pipeline"] .orderIdentityMain { gap: 16px; }
-.orderIdentity[data-variant="pipeline"] .orderStatusLead { font-size: clamp(1.2rem, 2.2cqw, 1.45rem); }
+.orderIdentity[data-variant="pipeline"] .orderStatusLead { font-size: clamp(1.35rem, 2.6cqw, 1.7rem); }
 .orderIdentityClient { margin: 0; color: var(--v2-ink); font-size: 1rem; line-height: 1.4; font-weight: 650; overflow-wrap: anywhere; }
 .orderDue { display: grid; gap: 2px; min-width: 0; }
 .orderDue > span { color: var(--v2-muted); font-size: 12px; font-weight: 650; }
 .orderDue > strong { font-size: 1.05rem; line-height: 1.3; font-weight: 740; font-variant-numeric: tabular-nums; }
 .orderDue[data-tone="overdue"] > strong { color: light-dark(#9f1239, #ffc5d5); }
 .orderDue[data-tone="today"] > strong { color: light-dark(#854d0e, #f9d696); }
-.heroAmount[data-secondary] > strong { font-size: clamp(1.15rem, 2.4cqw, 1.45rem); font-weight: 720; letter-spacing: -.02em; }
+.heroAmount[data-secondary] > strong { font-size: clamp(1rem, 1.8cqw, 1.2rem); font-weight: 680; letter-spacing: -.01em; color: var(--v2-muted); }
 .heroAmount[data-bare] { gap: 0; }
 .orderIdentityActions { display: flex; flex-wrap: wrap; gap: 8px; }
 .orderProgress { display: flex; align-items: start; gap: 0; margin: 0; padding: 0; list-style: none; }

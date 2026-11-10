@@ -268,24 +268,31 @@ export function BuilderV2OrderActionPanel({
   const items = multi ? triggers! : [{ id: 'default', title, primary: true as const, children }]
   const toolbarItems = items.map(({ id, title: itemTitle, icon, primary }) => ({ id, title: itemTitle, icon, primary }))
   const headerIcons = toolbarItems.filter(item => Boolean(item.icon) && !item.primary)
-  const headerIconKey = headerIcons.map(item => item.id).join('|')
+  const headerIconKey = headerIcons.map(item => `${item.id}:${item.icon ?? ''}`).join('|')
+  const setHeaderAccessory = published?.setHeaderAccessory
+  const showHeaderEdit = Boolean(identity && headerIcons.length && setHeaderAccessory)
   useEffect(() => {
-    if (!identity || !published?.setHeaderAccessory) return
-    if (!headerIcons.length) {
-      published.setHeaderAccessory(null)
-      return () => published.setHeaderAccessory?.(null)
+    if (!setHeaderAccessory) return
+    if (!showHeaderEdit) {
+      setHeaderAccessory(null)
+      return () => setHeaderAccessory(null)
     }
-    published.setHeaderAccessory(
+    const icons = headerIconKey.split('|').map(entry => {
+      const [id, icon] = entry.split(':')
+      const title = toolbarItems.find(item => item.id === id)?.title ?? id!
+      return { id: id!, icon: icon!, title }
+    })
+    setHeaderAccessory(
       <span className={ui.headerEditActions} data-placement="mobile">
-        {headerIcons.map(item => (
+        {icons.map(item => (
           <button key={item.id} type="button" className={ui.orderActionIcon} aria-label={item.title} title={item.title} onClick={() => open(item.id)}>
-            <ProtoIcon name={item.icon!} size={20} />
+            <ProtoIcon name={item.icon} size={20} />
           </button>
         ))}
       </span>,
     )
-    return () => published.setHeaderAccessory?.(null)
-  }, [identity, published, headerIconKey, open])
+    return () => setHeaderAccessory(null)
+  }, [showHeaderEdit, headerIconKey, setHeaderAccessory, open])
   if (!multi && !children) return null
   if (mode === 'reveal') {
     const dialog = active ? <OrderActionPanelContext.Provider value={{ mode, close }}>

@@ -1,7 +1,7 @@
 'use client'
 import {BuilderV2ScreenEnter} from './screen-enter'
 import {BuilderV2EnterNavigation} from './enter-navigation'
-import {useState,useEffect,useRef,type ReactNode} from 'react'
+import {useState,useEffect,useRef,useCallback,type ReactNode} from 'react'
 import {usePublishedV2Back} from './use-published-back'
 import {useRouter} from 'next/navigation'
 import {inspectPublishedV2DeleteAction,submitPublishedV2DeleteAction,readPublishedV2DataAction,readPublishedV2RecordAction,inspectPublishedV2FormAction,submitPublishedV2FormAction,inspectPublishedV2ButtonAction,submitPublishedV2ButtonAction} from '@/app/builder-v2-published-actions'
@@ -17,11 +17,12 @@ import { isBuilderV2ContactProfile } from './record-presentation'
 type Data=Extract<Awaited<ReturnType<typeof loadPublishedV2Page>>,{login:false}>
 export function PublishedV2Runtime({data}:{data:Data}){
   const router=useRouter(),{app,actor,revision,screenId,recordId,record,title,buttons,tables,rowActions,enter}=data,slug=app.slug,page=app.screens.find(screen=>screen.id===screenId)!
-  const [dataVersion,setDataVersion]=useState(0),[notice,setNotice]=useState(''),[headerAccessory,setHeaderAccessory]=useState<ReactNode>(null)
+  const [dataVersion,setDataVersion]=useState(0),[notice,setNotice]=useState(''),[headerAccessory,setHeaderAccessoryState]=useState<ReactNode>(null)
+  const setHeaderAccessory=useCallback((node:ReactNode)=>setHeaderAccessoryState(node),[])
   const enterNavigation=useRef(new BuilderV2EnterNavigation()),scopeKey=JSON.stringify([screenId,recordId]),visit=useRef({key:'',id:''})
   if(visit.current.key!==scopeKey)visit.current={key:scopeKey,id:`enter_${crypto.randomUUID().replaceAll('-','')}`}
   const enterBlocked=enterNavigation.current.visit(scopeKey)
-  useEffect(()=>{setNotice('');setHeaderAccessory(null)},[screenId,recordId])
+  useEffect(()=>{setNotice('');setHeaderAccessory(null)},[screenId,recordId,setHeaderAccessory])
   const refresh=(message?:string)=>{if(message)setNotice(message);setDataVersion(value=>value+1);router.refresh()}
   const history=usePublishedV2Back(app,{screenId,recordId},router)
   const navigate=(screenId:string,rowId?:string,options?:{automatic?:boolean;replace?:boolean})=>{

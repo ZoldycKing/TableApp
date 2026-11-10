@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState, useTransition } from 'react'
+import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { clearTemplateSamplesAction } from '@/app/template-actions'
 import { ownerPrimary, ownerSecondary } from './owner-ui'
@@ -9,20 +9,24 @@ export function TemplatePreparation({ appId, sampleCount, canEdit }: { appId: st
   const [confirm, setConfirm] = useState(false)
   const [cleared, setCleared] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [pending, startTransition] = useTransition()
+  // Explicit busy flag: useTransition pending can lag behind an error alert and leave
+  // the confirm button stuck on «Убираем примеры…» / disabled, so retry is unreachable.
+  const [pending, setPending] = useState(false)
   const lock = useRef(false)
   const router = useRouter()
   const clear = () => {
     if (lock.current || !canEdit) return
-    lock.current = true; setError(null)
-    startTransition(async () => {
+    lock.current = true
+    setPending(true)
+    setError(null)
+    void (async () => {
       try {
         const result = await clearTemplateSamplesAction(appId)
         if (!result.ok) { setError(result.error); return }
         setCleared(true); setConfirm(false); router.refresh()
       } catch { setError('Не удалось убрать примеры. Попробуйте ещё раз.') }
-      finally { lock.current = false }
-    })
+      finally { lock.current = false; setPending(false) }
+    })()
   }
   if (!sampleCount || cleared) return cleared ? <p role="status" className="mb-6 text-sm leading-6 text-sage-800">Добавьте свои данные в таблицы ниже.</p> : null
   return <section aria-labelledby="template-examples" aria-busy={pending} className="mb-6 rounded-2xl border border-sand-200 bg-sage-50 p-5 sm:p-6">

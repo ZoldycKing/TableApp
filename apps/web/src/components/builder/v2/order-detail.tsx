@@ -35,7 +35,7 @@ export function useBuilderV2OrderActionPanel() {
 
 export function BuilderV2OrderIdentity({
   title, status, amount, scoped = false, progress, manage = false,
-  variant = 'order', amountLabel, statusLabel, due, client, actions,
+  variant = 'order', amountLabel, statusLabel, due, client, actions, amountBadge,
 }: {
   title?: string
   status?: string
@@ -49,18 +49,25 @@ export function BuilderV2OrderIdentity({
   due?: { label: string; value: string; tone?: 'overdue' | 'today' }
   client?: ReactNode
   actions?: ReactNode
+  /** Optional nowrap badge rendered inline with the amount (inventory low-stock). */
+  amountBadge?: string
 }) {
   if (!title && !status && !amount && !progress?.length && !due && !client && !actions) return null
   const pipeline = variant === 'pipeline' && manage
   const moneyLabel = amountLabel === undefined ? (scoped ? 'Сумма доступных позиций' : 'Итого') : amountLabel
   if (pipeline) {
+    const amountValue = amount
+      ? amountBadge
+        ? <span className={ui.stockWithBadge}><span>{amount}</span><span className={ui.warningBadge}>{amountBadge}</span></span>
+        : amount
+      : null
     const facts = [
       status ? { id: 'stage', label: statusLabel || 'Этап', value: status as ReactNode, tone: builderV2StatusTone(status) } : null,
+      amount ? { id: 'amount', label: moneyLabel || 'Сумма', value: amountValue as ReactNode, tone: 'amount' as const } : null,
       due ? { id: 'due', label: due.label, value: due.value as ReactNode, tone: due.tone } : null,
-      amount ? { id: 'amount', label: moneyLabel || 'Сумма', value: amount as ReactNode, tone: 'amount' as const } : null,
       client ? { id: 'client', label: 'Клиент', value: client } : null,
     ].filter(Boolean) as { id: string; label: string; value: ReactNode; tone?: string }[]
-    return <section className={`${presentation.panel} ${ui.orderIdentity}`} data-manage data-variant="pipeline" aria-label={statusLabel ? 'Главное о товаре' : 'Главное о сделке'}>
+    return <section className={`${presentation.panel} ${ui.orderIdentity}`} data-manage data-variant="pipeline" aria-label={amountBadge || statusLabel === undefined && moneyLabel === 'Остаток' ? 'Главное о товаре' : 'Главное о сделке'}>
       <div className={ui.orderIdentityMain}>
         {facts.length > 0 && <div className={ui.orderIdentityFacts}>
           {facts.map(fact => <div key={fact.id} className={ui.orderIdentityFact} data-tone={fact.tone} data-kind={fact.id}>
@@ -212,11 +219,13 @@ export function BuilderV2OrderActionPanel({
     statusLabel?: string
     amount?: string
     amountLabel?: string
+    amountBadge?: string
     due?: { label: string; value: string; tone?: 'overdue' | 'today' }
     client?: ReactNode
   }
 }) {
   const multi = Boolean(triggers?.length)
+  const published = usePublishedV2()
   const [openId, setOpenId] = useState<string | null>(mode === 'persistent' && !multi ? 'default' : null)
   const dockRef = useRef<HTMLDivElement>(null)
   const lastTrigger = useRef<HTMLElement | null>(null)
@@ -256,9 +265,28 @@ export function BuilderV2OrderActionPanel({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [active, mode, close])
-  if (!multi && !children) return null
   const items = multi ? triggers! : [{ id: 'default', title, primary: true as const, children }]
   const toolbarItems = items.map(({ id, title: itemTitle, icon, primary }) => ({ id, title: itemTitle, icon, primary }))
+  const headerIcons = toolbarItems.filter(item => Boolean(item.icon) && !item.primary)
+  const headerIconKey = headerIcons.map(item => item.id).join('|')
+  useEffect(() => {
+    if (!identity || !published?.setHeaderAccessory) return
+    if (!headerIcons.length) {
+      published.setHeaderAccessory(null)
+      return () => published.setHeaderAccessory?.(null)
+    }
+    published.setHeaderAccessory(
+      <span className={ui.headerEditActions} data-placement="mobile">
+        {headerIcons.map(item => (
+          <button key={item.id} type="button" className={ui.orderActionIcon} aria-label={item.title} title={item.title} onClick={() => open(item.id)}>
+            <ProtoIcon name={item.icon!} size={20} />
+          </button>
+        ))}
+      </span>,
+    )
+    return () => published.setHeaderAccessory?.(null)
+  }, [identity, published, headerIconKey, open])
+  if (!multi && !children) return null
   if (mode === 'reveal') {
     const dialog = active ? <OrderActionPanelContext.Provider value={{ mode, close }}>
       <button type="button" className={ui.orderActionScrim} aria-label="Закрыть" onClick={close} />
@@ -275,10 +303,9 @@ export function BuilderV2OrderActionPanel({
     </OrderActionPanelContext.Provider> : null
     if (identity) {
       return <>
-        <BuilderV2OrderIdentity variant="pipeline" manage status={identity.status} statusLabel={identity.statusLabel} amount={identity.amount} amountLabel={identity.amountLabel ?? ''} due={identity.due} client={identity.client}
+        <BuilderV2OrderIdentity variant="pipeline" manage status={identity.status} statusLabel={identity.statusLabel} amount={identity.amount} amountLabel={identity.amountLabel ?? ''} amountBadge={identity.amountBadge} due={identity.due} client={identity.client}
           actions={<>
             <BuilderV2OrderActionToolbar items={toolbarItems} onOpen={open} placement="desktop" />
-            <BuilderV2OrderActionToolbar items={toolbarItems} onOpen={open} placement="mobile" iconsOnly />
           </>} />
         {!active && <BuilderV2OrderActionToolbar items={toolbarItems} onOpen={open} dockRef={dockRef} placement="mobile" textOnly />}
         {dialog}

@@ -6,6 +6,7 @@ import {BuilderV2Chart} from './chart'
 import {BuilderV2Video} from './video'
 import {builderV2ButtonAction,builderV2NodeAction} from '@/lib/builder-v2-button-action'
 import {builderCalendarTime} from '@/lib/builder-v2-calendar'
+import { formatInventoryAuthor } from '@/lib/inventory-author'
 import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 
 function InventoryTypeFilter({ choices, value, onChange }: { choices: readonly { id: string; name: string }[]; value: string; onChange: (id: string) => void }) {
@@ -312,12 +313,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
             const journalMeta = inventoryJournalList && row && inventory ? [
               cell(row, inventory.movementWarehouseFieldId),
               cell(row, inventory.movementDateFieldId),
-              (() => {
-                const author = cell(row, inventory.movementAuthorFieldId)
-                if (!author) return ''
-                const local = author.includes('@') ? author.split('@')[0]! : author
-                return local
-              })(),
+              formatInventoryAuthor(cell(row, inventory.movementAuthorFieldId)),
             ].filter(Boolean).join(' · ') : ''
             const lowBadge = inventoryStockList && row && row.values[inventory!.itemLowFieldId] === true
               ? <span className={ui.statusBadge} data-tone="rose">Мало</span>
@@ -358,8 +354,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
               const qty = Number(row.values[inventory.movementQtyFieldId])
               const qtyLabel = Number.isFinite(qty) ? `${qty > 0 ? '+' : ''}${qty} шт.` : ''
               const warehouse = cell(row, inventory.movementWarehouseFieldId)
-              const authorRaw = cell(row, inventory.movementAuthorFieldId)
-              const author = authorRaw.includes('@') ? authorRaw.split('@')[0]! : authorRaw
+              const author = formatInventoryAuthor(cell(row, inventory.movementAuthorFieldId))
               return <li key={row.id} className={ui.timelineItem}>
                 <time className={ui.timelineDate}>{when || 'Без даты'}</time>
                 <div className={ui.timelineBody}>
@@ -445,6 +440,8 @@ export function AppV2Renderer(props: AppV2RendererProps) {
           : <div className={rowsClass}>
             {Array.from({ length: cardLayout && !node.itemIds.length ? 2 : 1 }, (_, index) => <div key={index} className={ui.placeholder}>{item()}<span>Здесь будут записи из этой таблицы</span></div>)}
           </div>
+          const searching = Boolean((page as { search?: string } | undefined)?.search?.trim())
+          const clearSearch = (page as { clearSearch?: () => void } | undefined)?.clearSearch
           const emptyCopy = (() => {
             if (node.layout === 'calendar') return page?.calendar?.month === 'undated' ? 'Записей без даты нет' : 'На этот день записей нет'
             if (node.layout === 'kanban') return 'В этой колонке записей нет'
@@ -455,8 +452,12 @@ export function AppV2Renderer(props: AppV2RendererProps) {
             return 'Нет доступных записей'
           })()
           const emptyState = rows?.length === 0 ? (
-            inventoryStockList ? <div className={ui.collectionEmpty}>
-              <p>В складе пока нет товаров. Добавьте первую позицию, чтобы вести остатки.</p>
+            searching ? <div className={ui.collectionEmpty}>
+              <p>Ничего не найдено</p>
+              {clearSearch && <button type="button" className={styles.secondary} onClick={clearSearch}>Сбросить поиск</button>}
+            </div>
+            : inventoryStockList ? <div className={ui.collectionEmpty}>
+              <p>На складе пока нет товаров. Добавьте первую позицию, чтобы вести остатки.</p>
               {!props.editing && inventory?.createItemScreenId && <button type="button" className={styles.primary} onClick={() => {
                 const screenId = inventory.createItemScreenId!
                 if (published) published.navigate(screenId)
@@ -607,14 +608,23 @@ export function AppV2Renderer(props: AppV2RendererProps) {
     ] : undefined)
     // Shop manage identity is amount/status only (title stays in the frame). Skip a title-only plate.
     const showCustomerIdentity = Boolean(inventoryStatus || inventoryStockLabel || amount || (progress && progress.length > 1) || (crmDeal && (due || clientText)))
-    const revealIdentity = {
-      status: inventoryStatus,
-      statusLabel: inventoryItem ? (inventoryLow ? 'Внимание' : undefined) : undefined,
-      amount: inventoryItem ? inventoryStockLabel : amount,
-      amountLabel: inventoryItem ? 'Остаток' : 'Сумма',
-      due,
-      client: inventoryItem ? undefined : clientFact,
-    }
+    const revealIdentity = inventoryItem
+      ? {
+          amount: inventoryStockLabel,
+          amountLabel: 'Остаток',
+          amountBadge: inventoryLow ? `Ниже минимума (${inventoryMin || '—'})` : undefined,
+          due: inventoryMin
+            ? { label: 'Минимум', value: /\bшт\.?\b/i.test(inventoryMin) ? inventoryMin : `${inventoryMin} ${inventoryUnit}`.replace(/\s+/g, ' ').trim() }
+            : undefined,
+        }
+      : {
+          status: inventoryStatus,
+          statusLabel: undefined as string | undefined,
+          amount,
+          amountLabel: 'Сумма',
+          due,
+          client: clientFact,
+        }
     return <div className={`${styles.canvasBlocks} ${ui.screenBlocks} ${ui.businessDetail} ${ui.orderDetail}`} data-manage={manage || undefined} data-layout={stack ? 'stack' : undefined}>
       {!manage && showCustomerIdentity && <BuilderV2OrderIdentity title={title || undefined} status={inventoryStatus} amount={undefined} scoped={summary?.scoped} progress={progress} manage={false} />}
       <div className={ui.orderDetailBody}>

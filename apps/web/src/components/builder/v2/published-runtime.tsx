@@ -22,7 +22,9 @@ export function PublishedV2Runtime({data}:{data:Data}){
   const enterNavigation=useRef(new BuilderV2EnterNavigation()),scopeKey=JSON.stringify([screenId,recordId]),visit=useRef({key:'',id:''})
   if(visit.current.key!==scopeKey)visit.current={key:scopeKey,id:`enter_${crypto.randomUUID().replaceAll('-','')}`}
   const enterBlocked=enterNavigation.current.visit(scopeKey)
-  useEffect(()=>{setNotice('');setHeaderAccessory(null)},[screenId,recordId,setHeaderAccessory])
+  // Clear notice on navigation. Header accessory is owned by the active screen
+  // (OrderActionPanel cleanup); clearing it here races the child's mount effect.
+  useEffect(()=>{setNotice('')},[screenId,recordId])
   const refresh=(message?:string)=>{if(message)setNotice(message);setDataVersion(value=>value+1);router.refresh()}
   const history=usePublishedV2Back(app,{screenId,recordId},router)
   const navigate=(screenId:string,rowId?:string,options?:{automatic?:boolean;replace?:boolean})=>{

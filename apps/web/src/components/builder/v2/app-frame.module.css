@@ -83,7 +83,7 @@
 .headerMark { display: inline-flex; }
 .railIdentity { display: none; }
 .catalogIdentity { color: var(--v2-ink); font-weight: 650; overflow-wrap: anywhere; }
-.headerAction { margin-left: auto; flex-shrink: 0; }
+.headerAction { margin-left: auto; flex-shrink: 0; display: inline-flex; align-items: center; gap: 8px; }
 .account { position: relative; }
 .account summary { display: grid; place-items: center; width: 44px; height: 44px; border: 1px solid var(--v2-line); border-radius: 12px; cursor: pointer; color: var(--v2-accent); list-style: none; }
 .account summary::-webkit-details-marker { display: none; }

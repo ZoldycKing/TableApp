@@ -115,7 +115,13 @@ async function selectAndCreate(page: Page, max: number) {
 {
   const d = await open(browser, 1280, 900)
   await d.page.goto(fixture.purchasesUrl, { waitUntil: 'networkidle' })
-  await d.page.waitForTimeout(900)
+  await d.page.waitForTimeout(1600)
+  await d.page.getByRole('button', { name: /Что заказать/ }).first().waitFor({ state: 'visible' })
+  // Wait until the live low-stock counter lands on the button label.
+  await d.page.waitForFunction(() => {
+    const buttons = [...document.querySelectorAll('button')]
+    return buttons.some(button => /Что заказать\s*·\s*\d+/.test(button.textContent || ''))
+  }, undefined, { timeout: 8_000 }).catch(() => {})
   await save(d.page, 'd1280-purchases-reorder-entry')
   await selectAndCreate(d.page, 4)
   await save(d.page, 'd1280-reorder-selected')

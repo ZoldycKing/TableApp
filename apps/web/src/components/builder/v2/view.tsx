@@ -34,28 +34,33 @@ function ReorderToolbarLink({
   const inventory = app.inventory
   const [count, setCount] = useState<number | null>(null)
   useEffect(() => {
-    if (!published || !inventory?.itemsScreenId || !inventory.itemStockFieldId || !inventory.itemMinFieldId) return
-    const itemsScreen = app.screens.find(screen => screen.id === inventory.itemsScreenId)
-    const itemsNode = itemsScreen
-      ? app.nodes.find(entry => entry.type === 'collection' && itemsScreen.rootIds.includes(entry.id))
+    if (!published || !inventory?.reorderScreenId) return
+    const reorderScreen = app.screens.find(screen => screen.id === inventory.reorderScreenId)
+    const reorderNode = reorderScreen
+      ? app.nodes.find(entry => entry.type === 'collection' && reorderScreen.rootIds.includes(entry.id))
       : undefined
-    if (!itemsNode) return
+    if (!reorderNode) return
     let cancelled = false
-    void published.readData({ nodeId: itemsNode.id, screenId: inventory.itemsScreenId }).then(result => {
+    void published.readData({ nodeId: reorderNode.id, screenId: inventory.reorderScreenId }).then(result => {
       if (cancelled || !result.ok) return
+      // Reorder source is already filtered to low-stock; still enforce stock < min for stale formulas.
       const low = result.page.rows.filter(row => {
+        if (!inventory.itemStockFieldId || !inventory.itemMinFieldId) return true
         const stock = Number(row.values[inventory.itemStockFieldId])
         const min = Number(row.values[inventory.itemMinFieldId])
-        return Number.isFinite(stock) && Number.isFinite(min) && stock < min
+        if (!Number.isFinite(stock) || !Number.isFinite(min)) return inventory.itemLowFieldId ? row.values[inventory.itemLowFieldId] === true : true
+        return stock < min
       }).length
       setCount(low)
     }).catch(() => {})
     return () => { cancelled = true }
-  }, [published?.revision, published?.dataVersion, inventory?.itemsScreenId, app.id])
-  const labeled = count != null && count > 0
-    ? { ...node, label: `Что заказать · ${count}` }
-    : { ...node, label: 'Что заказать' }
-  return <PublishedV2Button node={labeled} screenId={screenId} buttonClassName={buttonClassName} buttonContent={buttonContent} />
+  }, [published?.revision, published?.dataVersion, inventory?.reorderScreenId, app.id])
+  const label = count != null && count > 0 ? `Что заказать · ${count}` : 'Что заказать'
+  if (buttonContent) {
+    return <PublishedV2Button node={{ ...node, label }} screenId={screenId} buttonClassName={buttonClassName} buttonContent={buttonContent} />
+  }
+  // Render plain label text so the counter is visible even before the button state hydrates.
+  return <PublishedV2Button node={{ ...node, label }} screenId={screenId} buttonClassName={buttonClassName} />
 }
 
 /** Centred dialog on desktop, bottom sheet on a narrow screen. */

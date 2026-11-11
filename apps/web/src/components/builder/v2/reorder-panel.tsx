@@ -117,77 +117,23 @@ export function ReorderPanel() {
       const productIds = mapped.map(row => row.productId)
       if (productIds.length) {
         try {
-          const { readPublishedV2PurchaseCostsAction, readPublishedV2RelatedRowsAction } = await import('@/app/builder-v2-published-actions')
-          const costs = await readPublishedV2PurchaseCostsAction(published.slug, { revision: published.revision, productIds })
+          const { readPublishedV2PurchaseCostsAction, readPublishedV2ReorderHintsAction } = await import('@/app/builder-v2-published-actions')
+          const [costs, hints] = await Promise.all([
+            readPublishedV2PurchaseCostsAction(published.slug, { revision: published.revision, productIds }),
+            readPublishedV2ReorderHintsAction(published.slug, { revision: published.revision, productIds }),
+          ])
           if (costs.ok) {
             for (const row of mapped) {
               const price = costs.costs[row.productId]
               if (typeof price === 'number' && Number.isFinite(price) && price >= 0) row.lastPrice = price
             }
           }
-          if (inventory.purchaseOrdersTableId && inventory.purchaseLinesTableId && inventory.purchasesScreenId) {
-            const purchasesNode = context.app.nodes.find(node => node.type === 'collection' && context.app.sources.some(source =>
-              source.id === node.sourceId && source.tableId === inventory.purchaseOrdersTableId && !source.screenTableId))
-            if (purchasesNode) {
-              const purchases = await published.readData({ nodeId: purchasesNode.id, screenId: inventory.purchasesScreenId })
-              if (purchases.ok) {
-                // Same history window as create_reorder_orders: any non-cancelled PO (received preferred).
-                const history = purchases.page.rows.filter(row => {
-                  if (!inventory.purchaseStatusFieldId) return false
-                  const status = row.values[inventory.purchaseStatusFieldId]
-                  return status !== inventory.statusCancelled
-                })
-                const allLineIds = history.flatMap(row => inventory.purchaseLinesFieldId ? idsOf(row.values[inventory.purchaseLinesFieldId]) : [])
-                if (allLineIds.length) {
-                  const lines = await readPublishedV2RelatedRowsAction(published.slug, {
-                    revision: published.revision, tableId: inventory.purchaseLinesTableId, recordIds: allLineIds.slice(0, 200),
-                  })
-                  if (lines.ok) {
-                    const rankOf = (status: unknown) => status === inventory.statusReceived ? 3
-                      : status === inventory.statusOrdered ? 2
-                        : status === inventory.statusDraft ? 1
-                          : 0
-                    const best = new Map<string, { rank: number; at: string; supplier: string; price: number }>()
-                    for (const order of history) {
-                      const status = inventory.purchaseStatusFieldId ? order.values[inventory.purchaseStatusFieldId] : undefined
-                      const rank = rankOf(status)
-                      if (!rank) continue
-                      const at = String(
-                        order.values[inventory.purchaseReceivedAtFieldId ?? '']
-                        ?? order.values[inventory.purchaseOrderedAtFieldId ?? '']
-                        ?? order.values[inventory.purchaseCreatedAtFieldId ?? '']
-                        ?? order.values[inventory.purchaseDateFieldId ?? '']
-                        ?? '',
-                      )
-                      const supplier = inventory.purchaseSupplierFieldId
-                        ? String(order.display[inventory.purchaseSupplierFieldId] || '').trim()
-                        : ''
-                      const orderLineIds = new Set(inventory.purchaseLinesFieldId ? idsOf(order.values[inventory.purchaseLinesFieldId]) : [])
-                      for (const line of lines.rows) {
-                        if (!orderLineIds.has(line.id)) continue
-                        const productId = idsOf(line.values[inventory.lineProductFieldId ?? ''])[0]
-                        if (!productId) continue
-                        const price = Number(line.values[inventory.linePriceFieldId ?? ''])
-                        const current = best.get(productId)
-                        if (!current || rank > current.rank || (rank === current.rank && at > current.at)) {
-                          best.set(productId, {
-                            rank,
-                            at,
-                            supplier,
-                            price: Number.isFinite(price) && price >= 0 ? price : 0,
-                          })
-                        }
-                      }
-                    }
-                    for (const row of mapped) {
-                      const hint = best.get(row.productId)
-                      if (!hint) continue
-                      if (hint.supplier) row.lastSupplier = hint.supplier
-                      if (hint.price > 0) row.lastPrice = hint.price
-                    }
-                  }
-                }
-              }
+          if (hints.ok) {
+            for (const row of mapped) {
+              const hint = hints.hints[row.productId]
+              if (!hint) continue
+              if (hint.supplier) row.lastSupplier = hint.supplier
+              if (hint.price > 0) row.lastPrice = hint.price
             }
           }
         } catch {

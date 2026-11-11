@@ -34,22 +34,27 @@ function ReorderToolbarLink({
   const inventory = app.inventory
   const [count, setCount] = useState<number | null>(null)
   useEffect(() => {
-    if (!published || !inventory?.reorderScreenId) return
-    const reorderScreen = app.screens.find(screen => screen.id === inventory.reorderScreenId)
-    const reorderNode = reorderScreen
-      ? app.nodes.find(entry => entry.type === 'collection' && reorderScreen.rootIds.includes(entry.id))
+    if (!published || !inventory?.itemsScreenId || !inventory.itemStockFieldId || !inventory.itemMinFieldId) return
+    const itemsScreen = app.screens.find(screen => screen.id === inventory.itemsScreenId)
+    const itemsNode = itemsScreen
+      ? app.nodes.find(entry => entry.type === 'collection' && itemsScreen.rootIds.includes(entry.id))
       : undefined
-    if (!reorderNode) return
+    if (!itemsNode) return
     let cancelled = false
-    void published.readData({ nodeId: reorderNode.id, screenId: inventory.reorderScreenId }).then(result => {
+    void published.readData({ nodeId: itemsNode.id, screenId: inventory.itemsScreenId }).then(result => {
       if (cancelled || !result.ok) return
-      setCount(result.page.rows.length)
+      const low = result.page.rows.filter(row => {
+        const stock = Number(row.values[inventory.itemStockFieldId])
+        const min = Number(row.values[inventory.itemMinFieldId])
+        return Number.isFinite(stock) && Number.isFinite(min) && stock < min
+      }).length
+      setCount(low)
     }).catch(() => {})
     return () => { cancelled = true }
-  }, [published?.revision, published?.dataVersion, inventory?.reorderScreenId, app.id])
+  }, [published?.revision, published?.dataVersion, inventory?.itemsScreenId, app.id])
   const labeled = count != null && count > 0
     ? { ...node, label: `Что заказать · ${count}` }
-    : node
+    : { ...node, label: 'Что заказать' }
   return <PublishedV2Button node={labeled} screenId={screenId} buttonClassName={buttonClassName} buttonContent={buttonContent} />
 }
 
@@ -799,7 +804,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
                   <span className={ui.purchaseListDate}>{when || '—'}</span>
                   <span className={ui.purchaseListMobileMeta}>
                     {warehouse ? <span>{warehouse}</span> : null}
-                    {(author || products) ? <span>{[author, products && `${products} тов.`].filter(Boolean).join(' · ')}</span> : null}
+                    {(author || products) ? <span>{[author, products && `${products}\u00a0тов.`].filter(Boolean).join(' · ')}</span> : null}
                   </span>
                 </div>
                 <span className={ui.purchaseListCol} data-col="warehouse">{warehouse || '—'}</span>

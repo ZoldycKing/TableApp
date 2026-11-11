@@ -1362,6 +1362,21 @@ button.recordButton:hover strong { color: var(--v2-accent, #456849); }
   min-width: 0;
   --inv-count-line-cols: 48px minmax(0, 1.4fr) 4.5rem 4.5rem 5rem 7rem;
 }
+.countLineCol {
+  display: none;
+  min-width: 0;
+  color: var(--v2-muted, #687568);
+  font-size: 13px;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+}
+.recordButton[data-compact][data-count-line] {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
+  gap: 8px 10px;
+  align-items: center;
+  min-width: 0;
+}
 .purchaseListHeader, .countListHeader, .countLineListHeader { display: none; }
 .recordButton[data-compact][data-count] {
   display: grid;
@@ -1885,9 +1900,8 @@ button.recordButton:hover strong { color: var(--v2-accent, #456849); }
   }
   .recordButton[data-compact][data-count-line] > .countLineCol { display: block; align-self: center; }
   .recordButton[data-compact][data-count-line] > .countLineCol[data-col='amount'] { justify-self: end; text-align: end; }
-  .recordButton[data-compact][data-count-line] .purchaseLineMeta > .countDiffBadge { display: none; }
+  .recordButton[data-compact][data-count-line] .purchaseLineMeta { display: none; }
 }
-.countLineCol { display: none; min-width: 0; color: var(--v2-muted, #687568); font-size: 13px; line-height: 1.35; font-variant-numeric: tabular-nums; }
 .countLineCol[data-tone='rose'], .countEditorCol[data-tone='rose'], .countDiffBadge[data-tone='rose'] { color: light-dark(#be123c, #ffc5d5); }
 .countLineCol[data-tone='mint'], .countEditorCol[data-tone='mint'], .countDiffBadge[data-tone='mint'] { color: light-dark(#047857, #abebcf); }
 .countDiffBadge {
@@ -1900,13 +1914,6 @@ button.recordButton:hover strong { color: var(--v2-accent, #456849); }
   font-weight: 720;
   font-variant-numeric: tabular-nums;
   background: color-mix(in srgb, currentColor 12%, var(--v2-surface, #fff));
-}
-.recordButton[data-compact][data-count-line] {
-  display: grid;
-  grid-template-columns: 48px minmax(0, 1fr) auto;
-  gap: 8px 10px;
-  align-items: center;
-  min-width: 0;
 }
 .recordButton[data-compact][data-count-line][data-diff],
 .row[data-diff] > .recordButton[data-compact][data-count-line],

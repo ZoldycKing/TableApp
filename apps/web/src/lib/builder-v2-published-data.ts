@@ -181,6 +181,15 @@ export async function readPublishedV2RelatedRows(slug:string,request:{revision:s
   })
 }
 
+function relationOne(value: unknown) {
+  if (typeof value === 'string' && value.trim()) return value.trim()
+  if (Array.isArray(value)) {
+    const id = value.find((item): item is string => typeof item === 'string' && Boolean(item.trim()))
+    return id?.trim() ?? null
+  }
+  return null
+}
+
 /** Default purchase line prices from product cost for staff/owner (cost stays hidden on product cards). */
 export async function readPublishedV2PurchaseCosts(slug:string,request:{revision:string;productIds:readonly string[]}){
   return withPublishedV2Read(async tx=>{
@@ -205,5 +214,74 @@ export async function readPublishedV2PurchaseCosts(slug:string,request:{revision
       if(Number.isFinite(price)&&price>=0)costs[row.id]=price
     }
     return {costs}
+  })
+}
+
+/** Last supplier + price per product for «Что заказать» (mirrors create_reorder_orders grouping). */
+export async function readPublishedV2ReorderHints(slug:string,request:{revision:string;productIds:readonly string[]}){
+  return withPublishedV2Read(async tx=>{
+    const {app,actor,revision}=await publishedV2Context(slug,tx)
+    if(revision!==request.revision)throw new RowWriteError('conflict','Приложение обновлено. Обновите страницу.')
+    const inventory=app.inventory
+    if(!inventory?.purchasesScreenId||!inventory.purchaseOrdersTableId||!inventory.purchaseLinesTableId
+      ||!inventory.purchaseSupplierFieldId||!inventory.purchaseStatusFieldId||!inventory.lineProductFieldId
+      ||!inventory.lineOrderFieldId||!inventory.linePriceFieldId||!inventory.suppliersTableId||!inventory.supplierNameFieldId
+      ||!canOpenAppV2Screen(app,actor,inventory.purchasesScreenId)){
+      throw new RowWriteError('denied','Закупки недоступны')
+    }
+    if(!actor.roleIds.includes('owner')&&!actor.roleIds.includes('staff'))throw new RowWriteError('denied','Закупки недоступны')
+    if(!request.productIds.length||request.productIds.length>100)throw new RowWriteError('invalid','Слишком много товаров')
+    const productSet=new Set(request.productIds)
+    const [orderRows,lineRows,supplierRows]=await Promise.all([
+      tx.select({id:rows.id,data:rows.data}).from(rows).where(and(
+        eq(rows.tableId,inventory.purchaseOrdersTableId),isNull(rows.deletedAt),publishedV2ReadSql(app,actor,inventory.purchaseOrdersTableId),
+      )),
+      tx.select({id:rows.id,data:rows.data}).from(rows).where(and(
+        eq(rows.tableId,inventory.purchaseLinesTableId),isNull(rows.deletedAt),publishedV2ReadSql(app,actor,inventory.purchaseLinesTableId),
+      )),
+      tx.select({id:rows.id,data:rows.data}).from(rows).where(and(
+        eq(rows.tableId,inventory.suppliersTableId),isNull(rows.deletedAt),publishedV2ReadSql(app,actor,inventory.suppliersTableId),
+      )),
+    ])
+    const supplierName=new Map(supplierRows.map(row=>{
+      const data=row.data as Record<string,unknown>
+      return [row.id,String(data[inventory.supplierNameFieldId!]??'').trim()] as const
+    }))
+    const rankOf=(status:unknown)=>status===inventory.statusReceived?3
+      :status===inventory.statusOrdered?2
+        :status===inventory.statusDraft?1
+          :0
+    const best=new Map<string,{rank:number;at:string;supplier:string;price:number}>()
+    for(const order of orderRows){
+      const data=order.data as Record<string,unknown>
+      if(inventory.statusCancelled&&data[inventory.purchaseStatusFieldId!]===inventory.statusCancelled)continue
+      const rank=rankOf(data[inventory.purchaseStatusFieldId!])
+      if(!rank)continue
+      const supplierId=relationOne(data[inventory.purchaseSupplierFieldId!])
+      if(!supplierId)continue
+      const at=String(
+        (inventory.purchaseReceivedAtFieldId?data[inventory.purchaseReceivedAtFieldId]:undefined)
+        ??(inventory.purchaseOrderedAtFieldId?data[inventory.purchaseOrderedAtFieldId]:undefined)
+        ??(inventory.purchaseCreatedAtFieldId?data[inventory.purchaseCreatedAtFieldId]:undefined)
+        ??(inventory.purchaseDateFieldId?data[inventory.purchaseDateFieldId]:undefined)
+        ??'',
+      )
+      const supplier=supplierName.get(supplierId)||''
+      if(!supplier)continue
+      for(const line of lineRows){
+        const lineData=line.data as Record<string,unknown>
+        if(relationOne(lineData[inventory.lineOrderFieldId!])!==order.id)continue
+        const productId=relationOne(lineData[inventory.lineProductFieldId!])
+        if(!productId||!productSet.has(productId))continue
+        const price=Number(lineData[inventory.linePriceFieldId!])
+        const current=best.get(productId)
+        if(!current||rank>current.rank||(rank===current.rank&&at>current.at)){
+          best.set(productId,{rank,at,supplier,price:Number.isFinite(price)&&price>=0?price:0})
+        }
+      }
+    }
+    const hints:Record<string,{supplier:string;price:number}>={}
+    for(const [productId,hint] of best)hints[productId]={supplier:hint.supplier,price:hint.price}
+    return {hints}
   })
 }

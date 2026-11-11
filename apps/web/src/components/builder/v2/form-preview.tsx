@@ -212,11 +212,20 @@ function InventoryDateInput({ id, disabled, errorId, required, label, value, onC
   const commit = (raw: string) => {
     const trimmed = raw.trim()
     if (!trimmed) { onChange(null); return }
+    // Programmatic / paste ISO (YYYY-MM-DD) — keep the posted value, show RU mask.
+    const iso = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+    if (iso) {
+      setDraft(`${iso[3]}.${iso[2]}.${iso[1]}`)
+      onChange(`${iso[1]}-${iso[2]}-${iso[3]}`)
+      return
+    }
     const match = trimmed.match(/^(\d{2})\.(\d{2})\.(\d{4})$/)
     if (match) onChange(`${match[3]}-${match[2]}-${match[1]}`)
   }
   return <input id={id} disabled={disabled} aria-describedby={errorId} aria-invalid={Boolean(errorId)} aria-required={required} aria-label={label} type="text" inputMode="numeric" placeholder="дд.мм.гггг" autoComplete="off" value={draft} onChange={event => {
-    const digits = event.target.value.replace(/\D/g, '').slice(0, 8)
+    const raw = event.target.value.trim()
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) { commit(raw); return }
+    const digits = raw.replace(/\D/g, '').slice(0, 8)
     const next = digits.length <= 2 ? digits : digits.length <= 4 ? `${digits.slice(0, 2)}.${digits.slice(2)}` : `${digits.slice(0, 2)}.${digits.slice(2, 4)}.${digits.slice(4)}`
     setDraft(next)
     if (!digits.length) onChange(null)

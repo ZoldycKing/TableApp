@@ -73,7 +73,8 @@ it('keeps a date after server normalization and posts an unchecked checkbox as f
   await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Проверить форму' })))
   const request = vi.mocked(inspectBuilderV2FormAction).mock.calls.at(-1)![2] as { values: Record<string, unknown> }
   expect(request.values).toMatchObject({ due: '2026-11-08', done: false })
-  expect((screen.getByLabelText('Готов к') as HTMLInputElement).value).toBe('2026-11-08')
+  // Date fields use the RU text mask; ISO in → dd.mm.yyyy on screen, ISO out on submit.
+  expect((screen.getByLabelText('Готов к') as HTMLInputElement).value).toBe('08.11.2026')
 })
 
 const workingProps = () => ({ ...props(), workingForm: { formId: 'create_form', tableName: 'Заявки', listHref: '/apps/app_pilot/preview?screen=home' } })

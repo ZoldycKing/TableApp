@@ -46,7 +46,8 @@ describe('BuilderV2OrderActionPanel', () => {
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(screen.queryByRole('dialog')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Добавить запись' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Закрыть' }))
+    // Scrim and header X both use aria-label «Закрыть»; backdrop is the first.
+    fireEvent.click(screen.getAllByRole('button', { name: 'Закрыть' })[0]!)
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 

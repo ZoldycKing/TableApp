@@ -38,12 +38,22 @@ export function ReorderPanel() {
   const hydrated = useRef(false)
   const payloadId = inventory?.reorderPayloadFieldId ?? inventory?.purchasePayloadFieldId
 
-  const sync = (next: ReorderRow[]) => {
-    setRows(next)
+  const writePayload = (next: ReorderRow[]) => {
     if (!payloadId || !context) return
     const products = next.filter(row => row.selected).map(row => ({ productId: row.productId, qty: row.qty }))
     context.change(payloadId, products.length ? JSON.stringify({ products }) : '')
   }
+
+  const sync = (next: ReorderRow[]) => {
+    setRows(next)
+    writePayload(next)
+  }
+
+  // Form change() no-ops while the form is still loading; push selection once it is ready.
+  useEffect(() => {
+    if (!payloadId || !context?.state || context.disabled || !rows.length) return
+    writePayload(rows)
+  }, [Boolean(context?.state), context?.disabled, payloadId, rows])
 
   useEffect(() => {
     if (!published || !inventory || !payloadId || !context || hydrated.current) return

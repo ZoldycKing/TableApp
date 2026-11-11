@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useRef, useState, useTransition } from 'react'
 import { changeRoleAction, inviteMemberAction, removeMemberAction,setMemberTableAccessAction } from '@/app/team-actions'
 import { MEMBER_ROLES, ROLE_LABELS, type MemberRole } from '@/lib/roles'
 import { TableAccessDialog,type AccessTable } from './table-access-dialog'
@@ -26,6 +26,9 @@ export function TeamManager({ rows, canManage,tables=[] }: { rows: TeamRow[]; ca
   const [inviting, setInviting] = useState(false)
   const [editingAccess,setEditingAccess]=useState<TeamRow|'invite'|null>(null)
   const [inviteAccess,setInviteAccess]=useState<TableAccess|null>(null)
+  // Ref mirrors staged invite access so submit cannot race a transition-deferred state update.
+  const inviteAccessRef=useRef<TableAccess|null>(null)
+  const stageInviteAccess=(access:TableAccess|null)=>{inviteAccessRef.current=access;setInviteAccess(access)}
 
   const run = (work: () => Promise<{ ok: boolean; error?: string }>) => {
     setError(null)
@@ -41,13 +44,14 @@ export function TeamManager({ rows, canManage,tables=[] }: { rows: TeamRow[]; ca
     <section aria-labelledby="team-members-heading">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div><h2 id="team-members-heading" className="text-lg font-semibold text-ink">Доступ к кабинету</h2><p className="mt-1 text-sm text-ink-muted">Участников: {rows.length}</p></div>
-        {canManage ? <button type="button" aria-expanded={inviting} onClick={() => { setInviting(!inviting); setError(null) }} className={`rounded-lg bg-ink px-4 py-2.5 text-sm font-medium text-white hover:bg-ink/90 ${FOCUS}`}>{inviting ? 'Закрыть приглашение' : 'Пригласить участника'}</button> : null}
+        {canManage ? <button type="button" aria-expanded={inviting} onClick={() => { setInviting(!inviting); setError(null); if(inviting)stageInviteAccess(null) }} className={`rounded-lg bg-ink px-4 py-2.5 text-sm font-medium text-white hover:bg-ink/90 ${FOCUS}`}>{inviting ? 'Закрыть приглашение' : 'Пригласить участника'}</button> : null}
       </div>
       {canManage && inviting ? <form className="mb-5 space-y-3 rounded-xl border border-sand-200 bg-white p-4" onSubmit={event => {
         event.preventDefault(); setError(null); setSent(null)
+        const stagedAccess=inviteAccessRef.current
         startTransition(async () => {
           try {
-            const result = inviteAccess&&role!=='owner'?await inviteMemberAction(email,role,inviteAccess):await inviteMemberAction(email, role)
+            const result = stagedAccess&&role!=='owner'?await inviteMemberAction(email,role,stagedAccess):await inviteMemberAction(email, role)
             if (!result.ok) return setError(result.error)
             setSent({ email, hint: result.hint }); setEmail('')
           } catch { setError('Не удалось отправить приглашение. Проверьте соединение и повторите попытку.') }
@@ -79,6 +83,6 @@ export function TeamManager({ rows, canManage,tables=[] }: { rows: TeamRow[]; ca
       {!canManage ? <p className="mt-3 text-sm text-ink-muted">Приглашать участников и менять роли может владелец пространства.</p> : soleOwner ? <p className="mt-3 text-sm text-ink-muted">Чтобы изменить доступ владельца, сначала назначьте ещё одного.</p> : null}
     </section>
     <details className="border-t border-sand-200 pt-5"><summary className={`cursor-pointer text-sm font-medium text-ink-soft ${FOCUS}`}>Что разрешено каждой роли</summary><dl className="mt-4 grid gap-4 sm:grid-cols-3">{MEMBER_ROLES.map(candidate => <div key={candidate}><dt className="text-sm font-semibold text-ink">{ROLE_LABELS[candidate]}</dt><dd className="mt-1 text-sm leading-6 text-ink-soft">{ROLE_HINTS[candidate]}</dd></div>)}</dl></details>
-    {canManage&&editingAccess?<TableAccessDialog key={editingAccess==='invite'?'invite':editingAccess.userId} name={editingAccess==='invite'?email||'Новый участник':editingAccess.name||editingAccess.email} role={editingAccess==='invite'?role:editingAccess.role} tables={tables} initialAccess={editingAccess==='invite'?inviteAccess:editingAccess.tableAccess} saveLabel={editingAccess==='invite'?'Готово':undefined} onSave={async access=>{if(editingAccess==='invite'){setInviteAccess(access);return {ok:true}}return setMemberTableAccessAction(editingAccess.userId,access)}} onClose={()=>setEditingAccess(null)}/>:null}
+    {canManage&&editingAccess?<TableAccessDialog key={editingAccess==='invite'?'invite':editingAccess.userId} name={editingAccess==='invite'?email||'Новый участник':editingAccess.name||editingAccess.email} role={editingAccess==='invite'?role:editingAccess.role} tables={tables} initialAccess={editingAccess==='invite'?inviteAccess:editingAccess.tableAccess} saveLabel={editingAccess==='invite'?'Готово':undefined} onSave={async access=>{if(editingAccess==='invite'){stageInviteAccess(access);return {ok:true}}return setMemberTableAccessAction(editingAccess.userId,access)}} onClose={()=>setEditingAccess(null)}/>:null}
   </div>
 }

@@ -4,7 +4,7 @@ Local WebP copies (~600px wide) for the warehouse seed catalog. No hotlinking.
 
 | File | Depicts | Source | License |
 |------|---------|--------|---------|
-| FA-120.webp | Air filter (whole product, neutral bg) | Wikimedia Commons: Panasonic AIR PURIFIER FILTER … (3).jpg | as listed on Commons |
+| FA-120.webp | Air filter (whole product, neutral bg) | Wikimedia Commons: HEPA Filter.png | as listed on Commons |
 | KTS-011.webp | Digital wall thermostat | Flickr via Openverse: Room Thermostat (441970348) | CC BY 2.0 |
 | R410-11.webp | Gas / propane cylinder (refrigerant stand-in) | Wikimedia Commons: Propane cylinder type 2012 in Tuntorp 3.jpg | CC BY-SA 4.0 |
 | TOOL-SH-18.webp | Cordless drill | Wikimedia Commons: Panasonic Cordless Drill… | CC BY-SA 4.0 |

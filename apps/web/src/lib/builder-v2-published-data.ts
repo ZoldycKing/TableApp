@@ -28,8 +28,14 @@ export function publishedV2ReadSql(app:AppV2,actor:AppV2Actor,tableId:string){
     return and(sql`jsonb_typeof(${rows.data}->${scope.fieldId}) = 'string'`,scope.property==='email'?sql`lower(btrim(${cell})) = ${value.trim().toLowerCase()}`:sql`btrim(${cell}) = ${value.trim()}`)
   }))??sql`false`
 }
+/** Create-product form lives on its own screen but opens as a dialog on the items list. */
+export function publishedV2FormHostScreenId(app:AppV2,screenId:string,nodeId:string){
+  if(app.inventory&&nodeId===app.inventory.createItemFormId&&screenId===app.inventory.itemsScreenId)return app.inventory.createItemScreenId
+  return screenId
+}
 export function publishedV2Node(app:AppV2,actor:AppV2Actor,screenId:string,nodeId:string,screenRow?:AppV2Record){
-  const screen=publishedV2Screen(app,actor,screenId),map=new Map(app.nodes.map(node=>[node.id,node]))
+  const hostScreenId=publishedV2FormHostScreenId(app,screenId,nodeId)
+  const screen=publishedV2Screen(app,actor,hostScreenId),map=new Map(app.nodes.map(node=>[node.id,node]))
   const visit=(ids:readonly string[],ancestors:AppV2Node[]):AppV2Node[]|null=>{for(const id of ids){const node=map.get(id);if(!node)continue;const path=[...ancestors,node];if(node.id===nodeId)return path;const result=visit(appV2ChildIds(node),path);if(result)return result}return null}
   const path=visit(screen.rootIds,[])
   if(!path||path.slice(0,-1).some(node=>node.type==='collection')||path.some(node=>node.visibleTo&&!matchesAppV2Audience(node.visibleTo,actor)||node.visibleWhen&&(()=>{const result=evaluateAppV2Condition(node.visibleWhen!,{actor,row:screenRow,screenRow});return !result.ok||!result.value})()))throw new RowWriteError('denied','Элемент недоступен')

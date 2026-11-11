@@ -27,7 +27,7 @@ export type BuilderV2OrderActionTrigger = {
 }
 
 type OrderActionPanelContextValue = { mode: BuilderV2OrderActionMode; close: () => void }
-const OrderActionPanelContext = createContext<OrderActionPanelContextValue | null>(null)
+export const OrderActionPanelContext = createContext<OrderActionPanelContextValue | null>(null)
 
 /** Shared action-panel controls for order/deal detail forms (persistent shop vs reveal-on-demand). */
 export function useBuilderV2OrderActionPanel() {

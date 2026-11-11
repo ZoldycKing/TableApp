@@ -46,7 +46,8 @@ function InventoryCreateDialog({
   }, [open, onDismiss])
   const close = () => { setOpen(false); onDismiss?.() }
   const submit = () => panelRef.current?.querySelector<HTMLButtonElement>('form button[type="submit"]')?.click()
-  const dialog = open && mounted ? createPortal(<>
+  // Same reveal context as edit/ops so a successful save dismisses the dialog and refreshes the list.
+  const dialog = open && mounted ? createPortal(<OrderActionPanelContext.Provider value={{ mode: 'reveal', close }}>
     <button type="button" className={ui.orderActionScrim} aria-label="Закрыть" onClick={close} />
     <aside ref={panelRef} className={ui.orderActionPanel} data-mode="reveal" data-open="true" data-dialog aria-labelledby={titleId} role="dialog" aria-modal="true">
       <div className={ui.orderActionHeader}>
@@ -59,7 +60,7 @@ function InventoryCreateDialog({
         <button type="button" className={styles.primary} onClick={submit}>Сохранить товар</button>
       </div>
     </aside>
-  </>, document.body) : null
+  </OrderActionPanelContext.Provider>, document.body) : null
   return <>
     <button type="button" className={styles.primary} onClick={() => setOpen(true)}>{label}</button>
     {dialog}
@@ -210,7 +211,7 @@ import { ShopAddToBasket, ShopBasketPanel } from './shop-basket'
 import { builderV2ContactHref, builderV2StatusTone, isBuilderV2BusinessDetail, isBuilderV2ContactProfile, isBuilderV2ContactTable, isBuilderV2OrderTable } from './record-presentation'
 import { RecordFieldLabel } from '@/components/runtime/record-field-label'
 import { BuilderV2OrderHero, BuilderV2RecordAvatar, InventoryProductThumb } from './record-visuals'
-import { BuilderV2OrderActionPanel, BuilderV2OrderFacts, BuilderV2OrderIdentity, BuilderV2OrderSummaryCard, BuilderV2ShopOrderLines, builderV2BlankFact, builderV2OrderStatusChoices, type BuilderV2OrderActionTrigger } from './order-detail'
+import { BuilderV2OrderActionPanel, BuilderV2OrderFacts, BuilderV2OrderIdentity, BuilderV2OrderSummaryCard, BuilderV2ShopOrderLines, OrderActionPanelContext, builderV2BlankFact, builderV2OrderStatusChoices, type BuilderV2OrderActionTrigger } from './order-detail'
 
 const cell = (row: AppV2Record, fieldId: string) => (row as Partial<BuilderV2DataRecord>).display?.[fieldId] ?? String(row.values[fieldId] ?? '')
 

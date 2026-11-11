@@ -24,7 +24,11 @@ export async function loadPublishedV2Page(slug:string,request:{screen?:string;ro
   return withPublishedV2Read(async tx=>{
     const current=await publishedV2Context(slug,tx),{app,actor,revision}=current,visibleScreens=app.screens.filter(screen=>canOpenAppV2Screen(app,actor,screen.id))
     if(!visibleScreens.length)return {login:true as const,id:app.id,workspaceId:app.workspaceId,name:app.name,accent:app.theme.accent,theme:app.theme,appearance:app.appearance}
-    const screen=publishedV2Screen(app,actor,request.screen??(visibleScreens.find(screen=>screen.id===app.homeScreenId)??visibleScreens.find(screen=>!screen.contextTableId)??visibleScreens[0])!.id)
+    // Create-product deep link opens the items list with the form dialog, so the list stays behind.
+    const openCreate = Boolean(app.inventory && request.screen === app.inventory.createItemScreenId)
+    const requestedScreenId = openCreate && app.inventory ? app.inventory.itemsScreenId
+      : request.screen??(visibleScreens.find(screen=>screen.id===app.homeScreenId)??visibleScreens.find(screen=>!screen.contextTableId)??visibleScreens[0])!.id
+    const screen=publishedV2Screen(app,actor,requestedScreenId)
     if(request.row&&!screen.contextTableId)throw new RowWriteError('denied','Запись недоступна')
     const selected=screen.contextTableId&&request.row?await publishedV2Row(await loadBuilderV2ReadMetadata(tx,app.workspaceId,[screen.contextTableId]),app,actor,screen.contextTableId,request.row):undefined
     const targetIds = [...new Set(builderV2ScreenNodes(app, screen.id).flatMap(node => node.type === 'business' && node.target ? [node.target.appId] : []))]
@@ -53,6 +57,10 @@ export async function loadPublishedV2Page(slug:string,request:{screen?:string;ro
       return kept
     }
     const rootIds=await visit(screen.rootIds)
+    // Include create form nodes on the items list so the toolbar dialog can render without navigating away.
+    if (app.inventory && screen.id === app.inventory.itemsScreenId && app.inventory.createItemFormId) {
+      await visit([app.inventory.createItemFormId])
+    }
     const recordTable = current.tables.find(table => table.id === screen.contextTableId)
     const statusField = recordTable?.fields.find(field => field.type === 'single_select' && builderV2StatusColumn(field))
     const groupedOrder = app.nodes.some(node => node.type === 'collection' && node.recordGroup && collectionCardScreen(app, node) === screen.id)
@@ -85,6 +93,6 @@ export async function loadPublishedV2Page(slug:string,request:{screen?:string;ro
     const safe:AppV2={...app,authentication:{mode:'invite_only',defaultRoleId:null,members:[]},roles:app.roles.filter(role=>actor.roleIds.includes(role.id)),policy:{tables:[],workflows:[]},screens:visibleScreens.map(item=>({...item,catalog:item.id===screen.id?item.catalog:undefined,rootIds:item.id===screen.id?rootIds:queue&&item.id===parent?.screenId?[queue.id]:[],events:{enter:null}})),nodes,sources,workflows}
     const enter=(!screen.contextTableId||request.row)?await publishedV2EnterState(current,tx,{screenId:screen.id,...(request.row?{recordId:request.row}:{})}):undefined
     const titleFieldId = screen.catalog?.titleFieldId ?? screen.recordTitleFieldId ?? current.tables.find(table=>table.id===screen.contextTableId)?.primaryFieldId
-    return {login:false as const,...(enter?{enter}:{}),app:safe,tables,actor,revision,screenId:screen.id,...(parent?{sectionId:parent.screenId}:{}),...(statusFormId?{statusFormId}:{}),recordId:request.row,record:selected?.record,title:selected?(titleFieldId&&selected.record.display[titleFieldId]||'Запись'):screen.name,buttons,rowActions,...(Object.keys(businessLinks).length ? { businessLinks } : {})}
+    return {login:false as const,...(enter?{enter}:{}),app:safe,tables,actor,revision,screenId:screen.id,...(parent?{sectionId:parent.screenId}:{}),...(statusFormId?{statusFormId}:{}),...(openCreate?{openCreate:true as const}:{}),recordId:request.row,record:selected?.record,title:selected?(titleFieldId&&selected.record.display[titleFieldId]||'Запись'):screen.name,buttons,rowActions,...(Object.keys(businessLinks).length ? { businessLinks } : {})}
   })
 }

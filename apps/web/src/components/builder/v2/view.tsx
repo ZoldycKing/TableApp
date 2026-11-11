@@ -7,7 +7,8 @@ import {BuilderV2Video} from './video'
 import {builderV2ButtonAction,builderV2NodeAction} from '@/lib/builder-v2-button-action'
 import {builderCalendarTime} from '@/lib/builder-v2-calendar'
 import { formatInventoryAuthor, formatInventoryJournalWhen } from '@/lib/inventory-author'
-import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
+import { useCallback, useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 
 function InventoryTypeFilter({ choices, value, onChange }: { choices: readonly { id: string; name: string }[]; value: string; onChange: (id: string) => void }) {
   if (!choices.length) return null
@@ -15,6 +16,54 @@ function InventoryTypeFilter({ choices, value, onChange }: { choices: readonly {
     <button type="button" aria-pressed={!value} onClick={() => onChange('')}>Все</button>
     {choices.map(choice => <button key={choice.id} type="button" aria-pressed={value === choice.id} onClick={() => onChange(choice.id)}>{choice.name}</button>)}
   </div>
+}
+
+/** Create-product dialog on the items list — keeps the list (and tabs) behind a dim scrim. */
+function InventoryCreateDialog({
+  label, children, defaultOpen = false, onDismiss,
+}: {
+  label: string
+  children: ReactNode
+  defaultOpen?: boolean
+  onDismiss?: () => void
+}) {
+  const [open, setOpen] = useState(defaultOpen)
+  const [mounted, setMounted] = useState(false)
+  const panelRef = useRef<HTMLElement>(null)
+  const titleId = useId()
+  useEffect(() => { setMounted(true) }, [])
+  useEffect(() => { if (defaultOpen) setOpen(true) }, [defaultOpen])
+  useEffect(() => {
+    if (!open) return
+    const focusable = panelRef.current?.querySelector<HTMLElement>('input:not([type="hidden"]), textarea, select, button:not([data-action-cancel])')
+    queueMicrotask(() => focusable?.focus())
+  }, [open])
+  useEffect(() => {
+    if (!open) return
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.preventDefault(); setOpen(false); onDismiss?.() } }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, onDismiss])
+  const close = () => { setOpen(false); onDismiss?.() }
+  const submit = () => panelRef.current?.querySelector<HTMLButtonElement>('form button[type="submit"]')?.click()
+  const dialog = open && mounted ? createPortal(<>
+    <button type="button" className={ui.orderActionScrim} aria-label="Закрыть" onClick={close} />
+    <aside ref={panelRef} className={ui.orderActionPanel} data-mode="reveal" data-open="true" data-dialog aria-labelledby={titleId} role="dialog" aria-modal="true">
+      <div className={ui.orderActionHeader}>
+        <h2 className={presentation.sectionTitle} id={titleId}>Новый товар</h2>
+        <button type="button" className={ui.orderActionClose} aria-label="Закрыть" data-action-cancel onClick={close}><ProtoIcon name="close" size={18} /></button>
+      </div>
+      <div className={ui.orderActionBody}>{children}</div>
+      <div className={ui.orderActionFooter}>
+        <button type="button" className={styles.secondary} data-action-cancel onClick={close}>Отмена</button>
+        <button type="button" className={styles.primary} onClick={submit}>Сохранить товар</button>
+      </div>
+    </aside>
+  </>, document.body) : null
+  return <>
+    <button type="button" className={styles.primary} onClick={() => setOpen(true)}>{label}</button>
+    {dialog}
+  </>
 }
 
 function InventoryJournalRows({ rows, typeFieldId, choices, renderRows }: {
@@ -165,7 +214,7 @@ import { BuilderV2OrderActionPanel, BuilderV2OrderFacts, BuilderV2OrderIdentity,
 
 const cell = (row: AppV2Record, fieldId: string) => (row as Partial<BuilderV2DataRecord>).display?.[fieldId] ?? String(row.values[fieldId] ?? '')
 
-export type AppV2RendererProps = { app: AppV2; screenId: string; tables: readonly BuilderV2Table[]; actor: AppV2Actor; rows?: Readonly<Record<string, readonly AppV2Record[]>>; record?: AppV2Record; live?: boolean; editing?: boolean; selectedId?: string | null; onSelect?: (id: string) => void; onAdd?: (parentId: string | null) => void; onNavigate?: (screenId: string, recordId?: string) => void; workingForm?: WorkingFormOptions & { formId: string }; rootNodeIds?: readonly string[]; businessApps?: readonly BuilderBusinessApp[]; businessLinks?: Readonly<Record<string, BuilderBusinessLink>>; statusFormId?: string }
+export type AppV2RendererProps = { app: AppV2; screenId: string; tables: readonly BuilderV2Table[]; actor: AppV2Actor; rows?: Readonly<Record<string, readonly AppV2Record[]>>; record?: AppV2Record; live?: boolean; editing?: boolean; selectedId?: string | null; onSelect?: (id: string) => void; onAdd?: (parentId: string | null) => void; onNavigate?: (screenId: string, recordId?: string) => void; workingForm?: WorkingFormOptions & { formId: string }; rootNodeIds?: readonly string[]; businessApps?: readonly BuilderBusinessApp[]; businessLinks?: Readonly<Record<string, BuilderBusinessLink>>; statusFormId?: string; openCreate?: boolean }
 
 /** One component tree for the editor and authenticated preview; no mutation engine lives here. */
 export function AppV2Renderer(props: AppV2RendererProps) {
@@ -179,8 +228,10 @@ export function AppV2Renderer(props: AppV2RendererProps) {
   const foldedCreateId = !props.editing && inventory && screen && (screen.id === inventory.itemsScreenId || screen.id === inventory.movementsScreenId)
     ? screen.rootIds.find(id => nodes.get(id)?.type === 'button') ?? null
     : null
-  const inventoryCreateScreen = Boolean(inventory && screen?.id === inventory.createItemScreenId)
-  const rootIds = props.rootNodeIds ?? screen?.rootIds ?? []
+  const inventoryCreateFormId = !props.editing && inventory && screen?.id === inventory.itemsScreenId
+    ? inventory.createItemFormId ?? null
+    : null
+  const rootIds = (props.rootNodeIds ?? screen?.rootIds ?? []).filter(id => id !== inventoryCreateFormId)
   const visible = (node: AppV2Node, row = props.record) => {
     if (node.visibleTo && !matchesAppV2Audience(node.visibleTo, props.actor)) return false
     const result = node.visibleWhen && evaluateAppV2Condition(node.visibleWhen, { actor: props.actor, row, screenRow: props.record })
@@ -300,6 +351,15 @@ export function AppV2Renderer(props: AppV2RendererProps) {
           const toolbarButton = inventory && screen?.id === inventory.movementsScreenId
             ? { ...button, label: 'Операция' }
             : button
+          if (inventoryCreateFormId && nodes.get(inventoryCreateFormId)) {
+            return <InventoryCreateDialog
+              label={toolbarButton.label}
+              defaultOpen={Boolean(props.openCreate)}
+              onDismiss={() => {
+                if (props.openCreate && inventory && published) published.navigate(inventory.itemsScreenId, undefined, { replace: true })
+              }}
+            >{render([inventoryCreateFormId])}</InventoryCreateDialog>
+          }
           return published
             ? <PublishedV2Button node={toolbarButton} screenId={props.screenId} recordId={props.record?.id} />
             : <button type="button" className={buttonStyle} disabled>{toolbarButton.label}</button>
@@ -384,7 +444,6 @@ export function AppV2Renderer(props: AppV2RendererProps) {
             const journalAuthor = inventoryJournalList && row && inventory
               ? formatInventoryAuthor(cell(row, inventory.movementAuthorFieldId))
               : ''
-            const journalPlace = [journalWarehouse, journalWhen].filter(Boolean).join(' · ')
             const lowBadge = inventoryStockList && row && row.values[inventory!.itemLowFieldId] === true
               ? <span className={ui.statusBadge} data-tone="rose">Мало</span>
               : null
@@ -433,8 +492,10 @@ export function AppV2Renderer(props: AppV2RendererProps) {
                   <strong>{label}</strong>
                   <span className={ui.recordJournalMeta}>
                     {subtitleValue ? <span className={ui.statusBadge} data-tone={builderV2StatusTone(subtitleValue)}>{subtitleValue}</span> : null}
-                    {journalPlace ? <span className={ui.journalPlace}>{journalPlace}</span> : null}
-                    {journalAuthor ? <span className={ui.journalAuthor}>{journalPlace ? '· ' : ''}{journalAuthor}</span> : null}
+                    {journalWarehouse ? <span className={ui.journalUnit}>{journalWarehouse}</span> : null}
+                    {journalWarehouse && journalWhen ? <span className={ui.journalSep} aria-hidden="true"> · </span> : null}
+                    {journalWhen ? <span className={ui.journalUnit}>{journalWhen}</span> : null}
+                    {journalAuthor ? <span className={ui.journalAuthor}>{journalWarehouse || journalWhen ? ' · ' : ''}{journalAuthor}</span> : null}
                   </span>
                 </div>
                 {detailNode}
@@ -779,26 +840,6 @@ export function AppV2Renderer(props: AppV2RendererProps) {
           </div>}
       </div>
     </div>
-  }
-  if (inventoryCreateScreen && inventory?.createItemFormId) {
-    const close = () => {
-      if (published) published.back(inventory.itemsScreenId)
-      else props.onNavigate?.(inventory.itemsScreenId)
-    }
-    return <>
-      <button type="button" className={ui.orderActionScrim} aria-label="Закрыть" onClick={close} />
-      <aside className={ui.orderActionPanel} data-mode="reveal" data-open="true" data-dialog role="dialog" aria-modal="true" aria-label="Новый товар">
-        <div className={ui.orderActionHeader}><h2 className={presentation.sectionTitle}>Новый товар</h2></div>
-        <div className={ui.orderActionBody}>{render([inventory.createItemFormId])}</div>
-        <div className={ui.orderActionFooter}>
-          <button type="button" className={styles.secondary} data-action-cancel onClick={close}>Отмена</button>
-          <button type="button" className={styles.primary} onClick={event => {
-            const root = (event.currentTarget.closest('[data-dialog]') as HTMLElement | null)
-            root?.querySelector<HTMLButtonElement>('form button[type="submit"]')?.click()
-          }}>Сохранить товар</button>
-        </div>
-      </aside>
-    </>
   }
   const basketScreen = !props.editing && props.app.shop?.basketScreenId === screen?.id
   return <div className={`${styles.canvasBlocks} ${ui.screenBlocks} ${screen?.contextTableId ? ui.businessDetail : ''} ${basketScreen ? ui.commerceScreen : ''}`} data-profile={profile || undefined} data-commerce={basketScreen ? 'basket' : undefined}>

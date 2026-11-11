@@ -14,9 +14,9 @@ import ui from './view.module.css'
 import { builderV2RecordParent } from './collection-navigation'
 import { BuilderV2OrderWorkbench } from './order-workbench'
 import { isBuilderV2ContactProfile } from './record-presentation'
-type Data=Extract<Awaited<ReturnType<typeof loadPublishedV2Page>>,{login:false}>
+type Data=Extract<Awaited<ReturnType<typeof loadPublishedV2Page>>,{login:false}> & { openCreate?: boolean }
 export function PublishedV2Runtime({data}:{data:Data}){
-  const router=useRouter(),{app,actor,revision,screenId,recordId,record,title,buttons,tables,rowActions,enter}=data,slug=app.slug,page=app.screens.find(screen=>screen.id===screenId)!
+  const router=useRouter(),{app,actor,revision,screenId,recordId,record,title,buttons,tables,rowActions,enter,openCreate}=data,slug=app.slug,page=app.screens.find(screen=>screen.id===screenId)!
   const [dataVersion,setDataVersion]=useState(0),[notice,setNotice]=useState(''),[headerAccessory,setHeaderAccessoryState]=useState<ReactNode>(null)
   const setHeaderAccessory=useCallback((node:ReactNode)=>setHeaderAccessoryState(node),[])
   const enterNavigation=useRef(new BuilderV2EnterNavigation()),scopeKey=JSON.stringify([screenId,recordId]),visit=useRef({key:'',id:''})
@@ -55,7 +55,7 @@ export function PublishedV2Runtime({data}:{data:Data}){
         {page.contextTableId && !recordId
           ? <p className={ui.hint}>Откройте запись из списка.</p>
           : <BuilderV2OrderWorkbench app={app} parent={parent} tables={tables} recordId={recordId} record={record} onOpen={id => navigate(screenId, id, { replace: true })}>
-              <AppV2Renderer key={JSON.stringify([revision,actor,screenId,recordId,record])} live app={app} actor={actor} screenId={screenId} record={record} tables={tables} businessLinks={data.businessLinks} onNavigate={navigate} statusFormId={data.statusFormId} />
+              <AppV2Renderer key={JSON.stringify([revision,actor,screenId,recordId,record])} live app={app} actor={actor} screenId={screenId} record={record} tables={tables} businessLinks={data.businessLinks} onNavigate={navigate} statusFormId={data.statusFormId} openCreate={Boolean(openCreate)} />
             </BuilderV2OrderWorkbench>}
       </BuilderV2AppFrame>
     </BuilderV2Theme>

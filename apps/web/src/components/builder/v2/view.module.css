@@ -144,26 +144,31 @@
 .orderActionDock .orderActionTrigger[data-primary] { grid-column: 1 / -1; }
 .orderActionIcon { display: inline-grid; place-items: center; width: 44px; height: 44px; flex: none; border: 1px solid var(--v2-line, #dce2d6); border-radius: var(--v2-control-radius, 8px); background: var(--v2-surface, #fff); color: var(--v2-ink, #253c2d); cursor: pointer; }
 .orderActionIcon:hover { border-color: var(--v2-accent); color: var(--v2-accent); }
-.orderActionScrim { position: fixed; inset: 0; z-index: 30; border: 0; padding: 0; background: color-mix(in srgb, #122018 42%, transparent); cursor: pointer; }
-.orderActionPanel[data-dialog] { position: fixed; top: 50%; left: 50%; z-index: 31; width: min(calc(100% - 32px), 30rem); max-height: min(88dvh, 40rem); transform: translate(-50%, -50%); overflow: hidden; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 0; padding: 0; border-radius: 16px; background: var(--v2-surface, #fff); box-shadow: var(--shadow-app-lg, 0 18px 40px color-mix(in srgb, #122018 18%, transparent)); border: 1px solid var(--v2-line, #dce2d6); }
-.orderActionPanel[data-dialog] .orderActionHeader { padding: 16px 18px 12px; border-bottom: 1px solid var(--v2-line, #dce2d6); }
+.orderActionScrim { position: fixed; inset: 0; z-index: 80; border: 0; padding: 0; background: color-mix(in srgb, #122018 46%, transparent); cursor: pointer; }
+.orderActionPanel[data-dialog] { position: fixed; top: 50%; left: 50%; z-index: 81; width: min(calc(100% - 32px), 30rem); max-height: min(88dvh, 40rem); transform: translate(-50%, -50%); overflow: hidden; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 0; padding: 0; border-radius: 16px; background: var(--v2-surface, #fff); box-shadow: var(--shadow-app-lg, 0 18px 40px color-mix(in srgb, #122018 18%, transparent)); border: 1px solid var(--v2-line, #dce2d6); }
+.orderActionPanel[data-dialog] .orderActionHeader { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 16px 18px 12px; border-bottom: 1px solid var(--v2-line, #dce2d6); }
+.orderActionPanel[data-dialog] .orderActionHeader .sectionTitle,
+.orderActionPanel[data-dialog] .orderActionHeader :is(h2) { margin: 0; min-width: 0; }
+.orderActionClose { display: inline-grid; place-items: center; width: 40px; height: 40px; border: 0; border-radius: var(--v2-control-radius, 8px); background: transparent; color: var(--v2-muted, #687568); cursor: pointer; }
+.orderActionClose:hover { background: var(--v2-bg, #f8faf6); color: var(--v2-ink, #253c2d); }
 .orderActionPanel[data-dialog] .orderActionBody { overflow: auto; padding: 16px 18px; min-height: 0; }
 .orderActionPanel[data-dialog] .orderActionFooter { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; padding: 12px 18px calc(14px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--v2-line, #dce2d6); background: var(--v2-surface, #fff); }
 .orderActionPanel[data-dialog] .orderActionFooter > button { min-height: 44px; }
 .orderActionPanel[data-dialog] .orderActionBody form > button[type="submit"] { display: none; }
 .orderActionPanel[data-dialog] .orderActionBody form { border: 0; box-shadow: none; background: transparent; padding: 0; border-radius: 0; }
 @media (max-width: 640px) {
+  /* Full-viewport sheet over app chrome; dim scrim covers the peeking header. */
   .orderActionPanel[data-dialog] {
-    top: auto;
+    top: 0;
     bottom: 0;
     left: 0;
     right: 0;
     width: 100%;
     max-width: none;
-    height: min(96dvh, 100%);
-    max-height: min(96dvh, 100%);
+    height: 100%;
+    max-height: none;
     transform: none;
-    border-radius: 16px 16px 0 0;
+    border-radius: 0;
   }
 }
 .orderActionFooter { display: none; }
@@ -196,6 +201,7 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: center;
 }
 .productThumb[data-size='list'] { width: 56px; height: 56px; }
 .productThumb[data-size='journal'] { width: 48px; height: 48px; border-radius: 10px; }
@@ -826,12 +832,14 @@
   vertical-align: -0.15em;
   margin-inline-end: 6px;
 }
-.journalPlace, .journalAuthor {
+.journalUnit, .journalSep, .journalAuthor {
   display: inline;
   font: inherit;
   color: inherit;
-  white-space: normal;
 }
+.journalUnit { white-space: nowrap; }
+.journalSep { white-space: nowrap; }
+.journalAuthor { white-space: normal; }
 /* Mobile journal: chip stays inline at start of the meta line; author only on desktop. */
 @container builder-app (max-width: 640px) {
   .journalAuthor { display: none; }

@@ -1,6 +1,7 @@
 'use client'
 
 import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type ReactNode, type Ref } from 'react'
+import { createPortal } from 'react-dom'
 import type { AppV2, AppV2Record } from '@tableapp/schema/app-v2'
 import { builderV2CatalogPrice, builderV2FormattedAmount } from '@/lib/builder-v2-catalog'
 import { builderV2OrderFactKind, builderV2OrderLineProductId, builderV2StatusProgress } from '@/lib/builder-v2-order-detail'
@@ -316,11 +317,12 @@ export function BuilderV2OrderActionPanel({
   }, [showHeaderEdit, headerIconKey, setHeaderAccessory, open])
   if (!multi && !children) return null
   if (mode === 'reveal') {
-    const dialog = active ? <OrderActionPanelContext.Provider value={{ mode, close }}>
+    const dialog = active && typeof document !== 'undefined' ? createPortal(<OrderActionPanelContext.Provider value={{ mode, close }}>
       <button type="button" className={ui.orderActionScrim} aria-label="Закрыть" onClick={close} />
       <aside ref={panelRef} className={ui.orderActionPanel} data-mode={mode} data-open="true" data-dialog aria-labelledby={titleId} role="dialog" aria-modal="true">
         <div className={ui.orderActionHeader}>
           <h2 className={presentation.sectionTitle} id={titleId}>{active.title}</h2>
+          <button type="button" className={ui.orderActionClose} aria-label="Закрыть" data-action-cancel onClick={close}><ProtoIcon name="close" size={18} /></button>
         </div>
         <div className={ui.orderActionBody}>{active.children}</div>
         <div className={ui.orderActionFooter}>
@@ -328,7 +330,7 @@ export function BuilderV2OrderActionPanel({
           <button type="button" className={styles.primary} onClick={submitForm}>Сохранить</button>
         </div>
       </aside>
-    </OrderActionPanelContext.Provider> : null
+    </OrderActionPanelContext.Provider>, document.body) : null
     if (identity) {
       return <>
         <BuilderV2OrderIdentity variant="pipeline" manage status={identity.status} statusLabel={identity.statusLabel} amount={identity.amount} amountLabel={identity.amountLabel ?? ''} amountBadge={identity.amountBadge} due={identity.due} client={identity.client} media={identity.media} productTitle={identity.productTitle}

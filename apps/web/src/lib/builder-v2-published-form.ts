@@ -35,6 +35,7 @@ export async function inspectPublishedV2Form(current:Awaited<ReturnType<typeof p
     if(fields.some(field=>!readable.has(field.id)))throw new RowWriteError('denied','Одно из полей формы недоступно для чтения')
   }
   const context:AppV2Context={actor,row:selected?.record,screenRow:selected?.record},initial:Record<string,unknown>={}
+  const blank=(value:unknown)=>value===null||value===undefined||typeof value==='string'&&!value.trim()||Array.isArray(value)&&value.length===0
   for(const input of inputs){
     const field=fields.find(field=>field.id===input.fieldId)!
     if(input.initialValue){
@@ -44,7 +45,12 @@ export async function inspectPublishedV2Form(current:Awaited<ReturnType<typeof p
     }else if(form.mode==='edit')initial[field.id]=selected?.record.values[field.id]??emptyValue(field.type)
     else initial[field.id]=emptyValue(field.type)
   }
-  const now=new Date(),defaults=await withInitialValues(fields,initial,async(tableId,rowId,fieldId)=>{const loaded=await publishedV2Row(meta,app,actor,tableId,rowId);const value=loaded.record.values[fieldId];return typeof value==='number'?value:undefined},{creating:form.mode==='create',now})
+  const now=new Date()
+  if(app.inventory&&form.mode==='create'){
+    const dateField=fields.find(field=>field.id===app.inventory!.movementDateFieldId)
+    if(dateField&&blank(initial[dateField.id]))initial[dateField.id]=now.toISOString()
+  }
+  const defaults=await withInitialValues(fields,initial,async(tableId,rowId,fieldId)=>{const loaded=await publishedV2Row(meta,app,actor,tableId,rowId);const value=loaded.record.values[fieldId];return typeof value==='number'?value:undefined},{creating:form.mode==='create',now})
   const fingerprint=builderV2Revision([revision,actor,screen.id,form,inputs,fields,selected?.stored.version??null,request.recordId??null])
   if(request.mode==='options'){
     const input=inputs.find(input=>input.fieldId===request.fieldId),field=fields.find(field=>field.id===request.fieldId)
@@ -60,6 +66,16 @@ export async function inspectPublishedV2Form(current:Awaited<ReturnType<typeof p
   const parsed={...defaults,...(request.mode==='check'?request.values:{})},errors:Record<string,string>={},labels:Record<string,string>={}
   for(const input of inputs){const field=fields.find(field=>field.id===input.fieldId)!;try{const values=await builderV2WorkflowValues(meta,form.tableId,{[field.id]:parsed[field.id] as AppV2Json},{app,actor});parsed[field.id]=values[field.id];const value=values[field.id];if(request.mode==='check'&&input.required&&(value===null||typeof value==='string'&&!value.trim()||Array.isArray(value)&&!value.length||field.type==='checkbox'&&value!==true))errors[input.id]=`Заполните поле «${input.label||field.name}»`;if(field.type==='relation'){const ids=Array.isArray(value)?value as string[]:[],primary=meta.primaryByTable.get(field.options.tableId),names=[];for(const id of ids){const related=await publishedV2Row(meta,app,actor,field.options.tableId,id);names.push(primary?related.record.display[primary]??'Запись':'Запись')}labels[field.id]=names.join(', ')}else labels[field.id]=formatCell(field,value)}catch(error){errors[input.id]=error instanceof RowWriteError?error.message:'Проверьте значение поля'}}
   if(Object.keys(errors).length)return {ok:false as const,error:'Проверьте отмеченные поля',errors}
+  if(app.inventory&&selected?.record&&screen.contextTableId){
+    const stock=selected.record.values[app.inventory.itemStockFieldId]
+    const unitValue=selected.record.values[app.inventory.itemUnitFieldId]
+    const itemFields=meta.fieldsByTable.get(screen.contextTableId)??[]
+    const stockField=itemFields.find(field=>field.id===app.inventory!.itemStockFieldId)
+    const unitField=itemFields.find(field=>field.id===app.inventory!.itemUnitFieldId)
+    if(typeof stock==='number'&&Number.isFinite(stock))labels[app.inventory.itemStockFieldId]=String(stock)
+    else if(stockField){const formatted=formatCell(stockField,stock);if(formatted&&/^-?\d+/.test(formatted))labels[app.inventory.itemStockFieldId]=formatted.match(/-?\d+/)![0]!}
+    if(unitField){const formatted=formatCell(unitField,unitValue).trim();if(formatted)labels[app.inventory.itemUnitFieldId]=formatted}
+  }
   const state:BuilderV2FormState&{revision:string}={values:builderV2Json(parsed) as Record<string,AppV2Json>,labels,fingerprint,revision,fields:inputs.map(input=>{const field=fields.find(field=>field.id===input.fieldId)!;return {nodeId:input.id,fieldId:field.id,label:input.label||field.name,type:field.type,required:input.required,readOnly:Boolean(input.readOnly),supported:true,...('choices'in field.options?{choices:field.options.choices}:{}),...(field.type==='relation'?{allowMultiple:field.options.allowMultiple}:{}), ...(field.type==='image'||field.type==='attachment'?{maxCount:field.options.maxCount}:{}),...(field.type==='date'||field.type==='datetime'?{timeZone:fieldTimeZone(field)}:{})}})}
   return {ok:true as const,state}
 }

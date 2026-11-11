@@ -62,7 +62,7 @@ describe('examples and dashboards match installed presets', () => {
     const home = example.app.screens.find(screen => screen.type === 'dashboard')!
     if (home.type !== 'dashboard') throw new Error('missing dashboard')
     const stock = home.blocks.find(block => block.title === 'Стоимость запасов')!
-    expect(values[stock.id]).toMatchObject({ kind: 'metric', text: expect.stringMatching(/119\s135/) })
+    expect(values[stock.id]).toMatchObject({ kind: 'metric', text: expect.stringMatching(/130\s295/) })
   })
   it('does not sum price lists or use next-callback dates as sales months', () => {
     for (const id of ['katalog', 'nedvizhimost', 'crm']) {

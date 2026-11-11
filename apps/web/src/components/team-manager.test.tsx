@@ -33,6 +33,9 @@ describe('workspace team controls', () => {
     fireEvent.change(screen.getByRole('combobox',{name:'Доступ: Заказы'}),{target:{value:'view'}})
     fireEvent.click(screen.getByRole('button',{name:'Готово'}))
     await waitFor(()=>expect(screen.queryByRole('dialog')).toBeNull())
+    // Invite access is staged in parent state inside a transition; wait until the
+    // trigger reflects "выбранные" so submit does not race a still-null draft.
+    await waitFor(()=>expect(screen.getByRole('button',{name:/Таблицы: выбранные/})).toBeTruthy())
     expect(actions.invite).not.toHaveBeenCalled();expect(actions.access).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button',{name:'Отправить приглашение'}))
     await waitFor(()=>expect(actions.invite).toHaveBeenCalledWith('new@example.invalid','editor',{orders:'view'}))

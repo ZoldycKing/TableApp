@@ -13,8 +13,8 @@ describe('sales warehouse installation', () => {
     const pair = orderStockPair(result.app)!
     expect(pair.inventory.tables.items).toBe(sales.app.customer!.catalog!.tableId)
     expect(pair.inventory.item.name).toBe(sales.app.customer!.catalog!.titleFieldId)
-    expect(result.tables).toHaveLength(1)
-    expect(result.tables[0]!.id).toBe(pair.inventory.tables.movements)
+    expect(result.tables).toHaveLength(2)
+    expect(result.tables.some(table => table.id === pair.inventory.tables.movements)).toBe(true)
     expect(JSON.stringify(sales.app)).toBe(before)
     const catalog = { tableIds: new Set([...sales.built.tables, ...result.tables].map(table => table.id)), fields: new Map([...sales.fields, ...result.fields as Field[]].map(field => [field.id, field])), views: new Map([...sales.views, ...result.views].map(view => [view.id, view])) }
     expect(checkAppReferences(result.app, catalog)).toBeNull()

@@ -16,11 +16,12 @@ export function isBuilderV2ContactProfile(app: AppV2, screenId: string, tables: 
   return Boolean(screen?.recordTitleFieldId && isBuilderV2ContactTable(tables.find(table => table.id === screen.contextTableId)))
 }
 
-/** Record screens that share the shop order-detail layout (orders + CRM deal/client). */
+/** Record screens that share the shop order-detail layout (orders + CRM deal/client + inventory item). */
 export function isBuilderV2BusinessDetail(app: AppV2, screenId: string, table?: BuilderV2Table) {
   if (isBuilderV2OrderTable(table)) return true
   const crm = app.crm
-  return Boolean(crm && (screenId === crm.dealScreenId || screenId === crm.clientScreenId))
+  if (crm && (screenId === crm.dealScreenId || screenId === crm.clientScreenId)) return true
+  return Boolean(app.inventory && screenId === app.inventory.itemScreenId)
 }
 
 export function builderV2Initials(name: string) {
@@ -36,7 +37,7 @@ export function builderV2RecordTone(id: string) {
 export function builderV2StatusTone(label: string) {
   const value = label.trim().toLocaleLowerCase('ru-RU').replaceAll('ё', 'е')
   if (/^(?:доставлен[оа]?|выполнен[оа]?|завершен[оа]?|выдан[оа]?|оплачен[оа]?|delivered|completed|done|paid)$/u.test(value)) return 'mint'
-  if (/^(?:отменен[оа]?|отказ|отмен[аы]|возврат|cancelled|canceled|returned)$/u.test(value)) return 'rose'
+  if (/^(?:отменен[оа]?|отказ|отмен[аы]|возврат|мало|заканчивается|cancelled|canceled|returned)$/u.test(value) || value.startsWith('ниже минимума')) return 'rose'
   if (/^(?:в работе|собирается|ожидает(?: .+)?|ожидание|pending|processing|in progress)$/u.test(value)) return 'amber'
   if (/^(?:отправлен[оа]?|в пути|в доставке|shipped|in transit)$/u.test(value)) return 'sky'
   return 'neutral'

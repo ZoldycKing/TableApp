@@ -1,7 +1,8 @@
 import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { and, eq, isNull } from 'drizzle-orm'
-import { newId, positionBetween, appSchema } from '@tableapp/schema'
+import { newId, positionBetween } from '@tableapp/schema'
+import { appV2Schema } from '@tableapp/schema/app-v2'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const envFile = resolve(import.meta.dirname, '../../../../.env')
@@ -43,16 +44,17 @@ describe.skipIf(!process.env.DATABASE_URL)('warehouse first launch in Postgres',
   })
   const definition = async () => {
     const [record] = await database.db.select().from(database.apps).where(eq(database.apps.id, appId))
-    return appSchema.parse(record!.draft)
+    return appV2Schema.parse(record!.draft)
   }
   it('prepares the owner role and atomically soft-deletes all untouched warehouse examples', async () => {
     const app = await definition()
-    expect(app.allowlist).toContainEqual({ email, roleId: 'manager', company: '' })
+    expect(app.formatVersion).toBe(2)
+    expect(app.authentication.members).toContainEqual({ email, roleIds: ['owner'], company: '' })
     const before = await prepare.inventoryPreparation(workspaceId, appId)
     expect(before!.samples).toBeGreaterThan(0)
     expect(await actions.clearInventorySamplesAction(appId)).toEqual({ ok: true })
     expect((await prepare.inventoryPreparation(workspaceId, appId))!.samples).toBe(0)
-    const records = await database.db.select().from(database.rows).where(eq(database.rows.tableId, app.inventory!.tables.items))
+    const records = await database.db.select().from(database.rows).where(eq(database.rows.tableId, app.inventory!.itemsTableId))
     expect(records.length).toBeGreaterThan(0)
     expect(records.every(row => row.deletedAt !== null)).toBe(true)
     expect(await definition()).toEqual(app)
@@ -61,10 +63,10 @@ describe.skipIf(!process.env.DATABASE_URL)('warehouse first launch in Postgres',
   it('retains a sample product and its history when an actual operation uses it', async () => {
     const app = await definition(), config = app.inventory!
     const { db, rows } = database
-    const [product] = await db.select().from(rows).where(eq(rows.tableId, config.tables.items)).limit(1)
+    const [product] = await db.select().from(rows).where(eq(rows.tableId, config.itemsTableId)).limit(1)
     const real = newId('row')
-    await db.insert(rows).values({ id: real, tableId: config.tables.movements, position: positionBetween(null, null), sample: false,
-      data: { [config.movement.item]: [product!.id], [config.movement.qty]: 3, [config.movement.name]: 'Своя приёмка' } })
+    await db.insert(rows).values({ id: real, tableId: config.movementsTableId, position: positionBetween(null, null), sample: false,
+      data: { [config.movementItemFieldId]: [product!.id], [config.movementQtyFieldId]: 3, [config.movementNameFieldId]: 'Своя приёмка' } })
     expect(await actions.clearInventorySamplesAction(appId)).toEqual({ ok: true })
     const [kept] = await db.select().from(rows).where(eq(rows.id, product!.id))
     expect(kept!.deletedAt).toBeNull()
@@ -73,7 +75,7 @@ describe.skipIf(!process.env.DATABASE_URL)('warehouse first launch in Postgres',
   })
   it('retains edited examples and denies a viewer or a foreign app', async () => {
     const app = await definition(), { db, rows } = database
-    const [product] = await db.select().from(rows).where(eq(rows.tableId, app.inventory!.tables.items)).limit(1)
+    const [product] = await db.select().from(rows).where(eq(rows.tableId, app.inventory!.itemsTableId)).limit(1)
     await db.update(rows).set({ sample: false }).where(eq(rows.id, product!.id))
     identity.member = { ...identity.member!, role: 'viewer' }
     expect((await actions.clearInventorySamplesAction(appId)).ok).toBe(false)

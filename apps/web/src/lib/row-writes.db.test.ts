@@ -145,12 +145,43 @@ describe.skipIf(!process.env.DATABASE_URL)('row writes against Postgres', () => 
       kind: choices.find((choice) => choice.id !== config.movementKindId)!.id, product }
   }
   async function inventory() {
-    const { applyTemplateAction } = await import('@/app/template-actions')
-    const applied = await applyTemplateAction('sklad')
-    if (!applied.ok) throw new Error(applied.error)
-    const [record] = await database.db.select().from(database.apps).where(eq(database.apps.id, applied.appId))
-    const definition = record!.draft as App
-    await database.db.update(database.apps).set({ published: definition }).where(eq(database.apps.id, applied.appId))
+    // V1 stock actions still exercise the classic inventory app; native install is App V2.
+    // Use opening-balance seed with an empty journal so these tests stay deterministic.
+    const { buildTemplate } = await import('./templates/build')
+    const { sklad } = await import('./templates/defs/sklad')
+    const { generateApp } = await import('./app-builder')
+    const { asInventory } = await import('./templates/inventory-app')
+    const openings: Record<string, number> = { s1: 4, s2: 12, s3: 2, s4: 3, s5: 18, s6: 1, s7: 140, s8: 25 }
+    const template = structuredClone(sklad)
+    for (const table of template.tables) {
+      if (table.key === template.inventory!.tables.movements) table.rows = []
+      if (table.key === template.inventory!.tables.items) {
+        table.rows = table.rows.map(row => ({
+          ...row,
+          values: { ...row.values, opening: openings[row.key] ?? 0, receipts: { rowKeys: [] } },
+        }))
+      }
+    }
+    const built = buildTemplate({ template, workspaceId: ids.workspace })
+    const table = built.tables.find(item => item.id === built.appTableId)!
+    const generated = generateApp({
+      appId: newId('app'), workspaceId: ids.workspace, name: built.appName, slug: `inventory-v1-${Date.now()}`,
+      table, fields: built.fields.filter(field => field.tableId === table.id) as Field[],
+      view: built.views.find(view => view.id === built.appViewId)! as import('@tableapp/schema').View,
+    })
+    const definition = asInventory(generated, built)
+    definition.allowlist = [{ email: identity.member!.email, roleId: 'manager', company: '' }]
+    await database.db.insert(database.tables).values(built.tables)
+    await database.db.insert(database.fields).values(built.fields)
+    await database.db.insert(database.views).values(built.views)
+    if (built.rows.length) await database.db.insert(database.rows).values(built.rows.map(row => ({ ...row, createdBy: ids.user, updatedBy: ids.user })))
+    await database.db.insert(database.apps).values({
+      id: definition.id, workspaceId: ids.workspace, name: definition.name, slug: definition.slug,
+      theme: definition.theme, accessMode: definition.accessMode, allowlist: definition.allowlist,
+      rowAccessRules: definition.rowAccessRules, homeScreenId: definition.homeScreenId,
+      draft: definition, published: definition,
+    })
+    await usage.recountWorkspace(ids.workspace)
     identity.roleId = 'staff'
     const config = definition.inventory!
     const [item] = await database.db.select().from(database.rows).where(eq(database.rows.tableId, config.tables.items)).orderBy(asc(database.rows.position))
@@ -159,11 +190,11 @@ describe.skipIf(!process.env.DATABASE_URL)('row writes against Postgres', () => 
     const projectedStock = async () => {
       const { loadPublishedApp } = await import('./app-runtime')
       const { asRole } = await import('./app-roles')
-      const loaded = await loadPublishedApp(applied.appSlug, asRole('staff', identity.member!.email))
+      const loaded = await loadPublishedApp(definition.slug, asRole('staff', identity.member!.email))
       return loaded!.tables[config.tables.items]!.rows.find(row => row.id === item!.id)!.data[config.item.stock]
     }
     const journal = () => database.db.select().from(database.rows).where(and(eq(database.rows.tableId, config.tables.movements), isNull(database.rows.deletedAt)))
-    return { ...applied, definition, config, item: item!, input, module, projectedStock, journal }
+    return { ok: true as const, appId: definition.id, appSlug: definition.slug, tableId: table.id, definition, config, item: item!, input, module, projectedStock, journal }
   }
   async function waitForLock() {
     const deadline = Date.now() + 5000
@@ -658,7 +689,7 @@ describe.skipIf(!process.env.DATABASE_URL)('row writes against Postgres', () => 
     expect((record!.published as App).inventory).toBeNull()
     expect((await read(test.item.id)).data).toEqual(before)
     expect((await read(test.item.id)).version).toBe(0)
-    expect((await db.select().from(tables).where(eq(tables.workspaceId, ids.workspace))).length).toBe(tableCount + 1)
+    expect((await db.select().from(tables).where(eq(tables.workspaceId, ids.workspace))).length).toBe(tableCount + 2)
     expect((await db.select().from(fields).where(eq(fields.id, test.config.item.opening)))[0]!.name).toBe('Начальный остаток')
     const { publishAppAction } = await import('@/app/app-actions')
     expect((await publishAppAction(test.appId)).ok).toBe(true)

@@ -270,18 +270,36 @@ export function validateAppV2(app: AppV2, catalog: AppV2Catalog, options: { mode
         if (step.type === 'branch') {
           steps(step.then, current, `${ownPath}.then`, depth + 1); steps(step.else, current, `${ownPath}.else`, depth + 1)
           // A result created in one branch is not definitely available after that branch.
-        } else if (step.type === 'create_row' || step.type === 'update_row' || step.type === 'place_shop_order') {
-          table(step.tableId, ownPath)
+        } else if (step.type === 'create_row' || step.type === 'update_row' || step.type === 'place_shop_order' || step.type === 'record_inventory_movement') {
+          const writeTableId = step.type === 'record_inventory_movement' ? app.inventory?.movementsTableId : step.tableId
+          if (step.type === 'record_inventory_movement') {
+            if (!app.inventory) issue('missing_inventory', ownPath, 'Складское движение доступно только в установленном складе')
+            else if (!writeTableId) issue('missing_inventory', ownPath, 'Таблица движений склада не настроена')
+            else table(writeTableId, ownPath)
+          } else {
+            table(step.tableId, ownPath)
+          }
           if (step.type === 'place_shop_order') {
             if (!app.shop) issue('missing_shop', ownPath, 'Оформление заказа доступно только в установленном магазине')
             else if (step.tableId !== app.shop.ordersTableId) issue('shop_order_table', ownPath, 'Оформление заказа записывает таблицу заказов')
             else if (step.values[app.shop.emailFieldId] || step.values[app.shop.statusFieldId] || step.values[app.shop.positionsFieldId]) issue('shop_server_field', ownPath, 'Почту, статус и состав заказа заполняет сервер')
             else if (step.values[app.shop.cartFieldId]?.kind !== 'form' || step.values[app.shop.submissionFieldId]?.kind !== 'form') issue('shop_cart_binding', ownPath, 'Корзина и ключ оформления берутся из формы')
           }
+          if (step.type === 'record_inventory_movement' && app.inventory) {
+            const inv = app.inventory
+            const required = [inv.movementQtyFieldId, inv.movementWarehouseFieldId, inv.movementNoteFieldId, inv.movementDateFieldId]
+            if (step.operation === 'transfer') required.push(inv.movementWarehouseToFieldId)
+            for (const fieldId of required) {
+              if (!step.values[fieldId] || step.values[fieldId]?.kind !== 'form') issue('inventory_form_binding', ownPath, 'Количество, склад, дата и комментарий берутся из формы')
+            }
+            for (const fieldId of [inv.movementTypeFieldId, inv.movementItemFieldId, inv.movementAuthorFieldId, inv.movementNameFieldId, inv.movementBeforeFieldId, inv.movementAfterFieldId]) {
+              if (fieldId && step.values[fieldId]) issue('inventory_server_field', ownPath, 'Тип, товар, автора и остатки заполняет сервер')
+            }
+          }
           if (step.type === 'update_row' && targetTable(step.target, current, ownPath) !== step.tableId) issue('record_table_mismatch', ownPath, 'Запись относится к другой таблице')
           if (!Object.keys(step.values).length) issue('empty_write', ownPath, 'Укажите значения полей для изменения')
           for (const [id, value] of Object.entries(step.values)) {
-            const found = field(id, step.tableId, `${ownPath}.values.${id}`, true)
+            const found = writeTableId ? field(id, writeTableId, `${ownPath}.values.${id}`, true) : undefined
             binding(value, current, `${ownPath}.values.${id}`)
             if (value.kind === 'record_ids' && (found?.type !== 'relation' || found.relationTableId !== value.tableId)) issue('relation_target', `${ownPath}.values.${id}`, 'Поле связи ведёт к другой таблице')
             if (found && value.kind === 'literal' && !CELL_VALUE[found.type].safeParse(value.value).success) issue('literal_type', `${ownPath}.values.${id}`, 'Значение не соответствует типу поля')
@@ -290,7 +308,7 @@ export function validateAppV2(app: AppV2, catalog: AppV2Catalog, options: { mode
               if (sourceType !== targetType && sourceType !== 'unknown' && targetType !== 'unknown') issue('binding_type', `${ownPath}.values.${id}`, 'Источник значения не соответствует типу поля')
             }
           }
-          results.set(step.id, step.tableId)
+          if (writeTableId) results.set(step.id, writeTableId)
         } else if (step.type === 'delete_row') {
           table(step.tableId, ownPath)
           if (targetTable(step.target, current, ownPath) !== step.tableId) issue('record_table_mismatch', ownPath, 'Запись относится к другой таблице')
@@ -353,6 +371,39 @@ export function validateAppV2(app: AppV2, catalog: AppV2Catalog, options: { mode
     if (relation && relation.relationTableId !== crm.clientsTableId) issue('crm_client_relation', path, 'Сделка должна ссылаться на клиентов')
     const stage = catalog.fields.get(crm.stageFieldId)
     if (stage && stage.type !== 'single_select') issue('crm_stage_type', path, 'Этап сделки должен быть одиночным выбором')
+  }
+  if (app.inventory) {
+    const inv = app.inventory, path = 'inventory'
+    table(inv.itemsTableId, path); table(inv.movementsTableId, path); table(inv.warehousesTableId, path)
+    for (const screenId of [inv.itemsScreenId, inv.itemScreenId, inv.movementsScreenId, ...(inv.createItemScreenId ? [inv.createItemScreenId] : [])]) {
+      if (!screens.has(screenId)) issue('inventory_screen', path, 'Экран склада удалён')
+    }
+    for (const formId of [inv.receiptFormId, inv.issueFormId, inv.writeOffFormId, inv.transferFormId, inv.itemEditFormId, ...(inv.createItemFormId ? [inv.createItemFormId] : [])]) {
+      if (nodes.get(formId)?.type !== 'form') issue('inventory_form', path, 'Форма склада удалена')
+    }
+    const item = (fieldId: string) => field(fieldId, inv.itemsTableId, path)
+    const movement = (fieldId: string) => field(fieldId, inv.movementsTableId, path)
+    const warehouse = (fieldId: string) => field(fieldId, inv.warehousesTableId, path)
+    for (const fieldId of [inv.itemNameFieldId, inv.itemSkuFieldId, inv.itemCategoryFieldId, inv.itemUnitFieldId, inv.itemMinFieldId, inv.itemCostFieldId, inv.itemWarehouseFieldId, inv.itemStockFieldId, inv.itemLowFieldId, inv.itemMovementsFieldId, inv.itemOpeningFieldId]) item(fieldId)
+    if (inv.itemBarcodeFieldId) item(inv.itemBarcodeFieldId)
+    if (inv.itemPhotoFieldId) {
+      const photo = item(inv.itemPhotoFieldId)
+      if (photo && !['image', 'url'].includes(photo.type)) issue('inventory_photo', path, 'Фото товара должно быть изображением или ссылкой')
+    }
+    for (const fieldId of [inv.movementNameFieldId, inv.movementTypeFieldId, inv.movementItemFieldId, inv.movementQtyFieldId, inv.movementWarehouseFieldId, inv.movementWarehouseToFieldId, inv.movementDateFieldId, inv.movementNoteFieldId, inv.movementAuthorFieldId]) movement(fieldId)
+    if (inv.movementBeforeFieldId) movement(inv.movementBeforeFieldId)
+    if (inv.movementAfterFieldId) movement(inv.movementAfterFieldId)
+    warehouse(inv.warehouseNameFieldId)
+    const itemLink = catalog.fields.get(inv.movementItemFieldId)
+    if (itemLink && itemLink.relationTableId !== inv.itemsTableId) issue('inventory_item_relation', path, 'Движение должно ссылаться на товары')
+    const fromWarehouse = catalog.fields.get(inv.movementWarehouseFieldId)
+    if (fromWarehouse && fromWarehouse.relationTableId !== inv.warehousesTableId) issue('inventory_warehouse_relation', path, 'Склад движения должен ссылаться на склады')
+    const toWarehouse = catalog.fields.get(inv.movementWarehouseToFieldId)
+    if (toWarehouse && toWarehouse.relationTableId !== inv.warehousesTableId) issue('inventory_warehouse_relation', path, 'Склад назначения должен ссылаться на склады')
+    const productWarehouse = catalog.fields.get(inv.itemWarehouseFieldId)
+    if (productWarehouse && productWarehouse.relationTableId !== inv.warehousesTableId) issue('inventory_item_warehouse', path, 'Склад товара должен ссылаться на склады')
+    const kind = catalog.fields.get(inv.movementTypeFieldId)
+    if (kind && kind.type !== 'single_select') issue('inventory_type_field', path, 'Вид движения должен быть одиночным выбором')
   }
   for (const rule of app.policy.tables) {
     const path = `policy.tables.${rule.tableId}`

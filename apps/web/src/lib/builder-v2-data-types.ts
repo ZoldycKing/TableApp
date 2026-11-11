@@ -6,7 +6,7 @@ export type BuilderV2OrderSummary = { amount: number | null; scoped?: boolean; s
 export type BuilderV2DataRecord = AppV2Record & { display: Record<string, string>; visibleNodeIds?:string[];canMove?:boolean; group?: BuilderV2CollectionGroup; summary?: { count: number; amount: number | null } }
 export type BuilderV2ReadScope = { screenId?: string; recordId?: string }
 export type BuilderV2DataRequest = BuilderV2ReadScope & { nodeId: string; search?: string; cursor?: string;calendarMonth?:string;calendarDay?:string;boardColumn?:string }
-export type BuilderV2DataPage = { kind: 'collection' | 'metric' | 'chart'; rows: BuilderV2DataRecord[]; value: number | null; total: number; next: string | null; orderSummary?: BuilderV2OrderSummary;chart?:BuilderV2ChartData;calendar?:{month:string;day:string|null;days:Record<string,number>;undated:number;timeZone:string};board?:{columns:{key:string;name:string;total:number;rows:BuilderV2DataRecord[];next:string|null}[]} }
+export type BuilderV2DataPage = { kind: 'collection' | 'metric' | 'chart'; rows: BuilderV2DataRecord[]; value: number | null; total: number; next: string | null; orderSummary?: BuilderV2OrderSummary;chart?:BuilderV2ChartData;calendar?:{month:string;day:string|null;days:Record<string,number>;undated:number;timeZone:string};board?:{columns:{key:string;name:string;total:number;rows:BuilderV2DataRecord[];next:string|null}[];}; search?: string; clearSearch?: () => void }
 export type BuilderV2DataResult = { ok: true; page: BuilderV2DataPage } | { ok: false; error: string; stale?: boolean }
 export type BuilderV2RecordResult = { ok: true; record: BuilderV2DataRecord; title: string; learning?: BuilderLearningProgress; learningError?: string } | { ok: false; error: string }
 

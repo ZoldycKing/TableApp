@@ -1,12 +1,28 @@
 import type { ReactNode } from 'react'
 import { ProtoIcon } from '../prototype/icons'
 import presentation from '@/components/runtime/app-presentation.module.css'
+import { BuilderV2Picture } from './media'
+import type { BuilderV2MediaItem } from './media-values'
 import { builderV2Initials, builderV2RecordTone, builderV2StatusTone } from './record-presentation'
 import ui from './view.module.css'
 
-export function BuilderV2RecordAvatar({ name, id, icon = 'apps' }: { name?: string; id: string; icon?: string }) {
-  return <span className={`${presentation.avatar} ${ui.recordAvatar}`} data-tone={builderV2RecordTone(id)} aria-hidden="true">
+export function BuilderV2RecordAvatar({ name, id, icon = 'apps', tone = true }: { name?: string; id: string; icon?: string; tone?: boolean }) {
+  return <span className={`${presentation.avatar} ${ui.recordAvatar}`} data-tone={tone ? builderV2RecordTone(id) : undefined} aria-hidden="true">
     {(name && builderV2Initials(name)) || <ProtoIcon name={icon} size={19} />}
+  </span>
+}
+
+/** Product photo thumb for warehouse lists — photo or neutral category mark, never letter initials. */
+export function InventoryProductThumb({
+  image, icon = 'box', size = 'list', label,
+}: {
+  image?: BuilderV2MediaItem
+  icon?: string
+  size?: 'list' | 'journal' | 'card'
+  label?: string
+}) {
+  return <span className={ui.productThumb} data-size={size} data-empty={!image || undefined} aria-hidden={image ? undefined : true} title={label}>
+    {image ? <BuilderV2Picture item={image} large={size === 'card'} /> : <ProtoIcon name={icon} size={size === 'card' ? 36 : 22} />}
   </span>
 }
 

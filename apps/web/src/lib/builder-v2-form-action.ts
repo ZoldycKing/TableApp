@@ -10,9 +10,16 @@ import { builderV2ExecutableWorkflow, builderV2WorkflowSteps, type BuilderV2Work
 export function builderV2FormSaveWorkflow(app: AppV2, form: BuilderV2Form) {
   const flow = app.workflows.find(flow => flow.id === form.events.submit), inputs = builderV2FormInputs(app, form)
   if (!inputs.length || !flow || flow.input.formId !== form.id || !builderV2ExecutableWorkflow(flow)) return null
-  const candidates = flow.steps.filter(step => (step.type === 'create_row' || step.type === 'update_row' || step.type === 'place_shop_order') && (step.type === 'place_shop_order' ? form.mode === 'create' : step.type === (form.mode === 'edit' ? 'update_row' : 'create_row')) && step.tableId === form.tableId && Object.keys(step.values).length && Object.entries(step.values).every(([id, value]) => value.kind === 'form' && value.formId === form.id && value.fieldId === id))
+  const candidates = flow.steps.filter(step => {
+    if (!(step.type === 'create_row' || step.type === 'update_row' || step.type === 'place_shop_order' || step.type === 'record_inventory_movement')) return false
+    if (step.type === 'place_shop_order' || step.type === 'record_inventory_movement') {
+      if (form.mode !== 'create') return false
+    } else if (step.type !== (form.mode === 'edit' ? 'update_row' : 'create_row')) return false
+    const tableId = step.type === 'record_inventory_movement' ? app.inventory?.movementsTableId : step.tableId
+    return tableId === form.tableId && Object.keys(step.values).length && Object.entries(step.values).every(([id, value]) => value.kind === 'form' && value.formId === form.id && value.fieldId === id)
+  })
   const writes = builderV2FormWriteInputs(app, form), step = candidates.find(step => 'values' in step && Object.keys(step.values).length === writes.length && writes.every(input => Object.hasOwn(step.values, input.fieldId))) ?? candidates[0]
-  if (!step || step.type !== 'create_row' && step.type !== 'update_row' && step.type !== 'place_shop_order') return null
+  if (!step || step.type !== 'create_row' && step.type !== 'update_row' && step.type !== 'place_shop_order' && step.type !== 'record_inventory_movement') return null
   if (step.type === 'update_row' && (step.target.kind !== 'current' || flow.input.rowTableId !== form.tableId)) return null
   return { flow, step }
 }
@@ -29,8 +36,8 @@ export function configureBuilderV2FormSave(app: AppV2, formId: string, roleIds: 
   if (form?.type !== 'form' || !screen) throw new Error('Выберите форму')
   const current = builderV2FormSaveWorkflow(app, form)
   if (form.events.submit && !current) throw new Error('У формы настроено другое действие. Его изменение будет доступно в редакторе действий.')
-  if (current?.step.type === 'place_shop_order') {
-    if (!roleIds?.length) throw new Error('Оформление заказа магазина нельзя отключить этой настройкой.')
+  if (current?.step.type === 'place_shop_order' || current?.step.type === 'record_inventory_movement') {
+    if (!roleIds?.length) throw new Error(current.step.type === 'place_shop_order' ? 'Оформление заказа магазина нельзя отключить этой настройкой.' : 'Складскую операцию нельзя отключить этой настройкой.')
     if (roleIds.some(id => !app.roles.some(role => role.id === id))) throw new Error('Выберите роль приложения')
     const audience = { kind: 'roles' as const, roleIds: [...new Set(roleIds)] }
     return { ...app, policy: { tables: grantBuilderV2WorkflowWrites(app, current.flow, audience.roleIds), workflows: [...app.policy.workflows.filter(grant => grant.workflowId !== current.flow.id), { workflowId: current.flow.id, audience }] } }
@@ -58,7 +65,13 @@ export function configureBuilderV2FormSave(app: AppV2, formId: string, roleIds: 
 
 export function grantBuilderV2WorkflowWrites(app: AppV2, flow: BuilderV2Workflow, roles: readonly string[]) {
   let tables = app.policy.tables
-  for (const step of builderV2WorkflowSteps(flow.steps)) if (step.type === 'create_row' || step.type === 'update_row' || step.type === 'place_shop_order') tables = grantBuilderV2Operation({ ...app, policy: { ...app.policy, tables } }, step.tableId, roles, step.type === 'update_row' ? 'update' : 'create', Object.keys(step.values))
+  for (const step of builderV2WorkflowSteps(flow.steps)) {
+    if (step.type === 'create_row' || step.type === 'update_row' || step.type === 'place_shop_order') {
+      tables = grantBuilderV2Operation({ ...app, policy: { ...app.policy, tables } }, step.tableId, roles, step.type === 'update_row' ? 'update' : 'create', Object.keys(step.values))
+    } else if (step.type === 'record_inventory_movement' && app.inventory) {
+      tables = grantBuilderV2Operation({ ...app, policy: { ...app.policy, tables } }, app.inventory.movementsTableId, roles, 'create', Object.keys(step.values))
+    }
+  }
   for(const step of builderV2WorkflowSteps(flow.steps))if(step.type==='delete_row')tables=grantBuilderV2Operation({...app,policy:{...app.policy,tables}},step.tableId,roles,'delete')
   return tables
 }

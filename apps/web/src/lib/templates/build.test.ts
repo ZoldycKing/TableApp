@@ -1,4 +1,4 @@
-import { computeDerivedRow, compileTableFormulas, type RelatedIndex } from '@tableapp/formula'
+import { computeDerivedRow, compileTableFormulas, relatedIndexFrom, type RelatedIndex } from '@tableapp/formula'
 import type { Field } from '@tableapp/schema'
 import { calendarDay, evalFilter, indexFields, type FilterGroup } from '@tableapp/schema'
 import { describe, expect, it } from 'vitest'
@@ -50,9 +50,9 @@ describe('шаблоны разворачиваются в рабочие таб
 
   it('позиции строк и колонок возрастают', () => {
     const built = build('sklad')
-    const positions = built.rows.map((row) => row.position)
-    expect([...positions].sort()).toEqual(positions)
     for (const table of built.tables) {
+      const rowPositions = built.rows.filter(row => row.tableId === table.id).map(row => row.position)
+      expect([...rowPositions].sort()).toEqual(rowPositions)
       const fieldPositions = built.fields.filter(field => field.tableId === table.id).map(field => field.position)
       expect([...fieldPositions].sort()).toEqual(fieldPositions)
     }
@@ -130,47 +130,59 @@ describe('заявки: связь и подстановка из справоч
 })
 
 describe('склад: вычисляемые колонки и отбор', () => {
-  it('«Пора докупать» считается по остатку и порогу', () => {
+  function skladDerived() {
     const built = build('sklad')
-    const fields = built.fields.filter(field => field.tableId === built.appTableId).map((field) => field as unknown as Field)
+    const byTable = new Map(built.tables.map(table => [
+      table.id,
+      built.fields.filter(field => field.tableId === table.id).map(field => field as unknown as Field),
+    ]))
+    const stored = new Map(built.tables.map(table => [
+      table.id,
+      new Map(built.rows.filter(row => row.tableId === table.id).map(row => [row.id, row.data])),
+    ]))
+    const related = relatedIndexFrom(stored, byTable)
+    const fields = byTable.get(built.appTableId)!
     const formulas = compileTableFormulas(fields)
+    return { built, fields, formulas, related }
+  }
+
+  it('«Пора докупать» считается по остатку и порогу', () => {
+    const { built, fields, formulas, related } = skladDerived()
     const low = built.fields.find((field) => field.name === 'Пора докупать')!
     const qty = built.fields.find((field) => field.name === 'Остаток')!
     const min = built.fields.find((field) => field.name === 'Минимальный остаток')!
-
-    for (const row of built.rows) {
-      const computed = computeDerivedRow(row.data, fields, new Map(), formulas)
+    const items = built.rows.filter(row => row.tableId === built.appTableId)
+    for (const row of items) {
+      const computed = computeDerivedRow(row.data, fields, related, formulas)
       expect(computed[low.id]).toBe((computed[qty.id] as number) <= (row.data[min.id] as number))
     }
   })
 
   it('представление «Заканчивается» показывает только то, что кончается', () => {
-    const built = build('sklad')
-    const fields = built.fields.filter(field => field.tableId === built.appTableId).map((field) => field as unknown as Field)
-    const formulas = compileTableFormulas(fields)
+    const { built, fields, formulas, related } = skladDerived()
     const view = built.views.find((item) => item.name === 'Заканчивается')!
     const filter = (view.config as { filter: FilterGroup }).filter
     const low = built.fields.find((field) => field.name === 'Пора докупать')!
+    const items = built.rows.filter(row => row.tableId === built.appTableId)
 
-    const passed = built.rows
-      .map((row) => computeDerivedRow(row.data, fields, new Map(), formulas))
+    const passed = items
+      .map((row) => computeDerivedRow(row.data, fields, related, formulas))
       .filter((row) => evalFilter(filter, row, indexFields(fields)))
 
     expect(passed.length).toBeGreaterThan(0)
     expect(passed.every((row) => row[low.id] === true)).toBe(true)
-    expect(passed.length).toBeLessThan(built.rows.length)
+    expect(passed.length).toBeLessThan(items.length)
   })
 
   it('стоимость остатка — остаток на цену', () => {
-    const built = build('sklad')
-    const fields = built.fields.filter(field => field.tableId === built.appTableId).map((field) => field as unknown as Field)
-    const formulas = compileTableFormulas(fields)
+    const { built, fields, formulas, related } = skladDerived()
     const total = built.fields.find((field) => field.name === 'Стоимость остатка')!
     const qty = built.fields.find((field) => field.name === 'Остаток')!
     const price = built.fields.find((field) => field.name === 'Цена')!
+    const sample = built.rows.find(row => row.tableId === built.appTableId)!
 
-    const row = computeDerivedRow(built.rows[0]!.data, fields, new Map(), formulas)
-    expect(row[total.id]).toBe((row[qty.id] as number) * (built.rows[0]!.data[price.id] as number))
+    const row = computeDerivedRow(sample.data, fields, related, formulas)
+    expect(row[total.id]).toBe((row[qty.id] as number) * (sample.data[price.id] as number))
   })
 })
 

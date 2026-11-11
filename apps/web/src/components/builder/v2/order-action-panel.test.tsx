@@ -1,10 +1,23 @@
 // @vitest-environment jsdom
-import { createElement } from 'react'
+import { createElement, type ReactNode, useState } from 'react'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { BuilderV2OrderActionPanel } from './order-detail'
+import { PublishedV2Context, type PublishedV2Transport } from './published-context'
 
 afterEach(cleanup)
+
+function withHeaderAccessory(ui: ReactNode) {
+  function Harness() {
+    const [accessory, setHeaderAccessory] = useState<ReactNode>(null)
+    const transport = { setHeaderAccessory } as PublishedV2Transport
+    return createElement(PublishedV2Context.Provider, { value: transport },
+      createElement('header', null, accessory),
+      ui,
+    )
+  }
+  return createElement(Harness)
+}
 
 describe('BuilderV2OrderActionPanel', () => {
   it('keeps the processing form open in persistent mode', () => {
@@ -33,7 +46,8 @@ describe('BuilderV2OrderActionPanel', () => {
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(screen.queryByRole('dialog')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Добавить запись' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Закрыть' }))
+    // Scrim and header X both use aria-label «Закрыть»; backdrop is the first.
+    fireEvent.click(screen.getAllByRole('button', { name: 'Закрыть' })[0]!)
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
@@ -55,20 +69,22 @@ describe('BuilderV2OrderActionPanel', () => {
   })
 
   it('puts pipeline actions into the identity header and keeps a mobile dock', () => {
-    const { container } = render(createElement(BuilderV2OrderActionPanel, {
+    const { container } = render(withHeaderAccessory(createElement(BuilderV2OrderActionPanel, {
       mode: 'reveal',
       identity: { status: 'Переговоры', amount: '780 000 ₽', amountLabel: 'Сумма', client: 'ООО Вектор' },
       triggers: [
         { id: 'edit', title: 'Изменить сделку', icon: 'edit', children: createElement('label', null, 'Этап', createElement('input')) },
         { id: 'journal', title: 'Добавить запись', primary: true, children: createElement('p', null, 'Журнал') },
       ],
-    }))
+    })))
     expect(screen.getByText('Этап')).toBeTruthy()
     expect(screen.getByText('Сумма')).toBeTruthy()
     expect(screen.getByText('780 000 ₽')).toBeTruthy()
     expect(container.querySelector('[data-variant="pipeline"]')).toBeTruthy()
     expect(container.querySelectorAll('[data-placement="desktop"] button')).toHaveLength(2)
-    expect(container.querySelectorAll('[data-placement="mobile"] button')).toHaveLength(2)
+    // Mobile dock is text-only (primary action); the pencil is mounted into the page header.
+    expect(container.querySelectorAll('[data-placement="mobile"][aria-label="Действия"] button')).toHaveLength(1)
+    expect(container.querySelector('header [aria-label="Изменить сделку"]')).toBeTruthy()
     expect(screen.queryByRole('heading', { level: 2, name: 'Поставка' })).toBeNull()
   })
 })

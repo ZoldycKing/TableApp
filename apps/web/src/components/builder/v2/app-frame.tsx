@@ -80,16 +80,20 @@ export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,childre
     {phone && <span className={css.island} aria-hidden="true" />}
     <section className={`${styles.surface} ${css.frame}`} data-navigation={screens.length ? navigation : 'bottom'}>
     <header className={`${styles.appHeader} ${css.header}`}>
-      {back ? <button type="button" className={presentation.iconControl} onClick={back} aria-label="Назад" title="Назад"><ProtoIcon name="back" /></button> : <span className={css.headerMark}>{mark}</span>}
-      {profile && <BuilderV2RecordAvatar name={title} id={scrollKey || screenId} icon="users" />}
-      {catalogDetail ? <span className={css.catalogIdentity}>{sectionScreen?.name ?? appName}</span>
-        : <div><span className={css.headerIdentity}>{headerEyebrow}</span><h1 className={presentation.pageTitle}>{title}</h1></div>}
-      {headerAction&&<span className={css.headerAction}>{headerAction}</span>}
+      <div className={`${css.chromeBar} ${presentation.contentWidth}`}>
+        {back ? <button type="button" className={presentation.iconControl} onClick={back} aria-label="Назад" title="Назад"><ProtoIcon name="back" /></button> : <span className={css.headerMark}>{mark}</span>}
+        {profile && <BuilderV2RecordAvatar name={title} id={scrollKey || screenId} icon="users" />}
+        {catalogDetail ? <span className={css.catalogIdentity}>{sectionScreen?.name ?? appName}</span>
+          : <div><span className={css.headerIdentity}>{headerEyebrow}</span><h1 className={presentation.pageTitle}>{title.replaceAll('-', '\u2011')}</h1></div>}
+        {headerAction&&<span className={css.headerAction}>{headerAction}</span>}
+      </div>
     </header>
     <div ref={body} className={css.body} role={contained ? 'region' : undefined} aria-label={contained ? 'Содержимое экрана' : undefined} tabIndex={contained ? 0 : undefined}>{notice}<div ref={contents} className={`${styles.appContent} ${css.content} ${presentation.contentWidth}`}>{children}</div></div>
     {screens.length>0&&<nav className={css.navigation} aria-label="Разделы приложения">
-      <div className={css.railIdentity}>{mark}<strong>{appName}</strong></div>
-      <div className={css.navItems}>{screens.map((screen,index)=><div key={screen.id} className={overflow&&index>=4?css.overflowItem:undefined}>{navButton(screen)}</div>)}{overflow&&<div className={css.more} ref={root}><button type="button" ref={trigger} aria-expanded={more} aria-controls={menuId} aria-current={activeExtra?'true':undefined} onClick={()=>setMore(!more)}><ProtoIcon name="more"/><span>Ещё</span></button>{more&&<div className={css.morePanel} id={menuId} role="region" aria-label="Другие разделы"><strong>Разделы</strong>{rest.map(screen=>navButton(screen,true))}</div>}</div>}</div>
+      <div className={navigation === 'sidebar' ? css.navStack : `${css.chromeBar} ${presentation.contentWidth}`}>
+        <div className={css.railIdentity}>{mark}<strong>{appName}</strong></div>
+        <div className={css.navItems}>{screens.map((screen,index)=><div key={screen.id} className={overflow&&index>=4?css.overflowItem:undefined}>{navButton(screen)}</div>)}{overflow&&<div className={css.more} ref={root}><button type="button" ref={trigger} aria-expanded={more} aria-controls={menuId} aria-current={activeExtra?'true':undefined} onClick={()=>setMore(!more)}><ProtoIcon name="more"/><span>Ещё</span></button>{more&&<div className={css.morePanel} id={menuId} role="region" aria-label="Другие разделы"><strong>Разделы</strong>{rest.map(screen=>navButton(screen,true))}</div>}</div>}</div>
+      </div>
     </nav>}
   </section></div></div>
 }

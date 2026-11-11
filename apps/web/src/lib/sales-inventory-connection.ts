@@ -13,6 +13,8 @@ export function connectSalesInventory(input: App, ownerEmail: string, existingFi
   const itemsDefinition = template.tables.find(table => table.key === template.inventory!.tables.items)!
   itemsDefinition.fields = itemsDefinition.fields.filter(field => ['name', 'photo', 'sku', 'opening', 'receipts', 'received', 'qty'].includes(field.key))
   itemsDefinition.views = [{ name: 'Товары на складе', type: 'grid' }]; itemsDefinition.rows = []
+  // Connection reuses the sales catalogue: no demo products, journals or warehouse places.
+  for (const table of template.tables) table.rows = []
   const built = buildTemplate({ template, workspaceId: base.workspaceId, afterPosition })
   const oldTable = built.tables.find(table => table.id === built.appTableId)!, stock = built.inventory!
   const generated = generateApp({ appId: base.id, workspaceId: base.workspaceId, name: 'Склад', slug: base.slug, table: oldTable,

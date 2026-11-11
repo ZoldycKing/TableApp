@@ -25,9 +25,12 @@ const grant = z.strictObject({
 const target = z.discriminatedUnion('kind', [z.strictObject({ kind: z.literal('current') }), z.strictObject({ kind: z.literal('result'), stepId: id })])
 export type AppV2Target = z.infer<typeof target>
 const values = z.record(id, appV2BindingSchema)
+export const appV2InventoryOperationSchema = z.enum(['receipt', 'issue', 'write_off', 'transfer'])
+export type AppV2InventoryOperation = z.infer<typeof appV2InventoryOperationSchema>
 export type AppV2Step = { id: string } & (
   | { type: 'create_row'; tableId: string; values: Record<string, AppV2Binding> }
   | { type: 'place_shop_order'; tableId: string; values: Record<string, AppV2Binding> }
+  | { type: 'record_inventory_movement'; operation: AppV2InventoryOperation; values: Record<string, AppV2Binding> }
   | { type: 'update_row'; tableId: string; target: AppV2Target; values: Record<string, AppV2Binding> }
   | { type: 'delete_row'; tableId: string; target: AppV2Target; confirm: boolean }
   | { type: 'require'; condition: AppV2Condition; message: string }
@@ -40,6 +43,7 @@ export type AppV2Step = { id: string } & (
 export const appV2StepSchema: z.ZodType<AppV2Step> = z.lazy(() => z.discriminatedUnion('type', [
   z.strictObject({ id, type: z.literal('create_row'), tableId: id, values }),
   z.strictObject({ id, type: z.literal('place_shop_order'), tableId: id, values }),
+  z.strictObject({ id, type: z.literal('record_inventory_movement'), operation: appV2InventoryOperationSchema, values }),
   z.strictObject({ id, type: z.literal('update_row'), tableId: id, target, values }),
   z.strictObject({ id, type: z.literal('delete_row'), tableId: id, target, confirm: z.boolean() }),
   z.strictObject({ id, type: z.literal('require'), condition: appV2ConditionSchema, message: z.string().min(1).max(500) }),
@@ -125,6 +129,24 @@ export const appV2Schema = z.strictObject({
     contactDealFieldId: id.optional(), contactClientFieldId: id.optional(), contactNextDueFieldId: id.optional(),
     initialStage: z.string().min(1).max(80),
     terminalStages: z.array(z.string().min(1).max(80)).max(20).optional(),
+  }).optional(),
+  /** Internal warehouse starter (stock from movements). Absent outside that install. */
+  inventory: z.strictObject({
+    itemsTableId: id, movementsTableId: id, warehousesTableId: id,
+    itemsScreenId: id, itemScreenId: id, movementsScreenId: id,
+    createItemScreenId: id.optional(),
+    receiptFormId: id, issueFormId: id, writeOffFormId: id, transferFormId: id, itemEditFormId: id,
+    createItemFormId: id.optional(),
+    itemNameFieldId: id, itemSkuFieldId: id, itemBarcodeFieldId: id.optional(), itemCategoryFieldId: id,
+    itemUnitFieldId: id, itemMinFieldId: id, itemCostFieldId: id, itemWarehouseFieldId: id,
+    itemPhotoFieldId: id.optional(),
+    itemStockFieldId: id, itemLowFieldId: id, itemMovementsFieldId: id, itemOpeningFieldId: id,
+    movementNameFieldId: id, movementTypeFieldId: id, movementItemFieldId: id, movementQtyFieldId: id,
+    movementWarehouseFieldId: id, movementWarehouseToFieldId: id, movementDateFieldId: id,
+    movementNoteFieldId: id, movementAuthorFieldId: id,
+    movementBeforeFieldId: id.optional(), movementAfterFieldId: id.optional(),
+    warehouseNameFieldId: id,
+    typeReceipt: id, typeIssue: id, typeWriteOff: id, typeTransfer: id,
   }).optional(),
 })
 export type AppV2 = z.infer<typeof appV2Schema>

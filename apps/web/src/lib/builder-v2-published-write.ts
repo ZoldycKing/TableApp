@@ -6,7 +6,7 @@ import {builderV2NodeAction} from './builder-v2-button-action'
 import {builderV2DeleteAction} from './builder-v2-delete-action'
 import {builderV2SaveFormAction} from './builder-v2-form-action'
 import {withPublishedV2Read,publishedV2Context,publishedV2Definition,publishedV2Screen} from './builder-v2-published'
-import {publishedV2Node} from './builder-v2-published-data'
+import {publishedV2FormHostScreenId,publishedV2Node} from './builder-v2-published-data'
 import {publishedV2Row} from './builder-v2-published-rows'
 import {loadBuilderV2ReadMetadata} from './builder-v2-row-data'
 import {inspectPublishedV2Form} from './builder-v2-published-form'
@@ -57,7 +57,8 @@ export async function submitPublishedV2(slug:string,kind:'form'|'button',request
     const ids=[...new Set([...(screen.contextTableId?[screen.contextTableId]:[]),...builderV2WorkflowSteps(action.flow.steps).flatMap(step=>'tableId'in step?[step.tableId]:[])])].sort();for(const id of ids)await mutationFields(context,id)
     const meta=await loadBuilderV2ReadMetadata(context.tx,app.workspaceId,ids),selected=screen.contextTableId?await publishedV2Row(meta,app,actor,screen.contextTableId,request.recordId,true,true):undefined
     if(Boolean(screen.contextTableId)!==Boolean(request.recordId))throw new RowWriteError('denied','Запись недоступна')
-    const path=builderV2WorkingPath(app,screen.id,nodeId);if(!path||path.some(node=>node.visibleTo&&!matchesAppV2Audience(node.visibleTo,actor)))throw new RowWriteError('denied','Действие недоступно')
+    const hostScreenId=publishedV2FormHostScreenId(app,screen.id,nodeId)
+    const path=builderV2WorkingPath(app,hostScreenId,nodeId);if(!path||path.some(node=>node.visibleTo&&!matchesAppV2Audience(node.visibleTo,actor)))throw new RowWriteError('denied','Действие недоступно')
     const hash=builderV2Revision(['published',kind,request]),receipt=await builderV2WorkflowReceipt(context,app.id,actor.id,request.requestId,hash,true)
     if(receipt)return receipt
     if(selected?.stored.deletedAt)throw new RowWriteError('missing','Запись удалена или больше недоступна')

@@ -48,7 +48,8 @@ describe.skipIf(!process.env.DATABASE_URL)('first launch of every starter in Pos
     const [record] = await database.db.select().from(database.apps).where(eq(database.apps.id, result.appId))
     return { ...result, app: appSchema.parse(record!.draft) }
   }
-  it.each(['salon', 'service', 'zayavki', 'nedvizhimost', 'dostavka', 'sklad', 'proizvodstvo'])('%s starts empty without losing its roles, screens or configuration', async id => {
+  // sklad installs as native App V2 (covered by inventory-preparation / inventory-v2 tests).
+  it.each(['salon', 'service', 'zayavki', 'nedvizhimost', 'dostavka', 'proizvodstvo'])('%s starts empty without losing its roles, screens or configuration', async id => {
     const installed = await install(id)
     expect(installed.app.allowlist).toContainEqual({ email, roleId: id === 'proizvodstvo' ? 'director' : 'manager', company: '' })
     const creatorRole = installed.app.allowlist.find(entry => entry.email === email)!.roleId

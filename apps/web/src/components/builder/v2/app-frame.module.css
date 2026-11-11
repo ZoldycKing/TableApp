@@ -79,11 +79,30 @@
 .frame { max-width: none; background: var(--v2-bg); color: var(--v2-ink); font-size: 14px; line-height: 20px; border-color: var(--v2-line); border-radius: var(--v2-frame-radius, 16px); min-height: min(640px,calc(100dvh - 48px)); display: grid; grid-template-areas: "header" "body" "nav"; grid-template-columns: minmax(0,1fr); grid-template-rows: auto var(--v2-content-track, 1fr) auto; }
 .container[data-contained="true"] .frame { --v2-content-track: minmax(0, 1fr); height: 100%; min-height: 0; max-width: none; box-shadow: var(--shadow-soft); }
 .container[data-fullscreen="true"] .frame { border: 0; border-radius: 0; box-shadow: none; }
-.container .header { grid-area: header; justify-content: start; min-height: 64px; padding: 12px clamp(16px, 3cqw, 40px); }
-.headerMark { display: inline-flex; }
+.container .header { grid-area: header; justify-content: start; min-height: 64px; padding: 12px 0; }
+/* Shared horizontal track for header / tabs / content — same padding + max-width.
+   Must beat prototype `.appHeader > div { display: grid }` or the icon/title/team stack vertically. */
+.chromeBar { display: flex; align-items: center; gap: 16px; width: 100%; min-width: 0; }
+.header > .chromeBar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+}
+.header > .chromeBar > div {
+  display: grid;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+.navStack { display: flex; flex-direction: column; gap: 0; width: 100%; min-width: 0; }
+.headerMark { display: inline-flex; flex: none; align-items: center; }
+.headerIdentity { font-size: 12px; line-height: 16px; color: var(--v2-muted, #687568); overflow-wrap: anywhere; }
 .railIdentity { display: none; }
 .catalogIdentity { color: var(--v2-ink); font-weight: 650; overflow-wrap: anywhere; }
-.headerAction { margin-left: auto; flex-shrink: 0; }
+.headerAction { margin-left: auto; flex-shrink: 0; display: inline-flex; align-items: center; gap: 8px; align-self: center; }
 .account { position: relative; }
 .account summary { display: grid; place-items: center; width: 44px; height: 44px; border: 1px solid var(--v2-line); border-radius: 12px; cursor: pointer; color: var(--v2-accent); list-style: none; }
 .account summary::-webkit-details-marker { display: none; }
@@ -96,13 +115,23 @@
 .appIcon[data-custom="true"] { background: transparent; }
 .appIcon img { display: block; width: 100%; height: 100%; object-fit: contain; }
 .body { grid-area: body; min-width: 0; }
-.container[data-contained="true"] .body { min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-gutter: stable; scrollbar-width: thin; }
+/* No scrollbar-gutter here: it narrows body vs header/tabs and breaks the shared content track. */
+.container[data-contained="true"] .body { min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-width: thin; }
 .container[data-contained="true"] .body:focus-visible { outline-offset: -2px; }
-.container .content { display: grid; align-content: start; gap: var(--spacing-widget-p); min-width: 0; padding-block: clamp(var(--spacing-widget-p), 3cqw, calc(2 * var(--spacing-canvas-p))); }
+.container .content {
+  display: grid;
+  align-content: start;
+  gap: var(--spacing-widget-p);
+  min-width: 0;
+  /* Beat prototype .appContent { padding: 24px } shorthand so body matches header/tabs. */
+  padding-inline: clamp(16px, 3cqw, 40px);
+  padding-block: clamp(var(--spacing-widget-p), 3cqw, calc(2 * var(--spacing-canvas-p)));
+}
 .content > button { justify-self: start; }
-.navigation { grid-area: nav; position: sticky; bottom: 0; z-index: 5; padding: 8px; padding-bottom: calc(8px + env(safe-area-inset-bottom,0px)); background: var(--v2-surface); border-top: 1px solid var(--v2-line); min-width: 0; }
+.navigation { grid-area: nav; position: sticky; bottom: 0; z-index: 5; padding: 8px 0; padding-bottom: calc(8px + env(safe-area-inset-bottom,0px)); background: var(--v2-surface); border-top: 1px solid var(--v2-line); min-width: 0; }
+.navigation .chromeBar { align-items: stretch; }
 .container[data-contained="true"] .navigation { position: relative; }
-.navItems { display: flex; gap: 4px; min-width: 0; }
+.navItems { display: flex; gap: 4px; min-width: 0; flex: 1; }
 .navItems > div { flex: 1; min-width: 0; }
 .navigation button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; width: 100%; min-height: 48px; border: 0; border-radius: var(--v2-control-radius, 8px); padding: 8px; background: transparent; color: var(--v2-muted); font-size: 12px; line-height: 16px; text-align: center; }
 .navigation button svg { flex-shrink: 0; }
@@ -143,10 +172,10 @@
   .frame:is([data-navigation="sidebar"],[data-navigation="tabs"]) .more { display: none; }
   .frame[data-navigation="tabs"] { grid-template-areas: "header" "nav" "body"; }
   .container[data-contained="true"] .frame[data-navigation="tabs"] { grid-template-rows: auto auto var(--v2-content-track); }
-  .frame[data-navigation="tabs"] .navigation { top: 0; bottom: auto; border-top: 0; border-bottom: 1px solid var(--v2-line); }
+  .frame[data-navigation="tabs"] .navigation { top: 0; bottom: auto; border-top: 0; border-bottom: 1px solid var(--v2-line); padding-block: 8px; }
   .frame[data-navigation="tabs"] .navItems { overflow-x: auto; }
   .frame[data-navigation="tabs"] .navItems > div { flex: 0 0 auto; max-width: 240px; }
   .frame[data-navigation="tabs"] .navigation button { flex-direction: row; font-size: 14px; line-height: 20px; }
 }
 @container builder-app (max-width: 640px) { .navItems > div > button > span { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } }
-@container builder-app (max-width: 440px) { .container .header { gap: 12px; } .navigation { padding: 4px; padding-bottom: calc(4px + env(safe-area-inset-bottom,0px)); } .navigation button { padding: 8px 4px; } }
+@container builder-app (max-width: 440px) { .container .header { gap: 12px; } .navigation { padding-block: 4px; padding-bottom: calc(4px + env(safe-area-inset-bottom,0px)); } .navigation button { padding: 8px 4px; } }

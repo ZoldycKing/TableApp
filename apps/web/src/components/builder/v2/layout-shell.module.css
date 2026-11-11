@@ -666,7 +666,11 @@
   padding: 0 !important;
 }
 
-/* Key/value rows: one column, label left / value right — no word-by-word wrap. */
+/* Key/value rows: one column, label left / value right — no word-by-word wrap.
+ * Collapse the contact-block → facts-block gap so phone isn't optically taller. */
+.detailBody :global([class*='orderFacts']:not([class*='orderFactsGrid'])) {
+  gap: 0 !important;
+}
 .detailBody :global([class*='orderFactsGrid']),
 .detailBody :global([class*='orderContactRow']) {
   display: grid !important;

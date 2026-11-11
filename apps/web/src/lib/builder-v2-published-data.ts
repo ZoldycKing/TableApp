@@ -217,6 +217,34 @@ export async function readPublishedV2PurchaseCosts(slug:string,request:{revision
   })
 }
 
+/** Count of products strictly below minimum for the purchases toolbar badge. */
+export async function readPublishedV2LowStockCount(slug:string,request:{revision:string}){
+  return withPublishedV2Read(async tx=>{
+    const {app,actor,revision}=await publishedV2Context(slug,tx)
+    if(revision!==request.revision)throw new RowWriteError('conflict','Приложение обновлено. Обновите страницу.')
+    const inventory=app.inventory
+    if(!inventory?.purchasesScreenId||!inventory.itemStockFieldId||!inventory.itemMinFieldId
+      ||!canOpenAppV2Screen(app,actor,inventory.purchasesScreenId)){
+      throw new RowWriteError('denied','Закупки недоступны')
+    }
+    if(!actor.roleIds.includes('owner')&&!actor.roleIds.includes('staff'))throw new RowWriteError('denied','Закупки недоступны')
+    const meta=await loadBuilderV2ReadMetadata(tx,app.workspaceId,[inventory.itemsTableId,inventory.movementsTableId])
+    const stored=await tx.select().from(rows).where(and(
+      eq(rows.tableId,inventory.itemsTableId),
+      isNull(rows.deletedAt),
+      publishedV2ReadSql(app,actor,inventory.itemsTableId),
+    ))
+    const derived=await derivePublishedV2Rows(meta,app,actor,stored as RuntimeSourceRow[])
+    let count=0
+    for(const row of derived){
+      const stock=Number(row.data[inventory.itemStockFieldId])
+      const min=Number(row.data[inventory.itemMinFieldId])
+      if(Number.isFinite(stock)&&Number.isFinite(min)&&stock<min)count+=1
+    }
+    return {count}
+  })
+}
+
 /** Last supplier + price per product for «Что заказать» (mirrors create_reorder_orders grouping). */
 export async function readPublishedV2ReorderHints(slug:string,request:{revision:string;productIds:readonly string[]}){
   return withPublishedV2Read(async tx=>{

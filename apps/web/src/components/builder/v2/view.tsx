@@ -34,24 +34,15 @@ function ReorderToolbarLink({
   const inventory = app.inventory
   const [count, setCount] = useState<number | null>(null)
   useEffect(() => {
-    if (!published || !inventory?.reorderScreenId) return
-    const reorderScreen = app.screens.find(screen => screen.id === inventory.reorderScreenId)
-    const reorderNode = reorderScreen
-      ? app.nodes.find(entry => entry.type === 'collection' && reorderScreen.rootIds.includes(entry.id))
-      : undefined
-    if (!reorderNode) return
+    if (!published) return
     let cancelled = false
-    void import('@/app/builder-v2-published-actions').then(async ({ readPublishedV2DataAction }) => {
-      const result = await readPublishedV2DataAction(published.slug, {
-        revision: published.revision,
-        nodeId: reorderNode.id,
-        screenId: inventory.reorderScreenId!,
-      })
-      if (cancelled || !result.ok || result.page.kind !== 'collection') return
-      setCount(result.page.rows.length)
+    void import('@/app/builder-v2-published-actions').then(async ({ readPublishedV2LowStockCountAction }) => {
+      const result = await readPublishedV2LowStockCountAction(published.slug, { revision: published.revision })
+      if (cancelled || !result.ok) return
+      setCount(result.count)
     }).catch(() => {})
     return () => { cancelled = true }
-  }, [published?.revision, published?.dataVersion, inventory?.reorderScreenId, app.id])
+  }, [published?.revision, published?.dataVersion])
   const label = count != null && count > 0 ? `Что заказать · ${count}` : 'Что заказать'
   return <PublishedV2Button
     node={{ ...node, label }}

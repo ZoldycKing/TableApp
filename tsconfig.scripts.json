@@ -8,5 +8,6 @@
     "types": ["node"],
     "paths": { "@/*": ["./apps/web/src/*"] }
   },
-  "include": ["scripts/**/*.mts", "packages/db/scripts/**/*.mts", "apps/web/scripts/**/*.mts"]
+  "include": ["scripts/**/*.mts", "packages/db/scripts/**/*.mts", "apps/web/scripts/**/*.mts"],
+  "exclude": ["apps/web/scripts/**/*shots*.mts", "apps/web/scripts/measure-*.mts", "apps/web/scripts/inspect-*.mts", "apps/web/scripts/setup-and-shoot-*.mts"]
 }

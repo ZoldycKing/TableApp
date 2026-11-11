@@ -4,8 +4,8 @@ import presentation from '@/components/runtime/app-presentation.module.css'
 import { builderV2Initials, builderV2RecordTone, builderV2StatusTone } from './record-presentation'
 import ui from './view.module.css'
 
-export function BuilderV2RecordAvatar({ name, id, icon = 'apps' }: { name?: string; id: string; icon?: string }) {
-  return <span className={`${presentation.avatar} ${ui.recordAvatar}`} data-tone={builderV2RecordTone(id)} aria-hidden="true">
+export function BuilderV2RecordAvatar({ name, id, icon = 'apps', tone = true }: { name?: string; id: string; icon?: string; tone?: boolean }) {
+  return <span className={`${presentation.avatar} ${ui.recordAvatar}`} data-tone={tone ? builderV2RecordTone(id) : undefined} aria-hidden="true">
     {(name && builderV2Initials(name)) || <ProtoIcon name={icon} size={19} />}
   </span>
 }

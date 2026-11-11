@@ -133,6 +133,11 @@ export function AppV2Renderer(props: AppV2RendererProps) {
   const profile = isBuilderV2ContactProfile(props.app, props.screenId, props.tables)
   const orderGroup = (published ? builderV2RecordParent(props.app, props.screenId) : builderV2PreviewRecordParent(props.app, props.screenId, props.actor))?.queue?.recordGroup
   const rootIds = props.rootNodeIds ?? screen?.rootIds ?? []
+  const inventory = props.app.inventory
+  // Fold the screen create button into the collection search toolbar (shop-like density).
+  const foldedCreateId = !props.editing && inventory && screen && (screen.id === inventory.itemsScreenId || screen.id === inventory.movementsScreenId)
+    ? screen.rootIds.find(id => nodes.get(id)?.type === 'button') ?? null
+    : null
   const visible = (node: AppV2Node, row = props.record) => {
     if (node.visibleTo && !matchesAppV2Audience(node.visibleTo, props.actor)) return false
     const result = node.visibleWhen && evaluateAppV2Condition(node.visibleWhen, { actor: props.actor, row, screenRow: props.record })
@@ -140,7 +145,6 @@ export function AppV2Renderer(props: AppV2RendererProps) {
   }
   const order = props.record && !screen?.catalog && isBuilderV2OrderTable(recordTable) && !props.rootNodeIds
   const crm = props.app.crm
-  const inventory = props.app.inventory
   const detail = Boolean(props.record && !screen?.catalog && !props.rootNodeIds && screen && isBuilderV2BusinessDetail(props.app, screen.id, recordTable))
   const composition = order && rootIds.map(id => nodes.get(id)).flatMap(node => {
     if (node?.type !== 'collection' || !visible(node)) return []
@@ -226,6 +230,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
       else if(node.type==='video')content=<BuilderV2Video value={resolve(node.value,record)} caption={node.caption} editing={Boolean(props.editing)}/>
       else if (node.type === 'image') { const url=builderV2MediaItems(raw(node.value,record),published?.slug).find(item=>item.image)?.url; content = url ? <img className={ui.image} src={url} alt={node.alt} loading="lazy" decoding="async" /> : <div className={ui.placeholder}><ProtoIcon name="apps" size={24} /><strong>Изображение</strong><span>Укажите ссылку в свойствах</span></div> }
       else if(node.type==='button'){
+        if (id === foldedCreateId) return []
         const buttonStyle=node.variant==='primary'?styles.primary:node.variant==='danger'?styles.danger:styles.secondary
         content=published?published.buttonState(node.id)?.kind==='delete'?<PublishedV2Delete node={node} screenId={props.screenId} recordId={props.record?.id}/>:<PublishedV2Button node={node} screenId={props.screenId} recordId={props.record?.id} itemId={itemId} itemLabel={itemLabel}/>:itemId&&!props.editing&&props.live&&builderV2ButtonAction(props.app,node)?<Link href={`/apps/${encodeURIComponent(props.app.id)}/actions/${encodeURIComponent(node.id)}?screen=${encodeURIComponent(props.screenId)}${props.record?`&row=${encodeURIComponent(props.record.id)}`:''}&item=${encodeURIComponent(itemId)}`} className={buttonStyle} aria-label={itemLabel?`${node.label}: ${itemLabel}`:undefined}>{node.label}</Link>:<button type="button" className={buttonStyle} disabled>{node.label}</button>
       }
@@ -243,7 +248,17 @@ export function AppV2Renderer(props: AppV2RendererProps) {
           {props.editing && <button type="button" className={styles.addInside} style={{ gridColumn: '1 / -1' }} onClick={() => props.onAdd?.(node.id)}><ProtoIcon name="plus" />Добавить элемент</button>}
         </div>
       } else {
-        content = <BuilderV2DataNode app={props.app} node={node} live={Boolean(props.live)} allowWrites={Boolean(props.live&&!props.editing)} table={props.tables.find(table=>table.id===props.app.sources.find(source=>source.id===node.sourceId)?.tableId)} heading={Boolean(props.editing||screen?.rootIds.length!==1||screen.rootIds[0]!==node.id||screen.name!==node.name)} scope={{ screenId: props.screenId, ...(props.record ? { recordId: props.record.id } : {}) }} onPage={id === lines?.id ? receiveSummary : undefined}>{page => {
+        const inventoryListToolbar = (() => {
+          if (!foldedCreateId || node.type !== 'collection') return undefined
+          const button = nodes.get(foldedCreateId)
+          if (!button || button.type !== 'button' || !visible(button)) return undefined
+          const buttonStyle = button.variant === 'primary' ? styles.primary : button.variant === 'danger' ? styles.danger : styles.secondary
+          return published
+            ? <PublishedV2Button node={button} screenId={props.screenId} recordId={props.record?.id} />
+            : <button type="button" className={buttonStyle} disabled>{button.label}</button>
+        })()
+        const showCollectionHeading = Boolean(props.editing || screen?.name !== node.name)
+        content = <BuilderV2DataNode app={props.app} node={node} live={Boolean(props.live)} allowWrites={Boolean(props.live&&!props.editing)} table={props.tables.find(table=>table.id===props.app.sources.find(source=>source.id===node.sourceId)?.tableId)} heading={showCollectionHeading} toolbarEnd={inventoryListToolbar} scope={{ screenId: props.screenId, ...(props.record ? { recordId: props.record.id } : {}) }} onPage={id === lines?.id ? receiveSummary : undefined}>{page => {
         let body: ReactNode
         const source = props.app.sources.find(source => source.id === node.sourceId), table = props.tables.find(table => table.id === source?.tableId)
         const rows = page ? page.rows : source && props.rows && Object.hasOwn(props.rows, source.id) ? props.rows[source.id] : undefined
@@ -376,7 +391,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
             </li>
           }
           const actionRow = (row:AppV2Record,as:'div'|'tr') => <CollectionActionRow key={row.id} appId={props.app.id} nodeId={node.id} screenId={props.screenId} recordId={props.record?.id} itemId={row.id} title={cell(row,node.titleFieldId)} actionName={rowAction!.name} as={as} whole={!node.itemIds.length&&as!=='tr'} content={!node.itemIds.length?(as==='tr'?cell(row,node.titleFieldId):<>{item(row)}<ProtoIcon name="arrow" size={16}/></>):undefined}>{control=>as==='tr'?node.itemIds.length?<td colSpan={subtitle?2:1}>{item(row)}{control}</td>:<><td>{control}</td>{subtitle&&<td>{cell(row,node.subtitleFieldId!)}</td>}</>:node.itemIds.length?<>{item(row)}{control}</>:control}</CollectionActionRow>
-          const showHeading = !['calendar','kanban'].includes(node.layout) && (props.editing || screen?.rootIds.length !== 1 || screen.rootIds[0] !== node.id || screen.name !== node.name)
+          const showHeading = !['calendar','kanban'].includes(node.layout) && (props.editing || (screen?.name !== node.name && !(inventoryJournalList && screen?.id === inventory?.movementsScreenId)))
           const GroupHeading = showHeading ? 'h3' : 'h2'
           const groups = new Map<string, { label?: string; rows: AppV2Record[] }>()
           for (const row of rows ?? []) {
@@ -400,7 +415,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
             const lowStock = Boolean(inventoryStockList && row.values[inventory!.itemLowFieldId] === true)
             const body = rowAction ? actionRow(row, 'div') : <div key={row.id} className={catalog ? `${ui.row} ${presentation.catalogCard}` : ui.row} data-low={lowStock || undefined}>
               {defaultCard ? <RecordControl className={ui.recordButton} data-compact={compact || undefined} data-status={(statusSubtitle && !inventoryStockList && !inventoryJournalList) || undefined} data-stock={inventoryStockList || undefined} data-journal={inventoryJournalList || undefined} data-low={lowStock || undefined} {...(cardScreen ? { type: 'button' as const, onClick: () => open(row) } : {})}>
-                {compact && !inventoryJournalList && !(statusSubtitle && !inventoryStockList) && <BuilderV2RecordAvatar id={row.id} name={orders ? undefined : cell(row, node.titleFieldId)} icon={orders ? 'receipt' : contacts ? 'users' : inventory ? 'box' : 'list'} />}
+                {compact && !inventoryJournalList && !(statusSubtitle && !inventoryStockList) && <BuilderV2RecordAvatar id={row.id} name={orders ? undefined : cell(row, node.titleFieldId)} icon={orders ? 'receipt' : contacts ? 'users' : inventory ? 'box' : 'list'} tone={!inventoryStockList} />}
                 {item(row)}
                 {!catalog && (cardScreen || props.editing && cardTarget) && <ProtoIcon name="arrow" size={16} />}
               </RecordControl> : <>{item(row)}{openRecord(row)}</>}
@@ -408,6 +423,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
             return node.layout === 'kanban' ? <BoardMoveRow key={row.id} row={row as BuilderV2DataRecord} label={cell(row, node.titleFieldId)}>{body}</BoardMoveRow> : body
           }
           const rowsClass = catalog ? `${ui.catalogRows} ${presentation.catalogGrid}` : cardLayout ? ui.cards : timeline ? ui.timelineList : node.layout === 'list' && !rowAction ? (node.recordGroup ? ui.groupedRecords : ui.plainList) : styles.collectionRows
+          const inventoryList = Boolean((inventoryStockList || inventoryJournalList) && !node.recordGroup)
           const typeChoices = inventoryJournalList && inventory
             ? (table?.fields.find(field => field.id === inventory.movementTypeFieldId)?.choices ?? [])
               .filter(choice => ['Приход', 'Расход', 'Списание', 'Перемещение'].includes(choice.name))
@@ -423,7 +439,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
             }
             return [...buckets].map(([key, group]) => <div key={key} className={group.label ? ui.listGroup : undefined}>
               {group.label && <GroupHeading className={ui.listGroupHeading}>{group.label}</GroupHeading>}
-              <div className={rowsClass}>{group.rows.map(listRow)}</div>
+              <div className={rowsClass} data-inventory={inventoryList || undefined}>{group.rows.map(listRow)}</div>
             </div>)
           }
           const collection = node.layout === 'table' ? <div className={ui.tableScroll}><table className={ui.table} aria-label={node.name}>
@@ -458,11 +474,6 @@ export function AppV2Renderer(props: AppV2RendererProps) {
             </div>
             : inventoryStockList ? <div className={ui.collectionEmpty}>
               <p>На складе пока нет товаров. Добавьте первую позицию, чтобы вести остатки.</p>
-              {!props.editing && inventory?.createItemScreenId && <button type="button" className={styles.primary} onClick={() => {
-                const screenId = inventory.createItemScreenId!
-                if (published) published.navigate(screenId)
-                else props.onNavigate?.(screenId)
-              }}>Добавить товар</button>}
             </div>
             : inventoryJournalList ? <div className={ui.collectionEmpty}><p>Операций пока нет. Откройте товар и оформите приход, расход или перемещение.</p></div>
             : <p className={ui.hint}>{emptyCopy}</p>

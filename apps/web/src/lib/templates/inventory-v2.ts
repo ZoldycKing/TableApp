@@ -169,7 +169,7 @@ export function buildInventoryV2App(built: BuiltTemplate, meta: { id: string; wo
       { id: newItemButton, name: 'Новый товар', type: 'button', label: 'Новый товар', variant: 'primary', visibleTo: owners, visibleWhen: null, events: { press: openCreateItem } },
       { id: newOperationButton, name: 'Новая операция', type: 'button', label: 'Новая операция', variant: 'primary', visibleTo: team, visibleWhen: null, events: { press: openItemsForOperation } },
       { id: itemsNode, name: 'Товары', type: 'collection', visibleTo: null, visibleWhen: null, sourceId: itemsSource, layout: 'list', titleFieldId: itemName, subtitleFieldId: itemSku, cardDetailFieldId: itemStock, itemIds: [], events: { itemPress: openItem } },
-      { id: movementsNode, name: 'Журнал движений', type: 'collection', visibleTo: null, visibleWhen: null, sourceId: movementsSource, layout: 'list', titleFieldId: movementItem, subtitleFieldId: movementType, cardDetailFieldId: movementQty, itemIds: [], events: { itemPress: null } },
+      { id: movementsNode, name: 'Движения', type: 'collection', visibleTo: null, visibleWhen: null, sourceId: movementsSource, layout: 'list', titleFieldId: movementItem, subtitleFieldId: movementType, cardDetailFieldId: movementQty, itemIds: [], events: { itemPress: null } },
       ...[...identityFieldIds, ...factFieldIds].map(fieldId => {
         const column = columns(itemsTableId).find(item => item.id === fieldId)!
         const label = fieldId === itemCost ? 'Себестоимость, ₽' : column.name

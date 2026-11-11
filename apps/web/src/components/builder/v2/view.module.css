@@ -152,20 +152,9 @@
 .statusBadge { display: inline-flex; align-items: center; flex: none; width: max-content; max-width: 100%; margin-top: 0; padding: 3px 8px; border-radius: var(--radius-badge, 999px); background: var(--v2-control); color: var(--v2-muted); font-size: 12px; line-height: 16px; font-weight: 700; white-space: nowrap; overflow-wrap: normal; word-break: normal; }
 .recordButton[data-low='true'] .statusBadge[data-tone='rose'],
 .row[data-low='true'] .statusBadge[data-tone='rose'] { background: color-mix(in srgb, #e11d48 14%, var(--v2-surface, #fff)); color: #be123c; }
-/* Absolute accent — never padding/border/shadow that shifts avatar/name vs normal rows. */
-.recordButton[data-low='true'],
-.row[data-low='true'] > .recordButton { position: relative; }
-.recordButton[data-low='true']::before,
-.row[data-low='true'] > .recordButton::before {
-  content: '';
-  position: absolute;
-  inset-block: 0;
-  inset-inline-start: 0;
-  width: 3px;
-  background: #e11d48;
-  border-radius: 3px 0 0 3px;
-  pointer-events: none;
-}
+/* Low stock: badge + tinted qty — no left accent bar (looks like a glitch next to the avatar). */
+.recordButton[data-low='true'] > .recordMetaDetail,
+.row[data-low='true'] .recordMetaDetail { color: #be123c; }
 .recordButton[data-compact][data-stock] {
   display: flex;
   align-items: center;
@@ -391,6 +380,7 @@
 .catalogSpecs .row strong { font-weight: 620; overflow-wrap: anywhere; }
 @container catalog-product (min-width: 590px) { .catalogHero[data-media="true"] { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); } }
 .plainList { display: grid; border: 1px solid var(--v2-line); border-radius: var(--v2-card-radius, 12px); background: var(--v2-surface); }
+.plainList[data-inventory] { max-width: 42rem; }
 .plainList .row { padding: var(--v2-row-padding, 12px 16px); border: 0; border-radius: 0; background: transparent; }
 .plainList .row + .row { border-top: 1px solid var(--v2-line); }
 .tableScroll { max-width: 100%; overflow-x: auto; border: 1px solid var(--v2-line, #dce2d6); border-radius: var(--v2-card-radius, 12px); }
@@ -472,6 +462,18 @@
 .businessOperation svg { flex-shrink: 0; color: var(--v2-accent, #456849); }
 .dataControls { position: relative; z-index: 3; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; justify-content: space-between; min-width: 0; }
 .dataControls:has(.dataError) { align-items: start; flex-direction: column; }
+.listToolbar { flex-wrap: nowrap; justify-content: stretch; gap: 10px; }
+.listSearch { position: relative; display: grid; flex: 1; min-width: 0; }
+.listSearch > svg { position: absolute; inset-inline-start: 13px; top: 50%; transform: translateY(-50%); pointer-events: none; color: var(--v2-muted); }
+.listSearch .search { width: 100%; padding-inline-start: 38px; }
+.listToolbar > :global(button),
+.listToolbar > :global(a) { flex: none; justify-self: end; white-space: nowrap; }
+@container builder-app (max-width: 520px) {
+  .listToolbar { flex-wrap: wrap; }
+  .listSearch { flex: 1 1 100%; }
+  .listToolbar > :global(button),
+  .listToolbar > :global(a) { flex: 1 1 auto; }
+}
 .dataError { color: var(--v2-danger, #8d3731); font-size: 12px; line-height: 1.6; }
 .search { width: 100%; min-width: 0; min-height: 44px; border: 1px solid var(--v2-line, #dce2d6); border-radius: 8px; padding: 8px 12px; color: var(--v2-ink, #253c2d); background: var(--v2-surface, #fff); font: inherit; }
 .searchControl > svg { position: absolute; inset-inline-start: 13px; pointer-events: none; color: var(--v2-muted); }

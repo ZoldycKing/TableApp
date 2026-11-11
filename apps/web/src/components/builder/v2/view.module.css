@@ -143,10 +143,10 @@
 .orderActionDock .orderActionTrigger { width: 100%; }
 .orderActionDock .orderActionTrigger[data-primary] { grid-column: 1 / -1; }
 /* Product sticky bar: Приход + Расход + … on one row (mockup). */
-.orderActionDock[data-placement='mobile']:has(.orderActionOverflow) {
+.orderActionDock[data-placement='mobile']:has(details) {
   grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr) 44px;
 }
-.orderActionDock[data-placement='mobile']:has(.orderActionOverflow) .orderActionTrigger[data-primary] {
+.orderActionDock[data-placement='mobile']:has(details) .orderActionTrigger[data-primary] {
   grid-column: auto;
 }
 .orderActionOverflow { position: relative; display: inline-flex; }
@@ -545,7 +545,7 @@
   .clientListHeader > span:nth-child(6),
   .clientListHeader > span:last-child { text-align: end; }
   .recordButton[data-compact][data-clients] {
-    grid-template-columns: 44px minmax(0, 1.2fr) minmax(0, 1fr) 6.5rem 4.5rem 6rem 6.5rem 16px;
+    grid-template-columns: 44px minmax(0, 1.2fr) minmax(0, 1fr) 6.5rem 4.5rem 6rem 6.5rem;
     column-gap: 14px;
   }
   .recordButton[data-compact][data-clients] > .clientListCol { display: block; align-self: center; }

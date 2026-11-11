@@ -371,13 +371,14 @@ function useClientDealStats(app: AppV2, crm?: NonNullable<AppV2['crm']> | null) 
     if (!published || !crm?.dealsTableId) return
     const dealNodes = app.nodes.filter(node => node.type === 'collection'
       && app.sources.some(source => source.id === node.sourceId && source.tableId === crm.dealsTableId))
-    // Prefer a plain list (full page of rows) over kanban columns for rollups.
-    const dealNode = dealNodes.find(node => node.layout === 'list')
-      ?? dealNodes.find(node => node.layout === 'kanban')
+    // Prefer kanban board (all open pipeline stages) then a plain list.
+    const dealNode = dealNodes.find(node => node.layout === 'kanban')
+      ?? dealNodes.find(node => node.layout === 'list')
       ?? dealNodes[0]
     if (!dealNode) return
-    const screenId = app.screens.find(screen => screen.rootIds.includes(dealNode.id))?.id
-      ?? (dealNode.layout === 'kanban' ? crm.boardScreenId : crm.boardScreenId)
+    const screenId = dealNode.layout === 'kanban'
+      ? crm.boardScreenId
+      : (app.screens.find(screen => screen.rootIds.includes(dealNode.id))?.id ?? crm.boardScreenId)
     let cancelled = false
     void published.readData({ nodeId: dealNode.id, screenId }).then(result => {
       if (cancelled || !result.ok) return
@@ -385,7 +386,8 @@ function useClientDealStats(app: AppV2, crm?: NonNullable<AppV2['crm']> | null) 
       const next = new Map<string, ClientDealStat>()
       let openDeals = 0
       let pipeline = 0
-      const rows = result.page.board?.columns.flatMap(column => column.rows) ?? result.page.rows
+      const boardRows = result.page.board?.columns.flatMap(column => column.rows) ?? []
+      const rows = boardRows.length ? boardRows : result.page.rows
       for (const row of rows) {
         const clientRaw = row.values[crm.clientRelationFieldId]
         const clientId = typeof clientRaw === 'string' ? clientRaw
@@ -1284,7 +1286,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
               {defaultCard ? <RecordControl className={ui.recordButton} data-compact={compact || undefined} data-status={(statusSubtitle && !inventoryStockList && !inventoryJournalList && !purchaseList && !countList && !supplierList && !shopOrdersList) || undefined} data-stock={inventoryStockList || undefined} data-journal={inventoryJournalList || undefined} data-purchase={purchaseList || shopOrdersList || undefined} data-purchase-line={purchaseLineList || undefined} data-count-line={countLineList || undefined} data-count={countList || undefined} data-supplier={supplierList || undefined} data-supplier-orders={supplierOrdersList || undefined} data-shop-orders={shopOrdersList || undefined} data-clients={clientList || undefined} data-low={lowStock || undefined} data-diff={countLineMismatch || undefined} {...(cardScreen ? { type: 'button' as const, onClick: () => open(row) } : {})}>
                 {compact && !inventoryStockList && !inventoryJournalList && !purchaseList && !purchaseLineList && !countList && !countLineList && !supplierList && !shopOrdersList && !clientList && !(statusSubtitle) && <BuilderV2RecordAvatar id={row.id} name={orders || clientList ? undefined : contacts ? undefined : cell(row, node.titleFieldId)} icon={orders || shopOrdersList ? 'receipt' : clientList ? 'building' : contacts ? 'users' : inventory ? 'box' : 'list'} tone forceIcon={Boolean(orders || clientList || contacts)} />}
                 {item(row)}
-                {!catalog && !inventoryStockList && !inventoryJournalList && !purchaseList && !purchaseLineList && !countList && !countLineList && (cardScreen || props.editing && cardTarget) && <ProtoIcon name="arrow" size={16} />}
+                {!catalog && !inventoryStockList && !inventoryJournalList && !purchaseList && !purchaseLineList && !countList && !countLineList && !clientList && !supplierList && (cardScreen || props.editing && cardTarget) && <ProtoIcon name="arrow" size={16} />}
               </RecordControl> : <>{item(row)}{openRecord(row)}</>}
             </div>
             return node.layout === 'kanban' ? <BoardMoveRow key={row.id} row={row as BuilderV2DataRecord} label={cell(row, node.titleFieldId)}>{body}</BoardMoveRow> : body

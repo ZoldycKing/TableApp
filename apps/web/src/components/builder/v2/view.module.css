@@ -540,6 +540,8 @@
 }
 @media (max-width: 720px) {
   .timelineItem { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+}
+@media (min-width: 641px) and (max-width: 720px) {
   .orderActionPanel[data-dialog] { width: min(calc(100% - 24px), 30rem); max-height: min(90dvh, 40rem); }
 }
 @media (max-width: 360px) {

@@ -248,6 +248,21 @@
 .timelineText { margin: 0; font-size: 15px; line-height: 1.45; font-weight: 560; overflow-wrap: break-word; word-break: normal; }
 .timelineMeta { margin: 0; color: var(--v2-muted); font-size: 13px; line-height: 1.4; overflow-wrap: break-word; word-break: normal; }
 .statusBadge { display: inline-flex; align-items: center; flex: none; width: max-content; max-width: 100%; margin-top: 0; padding: 3px 8px; border-radius: var(--radius-badge, 999px); background: var(--v2-control); color: var(--v2-muted); font-size: 12px; line-height: 16px; font-weight: 700; white-space: nowrap; overflow-wrap: normal; word-break: normal; }
+.productChip {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  width: max-content;
+  max-width: 100%;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--v2-line, #dce2d6);
+  background: color-mix(in srgb, var(--v2-bg, #f8faf6) 70%, var(--v2-surface, #fff));
+  color: var(--v2-muted, #687568);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 650;
+}
 .recordButton[data-low='true'] .statusBadge[data-tone='rose'],
 .row[data-low='true'] .statusBadge[data-tone='rose'] { background: color-mix(in srgb, #e11d48 14%, var(--v2-surface, #fff)); color: #be123c; }
 /* Low stock: badge + tinted qty — no left accent bar (looks like a glitch next to the avatar). */
@@ -519,9 +534,11 @@
     font-weight: 650;
     background: color-mix(in srgb, var(--v2-bg, #f8faf6) 88%, var(--v2-surface, #fff));
   }
+  .clientListHeader > span:nth-child(4),
+  .clientListHeader > span:nth-child(5),
   .clientListHeader > span:last-child { text-align: end; }
   .recordButton[data-compact][data-clients] {
-    grid-template-columns: 44px minmax(0, 1.2fr) minmax(0, 1fr) 6.5rem 4.5rem 6rem 6.5rem;
+    grid-template-columns: 44px minmax(0, 1.2fr) minmax(0, 1fr) 6.5rem 4.5rem 6rem 6.5rem 16px;
     column-gap: 14px;
   }
   .recordButton[data-compact][data-clients] > .clientListCol { display: block; align-self: center; }

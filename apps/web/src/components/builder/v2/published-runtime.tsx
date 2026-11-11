@@ -51,10 +51,10 @@ export function PublishedV2Runtime({data}:{data:Data}){
   const showBack = Boolean(backTarget && (page.contextTableId || suppliersHub || supplierCard || reorderHub))
   const shellList = !recordId && listShellScreen(app, screenId)
   // List screens own the page H1 in ListScreenShell; record cards keep short chrome titles.
-  const frameTitle = shellList ? ''
-    : app.inventory && screenId === app.inventory.itemScreenId ? 'Товар'
-      : app.inventory && screenId === app.inventory.purchaseScreenId ? 'Заказ'
-        : title
+  // List + inventory item card own the page H1 inside the shell; keep chrome title-free.
+  const frameTitle = shellList || (app.inventory && screenId === app.inventory.itemScreenId) ? ''
+    : app.inventory && screenId === app.inventory.purchaseScreenId ? 'Заказ'
+      : title
   return <PublishedV2Context.Provider value={transport}>
     <BuilderV2Theme as="main" app={app} className={`${ui.preview} ${ui.published}`}>
       <BuilderV2AppFrame

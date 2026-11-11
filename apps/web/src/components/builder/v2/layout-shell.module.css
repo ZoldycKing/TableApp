@@ -90,9 +90,17 @@
 .metric:nth-child(2n) { border-right: 0; }
 .summary[data-count='3'] .metric:nth-child(3) { border-right: 0; }
 .summary .metric[data-wide] { grid-column: 1 / -1; }
+/* After a full-width metric, a lone leftover must not leave an empty half-cell. */
+.summary .metric[data-wide] + .metric:last-child { grid-column: 1 / -1; }
+.summary[data-count='2'] { grid-template-columns: 1fr; }
+.summary[data-count='2'] .metric,
+.summary[data-count='2'] .metric[data-wide] { grid-column: auto; border-right: 0; }
 @container builder-app (min-width: 641px) {
-  .summary[data-count='3'] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .summary .metric[data-wide] { grid-column: auto; }
+  .summary[data-count='2'],
+  .summary[data-count='3'] { grid-template-columns: repeat(var(--shell-metrics, 3), minmax(0, 1fr)); }
+  .summary .metric[data-wide],
+  .summary .metric[data-wide] + .metric:last-child { grid-column: auto; }
+  .summary[data-count='2'] .metric:nth-child(2n) { border-right: 0; }
 }
 .summary[data-count='4'] .metric:nth-child(3),
 .summary[data-count='4'] .metric:nth-child(4) { border-bottom: 0; }
@@ -218,12 +226,33 @@
 
 .filterSearch > input::placeholder { color: var(--shell-muted); }
 
+.filterSearch > select {
+  min-width: 0;
+  width: max-content;
+  max-width: 100%;
+  min-height: 38px;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--shell-ink);
+  font: inherit;
+  font-weight: 650;
+  outline: none;
+  cursor: pointer;
+}
+
 .filterSelects {
   display: inline-flex;
   flex-wrap: wrap;
   gap: 8px;
   justify-content: flex-start;
   min-width: 0;
+}
+
+.filterSelects > .filterSearch {
+  flex: 0 1 auto;
+  width: auto;
+  max-width: 100%;
 }
 
 .body {
@@ -284,6 +313,11 @@
   border-bottom: 1px solid var(--shell-line);
 }
 
+.detailHead[data-product] {
+  grid-template-columns: minmax(0, 1fr);
+  border-bottom: 0;
+}
+
 .detailIdentity {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -296,9 +330,24 @@
   grid-template-columns: minmax(0, 1fr);
 }
 
+.detailIdentity[data-product] {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
 .detailCopy {
   display: grid;
-  gap: 4px;
+  gap: 8px;
+  min-width: 0;
+}
+
+.detailTitleRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  align-items: start;
+  justify-content: space-between;
   min-width: 0;
 }
 
@@ -309,13 +358,24 @@
   font-weight: 750;
   line-height: 1.25;
   letter-spacing: -0.02em;
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.detailChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  align-items: center;
+  min-width: 0;
 }
 
 .detailSubtitle {
   margin: 0;
   color: var(--shell-muted);
   font-size: 13px;
-  line-height: 1.35;
+  line-height: 1.45;
+  max-width: 46rem;
 }
 
 .detailActions {
@@ -330,7 +390,22 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0;
+  border-top: 1px solid var(--shell-line);
   border-bottom: 1px solid var(--shell-line);
+}
+
+.detailMetrics .metricValue[data-tone='rose'] {
+  color: color-mix(in srgb, #b42318 82%, var(--shell-ink));
+}
+
+.detailBody {
+  display: grid;
+  gap: 0;
+  min-width: 0;
+}
+
+.detailBody[data-product] {
+  gap: 0;
 }
 
 .detailSection {
@@ -348,6 +423,24 @@
   color: var(--shell-ink);
   font-size: 14px;
   font-weight: 720;
+}
+
+.detailCols {
+  display: grid;
+  gap: 0;
+  min-width: 0;
+}
+
+.detailMainCol,
+.detailSideCol {
+  display: grid;
+  gap: 0;
+  min-width: 0;
+  align-content: start;
+}
+
+.detailSideCol {
+  border-top: 1px solid var(--shell-line);
 }
 
 @media (min-width: 721px) {
@@ -373,6 +466,19 @@
   .detailMetrics {
     grid-template-columns: repeat(var(--shell-metrics, 4), minmax(0, 1fr));
   }
+  .detailIdentity[data-product] {
+    grid-template-columns: minmax(160px, 220px) minmax(0, 1fr);
+    gap: 18px 22px;
+    align-items: start;
+  }
+  .detailCols {
+    grid-template-columns: minmax(0, 1.6fr) minmax(14rem, 0.9fr);
+  }
+  .detailSideCol {
+    border-top: 0;
+    border-left: 1px solid var(--shell-line);
+  }
+  .detailActions[data-desktop-only] { display: inline-flex; }
 }
 
 @media (max-width: 720px) {
@@ -394,6 +500,13 @@
   .detailActions {
     justify-content: stretch;
   }
+  .detailActions[data-desktop-only] { display: none; }
+  .detailIdentity[data-product] :global(.productThumb[data-size='card']) {
+    width: 100%;
+    max-width: none;
+    max-height: none;
+    aspect-ratio: 1;
+  }
   .stickyBar {
     position: sticky;
     bottom: 0;
@@ -404,6 +517,19 @@
     border-top: 1px solid var(--shell-line);
     background: color-mix(in srgb, var(--shell-surface) 92%, transparent);
     backdrop-filter: blur(10px);
+  }
+  .stickyBar :global(.orderActionDock),
+  .stickyBar :global([data-placement='mobile']) {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto;
+    gap: 8px;
+    width: 100%;
+    position: static;
+    padding: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
   }
 }
 

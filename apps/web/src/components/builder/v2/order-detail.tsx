@@ -13,6 +13,7 @@ import styles from '../prototype/prototype.module.css'
 import { builderV2MediaItems } from './media-values'
 import { builderV2StatusTone } from './record-presentation'
 import { usePublishedV2 } from './published-context'
+import { DetailCardShell, type ShellMetric } from './layout-shell'
 import ui from './view.module.css'
 
 export type BuilderV2OrderActionMode = 'persistent' | 'reveal'
@@ -254,6 +255,7 @@ export function BuilderV2OrderActionPanel({
   triggers,
   children,
   identity,
+  detailBody,
 }: {
   title?: string
   mode?: BuilderV2OrderActionMode
@@ -270,7 +272,12 @@ export function BuilderV2OrderActionPanel({
     media?: ReactNode
     productTitle?: string
     facts?: readonly BuilderV2OrderIdentityFact[]
+    chips?: ReactNode
+    subtitle?: ReactNode
+    metrics?: readonly ShellMetric[]
   }
+  /** Extra sections under the product shell (warehouse / history / details). */
+  detailBody?: ReactNode
 }) {
   const multi = Boolean(triggers?.length)
   const published = usePublishedV2()
@@ -357,6 +364,26 @@ export function BuilderV2OrderActionPanel({
         </div>
       </aside>
     </OrderActionPanelContext.Provider>, document.body) : null
+    if (identity?.productTitle) {
+      const desktopItems = toolbarItems.filter(item => !(item.icon && !item.primary))
+      return <>
+        <DetailCardShell
+          layout="product"
+          media={identity.media}
+          title={identity.productTitle}
+          chips={identity.chips}
+          subtitle={identity.subtitle}
+          metrics={identity.metrics}
+          actions={<BuilderV2OrderActionToolbar items={desktopItems} onOpen={open} placement="desktop" textOnly />}
+          stickyActions={!active
+            ? <BuilderV2OrderActionToolbar items={toolbarItems} onOpen={open} dockRef={dockRef} placement="mobile" textOnly collapseMobile />
+            : undefined}
+        >
+          {detailBody}
+        </DetailCardShell>
+        {dialog}
+      </>
+    }
     if (identity) {
       return <>
         <BuilderV2OrderIdentity variant="pipeline" manage status={identity.status} statusLabel={identity.statusLabel} amount={identity.amount} amountLabel={identity.amountLabel ?? ''} amountBadge={identity.amountBadge} due={identity.due} client={identity.client} media={identity.media} productTitle={identity.productTitle} facts={identity.facts}

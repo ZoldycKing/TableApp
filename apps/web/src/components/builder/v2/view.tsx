@@ -248,6 +248,56 @@ function PurchaseOrderThumbs({
   </span>
 }
 
+/** First catalog product photos for a shop-order list row. */
+function ShopOrderThumbs({
+  lineIds, shop,
+}: {
+  lineIds: string[]
+  shop: NonNullable<AppV2['shop']>
+}) {
+  const published = usePublishedV2()
+  const [thumb, setThumb] = useState<{ id: string; image?: import('./media-values').BuilderV2MediaItem; label: string } | null>(null)
+  const [extra, setExtra] = useState(0)
+  useEffect(() => {
+    if (!published || !lineIds.length) {
+      setThumb(null)
+      setExtra(0)
+      return
+    }
+    let cancelled = false
+    void import('@/app/builder-v2-published-actions').then(async ({ readPublishedV2RelatedRowsAction }) => {
+      const lines = await readPublishedV2RelatedRowsAction(published.slug, {
+        revision: published.revision, tableId: shop.itemsTableId, recordIds: lineIds,
+      })
+      if (cancelled || !lines.ok) return
+      const productIds = lines.rows.flatMap(row => {
+        const id = builderV2OrderLineProductId(row.values[shop.productFieldId])
+        return id ? [id] : []
+      })
+      const unique = [...new Set(productIds)]
+      const firstId = unique[0]
+      const products = firstId && shop.imageFieldId
+        ? await readPublishedV2RelatedRowsAction(published.slug, {
+          revision: published.revision, tableId: shop.catalogTableId, recordIds: [firstId],
+        })
+        : { ok: true as const, rows: [] }
+      if (cancelled || !products.ok) return
+      const row = firstId ? products.rows.find(item => item.id === firstId) : undefined
+      const image = row && shop.imageFieldId
+        ? builderV2MediaItems(row.values[shop.imageFieldId], published.slug).find(item => item.image)
+        : undefined
+      const label = row?.display?.[shop.productTitleFieldId] || 'Товар'
+      setThumb(firstId ? { id: firstId, image, label } : null)
+      setExtra(Math.max(0, unique.length - 1))
+    })
+    return () => { cancelled = true }
+  }, [published, shop, lineIds.join('|')])
+  return <span className={ui.purchaseThumbs} aria-hidden="true">
+    {thumb ? <InventoryProductThumb image={thumb.image} size="journal" label={thumb.label} /> : <BuilderV2RecordAvatar id={lineIds[0] || 'order'} icon="receipt" tone />}
+    {extra > 0 ? <span className={ui.purchaseThumbsMore}>+{extra}</span> : null}
+  </span>
+}
+
 type SupplierOrderStat = { orders: number; lastOrder: string; purchased: number }
 
 /** Loads purchase orders once and derives per-supplier list metrics. */
@@ -319,8 +369,9 @@ function useClientDealStats(app: AppV2, crm?: NonNullable<AppV2['crm']> | null) 
   const [rollup, setRollup] = useState<{ openDeals: number; pipeline: number }>({ openDeals: 0, pipeline: 0 })
   useEffect(() => {
     if (!published || !crm?.dealsTableId) return
-    const boardNode = app.nodes.find(node => node.type === 'collection' && node.layout === 'kanban'
-      && app.sources.some(source => source.id === node.sourceId && source.tableId === crm.dealsTableId))
+    const boardNode = app.nodes.find(node => node.type === 'collection'
+      && app.sources.some(source => source.id === node.sourceId && source.tableId === crm.dealsTableId)
+      && (node.layout === 'kanban' || node.layout === 'list' || node.layout === 'calendar'))
     if (!boardNode) return
     let cancelled = false
     void published.readData({ nodeId: boardNode.id, screenId: crm.boardScreenId }).then(result => {
@@ -329,10 +380,14 @@ function useClientDealStats(app: AppV2, crm?: NonNullable<AppV2['crm']> | null) 
       const next = new Map<string, ClientDealStat>()
       let openDeals = 0
       let pipeline = 0
-      for (const row of result.page.rows) {
+      const rows = result.page.board?.columns.flatMap(column => column.rows) ?? result.page.rows
+      for (const row of rows) {
         const clientRaw = row.values[crm.clientRelationFieldId]
         const clientId = typeof clientRaw === 'string' ? clientRaw
-          : Array.isArray(clientRaw) ? clientRaw.find((id): id is string => typeof id === 'string') : undefined
+          : Array.isArray(clientRaw) ? clientRaw.find((id): id is string => typeof id === 'string')
+            : clientRaw && typeof clientRaw === 'object' && 'id' in clientRaw && typeof (clientRaw as { id: unknown }).id === 'string'
+              ? (clientRaw as { id: string }).id
+              : undefined
         if (!clientId) continue
         const stage = String(row.values[crm.stageFieldId] ?? '')
         const open = !terminal.has(stage)
@@ -340,8 +395,8 @@ function useClientDealStats(app: AppV2, crm?: NonNullable<AppV2['crm']> | null) 
         const sum = Number.isFinite(sumRaw) ? sumRaw : 0
         const due = String(row.values[crm.dueFieldId] ?? '')
         const current = next.get(clientId) ?? { deals: 0, sum: 0, lastContact: '' }
+        current.deals += 1
         if (open) {
-          current.deals += 1
           current.sum += sum
           openDeals += 1
           pipeline += sum
@@ -411,8 +466,8 @@ function InventoryWarehouseFacts({ record, inventory, unit }: {
     return () => { cancelled = true }
   }, [published, record.id, record.values, inventory, unit])
   if (rows.length < 2) return null
-  return <section className={`${presentation.panel} ${ui.orderFacts}`} aria-label="По складам">
-    <h2 className={presentation.sectionTitle}>По складам</h2>
+  return <section className={`${presentation.panel} ${ui.orderFacts}`} aria-label="Остатки по складам">
+    <h2 className={presentation.sectionTitle}>Остатки по складам</h2>
     <ul className={ui.warehouseBreakdown}>
       {rows.map(row => <li key={row.id}><span>{row.name}</span><strong>{row.qty} {unit}</strong></li>)}
     </ul>
@@ -429,7 +484,7 @@ import { BuilderV2FormPreview, BuilderV2FormInput, type WorkingFormOptions } fro
 import { BuilderV2DataNode } from './data-node'
 import type { BuilderV2DataPage, BuilderV2DataRecord, BuilderV2OrderSummary } from '@/lib/builder-v2-data-types'
 import { builderV2OrderLineFields, builderV2StatusColumn } from '@/lib/builder-v2-order-summary'
-import { builderV2DueTone, builderV2OrderDetailParts, builderV2OrderFactKind, builderV2StatusProgress } from '@/lib/builder-v2-order-detail'
+import { builderV2DueTone, builderV2OrderDetailParts, builderV2OrderFactKind, builderV2OrderLineProductId, builderV2StatusProgress } from '@/lib/builder-v2-order-detail'
 import { builderV2StatusForm } from '@/lib/builder-v2-status-form'
 import {usePublishedV2} from './published-context'
 import {PublishedV2Delete} from './published-delete'
@@ -882,24 +937,24 @@ export function AppV2Renderer(props: AppV2RendererProps) {
               const logo = logoField ? builderV2MediaItems(row.values[logoField.id], published?.slug).find(item => item.image) : undefined
               const stat = crmDealStats.stats.get(row.id)
               const deals = stat?.deals ?? 0
-              const dealSum = stat && stat.sum > 0 ? purchaseMoney(stat.sum) : ''
-              const last = stat?.lastContact ? formatPurchaseDate(stat.lastContact) : ''
+              const dealSum = stat && stat.sum > 0 ? purchaseMoney(stat.sum) : '—'
+              const last = stat?.lastContact ? formatPurchaseDate(stat.lastContact) : '—'
               return <>
                 {logo ? <InventoryProductThumb image={logo} size="list" label={name} /> : <BuilderV2RecordAvatar id={row.id} icon="building" forceIcon tone />}
                 <div className={ui.clientListCopy}>
                   <strong>{name || '—'}</strong>
-                  {contact ? <span>{contact}</span> : null}
                   <span className={ui.clientListMobileMeta}>
+                    {contact ? <span>{contact}</span> : null}
                     {phone ? <span>{phone}</span> : null}
-                    {deals ? <span>{deals} сделок · {dealSum || '—'}</span> : null}
-                    {last ? <span>Последний контакт {last}</span> : null}
+                    <span>{deals} сделок · {dealSum}</span>
+                    {last !== '—' ? <span>Последний контакт {last}</span> : null}
                   </span>
                 </div>
-                {contact ? <span className={ui.clientListCol} data-col="contact">{contact}</span> : null}
-                {phone ? <span className={ui.clientListCol} data-col="phone">{phone}</span> : null}
-                {deals ? <span className={ui.clientListCol} data-col="deals">{deals}</span> : null}
-                {dealSum ? <span className={ui.clientListCol} data-col="sum">{dealSum}</span> : null}
-                {last ? <span className={ui.clientListCol} data-col="last">{last}</span> : null}
+                <span className={ui.clientListCol} data-col="contact">{contact || '—'}</span>
+                <span className={ui.clientListCol} data-col="phone">{phone || '—'}</span>
+                <span className={ui.clientListCol} data-col="deals">{deals}</span>
+                <span className={ui.clientListCol} data-col="sum">{dealSum}</span>
+                <span className={ui.clientListCol} data-col="last">{last}</span>
               </>
             }
             if (shopOrdersList && props.app.shop && row) {
@@ -916,8 +971,11 @@ export function AppV2Renderer(props: AppV2RendererProps) {
                 ? purchaseMoney(totalRaw)
                 : summary?.amount != null && Number.isFinite(summary.amount) ? purchaseMoney(summary.amount)
                   : totalFieldId ? cell(row, totalFieldId) : ''
+              const positionIds = shop.positionsFieldId && Array.isArray(row.values[shop.positionsFieldId])
+                ? (row.values[shop.positionsFieldId] as unknown[]).filter((id): id is string => typeof id === 'string')
+                : []
               return <>
-                <span className={ui.purchaseThumbs} aria-hidden="true"><BuilderV2RecordAvatar id={row.id} icon="receipt" tone /></span>
+                <ShopOrderThumbs lineIds={positionIds} shop={shop} />
                 <div className={ui.purchaseListCopy}>
                   <strong>{number}</strong>
                   <span className={ui.purchaseListDate}>{when || '—'}</span>
@@ -925,10 +983,10 @@ export function AppV2Renderer(props: AppV2RendererProps) {
                     {customer ? <span>{customer}</span> : null}
                   </span>
                 </div>
-                {customer ? <span className={ui.purchaseListCol} data-col="customer">{customer}</span> : null}
+                <span className={ui.purchaseListCol} data-col="customer">{customer || '—'}</span>
                 <span className={ui.purchaseListCol} data-col="date">{when || '—'}</span>
                 {statusLabel ? <span className={ui.statusBadge} data-tone={builderV2StatusTone(statusLabel)}>{statusLabel}</span> : <span />}
-                <span className={ui.purchaseListAmount}>{amount || ''}</span>
+                <span className={ui.purchaseListAmount}>{amount || '—'}</span>
               </>
             }
             if (supplierList && inventory && row) {
@@ -1741,6 +1799,17 @@ export function AppV2Renderer(props: AppV2RendererProps) {
     const inventoryPhoto = inventoryItem && inventory?.itemPhotoFieldId
       ? builderV2MediaItems(props.record.values[inventory.itemPhotoFieldId], published?.slug).find(item => item.image)
       : undefined
+    const inventorySku = inventoryItem && inventory
+      ? cell(props.record, inventory.itemSkuFieldId).trim()
+      : ''
+    const inventoryCategory = inventoryItem && inventory
+      ? cell(props.record, inventory.itemCategoryFieldId).trim()
+      : ''
+    const inventoryDescField = inventoryItem && recordTable?.fields.find(field =>
+      field.type === 'text' && /^(?:описание|description|примечание)$/iu.test(field.name.trim()))
+    const inventoryDesc = inventoryDescField && Object.hasOwn(props.record.values, inventoryDescField.id)
+      ? cell(props.record, inventoryDescField.id).trim()
+      : ''
     const inventoryWarehouseLabel = inventoryItem && inventory
       ? cell(props.record, inventory.itemWarehouseFieldId).trim()
       : ''
@@ -1752,6 +1821,41 @@ export function AppV2Renderer(props: AppV2RendererProps) {
     const inventoryStockValue = inventoryItem && Number.isFinite(inventoryCostNum) && typeof rawTotal === 'number' && Number.isFinite(rawTotal)
       ? builderV2FormattedAmount(inventoryCostNum * rawTotal, 'Стоимость остатка, ₽')
       : ''
+    const inventoryMinLabel = inventoryMin
+      ? (/\bшт\.?\b/i.test(inventoryMin) ? inventoryMin : `${inventoryMin} ${inventoryUnit}`.replace(/\s+/g, ' ').trim())
+      : ''
+    const inventoryDeficit = inventoryLow && inventory && typeof rawTotal === 'number' && Number.isFinite(rawTotal)
+      ? (() => {
+        const minRaw = Number(props.record.values[inventory.itemMinFieldId])
+        if (!Number.isFinite(minRaw)) return ''
+        const delta = minRaw - rawTotal
+        return delta > 0 ? `Ниже минимума на ${delta} ${inventoryUnit}`.replace(/\s+/g, ' ').trim() : 'Ниже минимума'
+      })()
+      : (inventoryLow ? 'Ниже минимума' : '')
+    const inventoryChips = inventoryItem ? <>
+      {inventorySku ? <span className={ui.productChip}>SKU {inventorySku}</span> : null}
+      {inventoryCategory ? <span className={ui.productChip}>{inventoryCategory}</span> : null}
+      {inventoryDeficit ? <span className={ui.statusBadge} data-tone="rose">{inventoryDeficit}</span> : null}
+    </> : null
+    const inventoryMetrics = inventoryItem ? [
+      {
+        key: 'stock',
+        value: inventoryStockLabel || '—',
+        caption: 'Остаток',
+        ...(inventoryLow ? { tone: 'rose' as const } : {}),
+        ...(inventoryWarehouseLabel ? { pill: inventoryWarehouseLabel } : {}),
+      },
+      ...(inventoryMinLabel ? [{ key: 'min', value: inventoryMinLabel, caption: 'Минимум' }] : []),
+      ...(inventoryCostLabel ? [{ key: 'cost', value: inventoryCostLabel, caption: 'Себестоимость' }] : []),
+      ...(inventoryStockValue ? [{
+        key: 'stock_value',
+        value: inventoryStockValue,
+        caption: 'Стоимость остатка',
+        ...(typeof rawTotal === 'number' && Number.isFinite(rawTotal) && inventoryCostLabel
+          ? { pill: `${rawTotal} ${inventoryUnit} × ${inventoryCostLabel}`.replace(/\s+/g, ' ').trim() }
+          : {}),
+      }] : []),
+    ] : undefined
     const inventoryIdentityFacts = inventoryItem ? [
       inventoryWarehouseLabel ? { id: 'warehouse', label: 'Склад', value: inventoryWarehouseLabel } : null,
       inventoryCostLabel ? { id: 'cost', label: 'Себестоимость', value: inventoryCostLabel } : null,
@@ -1762,11 +1866,12 @@ export function AppV2Renderer(props: AppV2RendererProps) {
           amount: inventoryStockLabel,
           amountLabel: 'Остаток',
           amountBadge: inventoryLow ? `Ниже минимума (${inventoryMin || '—'})` : undefined,
-          due: inventoryMin
-            ? { label: 'Минимум', value: /\bшт\.?\b/i.test(inventoryMin) ? inventoryMin : `${inventoryMin} ${inventoryUnit}`.replace(/\s+/g, ' ').trim() }
-            : undefined,
+          due: inventoryMinLabel ? { label: 'Минимум', value: inventoryMinLabel } : undefined,
           media: <InventoryProductThumb image={inventoryPhoto} size="card" label={title || undefined} />,
           productTitle: title || undefined,
+          chips: inventoryChips,
+          subtitle: inventoryDesc || undefined,
+          metrics: inventoryMetrics,
           facts: inventoryIdentityFacts,
         }
       : {
@@ -1777,19 +1882,33 @@ export function AppV2Renderer(props: AppV2RendererProps) {
           due,
           client: clientFact,
         }
+    const inventoryDetailBody = inventoryItem && inventory ? <>
+      <div className={shellLayout.detailCols}>
+        <div className={shellLayout.detailMainCol}>
+          <InventoryWarehouseFacts record={props.record} inventory={inventory} unit={inventoryUnit} />
+          {linesBlock ? <DetailSection title="История движений">{linesBlock}</DetailSection> : null}
+          {manage && render([...parts.buttonIds, ...parts.otherIds])}
+        </div>
+        <aside className={shellLayout.detailSideCol}>
+          {manage ? <BuilderV2OrderFacts items={deliveryFacts} title="Детали" /> : null}
+        </aside>
+      </div>
+    </> : null
     const shopOrderDetail = Boolean(props.app.shop && !crm && !inventoryItem)
     return <div className={`${styles.canvasBlocks} ${ui.screenBlocks} ${ui.businessDetail} ${ui.orderDetail}`} data-manage={manage || undefined} data-layout={stack ? 'stack' : undefined} data-shell-detail={shopOrderDetail || stack || undefined}>
       {!manage && showCustomerIdentity && <BuilderV2OrderIdentity title={title || undefined} status={inventoryStatus} amount={undefined} scoped={summary?.scoped} progress={progress} manage={false} />}
       <div className={ui.orderDetailBody}>
         <div className={ui.orderDetailMain}>
-          {manage && (crmDeal || inventoryItem) && triggers
+          {manage && inventoryItem && triggers
+            ? <BuilderV2OrderActionPanel title={actionTitle} mode="reveal" triggers={triggers} identity={revealIdentity} detailBody={inventoryDetailBody} />
+            : null}
+          {manage && crmDeal && triggers
             ? <BuilderV2OrderActionPanel title={actionTitle} mode="reveal" triggers={triggers} identity={revealIdentity} />
             : null}
           {manage && !crmDeal && !inventoryItem && <BuilderV2OrderIdentity status={status} amount={amount} scoped={summary?.scoped} manage />}
-          {inventoryItem && inventory ? <InventoryWarehouseFacts record={props.record} inventory={inventory} unit={inventoryUnit} /> : null}
-          {linesBlock}
-          {manage && <BuilderV2OrderFacts items={deliveryFacts} title={factsTitle} />}
-          {manage && render([...parts.buttonIds, ...parts.otherIds])}
+          {!inventoryItem && linesBlock}
+          {manage && !inventoryItem && <BuilderV2OrderFacts items={deliveryFacts} title={factsTitle} />}
+          {manage && !inventoryItem && render([...parts.buttonIds, ...parts.otherIds])}
         </div>
         {manage && (crmDeal || inventoryItem) ? null : manage && parts.processingFormId
           ? <BuilderV2OrderActionPanel title={actionTitle} mode={actionMode}>{render([parts.processingFormId])}</BuilderV2OrderActionPanel>

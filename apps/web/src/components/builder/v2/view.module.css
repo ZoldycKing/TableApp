@@ -2199,6 +2199,31 @@ button.recordButton:hover strong { color: var(--v2-accent, #456849); }
   width: 100%;
 }
 
+/* Shared detail skeleton: one surface, thin dividers — keep shop two-column manage intact. */
+.orderDetail[data-shell-detail] {
+  gap: 0;
+  background: var(--v2-surface, #fff);
+  border: 1px solid color-mix(in srgb, var(--v2-line, #dce2d6) 88%, transparent);
+  border-radius: 14px;
+  overflow: clip;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--v2-ink, #253c2d) 4%, transparent);
+}
+
+.orderDetail[data-shell-detail] :is(.orderIdentity, .orderLines, .orderLinesPanel, .orderFacts, .facts, .orderActionPanel, .orderSummaryCard) {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+}
+
+.orderDetail[data-shell-detail] :is(.orderIdentity, .orderLines, .orderLinesPanel, .orderFacts, .facts) {
+  border-bottom: 1px solid var(--v2-line, #dce2d6);
+}
+
+.orderDetail[data-shell-detail] .orderDetailBody {
+  gap: 0;
+}
+
 @media (max-width: 720px) {
   .orderDetail[data-layout="detail"][data-manage] {
     padding-bottom: 0;

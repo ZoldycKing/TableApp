@@ -100,18 +100,21 @@ export function buildListShellMetrics(input: ShellMetricsInput): ShellMetric[] {
       const whKey = typeof wh === 'string' ? wh : Array.isArray(wh) ? wh.find((id): id is string => typeof id === 'string') : ''
       if (whKey) warehouses.add(whKey)
     }
-    const below = lowStockCount != null && lowStockCount > 0 ? lowStockCount : low
+    const below = lowStockCount != null ? lowStockCount : low
     return [
-      { key: 'total', value: formatShellCount(total, 'товар', 'товара', 'товаров'), caption: 'В каталоге' },
-      { key: 'value', value: stockValue > 0 ? formatShellMoney(stockValue) : '—', caption: 'Стоимость остатков' },
+      { key: 'value', value: stockValue > 0 ? formatShellMoney(stockValue) : '—', caption: 'Стоимость остатка' },
       {
         key: 'low',
         value: String(below),
         caption: 'Ниже минимума',
-        ...(below > 0 ? { pill: 'Внимание', tone: 'rose' as const } : {}),
+        ...(below > 0 ? { pill: 'Нужно заказать', tone: 'rose' as const } : {}),
       },
-      { key: 'wh', value: String(warehouses.size || '—'), caption: 'Складов в выборке' },
-    ].slice(0, 4)
+      {
+        key: 'wh',
+        value: String(warehouses.size || total),
+        caption: warehouses.size ? 'Складов' : 'Товаров в списке',
+      },
+    ]
   }
 
   if (kind === 'inventory-movements' && inventory) {
@@ -193,8 +196,11 @@ export function buildListShellMetrics(input: ShellMetricsInput): ShellMetric[] {
   }
 
   if (kind === 'crm-clients') {
+    const withPhone = rows.filter(row => Object.values(row.values).some(value => typeof value === 'string' && /\+?\d[\d\s()-]{6,}/.test(value))).length
     return [
       { key: 'clients', value: formatShellCount(total, 'клиент', 'клиента', 'клиентов'), caption: 'В базе' },
+      { key: 'loaded', value: String(rows.length), caption: 'В текущем списке' },
+      ...(withPhone ? [{ key: 'phone', value: String(withPhone), caption: 'С телефоном' }] : []),
     ]
   }
 

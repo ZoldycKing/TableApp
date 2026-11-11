@@ -1276,13 +1276,10 @@ export function AppV2Renderer(props: AppV2RendererProps) {
         : <button key={node.id} type="button" className={node.variant === 'danger' ? styles.danger : styles.secondary} disabled>{node.label}</button>)}
     </div> : null
     const countMetrics = [
-      { key: 'warehouse', value: warehouse || '—', caption: 'Склад' },
-      { key: 'date', value: when || '—', caption: 'Дата' },
-      { key: 'author', value: author || '—', caption: 'Автор' },
       { key: 'products', value: productCount || '—', caption: 'Товаров' },
       { key: 'diff', value: discrepancy || '—', caption: 'Расхождений' },
-      { key: 'shortage', value: shortage ? `−${shortage}` : '—', caption: 'Недостача', tone: shortage ? 'rose' as const : undefined },
-      { key: 'surplus', value: surplus ? `+${surplus}` : '—', caption: 'Излишек', tone: surplus ? 'mint' as const : undefined },
+      { key: 'shortage', value: shortage ? `−${shortage}` : '—', caption: 'Недостача', ...(shortage ? { tone: 'rose' as const } : {}) },
+      { key: 'surplus', value: surplus ? `+${surplus}` : '—', caption: 'Излишек', ...(surplus ? { tone: 'mint' as const } : {}) },
     ]
     return <div className={`${styles.canvasBlocks} ${ui.purchaseCard} ${ui.countCard}`} data-draft={draft || undefined}>
       <DetailCardShell
@@ -1356,10 +1353,9 @@ export function AppV2Renderer(props: AppV2RendererProps) {
     </div> : null
     const purchaseMetrics = [
       { key: 'amount', value: amount || '—', caption: 'Сумма' },
-      { key: 'supplier', value: supplier || '—', caption: 'Поставщик' },
+      { key: 'count', value: count || '—', caption: 'Позиций' },
       { key: 'warehouse', value: warehouse || '—', caption: 'Склад' },
       { key: 'date', value: when || '—', caption: 'Дата' },
-      { key: 'count', value: count || '—', caption: 'Позиций' },
     ]
     return <div className={`${styles.canvasBlocks} ${ui.purchaseCard}`}>
       <DetailCardShell
@@ -1590,7 +1586,8 @@ export function AppV2Renderer(props: AppV2RendererProps) {
           due,
           client: clientFact,
         }
-    return <div className={`${styles.canvasBlocks} ${ui.screenBlocks} ${ui.businessDetail} ${ui.orderDetail}`} data-manage={manage || undefined} data-layout={stack ? 'detail' : undefined}>
+    const shopOrderDetail = Boolean(props.app.shop && !crm && !inventoryItem)
+    return <div className={`${styles.canvasBlocks} ${ui.screenBlocks} ${ui.businessDetail} ${ui.orderDetail}`} data-manage={manage || undefined} data-layout={stack ? 'detail' : undefined} data-shell-detail={shopOrderDetail || stack || undefined}>
       {!manage && showCustomerIdentity && <BuilderV2OrderIdentity title={title || undefined} status={inventoryStatus} amount={undefined} scoped={summary?.scoped} progress={progress} manage={false} />}
       <div className={ui.orderDetailBody}>
         <div className={ui.orderDetailMain}>

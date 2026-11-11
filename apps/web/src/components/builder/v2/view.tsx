@@ -898,30 +898,26 @@ export function AppV2Renderer(props: AppV2RendererProps) {
     return <div className={`${styles.canvasBlocks} ${ui.purchaseCard}`}>
       <section className={`${presentation.panel} ${ui.orderIdentity}`} data-manage aria-label="Главное о заказе">
         <div className={ui.orderIdentityMain}>
-          <div className={ui.productIdentity}>
-            <div className={ui.productIdentityCopy}>
-              {hasActions ? <div className={ui.purchaseCardActions}>
-                {editFormId ? render([editFormId]) : null}
-                {primaryAction ? (published
-                  ? <PublishedV2Button node={primaryAction} screenId={props.screenId} recordId={purchaseRecord.id} refreshOnSuccess buttonClassName={styles.primary} />
-                  : <button type="button" className={styles.primary} disabled>{primaryAction.label}</button>) : null}
-                {secondaryActions.map(node => published
-                  ? <PublishedV2Button key={node.id} node={node} screenId={props.screenId} recordId={purchaseRecord.id} refreshOnSuccess buttonClassName={styles.secondary} />
-                  : <button key={node.id} type="button" className={styles.secondary} disabled>{node.label}</button>)}
-              </div> : null}
-              <div className={ui.orderIdentityMeta}>
-                {amount ? <div className={ui.heroAmount} data-bare><span>Сумма</span><strong>{amount}</strong></div> : null}
-                {status ? <span className={ui.heroStatus} data-tone={builderV2StatusTone(status)}>{status}</span> : null}
-              </div>
-              <div className={ui.orderIdentityFacts}>
-                <div className={ui.orderIdentityFact}><span>Поставщик</span><strong>{supplier || '—'}</strong></div>
-                <div className={ui.orderIdentityFact}><span>Склад</span><strong>{warehouse || '—'}</strong></div>
-                <div className={ui.orderIdentityFact}><span>Дата</span><strong>{when || '—'}</strong></div>
-                <div className={ui.orderIdentityFact}><span>Позиций</span><strong>{count || '—'}</strong></div>
-              </div>
-              {comment ? <p className={ui.purchaseComment}>{comment}</p> : null}
-            </div>
+          {hasActions ? <div className={ui.purchaseCardActions}>
+            {editFormId ? render([editFormId]) : null}
+            {primaryAction ? (published
+              ? <PublishedV2Button node={primaryAction} screenId={props.screenId} recordId={purchaseRecord.id} refreshOnSuccess buttonClassName={styles.primary} />
+              : <button type="button" className={styles.primary} disabled>{primaryAction.label}</button>) : null}
+            {secondaryActions.map(node => published
+              ? <PublishedV2Button key={node.id} node={node} screenId={props.screenId} recordId={purchaseRecord.id} refreshOnSuccess buttonClassName={styles.secondary} />
+              : <button key={node.id} type="button" className={styles.secondary} disabled>{node.label}</button>)}
+          </div> : null}
+          <div className={ui.orderIdentityMeta}>
+            {amount ? <div className={ui.heroAmount} data-bare><span>Сумма</span><strong>{amount}</strong></div> : null}
+            {status ? <span className={ui.heroStatus} data-tone={builderV2StatusTone(status)}>{status}</span> : null}
           </div>
+          <div className={ui.orderIdentityFacts}>
+            <div className={ui.orderIdentityFact}><span>Поставщик</span><strong>{supplier || '—'}</strong></div>
+            <div className={ui.orderIdentityFact}><span>Склад</span><strong>{warehouse || '—'}</strong></div>
+            <div className={ui.orderIdentityFact}><span>Дата</span><strong>{when || '—'}</strong></div>
+            <div className={ui.orderIdentityFact}><span>Позиций</span><strong>{count || '—'}</strong></div>
+          </div>
+          {comment ? <p className={ui.purchaseComment}>{comment}</p> : null}
         </div>
       </section>
       {linesId ? <div className={`${presentation.panel} ${ui.orderLinesPanel}`}>{render([linesId])}</div> : null}

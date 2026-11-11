@@ -95,12 +95,12 @@ body {
 }
 
 /* The site, account and portalled dialogs share one type family.
- * Keep tracking, but restore word gaps so one-letter prepositions
- * («О сделке», «к разговору») don't optically fuse with the next word. */
+ * Manrope's space is ~0.2em; negative tracking makes one-letter
+ * prepositions («О сделке», «к разговору») look fused — pad word gaps. */
 h1, h2, h3 {
   font-family: var(--font-sans);
   letter-spacing: -0.018em;
-  word-spacing: 0.08em;
+  word-spacing: 0.35em;
 }
 
 .accent-word {

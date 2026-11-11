@@ -586,7 +586,7 @@
   font-size: 15px;
   font-weight: 750;
   letter-spacing: -0.012em;
-  word-spacing: 0.06em;
+  word-spacing: 0.32em;
 }
 
 .detailSectionBody {
@@ -690,10 +690,13 @@
 }
 
 /* Phone/email links must not inflate KV row height above siblings. */
-.detailBody :global([class*='contactLink']) {
-  min-height: 0;
-  padding-block: 0;
-  margin-block: 0;
+.detailBody :global([class*='orderFact'] a),
+.detailBody :global([class*='orderFact'] button),
+.detailBody :global([class*='orderFact'] [class*='contactLink']) {
+  min-height: 0 !important;
+  padding-block: 0 !important;
+  margin-block: 0 !important;
+  line-height: inherit;
   align-items: baseline;
 }
 

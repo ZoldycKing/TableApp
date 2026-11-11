@@ -71,7 +71,7 @@ export async function readPublishedV2OpenPurchaseTotalAction(slug:string,value:u
   try{return {ok:true,...await readPublishedV2OpenPurchaseTotal(slug,{revision:String(parsed.revision)})}}catch(error){return failure(error)}
 }
 export async function readPublishedV2ClientDealStatsAction(slug:string,value:unknown):Promise<
-  {ok:true;stats:Record<string,{deals:number;sum:number;lastContact:string}>;openDeals:number;pipeline:number}|{ok:false;error:string}
+  {ok:true;stats:Record<string,{deals:number;sum:number;lastContact:string}>;openDeals:number;pipeline:number;dueToday:number;dueOverdue:number}|{ok:false;error:string}
 >{
   if(appDefinitionInputError(value)||!value||typeof value!=='object'||Array.isArray(value))return {ok:false,error:'Сделки недоступны'}
   const parsed=value as Record<string,unknown>

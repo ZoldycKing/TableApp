@@ -291,6 +291,10 @@ export async function readPublishedV2ClientDealStats(slug:string,request:{revisi
     const stats:Record<string,{deals:number;sum:number;lastContact:string}>={}
     let openDeals=0
     let pipeline=0
+    let dueToday=0
+    let dueOverdue=0
+    const startOfToday=(()=>{const d=new Date();d.setHours(0,0,0,0);return d.getTime()})()
+    const endOfToday=startOfToday+86_400_000-1
     for(const row of stored){
       const data=row.data as Record<string,unknown>
       const clientRaw=data[crm.clientRelationFieldId]
@@ -308,11 +312,18 @@ export async function readPublishedV2ClientDealStats(slug:string,request:{revisi
         current.sum+=sum
         openDeals+=1
         pipeline+=sum
+        if(due){
+          const dueMs=Date.parse(due)
+          if(Number.isFinite(dueMs)){
+            if(dueMs<startOfToday)dueOverdue+=1
+            else if(dueMs<=endOfToday)dueToday+=1
+          }
+        }
       }
       if(due&&(!current.lastContact||due>current.lastContact))current.lastContact=due
       stats[clientId]=current
     }
-    return {stats,openDeals,pipeline}
+    return {stats,openDeals,pipeline,dueToday,dueOverdue}
   })
 }
 

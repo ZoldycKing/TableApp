@@ -7,6 +7,8 @@ export type ShellMetric = {
   key: string
   value: ReactNode
   caption: string
+  /** Small context under the value (warehouse, formula, …). */
+  note?: ReactNode
   pill?: ReactNode
   tone?: 'rose' | 'amber' | 'mint'
   wide?: boolean
@@ -64,6 +66,7 @@ export function ListScreenShell({
         {visibleMetrics.map(metric => <div key={metric.key} className={shell.metric} data-wide={metric.wide || undefined}>
           <p className={shell.metricValue}>{metric.value}</p>
           <p className={shell.metricCaption}>{metric.caption}</p>
+          {metric.note ? <p className={shell.metricNote}>{metric.note}</p> : null}
           {metric.pill ? <span className={shell.metricPill} data-tone={metric.tone}>{metric.pill}</span> : null}
         </div>)}
       </div> : null}
@@ -118,7 +121,10 @@ export function ShellSearchField({
   </label>
 }
 
-/** Detail card: identity header → metrics → divider sections in one container. */
+/**
+ * Detail page skeleton (product.html / shared cards):
+ * back above the card → hero (media | title+chips | actions) → metric tiles → body cols.
+ */
 export function DetailCardShell({
   media,
   title,
@@ -143,7 +149,7 @@ export function DetailCardShell({
   stickyActions?: ReactNode
   /** `product` = large photo + chips + desktop actions beside the title (inventory item). */
   layout?: 'card' | 'product'
-  /** In-content back control («← Товары»), replaces chrome back on shell pages. */
+  /** In-content back control («← Товары»), sits above the card on the page grid. */
   back?: { label: string; onClick: () => void }
 }) {
   const visibleMetrics = metrics?.filter(metric => {
@@ -152,32 +158,37 @@ export function DetailCardShell({
   }) ?? []
   const metricCount = visibleMetrics.length
   const product = layout === 'product'
-  return <div className={shell.detail} data-layout={product ? 'product' : 'detail'}>
+  return <div className={shell.detailPage} data-layout={product ? 'product' : 'detail'}>
     {back ? <button type="button" className={shell.detailBack} onClick={back.onClick}>← {back.label}</button> : null}
-    <header className={shell.detailHead} data-product={product || undefined}>
-      <div className={shell.detailIdentity} data-plain={!media || undefined} data-product={product || undefined}>
-        {media ?? null}
-        <div className={shell.detailCopy}>
-          {badge}
-          <div className={shell.detailTitleRow}>
-            <h2 className={shell.detailTitle}>{title}</h2>
-            {actions ? <div className={shell.detailActions} data-desktop-only={product || undefined}>{actions}</div> : null}
+    <div className={shell.detail} data-layout={product ? 'product' : 'detail'}>
+      <header className={shell.detailHead} data-product={product || undefined}>
+        <div className={shell.detailIdentity} data-plain={!media || undefined} data-product={product || undefined}>
+          {media ?? null}
+          <div className={shell.detailCopy}>
+            <div className={shell.detailTitleRow}>
+              <div className={shell.detailTitleBlock}>
+                <h2 className={shell.detailTitle}>{title}</h2>
+                {badge}
+              </div>
+              {actions ? <div className={shell.detailActions} data-desktop-only={product || undefined}>{actions}</div> : null}
+            </div>
+            {chips ? <div className={shell.detailChips}>{chips}</div> : null}
+            {subtitle ? <p className={shell.detailSubtitle}>{subtitle}</p> : null}
           </div>
-          {chips ? <div className={shell.detailChips}>{chips}</div> : null}
-          {subtitle ? <p className={shell.detailSubtitle}>{subtitle}</p> : null}
         </div>
-      </div>
-      {!product && actions ? <div className={shell.detailActions}>{actions}</div> : null}
-    </header>
-    {metricCount ? <div className={shell.detailMetrics} style={{ '--shell-metrics': metricCount } as CSSProperties} data-count={metricCount}>
-      {visibleMetrics.map(metric => <div key={metric.key} className={shell.metric}>
-        <p className={shell.metricValue} data-tone={metric.tone}>{metric.value}</p>
-        <p className={shell.metricCaption}>{metric.caption}</p>
-        {metric.pill ? <span className={shell.metricPill}>{metric.pill}</span> : null}
-      </div>)}
-    </div> : null}
-    {children ? <div className={shell.detailBody} data-product={product || undefined}>{children}</div> : null}
-    {stickyActions ? <div className={shell.stickyBar} data-open>{stickyActions}</div> : null}
+        {!product && actions ? <div className={shell.detailActions}>{actions}</div> : null}
+      </header>
+      {metricCount ? <div className={shell.detailMetrics} style={{ '--shell-metrics': metricCount } as CSSProperties} data-count={metricCount} data-tiles={product || undefined}>
+        {visibleMetrics.map(metric => <div key={metric.key} className={shell.metric} data-tile={product || undefined}>
+          <p className={shell.metricCaption}>{metric.caption}</p>
+          <p className={shell.metricValue} data-tone={metric.tone}>{metric.value}</p>
+          {metric.note ? <p className={shell.metricNote}>{metric.note}</p> : null}
+          {metric.pill ? <span className={shell.metricPill}>{metric.pill}</span> : null}
+        </div>)}
+      </div> : null}
+      {children ? <div className={shell.detailBody} data-product={product || undefined}>{children}</div> : null}
+      {stickyActions ? <div className={shell.stickyBar} data-open>{stickyActions}</div> : null}
+    </div>
   </div>
 }
 

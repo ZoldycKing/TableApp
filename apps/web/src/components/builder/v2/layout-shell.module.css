@@ -12,7 +12,8 @@
   --shell-bg: var(--v2-bg, #f8faf6);
   display: grid;
   gap: 14px;
-  width: min(100%, var(--shell-max));
+  width: 100%;
+  max-width: var(--shell-max);
   margin-inline: auto;
   min-width: 0;
 }
@@ -128,6 +129,14 @@
   font-weight: 650;
 }
 
+.metricNote {
+  margin: 0;
+  color: var(--shell-muted);
+  font-size: 12px;
+  line-height: 1.35;
+  font-weight: 550;
+}
+
 .metricPill {
   display: inline-flex;
   width: max-content;
@@ -163,15 +172,22 @@
 
 .filterTabs {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 6px;
   min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
 }
+
+.filterTabs::-webkit-scrollbar { display: none; }
 
 .filterTab {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  flex: 0 0 auto;
   min-height: 34px;
   padding: 0 12px;
   border: 1px solid transparent;
@@ -181,6 +197,7 @@
   font: inherit;
   font-size: 13px;
   font-weight: 650;
+  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -316,22 +333,27 @@
   border-right: 0;
 }
 
-.detail {
+/* ── Detail page: back above card, full content width ── */
+.detailPage {
+  --shell-max: min(100%, var(--app-content-width, 1480px));
+  --shell-pad-x: clamp(16px, 3cqw, 28px);
+  --shell-line: var(--v2-line, #dce2d6);
+  --shell-muted: var(--v2-muted, #687568);
+  --shell-ink: var(--v2-ink, #253c2d);
+  --shell-surface: var(--v2-surface, #fff);
+  --shell-bg: var(--v2-bg, #f8faf6);
   display: grid;
-  gap: 0;
+  gap: 12px;
+  width: 100%;
+  max-width: var(--shell-max);
+  margin-inline: 0;
   min-width: 0;
-  width: min(100%, var(--shell-max));
-  margin-inline: auto;
-  background: var(--shell-surface);
-  border: 1px solid color-mix(in srgb, var(--shell-line) 88%, transparent);
-  border-radius: 14px;
-  overflow: clip;
-  box-shadow: 0 1px 0 color-mix(in srgb, var(--shell-ink) 4%, transparent);
+  align-content: start;
 }
 
 .detailBack {
   justify-self: start;
-  margin: 14px var(--shell-pad-x) 0;
+  margin: 0;
   padding: 0;
   border: 0;
   background: transparent;
@@ -343,36 +365,26 @@
   cursor: pointer;
 }
 
+.detail {
+  display: grid;
+  gap: 0;
+  min-width: 0;
+  width: 100%;
+  background: var(--shell-surface);
+  border: 1px solid color-mix(in srgb, var(--shell-line) 88%, transparent);
+  border-radius: 14px;
+  overflow: clip;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--shell-ink) 4%, transparent);
+}
+
+/* Product: page grid of cards (hero / metrics / cols), not one shrink-wrapped plate. */
 .detail[data-layout='product'] {
   background: transparent;
   border: 0;
   border-radius: 0;
   box-shadow: none;
   overflow: visible;
-}
-
-.detail[data-layout='product'] .detailHead {
-  padding-inline: 0;
-  padding-top: 8px;
-}
-
-.detail[data-layout='product'] .detailMetrics {
-  border: 1px solid var(--shell-line);
-  border-radius: 14px;
-  overflow: clip;
-  background: var(--shell-surface);
-  margin-bottom: 16px;
-}
-
-.detail[data-layout='product'] .detailBody {
-  border: 1px solid var(--shell-line);
-  border-radius: 14px;
-  overflow: clip;
-  background: var(--shell-surface);
-}
-
-.detail[data-layout='product'] .detailBack {
-  margin-inline: 0;
+  gap: 16px;
 }
 
 .detailHead {
@@ -384,9 +396,13 @@
   border-bottom: 1px solid var(--shell-line);
 }
 
-.detailHead[data-product] {
+.detail[data-layout='product'] .detailHead {
   grid-template-columns: minmax(0, 1fr);
-  border-bottom: 0;
+  padding: 18px var(--shell-pad-x);
+  border: 1px solid var(--shell-line);
+  border-radius: 14px;
+  background: var(--shell-surface);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--shell-ink) 4%, transparent);
 }
 
 .detailIdentity {
@@ -422,6 +438,24 @@
   min-width: 0;
 }
 
+.detailTitleBlock {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+  min-width: 0;
+  flex: 1 1 12rem;
+}
+
+.detailTitleBlock :global(.heroStatus) {
+  flex: 0 0 auto;
+  width: max-content;
+  max-width: 100%;
+  margin: 0;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
 .detailTitle {
   margin: 0;
   color: var(--shell-ink);
@@ -429,7 +463,6 @@
   font-weight: 750;
   line-height: 1.25;
   letter-spacing: -0.02em;
-  flex: 1 1 12rem;
   min-width: 0;
 }
 
@@ -465,8 +498,37 @@
   border-bottom: 1px solid var(--shell-line);
 }
 
+.detailMetrics[data-tiles] {
+  border: 0;
+  gap: 12px;
+  background: transparent;
+}
+
+.detailMetrics[data-tiles] .metric,
+.metric[data-tile] {
+  border: 1px solid var(--shell-line);
+  border-radius: 14px;
+  background: var(--shell-surface);
+  padding: 16px;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--shell-ink) 4%, transparent);
+  gap: 6px;
+}
+
+.detailMetrics[data-tiles] .metric:nth-child(2n),
+.metric[data-tile]:nth-child(2n) { border-right: 1px solid var(--shell-line); }
+
 .detailMetrics .metricValue[data-tone='rose'] {
   color: color-mix(in srgb, #b42318 82%, var(--shell-ink));
+}
+.detailMetrics .metricValue[data-tone='amber'] {
+  color: color-mix(in srgb, #b45309 82%, var(--shell-ink));
+}
+.detailMetrics .metricValue[data-tone='mint'] {
+  color: color-mix(in srgb, #047857 82%, var(--shell-ink));
+}
+
+.detailMetrics[data-tiles] .metricValue {
+  font-size: clamp(1.35rem, 2.8cqw, 1.75rem);
 }
 
 .detailBody {
@@ -475,8 +537,42 @@
   min-width: 0;
 }
 
-.detailBody[data-product] {
+.detailBody :global(.orderLinesPanel),
+.detailBody :global(.orderLines),
+.detailBody :global(.orderFacts),
+.detailBody :global(.facts),
+.detailBody :global(.timeline),
+.detailBody :global(.plainList),
+.detailBody :global(.groupedRecords) {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+}
+
+.detail[data-layout='product'] .detailBody {
   gap: 0;
+  border: 0;
+  background: transparent;
+  overflow: visible;
+}
+
+/* Non-product detail: 2fr/1fr body becomes sibling cards on the page band. */
+.detail:not([data-layout='product']) .detailBody:has(> .detailCols) {
+  padding: 16px;
+  background: color-mix(in srgb, var(--shell-bg) 70%, var(--shell-surface));
+  border-top: 1px solid var(--shell-line);
+}
+
+.detail:not([data-layout='product']) .detailMainCol > :global(section),
+.detail:not([data-layout='product']) .detailSideCol > :global(section),
+.detail:not([data-layout='product']) .detailMainCol > .detailSection,
+.detail:not([data-layout='product']) .detailSideCol > .detailSection {
+  border: 1px solid var(--shell-line);
+  border-radius: 14px;
+  background: var(--shell-surface);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--shell-ink) 4%, transparent);
+  padding: 16px var(--shell-pad-x);
 }
 
 .detailSection {
@@ -498,20 +594,44 @@
 
 .detailCols {
   display: grid;
-  gap: 0;
+  gap: 16px;
   min-width: 0;
+  align-items: start;
 }
 
 .detailMainCol,
 .detailSideCol {
   display: grid;
-  gap: 0;
+  gap: 16px;
   min-width: 0;
   align-content: start;
 }
 
-.detailSideCol {
-  border-top: 1px solid var(--shell-line);
+/* Product cols: each section is its own framed card with matching heading edge. */
+.detail[data-layout='product'] .detailMainCol > :global(section),
+.detail[data-layout='product'] .detailSideCol > :global(section),
+.detail[data-layout='product'] .detailMainCol > .detailSection,
+.detail[data-layout='product'] .detailSideCol > .detailSection {
+  border: 1px solid var(--shell-line);
+  border-radius: 14px;
+  background: var(--shell-surface);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--shell-ink) 4%, transparent);
+  padding: 16px var(--shell-pad-x);
+  border-bottom: 1px solid var(--shell-line);
+}
+
+.detail[data-layout='product'] .detailMainCol > .detailSection:last-child,
+.detail[data-layout='product'] .detailSideCol > .detailSection:last-child {
+  border-bottom: 1px solid var(--shell-line);
+}
+
+.detail[data-layout='product'] .detailSideCol :global(.orderFacts),
+.detail[data-layout='product'] .detailSideCol :global(.facts) {
+  border: 1px solid var(--shell-line);
+  border-radius: 14px;
+  background: var(--shell-surface);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--shell-ink) 4%, transparent);
+  padding: 16px var(--shell-pad-x);
 }
 
 .detail[data-layout='product'] .detailSideCol :global(.orderFactsGrid) {
@@ -547,6 +667,13 @@
   white-space: nowrap;
 }
 
+.detail[data-layout='product'] .detailSideCol :global(.sectionTitle),
+.detail[data-layout='product'] .detailSectionTitle {
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 750;
+}
+
 @media (min-width: 721px) {
   .summary {
     grid-template-columns: repeat(var(--shell-metrics, 4), minmax(0, 1fr));
@@ -570,17 +697,22 @@
   .detailMetrics {
     grid-template-columns: repeat(var(--shell-metrics, 4), minmax(0, 1fr));
   }
+  .detailMetrics[data-tiles] {
+    grid-template-columns: repeat(var(--shell-metrics, 4), minmax(0, 1fr));
+    gap: 16px;
+  }
+  .detailMetrics[data-tiles] .metric,
+  .metric[data-tile] {
+    border-right: 1px solid var(--shell-line);
+  }
   .detailIdentity[data-product] {
-    grid-template-columns: 220px minmax(0, 1fr);
+    grid-template-columns: minmax(160px, 200px) minmax(0, 1fr);
     gap: 18px 22px;
     align-items: start;
   }
   .detailCols {
-    grid-template-columns: minmax(0, 1.6fr) minmax(14rem, 0.9fr);
-  }
-  .detailSideCol {
-    border-top: 0;
-    border-left: 1px solid var(--shell-line);
+    grid-template-columns: minmax(0, 2fr) minmax(14rem, 1fr);
+    gap: 16px;
   }
   .detailActions[data-desktop-only] { display: inline-flex; }
 }
@@ -598,6 +730,24 @@
   .headerActions > :global(.form) {
     flex: 1 1 auto;
   }
+  /* Mobile list: two selects share the row 50/50; don't overflow the card. */
+  .filterTools {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+  .filterSelects {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    flex: none;
+  }
+  .filterSelects > .filterSearch {
+    flex: none;
+    width: auto;
+    max-width: none;
+    min-width: 0;
+  }
   .detailHead {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -613,6 +763,16 @@
   }
   .detail[data-layout='product'] {
     padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
+  }
+  .detail[data-layout='product'] .detailHead {
+    padding: 16px;
+  }
+  .detailMetrics[data-tiles] {
+    gap: 10px;
+  }
+  .detailMetrics[data-tiles] .metric,
+  .metric[data-tile] {
+    padding: 16px;
   }
   .stickyBar {
     position: sticky;

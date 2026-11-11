@@ -85,6 +85,8 @@ type ShellMetricsInput = {
   openPurchaseTotal?: number | null
   clientOpenDeals?: number
   clientPipelineAmount?: number
+  clientDueToday?: number
+  clientDueOverdue?: number
 }
 
 function rowsOf(input: ShellMetricsInput): readonly AppV2Record[] {
@@ -207,12 +209,25 @@ export function buildListShellMetrics(input: ShellMetricsInput): ShellMetric[] {
   }
 
   if (kind === 'crm-clients') {
+    const dueToday = input.clientDueToday ?? 0
+    const dueOverdue = input.clientDueOverdue ?? 0
+    const dueLabel = dueOverdue > 0
+      ? `${dueOverdue} просрочено`
+      : dueToday > 0
+        ? `${dueToday} сегодня`
+        : 'нет'
     return [
       ...(clientPipelineAmount != null && clientPipelineAmount > 0 ? [{ key: 'pipe', value: formatShellMoney(clientPipelineAmount), caption: 'Сумма сделок' }] : []),
-      { key: 'clients', value: formatShellCount(total, 'клиент', 'клиента', 'клиентов'), caption: 'Клиентов' },
       ...(clientOpenDeals != null && clientOpenDeals > 0
         ? [{ key: 'open', value: formatShellCount(clientOpenDeals, 'сделка', 'сделки', 'сделок'), caption: 'Открытых сделок' }]
         : []),
+      {
+        key: 'due',
+        value: dueOverdue > 0 ? String(dueOverdue) : dueToday > 0 ? String(dueToday) : '—',
+        caption: 'След. контакт',
+        note: dueLabel,
+        ...(dueOverdue > 0 ? { tone: 'rose' as const } : dueToday > 0 ? { tone: 'amber' as const } : {}),
+      },
     ]
   }
 

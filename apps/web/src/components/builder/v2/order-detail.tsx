@@ -271,6 +271,8 @@ export function BuilderV2OrderActionPanel({
     client?: ReactNode
     media?: ReactNode
     productTitle?: string
+    /** CRM deal H1 — routes to DetailCardShell with back + metrics. */
+    dealTitle?: string
     facts?: readonly BuilderV2OrderIdentityFact[]
     chips?: ReactNode
     subtitle?: ReactNode
@@ -368,6 +370,7 @@ export function BuilderV2OrderActionPanel({
     if (identity?.productTitle) {
       const desktopItems = toolbarItems.filter(item => !(item.icon && !item.primary))
       const editIcons = toolbarItems.filter(item => Boolean(item.icon) && !item.primary)
+      const mobileItems = toolbarItems.filter(item => !(item.icon && !item.primary))
       return <>
         <DetailCardShell
           layout="product"
@@ -384,6 +387,44 @@ export function BuilderV2OrderActionPanel({
                 <ProtoIcon name={item.icon!} size={20} />
               </button>
             ))}
+          </>}
+          stickyActions={!active
+            ? <BuilderV2OrderActionToolbar
+                items={[
+                  ...mobileItems,
+                  // Keep pencil reachable from the sticky dock (not only the app header).
+                  ...editIcons.map(item => ({ ...item, primary: false as const })),
+                ]}
+                onOpen={open}
+                dockRef={dockRef}
+                placement="mobile"
+                textOnly
+                collapseMobile
+              />
+            : undefined}
+        >
+          {detailBody}
+        </DetailCardShell>
+        {dialog}
+      </>
+    }
+    if (identity?.dealTitle) {
+      const desktopItems = toolbarItems.filter(item => !(item.icon && !item.primary))
+      const editIcons = toolbarItems.filter(item => Boolean(item.icon) && !item.primary)
+      return <>
+        <DetailCardShell
+          back={identity.back}
+          title={identity.dealTitle}
+          subtitle={identity.subtitle}
+          badge={identity.status ? <span className={ui.heroStatus} data-tone={builderV2StatusTone(identity.status)}>{identity.status}</span> : undefined}
+          metrics={identity.metrics}
+          actions={<>
+            {editIcons.map(item => (
+              <button key={item.id} type="button" className={ui.orderActionIcon} aria-label={item.title} title={item.title} onClick={() => open(item.id)}>
+                <ProtoIcon name={item.icon!} size={20} />
+              </button>
+            ))}
+            <BuilderV2OrderActionToolbar items={desktopItems} onOpen={open} placement="desktop" textOnly />
           </>}
           stickyActions={!active
             ? <BuilderV2OrderActionToolbar items={toolbarItems} onOpen={open} dockRef={dockRef} placement="mobile" textOnly collapseMobile />

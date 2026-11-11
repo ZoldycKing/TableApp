@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import type { AppV2Record } from '@tableapp/schema/app-v2'
+import { purchaseMoney } from '@/lib/purchase-format'
 import { builderV2MediaItems } from './media-values'
 import { InventoryProductThumb } from './record-visuals'
 import { useBuilderV2FormContext } from './form-preview'
@@ -13,6 +14,7 @@ type CountLine = {
   sku?: string
   systemQty: number
   actualQty: number
+  cost: number
   image?: ReturnType<typeof builderV2MediaItems>[number]
 }
 
@@ -20,6 +22,11 @@ function idsOf(value: unknown) {
   if (typeof value === 'string' && value.trim()) return [value.trim()]
   if (!Array.isArray(value)) return []
   return value.filter((item): item is string => typeof item === 'string' && Boolean(item.trim()))
+}
+
+function signedDiff(value: number) {
+  if (!Number.isFinite(value) || value === 0) return '0'
+  return `${value > 0 ? '+' : ''}${value}`
 }
 
 /** Line editor for inventory count forms. Writes `{lines:[{productId,actualQty}]}` into the payload field. */
@@ -30,6 +37,7 @@ export function CountLinesEditor({ record }: { record?: AppV2Record }) {
   const [lines, setLines] = useState<CountLine[]>([])
   const [loading, setLoading] = useState(false)
   const [note, setNote] = useState('')
+  const [onlyDiff, setOnlyDiff] = useState(false)
   const hydrated = useRef<string | null>(null)
   const payloadId = inventory?.countPayloadFieldId
   const createMode = Boolean(inventory?.createCountFormId && context?.scope.formId === inventory.createCountFormId)
@@ -76,6 +84,7 @@ export function CountLinesEditor({ record }: { record?: AppV2Record }) {
         const product = byId.get(productId)
         const systemQty = Number(row.values[inventory.countLineSystemFieldId ?? ''])
         const actualQty = Number(row.values[inventory.countLineActualFieldId ?? ''])
+        const cost = product && inventory.itemCostFieldId ? Number(product.values[inventory.itemCostFieldId]) : 0
         const image = product && inventory.itemPhotoFieldId
           ? builderV2MediaItems(product.values[inventory.itemPhotoFieldId], published.slug).find(item => item.image)
           : undefined
@@ -91,6 +100,7 @@ export function CountLinesEditor({ record }: { record?: AppV2Record }) {
           sku,
           systemQty: Number.isFinite(systemQty) ? Math.trunc(systemQty) : 0,
           actualQty: Number.isFinite(actualQty) ? Math.trunc(actualQty) : (Number.isFinite(systemQty) ? Math.trunc(systemQty) : 0),
+          cost: Number.isFinite(cost) && cost >= 0 ? cost : 0,
           image,
         }]
       })
@@ -119,37 +129,68 @@ export function CountLinesEditor({ record }: { record?: AppV2Record }) {
       : item))
   }
 
+  const visible = onlyDiff ? lines.filter(line => line.actualQty !== line.systemQty) : lines
+
   return <div className={ui.countEditor} data-count-field="lines" data-mode="edit">
     <div className={ui.purchaseEditorHead}>
       <h3>Позиции</h3>
-      {lines.length ? <span>{lines.length} поз.</span> : null}
+      <div className={ui.countEditorTools}>
+        {lines.length ? <span>{lines.length} поз.</span> : null}
+        {lines.some(line => line.actualQty !== line.systemQty) ? <label className={ui.countOnlyDiff}>
+          <input type="checkbox" checked={onlyDiff} onChange={event => setOnlyDiff(event.target.checked)} />
+          Только расхождения
+        </label> : null}
+      </div>
     </div>
     {error ? <p role="alert" className={ui.dataError}>{error}</p> : null}
     {note ? <p className={ui.hint}>{note}</p> : null}
     {loading ? <p className={ui.hint}>Загружаем позиции…</p> : null}
     {!loading && !lines.length ? <p className={ui.hint}>Нет позиций для пересчёта</p> : null}
-    {lines.length ? <ul className={ui.purchaseEditorLines}>
-      {lines.map(line => <li key={line.productId} className={`${ui.purchaseEditorLine} ${ui.countEditorLine}`}>
-        <InventoryProductThumb image={line.image} size="journal" label={line.name} />
-        <div className={ui.purchaseEditorCopy}>
-          <strong>{line.name}</strong>
-          {line.sku ? <span className={ui.purchaseEditorSku}>{line.sku}</span> : null}
-          <span className={ui.countEditorSystem}>Учёт: {line.systemQty}</span>
-        </div>
-        <label className={ui.purchaseEditorField} data-field="actual">
-          <span>Факт</span>
-          <input
-            type="number"
-            inputMode="numeric"
-            min={0}
-            max={1000000}
-            step={1}
-            value={line.actualQty}
-            aria-label={`Факт: ${line.name}`}
-            onChange={event => updateActual(line.productId, event.target.value)}
-          />
-        </label>
-      </li>)}
-    </ul> : null}
+    {!loading && lines.length && !visible.length ? <p className={ui.hint}>Нет расхождений</p> : null}
+    {visible.length ? <>
+      <div className={ui.countLineHeader} aria-hidden="true">
+        <span>Товар</span>
+        <span>Учёт</span>
+        <span>Факт</span>
+        <span>Разница</span>
+        <span>Сумма разницы</span>
+      </div>
+      <ul className={ui.purchaseEditorLines}>
+        {visible.map(line => {
+          const diff = line.actualQty - line.systemQty
+          const amount = diff * line.cost
+          const tone = diff < 0 ? 'rose' : diff > 0 ? 'mint' : undefined
+          return <li key={line.productId} className={`${ui.purchaseEditorLine} ${ui.countEditorLine}`} data-diff={diff !== 0 || undefined} data-tone={tone}>
+            <InventoryProductThumb image={line.image} size="journal" label={line.name} />
+            <div className={ui.purchaseEditorCopy}>
+              <strong>{line.name}</strong>
+              {line.sku ? <span className={ui.purchaseEditorSku}>{line.sku}</span> : null}
+              <span className={ui.countEditorMobileMeta}>
+                <span>Учёт {line.systemQty}</span>
+                {diff !== 0 ? <span className={ui.countDiffBadge} data-tone={tone}>{signedDiff(diff)}</span> : null}
+              </span>
+            </div>
+            <span className={ui.countEditorCol} data-col="system">{line.systemQty}</span>
+            <label className={ui.purchaseEditorField} data-field="actual">
+              <span>Факт</span>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                max={1000000}
+                step={1}
+                value={line.actualQty}
+                aria-label={`Факт: ${line.name}`}
+                onChange={event => updateActual(line.productId, event.target.value)}
+              />
+            </label>
+            <span className={ui.countEditorCol} data-col="diff" data-tone={tone}>{signedDiff(diff)}</span>
+            <span className={ui.countEditorCol} data-col="amount" data-tone={tone}>
+              {amount === 0 ? '—' : `${amount > 0 ? '+' : '−'}${purchaseMoney(Math.abs(amount))}`}
+            </span>
+          </li>
+        })}
+      </ul>
+    </> : null}
   </div>
 }

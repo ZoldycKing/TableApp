@@ -25,10 +25,11 @@ export function AppV2Preview({ app, tables, businessApps, actor, initialScreen, 
   const sectionId = parent?.screenId ?? purchaseSection
   const suppliersHub = Boolean(inventory && page && (page.id === inventory.suppliersScreenId || page.id === inventory.createSupplierScreenId))
   const supplierCard = Boolean(inventory && page && page.id === inventory.supplierScreenId)
+  const reorderHub = Boolean(inventory && page && page.id === inventory.reorderScreenId)
   const backTarget = supplierCard && inventory?.suppliersScreenId
     ? inventory.suppliersScreenId
     : sectionId
-  const showBack = Boolean(backTarget && (page?.contextTableId || suppliersHub || supplierCard))
+  const showBack = Boolean(backTarget && (page?.contextTableId || suppliersHub || supplierCard || reorderHub))
   const frameTitle = inventory && page?.id === inventory.itemScreenId ? 'Товар'
     : inventory && page?.id === inventory.purchaseScreenId ? 'Заказ'
       : (record.title ?? page?.name ?? 'Экран')

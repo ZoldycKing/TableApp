@@ -43,10 +43,11 @@ export function PublishedV2Runtime({data}:{data:Data}){
   const sectionId = data.sectionId ?? purchaseSection
   const suppliersHub = Boolean(inventory && (screenId === inventory.suppliersScreenId || screenId === inventory.createSupplierScreenId))
   const supplierCard = Boolean(inventory && screenId === inventory.supplierScreenId)
+  const reorderHub = Boolean(inventory && screenId === inventory.reorderScreenId)
   const backTarget = supplierCard && inventory?.suppliersScreenId
     ? inventory.suppliersScreenId
     : sectionId ?? home
-  const showBack = Boolean(backTarget && (page.contextTableId || suppliersHub || supplierCard))
+  const showBack = Boolean(backTarget && (page.contextTableId || suppliersHub || supplierCard || reorderHub))
   // Full product name lives under the photo; keep the chrome title short so stock stays in view.
   const frameTitle = app.inventory && screenId === app.inventory.itemScreenId ? 'Товар'
     : app.inventory && screenId === app.inventory.purchaseScreenId ? 'Заказ'

@@ -63,13 +63,13 @@ export async function loadPublishedV2Page(slug:string,request:{screen?:string;ro
     if (inventory && screen.id === inventory.itemsScreenId && inventory.createItemFormId) {
       await visit([inventory.createItemFormId])
     }
-    if (inventory?.createPurchaseFormId && screen.id === inventory.purchasesScreenId) {
+    if (inventory?.createPurchaseFormId && (screen.id === inventory.purchasesScreenId || screen.id === inventory.supplierScreenId)) {
       await visit([inventory.createPurchaseFormId])
     }
     if (inventory?.createSupplierFormId && screen.id === inventory.suppliersScreenId) {
       await visit([inventory.createSupplierFormId])
     }
-    if (inventory && (screen.id === inventory.purchasesScreenId || screen.id === inventory.purchaseScreenId || screen.id === inventory.createPurchaseScreenId)) {
+    if (inventory && (screen.id === inventory.purchasesScreenId || screen.id === inventory.purchaseScreenId || screen.id === inventory.createPurchaseScreenId || screen.id === inventory.supplierScreenId)) {
       const itemsList = app.nodes.find(node => node.type === 'collection' && node.layout === 'list' && app.sources.some(source => source.id === node.sourceId && source.tableId === inventory.itemsTableId && !source.screenTableId))
       if (itemsList && !nodes.some(node => node.id === itemsList.id)) await visit([itemsList.id])
     }

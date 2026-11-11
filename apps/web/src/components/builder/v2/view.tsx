@@ -369,12 +369,17 @@ function useClientDealStats(app: AppV2, crm?: NonNullable<AppV2['crm']> | null) 
   const [rollup, setRollup] = useState<{ openDeals: number; pipeline: number }>({ openDeals: 0, pipeline: 0 })
   useEffect(() => {
     if (!published || !crm?.dealsTableId) return
-    const boardNode = app.nodes.find(node => node.type === 'collection'
-      && app.sources.some(source => source.id === node.sourceId && source.tableId === crm.dealsTableId)
-      && (node.layout === 'kanban' || node.layout === 'list' || node.layout === 'calendar'))
-    if (!boardNode) return
+    const dealNodes = app.nodes.filter(node => node.type === 'collection'
+      && app.sources.some(source => source.id === node.sourceId && source.tableId === crm.dealsTableId))
+    // Prefer a plain list (full page of rows) over kanban columns for rollups.
+    const dealNode = dealNodes.find(node => node.layout === 'list')
+      ?? dealNodes.find(node => node.layout === 'kanban')
+      ?? dealNodes[0]
+    if (!dealNode) return
+    const screenId = app.screens.find(screen => screen.rootIds.includes(dealNode.id))?.id
+      ?? (dealNode.layout === 'kanban' ? crm.boardScreenId : crm.boardScreenId)
     let cancelled = false
-    void published.readData({ nodeId: boardNode.id, screenId: crm.boardScreenId }).then(result => {
+    void published.readData({ nodeId: dealNode.id, screenId }).then(result => {
       if (cancelled || !result.ok) return
       const terminal = new Set(crm.terminalStages ?? [])
       const next = new Map<string, ClientDealStat>()
@@ -408,7 +413,7 @@ function useClientDealStats(app: AppV2, crm?: NonNullable<AppV2['crm']> | null) 
       setRollup({ openDeals, pipeline })
     }).catch(() => {})
     return () => { cancelled = true }
-  }, [published, published?.revision, published?.dataVersion, app.nodes, crm])
+  }, [published, published?.revision, published?.dataVersion, app.nodes, app.screens, crm])
   return { stats, rollup }
 }
 
@@ -930,8 +935,12 @@ export function AppV2Renderer(props: AppV2RendererProps) {
               : null
             if (clientList && crm && row) {
               const name = cell(row, crm.clientTitleFieldId)
-              const contactField = table?.fields.find(field => /контакт/i.test(field.name.trim()) && field.id !== crm.clientTitleFieldId)
-              const contact = contactField ? cell(row, contactField.id) : ''
+              const contactField = crm.clientNameFieldId
+                ?? table?.fields.find(field =>
+                  /^(?:контакт(?:ное лицо)?|имя(?:\s+контакт(?:а|ного)?)?)$/iu.test(field.name.trim())
+                  && field.id !== crm.clientTitleFieldId
+                  && field.id !== crm.clientPhoneFieldId)?.id
+              const contact = contactField && Object.hasOwn(row.values, contactField) ? cell(row, contactField) : ''
               const phone = Object.hasOwn(row.values, crm.clientPhoneFieldId) ? cell(row, crm.clientPhoneFieldId) : ''
               const logoField = table?.fields.find(field => field.type === 'image' && /logo|логотип|фото/iu.test(field.name))
               const logo = logoField ? builderV2MediaItems(row.values[logoField.id], published?.slug).find(item => item.image) : undefined
@@ -1318,6 +1327,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
               : null
             const clientHeader = clientList && !node.recordGroup
               ? <div className={ui.clientListHeader} aria-hidden="true">
+                <span />
                 <span>Клиент</span>
                 <span>Контакт</span>
                 <span>Телефон</span>

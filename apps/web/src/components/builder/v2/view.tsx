@@ -894,24 +894,21 @@ export function AppV2Renderer(props: AppV2RendererProps) {
       const by = formatInventoryAuthor(byRaw) || byRaw
       return [{ ...item, at, by }]
     })
-    const heading = number || 'Заказ'
+    const hasActions = Boolean(editFormId || primaryAction || secondaryActions.length)
     return <div className={`${styles.canvasBlocks} ${ui.purchaseCard}`}>
       <section className={`${presentation.panel} ${ui.orderIdentity}`} data-manage aria-label="Главное о заказе">
         <div className={ui.orderIdentityMain}>
           <div className={ui.productIdentity}>
             <div className={ui.productIdentityCopy}>
-              <div className={ui.productIdentityHead}>
-                <h2 className={ui.productIdentityTitle}>{heading}</h2>
-                <div className={ui.orderIdentityActions}>
-                  {editFormId ? render([editFormId]) : null}
-                  {primaryAction ? (published
-                    ? <PublishedV2Button node={primaryAction} screenId={props.screenId} recordId={purchaseRecord.id} refreshOnSuccess buttonClassName={styles.primary} />
-                    : <button type="button" className={styles.primary} disabled>{primaryAction.label}</button>) : null}
-                  {secondaryActions.map(node => published
-                    ? <PublishedV2Button key={node.id} node={node} screenId={props.screenId} recordId={purchaseRecord.id} refreshOnSuccess buttonClassName={styles.secondary} />
-                    : <button key={node.id} type="button" className={styles.secondary} disabled>{node.label}</button>)}
-                </div>
-              </div>
+              {hasActions ? <div className={ui.purchaseCardActions}>
+                {editFormId ? render([editFormId]) : null}
+                {primaryAction ? (published
+                  ? <PublishedV2Button node={primaryAction} screenId={props.screenId} recordId={purchaseRecord.id} refreshOnSuccess buttonClassName={styles.primary} />
+                  : <button type="button" className={styles.primary} disabled>{primaryAction.label}</button>) : null}
+                {secondaryActions.map(node => published
+                  ? <PublishedV2Button key={node.id} node={node} screenId={props.screenId} recordId={purchaseRecord.id} refreshOnSuccess buttonClassName={styles.secondary} />
+                  : <button key={node.id} type="button" className={styles.secondary} disabled>{node.label}</button>)}
+              </div> : null}
               <div className={ui.orderIdentityMeta}>
                 {amount ? <div className={ui.heroAmount} data-bare><span>Сумма</span><strong>{amount}</strong></div> : null}
                 {status ? <span className={ui.heroStatus} data-tone={builderV2StatusTone(status)}>{status}</span> : null}

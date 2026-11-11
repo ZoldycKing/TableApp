@@ -1285,7 +1285,24 @@ button.recordButton:hover strong { color: var(--v2-accent, #456849); }
 }
 .purchaseLineCopy { min-width: 0; display: grid; gap: 2px; }
 .purchaseCard { display: grid; gap: 16px; min-width: 0; align-content: start; }
-.purchaseCard > .orderIdentity .heroStatus { width: max-content; max-width: 100%; }
+.purchaseCard > .orderIdentity .heroStatus {
+  width: max-content;
+  max-width: 100%;
+  flex: none;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+.purchaseCardActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+  margin-bottom: 4px;
+}
+.purchaseCardActions > .form { width: auto; margin: 0; flex: none; }
+.purchaseCardActions button { min-height: 44px; }
 .purchaseComment {
   margin: 0;
   color: var(--v2-muted, #687568);

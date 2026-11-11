@@ -765,14 +765,13 @@ export function AppV2Renderer(props: AppV2RendererProps) {
         ? <button type="button" className={ui.contactLink} onClick={openClient}>{clientText}</button>
         : clientText
       : undefined
-    // Identity already shows the client; keep only non-duplicated facts (assignee email, etc.).
+    // Identity already shows the client / inventory warehouse+cost; keep only non-duplicated facts.
     const deliveryFacts = factItems.filter(item => {
       if (item.kind === 'reply') return false
-      if (crmDeal && crm) {
-        const node = nodes.get(item.id)
-        const fieldId = node?.type === 'field' && 'fieldId' in node.value ? node.value.fieldId : undefined
-        return fieldId !== crm.clientRelationFieldId
-      }
+      const node = nodes.get(item.id)
+      const fieldId = node?.type === 'field' && 'fieldId' in node.value ? node.value.fieldId : undefined
+      if (crmDeal && crm && fieldId === crm.clientRelationFieldId) return false
+      if (inventoryItem && inventory && fieldId && (fieldId === inventory.itemWarehouseFieldId || fieldId === inventory.itemCostFieldId)) return false
       return true
     })
     const factsTitle = inventoryItem ? 'О товаре' : crmDeal ? 'Исполнитель' : crm ? (crmClient ? 'О клиенте' : 'Клиент') : 'Клиент и доставка'

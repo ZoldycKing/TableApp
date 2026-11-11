@@ -490,26 +490,21 @@
 .warehouseBreakdown li strong { flex: none; font-variant-numeric: tabular-nums; }
 .stockHint { margin: 6px 0 0; color: var(--v2-muted, #687568); font-size: 13px; line-height: 1.35; }
 .warningBadge { display: inline-flex; align-items: center; gap: 6px; flex: none; width: max-content; max-width: none; padding: 6px 10px; border-radius: var(--radius-badge, 999px); background: color-mix(in srgb, #e11d48 12%, var(--v2-surface, #fff)); color: #be123c; font-size: 13px; line-height: 16px; font-weight: 740; white-space: nowrap; overflow-wrap: normal; word-break: normal; }
-.stockWithBadge { display: inline-flex; flex-wrap: nowrap; align-items: center; gap: 8px 10px; min-width: 0; max-width: 100%; }
-.stockQty { white-space: nowrap; overflow-wrap: normal; word-break: normal; font-variant-numeric: tabular-nums; }
-.stockWithBadge > .warningBadge { margin: 0; flex: none; }
-/* Mobile: never split «N шт.»; put the low-stock badge under the value. */
-@container builder-app (max-width: 640px) {
-  .stockWithBadge {
-    flex-direction: column;
-    align-items: flex-start;
-    flex-wrap: nowrap;
-    gap: 6px;
-    max-width: 100%;
-  }
-  .stockWithBadge > .stockQty {
-    white-space: nowrap;
-    overflow-wrap: normal;
-    word-break: keep-all;
-  }
-  .orderIdentityFact[data-kind="amount"] > strong:has(.stockWithBadge) {
-    min-width: 0;
-  }
+/* Badge under «N шт.» so adjacent fact columns never collide (390 → 1440). */
+.stockWithBadge {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  flex-wrap: nowrap;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+.stockQty { white-space: nowrap; overflow-wrap: normal; word-break: keep-all; font-variant-numeric: tabular-nums; }
+.stockWithBadge > .warningBadge { margin: 0; flex: none; max-width: 100%; white-space: normal; }
+.orderIdentityFact[data-kind="amount"] > strong:has(.stockWithBadge) {
+  min-width: 0;
+  overflow: hidden;
 }
 .headerEditActions { display: inline-flex; align-items: center; gap: 8px; margin-inline-end: 4px; }
 @container builder-app (min-width: 900px) {

@@ -7,7 +7,7 @@ import {BuilderV2Video} from './video'
 import {builderV2ButtonAction,builderV2NodeAction} from '@/lib/builder-v2-button-action'
 import {builderCalendarTime} from '@/lib/builder-v2-calendar'
 import { formatInventoryAuthor, formatInventoryJournalWhen } from '@/lib/inventory-author'
-import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } from 'react'
+import { useCallback, useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 
 function InventoryTypeFilter({ choices, value, onChange }: { choices: readonly { id: string; name: string }[]; value: string; onChange: (id: string) => void }) {
   if (!choices.length) return null
@@ -15,6 +15,41 @@ function InventoryTypeFilter({ choices, value, onChange }: { choices: readonly {
     <button type="button" aria-pressed={!value} onClick={() => onChange('')}>Все</button>
     {choices.map(choice => <button key={choice.id} type="button" aria-pressed={value === choice.id} onClick={() => onChange(choice.id)}>{choice.name}</button>)}
   </div>
+}
+
+/** Centred create-product dialog for the warehouse list toolbar. */
+function InventoryCreateDialog({ label, children }: { label: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false)
+  const panelRef = useRef<HTMLElement>(null)
+  const titleId = useId()
+  useEffect(() => {
+    if (!open) return
+    const focusable = panelRef.current?.querySelector<HTMLElement>('input:not([type="hidden"]), textarea, select, button:not([data-action-cancel])')
+    queueMicrotask(() => focusable?.focus())
+  }, [open])
+  useEffect(() => {
+    if (!open) return
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.preventDefault(); setOpen(false) } }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open])
+  const submit = () => panelRef.current?.querySelector<HTMLButtonElement>('form button[type="submit"]')?.click()
+  return <>
+    <button type="button" className={styles.primary} onClick={() => setOpen(true)}>{label}</button>
+    {open ? <>
+      <button type="button" className={ui.orderActionScrim} aria-label="Закрыть" onClick={() => setOpen(false)} />
+      <aside ref={panelRef} className={ui.orderActionPanel} data-mode="reveal" data-open="true" data-dialog aria-labelledby={titleId} role="dialog" aria-modal="true">
+        <div className={ui.orderActionHeader}>
+          <h2 className={presentation.sectionTitle} id={titleId}>Новый товар</h2>
+        </div>
+        <div className={ui.orderActionBody}>{children}</div>
+        <div className={ui.orderActionFooter}>
+          <button type="button" className={styles.secondary} data-action-cancel onClick={() => setOpen(false)}>Отмена</button>
+          <button type="button" className={styles.primary} onClick={submit}>Сохранить товар</button>
+        </div>
+      </aside>
+    </> : null}
+  </>
 }
 
 function InventoryJournalRows({ rows, typeFieldId, choices, renderRows }: {
@@ -174,12 +209,17 @@ export function AppV2Renderer(props: AppV2RendererProps) {
   const recordTable = props.tables.find(table => table.id === screen?.contextTableId)
   const profile = isBuilderV2ContactProfile(props.app, props.screenId, props.tables)
   const orderGroup = (published ? builderV2RecordParent(props.app, props.screenId) : builderV2PreviewRecordParent(props.app, props.screenId, props.actor))?.queue?.recordGroup
-  const rootIds = props.rootNodeIds ?? screen?.rootIds ?? []
   const inventory = props.app.inventory
   // Fold the screen create button into the collection search toolbar (shop-like density).
   const foldedCreateId = !props.editing && inventory && screen && (screen.id === inventory.itemsScreenId || screen.id === inventory.movementsScreenId)
     ? screen.rootIds.find(id => nodes.get(id)?.type === 'button') ?? null
     : null
+  const inventoryCreateFormId = !props.editing && inventory && screen?.id === inventory.itemsScreenId
+    ? inventory.createItemFormId ?? null
+    : null
+  const inventoryCreateScreen = Boolean(inventory && screen?.id === inventory.createItemScreenId)
+  // Host create form in the list dialog only — keep it out of the canvas walk.
+  const rootIds = (props.rootNodeIds ?? screen?.rootIds ?? []).filter(id => id !== inventoryCreateFormId)
   const visible = (node: AppV2Node, row = props.record) => {
     if (node.visibleTo && !matchesAppV2Audience(node.visibleTo, props.actor)) return false
     const result = node.visibleWhen && evaluateAppV2Condition(node.visibleWhen, { actor: props.actor, row, screenRow: props.record })
@@ -299,6 +339,12 @@ export function AppV2Renderer(props: AppV2RendererProps) {
           const toolbarButton = inventory && screen?.id === inventory.movementsScreenId
             ? { ...button, label: 'Операция' }
             : button
+          if (inventoryCreateFormId && inventory && screen?.id === inventory.itemsScreenId) {
+            const formNode = nodes.get(inventoryCreateFormId)
+            if (formNode && visible(formNode)) {
+              return <InventoryCreateDialog label={toolbarButton.label}>{render([inventoryCreateFormId])}</InventoryCreateDialog>
+            }
+          }
           return published
             ? <PublishedV2Button node={toolbarButton} screenId={props.screenId} recordId={props.record?.id} />
             : <button type="button" className={buttonStyle} disabled>{toolbarButton.label}</button>
@@ -398,6 +444,9 @@ export function AppV2Renderer(props: AppV2RendererProps) {
               const minRatio = Number.isFinite(stockNum) && Number.isFinite(minNum) && minNum > 0
                 ? Math.max(0, Math.min(1, stockNum / minNum))
                 : null
+              const minBar = minRatio !== null
+                ? <span className={ui.stockMinBar} aria-hidden="true"><i style={{ width: `${Math.round(minRatio * 100)}%` }} /></span>
+                : null
               return <>
                 <InventoryProductThumb image={image} size="list" label={label} />
                 <div className={ui.recordStockCopy}>
@@ -407,18 +456,14 @@ export function AppV2Renderer(props: AppV2RendererProps) {
                     {lowBadge}
                   </span>
                   <span className={ui.recordStockMobileMeta}>
-                    <span>{category}</span>
-                    <span>{warehouse}</span>
-                    {stockVsMin ? <span>{stockVsMin}</span> : null}
+                    <span className={ui.recordStockMobileLine}>{category} · {warehouse}</span>
+                    {stockVsMin ? <span className={ui.recordStockMobileStock}>{minBar}<span>{stockVsMin}</span></span> : null}
                   </span>
                 </div>
                 <span className={ui.recordStockCol} data-col="category">{category}</span>
                 <span className={ui.recordStockCol} data-col="warehouse">{warehouse}</span>
                 <span className={ui.recordStockCol} data-col="min">
-                  {stockVsMin ? <>
-                    <span>{stockVsMin}</span>
-                    {minRatio !== null ? <span className={ui.stockMinBar} aria-hidden="true"><i style={{ width: `${Math.round(minRatio * 100)}%` }} /></span> : null}
-                  </> : '—'}
+                  {stockVsMin ? <><span>{stockVsMin}</span>{minBar}</> : '—'}
                 </span>
                 {detailNode}
               </>
@@ -433,10 +478,8 @@ export function AppV2Renderer(props: AppV2RendererProps) {
                   <strong>{label}</strong>
                   <span className={ui.recordJournalMeta}>
                     {subtitleValue ? <span className={ui.statusBadge} data-tone={builderV2StatusTone(subtitleValue)}>{subtitleValue}</span> : null}
-                    {(journalPlace || journalAuthor) ? <small>
-                      {journalPlace ? <span className={ui.journalPlace}>{journalPlace}</span> : null}
-                      {journalAuthor ? <span className={ui.journalAuthor}>{journalPlace ? ' · ' : ''}{journalAuthor}</span> : null}
-                    </small> : null}
+                    {journalPlace ? <span className={ui.journalPlace}>{journalPlace}</span> : null}
+                    {journalAuthor ? <span className={ui.journalAuthor}>{journalPlace ? '· ' : ''}{journalAuthor}</span> : null}
                   </span>
                 </div>
                 {detailNode}
@@ -533,9 +576,22 @@ export function AppV2Renderer(props: AppV2RendererProps) {
               bucket.rows.push(row)
               buckets.set(key, bucket)
             }
+            const stockHeader = inventoryStockList && !node.recordGroup
+              ? <div className={ui.stockListHeader} aria-hidden="true">
+                <span />
+                <span>Товар</span>
+                <span>Категория</span>
+                <span>Склад</span>
+                <span>Запас</span>
+                <span>Остаток</span>
+              </div>
+              : null
             return [...buckets].map(([key, group]) => <div key={key} className={group.label ? ui.listGroup : undefined}>
               {group.label && <GroupHeading className={ui.listGroupHeading}>{group.label}</GroupHeading>}
-              <div className={rowsClass} data-inventory={inventoryList || undefined}>{group.rows.map(listRow)}</div>
+              <div className={rowsClass} data-inventory={inventoryList || undefined} data-stock={inventoryStockList || undefined}>
+                {stockHeader}
+                {group.rows.map(listRow)}
+              </div>
             </div>)
           }
           const collection = node.layout === 'table' ? <div className={ui.tableScroll}><table className={ui.table} aria-label={node.name}>
@@ -768,6 +824,26 @@ export function AppV2Renderer(props: AppV2RendererProps) {
           </div>}
       </div>
     </div>
+  }
+  if (inventoryCreateScreen && inventory?.createItemFormId) {
+    const close = () => {
+      if (published) published.back(inventory.itemsScreenId)
+      else props.onNavigate?.(inventory.itemsScreenId)
+    }
+    return <>
+      <button type="button" className={ui.orderActionScrim} aria-label="Закрыть" onClick={close} />
+      <aside className={ui.orderActionPanel} data-mode="reveal" data-open="true" data-dialog role="dialog" aria-modal="true" aria-label="Новый товар">
+        <div className={ui.orderActionHeader}><h2 className={presentation.sectionTitle}>Новый товар</h2></div>
+        <div className={ui.orderActionBody}>{render([inventory.createItemFormId])}</div>
+        <div className={ui.orderActionFooter}>
+          <button type="button" className={styles.secondary} data-action-cancel onClick={close}>Отмена</button>
+          <button type="button" className={styles.primary} onClick={event => {
+            const root = (event.currentTarget.closest('[data-dialog]') as HTMLElement | null)
+            root?.querySelector<HTMLButtonElement>('form button[type="submit"]')?.click()
+          }}>Сохранить товар</button>
+        </div>
+      </aside>
+    </>
   }
   const basketScreen = !props.editing && props.app.shop?.basketScreenId === screen?.id
   return <div className={`${styles.canvasBlocks} ${ui.screenBlocks} ${screen?.contextTableId ? ui.businessDetail : ''} ${basketScreen ? ui.commerceScreen : ''}`} data-profile={profile || undefined} data-commerce={basketScreen ? 'basket' : undefined}>

@@ -158,8 +158,9 @@ export function buildInventoryV2App(built: BuiltTemplate, meta: { id: string; wo
     authentication: { mode: 'invite_only', defaultRoleId: null, members: [{ email: meta.email.trim().toLowerCase(), roleIds: ['owner'], company: '' }] },
     homeScreenId: itemsScreenId,
     screens: [
-      { id: itemsScreenId, name: 'Товары', menuLabel: 'Товары', icon: 'box', navigation: true, audience: team, contextTableId: null, rootIds: [newItemButton, itemsNode], events: { enter: null } },
+      { id: itemsScreenId, name: 'Товары', menuLabel: 'Товары', icon: 'box', navigation: true, audience: team, contextTableId: null, rootIds: [newItemButton, itemsNode, createItemFormId], events: { enter: null } },
       { id: movementsScreenId, name: 'Движения', menuLabel: 'Движения', icon: 'truck', navigation: true, audience: team, contextTableId: null, rootIds: [newOperationButton, movementsNode], events: { enter: null } },
+      // Kept for deep links; list opens the same form in a centred dialog.
       { id: createItemScreenId, name: 'Новый товар', icon: 'box', navigation: false, audience: owners, contextTableId: null, rootIds: [createItemFormId], events: { enter: null } },
       { id: itemScreenId, name: 'Товар', icon: 'box', navigation: false, audience: team, contextTableId: itemsTableId, recordTitleFieldId: itemName, rootIds: [
         ...identityFieldIds.map(id => `item_${id}`),
@@ -168,7 +169,8 @@ export function buildInventoryV2App(built: BuiltTemplate, meta: { id: string; wo
       ], events: { enter: null } },
     ],
     nodes: [
-      { id: newItemButton, name: 'Новый товар', type: 'button', label: 'Новый товар', variant: 'primary', visibleTo: owners, visibleWhen: null, events: { press: openCreateItem } },
+      // Press is handled in the list toolbar as a centred dialog (not a full-page screen).
+      { id: newItemButton, name: 'Новый товар', type: 'button', label: 'Новый товар', variant: 'primary', visibleTo: owners, visibleWhen: null, events: { press: null } },
       { id: newOperationButton, name: 'Новая операция', type: 'button', label: 'Новая операция', variant: 'primary', visibleTo: team, visibleWhen: null, events: { press: openItemsForOperation } },
       { id: itemsNode, name: 'Товары', type: 'collection', visibleTo: null, visibleWhen: null, sourceId: itemsSource, layout: 'list', titleFieldId: itemName, subtitleFieldId: itemSku, ...(itemPhoto ? { cardImageFieldId: itemPhoto } : {}), cardDetailFieldId: itemStock, itemIds: [], events: { itemPress: openItem } },
       { id: movementsNode, name: 'Движения', type: 'collection', visibleTo: null, visibleWhen: null, sourceId: movementsSource, layout: 'list', titleFieldId: movementItem, subtitleFieldId: movementType, cardDetailFieldId: movementQty, itemIds: [], events: { itemPress: null } },

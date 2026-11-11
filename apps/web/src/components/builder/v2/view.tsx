@@ -495,9 +495,10 @@ export function AppV2Renderer(props: AppV2RendererProps) {
   const foldedExtraIds = new Set<string>()
   const suppliersLinkId = !props.editing && inventory && screen?.id === inventory.purchasesScreenId ? rootButtonByLabel('Поставщики') : null
   if (suppliersLinkId) foldedExtraIds.add(suppliersLinkId)
-  const reorderLinkId = !props.editing && inventory?.reorderScreenId
-    && (screen?.id === inventory.purchasesScreenId || screen?.id === inventory.itemsScreenId)
-    ? props.app.nodes.find(node => node.type === 'button' && node.label === 'Что заказать')?.id ?? null
+  const reorderOnList = Boolean(!props.editing && inventory?.reorderScreenId
+    && (screen?.id === inventory.purchasesScreenId || screen?.id === inventory.itemsScreenId))
+  const reorderLinkId = reorderOnList
+    ? props.app.nodes.find(node => node.type === 'button' && (node.label === 'Что заказать' || node.label.startsWith('Что заказать')))?.id ?? null
     : null
   if (reorderLinkId) foldedExtraIds.add(reorderLinkId)
   const inventoryCreateFormId = !props.editing && inventory && screen?.id === inventory.itemsScreenId
@@ -603,7 +604,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
   }
   const raw=(value:AppV2Binding,record:AppV2Record|undefined)=>{const result=resolveAppV2Binding(value,{actor:props.actor,row:record,screenRow:props.record});return result.ok?result.value:null}
   function buildInventoryListToolbar(): ReactNode | undefined {
-    if (!inventory || props.editing || (!foldedCreateId && !suppliersLinkId && !reorderLinkId)) return undefined
+    if (!inventory || props.editing || (!foldedCreateId && !suppliersLinkId && !reorderOnList)) return undefined
     const parts: ReactNode[] = []
     if (suppliersLinkId) {
       const link = nodes.get(suppliersLinkId)
@@ -621,21 +622,34 @@ export function AppV2Renderer(props: AppV2RendererProps) {
         </span>)
       }
     }
-    if (reorderLinkId) {
-      const link = nodes.get(reorderLinkId)
-      if (link?.type === 'button' && visible(link)) {
-        parts.push(<span key={link.id} className={ui.purchaseSuppliersSlot}>
-          {published
+    if (reorderOnList && inventory?.reorderScreenId) {
+      const link = reorderLinkId ? nodes.get(reorderLinkId) : undefined
+      const reorderNode = link?.type === 'button' ? link : {
+        id: reorderLinkId ?? 'reorder-shell',
+        name: 'Что заказать',
+        type: 'button' as const,
+        label: 'Что заказать',
+        variant: 'secondary' as const,
+        visibleTo: null,
+        visibleWhen: null,
+        events: { press: null },
+      }
+      parts.push(<span key={reorderNode.id} className={ui.purchaseSuppliersSlot}>
+        {published
+          ? link?.type === 'button'
             ? <>
               <ReorderToolbarLink app={props.app} node={link} screenId={props.screenId} buttonClassName={`${styles.secondary} ${ui.purchaseSuppliersDesktop}`} />
               <ReorderToolbarLink app={props.app} node={link} screenId={props.screenId} buttonClassName={`${ui.orderActionIcon} ${ui.purchaseSuppliersMobile}`} buttonContent={<ProtoIcon name="box" size={20} />} />
             </>
             : <>
-              <button type="button" className={`${styles.secondary} ${ui.purchaseSuppliersDesktop}`} disabled>{link.label}</button>
-              <button type="button" className={`${ui.orderActionIcon} ${ui.purchaseSuppliersMobile}`} aria-label={link.label} title={link.label} disabled><ProtoIcon name="box" size={20} /></button>
-            </>}
-        </span>)
-      }
+              <button type="button" className={`${styles.secondary} ${ui.purchaseSuppliersDesktop}`} onClick={() => published.navigate(inventory.reorderScreenId!)}>Что заказать</button>
+              <button type="button" className={`${ui.orderActionIcon} ${ui.purchaseSuppliersMobile}`} aria-label="Что заказать" title="Что заказать" onClick={() => published.navigate(inventory.reorderScreenId!)}><ProtoIcon name="box" size={20} /></button>
+            </>
+          : <>
+            <button type="button" className={`${styles.secondary} ${ui.purchaseSuppliersDesktop}`} disabled>Что заказать</button>
+            <button type="button" className={`${ui.orderActionIcon} ${ui.purchaseSuppliersMobile}`} aria-label="Что заказать" title="Что заказать" disabled><ProtoIcon name="box" size={20} /></button>
+          </>}
+      </span>)
     }
     if (foldedCreateId) {
       const button = nodes.get(foldedCreateId)

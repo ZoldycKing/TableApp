@@ -1,6 +1,6 @@
 'use server'
 import {appDefinitionInputError,appV2IdSchema} from '@tableapp/schema/app-v2'
-import {readPublishedV2Data,readPublishedV2LowStockCount,readPublishedV2PurchaseCosts,readPublishedV2Record,readPublishedV2RelatedRows,readPublishedV2ReorderHints} from '@/lib/builder-v2-published-data'
+import {readPublishedV2ClientDealStats,readPublishedV2Data,readPublishedV2LowStockCount,readPublishedV2PurchaseCosts,readPublishedV2Record,readPublishedV2RelatedRows,readPublishedV2ReorderHints} from '@/lib/builder-v2-published-data'
 import {inspectPublishedV2Button,inspectPublishedV2FormRequest,submitPublishedV2} from '@/lib/builder-v2-published-write'
 import {validBuilderCollectionQuery} from '@/lib/builder-v2-collection-query'
 import {RowWriteError} from '@/lib/row-mutations'
@@ -63,6 +63,14 @@ export async function readPublishedV2LowStockCountAction(slug:string,value:unkno
   const parsed=value as Record<string,unknown>
   if(!hash(parsed.revision)||Object.keys(parsed).some(key=>key!=='revision'))return {ok:false,error:'Счётчик недоступен'}
   try{return {ok:true,...await readPublishedV2LowStockCount(slug,{revision:String(parsed.revision)})}}catch(error){return failure(error)}
+}
+export async function readPublishedV2ClientDealStatsAction(slug:string,value:unknown):Promise<
+  {ok:true;stats:Record<string,{deals:number;sum:number;lastContact:string}>;openDeals:number;pipeline:number}|{ok:false;error:string}
+>{
+  if(appDefinitionInputError(value)||!value||typeof value!=='object'||Array.isArray(value))return {ok:false,error:'Сделки недоступны'}
+  const parsed=value as Record<string,unknown>
+  if(!hash(parsed.revision)||Object.keys(parsed).some(key=>key!=='revision'))return {ok:false,error:'Сделки недоступны'}
+  try{return {ok:true,...await readPublishedV2ClientDealStats(slug,{revision:String(parsed.revision)})}}catch(error){return failure(error)}
 }
 export async function inspectPublishedV2FormAction(slug:string,value:unknown):Promise<BuilderV2FormResult|BuilderV2FormOptionsResult>{
   const parsed=form(value);if(!parsed)return {ok:false,error:'Обновите форму'}

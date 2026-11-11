@@ -369,53 +369,18 @@ function useClientDealStats(app: AppV2, crm?: NonNullable<AppV2['crm']> | null) 
   const [rollup, setRollup] = useState<{ openDeals: number; pipeline: number }>({ openDeals: 0, pipeline: 0 })
   useEffect(() => {
     if (!published || !crm?.dealsTableId) return
-    const dealNodes = app.nodes.filter(node => node.type === 'collection'
-      && app.sources.some(source => source.id === node.sourceId && source.tableId === crm.dealsTableId))
-    // Prefer kanban board (all open pipeline stages) then a plain list.
-    const dealNode = dealNodes.find(node => node.layout === 'kanban')
-      ?? dealNodes.find(node => node.layout === 'list')
-      ?? dealNodes[0]
-    if (!dealNode) return
-    const screenId = dealNode.layout === 'kanban'
-      ? crm.boardScreenId
-      : (app.screens.find(screen => screen.rootIds.includes(dealNode.id))?.id ?? crm.boardScreenId)
     let cancelled = false
-    void published.readData({ nodeId: dealNode.id, screenId }).then(result => {
+    // Deal collections are not shipped on the clients screen projection — load via server action.
+    void import('@/app/builder-v2-published-actions').then(async ({ readPublishedV2ClientDealStatsAction }) => {
+      const result = await readPublishedV2ClientDealStatsAction(published.slug, { revision: published.revision })
       if (cancelled || !result.ok) return
-      const terminal = new Set(crm.terminalStages ?? [])
       const next = new Map<string, ClientDealStat>()
-      let openDeals = 0
-      let pipeline = 0
-      const boardRows = result.page.board?.columns.flatMap(column => column.rows) ?? []
-      const rows = boardRows.length ? boardRows : result.page.rows
-      for (const row of rows) {
-        const clientRaw = row.values[crm.clientRelationFieldId]
-        const clientId = typeof clientRaw === 'string' ? clientRaw
-          : Array.isArray(clientRaw) ? clientRaw.find((id): id is string => typeof id === 'string')
-            : clientRaw && typeof clientRaw === 'object' && 'id' in clientRaw && typeof (clientRaw as { id: unknown }).id === 'string'
-              ? (clientRaw as { id: string }).id
-              : undefined
-        if (!clientId) continue
-        const stage = String(row.values[crm.stageFieldId] ?? '')
-        const open = !terminal.has(stage)
-        const sumRaw = Number(row.values[crm.sumFieldId])
-        const sum = Number.isFinite(sumRaw) ? sumRaw : 0
-        const due = String(row.values[crm.dueFieldId] ?? '')
-        const current = next.get(clientId) ?? { deals: 0, sum: 0, lastContact: '' }
-        current.deals += 1
-        if (open) {
-          current.sum += sum
-          openDeals += 1
-          pipeline += sum
-        }
-        if (due && (!current.lastContact || due > current.lastContact)) current.lastContact = due
-        next.set(clientId, current)
-      }
+      for (const [clientId, value] of Object.entries(result.stats)) next.set(clientId, value)
       setStats(next)
-      setRollup({ openDeals, pipeline })
+      setRollup({ openDeals: result.openDeals, pipeline: result.pipeline })
     }).catch(() => {})
     return () => { cancelled = true }
-  }, [published, published?.revision, published?.dataVersion, app.nodes, app.screens, crm])
+  }, [published, published?.revision, published?.dataVersion, crm?.dealsTableId, app.id])
   return { stats, rollup }
 }
 

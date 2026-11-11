@@ -245,6 +245,50 @@ export async function readPublishedV2LowStockCount(slug:string,request:{revision
   })
 }
 
+/** Per-client open-deal counts for the CRM clients list shell (board nodes are not shipped on that screen). */
+export async function readPublishedV2ClientDealStats(slug:string,request:{revision:string}){
+  return withPublishedV2Read(async tx=>{
+    const {app,actor,revision}=await publishedV2Context(slug,tx)
+    if(revision!==request.revision)throw new RowWriteError('conflict','Приложение обновлено. Обновите страницу.')
+    const crm=app.crm
+    if(!crm?.clientsScreenId||!crm.dealsTableId||!canOpenAppV2Screen(app,actor,crm.clientsScreenId)){
+      throw new RowWriteError('denied','Клиенты недоступны')
+    }
+    if(!actor.roleIds.includes('owner')&&!actor.roleIds.includes('staff'))throw new RowWriteError('denied','Клиенты недоступны')
+    const stored=await tx.select().from(rows).where(and(
+      eq(rows.tableId,crm.dealsTableId),
+      isNull(rows.deletedAt),
+      publishedV2ReadSql(app,actor,crm.dealsTableId),
+    ))
+    const terminal=new Set(crm.terminalStages??[])
+    const stats:Record<string,{deals:number;sum:number;lastContact:string}>={}
+    let openDeals=0
+    let pipeline=0
+    for(const row of stored){
+      const data=row.data as Record<string,unknown>
+      const clientRaw=data[crm.clientRelationFieldId]
+      const clientId=typeof clientRaw==='string'?clientRaw
+        :Array.isArray(clientRaw)?clientRaw.find((id):id is string=>typeof id==='string'):undefined
+      if(!clientId)continue
+      const stage=String(data[crm.stageFieldId]??'')
+      const open=!terminal.has(stage)
+      const sumRaw=Number(data[crm.sumFieldId])
+      const sum=Number.isFinite(sumRaw)?sumRaw:0
+      const due=String(data[crm.dueFieldId]??'')
+      const current=stats[clientId]??{deals:0,sum:0,lastContact:''}
+      current.deals+=1
+      if(open){
+        current.sum+=sum
+        openDeals+=1
+        pipeline+=sum
+      }
+      if(due&&(!current.lastContact||due>current.lastContact))current.lastContact=due
+      stats[clientId]=current
+    }
+    return {stats,openDeals,pipeline}
+  })
+}
+
 /** Last supplier + price per product for «Что заказать» (mirrors create_reorder_orders grouping). */
 export async function readPublishedV2ReorderHints(slug:string,request:{revision:string;productIds:readonly string[]}){
   return withPublishedV2Read(async tx=>{

@@ -534,7 +534,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
             if (button?.type === 'button' && visible(button)) {
               const buttonStyle = button.variant === 'primary' ? styles.primary : button.variant === 'danger' ? styles.danger : styles.secondary
               const toolbarButton = inventory && screen?.id === inventory.movementsScreenId ? { ...button, label: 'Операция' }
-                : inventory && screen?.id === inventory.countsScreenId ? { ...button, label: 'Пересчёт' }
+                : inventory && screen?.id === inventory.countsScreenId ? { ...button, label: 'Новая' }
                 : button
               const purchaseCreate = Boolean(inventory && screen?.id === inventory.purchasesScreenId)
               const supplierCreate = Boolean(inventory && screen?.id === inventory.suppliersScreenId)

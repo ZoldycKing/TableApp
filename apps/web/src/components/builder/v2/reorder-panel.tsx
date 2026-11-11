@@ -47,17 +47,22 @@ export function ReorderPanel() {
 
   useEffect(() => {
     if (!published || !inventory || !payloadId || !context || hydrated.current) return
-    const reorderNode = context.app.nodes.find(node => node.type === 'collection'
-      && context.app.sources.some(source => source.id === node.sourceId
-        && source.tableId === inventory.itemsTableId
-        && source.filter
-        && 'op' in source.filter
-        && source.filter.op === 'eq'
-        && 'left' in source.filter
-        && typeof source.filter.left === 'object'
-        && source.filter.left
-        && 'fieldId' in source.filter.left
-        && source.filter.left.fieldId === inventory.itemLowFieldId))
+    const reorderScreen = inventory.reorderScreenId
+      ? context.app.screens.find(screen => screen.id === inventory.reorderScreenId)
+      : undefined
+    const reorderNode = reorderScreen
+      ? context.app.nodes.find(node => node.type === 'collection' && reorderScreen.rootIds.includes(node.id))
+      : context.app.nodes.find(node => node.type === 'collection'
+        && context.app.sources.some(source => source.id === node.sourceId
+          && source.tableId === inventory.itemsTableId
+          && source.filter
+          && 'op' in source.filter
+          && source.filter.op === 'eq'
+          && 'left' in source.filter
+          && typeof source.filter.left === 'object'
+          && source.filter.left
+          && 'fieldId' in source.filter.left
+          && source.filter.left.fieldId === inventory.itemLowFieldId))
     if (!reorderNode || !inventory.reorderScreenId) {
       setNote('Список товаров к заказу недоступен')
       return

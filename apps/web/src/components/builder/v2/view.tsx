@@ -41,26 +41,24 @@ function ReorderToolbarLink({
       : undefined
     if (!reorderNode) return
     let cancelled = false
-    void published.readData({ nodeId: reorderNode.id, screenId: inventory.reorderScreenId }).then(result => {
-      if (cancelled || !result.ok) return
-      // Reorder source is already filtered to low-stock; still enforce stock < min for stale formulas.
-      const low = result.page.rows.filter(row => {
-        if (!inventory.itemStockFieldId || !inventory.itemMinFieldId) return true
-        const stock = Number(row.values[inventory.itemStockFieldId])
-        const min = Number(row.values[inventory.itemMinFieldId])
-        if (!Number.isFinite(stock) || !Number.isFinite(min)) return inventory.itemLowFieldId ? row.values[inventory.itemLowFieldId] === true : true
-        return stock < min
-      }).length
-      setCount(low)
+    void import('@/app/builder-v2-published-actions').then(async ({ readPublishedV2DataAction }) => {
+      const result = await readPublishedV2DataAction(published.slug, {
+        revision: published.revision,
+        nodeId: reorderNode.id,
+        screenId: inventory.reorderScreenId!,
+      })
+      if (cancelled || !result.ok || result.page.kind !== 'collection') return
+      setCount(result.page.rows.length)
     }).catch(() => {})
     return () => { cancelled = true }
   }, [published?.revision, published?.dataVersion, inventory?.reorderScreenId, app.id])
   const label = count != null && count > 0 ? `Что заказать · ${count}` : 'Что заказать'
-  if (buttonContent) {
-    return <PublishedV2Button node={{ ...node, label }} screenId={screenId} buttonClassName={buttonClassName} buttonContent={buttonContent} />
-  }
-  // Render plain label text so the counter is visible even before the button state hydrates.
-  return <PublishedV2Button node={{ ...node, label }} screenId={screenId} buttonClassName={buttonClassName} />
+  return <PublishedV2Button
+    node={{ ...node, label }}
+    screenId={screenId}
+    buttonClassName={buttonClassName}
+    buttonContent={buttonContent}
+  />
 }
 
 /** Centred dialog on desktop, bottom sheet on a narrow screen. */

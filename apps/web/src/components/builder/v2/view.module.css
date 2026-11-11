@@ -811,27 +811,24 @@
   white-space: normal;
 }
 .recordJournalMeta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 8px;
+  display: block;
   min-width: 0;
   color: var(--v2-muted, #687568);
   font-size: 13px;
-  line-height: 16px;
+  line-height: 1.35;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 .recordJournalMeta > .statusBadge {
-  flex: 0 0 auto;
   display: inline-flex;
+  vertical-align: -0.15em;
+  margin-inline-end: 6px;
 }
 .journalPlace, .journalAuthor {
-  flex: 0 1 auto;
-  min-width: 0;
+  display: inline;
   font: inherit;
   color: inherit;
   white-space: normal;
-  overflow-wrap: break-word;
-  word-break: normal;
 }
 /* Mobile journal: chip stays inline at start of the meta line; author only on desktop. */
 @container builder-app (max-width: 640px) {

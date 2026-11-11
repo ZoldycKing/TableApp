@@ -17,41 +17,6 @@ function InventoryTypeFilter({ choices, value, onChange }: { choices: readonly {
   </div>
 }
 
-/** Centred create-product dialog for the warehouse list toolbar. */
-function InventoryCreateDialog({ label, children }: { label: string; children: ReactNode }) {
-  const [open, setOpen] = useState(false)
-  const panelRef = useRef<HTMLElement>(null)
-  const titleId = useId()
-  useEffect(() => {
-    if (!open) return
-    const focusable = panelRef.current?.querySelector<HTMLElement>('input:not([type="hidden"]), textarea, select, button:not([data-action-cancel])')
-    queueMicrotask(() => focusable?.focus())
-  }, [open])
-  useEffect(() => {
-    if (!open) return
-    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.preventDefault(); setOpen(false) } }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [open])
-  const submit = () => panelRef.current?.querySelector<HTMLButtonElement>('form button[type="submit"]')?.click()
-  return <>
-    <button type="button" className={styles.primary} onClick={() => setOpen(true)}>{label}</button>
-    {open ? <>
-      <button type="button" className={ui.orderActionScrim} aria-label="Закрыть" onClick={() => setOpen(false)} />
-      <aside ref={panelRef} className={ui.orderActionPanel} data-mode="reveal" data-open="true" data-dialog aria-labelledby={titleId} role="dialog" aria-modal="true">
-        <div className={ui.orderActionHeader}>
-          <h2 className={presentation.sectionTitle} id={titleId}>Новый товар</h2>
-        </div>
-        <div className={ui.orderActionBody}>{children}</div>
-        <div className={ui.orderActionFooter}>
-          <button type="button" className={styles.secondary} data-action-cancel onClick={() => setOpen(false)}>Отмена</button>
-          <button type="button" className={styles.primary} onClick={submit}>Сохранить товар</button>
-        </div>
-      </aside>
-    </> : null}
-  </>
-}
-
 function InventoryJournalRows({ rows, typeFieldId, choices, renderRows }: {
   rows: readonly AppV2Record[]
   typeFieldId: string
@@ -214,12 +179,8 @@ export function AppV2Renderer(props: AppV2RendererProps) {
   const foldedCreateId = !props.editing && inventory && screen && (screen.id === inventory.itemsScreenId || screen.id === inventory.movementsScreenId)
     ? screen.rootIds.find(id => nodes.get(id)?.type === 'button') ?? null
     : null
-  const inventoryCreateFormId = !props.editing && inventory && screen?.id === inventory.itemsScreenId
-    ? inventory.createItemFormId ?? null
-    : null
   const inventoryCreateScreen = Boolean(inventory && screen?.id === inventory.createItemScreenId)
-  // Host create form in the list dialog only — keep it out of the canvas walk.
-  const rootIds = (props.rootNodeIds ?? screen?.rootIds ?? []).filter(id => id !== inventoryCreateFormId)
+  const rootIds = props.rootNodeIds ?? screen?.rootIds ?? []
   const visible = (node: AppV2Node, row = props.record) => {
     if (node.visibleTo && !matchesAppV2Audience(node.visibleTo, props.actor)) return false
     const result = node.visibleWhen && evaluateAppV2Condition(node.visibleWhen, { actor: props.actor, row, screenRow: props.record })
@@ -339,12 +300,6 @@ export function AppV2Renderer(props: AppV2RendererProps) {
           const toolbarButton = inventory && screen?.id === inventory.movementsScreenId
             ? { ...button, label: 'Операция' }
             : button
-          if (inventoryCreateFormId && inventory && screen?.id === inventory.itemsScreenId) {
-            const formNode = nodes.get(inventoryCreateFormId)
-            if (formNode && visible(formNode)) {
-              return <InventoryCreateDialog label={toolbarButton.label}>{render([inventoryCreateFormId])}</InventoryCreateDialog>
-            }
-          }
           return published
             ? <PublishedV2Button node={toolbarButton} screenId={props.screenId} recordId={props.record?.id} />
             : <button type="button" className={buttonStyle} disabled>{toolbarButton.label}</button>

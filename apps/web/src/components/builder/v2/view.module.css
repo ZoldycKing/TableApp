@@ -429,19 +429,15 @@
 .collectionEmpty[data-centered] > :is(a, button) { justify-self: center; }
 .typeFilter {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 8px;
   margin-block: 4px 10px;
   width: 100%;
   min-width: 0;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  scrollbar-width: none;
-  -webkit-overflow-scrolling: touch;
 }
-.typeFilter::-webkit-scrollbar { display: none; }
 .typeFilter button {
   flex: none;
+  min-width: max-content;
   min-height: 36px;
   padding: 6px 12px;
   border: 1px solid var(--v2-line, #dce2d6);
@@ -453,6 +449,23 @@
   font-weight: 650;
   white-space: nowrap;
   cursor: pointer;
+}
+/* Narrow app chrome: two even rows for the five movement-type chips. */
+@container builder-app (max-width: 640px) {
+  .typeFilter {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+  .typeFilter button {
+    grid-column: span 2;
+    min-width: 0;
+    justify-self: stretch;
+    padding: 6px 10px;
+  }
+  .typeFilter button:nth-child(4):nth-last-child(2),
+  .typeFilter button:nth-child(5):last-child {
+    grid-column: span 3;
+  }
 }
 .typeFilter button[aria-pressed="true"] { border-color: var(--v2-accent, #456849); background: var(--v2-soft, #e8eee1); color: var(--v2-accent, #456849); }
 .warehouseBreakdown { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }

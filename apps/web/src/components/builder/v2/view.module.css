@@ -153,7 +153,6 @@
 .recordButton[data-low='true'] .statusBadge[data-tone='rose'],
 .row[data-low='true'] .statusBadge[data-tone='rose'] { background: color-mix(in srgb, #e11d48 14%, var(--v2-surface, #fff)); color: #be123c; }
 /* Low stock: badge + tinted qty — no left accent bar (looks like a glitch next to the avatar). */
-.recordButton[data-low='true'] > .recordMetaDetail,
 .row[data-low='true'] .recordMetaDetail { color: #be123c; }
 .recordButton[data-compact][data-stock] {
   display: flex;
@@ -195,6 +194,9 @@
   color: var(--v2-ink, #253c2d);
   font-size: 14px;
   font-weight: 700;
+}
+.recordButton[data-compact][data-stock][data-low='true'] > .recordMetaDetail {
+  color: #be123c;
 }
 .recordButton[data-compact][data-stock] > svg { flex: none; }
 .collectionEmpty { display: grid; gap: 12px; justify-items: start; padding: 8px 2px 4px; min-width: 0; }

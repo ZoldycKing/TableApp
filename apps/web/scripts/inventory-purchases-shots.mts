@@ -7,6 +7,7 @@ const fixture = JSON.parse(readFileSync('/tmp/inventory-visual.json', 'utf8')) a
   staffCookie: string
   purchasesUrl: string
   purchaseOrderedUrl: string
+  purchaseDraftUrl: string
   purchaseReceivedUrl: string
   suppliersUrl: string
   boxItemUrl: string
@@ -62,13 +63,19 @@ async function pickRelation(dialog: ReturnType<Page['locator']>, label: string) 
 }
 
 async function addProduct(dialog: ReturnType<Page['locator']>, query: string) {
+  const page = dialog.page()
   await dialog.getByRole('button', { name: 'Добавить товар' }).click()
   const search = dialog.getByRole('searchbox', { name: 'Найти товар' })
   await search.fill(query)
-  await dialog.page().waitForTimeout(700)
-  const add = dialog.locator('button').filter({ hasText: /^Добавить$/ }).first()
-  await add.click()
-  await dialog.page().waitForTimeout(450)
+  await page.waitForTimeout(900)
+  const pick = dialog.locator('li button').filter({ hasText: 'Добавить' }).first()
+  if (await pick.count()) {
+    await pick.click()
+  } else {
+    // Fallback: any enabled pick row in the product list.
+    await dialog.locator('[class*="purchasePick"]:not([disabled])').first().click()
+  }
+  await page.waitForTimeout(450)
 }
 
 async function main() {
@@ -85,7 +92,7 @@ async function main() {
   await shot(d, 'd1280-list')
 
   await goto(d, fixture.purchaseOrderedUrl)
-  await d.waitForSelector('text=З-0002')
+  await d.getByRole('button', { name: 'Получить' }).waitFor({ timeout: 30_000 })
   await d.waitForTimeout(900)
   await shot(d, 'd1280-card')
 
@@ -100,25 +107,33 @@ async function main() {
   await d.waitForSelector('[role="dialog"]')
   await d.waitForTimeout(700)
   await shot(d, 'd1280-create-top')
+  await d.keyboard.press('Escape')
 
+  // Edit draft to show selected lines + total (seed already has one line; add a second).
+  await goto(d, fixture.purchaseDraftUrl)
+  await d.getByRole('button', { name: 'Изменить' }).click()
+  await d.waitForSelector('[role="dialog"]')
   const dialog = d.locator('[role="dialog"]')
-  await pickRelation(dialog, 'Поставщик')
-  await pickRelation(dialog, 'Склад')
-  await addProduct(dialog, 'фильтр')
   await addProduct(dialog, 'короб')
   await dialog.locator('text=Итого').scrollIntoViewIfNeeded().catch(() => {})
-  await d.waitForTimeout(400)
+  await d.waitForTimeout(500)
   await shot(d, 'd1280-create-lines')
   await d.keyboard.press('Escape')
 
-  await goto(d, fixture.suppliersUrl)
-  await d.waitForTimeout(900)
-  await shot(d, 'd1280-suppliers')
-  await d.getByRole('button', { name: /Новый поставщик/ }).click()
-  await d.waitForSelector('[role="dialog"]')
-  await d.waitForTimeout(500)
-  await shot(d, 'd1280-supplier-modal')
-  await d.keyboard.press('Escape')
+  await staff.close()
+
+  const owner = await browser.newContext({ viewport: { width: 1280, height: 900 } })
+  await auth(owner, fixture.ownerCookie)
+  const od = await owner.newPage()
+
+  await goto(od, fixture.suppliersUrl)
+  await od.waitForTimeout(900)
+  await shot(od, 'd1280-suppliers')
+  await od.getByRole('button', { name: 'Новый поставщик' }).click()
+  await od.waitForSelector('[role="dialog"]')
+  await od.waitForTimeout(500)
+  await shot(od, 'd1280-supplier-modal')
+  await od.keyboard.press('Escape')
 
   // --- Mobile static shots (before mutate) ---
   const mStaff = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
@@ -130,12 +145,13 @@ async function main() {
   await shot(m, 'm390-list')
 
   await goto(m, fixture.purchaseOrderedUrl)
-  await m.waitForSelector('text=З-0002')
+  await m.getByRole('button', { name: 'Получить' }).waitFor({ timeout: 30_000 })
   await m.waitForTimeout(800)
   await shot(m, 'm390-card')
 
   await goto(m, fixture.purchaseReceivedUrl)
   await m.waitForSelector('text=История')
+  await m.locator('ul').filter({ hasText: 'Получен' }).scrollIntoViewIfNeeded().catch(() => {})
   await m.waitForTimeout(800)
   await shot(m, 'm390-card-received')
 
@@ -150,29 +166,33 @@ async function main() {
   await m.waitForTimeout(800)
   await shot(m, 'm390-create-search')
   await m.keyboard.press('Escape')
-
-  await goto(m, fixture.suppliersUrl)
-  await m.waitForTimeout(800)
-  await shot(m, 'm390-suppliers')
-  await m.getByRole('button', { name: /Новый поставщик/ }).click()
-  await m.waitForSelector('[role="dialog"]')
-  await m.waitForTimeout(500)
-  await shot(m, 'm390-supplier-modal')
   await mStaff.close()
 
-  // --- Mutating flows on desktop ---
-  await goto(d, fixture.purchaseOrderedUrl)
-  await d.getByRole('button', { name: 'Получить' }).click()
-  await d.waitForTimeout(1800)
-  await shot(d, 'd1280-card-after-receive')
-  await goto(d, fixture.boxItemUrl)
-  await d.waitForTimeout(1100)
-  await shot(d, 'd1280-stock-after-receive')
-  await staff.close()
+  const mOwner = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
+  await auth(mOwner, fixture.ownerCookie)
+  const mo = await mOwner.newPage()
+  await goto(mo, fixture.suppliersUrl)
+  await mo.waitForTimeout(800)
+  await shot(mo, 'm390-suppliers')
+  await mo.getByRole('button', { name: 'Новый поставщик' }).click()
+  await mo.waitForSelector('[role="dialog"]')
+  await mo.waitForTimeout(500)
+  await shot(mo, 'm390-supplier-modal')
+  await mOwner.close()
 
-  const owner = await browser.newContext({ viewport: { width: 1280, height: 900 } })
-  await auth(owner, fixture.ownerCookie)
-  const od = await owner.newPage()
+  // --- Mutating flows on desktop (staff receive, then owner cancel dialog) ---
+  const staff2 = await browser.newContext({ viewport: { width: 1280, height: 900 } })
+  await auth(staff2, fixture.staffCookie)
+  const d2 = await staff2.newPage()
+  await goto(d2, fixture.purchaseOrderedUrl)
+  await d2.getByRole('button', { name: 'Получить' }).click()
+  await d2.waitForTimeout(1800)
+  await shot(d2, 'd1280-card-after-receive')
+  await goto(d2, fixture.boxItemUrl)
+  await d2.waitForTimeout(1100)
+  await shot(d2, 'd1280-stock-after-receive')
+  await staff2.close()
+
   await goto(od, fixture.purchaseReceivedUrl)
   await od.getByRole('button', { name: 'Отменить' }).click()
   await od.waitForSelector('text=Отменить полученный заказ')

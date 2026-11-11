@@ -1225,7 +1225,12 @@ export function AppV2Renderer(props: AppV2RendererProps) {
           }
           const actionRow = (row:AppV2Record,as:'div'|'tr') => <CollectionActionRow key={row.id} appId={props.app.id} nodeId={node.id} screenId={props.screenId} recordId={props.record?.id} itemId={row.id} title={cell(row,node.titleFieldId)} actionName={rowAction!.name} as={as} whole={!node.itemIds.length&&as!=='tr'} content={!node.itemIds.length?(as==='tr'?cell(row,node.titleFieldId):<>{item(row)}<ProtoIcon name="arrow" size={16}/></>):undefined}>{control=>as==='tr'?node.itemIds.length?<td colSpan={subtitle?2:1}>{item(row)}{control}</td>:<><td>{control}</td>{subtitle&&<td>{cell(row,node.subtitleFieldId!)}</td>}</>:node.itemIds.length?<>{item(row)}{control}</>:control}</CollectionActionRow>
           const inventoryItemHistory = Boolean(inventory && screen?.id === inventory.itemScreenId && timeline)
-          const showHeading = !useShell && !inventoryItemHistory && !['calendar','kanban'].includes(node.layout) && (props.editing || (screen?.name !== node.name && !(inventoryJournalList && screen?.id === inventory?.movementsScreenId) && !(countList && screen?.id === inventory?.countsScreenId)))
+          const detailShellCollection = Boolean(
+            (crm && (screen?.id === crm.dealScreenId || screen?.id === crm.clientScreenId))
+            || (inventory && (screen?.id === inventory.itemScreenId || screen?.id === inventory.supplierScreenId || screen?.id === inventory.countScreenId || screen?.id === inventory.purchaseScreenId))
+            || (props.app.shop && screen?.id === props.app.shop.orderScreenId),
+          )
+          const showHeading = !useShell && !inventoryItemHistory && !detailShellCollection && !['calendar','kanban'].includes(node.layout) && (props.editing || (screen?.name !== node.name && !(inventoryJournalList && screen?.id === inventory?.movementsScreenId) && !(countList && screen?.id === inventory?.countsScreenId)))
           const GroupHeading = showHeading ? 'h3' : 'h2'
           const groups = new Map<string, { label?: string; rows: AppV2Record[] }>()
           for (const row of rows ?? []) {
@@ -1706,7 +1711,10 @@ export function AppV2Renderer(props: AppV2RendererProps) {
     const crmDeal = Boolean(crm && screen?.id === crm.dealScreenId)
     const crmClient = Boolean(crm && screen?.id === crm.clientScreenId)
     const inventoryItem = Boolean(inventory && screen?.id === inventory.itemScreenId)
-    const editFormId = crmDeal ? crm?.dealEditFormId : inventoryItem ? inventory?.itemEditFormId : undefined
+    const editFormId = crmDeal ? crm?.dealEditFormId
+      : crmClient ? crm?.clientEditFormId
+      : inventoryItem ? inventory?.itemEditFormId
+      : undefined
     const inventoryActionForms = inventoryItem && inventory
       ? [inventory.receiptFormId, inventory.issueFormId, inventory.writeOffFormId, inventory.transferFormId]
       : []
@@ -1725,8 +1733,8 @@ export function AppV2Renderer(props: AppV2RendererProps) {
       : inventoryItem && inventory ? recordTable?.fields.find(field => field.id === inventory.itemMinFieldId) : undefined
     const dueRaw = dueColumn ? props.record.values[dueColumn.id] : undefined
     const dueValue = dueColumn && Object.hasOwn(props.record.values, dueColumn.id) ? cell(props.record, dueColumn.id) : ''
-    // Keep an explicit NBSP so «к разговору» never collapses / wraps into «кразговору».
-    const dueLabel = 'Вернуться к\u00a0разговору'
+    // Metric caption stays short so it never wraps into «кразговору»; forms keep the full phrase.
+    const dueLabel = 'След. контакт'
     const due = crmDeal && dueValue ? { label: dueLabel, value: dueValue, tone: builderV2DueTone(dueRaw) } : undefined
     const inventoryLow = inventoryItem && inventory ? props.record.values[inventory.itemLowFieldId] === true : false
     const inventoryUnit = inventoryItem && inventory ? (cell(props.record, inventory.itemUnitFieldId) || 'шт.') : 'шт.'
@@ -1963,11 +1971,15 @@ export function AppV2Renderer(props: AppV2RendererProps) {
       }
       : undefined
     const clientEditFormId = crmClient
-      ? (crm?.createClientFormId && nodes.get(crm.createClientFormId)?.type === 'form' ? crm.createClientFormId : undefined)
+      ? (crm?.clientEditFormId && nodes.get(crm.clientEditFormId)?.type === 'form' ? crm.clientEditFormId
+        : rootIds.find(id => {
+          const node = nodes.get(id)
+          return node?.type === 'form' && node.mode === 'edit' && node.tableId === crm?.clientsTableId && visible(node)
+        }))
       : undefined
     const renderClientActions = (keyPrefix: string) => (clientEditFormId || clientCreateDeal) ? <div key={keyPrefix} className={ui.purchaseCardActions}>
       {clientEditFormId ? <InventoryCreateDialog
-        label={<ProtoIcon name="edit" size={18} />}
+        label="Изменить"
         iconOnly
         icon="edit"
         title="Изменить клиента"

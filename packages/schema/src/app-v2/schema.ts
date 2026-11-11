@@ -142,6 +142,8 @@ export const appV2Schema = z.strictObject({
     createDealFormId: id, createClientFormId: id, contactFormId: id,
     /** Compact stage/due/sum editor; absent on older drafts that only had the journal form. */
     dealEditFormId: id.optional(),
+    /** Pencil editor on the client card; absent on older drafts. */
+    clientEditFormId: id.optional(),
     titleFieldId: id, stageFieldId: id, dueFieldId: id, noteFieldId: id, sumFieldId: id,
     clientRelationFieldId: id, assignmentFieldId: id, clientNameFieldId: id,
     clientTitleFieldId: id, clientPhoneFieldId: id, clientEmailFieldId: id, clientNoteFieldId: id,

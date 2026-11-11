@@ -636,8 +636,25 @@
 .detailSectionBody :global([class*='collectionHeading']),
 .detailSectionBody :global([class*='formTitle']),
 .detailMainCol > :global(section) :global([class*='collectionHeading']),
-.detailSideCol > :global(section) :global([class*='collectionHeading']) {
-  display: none;
+.detailSideCol > :global(section) :global([class*='collectionHeading']),
+.detailMainCol > :global([data-kind='collection']) :global([class*='collectionHeading']),
+.detailMainCol > :global([data-kind='collection']) :global([class*='heading']) {
+  display: none !important;
+}
+
+/* canvasBlock / collection wrappers that already sit in a framed section lose nested chrome */
+.detailMainCol > :global([data-kind='collection']) :global([class*='plainList']),
+.detailMainCol > :global([data-kind='collection']) :global([class*='timelineCollection']),
+.detailMainCol > :global([data-kind='collection']) :global([class*='panel']),
+.detailSectionBody :global([class*='plainList']),
+.detailSectionBody :global([class*='timelineCollection']),
+.detailSectionBody :global([class*='panel']),
+.detailSectionBody :global([class*='collection']) {
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  padding: 0 !important;
 }
 
 /* Key/value rows: one column, label left / value right — no word-by-word wrap. */

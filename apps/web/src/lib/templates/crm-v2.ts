@@ -58,12 +58,12 @@ export function buildCrmV2App(built: BuiltTemplate, meta: { id: string; workspac
   const createDealScreenId = newId('screen'), createClientScreenId = newId('screen')
   const boardNode = newId('component'), calendarNode = newId('component'), clientsNode = newId('component'), relatedDealsNode = newId('component')
   const dealContactsNode = newId('component'), clientContactsNode = newId('component')
-  const createDealFormId = newId('component'), createClientFormId = newId('component'), contactFormId = newId('component'), dealEditFormId = newId('component')
+  const createDealFormId = newId('component'), createClientFormId = newId('component'), contactFormId = newId('component'), dealEditFormId = newId('component'), clientEditFormId = newId('component')
   const boardSource = newId('component'), calendarSource = newId('component'), clientsSource = newId('component'), relatedSource = newId('component')
   const dealContactsSource = newId('component'), clientContactsSource = newId('component')
   const openDeal = newId('action'), openClient = newId('action'), openRelatedDeal = newId('action')
   const openCreateDeal = newId('action'), openCreateClient = newId('action')
-  const createDeal = newId('action'), createClient = newId('action'), saveContact = newId('action'), saveDealEdit = newId('action')
+  const createDeal = newId('action'), createClient = newId('action'), saveContact = newId('action'), saveDealEdit = newId('action'), saveClientEdit = newId('action')
   const createDealStep = newId('action'), createClientStep = newId('action'), logContactStep = newId('action')
   const newDealButton = newId('component'), newClientButton = newId('component')
 
@@ -93,6 +93,14 @@ export function buildCrmV2App(built: BuiltTemplate, meta: { id: string; workspac
     input(due, 'Вернуться к разговору', false),
     input(sum, 'Сумма', false),
   ]
+  const clientEditInputs = [
+    input(field('clients', 'name'), 'Клиент', true),
+    input(field('clients', 'contact'), 'Контактное лицо', false),
+    input(field('clients', 'phone'), 'Телефон', false),
+    input(field('clients', 'email'), 'Почта', false),
+    input(field('clients', 'city'), 'Город', false),
+    input(field('clients', 'note'), 'Заметки', false),
+  ]
   // Stage/sum/due feed Identity; client + assignee stay as facts.
   const dealIdentityFieldIds = [stage, sum, due]
   const dealFieldIds = [clientRelation, assignment]
@@ -102,7 +110,7 @@ export function buildCrmV2App(built: BuiltTemplate, meta: { id: string; workspac
     dealsTableId, clientsTableId, contactsTableId,
     boardScreenId, dealScreenId, clientsScreenId, clientScreenId, calendarScreenId,
     createDealScreenId, createClientScreenId,
-    createDealFormId, createClientFormId, contactFormId, dealEditFormId,
+    createDealFormId, createClientFormId, contactFormId, dealEditFormId, clientEditFormId,
     titleFieldId: title, stageFieldId: stage, dueFieldId: due, noteFieldId: note, sumFieldId: sum,
     clientRelationFieldId: clientRelation, assignmentFieldId: assignment, clientNameFieldId: clientName,
     clientTitleFieldId: field('clients', 'name'), clientPhoneFieldId: field('clients', 'phone'),
@@ -116,6 +124,7 @@ export function buildCrmV2App(built: BuiltTemplate, meta: { id: string; workspac
   const clientCreateFields = createClientInputs.map(item => item.fieldId)
   const contactUpdateFields = [due, note]
   const dealEditFields = [stage, due, sum]
+  const clientEditFields = clientEditInputs.map(item => item.fieldId)
   const contactCreateFields = [contactSummary, contactDeal, contactClient, contactLoggedAt, contactNextDue]
   const staffDealRead = columns(dealsTableId).map(item => item.id)
   const staffDealUpdate = [stage, due, note, sum, title, clientRelation]
@@ -135,7 +144,7 @@ export function buildCrmV2App(built: BuiltTemplate, meta: { id: string; workspac
       { id: createDealScreenId, name: 'Новая сделка', icon: 'deal', navigation: false, audience: team, contextTableId: null, rootIds: [createDealFormId], events: { enter: null } },
       { id: createClientScreenId, name: 'Новый клиент', icon: 'users', navigation: false, audience: team, contextTableId: null, rootIds: [createClientFormId], events: { enter: null } },
       { id: dealScreenId, name: 'Сделка', icon: 'deal', navigation: false, audience: team, contextTableId: dealsTableId, recordTitleFieldId: title, rootIds: [...dealIdentityFieldIds.map(id => `deal_${id}`), ...dealFieldIds.map(id => `deal_${id}`), dealContactsNode, contactFormId, dealEditFormId], events: { enter: null } },
-      { id: clientScreenId, name: 'Клиент', icon: 'users', navigation: false, audience: team, contextTableId: clientsTableId, recordTitleFieldId: crm.clientTitleFieldId, rootIds: [...clientFieldIds.map(id => `client_${id}`), relatedDealsNode, clientContactsNode], events: { enter: null } },
+      { id: clientScreenId, name: 'Клиент', icon: 'users', navigation: false, audience: team, contextTableId: clientsTableId, recordTitleFieldId: crm.clientTitleFieldId, rootIds: [...clientFieldIds.map(id => `client_${id}`), relatedDealsNode, clientContactsNode, clientEditFormId], events: { enter: null } },
     ],
     nodes: [
       { id: newDealButton, name: 'Новая сделка', type: 'button', label: 'Новая сделка', variant: 'primary', visibleTo: team, visibleWhen: null, events: { press: openCreateDeal } },
@@ -152,6 +161,8 @@ export function buildCrmV2App(built: BuiltTemplate, meta: { id: string; workspac
       { id: contactFormId, name: 'Добавить запись', type: 'form', visibleTo: team, visibleWhen: null, tableId: dealsTableId, mode: 'edit', childIds: contactInputs.map(item => item.id), events: { submit: saveContact }, submitLabel: 'Сохранить запись' },
       ...contactInputs,
       { id: dealEditFormId, name: 'Изменить сделку', type: 'form', visibleTo: team, visibleWhen: null, tableId: dealsTableId, mode: 'edit', childIds: dealEditInputs.map(item => item.id), events: { submit: saveDealEdit }, submitLabel: 'Сохранить' },
+      { id: clientEditFormId, name: 'Изменить клиента', type: 'form', visibleTo: team, visibleWhen: null, tableId: clientsTableId, mode: 'edit', childIds: clientEditInputs.map(item => item.id), events: { submit: saveClientEdit }, submitLabel: 'Сохранить' },
+      ...clientEditInputs,
       ...dealEditInputs,
       ...clientFieldIds.map(fieldId => node(`client_${fieldId}`, columns(clientsTableId).find(item => item.id === fieldId)!.name, fieldId)),
       { id: relatedDealsNode, name: 'Сделки', type: 'collection', visibleTo: null, visibleWhen: null, sourceId: relatedSource, layout: 'list', titleFieldId: title, subtitleFieldId: stage, cardDetailFieldId: due, itemIds: [], events: { itemPress: openRelatedDeal } },
@@ -198,6 +209,10 @@ export function buildCrmV2App(built: BuiltTemplate, meta: { id: string; workspac
         { id: newId('action'), type: 'update_row', tableId: dealsTableId, target: { kind: 'current' }, values: Object.fromEntries(dealEditFields.map(fieldId => [fieldId, { kind: 'form' as const, formId: dealEditFormId, fieldId }])) },
         { id: newId('action'), type: 'notify', message: { kind: 'literal', value: 'Сделка обновлена.' } },
       ] },
+      { id: saveClientEdit, name: 'Изменить клиента', input: { rowTableId: clientsTableId, formId: clientEditFormId, screenTableId: clientsTableId }, steps: [
+        { id: newId('action'), type: 'update_row', tableId: clientsTableId, target: { kind: 'current' }, values: Object.fromEntries(clientEditFields.map(fieldId => [fieldId, { kind: 'form' as const, formId: clientEditFormId, fieldId }])) },
+        { id: newId('action'), type: 'notify', message: { kind: 'literal', value: 'Клиент обновлён.' } },
+      ] },
     ],
     policy: {
       tables: [
@@ -237,6 +252,7 @@ export function buildCrmV2App(built: BuiltTemplate, meta: { id: string; workspac
         { workflowId: createClient, audience: team },
         { workflowId: saveContact, audience: team },
         { workflowId: saveDealEdit, audience: team },
+        { workflowId: saveClientEdit, audience: team },
       ],
     },
     crm,

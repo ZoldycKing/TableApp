@@ -138,7 +138,16 @@
   letter-spacing: -.015em;
   white-space: nowrap;
 }
-.orderDetail[data-layout="stack"][data-manage] { padding-bottom: calc(4.75rem + env(safe-area-inset-bottom, 0px)); }
+.orderDetail[data-layout="stack"][data-manage] {
+  padding-bottom: calc(4.75rem + env(safe-area-inset-bottom, 0px));
+}
+/* Keep «Обработка заказа» fully on-page (form fields + save), not clipped by the frame. */
+.orderDetail[data-layout="stack"] .orderActionPanel[data-mode='persistent'] {
+  margin-bottom: 12px;
+}
+.orderDetail[data-layout="stack"][data-manage] .orderDetailMain {
+  padding-bottom: 24px;
+}
 .orderActionDock[data-mode="reveal"], .orderActionDock[data-placement="mobile"] { position: sticky; bottom: 12px; z-index: 4; padding: 10px; border-radius: var(--v2-card-radius, 12px); background: color-mix(in srgb, var(--v2-surface, #fff) 92%, transparent); box-shadow: var(--v2-panel-shadow); backdrop-filter: blur(8px); }
 .orderActionDock .orderActionTrigger { width: 100%; }
 .orderActionDock .orderActionTrigger[data-primary] { grid-column: 1 / -1; }

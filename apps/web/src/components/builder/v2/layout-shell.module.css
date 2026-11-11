@@ -227,16 +227,23 @@
 .filterSearch > input::placeholder { color: var(--shell-muted); }
 
 .filterSearch > select {
-  min-width: 0;
-  width: max-content;
+  appearance: none;
+  -webkit-appearance: none;
+  min-width: 8.5rem;
+  width: auto;
   max-width: 100%;
   min-height: 38px;
-  padding: 0 4px;
+  padding: 0 1.5rem 0 2px;
   border: 0;
-  background: transparent;
+  background:
+    transparent
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23687568' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")
+    no-repeat right 2px center / 12px 12px;
   color: var(--shell-ink);
   font: inherit;
+  font-size: 13px;
   font-weight: 650;
+  line-height: 1.2;
   outline: none;
   cursor: pointer;
 }
@@ -253,6 +260,7 @@
   flex: 0 1 auto;
   width: auto;
   max-width: 100%;
+  padding-inline: 10px 8px;
 }
 
 .body {

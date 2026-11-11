@@ -142,6 +142,13 @@
 .orderActionDock[data-mode="reveal"], .orderActionDock[data-placement="mobile"] { position: sticky; bottom: 12px; z-index: 4; padding: 10px; border-radius: var(--v2-card-radius, 12px); background: color-mix(in srgb, var(--v2-surface, #fff) 92%, transparent); box-shadow: var(--v2-panel-shadow); backdrop-filter: blur(8px); }
 .orderActionDock .orderActionTrigger { width: 100%; }
 .orderActionDock .orderActionTrigger[data-primary] { grid-column: 1 / -1; }
+/* Product sticky bar: Приход + Расход + … on one row (mockup). */
+.orderActionDock[data-placement='mobile']:has(.orderActionOverflow) {
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr) 44px;
+}
+.orderActionDock[data-placement='mobile']:has(.orderActionOverflow) .orderActionTrigger[data-primary] {
+  grid-column: auto;
+}
 .orderActionOverflow { position: relative; display: inline-flex; }
 .orderActionOverflow > summary { list-style: none; cursor: pointer; }
 .orderActionOverflow > summary::-webkit-details-marker { display: none; }

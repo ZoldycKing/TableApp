@@ -169,7 +169,7 @@ export function DetailCardShell({
       {visibleMetrics.map(metric => <div key={metric.key} className={shell.metric}>
         <p className={shell.metricCaption}>{metric.caption}</p>
         <p className={shell.metricValue} data-tone={metric.tone}>{metric.value}</p>
-        {metric.pill ? <span className={shell.metricPill} data-tone={metric.tone}>{metric.pill}</span> : null}
+        {metric.pill ? <span className={shell.metricPill}>{metric.pill}</span> : null}
       </div>)}
     </div> : null}
     {children ? <div className={shell.detailBody} data-product={product || undefined}>{children}</div> : null}

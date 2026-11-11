@@ -13,6 +13,7 @@ type PurchaseInventory = NonNullable<AppV2['inventory']> & {
   purchaseLinesTableId: string
   supplierNameFieldId: string
   purchaseNameFieldId: string
+  purchaseNumberFieldId: string
   purchaseSupplierFieldId: string
   purchaseWarehouseFieldId: string
   purchaseDateFieldId: string
@@ -22,6 +23,14 @@ type PurchaseInventory = NonNullable<AppV2['inventory']> & {
   purchaseLinesFieldId: string
   purchaseCountFieldId: string
   purchasePayloadFieldId: string
+  purchaseCreatedAtFieldId: string
+  purchaseCreatedByFieldId: string
+  purchaseOrderedAtFieldId: string
+  purchaseOrderedByFieldId: string
+  purchaseReceivedAtFieldId: string
+  purchaseReceivedByFieldId: string
+  purchaseCancelledAtFieldId: string
+  purchaseCancelledByFieldId: string
   lineNameFieldId: string
   lineOrderFieldId: string
   lineProductFieldId: string
@@ -38,11 +47,16 @@ const actorKind = (actor: AppV2Actor) => ({ id: actor.id!, kind: 'app_user' as c
 function purchases(app: AppV2): PurchaseInventory {
   const inv = app.inventory
   if (!inv?.purchaseOrdersTableId || !inv.purchaseLinesTableId || !inv.suppliersTableId
-    || !inv.supplierNameFieldId || !inv.purchaseNameFieldId || !inv.purchaseSupplierFieldId
-    || !inv.purchaseWarehouseFieldId || !inv.purchaseDateFieldId || !inv.purchaseStatusFieldId
-    || !inv.purchaseTotalFieldId || !inv.purchaseCommentFieldId || !inv.purchaseLinesFieldId
-    || !inv.purchaseCountFieldId || !inv.purchasePayloadFieldId || !inv.lineNameFieldId
-    || !inv.lineOrderFieldId || !inv.lineProductFieldId || !inv.lineQtyFieldId || !inv.linePriceFieldId
+    || !inv.supplierNameFieldId || !inv.purchaseNameFieldId || !inv.purchaseNumberFieldId
+    || !inv.purchaseSupplierFieldId || !inv.purchaseWarehouseFieldId || !inv.purchaseDateFieldId
+    || !inv.purchaseStatusFieldId || !inv.purchaseTotalFieldId || !inv.purchaseCommentFieldId
+    || !inv.purchaseLinesFieldId || !inv.purchaseCountFieldId || !inv.purchasePayloadFieldId
+    || !inv.purchaseCreatedAtFieldId || !inv.purchaseCreatedByFieldId
+    || !inv.purchaseOrderedAtFieldId || !inv.purchaseOrderedByFieldId
+    || !inv.purchaseReceivedAtFieldId || !inv.purchaseReceivedByFieldId
+    || !inv.purchaseCancelledAtFieldId || !inv.purchaseCancelledByFieldId
+    || !inv.lineNameFieldId || !inv.lineOrderFieldId || !inv.lineProductFieldId
+    || !inv.lineQtyFieldId || !inv.linePriceFieldId
     || !inv.statusDraft || !inv.statusOrdered || !inv.statusReceived || !inv.statusCancelled) {
     throw new RowWriteError('denied', 'Закупки не настроены')
   }
@@ -88,6 +102,13 @@ function textOf(value: unknown, label: string, max = 2000) {
   return text
 }
 
+function actorStamp(actor: AppV2Actor) {
+  return {
+    at: new Date().toISOString(),
+    by: (actor.email || actor.id || '').trim() || 'unknown',
+  }
+}
+
 /** Lines travel in the form as JSON and are never stored on the order row. */
 export function parsePurchaseLines(value: unknown): PurchaseLineInput[] {
   let parsed: unknown = value
@@ -122,6 +143,18 @@ export function parsePurchaseLines(value: unknown): PurchaseLineInput[] {
 async function liveRows(write: RowTransaction, tableId: string, ids: string[]) {
   if (!ids.length) return []
   return write.tx.select().from(rows).where(and(eq(rows.tableId, tableId), inArray(rows.id, ids), isNull(rows.deletedAt)))
+}
+
+async function nextPurchaseNumber(write: RowTransaction, inv: PurchaseInventory) {
+  const existing = await write.tx.select({ data: rows.data }).from(rows)
+    .where(and(eq(rows.tableId, inv.purchaseOrdersTableId), isNull(rows.deletedAt)))
+  let max = 0
+  for (const row of existing) {
+    const value = String((row.data as Record<string, unknown>)[inv.purchaseNumberFieldId] ?? '').trim()
+    const match = /^З-(\d+)$/u.exec(value)
+    if (match) max = Math.max(max, Number(match[1]))
+  }
+  return `З-${String(max + 1).padStart(4, '0')}`
 }
 
 async function header(write: RowTransaction, app: AppV2, actor: AppV2Actor, values: Record<string, AppV2Json>, operation: 'create' | 'update', orderId?: string) {
@@ -180,8 +213,11 @@ async function replaceLines(write: RowTransaction, inv: PurchaseInventory, actor
 export async function createPurchaseOrder(write: RowTransaction, app: AppV2, actor: AppV2Actor, values: Record<string, AppV2Json>) {
   const draft = await header(write, app, actor, values, 'create')
   const { inv } = draft
+  const number = await nextPurchaseNumber(write, inv)
+  const createdStamp = actorStamp(actor)
   const created = await createRow(write, inv.purchaseOrdersTableId, {
     [inv.purchaseNameFieldId]: draft.title,
+    [inv.purchaseNumberFieldId]: number,
     [inv.purchaseSupplierFieldId]: [draft.supplierId],
     [inv.purchaseWarehouseFieldId]: [draft.warehouseId],
     [inv.purchaseDateFieldId]: draft.date,
@@ -190,6 +226,8 @@ export async function createPurchaseOrder(write: RowTransaction, app: AppV2, act
     [inv.purchaseCommentFieldId]: draft.comment,
     [inv.purchaseLinesFieldId]: [],
     [inv.purchaseCountFieldId]: draft.lines.length,
+    [inv.purchaseCreatedAtFieldId]: createdStamp.at,
+    [inv.purchaseCreatedByFieldId]: createdStamp.by,
   }, actorKind(actor), { origin: 'runtime' })
   const lineIds = await replaceLines(write, inv, actor, created.id, [], draft.lines, draft.names)
   await updateRow(write, inv.purchaseOrdersTableId, created.id, { [inv.purchaseLinesFieldId]: lineIds }, actorKind(actor))
@@ -232,7 +270,12 @@ export async function orderPurchaseOrder(write: RowTransaction, app: AppV2, acto
   if (!order || order.deletedAt) throw new RowWriteError('missing', 'Заказ недоступен')
   const status = (order.data as Record<string, unknown>)[inv.purchaseStatusFieldId]
   if (status !== inv.statusDraft) throw new RowWriteError('invalid', 'Отметить заказанным можно только черновик')
-  await updateRow(write, inv.purchaseOrdersTableId, orderId, { [inv.purchaseStatusFieldId]: inv.statusOrdered }, actorKind(actor))
+  const stamp = actorStamp(actor)
+  await updateRow(write, inv.purchaseOrdersTableId, orderId, {
+    [inv.purchaseStatusFieldId]: inv.statusOrdered,
+    [inv.purchaseOrderedAtFieldId]: stamp.at,
+    [inv.purchaseOrderedByFieldId]: stamp.by,
+  }, actorKind(actor))
   return { id: orderId }
 }
 
@@ -264,7 +307,8 @@ export async function receivePurchaseOrder(write: RowTransaction, app: AppV2, ac
   }).sort((a, b) => a.productId.localeCompare(b.productId))
   const comment = textOf(data[inv.purchaseCommentFieldId], 'Комментарий')
   const name = String(data[inv.purchaseNameFieldId] ?? 'Заказ')
-  const note = [`Закупка · ${name}`, comment].filter(part => part.trim()).join('. ').slice(0, 2000)
+  const number = String(data[inv.purchaseNumberFieldId] ?? '').trim()
+  const note = [`Закупка · ${number || name}`, comment].filter(part => part.trim()).join('. ').slice(0, 2000)
   const when = typeof data[inv.purchaseDateFieldId] === 'string' && String(data[inv.purchaseDateFieldId]).trim()
     ? String(data[inv.purchaseDateFieldId]).trim()
     : new Date().toISOString()
@@ -276,18 +320,58 @@ export async function receivePurchaseOrder(write: RowTransaction, app: AppV2, ac
       [inv.movementDateFieldId]: when,
     }, line.productId)
   }
-  await updateRow(write, inv.purchaseOrdersTableId, orderId, { [inv.purchaseStatusFieldId]: inv.statusReceived }, actorKind(actor))
+  const stamp = actorStamp(actor)
+  await updateRow(write, inv.purchaseOrdersTableId, orderId, {
+    [inv.purchaseStatusFieldId]: inv.statusReceived,
+    [inv.purchaseReceivedAtFieldId]: stamp.at,
+    [inv.purchaseReceivedByFieldId]: stamp.by,
+  }, actorKind(actor))
   return { id: orderId }
 }
 
-/** Owner cancels a received order. Stage 2 does not reverse the receipt. */
+/**
+ * Owner cancels a received order and reverses each receipt with a write-off
+ * into the order warehouse. Negative stock is refused with a clear error.
+ */
 export async function cancelPurchaseOrder(write: RowTransaction, app: AppV2, actor: AppV2Actor, orderId: string) {
   const inv = purchases(app)
   ownerOnly(actor)
+  if (!actor.email) throw new RowWriteError('denied', 'Для отмены нужно войти')
   const order = await lockedRow(write, inv.purchaseOrdersTableId, orderId)
   if (!order || order.deletedAt) throw new RowWriteError('missing', 'Заказ недоступен')
-  const status = (order.data as Record<string, unknown>)[inv.purchaseStatusFieldId]
+  const data = order.data as Record<string, unknown>
+  const status = data[inv.purchaseStatusFieldId]
   if (status !== inv.statusReceived) throw new RowWriteError('invalid', 'Отменить можно только полученный заказ')
-  await updateRow(write, inv.purchaseOrdersTableId, orderId, { [inv.purchaseStatusFieldId]: inv.statusCancelled }, actorKind(actor))
-  return { id: orderId }
+  const warehouseId = relationId(data[inv.purchaseWarehouseFieldId])
+  if (!warehouseId) throw new RowWriteError('invalid', 'В заказе не указан склад')
+  const lineIds = relationIds(data[inv.purchaseLinesFieldId])
+  const stored = await liveRows(write, inv.purchaseLinesTableId, lineIds)
+  if (!stored.length) throw new RowWriteError('invalid', 'В заказе нет позиций')
+  const lines = stored.map(row => {
+    const line = row.data as Record<string, unknown>
+    const productId = relationId(line[inv.lineProductFieldId])
+    const qty = Number(line[inv.lineQtyFieldId])
+    if (!productId || !Number.isSafeInteger(qty) || qty < 1) throw new RowWriteError('invalid', 'Проверьте позиции заказа')
+    return { productId, qty }
+  }).sort((a, b) => a.productId.localeCompare(b.productId))
+  const name = String(data[inv.purchaseNameFieldId] ?? 'Заказ')
+  const number = String(data[inv.purchaseNumberFieldId] ?? '').trim()
+  const label = number || name
+  const note = `Отмена закупки · ${label}`.slice(0, 2000)
+  const when = new Date().toISOString()
+  for (const line of lines) {
+    await recordInventoryMovement(write, app, actor, 'write_off', {
+      [inv.movementQtyFieldId]: line.qty,
+      [inv.movementWarehouseFieldId]: [warehouseId],
+      [inv.movementNoteFieldId]: note,
+      [inv.movementDateFieldId]: when,
+    }, line.productId)
+  }
+  const stamp = actorStamp(actor)
+  await updateRow(write, inv.purchaseOrdersTableId, orderId, {
+    [inv.purchaseStatusFieldId]: inv.statusCancelled,
+    [inv.purchaseCancelledAtFieldId]: stamp.at,
+    [inv.purchaseCancelledByFieldId]: stamp.by,
+  }, actorKind(actor))
+  return { id: orderId, label }
 }

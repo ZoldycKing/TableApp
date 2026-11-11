@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-const envFile = resolve(import.meta.dirname, '../../../.env')
+const envFile = resolve(import.meta.dirname, '../../../../.env')
 if (!process.env.DATABASE_URL && existsSync(envFile)) process.loadEnvFile(envFile)
 
 describe('purchase line payload', () => {

@@ -25,7 +25,9 @@ export class BuilderV2WorkflowError extends Error {
 }
 /** Carries a preview out of the savepoint; no mutation, receipt or journal entry is committed. */
 export class BuilderV2WorkflowConfirmationRequired extends Error {
-  constructor(readonly confirmation:BuilderV2WorkflowConfirmation){super('Подтвердите удаление записей')}
+  constructor(readonly confirmation: BuilderV2WorkflowConfirmation) {
+    super(confirmation.kind === 'cancel_purchase' ? 'Подтвердите отмену заказа' : 'Подтвердите удаление записей')
+  }
 }
 
 /** Executes the complete validated definition. Effects are returned only after its transaction commits. */
@@ -49,6 +51,7 @@ export async function executeBuilderV2Workflow(options: { write: RowTransaction;
   const initial = selected ? await record(selected) : undefined, screenInitial=options.screenSelected===undefined?initial:options.screenSelected?await record(options.screenSelected):undefined, results = new Map<string, AppV2Record>(), effects: BuilderV2WorkflowEffect[] = [], trace: BuilderV2WorkflowTrace = []
   const context: AppV2Context = { actor, row: initial, screenRow: screenInitial, forms: new Map(form ? [[form.id, { tableId: form.tableId, values: form.values }]] : []), results }
   const created=new Map<string,string>(),deleted=new Set<string>(),deletions:{stepId:string;tableId:string;recordKey:string;version:number;recordLabel:string;tableName:string}[]=[]
+  const cancellations:{stepId:string;tableId:string;recordKey:string;version:number;recordLabel:string;tableName:string}[]=[]
   const resolve = (binding: AppV2Binding): AppV2Json => { const result = resolveAppV2Binding(binding, context); if (!result.ok) throw new RowWriteError('invalid', result.error); return result.value }
   const target = (value: AppV2Target): AppV2Record => { const result = value.kind === 'current' ? context.row : results.get(value.stepId); if (!result) throw new RowWriteError('invalid', 'Запись недоступна на этом шаге'); return result }
   const condition = (value: Parameters<typeof evaluateAppV2Condition>[0]) => { const result = evaluateAppV2Condition(value, context); if (!result.ok) throw new RowWriteError('invalid', result.error); return result.value }
@@ -93,15 +96,30 @@ export async function executeBuilderV2Workflow(options: { write: RowTransaction;
           const current = context.screenRow ?? context.row
           const ordersId = app.inventory?.purchaseOrdersTableId
           if (!current || !ordersId || current.tableId !== ordersId) throw new RowWriteError('invalid', 'Откройте заказ поставщику')
-          const saved = step.type === 'order_purchase_order'
-            ? await orderPurchaseOrder(write, app, actor, current.id)
-            : step.type === 'receive_purchase_order'
-              ? await receivePurchaseOrder(write, app, actor, current.id)
-              : await cancelPurchaseOrder(write, app, actor, current.id)
-          const next = await record(await workingBuilderV2Record(write.tx, ordersId, saved.id))
-          results.set(step.id, next)
-          if (context.row?.id === next.id) context.row = next
-          if (context.screenRow?.id === next.id) context.screenRow = next
+          const stored = await workingBuilderV2Record(write.tx, ordersId, current.id, true)
+          if (step.type === 'cancel_purchase_order') {
+            const saved = await cancelPurchaseOrder(write, app, actor, current.id)
+            const next = await record(await workingBuilderV2Record(write.tx, ordersId, saved.id))
+            results.set(step.id, next)
+            if (context.row?.id === next.id) context.row = next
+            if (context.screenRow?.id === next.id) context.screenRow = next
+            cancellations.push({
+              stepId: step.id,
+              tableId: ordersId,
+              recordKey: stored.id,
+              version: stored.version,
+              recordLabel: saved.label || 'Заказ',
+              tableName: tables.find(table => table.id === ordersId)?.name ?? 'Заказы поставщикам',
+            })
+          } else {
+            const saved = step.type === 'order_purchase_order'
+              ? await orderPurchaseOrder(write, app, actor, current.id)
+              : await receivePurchaseOrder(write, app, actor, current.id)
+            const next = await record(await workingBuilderV2Record(write.tx, ordersId, saved.id))
+            results.set(step.id, next)
+            if (context.row?.id === next.id) context.row = next
+            if (context.screenRow?.id === next.id) context.screenRow = next
+          }
         } else if (step.type === 'create_row' || step.type === 'update_row') {
           const values = await builderV2WorkflowValues(meta, step.tableId, Object.fromEntries(Object.entries(step.values).map(([id, value]) => [id, resolve(value)])),options.published?{app,actor}:undefined), row = step.type === 'update_row' ? target(step.target) : undefined
           if (row && row.tableId !== step.tableId) throw new RowWriteError('denied', 'Запись относится к другой таблице')
@@ -157,10 +175,20 @@ export async function executeBuilderV2Workflow(options: { write: RowTransaction;
   await run(flow.steps)
   const finalFailure=(message:string,conflict=false):never=>{throw new BuilderV2WorkflowError(new RowWriteError(conflict?'conflict':'invalid',message),all.at(-1)?.id??'finish','Завершить действие',trace)}
   if(effects.some(effect=>effect.type==='open_screen'&&effect.recordId&&deleted.has(effect.recordId)))finalFailure('Нельзя открыть удалённую запись. Выберите другой экран после удаления.')
-  if(options.confirmation&&!deletions.length)finalFailure('Условия действия изменились. Обновите данные и запустите его заново.',true)
+  if(options.confirmation&&!deletions.length&&!cancellations.length)finalFailure('Условия действия изменились. Обновите данные и запустите его заново.',true)
+  if(cancellations.length){
+    const fingerprint=builderV2Revision(['workflow-cancel-purchase',app.id,flow,actor,selected?[selected.id,selected.version]:null,screenInitial?.id,form?.values,cancellations])
+    if(options.confirmation!==fingerprint)throw new BuilderV2WorkflowConfirmationRequired({
+      fingerprint,
+      kind: 'cancel_purchase',
+      title: 'Отменить полученный заказ?',
+      message: 'Отмена уменьшит остатки на складе: приходы по этому заказу будут сторнированы списанием. Если товара уже не хватает, отмена не пройдёт.',
+      records: cancellations.map(({ tableName, recordLabel }) => ({ tableName, recordLabel })),
+    })
+  }
   if(deletions.length){
     const fingerprint=builderV2Revision(['workflow-delete',app.id,flow,actor,selected?[selected.id,selected.version]:null,screenInitial?.id,form?.values,deletions])
-    if(options.confirmation!==fingerprint)throw new BuilderV2WorkflowConfirmationRequired({fingerprint,records:deletions.map(({tableName,recordLabel})=>({tableName,recordLabel}))})
+    if(options.confirmation!==fingerprint)throw new BuilderV2WorkflowConfirmationRequired({fingerprint,kind:'delete',records:deletions.map(({tableName,recordLabel})=>({tableName,recordLabel}))})
     if(screenInitial&&deleted.has(screenInitial.id)&&!effects.some(effect=>['open_screen','go_back','open_url'].includes(effect.type))){const home=app.screens.find(screen=>screen.id===app.homeScreenId&&!screen.contextTableId&&canOpenAppV2Screen(app,actor,screen.id))??app.screens.find(screen=>!screen.contextTableId&&canOpenAppV2Screen(app,actor,screen.id));if(home)effects.push({type:'open_screen',screenId:home.id})}
   }
   const primary = primaryStepId ? results.get(primaryStepId) : context.row ?? results.values().next().value

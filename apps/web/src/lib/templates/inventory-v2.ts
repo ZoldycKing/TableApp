@@ -83,6 +83,7 @@ export function buildInventoryV2App(built: BuiltTemplate, meta: { id: string; wo
   const supplierPhone = fieldByName(suppliersTableId, 'Телефон')
   const supplierComment = fieldByName(suppliersTableId, 'Комментарий')
   const purchaseName = fieldByName(purchaseOrdersTableId, 'Заказ')
+  const purchaseNumber = fieldByName(purchaseOrdersTableId, 'Номер')
   const purchaseSupplier = fieldByName(purchaseOrdersTableId, 'Поставщик')
   const purchaseWarehouse = fieldByName(purchaseOrdersTableId, 'Склад')
   const purchaseDate = fieldByName(purchaseOrdersTableId, 'Дата')
@@ -92,6 +93,14 @@ export function buildInventoryV2App(built: BuiltTemplate, meta: { id: string; wo
   const purchaseLines = fieldByName(purchaseOrdersTableId, 'Позиции')
   const purchaseCount = fieldByName(purchaseOrdersTableId, 'Позиций')
   const purchasePayload = fieldByName(purchaseOrdersTableId, 'Состав заказа')
+  const purchaseCreatedAt = fieldByName(purchaseOrdersTableId, 'Создан')
+  const purchaseCreatedBy = fieldByName(purchaseOrdersTableId, 'Создал')
+  const purchaseOrderedAt = fieldByName(purchaseOrdersTableId, 'Заказан')
+  const purchaseOrderedBy = fieldByName(purchaseOrdersTableId, 'Заказал')
+  const purchaseReceivedAt = fieldByName(purchaseOrdersTableId, 'Получен')
+  const purchaseReceivedBy = fieldByName(purchaseOrdersTableId, 'Получил')
+  const purchaseCancelledAt = fieldByName(purchaseOrdersTableId, 'Отменён')
+  const purchaseCancelledBy = fieldByName(purchaseOrdersTableId, 'Отменил')
   const lineName = fieldByName(purchaseLinesTableId, 'Позиция')
   const lineOrder = fieldByName(purchaseLinesTableId, 'Заказ')
   const lineProduct = fieldByName(purchaseLinesTableId, 'Товар')
@@ -201,9 +210,13 @@ export function buildInventoryV2App(built: BuiltTemplate, meta: { id: string; wo
     suppliersScreenId, supplierScreenId, createSupplierScreenId,
     createPurchaseFormId, editPurchaseFormId, createSupplierFormId, editSupplierFormId,
     supplierNameFieldId: supplierName, supplierContactFieldId: supplierContact, supplierPhoneFieldId: supplierPhone, supplierCommentFieldId: supplierComment,
-    purchaseNameFieldId: purchaseName, purchaseSupplierFieldId: purchaseSupplier, purchaseWarehouseFieldId: purchaseWarehouse,
+    purchaseNameFieldId: purchaseName, purchaseNumberFieldId: purchaseNumber, purchaseSupplierFieldId: purchaseSupplier, purchaseWarehouseFieldId: purchaseWarehouse,
     purchaseDateFieldId: purchaseDate, purchaseStatusFieldId: purchaseStatus, purchaseTotalFieldId: purchaseTotal,
     purchaseCommentFieldId: purchaseComment, purchaseLinesFieldId: purchaseLines, purchaseCountFieldId: purchaseCount, purchasePayloadFieldId: purchasePayload,
+    purchaseCreatedAtFieldId: purchaseCreatedAt, purchaseCreatedByFieldId: purchaseCreatedBy,
+    purchaseOrderedAtFieldId: purchaseOrderedAt, purchaseOrderedByFieldId: purchaseOrderedBy,
+    purchaseReceivedAtFieldId: purchaseReceivedAt, purchaseReceivedByFieldId: purchaseReceivedBy,
+    purchaseCancelledAtFieldId: purchaseCancelledAt, purchaseCancelledByFieldId: purchaseCancelledBy,
     lineNameFieldId: lineName, lineOrderFieldId: lineOrder, lineProductFieldId: lineProduct, lineQtyFieldId: lineQty, linePriceFieldId: linePrice, lineTotalFieldId: lineTotal,
     statusDraft, statusOrdered, statusReceived, statusCancelled,
   }
@@ -237,7 +250,7 @@ export function buildInventoryV2App(built: BuiltTemplate, meta: { id: string; wo
       // Deep-link screen; list toolbar opens the same form node in a centred dialog (not dual-rooted).
       { id: createItemScreenId, name: 'Новый товар', icon: 'box', navigation: false, audience: owners, contextTableId: null, rootIds: [createItemFormId], events: { enter: null } },
       { id: createPurchaseScreenId, name: 'Новый заказ', icon: 'clipboard', navigation: false, audience: team, contextTableId: null, rootIds: [createPurchaseFormId], events: { enter: null } },
-      { id: purchaseScreenId, name: 'Заказ поставщику', icon: 'clipboard', navigation: false, audience: team, contextTableId: purchaseOrdersTableId, recordTitleFieldId: purchaseName, rootIds: [purchaseLinesNode, editPurchaseFormId, orderPurchaseButton, receivePurchaseButton, cancelPurchaseButton], events: { enter: null } },
+      { id: purchaseScreenId, name: 'Заказ поставщику', icon: 'clipboard', navigation: false, audience: team, contextTableId: purchaseOrdersTableId, recordTitleFieldId: purchaseNumber, rootIds: [purchaseLinesNode, editPurchaseFormId, orderPurchaseButton, receivePurchaseButton, cancelPurchaseButton], events: { enter: null } },
       { id: suppliersScreenId, name: 'Поставщики', icon: 'users', navigation: false, audience: team, contextTableId: null, rootIds: [newSupplierButton, suppliersNode], events: { enter: null } },
       { id: createSupplierScreenId, name: 'Новый поставщик', icon: 'users', navigation: false, audience: owners, contextTableId: null, rootIds: [createSupplierFormId], events: { enter: null } },
       { id: supplierScreenId, name: 'Поставщик', icon: 'users', navigation: false, audience: team, contextTableId: suppliersTableId, recordTitleFieldId: supplierName, rootIds: [`supplier_${supplierContact}`, `supplier_${supplierPhone}`, `supplier_${supplierComment}`, editSupplierFormId], events: { enter: null } },
@@ -274,7 +287,7 @@ export function buildInventoryV2App(built: BuiltTemplate, meta: { id: string; wo
       { id: suppliersButton, name: 'Поставщики', type: 'button', label: 'Поставщики', variant: 'secondary', visibleTo: team, visibleWhen: null, events: { press: openSuppliers } },
       { id: newPurchaseButton, name: 'Новый заказ', type: 'button', label: 'Новый заказ', variant: 'primary', visibleTo: team, visibleWhen: null, events: { press: openCreatePurchase } },
       { id: newSupplierButton, name: 'Новый поставщик', type: 'button', label: 'Новый поставщик', variant: 'primary', visibleTo: owners, visibleWhen: null, events: { press: openCreateSupplier } },
-      { id: purchasesNode, name: 'Закупки', type: 'collection', visibleTo: null, visibleWhen: null, sourceId: purchasesSource, layout: 'list', titleFieldId: purchaseName, subtitleFieldId: purchaseSupplier, dateFieldId: purchaseDate, groupFieldId: purchaseStatus, cardDetailFieldId: purchaseTotal, itemIds: [], events: { itemPress: openPurchase } },
+      { id: purchasesNode, name: 'Закупки', type: 'collection', visibleTo: null, visibleWhen: null, sourceId: purchasesSource, layout: 'list', titleFieldId: purchaseNumber, subtitleFieldId: purchaseSupplier, dateFieldId: purchaseDate, groupFieldId: purchaseStatus, cardDetailFieldId: purchaseTotal, itemIds: [], events: { itemPress: openPurchase } },
       { id: purchaseLinesNode, name: 'Позиции', type: 'collection', visibleTo: null, visibleWhen: null, sourceId: purchaseLinesSource, layout: 'list', titleFieldId: lineName, subtitleFieldId: lineQty, cardDetailFieldId: lineTotal, itemIds: [], events: { itemPress: null } },
       { id: suppliersNode, name: 'Поставщики', type: 'collection', visibleTo: null, visibleWhen: null, sourceId: suppliersSource, layout: 'list', titleFieldId: supplierName, subtitleFieldId: supplierContact, cardDetailFieldId: supplierPhone, itemIds: [], events: { itemPress: openSupplier } },
       node(`supplier_${supplierContact}`, 'Контакт', supplierContact),
@@ -282,7 +295,7 @@ export function buildInventoryV2App(built: BuiltTemplate, meta: { id: string; wo
       node(`supplier_${supplierComment}`, 'Комментарий', supplierComment),
       { id: orderPurchaseButton, name: 'Заказать', type: 'button', label: 'Заказать', variant: 'primary', visibleTo: team, visibleWhen: whenStatus(statusDraft), events: { press: markOrdered } },
       { id: receivePurchaseButton, name: 'Получить', type: 'button', label: 'Получить', variant: 'primary', visibleTo: team, visibleWhen: whenStatus(statusOrdered), events: { press: receivePurchase } },
-      { id: cancelPurchaseButton, name: 'Отменить', type: 'button', label: 'Отменить', variant: 'danger', visibleTo: owners, visibleWhen: whenStatus(statusReceived), events: { press: cancelPurchase } },
+      { id: cancelPurchaseButton, name: 'Отменить', type: 'button', label: 'Отменить', variant: 'secondary', visibleTo: owners, visibleWhen: whenStatus(statusReceived), events: { press: cancelPurchase } },
       { id: createPurchaseFormId, name: 'Новый заказ', type: 'form', visibleTo: team, visibleWhen: null, tableId: purchaseOrdersTableId, mode: 'create', childIds: createPurchaseInputs.map(item => item.id), events: { submit: createPurchase }, submitLabel: 'Сохранить заказ' },
       ...createPurchaseInputs,
       { id: editPurchaseFormId, name: 'Изменить заказ', type: 'form', visibleTo: team, visibleWhen: whenStatus(statusDraft, statusOrdered), tableId: purchaseOrdersTableId, mode: 'edit', childIds: editPurchaseInputs.map(item => item.id), events: { submit: savePurchase }, submitLabel: 'Сохранить' },
@@ -296,7 +309,7 @@ export function buildInventoryV2App(built: BuiltTemplate, meta: { id: string; wo
       { id: itemsSource, tableId: itemsTableId, viewId: null, filter: null, sorts: [], searchFieldIds: [itemName, itemSku], pageSize: 30 },
       { id: movementsSource, tableId: movementsTableId, viewId: null, filter: null, sorts: [{ fieldId: movementDate, direction: 'desc' }], searchFieldIds: [movementName, movementType], pageSize: 40 },
       { id: historySource, tableId: movementsTableId, screenTableId: itemsTableId, viewId: null, filter: { op: 'includes', left: { kind: 'row', fieldId: movementItem }, right: { kind: 'screen_row_id' } }, sorts: [{ fieldId: movementDate, direction: 'desc' }], searchFieldIds: [], pageSize: 30 },
-      { id: purchasesSource, tableId: purchaseOrdersTableId, viewId: null, filter: null, sorts: [{ fieldId: purchaseDate, direction: 'desc' }, { fieldId: purchaseTotal, direction: 'desc' }, { fieldId: purchaseCount, direction: 'desc' }], searchFieldIds: [purchaseName], pageSize: 30 },
+      { id: purchasesSource, tableId: purchaseOrdersTableId, viewId: null, filter: null, sorts: [{ fieldId: purchaseDate, direction: 'desc' }, { fieldId: purchaseTotal, direction: 'desc' }, { fieldId: purchaseCount, direction: 'desc' }], searchFieldIds: [purchaseNumber, purchaseName, purchaseSupplier], pageSize: 30 },
       { id: purchaseLinesSource, tableId: purchaseLinesTableId, screenTableId: purchaseOrdersTableId, viewId: null, filter: { op: 'includes', left: { kind: 'row', fieldId: lineOrder }, right: { kind: 'screen_row_id' } }, sorts: [], searchFieldIds: [], pageSize: 50 },
       { id: suppliersSource, tableId: suppliersTableId, viewId: null, filter: null, sorts: [{ fieldId: supplierName, direction: 'asc' }], searchFieldIds: [supplierName, supplierContact], pageSize: 30 },
     ],
@@ -344,7 +357,7 @@ export function buildInventoryV2App(built: BuiltTemplate, meta: { id: string; wo
       ] },
       { id: cancelPurchase, name: 'Отменить полученный заказ', input: { rowTableId: purchaseOrdersTableId, formId: null, screenTableId: purchaseOrdersTableId }, steps: [
         { id: newId('action'), type: 'cancel_purchase_order' },
-        { id: newId('action'), type: 'notify', message: { kind: 'literal', value: 'Заказ отменён. Остатки не изменились.' } },
+        { id: newId('action'), type: 'notify', message: { kind: 'literal', value: 'Заказ отменён. Приходы сторнированы, остатки уменьшены.' } },
       ] },
       { id: createSupplier, name: 'Создать поставщика', input: { rowTableId: null, formId: createSupplierFormId, screenTableId: null }, steps: [
         { id: createSupplier, type: 'create_row', tableId: suppliersTableId, values: Object.fromEntries(supplierUserFields.map(fieldId => [fieldId, { kind: 'form' as const, formId: createSupplierFormId, fieldId }])) },

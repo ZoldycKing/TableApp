@@ -501,8 +501,8 @@ export function AppV2Renderer(props: AppV2RendererProps) {
               const countLabel = Number.isFinite(countRaw) ? `${countRaw} поз.` : ''
               return <>
                 <div className={ui.purchaseListCopy}>
-                  <strong>{label}</strong>
-                  <span>{[supplier, when].filter(Boolean).join(' · ') || '—'}</span>
+                  <strong>{supplier || label}</strong>
+                  <span>{when || '—'}</span>
                 </div>
                 <span className={ui.purchaseListCount}>{countLabel || '—'}</span>
                 {statusLabel ? <span className={ui.statusBadge} data-tone={builderV2StatusTone(statusLabel)}>{statusLabel}</span> : <span />}

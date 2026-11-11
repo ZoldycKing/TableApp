@@ -268,9 +268,9 @@ export const sklad: TemplateDef = {
       ],
       views: [{ name: 'Все заказы', type: 'grid', hiddenFields: ['payload'] }],
       rows: [
-        { key: 'po1', values: { name: 'Черновик · КлиматСервис', supplier: { rowKey: 'sup1' }, warehouse: { rowKey: 'wh1' }, date: inDays(3), status: 'Черновик', total: 7120, comment: 'Ждём счёт', lines: { rowKeys: ['pl1'] }, count: 1 } },
+        { key: 'po1', values: { name: 'Заказ · КлиматСервис', supplier: { rowKey: 'sup1' }, warehouse: { rowKey: 'wh1' }, date: inDays(3), status: 'Черновик', total: 7120, comment: 'Ждём счёт', lines: { rowKeys: ['pl1'] }, count: 1 } },
         { key: 'po2', values: { name: 'Заказ · Упаковка Плюс', supplier: { rowKey: 'sup2' }, warehouse: { rowKey: 'wh1' }, date: inDays(-1), status: 'Заказано', total: 3360, comment: 'Отгрузка на следующей неделе', lines: { rowKeys: ['pl2'] }, count: 1 } },
-        { key: 'po3', values: { name: 'Получено · КлиматСервис', supplier: { rowKey: 'sup1' }, warehouse: { rowKey: 'wh1' }, date: inDays(-14), status: 'Получено', total: 9800, comment: 'Накладная ПН-104', lines: { rowKeys: ['pl3'] }, count: 1 } },
+        { key: 'po3', values: { name: 'Заказ · КлиматСервис', supplier: { rowKey: 'sup1' }, warehouse: { rowKey: 'wh1' }, date: inDays(-14), status: 'Получено', total: 9800, comment: 'Накладная ПН-104', lines: { rowKeys: ['pl3'] }, count: 1 } },
       ],
     },
   ],

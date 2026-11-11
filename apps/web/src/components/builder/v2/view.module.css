@@ -1301,10 +1301,8 @@ button.recordButton:hover strong { color: var(--v2-accent, #456849); }
   min-width: 0;
   margin-bottom: 4px;
 }
-/* PublishedV2Button wraps each action in .form (display:grid) — flatten so buttons sit in one row. */
-.purchaseCardActions > .form {
-  display: contents;
-}
+/* Flatten wrappers so Изменить / Получить sit on one row. */
+.purchaseCardActions > :is(section, .form) { display: contents; }
 .purchaseCardActions button { min-height: 44px; width: auto; flex: none; }
 .purchaseComment {
   margin: 0;

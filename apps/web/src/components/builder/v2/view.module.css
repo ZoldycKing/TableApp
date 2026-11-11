@@ -1294,16 +1294,17 @@ button.recordButton:hover strong { color: var(--v2-accent, #456849); }
 }
 .purchaseCardActions {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 8px;
   align-items: center;
   justify-content: flex-end;
+  width: 100%;
   min-width: 0;
   margin-bottom: 4px;
 }
 /* Flatten wrappers so Изменить / Получить sit on one row. */
 .purchaseCardActions > :is(section, .form) { display: contents; }
-.purchaseCardActions button { min-height: 44px; width: auto; flex: none; }
+.purchaseCardActions button { min-height: 44px; width: auto; flex: none; white-space: nowrap; }
 .purchaseComment {
   margin: 0;
   color: var(--v2-muted, #687568);

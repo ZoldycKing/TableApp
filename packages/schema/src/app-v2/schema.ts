@@ -139,6 +139,7 @@ export const appV2Schema = z.strictObject({
     createItemFormId: id.optional(),
     itemNameFieldId: id, itemSkuFieldId: id, itemBarcodeFieldId: id.optional(), itemCategoryFieldId: id,
     itemUnitFieldId: id, itemMinFieldId: id, itemCostFieldId: id, itemWarehouseFieldId: id,
+    itemPhotoFieldId: id.optional(),
     itemStockFieldId: id, itemLowFieldId: id, itemMovementsFieldId: id, itemOpeningFieldId: id,
     movementNameFieldId: id, movementTypeFieldId: id, movementItemFieldId: id, movementQtyFieldId: id,
     movementWarehouseFieldId: id, movementWarehouseToFieldId: id, movementDateFieldId: id,

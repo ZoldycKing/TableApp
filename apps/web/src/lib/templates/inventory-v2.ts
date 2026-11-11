@@ -122,7 +122,9 @@ export function buildInventoryV2App(built: BuiltTemplate, meta: { id: string; wo
     receiptFormId, issueFormId, writeOffFormId, transferFormId, itemEditFormId, createItemFormId,
     itemNameFieldId: itemName, itemSkuFieldId: itemSku, itemBarcodeFieldId: itemBarcode,
     itemCategoryFieldId: itemCategory, itemUnitFieldId: itemUnit, itemMinFieldId: itemMin,
-    itemCostFieldId: itemCost, itemWarehouseFieldId: itemWarehouse, itemStockFieldId: itemStock,
+    itemCostFieldId: itemCost, itemWarehouseFieldId: itemWarehouse,
+    ...(itemPhoto ? { itemPhotoFieldId: itemPhoto } : {}),
+    itemStockFieldId: itemStock,
     itemLowFieldId: itemLow, itemMovementsFieldId: itemMovements, itemOpeningFieldId: itemOpening,
     movementNameFieldId: movementName, movementTypeFieldId: movementType, movementItemFieldId: movementItem,
     movementQtyFieldId: movementQty, movementWarehouseFieldId: movementWarehouse,
@@ -168,7 +170,7 @@ export function buildInventoryV2App(built: BuiltTemplate, meta: { id: string; wo
     nodes: [
       { id: newItemButton, name: 'Новый товар', type: 'button', label: 'Новый товар', variant: 'primary', visibleTo: owners, visibleWhen: null, events: { press: openCreateItem } },
       { id: newOperationButton, name: 'Новая операция', type: 'button', label: 'Новая операция', variant: 'primary', visibleTo: team, visibleWhen: null, events: { press: openItemsForOperation } },
-      { id: itemsNode, name: 'Товары', type: 'collection', visibleTo: null, visibleWhen: null, sourceId: itemsSource, layout: 'list', titleFieldId: itemName, subtitleFieldId: itemSku, cardDetailFieldId: itemStock, itemIds: [], events: { itemPress: openItem } },
+      { id: itemsNode, name: 'Товары', type: 'collection', visibleTo: null, visibleWhen: null, sourceId: itemsSource, layout: 'list', titleFieldId: itemName, subtitleFieldId: itemSku, ...(itemPhoto ? { cardImageFieldId: itemPhoto } : {}), cardDetailFieldId: itemStock, itemIds: [], events: { itemPress: openItem } },
       { id: movementsNode, name: 'Движения', type: 'collection', visibleTo: null, visibleWhen: null, sourceId: movementsSource, layout: 'list', titleFieldId: movementItem, subtitleFieldId: movementType, cardDetailFieldId: movementQty, itemIds: [], events: { itemPress: null } },
       ...[...identityFieldIds, ...factFieldIds].map(fieldId => {
         const column = columns(itemsTableId).find(item => item.id === fieldId)!

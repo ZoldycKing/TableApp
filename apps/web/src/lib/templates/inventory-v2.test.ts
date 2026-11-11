@@ -44,7 +44,11 @@ describe('inventory template v2 installation', () => {
       itemsTableId: expect.any(String),
       movementsTableId: expect.any(String),
       warehousesTableId: expect.any(String),
+      itemPhotoFieldId: expect.any(String),
     })
+    const itemsCollection = app.nodes.find(node => node.type === 'collection' && node.layout === 'list' && node.cardDetailFieldId === app.inventory!.itemStockFieldId)
+    expect(itemsCollection).toMatchObject({ cardImageFieldId: app.inventory!.itemPhotoFieldId })
+    expect(app.nodes.some(node => node.type === 'input' && 'fieldId' in node && node.fieldId === app.inventory!.itemPhotoFieldId)).toBe(true)
     expect(app.roles.map(role => role.id)).toEqual(['owner', 'staff'])
     expect(app.roles.find(role => role.id === 'staff')?.name).toBe('Кладовщик')
     expect(app.homeScreenId).toBe(app.inventory!.itemsScreenId)

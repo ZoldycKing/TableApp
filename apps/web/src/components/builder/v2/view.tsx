@@ -31,6 +31,48 @@ function InventoryJournalRows({ rows, typeFieldId, choices, renderRows }: {
   </>
 }
 
+const inventoryPhotoCache = new Map<string, import('./media-values').BuilderV2MediaItem | null>()
+
+/** Loads a related product photo once and reuses it across journal rows. */
+function InventoryRelatedThumb({
+  itemId, inventory, label, size = 'journal',
+}: {
+  itemId?: string
+  inventory: NonNullable<AppV2['inventory']>
+  label?: string
+  size?: 'list' | 'journal' | 'card'
+}) {
+  const published = usePublishedV2()
+  const [image, setImage] = useState<import('./media-values').BuilderV2MediaItem | undefined>(() => {
+    if (!itemId) return undefined
+    const cached = inventoryPhotoCache.get(itemId)
+    return cached === null ? undefined : cached
+  })
+  useEffect(() => {
+    if (!itemId || !published || !inventory.itemPhotoFieldId) return
+    if (inventoryPhotoCache.has(itemId)) {
+      const cached = inventoryPhotoCache.get(itemId)
+      setImage(cached === null ? undefined : cached)
+      return
+    }
+    let cancelled = false
+    void import('@/app/builder-v2-published-actions').then(async ({ readPublishedV2RelatedRowsAction }) => {
+      const result = await readPublishedV2RelatedRowsAction(published.slug, {
+        revision: published.revision, tableId: inventory.itemsTableId, recordIds: [itemId],
+      })
+      if (cancelled) return
+      const row = result.ok ? result.rows.find(entry => entry.id === itemId) : undefined
+      const found = row
+        ? builderV2MediaItems(row.values[inventory.itemPhotoFieldId!], published.slug).find(item => item.image)
+        : undefined
+      inventoryPhotoCache.set(itemId, found ?? null)
+      setImage(found)
+    })
+    return () => { cancelled = true }
+  }, [itemId, published, inventory])
+  return <InventoryProductThumb image={image} size={size} label={label} />
+}
+
 function InventoryWarehouseFacts({ record, inventory, unit }: {
   record: AppV2Record
   inventory: NonNullable<AppV2['inventory']>
@@ -118,7 +160,7 @@ import { BuilderV2CatalogDetail } from './catalog-detail'
 import { ShopAddToBasket, ShopBasketPanel } from './shop-basket'
 import { builderV2ContactHref, builderV2StatusTone, isBuilderV2BusinessDetail, isBuilderV2ContactProfile, isBuilderV2ContactTable, isBuilderV2OrderTable } from './record-presentation'
 import { RecordFieldLabel } from '@/components/runtime/record-field-label'
-import { BuilderV2OrderHero, BuilderV2RecordAvatar } from './record-visuals'
+import { BuilderV2OrderHero, BuilderV2RecordAvatar, InventoryProductThumb } from './record-visuals'
 import { BuilderV2OrderActionPanel, BuilderV2OrderFacts, BuilderV2OrderIdentity, BuilderV2OrderSummaryCard, BuilderV2ShopOrderLines, builderV2BlankFact, builderV2OrderStatusChoices, type BuilderV2OrderActionTrigger } from './order-detail'
 
 const cell = (row: AppV2Record, fieldId: string) => (row as Partial<BuilderV2DataRecord>).display?.[fieldId] ?? String(row.values[fieldId] ?? '')
@@ -309,8 +351,11 @@ export function AppV2Renderer(props: AppV2RendererProps) {
           }
           const item = (row?: AppV2Record) => {
             if (node.itemIds.length) return render(node.itemIds, row, null, row?.id, row ? cell(row, node.titleFieldId) : undefined)
-            const image = cardLayout && node.cardImageFieldId && row
-              ? builderV2MediaItems(row.values[node.cardImageFieldId], published?.slug).find(item => item.image)
+            const imageFieldId = inventoryStockList && inventory?.itemPhotoFieldId
+              ? inventory.itemPhotoFieldId
+              : node.cardImageFieldId
+            const image = (cardLayout || inventoryStockList) && imageFieldId && row
+              ? builderV2MediaItems(row.values[imageFieldId], published?.slug).find(item => item.image)
               : undefined
             const rawDetail = node.cardDetailFieldId && row
               ? catalog ? builderV2CatalogPrice(row, table?.fields.find(field => field.id === node.cardDetailFieldId)) : cell(row, node.cardDetailFieldId)
@@ -342,28 +387,58 @@ export function AppV2Renderer(props: AppV2RendererProps) {
             const lowBadge = inventoryStockList && row && row.values[inventory!.itemLowFieldId] === true
               ? <span className={ui.statusBadge} data-tone="rose">Мало</span>
               : null
-            if (inventoryStockList) {
+            if (inventoryStockList && inventory && row) {
+              const category = cell(row, inventory.itemCategoryFieldId) || '—'
+              const warehouse = cell(row, inventory.itemWarehouseFieldId) || '—'
+              const stockNum = Number(row.values[inventory.itemStockFieldId])
+              const minNum = Number(row.values[inventory.itemMinFieldId])
+              const stockVsMin = Number.isFinite(stockNum) && Number.isFinite(minNum)
+                ? `${stockNum} из мин. ${minNum}`
+                : ''
+              const minRatio = Number.isFinite(stockNum) && Number.isFinite(minNum) && minNum > 0
+                ? Math.max(0, Math.min(1, stockNum / minNum))
+                : null
               return <>
+                <InventoryProductThumb image={image} size="list" label={label} />
                 <div className={ui.recordStockCopy}>
-                  <strong title={label}>{label}</strong>
+                  <strong>{label}</strong>
                   <span className={ui.recordSkuLine}>
                     {subtitleValue ? <span>{subtitleValue}</span> : null}
                     {lowBadge}
                   </span>
+                  <span className={ui.recordStockMobileMeta}>
+                    <span>{category}</span>
+                    <span>{warehouse}</span>
+                    {stockVsMin ? <span>{stockVsMin}</span> : null}
+                  </span>
                 </div>
+                <span className={ui.recordStockCol} data-col="category">{category}</span>
+                <span className={ui.recordStockCol} data-col="warehouse">{warehouse}</span>
+                <span className={ui.recordStockCol} data-col="min">
+                  {stockVsMin ? <>
+                    <span>{stockVsMin}</span>
+                    {minRatio !== null ? <span className={ui.stockMinBar} aria-hidden="true"><i style={{ width: `${Math.round(minRatio * 100)}%` }} /></span> : null}
+                  </> : '—'}
+                </span>
                 {detailNode}
               </>
             }
-            if (inventoryJournalList) {
+            if (inventoryJournalList && inventory) {
+              const itemRaw = row ? row.values[inventory.movementItemFieldId] : undefined
+              const itemId = typeof itemRaw === 'string' ? itemRaw
+                : Array.isArray(itemRaw) ? itemRaw.find((id): id is string => typeof id === 'string') : undefined
               return <>
-                <strong title={label}>{label}</strong>
-                <span className={ui.recordJournalMeta}>
-                  {subtitleValue ? <span className={ui.statusBadge} data-tone={builderV2StatusTone(subtitleValue)}>{subtitleValue}</span> : null}
-                  {(journalPlace || journalAuthor) ? <small>
-                    {journalPlace ? <span className={ui.journalPlace}>{journalPlace}</span> : null}
-                    {journalAuthor ? <span className={ui.journalAuthor}>{journalPlace ? ' · ' : ''}{journalAuthor}</span> : null}
-                  </small> : null}
-                </span>
+                <InventoryRelatedThumb itemId={itemId} inventory={inventory} label={label} size="journal" />
+                <div className={ui.recordJournalCopy}>
+                  <strong>{label}</strong>
+                  <span className={ui.recordJournalMeta}>
+                    {subtitleValue ? <span className={ui.statusBadge} data-tone={builderV2StatusTone(subtitleValue)}>{subtitleValue}</span> : null}
+                    {(journalPlace || journalAuthor) ? <small>
+                      {journalPlace ? <span className={ui.journalPlace}>{journalPlace}</span> : null}
+                      {journalAuthor ? <span className={ui.journalAuthor}>{journalPlace ? ' · ' : ''}{journalAuthor}</span> : null}
+                    </small> : null}
+                  </span>
+                </div>
                 {detailNode}
               </>
             }
@@ -436,9 +511,9 @@ export function AppV2Renderer(props: AppV2RendererProps) {
             const lowStock = Boolean(inventoryStockList && row.values[inventory!.itemLowFieldId] === true)
             const body = rowAction ? actionRow(row, 'div') : <div key={row.id} className={catalog ? `${ui.row} ${presentation.catalogCard}` : ui.row} data-low={lowStock || undefined}>
               {defaultCard ? <RecordControl className={ui.recordButton} data-compact={compact || undefined} data-status={(statusSubtitle && !inventoryStockList && !inventoryJournalList) || undefined} data-stock={inventoryStockList || undefined} data-journal={inventoryJournalList || undefined} data-low={lowStock || undefined} {...(cardScreen ? { type: 'button' as const, onClick: () => open(row) } : {})}>
-                {compact && !inventoryJournalList && !(statusSubtitle && !inventoryStockList) && <BuilderV2RecordAvatar id={row.id} name={orders ? undefined : cell(row, node.titleFieldId)} icon={orders ? 'receipt' : contacts ? 'users' : inventory ? 'box' : 'list'} tone={!inventoryStockList} />}
+                {compact && !inventoryStockList && !inventoryJournalList && !(statusSubtitle) && <BuilderV2RecordAvatar id={row.id} name={orders ? undefined : cell(row, node.titleFieldId)} icon={orders ? 'receipt' : contacts ? 'users' : inventory ? 'box' : 'list'} tone />}
                 {item(row)}
-                {!catalog && (cardScreen || props.editing && cardTarget) && <ProtoIcon name="arrow" size={16} />}
+                {!catalog && !inventoryStockList && !inventoryJournalList && (cardScreen || props.editing && cardTarget) && <ProtoIcon name="arrow" size={16} />}
               </RecordControl> : <>{item(row)}{openRecord(row)}</>}
             </div>
             return node.layout === 'kanban' ? <BoardMoveRow key={row.id} row={row as BuilderV2DataRecord} label={cell(row, node.titleFieldId)}>{body}</BoardMoveRow> : body
@@ -648,6 +723,9 @@ export function AppV2Renderer(props: AppV2RendererProps) {
     ] : undefined)
     // Shop manage identity is amount/status only (title stays in the frame). Skip a title-only plate.
     const showCustomerIdentity = Boolean(inventoryStatus || inventoryStockLabel || amount || (progress && progress.length > 1) || (crmDeal && (due || clientText)))
+    const inventoryPhoto = inventoryItem && inventory?.itemPhotoFieldId
+      ? builderV2MediaItems(props.record.values[inventory.itemPhotoFieldId], published?.slug).find(item => item.image)
+      : undefined
     const revealIdentity = inventoryItem
       ? {
           amount: inventoryStockLabel,
@@ -656,6 +734,8 @@ export function AppV2Renderer(props: AppV2RendererProps) {
           due: inventoryMin
             ? { label: 'Минимум', value: /\bшт\.?\b/i.test(inventoryMin) ? inventoryMin : `${inventoryMin} ${inventoryUnit}`.replace(/\s+/g, ' ').trim() }
             : undefined,
+          media: <InventoryProductThumb image={inventoryPhoto} size="card" label={title || undefined} />,
+          productTitle: title || undefined,
         }
       : {
           status: inventoryStatus,

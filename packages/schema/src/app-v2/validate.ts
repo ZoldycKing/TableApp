@@ -386,6 +386,10 @@ export function validateAppV2(app: AppV2, catalog: AppV2Catalog, options: { mode
     const warehouse = (fieldId: string) => field(fieldId, inv.warehousesTableId, path)
     for (const fieldId of [inv.itemNameFieldId, inv.itemSkuFieldId, inv.itemCategoryFieldId, inv.itemUnitFieldId, inv.itemMinFieldId, inv.itemCostFieldId, inv.itemWarehouseFieldId, inv.itemStockFieldId, inv.itemLowFieldId, inv.itemMovementsFieldId, inv.itemOpeningFieldId]) item(fieldId)
     if (inv.itemBarcodeFieldId) item(inv.itemBarcodeFieldId)
+    if (inv.itemPhotoFieldId) {
+      const photo = item(inv.itemPhotoFieldId)
+      if (photo && !['image', 'url'].includes(photo.type)) issue('inventory_photo', path, 'Фото товара должно быть изображением или ссылкой')
+    }
     for (const fieldId of [inv.movementNameFieldId, inv.movementTypeFieldId, inv.movementItemFieldId, inv.movementQtyFieldId, inv.movementWarehouseFieldId, inv.movementWarehouseToFieldId, inv.movementDateFieldId, inv.movementNoteFieldId, inv.movementAuthorFieldId]) movement(fieldId)
     if (inv.movementBeforeFieldId) movement(inv.movementBeforeFieldId)
     if (inv.movementAfterFieldId) movement(inv.movementAfterFieldId)

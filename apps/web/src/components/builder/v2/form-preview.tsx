@@ -116,26 +116,31 @@ export function BuilderV2FormPreview({ app, form, screenId, recordId, enabled, e
     return parsed.data
   }:undefined
   const checkout = app.shop?.checkoutFormId === form.id
-  return <Context.Provider value={{ app, scope, inspect, state: visible.state, values: visible.values, errors: visible.errors, disabled, key:key+':'+refresh,upload,onPending, change: (id, value) => { if (disabled) return; generation.current++; setData(old=>old.key===key?{...old,values:{...old.values,[id]:value},errors:{},error:'',success:false}:old) } }}><form ref={formRef} className={`${styles.formBlock} ${ui.form} ${checkout ? ui.commerceForm : ''}`} data-commerce={checkout ? 'checkout' : undefined} noValidate onSubmit={event => { event.preventDefault(); void check() }} aria-label={formTitle} aria-busy={!editing && enabled && (visible.loading || visible.checking || pendingCount>0)}>
+  const purchaseForm = Boolean(app.inventory && (form.id === app.inventory.createPurchaseFormId || form.id === app.inventory.editPurchaseFormId))
+  return <Context.Provider value={{ app, scope, inspect, state: visible.state, values: visible.values, errors: visible.errors, disabled, key:key+':'+refresh,upload,onPending, change: (id, value) => { if (disabled) return; generation.current++; setData(old=>old.key===key?{...old,values:{...old.values,[id]:value},errors:{},error:'',success:false}:old) } }}><form ref={formRef} className={`${styles.formBlock} ${ui.form} ${checkout ? ui.commerceForm : ''}`} data-commerce={checkout ? 'checkout' : undefined} data-purchase={purchaseForm || undefined} noValidate onSubmit={event => { event.preventDefault(); void check() }} aria-label={formTitle} aria-busy={!editing && enabled && (visible.loading || visible.checking || pendingCount>0)}>
     <h3 className={ui.formTitle} id={checkout ? 'shop-checkout' : undefined}>{checkout ? 'Оформление заказа' : formTitle}</h3>
     <ShopCheckoutSync />
     {!editing && enabled && visible.loading && <p role="status" className={ui.hint}>Подготавливаем форму…</p>}
-    <div className={styles.canvasBlocks}>{children}</div>
+    <div className={styles.canvasBlocks} data-purchase-fields={purchaseForm || undefined}>{children}</div>
     {!visible.confirmation&&visible.error && <div className={ui.liveData}><p role="alert" className={ui.dataError}>{visible.error}</p>{(!visible.state || visible.stale) && <button type="button" className={styles.textButton} onClick={() => working ? window.location.reload() : setRefresh(value => value + 1)}>Обновить форму</button>}</div>}
     {visible.success && !refreshesCard && !visible.effects?.some(effect => effect.type === 'notify') && <p role="status" className={ui.formSuccess}>{working ? form.mode === 'edit' ? 'Изменения сохранены.' : `Запись сохранена в таблице «${working.tableName}».` : 'Форма заполнена верно. Это проверка: запись в таблицу не добавлена.'}</p>}
     {Boolean(visible.effects?.length || visible.trace?.length) && <BuilderV2WorkflowFeedback appId={app.id} requestKey={visible.requestKey} effects={visible.effects} editor={working?.learning} backHref={working?.learning?working.listHref:form.mode==='edit'?working?.recordHref??working?.listHref:working?.listHref} trace={published ? undefined : visible.trace} />}
     {working && visible.success ? <div className={ui.dataControls}>{published?(refreshesCard ? null : <button type="button" className={styles.primary} onClick={()=>{if(form.mode==='edit')published.refresh();else{const home=app.screens.find(screen=>screen.id===app.homeScreenId&&!screen.contextTableId)??app.screens.find(screen=>!screen.contextTableId);if(home)published.navigate(home.id);else published.refresh()}}}>{form.mode==='edit'?'Обновить запись':'Посмотреть список'}<ProtoArrow/></button>):working.learning?<a href={working.listHref} className={styles.primary}>Посмотреть список<ProtoArrow/></a>:<Link href={form.mode === 'edit' ? working.recordHref ?? working.listHref : working.listHref} className={styles.primary}>{form.mode === 'edit' ? 'Открыть запись' : 'Посмотреть список'}<ProtoArrow /></Link>}<button type="button" className={styles.secondary} onClick={() => { attempt.current = null; setRefresh(value => value + 1) }}>{form.mode === 'edit' ? 'Изменить ещё' : 'Добавить ещё'}</button></div> : <button type="submit" className={styles.primary} disabled={unavailable||pendingCount>0}>{visible.checking ? working ? 'Сохраняем…' : 'Проверяем…' : working ? visible.uncertain ? 'Повторить сохранение' : form.submitLabel || 'Сохранить' : 'Проверить форму'}</button>}
     {!editing && !working && <p className={ui.hint}>В предпросмотре форма проверяется без сохранения в таблицы.</p>}
-    {visible.confirmation&&<WorkflowConfirmation value={visible.confirmation} pending={visible.checking} uncertain={Boolean(visible.uncertain)} error={visible.error} onConfirm={()=>void check(visible.confirmation!.fingerprint)} onCancel={()=>{if(!busy.current&&!visible.uncertain){attempt.current=null;setData({...visible,confirmation:undefined,error:''})}}}/>}
+    {visible.confirmation&&<WorkflowConfirmation value={visible.confirmation} pending={visible.checking} uncertain={Boolean(visible.uncertain)} error={visible.error} inventory={app.inventory} onConfirm={()=>void check(visible.confirmation!.fingerprint)} onCancel={()=>{if(!busy.current&&!visible.uncertain){attempt.current=null;setData({...visible,confirmation:undefined,error:''})}}}/>}
   </form></Context.Provider>
 }
 function ProtoArrow() { return <span aria-hidden>↗</span> }
 
 function RelationInput({ context, field, id, errorId }: { context: FormContext; field: BuilderV2FormField; id: string; errorId?: string }) {
   const inventory = context.app.inventory
-  const warehouseField = Boolean(inventory && (field.fieldId === inventory.movementWarehouseFieldId || field.fieldId === inventory.movementWarehouseToFieldId || field.fieldId === inventory.itemWarehouseFieldId))
+  const purchaseSupplier = Boolean(inventory?.purchaseSupplierFieldId && field.fieldId === inventory.purchaseSupplierFieldId)
+  const purchaseWarehouse = Boolean(inventory?.purchaseWarehouseFieldId && field.fieldId === inventory.purchaseWarehouseFieldId)
+  const warehouseField = Boolean(inventory && (field.fieldId === inventory.movementWarehouseFieldId || field.fieldId === inventory.movementWarehouseToFieldId || field.fieldId === inventory.itemWarehouseFieldId || purchaseWarehouse))
+  const purchaseRelation = purchaseSupplier || purchaseWarehouse
+  const simpleSelect = warehouseField || purchaseRelation
   const [search, setSearch] = useState(''), [options, setOptions] = useState<{ key: string; values: { id: string; label: string }[]; next: string | null; loading: boolean; error: string }>({ key: '', values: [], next: null, loading: true, error: '' }), [refresh, setRefresh] = useState(0), generation = useRef(0)
-  const key = JSON.stringify([context.scope, field.fieldId, warehouseField ? '' : search]), current = useRef({ context, key }); current.current = { context, key }
+  const key = JSON.stringify([context.scope, field.fieldId, simpleSelect ? '' : search]), current = useRef({ context, key }); current.current = { context, key }
   const known = useRef<{ key: string; labels: Map<string, string> }>({ key: '', labels: new Map() }), scopeKey = JSON.stringify([context.app.id, context.scope, field.fieldId])
   if (known.current.key !== scopeKey) known.current = { key: scopeKey, labels: new Map() }
   const selected = Array.isArray(context.values[field.fieldId]) ? context.values[field.fieldId] as string[] : []
@@ -143,27 +148,29 @@ function RelationInput({ context, field, id, errorId }: { context: FormContext; 
     const version = ++generation.current
     if (context.disabled || field.readOnly) return
     setOptions({ key, values: [], next: null, loading: true, error: '' })
-    const timer = setTimeout(async () => { try { const ctx = current.current.context, result = await ctx.inspect({ ...ctx.scope, mode: 'options', fieldId: field.fieldId, search: warehouseField ? '' : search }); if (version !== generation.current) return; setOptions(result.ok && 'options' in result ? { key, values: result.options, next: result.next, loading: false, error: '' } : { key, values: [], next: null, loading: false, error: result.ok ? 'Нет списка' : result.error }) } catch { if (version === generation.current) setOptions({ key, values: [], next: null, loading: false, error: 'Не удалось загрузить список' }) } }, warehouseField ? 0 : 300)
+    const timer = setTimeout(async () => { try { const ctx = current.current.context, result = await ctx.inspect({ ...ctx.scope, mode: 'options', fieldId: field.fieldId, search: simpleSelect ? '' : search }); if (version !== generation.current) return; setOptions(result.ok && 'options' in result ? { key, values: result.options, next: result.next, loading: false, error: '' } : { key, values: [], next: null, loading: false, error: result.ok ? 'Нет списка' : result.error }) } catch { if (version === generation.current) setOptions({ key, values: [], next: null, loading: false, error: 'Не удалось загрузить список' }) } }, simpleSelect ? 0 : 300)
     return () => { clearTimeout(timer); generation.current++ }
-  }, [key, context.disabled, field.readOnly, refresh, warehouseField, search])
+  }, [key, context.disabled, field.readOnly, refresh, simpleSelect, search])
   const visible = options.key === key ? options : { key, values: [], next: null, loading: true, error: '' }
   visible.values.forEach(option => known.current.labels.set(option.id, option.label))
   useEffect(() => {
     if (!warehouseField || context.disabled || field.readOnly || field.allowMultiple || selected.length || visible.loading || visible.error) return
     if (visible.values.length === 1) context.change(field.fieldId, [visible.values[0]!.id])
   }, [warehouseField, context, field.fieldId, field.allowMultiple, field.readOnly, selected.length, visible.loading, visible.error, visible.values])
-  const more = async () => { if (!visible.next || visible.loading || context.disabled) return; const version = ++generation.current; setOptions({ ...visible, loading: true }); try { const result = await context.inspect({ ...context.scope, mode: 'options', fieldId: field.fieldId, search: warehouseField ? '' : search, after: visible.next }); if (version !== generation.current || current.current.key !== key) return; setOptions(result.ok && 'options' in result ? { key, values: [...visible.values, ...result.options.filter(item => !visible.values.some(old => old.id === item.id))], next: result.next, loading: false, error: '' } : { ...visible, loading: false, error: result.ok ? 'Нет списка' : result.error }) } catch { if (version === generation.current) setOptions({ ...visible, loading: false, error: 'Не удалось загрузить список' }) } }
-  const emptyLabel = warehouseField ? 'Выберите склад' : 'Выберите запись'
-  return <div className={ui.relationInput} data-warehouse={warehouseField || undefined}>
-    {!warehouseField && <input type="search" disabled={context.disabled} value={search} placeholder="Найти запись" aria-label={`Найти: ${field.label}`} onChange={event => setSearch(event.target.value)} />}
+  const more = async () => { if (!visible.next || visible.loading || context.disabled) return; const version = ++generation.current; setOptions({ ...visible, loading: true }); try { const result = await context.inspect({ ...context.scope, mode: 'options', fieldId: field.fieldId, search: simpleSelect ? '' : search, after: visible.next }); if (version !== generation.current || current.current.key !== key) return; setOptions(result.ok && 'options' in result ? { key, values: [...visible.values, ...result.options.filter(item => !visible.values.some(old => old.id === item.id))], next: result.next, loading: false, error: '' } : { ...visible, loading: false, error: result.ok ? 'Нет списка' : result.error }) } catch { if (version === generation.current) setOptions({ ...visible, loading: false, error: 'Не удалось загрузить список' }) } }
+  const emptyLabel = purchaseSupplier ? 'Выберите поставщика' : warehouseField || purchaseWarehouse ? 'Выберите склад' : 'Выберите запись'
+  const selectedFallback = purchaseSupplier ? 'Выбранный поставщик' : warehouseField || purchaseWarehouse ? 'Выбранный склад' : 'Выбранная запись'
+  const loadingLabel = purchaseSupplier ? 'Загружаем поставщиков…' : warehouseField || purchaseWarehouse ? 'Загружаем склады…' : 'Загружаем записи…'
+  return <div className={ui.relationInput} data-warehouse={warehouseField || undefined} data-purchase-relation={purchaseRelation || undefined}>
+    {!simpleSelect && <input type="search" disabled={context.disabled} value={search} placeholder="Найти запись" aria-label={`Найти: ${field.label}`} onChange={event => setSearch(event.target.value)} />}
     <select id={id} aria-describedby={errorId} aria-invalid={Boolean(errorId)} multiple={field.allowMultiple} disabled={context.disabled} value={field.allowMultiple ? selected : selected[0] ?? ''} onChange={event => context.change(field.fieldId, field.allowMultiple ? Array.from(event.target.selectedOptions).map(option => option.value).filter(Boolean) : event.target.value ? [event.target.value] : [])}>
       {!field.allowMultiple && <option value="">{emptyLabel}</option>}
-      {selected.filter(id => !visible.values.some(item => item.id === id)).map(id => <option key={id} value={id}>{known.current.labels.get(id) || (Array.isArray(context.state?.values[field.fieldId]) && (context.state.values[field.fieldId] as string[]).includes(id) ? context.state?.labels[field.fieldId] : '') || (warehouseField ? 'Выбранный склад' : 'Выбранная запись')}</option>)}
+      {selected.filter(id => !visible.values.some(item => item.id === id)).map(id => <option key={id} value={id}>{known.current.labels.get(id) || (Array.isArray(context.state?.values[field.fieldId]) && (context.state.values[field.fieldId] as string[]).includes(id) ? context.state?.labels[field.fieldId] : '') || selectedFallback}</option>)}
       {visible.values.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
     </select>
-    {visible.loading && !context.disabled && <span role="status" className={ui.hint}>{warehouseField ? 'Загружаем склады…' : 'Загружаем записи…'}</span>}
+    {visible.loading && !context.disabled && <span role="status" className={ui.hint}>{loadingLabel}</span>}
     {visible.error && <><span role="alert" className={ui.dataError}>{visible.error}</span><button type="button" className={styles.textButton} onClick={() => setRefresh(value => value + 1)}>Повторить</button></>}
-    {visible.next && !warehouseField && <button type="button" className={styles.textButton} disabled={visible.loading} onClick={() => void more()}>Показать ещё записи</button>}
+    {visible.next && !simpleSelect && <button type="button" className={styles.textButton} disabled={visible.loading} onClick={() => void more()}>Показать ещё записи</button>}
   </div>
 }
 
@@ -218,8 +225,15 @@ export function BuilderV2FormInput({ node, table }: { node: BuilderV2Input; tabl
   if (context?.app.shop && (node.fieldId === context.app.shop.cartFieldId || node.fieldId === context.app.shop.submissionFieldId)) return null
   if (context?.app.inventory?.purchasePayloadFieldId && node.fieldId === context.app.inventory.purchasePayloadFieldId) return null
   const inventory = context?.app.inventory
-  const inventoryDate = Boolean(inventory && node.fieldId === inventory.movementDateFieldId)
+  const inventoryDate = Boolean(inventory && (node.fieldId === inventory.movementDateFieldId || node.fieldId === inventory.purchaseDateFieldId))
   const inventoryQty = Boolean(inventory && node.fieldId === inventory.movementQtyFieldId)
+  const purchaseField = inventory
+    ? node.fieldId === inventory.purchaseSupplierFieldId ? 'supplier'
+      : node.fieldId === inventory.purchaseWarehouseFieldId ? 'warehouse'
+        : node.fieldId === inventory.purchaseDateFieldId ? 'date'
+          : node.fieldId === inventory.purchaseCommentFieldId ? 'comment'
+            : null
+    : null
   const type = field?.type ?? column?.type ?? 'text', value = context?.values[node.fieldId] ?? null, error = context?.errors[node.id], errorId = error ? `${unique}-error` : undefined, disabled = !context || context.disabled || Boolean(node.readOnly), label = node.label || column?.name || 'Поле'
   const common = { id: unique, disabled, 'aria-describedby': errorId, 'aria-invalid': Boolean(error), 'aria-required': node.required, 'aria-label': label }
   const change = (value: AppV2Json) => context?.change(node.fieldId, value)
@@ -251,5 +265,5 @@ export function BuilderV2FormInput({ node, table }: { node: BuilderV2Input; tabl
     : type === 'number' && builderV2IsMoneyFieldLabel(label)
       ? <BuilderV2MoneyInput {...common} value={value} onValueChange={change} maxLength={32} />
     : <input {...common} type={type === 'email' ? 'email' : type === 'phone' ? 'tel' : type === 'url' ? 'url' : type === 'number' ? 'number' : 'text'} inputMode={type === 'number' ? 'decimal' : undefined} value={String(value ?? '')} maxLength={10000} onChange={event => change(type === 'number' ? (event.target.value === '' ? null : Number(event.target.value)) : event.target.value)} />
-  return <div className={`${ui.input} ${type === 'checkbox' ? ui.checkInput : ''}`} data-kind={builderV2OrderFactKind(label)}><label htmlFor={unique}>{label}{node.required ? ' *' : ''}</label>{control}{stockHint && <p className={ui.stockHint}>{stockHint}</p>}{error && <span className={ui.dataError} id={errorId}>{error}</span>}</div>
+  return <div className={`${ui.input} ${type === 'checkbox' ? ui.checkInput : ''}`} data-kind={builderV2OrderFactKind(label)} data-purchase-field={purchaseField || undefined}><label htmlFor={unique}>{label}{node.required ? ' *' : ''}</label>{control}{stockHint && <p className={ui.stockHint}>{stockHint}</p>}{error && <span className={ui.dataError} id={errorId}>{error}</span>}</div>
 }

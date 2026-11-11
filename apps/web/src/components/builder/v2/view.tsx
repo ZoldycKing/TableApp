@@ -68,8 +68,10 @@ function InventoryCreateDialog({
       </div>
       <div className={ui.orderActionFooter} data-purchase-total={wide || undefined}>
         {wide && total != null ? <p className={ui.purchaseDialogTotal}><span>Итого</span><strong>{purchaseMoney(total)}</strong></p> : null}
-        <button type="button" className={styles.secondary} data-action-cancel onClick={close}>Отмена</button>
-        <button type="button" className={styles.primary} onClick={submit}>{submitLabel}</button>
+        <div className={ui.orderActionFooterActions}>
+          <button type="button" className={styles.secondary} data-action-cancel onClick={close}>Отмена</button>
+          <button type="button" className={styles.primary} onClick={submit}>{submitLabel}</button>
+        </div>
       </div>
     </aside>
   </OrderActionPanelContext.Provider>, document.body) : null
@@ -192,6 +194,43 @@ function PurchaseOrderThumbs({
   </span>
 }
 
+type SupplierOrderStat = { orders: number; lastOrder: string; purchased: number }
+
+/** Loads purchase orders once and derives per-supplier list metrics. */
+function useSupplierOrderStats(app: AppV2, inventory?: NonNullable<AppV2['inventory']> | null) {
+  const published = usePublishedV2()
+  const [stats, setStats] = useState<Map<string, SupplierOrderStat>>(new Map())
+  useEffect(() => {
+    if (!published || !inventory?.purchasesScreenId || !inventory.purchaseOrdersTableId) return
+    const purchasesNode = app.nodes.find(node => node.type === 'collection' && node.layout === 'list'
+      && app.sources.some(source => source.id === node.sourceId && source.tableId === inventory.purchaseOrdersTableId && !source.screenTableId))
+    if (!purchasesNode) return
+    let cancelled = false
+    void published.readData({ nodeId: purchasesNode.id, screenId: inventory.purchasesScreenId }).then(result => {
+      if (cancelled || !result.ok) return
+      const next = new Map<string, SupplierOrderStat>()
+      for (const row of result.page.rows) {
+        const supplierRaw = inventory.purchaseSupplierFieldId ? row.values[inventory.purchaseSupplierFieldId] : undefined
+        const supplierId = typeof supplierRaw === 'string' ? supplierRaw
+          : Array.isArray(supplierRaw) ? supplierRaw.find((id): id is string => typeof id === 'string') : undefined
+        if (!supplierId) continue
+        const current = next.get(supplierId) ?? { orders: 0, lastOrder: '', purchased: 0 }
+        current.orders += 1
+        const rawDate = inventory.purchaseDateFieldId ? String(row.values[inventory.purchaseDateFieldId] ?? '') : ''
+        if (rawDate && (!current.lastOrder || rawDate > current.lastOrder)) current.lastOrder = rawDate
+        const status = inventory.purchaseStatusFieldId ? String(row.values[inventory.purchaseStatusFieldId] ?? '') : ''
+        const received = Boolean(inventory.statusReceived && status === inventory.statusReceived)
+        const totalRaw = inventory.purchaseTotalFieldId ? row.values[inventory.purchaseTotalFieldId] : null
+        if (received && typeof totalRaw === 'number' && Number.isFinite(totalRaw)) current.purchased += totalRaw
+        next.set(supplierId, current)
+      }
+      setStats(next)
+    }).catch(() => {})
+    return () => { cancelled = true }
+  }, [published, published?.revision, published?.dataVersion, app.nodes, inventory])
+  return stats
+}
+
 function InventoryWarehouseFacts({ record, inventory, unit }: {
   record: AppV2Record
   inventory: NonNullable<AppV2['inventory']>
@@ -295,6 +334,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
   const profile = isBuilderV2ContactProfile(props.app, props.screenId, props.tables)
   const orderGroup = (published ? builderV2RecordParent(props.app, props.screenId) : builderV2PreviewRecordParent(props.app, props.screenId, props.actor))?.queue?.recordGroup
   const inventory = props.app.inventory
+  const supplierStats = useSupplierOrderStats(props.app, inventory && screen?.id === inventory.suppliersScreenId ? inventory : null)
   const rootButtonByLabel = (label: string) => screen?.rootIds.find(id => {
     const node = nodes.get(id)
     return node?.type === 'button' && node.label === label
@@ -413,11 +453,15 @@ export function AppV2Renderer(props: AppV2RendererProps) {
         content=published?published.buttonState(node.id)?.kind==='delete'?<PublishedV2Delete node={node} screenId={props.screenId} recordId={props.record?.id}/>:<PublishedV2Button node={node} screenId={props.screenId} recordId={props.record?.id} itemId={itemId} itemLabel={itemLabel}/>:itemId&&!props.editing&&props.live&&builderV2ButtonAction(props.app,node)?<Link href={`/apps/${encodeURIComponent(props.app.id)}/actions/${encodeURIComponent(node.id)}?screen=${encodeURIComponent(props.screenId)}${props.record?`&row=${encodeURIComponent(props.record.id)}`:''}&item=${encodeURIComponent(itemId)}`} className={buttonStyle} aria-label={itemLabel?`${node.label}: ${itemLabel}`:undefined}>{node.label}</Link>:<button type="button" className={buttonStyle} disabled>{node.label}</button>
       }
       else if (node.type === 'business') content = <BuilderBusinessOperation node={node} link={props.businessLinks?.[node.id]} apps={props.businessApps} />
-      else if (node.type === 'input') content = <BuilderV2FormInput node={node} table={props.tables.find(table => table.id === formTableId)} />
+      else if (node.type === 'input') {
+        const purchasePayload = Boolean(inventory?.purchasePayloadFieldId && node.fieldId === inventory.purchasePayloadFieldId)
+        content = purchasePayload && !props.editing
+          ? <PurchaseLinesEditor record={record} />
+          : <BuilderV2FormInput node={node} table={props.tables.find(table => table.id === formTableId)} />
+      }
       else if (node.type === 'form') {
-        const purchaseForm = Boolean(inventory && (node.id === inventory.createPurchaseFormId || node.id === inventory.editPurchaseFormId))
         const supplierEdit = Boolean(inventory?.editSupplierFormId && node.id === inventory.editSupplierFormId)
-        const preview = <BuilderV2FormPreview app={props.app} form={node} screenId={props.screenId} recordId={props.record?.id} enabled={Boolean(props.live)} editing={Boolean(props.editing)} working={props.workingForm?.formId === node.id ? props.workingForm : undefined}>{render(node.childIds, record, node.tableId)}{purchaseForm && !props.editing ? <PurchaseLinesEditor record={node.id === inventory?.editPurchaseFormId ? props.record : undefined} /> : null}{props.editing && <button type="button" className={styles.addInside} onClick={() => props.onAdd?.(node.id)}><ProtoIcon name="plus" />Добавить поле</button>}</BuilderV2FormPreview>
+        const preview = <BuilderV2FormPreview app={props.app} form={node} screenId={props.screenId} recordId={props.record?.id} enabled={Boolean(props.live)} editing={Boolean(props.editing)} working={props.workingForm?.formId === node.id ? props.workingForm : undefined}>{render(node.childIds, record, node.tableId)}{props.editing && <button type="button" className={styles.addInside} onClick={() => props.onAdd?.(node.id)}><ProtoIcon name="plus" />Добавить поле</button>}</BuilderV2FormPreview>
         content = (node.id === inventory?.editPurchaseFormId || supplierEdit) && !props.editing
           ? <InventoryCreateDialog label="Изменить" buttonClassName={styles.secondary} title={supplierEdit ? 'Изменить поставщика' : 'Изменить заказ'} submitLabel="Сохранить" wide={node.id === inventory?.editPurchaseFormId}>{preview}</InventoryCreateDialog>
           : preview
@@ -439,9 +483,17 @@ export function AppV2Renderer(props: AppV2RendererProps) {
           if (suppliersLinkId) {
             const link = nodes.get(suppliersLinkId)
             if (link?.type === 'button' && visible(link)) {
-              parts.push(published
-                ? <PublishedV2Button key={link.id} node={link} screenId={props.screenId} recordId={props.record?.id} buttonClassName={ui.orderActionIcon} buttonContent={<ProtoIcon name="users" size={20} />} />
-                : <button key={link.id} type="button" className={ui.orderActionIcon} aria-label={link.label} title={link.label} disabled><ProtoIcon name="users" size={20} /></button>)
+              parts.push(<span key={link.id} className={ui.purchaseSuppliersSlot}>
+                {published
+                  ? <>
+                    <PublishedV2Button node={link} screenId={props.screenId} recordId={props.record?.id} buttonClassName={`${styles.secondary} ${ui.purchaseSuppliersDesktop}`} />
+                    <PublishedV2Button node={link} screenId={props.screenId} recordId={props.record?.id} buttonClassName={`${ui.orderActionIcon} ${ui.purchaseSuppliersMobile}`} buttonContent={<ProtoIcon name="truck" size={20} />} />
+                  </>
+                  : <>
+                    <button type="button" className={`${styles.secondary} ${ui.purchaseSuppliersDesktop}`} disabled>{link.label}</button>
+                    <button type="button" className={`${ui.orderActionIcon} ${ui.purchaseSuppliersMobile}`} aria-label={link.label} title={link.label} disabled><ProtoIcon name="truck" size={20} /></button>
+                  </>}
+              </span>)
             }
           }
           if (foldedCreateId) {
@@ -505,8 +557,9 @@ export function AppV2Renderer(props: AppV2RendererProps) {
           const time=(row?:AppV2Record)=>node.layout==='calendar'&&table?.fields.find(field=>field.id===node.dateFieldId)?.type==='datetime'?builderCalendarTime(row?.values[node.dateFieldId!],page?.calendar?.timeZone??table?.fields.find(field=>field.id===node.dateFieldId)?.timeZone):null
           const inventoryStockList = Boolean(inventory && node.cardDetailFieldId === inventory.itemStockFieldId)
           const inventoryJournalList = Boolean(inventory && screen?.id === inventory.movementsScreenId && node.layout === 'list')
-          const purchaseList = Boolean(inventory?.purchaseOrdersTableId && source?.tableId === inventory.purchaseOrdersTableId && node.layout === 'list' && !source?.screenTableId)
+          const purchaseList = Boolean(inventory?.purchaseOrdersTableId && source?.tableId === inventory.purchaseOrdersTableId && node.layout === 'list' && (!source?.screenTableId || source.screenTableId === inventory.suppliersTableId))
           const purchaseLineList = Boolean(inventory?.purchaseLinesTableId && source?.tableId === inventory.purchaseLinesTableId)
+          const supplierList = Boolean(inventory?.suppliersTableId && source?.tableId === inventory.suppliersTableId && node.layout === 'list' && !source?.screenTableId && screen?.id === inventory.suppliersScreenId)
           const inventoryHistory = Boolean(inventory && node.layout === 'timeline' && node.dateFieldId === inventory.movementDateFieldId)
           const unitOf = (row?: AppV2Record) => {
             if (!inventory || !row) return 'шт.'
@@ -559,6 +612,31 @@ export function AppV2Renderer(props: AppV2RendererProps) {
             const lowBadge = inventoryStockList && row && row.values[inventory!.itemLowFieldId] === true
               ? <span className={ui.statusBadge} data-tone="rose">Мало</span>
               : null
+            if (supplierList && inventory && row) {
+              const name = inventory.supplierNameFieldId ? cell(row, inventory.supplierNameFieldId) : label
+              const contact = inventory.supplierContactFieldId ? cell(row, inventory.supplierContactFieldId) : ''
+              const phone = inventory.supplierPhoneFieldId ? cell(row, inventory.supplierPhoneFieldId) : ''
+              const stat = supplierStats.get(row.id)
+              const lastOrder = stat?.lastOrder ? formatPurchaseDate(stat.lastOrder) : '—'
+              const purchased = stat && stat.purchased > 0 ? purchaseMoney(stat.purchased) : '—'
+              const ordersLabel = stat ? `${stat.orders}` : '0'
+              return <>
+                <BuilderV2RecordAvatar id={row.id} name={name} icon="truck" tone />
+                <div className={ui.supplierListCopy}>
+                  <strong>{name || '—'}</strong>
+                  {contact ? <span className={ui.supplierListContact}>{contact}</span> : null}
+                  <span className={ui.supplierListMobileMeta}>
+                    {phone ? <span>{phone}</span> : null}
+                    <span>{ordersLabel} заказов · {lastOrder}</span>
+                    <span>Закуплено на {purchased}</span>
+                  </span>
+                </div>
+                <span className={ui.supplierListCol} data-col="phone">{phone || '—'}</span>
+                <span className={ui.supplierListCol} data-col="orders">{ordersLabel}</span>
+                <span className={ui.supplierListCol} data-col="last">{lastOrder}</span>
+                <span className={ui.supplierListCol} data-col="sum">{purchased}</span>
+              </>
+            }
             if (purchaseList && inventory && row) {
               const when = inventory.purchaseDateFieldId ? formatPurchaseDate(cell(row, inventory.purchaseDateFieldId) || String(row.values[inventory.purchaseDateFieldId] ?? '')) : ''
               const number = inventory.purchaseNumberFieldId ? cell(row, inventory.purchaseNumberFieldId) || String(row.values[inventory.purchaseNumberFieldId] ?? '') : ''
@@ -581,7 +659,10 @@ export function AppV2Renderer(props: AppV2RendererProps) {
                 <div className={ui.purchaseListCopy}>
                   <strong>{number || '—'}</strong>
                   <span className={ui.purchaseListDate}>{when || '—'}</span>
-                  <span className={ui.purchaseListMobileMeta}>{[supplier, warehouse, countLabel && `${countLabel} поз.`].filter(Boolean).join(' · ')}</span>
+                  <span className={ui.purchaseListMobileMeta}>
+                    {supplier ? <span>{supplier}</span> : null}
+                    {(warehouse || countLabel) ? <span>{[warehouse, countLabel && `${countLabel} поз.`].filter(Boolean).join(' · ')}</span> : null}
+                  </span>
                 </div>
                 <span className={ui.purchaseListCol} data-col="supplier">{supplier || '—'}</span>
                 <span className={ui.purchaseListCol} data-col="count">{countLabel || '—'}</span>
@@ -606,7 +687,10 @@ export function AppV2Renderer(props: AppV2RendererProps) {
                 <InventoryRelatedThumb itemId={productId} inventory={inventory} label={label} size="journal" />
                 <div className={ui.purchaseLineCopy}>
                   <strong>{label}</strong>
-                  <span>{[qty && `${qty} шт.`, price].filter(Boolean).join(' × ')}</span>
+                  <span className={ui.purchaseLineMeta}>
+                    <span>{[qty && `${qty} шт.`, price].filter(Boolean).join(' × ')}</span>
+                    <span className={ui.purchaseLineAmountMobile}>{sum}</span>
+                  </span>
                 </div>
                 <span className={ui.purchaseListAmount}>{sum}</span>
               </>
@@ -735,8 +819,8 @@ export function AppV2Renderer(props: AppV2RendererProps) {
             const RecordControl = cardScreen ? 'button' : 'div'
             const lowStock = Boolean(inventoryStockList && row.values[inventory!.itemLowFieldId] === true)
             const body = rowAction ? actionRow(row, 'div') : <div key={row.id} className={catalog ? `${ui.row} ${presentation.catalogCard}` : ui.row} data-low={lowStock || undefined}>
-              {defaultCard ? <RecordControl className={ui.recordButton} data-compact={compact || undefined} data-status={(statusSubtitle && !inventoryStockList && !inventoryJournalList && !purchaseList) || undefined} data-stock={inventoryStockList || undefined} data-journal={inventoryJournalList || undefined} data-purchase={purchaseList || undefined} data-purchase-line={purchaseLineList || undefined} data-low={lowStock || undefined} {...(cardScreen ? { type: 'button' as const, onClick: () => open(row) } : {})}>
-                {compact && !inventoryStockList && !inventoryJournalList && !purchaseList && !purchaseLineList && !(statusSubtitle) && <BuilderV2RecordAvatar id={row.id} name={orders ? undefined : cell(row, node.titleFieldId)} icon={orders ? 'receipt' : contacts ? 'users' : inventory ? 'box' : 'list'} tone />}
+              {defaultCard ? <RecordControl className={ui.recordButton} data-compact={compact || undefined} data-status={(statusSubtitle && !inventoryStockList && !inventoryJournalList && !purchaseList && !supplierList) || undefined} data-stock={inventoryStockList || undefined} data-journal={inventoryJournalList || undefined} data-purchase={purchaseList || undefined} data-purchase-line={purchaseLineList || undefined} data-supplier={supplierList || undefined} data-low={lowStock || undefined} {...(cardScreen ? { type: 'button' as const, onClick: () => open(row) } : {})}>
+                {compact && !inventoryStockList && !inventoryJournalList && !purchaseList && !purchaseLineList && !supplierList && !(statusSubtitle) && <BuilderV2RecordAvatar id={row.id} name={orders ? undefined : cell(row, node.titleFieldId)} icon={orders ? 'receipt' : contacts ? 'users' : inventory ? 'box' : 'list'} tone />}
                 {item(row)}
                 {!catalog && !inventoryStockList && !inventoryJournalList && !purchaseList && !purchaseLineList && (cardScreen || props.editing && cardTarget) && <ProtoIcon name="arrow" size={16} />}
               </RecordControl> : <>{item(row)}{openRecord(row)}</>}
@@ -744,7 +828,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
             return node.layout === 'kanban' ? <BoardMoveRow key={row.id} row={row as BuilderV2DataRecord} label={cell(row, node.titleFieldId)}>{body}</BoardMoveRow> : body
           }
           const rowsClass = catalog ? `${ui.catalogRows} ${presentation.catalogGrid}` : cardLayout ? ui.cards : timeline ? ui.timelineList : node.layout === 'list' && !rowAction ? (node.recordGroup ? ui.groupedRecords : ui.plainList) : styles.collectionRows
-          const inventoryList = Boolean((inventoryStockList || inventoryJournalList || purchaseList) && !node.recordGroup)
+          const inventoryList = Boolean((inventoryStockList || inventoryJournalList || purchaseList || supplierList) && !node.recordGroup)
           const typeChoices = inventoryJournalList && inventory
             ? (table?.fields.find(field => field.id === inventory.movementTypeFieldId)?.choices ?? [])
               .filter(choice => ['Приход', 'Расход', 'Списание', 'Перемещение'].includes(choice.name))
@@ -779,11 +863,21 @@ export function AppV2Renderer(props: AppV2RendererProps) {
                 <span>Сумма</span>
               </div>
               : null
+            const supplierHeader = supplierList && !node.recordGroup
+              ? <div className={ui.supplierListHeader} aria-hidden="true">
+                <span>Поставщик</span>
+                <span>Телефон</span>
+                <span>Заказов</span>
+                <span>Последний заказ</span>
+                <span>Закуплено на</span>
+              </div>
+              : null
             return [...buckets].map(([key, group]) => <div key={key} className={group.label ? ui.listGroup : undefined}>
               {group.label && <GroupHeading className={ui.listGroupHeading}>{group.label}</GroupHeading>}
-              <div className={rowsClass} data-inventory={inventoryList || undefined} data-stock={inventoryStockList || undefined} data-purchase={purchaseList || undefined}>
+              <div className={rowsClass} data-inventory={inventoryList || undefined} data-stock={inventoryStockList || undefined} data-purchase={purchaseList || undefined} data-supplier={supplierList || undefined}>
                 {stockHeader}
                 {purchaseHeader}
+                {supplierHeader}
                 {group.rows.map(listRow)}
               </div>
             </div>)
@@ -895,28 +989,34 @@ export function AppV2Renderer(props: AppV2RendererProps) {
       return [{ ...item, at, by }]
     })
     const hasActions = Boolean(editFormId || primaryAction || secondaryActions.length)
+    const purchaseTitle = [number && `Заказ ${number}`, supplier].filter(Boolean).join(' · ') || 'Заказ поставщику'
+    const purchaseActions = hasActions ? <div className={ui.purchaseCardActions}>
+      {editFormId ? render([editFormId]) : null}
+      {primaryAction ? (published
+        ? <PublishedV2Button node={primaryAction} screenId={props.screenId} recordId={purchaseRecord.id} refreshOnSuccess buttonClassName={styles.primary} />
+        : <button type="button" className={styles.primary} disabled>{primaryAction.label}</button>) : null}
+      {secondaryActions.map(node => published
+        ? <PublishedV2Button key={node.id} node={node} screenId={props.screenId} recordId={purchaseRecord.id} refreshOnSuccess buttonClassName={styles.secondary} />
+        : <button key={node.id} type="button" className={styles.secondary} disabled>{node.label}</button>)}
+    </div> : null
     return <div className={`${styles.canvasBlocks} ${ui.purchaseCard}`}>
-      <section className={`${presentation.panel} ${ui.orderIdentity}`} data-manage aria-label="Главное о заказе">
+      <section className={`${presentation.panel} ${ui.orderIdentity}`} data-manage data-variant="pipeline" data-purchase-card aria-label="Главное о заказе">
         <div className={ui.orderIdentityMain}>
-          {hasActions ? <div className={ui.purchaseCardActions}>
-            {editFormId ? render([editFormId]) : null}
-            {primaryAction ? (published
-              ? <PublishedV2Button node={primaryAction} screenId={props.screenId} recordId={purchaseRecord.id} refreshOnSuccess buttonClassName={styles.primary} />
-              : <button type="button" className={styles.primary} disabled>{primaryAction.label}</button>) : null}
-            {secondaryActions.map(node => published
-              ? <PublishedV2Button key={node.id} node={node} screenId={props.screenId} recordId={purchaseRecord.id} refreshOnSuccess buttonClassName={styles.secondary} />
-              : <button key={node.id} type="button" className={styles.secondary} disabled>{node.label}</button>)}
-          </div> : null}
-          <div className={ui.orderIdentityMeta}>
-            {amount ? <div className={ui.heroAmount} data-bare><span>Сумма</span><strong>{amount}</strong></div> : null}
-            {status ? <span className={ui.heroStatus} data-tone={builderV2StatusTone(status)}>{status}</span> : null}
+          <div className={ui.purchaseCardHead}>
+            <div className={ui.purchaseCardIdentity}>
+              {status ? <span className={ui.heroStatus} data-tone={builderV2StatusTone(status)}>{status}</span> : null}
+              <h2 className={ui.purchaseCardTitle}>{purchaseTitle}</h2>
+            </div>
+            {purchaseActions ? <div className={ui.purchaseCardActionsDesktop}>{purchaseActions}</div> : null}
           </div>
-          <div className={ui.orderIdentityFacts}>
+          <div className={ui.orderIdentityFacts} data-count="5">
+            <div className={ui.orderIdentityFact} data-kind="amount"><span>Сумма</span><strong>{amount || '—'}</strong></div>
             <div className={ui.orderIdentityFact}><span>Поставщик</span><strong>{supplier || '—'}</strong></div>
             <div className={ui.orderIdentityFact}><span>Склад</span><strong>{warehouse || '—'}</strong></div>
             <div className={ui.orderIdentityFact}><span>Дата</span><strong>{when || '—'}</strong></div>
             <div className={ui.orderIdentityFact}><span>Позиций</span><strong>{count || '—'}</strong></div>
           </div>
+          {purchaseActions ? <div className={ui.purchaseCardActionsMobile}>{purchaseActions}</div> : null}
           {comment ? <p className={ui.purchaseComment}>{comment}</p> : null}
         </div>
       </section>

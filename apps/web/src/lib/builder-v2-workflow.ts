@@ -51,7 +51,7 @@ export async function executeBuilderV2Workflow(options: { write: RowTransaction;
   const initial = selected ? await record(selected) : undefined, screenInitial=options.screenSelected===undefined?initial:options.screenSelected?await record(options.screenSelected):undefined, results = new Map<string, AppV2Record>(), effects: BuilderV2WorkflowEffect[] = [], trace: BuilderV2WorkflowTrace = []
   const context: AppV2Context = { actor, row: initial, screenRow: screenInitial, forms: new Map(form ? [[form.id, { tableId: form.tableId, values: form.values }]] : []), results }
   const created=new Map<string,string>(),deleted=new Set<string>(),deletions:{stepId:string;tableId:string;recordKey:string;version:number;recordLabel:string;tableName:string}[]=[]
-  const cancellations:{stepId:string;tableId:string;recordKey:string;version:number;recordLabel:string;tableName:string}[]=[]
+  const cancellations:{stepId:string;tableId:string;recordKey:string;version:number;recordLabel:string;tableName:string;deductions:{productId:string;name:string;qty:number}[]}[]=[]
   const resolve = (binding: AppV2Binding): AppV2Json => { const result = resolveAppV2Binding(binding, context); if (!result.ok) throw new RowWriteError('invalid', result.error); return result.value }
   const target = (value: AppV2Target): AppV2Record => { const result = value.kind === 'current' ? context.row : results.get(value.stepId); if (!result) throw new RowWriteError('invalid', 'Запись недоступна на этом шаге'); return result }
   const condition = (value: Parameters<typeof evaluateAppV2Condition>[0]) => { const result = evaluateAppV2Condition(value, context); if (!result.ok) throw new RowWriteError('invalid', result.error); return result.value }
@@ -110,6 +110,7 @@ export async function executeBuilderV2Workflow(options: { write: RowTransaction;
               version: stored.version,
               recordLabel: saved.label || 'Заказ',
               tableName: tables.find(table => table.id === ordersId)?.name ?? 'Заказы поставщикам',
+              deductions: saved.deductions,
             })
           } else {
             const saved = step.type === 'order_purchase_order'
@@ -182,8 +183,10 @@ export async function executeBuilderV2Workflow(options: { write: RowTransaction;
       fingerprint,
       kind: 'cancel_purchase',
       title: 'Отменить полученный заказ?',
-      message: 'Отмена уменьшит остатки на складе: приходы по этому заказу будут сторнированы списанием. Если товара уже не хватает, отмена не пройдёт.',
-      records: cancellations.map(({ tableName, recordLabel }) => ({ tableName, recordLabel })),
+      message: 'Отмена уменьшит остатки на складе. Если товара уже не хватает, отмена не пройдёт.',
+      records: cancellations.flatMap(item => item.deductions.length
+        ? item.deductions.map(line => ({ tableName: '', recordLabel: line.name, productId: line.productId, qty: line.qty }))
+        : [{ tableName: '', recordLabel: item.recordLabel }]),
     })
   }
   if(deletions.length){

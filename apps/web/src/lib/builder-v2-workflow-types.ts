@@ -7,7 +7,7 @@ export type BuilderV2WorkflowConfirmation = {
   kind?: 'delete' | 'cancel_purchase'
   title?: string
   message?: string
-  records: { tableName: string; recordLabel: string }[]
+  records: { tableName: string; recordLabel: string; productId?: string; qty?: number }[]
 }
 export const BUILDER_V2_WORKFLOW_STEPS = new Set<AppV2Step['type']>(['require', 'branch', 'create_row', 'place_shop_order', 'record_inventory_movement', 'create_purchase_order', 'update_purchase_order', 'order_purchase_order', 'receive_purchase_order', 'cancel_purchase_order', 'update_row', 'delete_row', 'notify', 'open_screen', 'go_back', 'open_url', 'copy_value'])
 export function builderV2WorkflowSteps(steps: readonly AppV2Step[]): AppV2Step[] { return steps.flatMap(step => [step, ...(step.type === 'branch' ? [...builderV2WorkflowSteps(step.then), ...builderV2WorkflowSteps(step.else)] : [])]) }

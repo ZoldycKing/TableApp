@@ -66,16 +66,30 @@ describe.skipIf(!process.env.DATABASE_URL)('inventory visual setup', () => {
     await database.db.update(database.apps).set({ published, draft: published, publishedAt: new Date() }).where(eq(database.apps.id, installed.appId))
     const items = await database.db.select().from(database.rows).where(and(eq(database.rows.tableId, inv.itemsTableId), isNull(database.rows.deletedAt)))
     const low = items.find(row => (row.data as Record<string, unknown>)[inv.itemNameFieldId] === 'Фильтр воздушный FA-120') ?? items[0]
+    const longName = 'Комплект уплотнителей для холодильной витрины серии FrostLine Pro XL с усиленным крепежом и запасными втулками'
+    const long = items.find(row => (row.data as Record<string, unknown>)[inv.itemNameFieldId] === longName) ?? items[0]
+    const photoField = inv.itemPhotoFieldId
+    const withPhotos = items.filter(row => {
+      const value = photoField ? (row.data as Record<string, unknown>)[photoField] : null
+      return Array.isArray(value) && value.length > 0
+    }).length
+    expect(withPhotos).toBe(items.length)
     writeFileSync('/tmp/inventory-visual.json', JSON.stringify({
       appId: installed.appId, slug: installed.appSlug,
       ownerCookie: `tableapp_staff=${ownerSessionId}`,
       staffCookie: `tableapp_staff=${staffSessionId}`,
       listUrl: `http://127.0.0.1:3210/a/${installed.appSlug}`,
       itemUrl: `http://127.0.0.1:3210/a/${installed.appSlug}?screen=${inv.itemScreenId}&row=${low?.id}`,
+      longItemUrl: `http://127.0.0.1:3210/a/${installed.appSlug}?screen=${inv.itemScreenId}&row=${long?.id}`,
+      createUrl: inv.createItemScreenId
+        ? `http://127.0.0.1:3210/a/${installed.appSlug}?screen=${inv.createItemScreenId}`
+        : `http://127.0.0.1:3210/a/${installed.appSlug}`,
       movementsUrl: `http://127.0.0.1:3210/a/${installed.appSlug}?screen=${inv.movementsScreenId}`,
       receiptFormId: inv.receiptFormId,
       writeOffFormId: inv.writeOffFormId,
       itemName: low ? (low.data as Record<string, unknown>)[inv.itemNameFieldId] : null,
+      longItemName: long ? (long.data as Record<string, unknown>)[inv.itemNameFieldId] : null,
+      photoCount: withPhotos,
     }, null, 2))
   })
 })

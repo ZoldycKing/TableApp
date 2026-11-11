@@ -39,10 +39,12 @@ export function PublishedV2Runtime({data}:{data:Data}){
   const home=(app.homeScreenId?app.screens.find(screen=>screen.id===app.homeScreenId&&!screen.contextTableId)?.id:undefined)??app.screens.find(screen=>!screen.contextTableId)?.id
   const parent = builderV2RecordParent(app, screenId)
   const backTarget = data.sectionId ?? home
+  // Full product name lives under the photo; keep the chrome title short so stock stays in view.
+  const frameTitle = app.inventory && screenId === app.inventory.itemScreenId ? 'Товар' : title
   return <PublishedV2Context.Provider value={transport}>
     <BuilderV2Theme as="main" app={app} className={`${ui.preview} ${ui.published}`}>
       <BuilderV2AppFrame
-        fullScreen scrollKey={recordId ?? ''} app={app} screenId={screenId} sectionId={data.sectionId} title={title}
+        fullScreen scrollKey={recordId ?? ''} app={app} screenId={screenId} sectionId={data.sectionId} title={frameTitle}
         profile={Boolean(record && isBuilderV2ContactProfile(app, screenId, tables))}
         back={page.contextTableId && backTarget ? () => { enterNavigation.current.prepare(); history.back(backTarget) } : undefined}
         headerAction={<>{headerAccessory}<BuilderV2Account email={actor.email} authenticated={actor.authenticated} slug={slug} /></>}

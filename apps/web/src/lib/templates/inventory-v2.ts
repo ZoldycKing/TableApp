@@ -102,13 +102,13 @@ export function buildInventoryV2App(built: BuiltTemplate, meta: { id: string; wo
   const productFields = () => [
     input(itemName, 'Наименование', true),
     input(itemSku, 'Артикул', false),
+    ...(itemPhoto ? [input(itemPhoto, 'Фото', false)] : []),
     input(itemBarcode, 'Штрихкод', false),
     input(itemCategory, 'Категория', false),
     input(itemUnit, 'Единица', true),
     input(itemMin, 'Минимальный остаток', true),
     input(itemCost, 'Себестоимость, ₽', false),
     input(itemWarehouse, 'Склад', true),
-    ...(itemPhoto ? [input(itemPhoto, 'Фото', false)] : []),
   ]
   const itemEditInputs = productFields()
   const createItemInputs = productFields()

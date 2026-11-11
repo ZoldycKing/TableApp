@@ -88,6 +88,20 @@ async function shootPair(browser: Browser, cookie: string, template: string, scr
   }
 }
 
+// Drop reorder/e2e leftover drafts from the demo dataset before shooting.
+{
+  const { spawnSync } = await import('node:child_process')
+  const cleaned = spawnSync('pnpm', ['exec', 'tsx', 'scripts/cleanup-inventory-demo-pos.mts'], {
+    cwd: resolve('/workspace/apps/web'),
+    encoding: 'utf8',
+  })
+  if (cleaned.status !== 0) {
+    console.warn('demo PO cleanup failed', cleaned.stderr || cleaned.stdout)
+  } else {
+    console.log('demo PO cleanup', (cleaned.stdout || '').trim())
+  }
+}
+
 const browser = await chromium.launch({ headless: true })
 
 await shootPair(browser, inv3.ownerCookie, 'inventory', 'items', inv.items)

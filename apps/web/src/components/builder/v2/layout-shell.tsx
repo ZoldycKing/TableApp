@@ -122,8 +122,9 @@ export function ShellSearchField({
 }
 
 /**
- * Detail page skeleton (product.html / shared cards):
- * back above the card → hero (media | title+chips | actions) → metric tiles → body cols.
+ * Detail page skeleton:
+ * back above → plate (header + metrics only) → body section cards on the page grid.
+ * Body is NEVER nested inside the outer plate (avoids double frames).
  */
 export function DetailCardShell({
   media,
@@ -158,7 +159,7 @@ export function DetailCardShell({
   }) ?? []
   const metricCount = visibleMetrics.length
   const product = layout === 'product'
-  return <div className={shell.detailPage} data-layout={product ? 'product' : 'detail'}>
+  return <div className={shell.detailPage} data-layout={product ? 'product' : 'detail'} data-sticky={stickyActions ? true : undefined}>
     {back ? <button type="button" className={shell.detailBack} onClick={back.onClick}>← {back.label}</button> : null}
     <div className={shell.detail} data-layout={product ? 'product' : 'detail'}>
       <header className={shell.detailHead} data-product={product || undefined}>
@@ -186,15 +187,15 @@ export function DetailCardShell({
           {metric.pill ? <span className={shell.metricPill}>{metric.pill}</span> : null}
         </div>)}
       </div> : null}
-      {children ? <div className={shell.detailBody} data-product={product || undefined}>{children}</div> : null}
-      {stickyActions ? <div className={shell.stickyBar} data-open>{stickyActions}</div> : null}
     </div>
+    {children ? <div className={shell.detailBody} data-product={product || undefined}>{children}</div> : null}
+    {stickyActions ? <div className={shell.stickyBar} data-open>{stickyActions}</div> : null}
   </div>
 }
 
 export function DetailSection({ title, children }: { title?: ReactNode; children: ReactNode }) {
   return <section className={shell.detailSection}>
     {title ? <h3 className={shell.detailSectionTitle}>{title}</h3> : null}
-    {children}
+    <div className={shell.detailSectionBody}>{children}</div>
   </section>
 }

@@ -125,8 +125,11 @@
   margin: 0;
   color: var(--shell-muted);
   font-size: 12px;
-  line-height: 1.3;
+  line-height: 1.35;
   font-weight: 650;
+  letter-spacing: 0;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 .metricNote {
@@ -531,65 +534,12 @@
   font-size: clamp(1.35rem, 2.8cqw, 1.75rem);
 }
 
+/* Body lives on the page grid (sibling of the header plate) — never nested in an outer frame. */
 .detailBody {
   display: grid;
-  gap: 0;
+  gap: 16px;
   min-width: 0;
-}
-
-.detailBody :global(.orderLinesPanel),
-.detailBody :global(.orderLines),
-.detailBody :global(.orderFacts),
-.detailBody :global(.facts),
-.detailBody :global(.timeline),
-.detailBody :global(.plainList),
-.detailBody :global(.groupedRecords) {
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
-  background: transparent;
-}
-
-.detail[data-layout='product'] .detailBody {
-  gap: 0;
-  border: 0;
-  background: transparent;
-  overflow: visible;
-}
-
-/* Non-product detail: 2fr/1fr body becomes sibling cards on the page band. */
-.detail:not([data-layout='product']) .detailBody:has(> .detailCols) {
-  padding: 16px;
-  background: color-mix(in srgb, var(--shell-bg) 70%, var(--shell-surface));
-  border-top: 1px solid var(--shell-line);
-}
-
-.detail:not([data-layout='product']) .detailMainCol > :global(section),
-.detail:not([data-layout='product']) .detailSideCol > :global(section),
-.detail:not([data-layout='product']) .detailMainCol > .detailSection,
-.detail:not([data-layout='product']) .detailSideCol > .detailSection {
-  border: 1px solid var(--shell-line);
-  border-radius: 14px;
-  background: var(--shell-surface);
-  box-shadow: 0 1px 0 color-mix(in srgb, var(--shell-ink) 4%, transparent);
-  padding: 16px var(--shell-pad-x);
-}
-
-.detailSection {
-  display: grid;
-  gap: 12px;
-  min-width: 0;
-  padding: 16px var(--shell-pad-x);
-  border-bottom: 1px solid var(--shell-line);
-}
-
-.detailSection:last-child { border-bottom: 0; }
-
-.detailSectionTitle {
-  margin: 0;
-  color: var(--shell-ink);
-  font-size: 14px;
-  font-weight: 720;
+  width: 100%;
 }
 
 .detailCols {
@@ -607,42 +557,99 @@
   align-content: start;
 }
 
-/* Product cols: each section is its own framed card with matching heading edge. */
-.detail[data-layout='product'] .detailMainCol > :global(section),
-.detail[data-layout='product'] .detailSideCol > :global(section),
-.detail[data-layout='product'] .detailMainCol > .detailSection,
-.detail[data-layout='product'] .detailSideCol > .detailSection {
+/* One frame per section card. Inner lists/tables lose their own chrome. */
+.detailSection,
+.detailMainCol > :global(section),
+.detailSideCol > :global(section) {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 16px var(--shell-pad-x);
   border: 1px solid var(--shell-line);
   border-radius: 14px;
   background: var(--shell-surface);
   box-shadow: 0 1px 0 color-mix(in srgb, var(--shell-ink) 4%, transparent);
+}
+
+.detailSectionTitle,
+.detailMainCol > :global(section) :global([class*='sectionTitle']),
+.detailSideCol > :global(section) :global([class*='sectionTitle']) {
+  margin: 0;
+  color: var(--shell-ink);
+  font-size: 15px;
+  font-weight: 750;
+}
+
+.detailSectionBody {
+  display: grid;
+  gap: 0;
+  min-width: 0;
+}
+
+/*
+ * Strip nested chrome *inside* a section card — the section itself keeps the one frame
+ * from `.detailSection` / `.detailMainCol > section`. Do not target the outer section.
+ */
+.detailSectionBody :global([class*='orderLinesPanel']),
+.detailSectionBody :global([class*='orderLines']),
+.detailSectionBody :global([class*='timelineCollection']),
+.detailSectionBody :global([class*='timelineList']),
+.detailSectionBody :global([class*='plainList']),
+.detailSectionBody :global([class*='groupedRecords']),
+.detailSectionBody :global([class*='purchaseHistory']),
+.detailSectionBody :global([class*='collection']:not([class*='collectionHeading'])),
+.detailSectionBody :global([class*='form']),
+.detailSectionBody :global(form),
+.detailMainCol > :global(section) > :global([class*='orderLines']),
+.detailMainCol > :global(section) > :global([class*='timeline']),
+.detailMainCol > :global(section) > :global([class*='plainList']),
+.detailMainCol > :global(section) > :global([class*='groupedRecords']),
+.detailMainCol > :global(section) > :global([class*='form']),
+.detailMainCol > :global(section) > :global(form),
+.detailSideCol > :global(section) > :global([class*='orderFactsGrid']),
+.detailSideCol > :global(section) > :global([class*='form']),
+.detailSideCol > :global(section) > :global(form),
+.detailSideCol > :global(section) :global([class*='form']),
+.detailSideCol > :global(section) :global(form) {
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  padding-inline: 0 !important;
+}
+
+/* Collection wrappers that are direct children become the one section frame. */
+.detailMainCol > :global([class*='timelineCollection']),
+.detailMainCol > :global([class*='collection']:not([class*='collectionHeading'])),
+.detailMainCol > :global([class*='orderLinesPanel']),
+.detailSideCol > :global([class*='orderActionPanel']) {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
   padding: 16px var(--shell-pad-x);
-  border-bottom: 1px solid var(--shell-line);
-}
-
-.detail[data-layout='product'] .detailMainCol > .detailSection:last-child,
-.detail[data-layout='product'] .detailSideCol > .detailSection:last-child {
-  border-bottom: 1px solid var(--shell-line);
-}
-
-.detail[data-layout='product'] .detailSideCol :global([class*='orderFacts']),
-.detail[data-layout='product'] .detailSideCol :global([class*='facts']) {
   border: 1px solid var(--shell-line);
   border-radius: 14px;
   background: var(--shell-surface);
   box-shadow: 0 1px 0 color-mix(in srgb, var(--shell-ink) 4%, transparent);
-  padding: 16px var(--shell-pad-x);
 }
 
-/* Beat view.module 2/3-col container queries — hashed class names need *=. */
-.detail[data-layout='product'] .detailSideCol :global([class*='orderFactsGrid']) {
+.detailSectionBody :global([class*='collectionHeading']),
+.detailSectionBody :global([class*='formTitle']),
+.detailMainCol > :global(section) :global([class*='collectionHeading']),
+.detailSideCol > :global(section) :global([class*='collectionHeading']) {
+  display: none;
+}
+
+/* Key/value rows: one column, label left / value right — no word-by-word wrap. */
+.detailBody :global([class*='orderFactsGrid']),
+.detailBody :global([class*='orderContactRow']) {
   display: grid !important;
   grid-template-columns: minmax(0, 1fr) !important;
-  gap: 0;
+  gap: 0 !important;
 }
 
-.detail[data-layout='product'] .detailSideCol :global([class*='orderFact']:not([class*='orderFacts'])) {
-  display: flex;
+.detailBody :global([class*='orderFact']:not([class*='orderFacts'])) {
+  display: flex !important;
   justify-content: space-between;
   align-items: baseline;
   gap: 16px;
@@ -652,27 +659,41 @@
   word-break: normal;
 }
 
-.detail[data-layout='product'] .detailSideCol :global([class*='orderFact']:not([class*='orderFacts']):last-child) {
+.detailBody :global([class*='orderFact']:not([class*='orderFacts']):last-child) {
   border-bottom: 0;
 }
 
-.detail[data-layout='product'] .detailSideCol :global([class*='orderFact'] > small) {
+.detailBody :global([class*='orderFact'] > small) {
   color: var(--shell-muted);
   font-weight: 600;
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: 46%;
   white-space: nowrap;
 }
 
-.detail[data-layout='product'] .detailSideCol :global([class*='orderFact'] > strong) {
+.detailBody :global([class*='orderFact'] > strong) {
   text-align: right;
   font-weight: 700;
-  white-space: nowrap;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
-.detail[data-layout='product'] .detailSideCol :global([class*='sectionTitle']),
-.detail[data-layout='product'] .detailSectionTitle {
-  margin: 0 0 4px;
-  font-size: 15px;
-  font-weight: 750;
+/* Notes / long text facts span full width under the label. */
+.detailBody :global([class*='orderFact'][data-kind='note']),
+.detailBody :global([class*='orderFact'][data-kind='reply']) {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.detailBody :global([class*='orderFact'][data-kind='note'] > strong),
+.detailBody :global([class*='orderFact'][data-kind='reply'] > strong) {
+  text-align: start;
+  font-weight: 560;
+  line-height: 1.45;
 }
 
 @media (min-width: 721px) {
@@ -707,9 +728,15 @@
     border-right: 1px solid var(--shell-line);
   }
   .detailIdentity[data-product] {
-    grid-template-columns: minmax(160px, 200px) minmax(0, 1fr);
-    gap: 18px 22px;
+    grid-template-columns: 160px minmax(0, 1fr);
+    gap: 16px 20px;
     align-items: start;
+  }
+  .detailIdentity[data-product] :global(.productThumb[data-size='card']) {
+    width: 160px;
+    height: 160px;
+    max-width: 160px;
+    max-height: 160px;
   }
   .detailCols {
     grid-template-columns: minmax(0, 2fr) minmax(14rem, 1fr);
@@ -762,8 +789,8 @@
     max-height: none;
     aspect-ratio: 4 / 3;
   }
-  .detail[data-layout='product'] {
-    padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
+  .detailPage[data-sticky] {
+    padding-bottom: calc(6.75rem + env(safe-area-inset-bottom, 0px));
   }
   .detail[data-layout='product'] .detailHead {
     padding: 16px;
@@ -776,7 +803,9 @@
     padding: 16px;
   }
   .stickyBar {
-    position: sticky;
+    position: fixed;
+    left: 0;
+    right: 0;
     bottom: 0;
     z-index: 4;
     display: grid;
@@ -787,9 +816,10 @@
     backdrop-filter: blur(10px);
   }
   .stickyBar :global(.orderActionDock),
-  .stickyBar :global([data-placement='mobile']) {
+  .stickyBar :global([data-placement='mobile']),
+  .stickyBar :global([class*='purchaseCardActions']) {
     display: grid;
-    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr);
     gap: 8px;
     width: 100%;
     position: static;
@@ -804,4 +834,6 @@
 .stickyBar { display: none; }
 @media (max-width: 720px) {
   .stickyBar[data-open] { display: grid; }
+  /* Hide desktop header actions when sticky bar owns them. */
+  .detailPage[data-sticky] .detailActions { display: none; }
 }

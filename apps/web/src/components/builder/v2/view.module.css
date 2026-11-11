@@ -293,8 +293,8 @@
 .productThumb[data-size='list'] { width: 56px; height: 56px; }
 .productThumb[data-size='journal'] { width: 48px; height: 48px; border-radius: 10px; }
 .productThumb[data-size='card'] {
-  width: 220px;
-  height: 220px;
+  width: 160px;
+  height: 160px;
   max-width: 100%;
   border-radius: 16px;
 }
@@ -1497,8 +1497,8 @@ button.recordButton:hover strong { color: var(--v2-accent, #456849); }
   --inv-purchase-cols: 3.5rem 7.25rem minmax(0, 1.2fr) 4.5rem 8rem 6.25rem 7rem;
 }
 .plainList[data-purchase][data-supplier-orders] {
-  /* Same stretch as the main purchases grid, without the supplier column. */
-  --inv-purchase-cols: 3.5rem 7.25rem 4.5rem minmax(0, 1.2fr) 6.25rem 7rem;
+  /* thumbs · number · count · warehouse · status · amount — size to content, not stretch warehouse. */
+  --inv-purchase-cols: 3.5rem 7.25rem 4.5rem max-content auto 7rem;
 }
 .plainList[data-count] {
   min-width: 0;
@@ -2067,6 +2067,16 @@ button.recordButton:hover strong { color: var(--v2-accent, #456849); }
   background: color-mix(in srgb, #f59e0b 7%, var(--v2-surface, #fff));
   box-shadow: inset 3px 0 0 color-mix(in srgb, #f59e0b 55%, transparent);
   overflow: visible;
+  /* Full-bleed highlight: cancel row/list inline padding so the wash reaches photo + edges. */
+  margin-inline: calc(-1 * var(--shell-pad-x, 16px));
+  padding-inline: var(--shell-pad-x, 16px);
+  width: auto;
+  max-width: none;
+  border-radius: 0;
+}
+.countEditorLine[data-diff] {
+  margin-inline: -4px;
+  padding-inline: 4px;
 }
 .recordButton[data-compact][data-count-line] > .productThumb,
 .countEditorLine > .productThumb {

@@ -283,8 +283,8 @@ export const sklad: TemplateDef = {
           key: 'po1',
           values: {
             name: 'Заказ · КлиматСервис', number: 'ЗК-0001', supplier: { rowKey: 'sup1' }, warehouse: { rowKey: 'wh1' },
-            date: inDays(3), status: 'Черновик', total: 7120, comment: 'Ждём счёт', lines: { rowKeys: ['pl1'] }, count: 1,
-            createdAt: inDays(3), createdBy: 'maria.sokolova@example.invalid',
+            date: inDays(-2), status: 'Черновик', total: 7120, comment: 'Ждём счёт', lines: { rowKeys: ['pl1'] }, count: 1,
+            createdAt: inDays(-2), createdBy: 'maria.sokolova@example.invalid',
           },
         },
         {

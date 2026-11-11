@@ -47,8 +47,10 @@ export async function inspectPublishedV2Form(current:Awaited<ReturnType<typeof p
   }
   const now=new Date()
   if(app.inventory&&form.mode==='create'){
-    const dateField=fields.find(field=>field.id===app.inventory!.movementDateFieldId)
-    if(dateField&&blank(initial[dateField.id]))initial[dateField.id]=now.toISOString()
+    for(const fieldId of [app.inventory.movementDateFieldId, app.inventory.purchaseDateFieldId]){
+      const dateField=fieldId?fields.find(field=>field.id===fieldId):undefined
+      if(dateField&&blank(initial[dateField.id]))initial[dateField.id]=now.toISOString()
+    }
   }
   const defaults=await withInitialValues(fields,initial,async(tableId,rowId,fieldId)=>{const loaded=await publishedV2Row(meta,app,actor,tableId,rowId);const value=loaded.record.values[fieldId];return typeof value==='number'?value:undefined},{creating:form.mode==='create',now})
   const fingerprint=builderV2Revision([revision,actor,screen.id,form,inputs,fields,selected?.stored.version??null,request.recordId??null])

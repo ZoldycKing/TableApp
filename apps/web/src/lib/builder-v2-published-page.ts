@@ -57,9 +57,21 @@ export async function loadPublishedV2Page(slug:string,request:{screen?:string;ro
       return kept
     }
     const rootIds=await visit(screen.rootIds)
-    // Include create form nodes on the items list so the toolbar dialog can render without navigating away.
-    if (app.inventory && screen.id === app.inventory.itemsScreenId && app.inventory.createItemFormId) {
-      await visit([app.inventory.createItemFormId])
+    // Toolbar dialogs render a form that lives on another screen, and the purchase
+    // line editor looks up the product list by node id. Keep those nodes on the page.
+    const inventory = app.inventory
+    if (inventory && screen.id === inventory.itemsScreenId && inventory.createItemFormId) {
+      await visit([inventory.createItemFormId])
+    }
+    if (inventory?.createPurchaseFormId && screen.id === inventory.purchasesScreenId) {
+      await visit([inventory.createPurchaseFormId])
+    }
+    if (inventory?.createSupplierFormId && screen.id === inventory.suppliersScreenId) {
+      await visit([inventory.createSupplierFormId])
+    }
+    if (inventory && (screen.id === inventory.purchasesScreenId || screen.id === inventory.purchaseScreenId || screen.id === inventory.createPurchaseScreenId)) {
+      const itemsList = app.nodes.find(node => node.type === 'collection' && node.layout === 'list' && app.sources.some(source => source.id === node.sourceId && source.tableId === inventory.itemsTableId && !source.screenTableId))
+      if (itemsList && !nodes.some(node => node.id === itemsList.id)) await visit([itemsList.id])
     }
     const recordTable = current.tables.find(table => table.id === screen.contextTableId)
     const statusField = recordTable?.fields.find(field => field.type === 'single_select' && builderV2StatusColumn(field))

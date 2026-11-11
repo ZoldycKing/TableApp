@@ -12,6 +12,7 @@ import { builderV2WorkflowValues } from './builder-v2-workflow-values'
 import {derivePublishedV2Rows,canReadPublishedV2Row} from './builder-v2-published-rows'
 import { placeShopOrder } from './shop-order'
 import { recordInventoryMovement } from './inventory-movement'
+import { cancelPurchaseOrder, createPurchaseOrder, orderPurchaseOrder, receivePurchaseOrder, updatePurchaseOrder } from './purchase-order'
 
 export class BuilderV2WorkflowError extends Error {
   readonly trace: BuilderV2WorkflowTrace
@@ -35,8 +36,8 @@ export async function executeBuilderV2Workflow(options: { write: RowTransaction;
     ...(selected ? [selected.tableId] : []),
     ...(options.screenSelected ? [options.screenSelected.tableId] : []),
     ...all.flatMap(step => 'tableId' in step ? [step.tableId] : []),
-    ...(app.inventory && all.some(step => step.type === 'record_inventory_movement')
-      ? [app.inventory.itemsTableId, app.inventory.movementsTableId, app.inventory.warehousesTableId]
+    ...(app.inventory && all.some(step => step.type === 'record_inventory_movement' || step.type === 'receive_purchase_order' || step.type === 'create_purchase_order' || step.type === 'update_purchase_order' || step.type === 'order_purchase_order' || step.type === 'cancel_purchase_order')
+      ? [app.inventory.itemsTableId, app.inventory.movementsTableId, app.inventory.warehousesTableId, ...(app.inventory.suppliersTableId ? [app.inventory.suppliersTableId] : []), ...(app.inventory.purchaseOrdersTableId ? [app.inventory.purchaseOrdersTableId] : []), ...(app.inventory.purchaseLinesTableId ? [app.inventory.purchaseLinesTableId] : [])]
       : []),
   ])]
   const meta = await loadBuilderV2ReadMetadata(write.tx, app.workspaceId, roots), needed = new Map<string, Set<string>>()
@@ -78,6 +79,29 @@ export async function executeBuilderV2Workflow(options: { write: RowTransaction;
           const placed = await recordInventoryMovement(write, app, actor, step.operation, values, product.id)
           const next = await record(await workingBuilderV2Record(write.tx, inv.movementsTableId, placed.id))
           results.set(step.id, next)
+        } else if (step.type === 'create_purchase_order' || step.type === 'update_purchase_order') {
+          const values = await builderV2WorkflowValues(meta, step.tableId, Object.fromEntries(Object.entries(step.values).map(([id, value]) => [id, resolve(value)])), options.published ? { app, actor } : undefined)
+          const current = context.screenRow ?? context.row
+          const saved = step.type === 'create_purchase_order'
+            ? await createPurchaseOrder(write, app, actor, values)
+            : await updatePurchaseOrder(write, app, actor, values, current?.tableId === step.tableId ? current.id : undefined)
+          const next = await record(await workingBuilderV2Record(write.tx, step.tableId, saved.id))
+          results.set(step.id, next)
+          if (context.row?.id === next.id && context.row.tableId === step.tableId) context.row = next
+          if (context.screenRow?.id === next.id && context.screenRow.tableId === step.tableId) context.screenRow = next
+        } else if (step.type === 'order_purchase_order' || step.type === 'receive_purchase_order' || step.type === 'cancel_purchase_order') {
+          const current = context.screenRow ?? context.row
+          const ordersId = app.inventory?.purchaseOrdersTableId
+          if (!current || !ordersId || current.tableId !== ordersId) throw new RowWriteError('invalid', 'Откройте заказ поставщику')
+          const saved = step.type === 'order_purchase_order'
+            ? await orderPurchaseOrder(write, app, actor, current.id)
+            : step.type === 'receive_purchase_order'
+              ? await receivePurchaseOrder(write, app, actor, current.id)
+              : await cancelPurchaseOrder(write, app, actor, current.id)
+          const next = await record(await workingBuilderV2Record(write.tx, ordersId, saved.id))
+          results.set(step.id, next)
+          if (context.row?.id === next.id) context.row = next
+          if (context.screenRow?.id === next.id) context.screenRow = next
         } else if (step.type === 'create_row' || step.type === 'update_row') {
           const values = await builderV2WorkflowValues(meta, step.tableId, Object.fromEntries(Object.entries(step.values).map(([id, value]) => [id, resolve(value)])),options.published?{app,actor}:undefined), row = step.type === 'update_row' ? target(step.target) : undefined
           if (row && row.tableId !== step.tableId) throw new RowWriteError('denied', 'Запись относится к другой таблице')

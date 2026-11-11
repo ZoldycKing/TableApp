@@ -46,8 +46,11 @@ export function prepareInventoryUpgrade(app: App, table: { id: string; workspace
     roles: [...upgradedApp.roles, { id: 'client', name: 'Кладовщик (прежняя роль)', isDefault: false }],
     screens: upgradedApp.screens.map(screen => screen.access.roles.includes('staff') ? { ...screen, access: { ...screen.access, roles: [...screen.access.roles, 'client'] } } : screen),
   }
-  return { opening, fields: additions, tables: mapped.tables.filter(t => t.id !== table.id),
-    views: mapped.views.filter(view => view.tableId !== table.id), app: upgradedApp }
+  const legacyNames = new Set(['Движения', 'Склады'])
+  const legacyTables = mapped.tables.filter(item => item.id !== table.id && legacyNames.has(item.name))
+  const legacyIds = new Set(legacyTables.map(item => item.id))
+  return { opening, fields: additions.filter(field => field.tableId === table.id || legacyIds.has(field.tableId)), tables: legacyTables,
+    views: mapped.views.filter(view => legacyIds.has(view.tableId)), app: upgradedApp }
 }
 
 function remapRead<T>(value: T, from: string, to: string): T {

@@ -31,6 +31,11 @@ export type AppV2Step = { id: string } & (
   | { type: 'create_row'; tableId: string; values: Record<string, AppV2Binding> }
   | { type: 'place_shop_order'; tableId: string; values: Record<string, AppV2Binding> }
   | { type: 'record_inventory_movement'; operation: AppV2InventoryOperation; values: Record<string, AppV2Binding> }
+  | { type: 'create_purchase_order'; tableId: string; values: Record<string, AppV2Binding> }
+  | { type: 'update_purchase_order'; tableId: string; values: Record<string, AppV2Binding> }
+  | { type: 'order_purchase_order' }
+  | { type: 'receive_purchase_order' }
+  | { type: 'cancel_purchase_order' }
   | { type: 'update_row'; tableId: string; target: AppV2Target; values: Record<string, AppV2Binding> }
   | { type: 'delete_row'; tableId: string; target: AppV2Target; confirm: boolean }
   | { type: 'require'; condition: AppV2Condition; message: string }
@@ -44,6 +49,11 @@ export const appV2StepSchema: z.ZodType<AppV2Step> = z.lazy(() => z.discriminate
   z.strictObject({ id, type: z.literal('create_row'), tableId: id, values }),
   z.strictObject({ id, type: z.literal('place_shop_order'), tableId: id, values }),
   z.strictObject({ id, type: z.literal('record_inventory_movement'), operation: appV2InventoryOperationSchema, values }),
+  z.strictObject({ id, type: z.literal('create_purchase_order'), tableId: id, values }),
+  z.strictObject({ id, type: z.literal('update_purchase_order'), tableId: id, values }),
+  z.strictObject({ id, type: z.literal('order_purchase_order') }),
+  z.strictObject({ id, type: z.literal('receive_purchase_order') }),
+  z.strictObject({ id, type: z.literal('cancel_purchase_order') }),
   z.strictObject({ id, type: z.literal('update_row'), tableId: id, target, values }),
   z.strictObject({ id, type: z.literal('delete_row'), tableId: id, target, confirm: z.boolean() }),
   z.strictObject({ id, type: z.literal('require'), condition: appV2ConditionSchema, message: z.string().min(1).max(500) }),
@@ -147,6 +157,44 @@ export const appV2Schema = z.strictObject({
     movementBeforeFieldId: id.optional(), movementAfterFieldId: id.optional(),
     warehouseNameFieldId: id,
     typeReceipt: id, typeIssue: id, typeWriteOff: id, typeTransfer: id,
+    /** Stage 2 purchases. Absent on warehouses installed before supplier orders. */
+    suppliersTableId: id.optional(),
+    purchaseOrdersTableId: id.optional(),
+    purchaseLinesTableId: id.optional(),
+    purchasesScreenId: id.optional(),
+    purchaseScreenId: id.optional(),
+    createPurchaseScreenId: id.optional(),
+    suppliersScreenId: id.optional(),
+    supplierScreenId: id.optional(),
+    createSupplierScreenId: id.optional(),
+    createPurchaseFormId: id.optional(),
+    editPurchaseFormId: id.optional(),
+    createSupplierFormId: id.optional(),
+    editSupplierFormId: id.optional(),
+    supplierNameFieldId: id.optional(),
+    supplierContactFieldId: id.optional(),
+    supplierPhoneFieldId: id.optional(),
+    supplierCommentFieldId: id.optional(),
+    purchaseNameFieldId: id.optional(),
+    purchaseSupplierFieldId: id.optional(),
+    purchaseWarehouseFieldId: id.optional(),
+    purchaseDateFieldId: id.optional(),
+    purchaseStatusFieldId: id.optional(),
+    purchaseTotalFieldId: id.optional(),
+    purchaseCommentFieldId: id.optional(),
+    purchaseLinesFieldId: id.optional(),
+    purchaseCountFieldId: id.optional(),
+    purchasePayloadFieldId: id.optional(),
+    lineNameFieldId: id.optional(),
+    lineOrderFieldId: id.optional(),
+    lineProductFieldId: id.optional(),
+    lineQtyFieldId: id.optional(),
+    linePriceFieldId: id.optional(),
+    lineTotalFieldId: id.optional(),
+    statusDraft: id.optional(),
+    statusOrdered: id.optional(),
+    statusReceived: id.optional(),
+    statusCancelled: id.optional(),
   }).optional(),
 })
 export type AppV2 = z.infer<typeof appV2Schema>

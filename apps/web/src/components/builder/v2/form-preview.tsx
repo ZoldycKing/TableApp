@@ -24,6 +24,7 @@ import type { BuilderV2WorkflowEffect, BuilderV2WorkflowTrace } from '@/lib/buil
 export type WorkingFormOptions = { tableName: string; listHref: string; recordHref?: string; learning?:boolean; revision?: string }
 type FormContext = { app: AppV2; scope: BuilderV2FormScope; state?: BuilderV2FormState; values: Record<string, AppV2Json>; errors: Record<string, string>; disabled: boolean; key:string; upload?: (fieldId:string,file:File,signal:AbortSignal)=>Promise<Attachment>; onPending:(id:string,pending:boolean)=>void; change: (id: string, value: AppV2Json) => void; inspect: (request: BuilderV2FormRequest) => Promise<BuilderV2FormResult | BuilderV2FormOptionsResult> }
 const Context = createContext<FormContext | null>(null)
+export function useBuilderV2FormContext() { return useContext(Context) }
 const editSaveNotice = (effects: BuilderV2WorkflowEffect[] = []) => effects.length === 0
   ? 'Изменения сохранены.' : effects.length === 1 && effects[0]?.type === 'notify' ? effects[0].message : undefined
 
@@ -215,6 +216,7 @@ function InventoryDateInput({ id, disabled, errorId, required, label, value, onC
 export function BuilderV2FormInput({ node, table }: { node: BuilderV2Input; table?: BuilderV2Table }) {
   const context = useContext(Context), published=usePublishedV2(), unique = useId(), field = context?.state?.fields.find(field => field.nodeId === node.id), column = table?.fields.find(field => field.id === node.fieldId)
   if (context?.app.shop && (node.fieldId === context.app.shop.cartFieldId || node.fieldId === context.app.shop.submissionFieldId)) return null
+  if (context?.app.inventory?.purchasePayloadFieldId && node.fieldId === context.app.inventory.purchasePayloadFieldId) return null
   const inventory = context?.app.inventory
   const inventoryDate = Boolean(inventory && node.fieldId === inventory.movementDateFieldId)
   const inventoryQty = Boolean(inventory && node.fieldId === inventory.movementQtyFieldId)

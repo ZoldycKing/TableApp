@@ -54,7 +54,17 @@ describe('inventory template v2 installation', () => {
     expect(app.homeScreenId).toBe(app.inventory!.itemsScreenId)
     expect(app.authentication).toMatchObject({ mode: 'invite_only', defaultRoleId: null })
     const inv = app.inventory!
+    expect(app.screens.filter(screen => screen.navigation).map(screen => screen.menuLabel)).toEqual(['Товары', 'Движения', 'Закупки'])
     expect(app.screens.some(screen => screen.id === inv.movementsScreenId && screen.navigation)).toBe(true)
+    expect(built.rows.filter(row => row.tableId === inv.suppliersTableId).length).toBe(2)
+    const purchaseRows = built.rows.filter(row => row.tableId === inv.purchaseOrdersTableId)
+    expect(purchaseRows).toHaveLength(3)
+    expect(new Set(purchaseRows.map(row => row.data[inv.purchaseStatusFieldId!]))).toEqual(new Set([inv.statusDraft, inv.statusOrdered, inv.statusReceived]))
+    expect(built.rows.filter(row => row.tableId === inv.purchaseLinesTableId).length).toBe(3)
+    const receive = app.workflows.find(flow => flow.steps.some(step => step.type === 'receive_purchase_order'))
+    const cancel = app.workflows.find(flow => flow.steps.some(step => step.type === 'cancel_purchase_order'))
+    expect(receive?.steps.some(step => step.type === 'receive_purchase_order')).toBe(true)
+    expect(cancel?.steps.some(step => step.type === 'cancel_purchase_order')).toBe(true)
     expect(app.nodes.find(node => node.id === inv.receiptFormId)).toMatchObject({ type: 'form', mode: 'create' })
     expect(app.nodes.find(node => node.id === inv.itemEditFormId)).toMatchObject({ type: 'form', mode: 'edit' })
     const receipt = app.workflows.find(flow => flow.id === (app.nodes.find(node => node.id === inv.receiptFormId) as { events: { submit: string } }).events.submit)!
@@ -105,5 +115,23 @@ describe('inventory template v2 installation', () => {
     expect(projectAppV2Row(app, staff, record)).not.toHaveProperty(inv.itemCostFieldId)
     expect(projectAppV2Row(app, owner, record)).toHaveProperty(inv.itemCostFieldId)
     expect(inventoryGuardNegativeStock(2, -3, 3)).toMatchObject({ ok: false })
+    const receive = app.workflows.find(flow => flow.steps.some(step => step.type === 'receive_purchase_order'))!
+    const cancel = app.workflows.find(flow => flow.steps.some(step => step.type === 'cancel_purchase_order'))!
+    const createPurchase = app.workflows.find(flow => flow.steps.some(step => step.type === 'create_purchase_order'))!
+    const editSupplier = app.nodes.find(node => node.id === inv.editSupplierFormId)
+    if (editSupplier?.type !== 'form') throw new Error('missing supplier form')
+    expect(canInvokeAppV2Workflow(app, staff, receive.id)).toBe(true)
+    expect(canInvokeAppV2Workflow(app, staff, createPurchase.id)).toBe(true)
+    expect(canInvokeAppV2Workflow(app, staff, cancel.id)).toBe(false)
+    expect(canInvokeAppV2Workflow(app, owner, cancel.id)).toBe(true)
+    expect(canInvokeAppV2Workflow(app, staff, editSupplier.events.submit!)).toBe(false)
+    expect(canInvokeAppV2Workflow(app, owner, editSupplier.events.submit!)).toBe(true)
+    const supplier = built.rows.find(row => row.tableId === inv.suppliersTableId)!
+    const supplierRow = { id: supplier.id, tableId: supplier.tableId, values: supplier.data as Record<string, string | number | boolean | null> }
+    const supplierPatch = { [inv.supplierNameFieldId!]: 'Новый поставщик' }
+    expect(authorizeAppV2Write(app, staff, { operation: 'update', row: supplierRow, values: supplierPatch }).ok).toBe(false)
+    expect(authorizeAppV2Write(app, owner, { operation: 'update', row: supplierRow, values: supplierPatch }).ok).toBe(true)
+    expect(canOpenAppV2Screen(app, staff, inv.purchasesScreenId!)).toBe(true)
+    expect(canOpenAppV2Screen(app, staff, inv.createSupplierScreenId!)).toBe(false)
   })
 })

@@ -32,6 +32,8 @@ export function publishedV2ReadSql(app:AppV2,actor:AppV2Actor,tableId:string){
 export function publishedV2FormHostScreenId(app:AppV2,screenId:string,nodeId:string){
   const inv=app.inventory
   if(inv?.createItemFormId===nodeId&&inv.itemsScreenId===screenId&&inv.createItemScreenId)return inv.createItemScreenId
+  if(inv?.createPurchaseFormId===nodeId&&inv.purchasesScreenId===screenId&&inv.createPurchaseScreenId)return inv.createPurchaseScreenId
+  if(inv?.createSupplierFormId===nodeId&&inv.suppliersScreenId===screenId&&inv.createSupplierScreenId)return inv.createSupplierScreenId
   return screenId
 }
 export function publishedV2Node(app:AppV2,actor:AppV2Actor,screenId:string,nodeId:string,screenRow?:AppV2Record){

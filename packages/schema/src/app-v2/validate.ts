@@ -270,7 +270,12 @@ export function validateAppV2(app: AppV2, catalog: AppV2Catalog, options: { mode
         if (step.type === 'branch') {
           steps(step.then, current, `${ownPath}.then`, depth + 1); steps(step.else, current, `${ownPath}.else`, depth + 1)
           // A result created in one branch is not definitely available after that branch.
-        } else if (step.type === 'create_row' || step.type === 'update_row' || step.type === 'place_shop_order' || step.type === 'record_inventory_movement') {
+        } else if (step.type === 'order_purchase_order' || step.type === 'receive_purchase_order' || step.type === 'cancel_purchase_order') {
+          const ordersId = app.inventory?.purchaseOrdersTableId
+          if (!app.inventory || !ordersId) issue('missing_inventory', ownPath, 'Приёмка заказа доступна только в установленном складе')
+          else if (current.rowTableId !== ordersId) issue('missing_record_context', ownPath, 'Откройте заказ поставщику')
+          else { table(ordersId, ownPath); results.set(step.id, ordersId) }
+        } else if (step.type === 'create_row' || step.type === 'update_row' || step.type === 'place_shop_order' || step.type === 'record_inventory_movement' || step.type === 'create_purchase_order' || step.type === 'update_purchase_order') {
           const writeTableId = step.type === 'record_inventory_movement' ? app.inventory?.movementsTableId : step.tableId
           if (step.type === 'record_inventory_movement') {
             if (!app.inventory) issue('missing_inventory', ownPath, 'Складское движение доступно только в установленном складе')
@@ -284,6 +289,19 @@ export function validateAppV2(app: AppV2, catalog: AppV2Catalog, options: { mode
             else if (step.tableId !== app.shop.ordersTableId) issue('shop_order_table', ownPath, 'Оформление заказа записывает таблицу заказов')
             else if (step.values[app.shop.emailFieldId] || step.values[app.shop.statusFieldId] || step.values[app.shop.positionsFieldId]) issue('shop_server_field', ownPath, 'Почту, статус и состав заказа заполняет сервер')
             else if (step.values[app.shop.cartFieldId]?.kind !== 'form' || step.values[app.shop.submissionFieldId]?.kind !== 'form') issue('shop_cart_binding', ownPath, 'Корзина и ключ оформления берутся из формы')
+          }
+          if ((step.type === 'create_purchase_order' || step.type === 'update_purchase_order')) {
+            const ordersId = app.inventory?.purchaseOrdersTableId
+            if (!app.inventory || !ordersId) issue('missing_inventory', ownPath, 'Заказ поставщику доступен только в установленном складе')
+            else if (step.tableId !== ordersId) issue('purchase_order_table', ownPath, 'Заказ поставщику записывает таблицу заказов')
+            else {
+              const inv = app.inventory
+              const required = [inv.purchaseSupplierFieldId, inv.purchaseWarehouseFieldId, inv.purchaseDateFieldId, inv.purchaseCommentFieldId, inv.purchasePayloadFieldId]
+              if (required.some(fieldId => !fieldId || step.values[fieldId]?.kind !== 'form')) issue('purchase_form_binding', ownPath, 'Поставщик, склад, дата, комментарий и состав берутся из формы')
+              const serverFields = [inv.purchaseNameFieldId, inv.purchaseStatusFieldId, inv.purchaseLinesFieldId, inv.purchaseTotalFieldId, inv.purchaseCountFieldId]
+              if (serverFields.some(fieldId => fieldId && step.values[fieldId])) issue('purchase_server_field', ownPath, 'Название, статус, позиции и сумму заполняет сервер')
+              if (step.type === 'update_purchase_order' && current.rowTableId !== step.tableId) issue('missing_record_context', ownPath, 'Откройте заказ поставщику')
+            }
           }
           if (step.type === 'record_inventory_movement' && app.inventory) {
             const inv = app.inventory
@@ -375,10 +393,23 @@ export function validateAppV2(app: AppV2, catalog: AppV2Catalog, options: { mode
   if (app.inventory) {
     const inv = app.inventory, path = 'inventory'
     table(inv.itemsTableId, path); table(inv.movementsTableId, path); table(inv.warehousesTableId, path)
-    for (const screenId of [inv.itemsScreenId, inv.itemScreenId, inv.movementsScreenId, ...(inv.createItemScreenId ? [inv.createItemScreenId] : [])]) {
+    const purchaseIds = [
+      inv.suppliersTableId, inv.purchaseOrdersTableId, inv.purchaseLinesTableId,
+      inv.purchasesScreenId, inv.purchaseScreenId, inv.createPurchaseScreenId, inv.suppliersScreenId, inv.supplierScreenId, inv.createSupplierScreenId,
+      inv.createPurchaseFormId, inv.editPurchaseFormId, inv.createSupplierFormId, inv.editSupplierFormId,
+      inv.supplierNameFieldId, inv.supplierContactFieldId, inv.supplierPhoneFieldId, inv.supplierCommentFieldId,
+      inv.purchaseNameFieldId, inv.purchaseSupplierFieldId, inv.purchaseWarehouseFieldId, inv.purchaseDateFieldId, inv.purchaseStatusFieldId,
+      inv.purchaseTotalFieldId, inv.purchaseCommentFieldId, inv.purchaseLinesFieldId, inv.purchaseCountFieldId, inv.purchasePayloadFieldId,
+      inv.lineNameFieldId, inv.lineOrderFieldId, inv.lineProductFieldId, inv.lineQtyFieldId, inv.linePriceFieldId, inv.lineTotalFieldId,
+      inv.statusDraft, inv.statusOrdered, inv.statusReceived, inv.statusCancelled,
+    ]
+    const purchasesOn = purchaseIds.some(Boolean)
+    const purchasesReady = purchaseIds.every(Boolean)
+    if (purchasesOn && !purchasesReady) issue('inventory_purchases', path, 'Закупки настроены не полностью')
+    for (const screenId of [inv.itemsScreenId, inv.itemScreenId, inv.movementsScreenId, ...(inv.createItemScreenId ? [inv.createItemScreenId] : []), ...(purchasesReady ? [inv.purchasesScreenId!, inv.purchaseScreenId!, inv.createPurchaseScreenId!, inv.suppliersScreenId!, inv.supplierScreenId!, inv.createSupplierScreenId!] : [])]) {
       if (!screens.has(screenId)) issue('inventory_screen', path, 'Экран склада удалён')
     }
-    for (const formId of [inv.receiptFormId, inv.issueFormId, inv.writeOffFormId, inv.transferFormId, inv.itemEditFormId, ...(inv.createItemFormId ? [inv.createItemFormId] : [])]) {
+    for (const formId of [inv.receiptFormId, inv.issueFormId, inv.writeOffFormId, inv.transferFormId, inv.itemEditFormId, ...(inv.createItemFormId ? [inv.createItemFormId] : []), ...(purchasesReady ? [inv.createPurchaseFormId!, inv.editPurchaseFormId!, inv.createSupplierFormId!, inv.editSupplierFormId!] : [])]) {
       if (nodes.get(formId)?.type !== 'form') issue('inventory_form', path, 'Форма склада удалена')
     }
     const item = (fieldId: string) => field(fieldId, inv.itemsTableId, path)
@@ -404,6 +435,35 @@ export function validateAppV2(app: AppV2, catalog: AppV2Catalog, options: { mode
     if (productWarehouse && productWarehouse.relationTableId !== inv.warehousesTableId) issue('inventory_item_warehouse', path, 'Склад товара должен ссылаться на склады')
     const kind = catalog.fields.get(inv.movementTypeFieldId)
     if (kind && kind.type !== 'single_select') issue('inventory_type_field', path, 'Вид движения должен быть одиночным выбором')
+    if (purchasesReady) {
+      table(inv.suppliersTableId!, path); table(inv.purchaseOrdersTableId!, path); table(inv.purchaseLinesTableId!, path)
+      const supplier = (fieldId: string) => field(fieldId, inv.suppliersTableId!, path)
+      const order = (fieldId: string) => field(fieldId, inv.purchaseOrdersTableId!, path)
+      const line = (fieldId: string) => field(fieldId, inv.purchaseLinesTableId!, path)
+      for (const fieldId of [inv.supplierNameFieldId!, inv.supplierContactFieldId!, inv.supplierPhoneFieldId!, inv.supplierCommentFieldId!]) supplier(fieldId)
+      for (const fieldId of [inv.purchaseNameFieldId!, inv.purchaseSupplierFieldId!, inv.purchaseWarehouseFieldId!, inv.purchaseDateFieldId!, inv.purchaseStatusFieldId!, inv.purchaseTotalFieldId!, inv.purchaseCommentFieldId!, inv.purchaseLinesFieldId!, inv.purchaseCountFieldId!, inv.purchasePayloadFieldId!]) order(fieldId)
+      for (const fieldId of [inv.lineNameFieldId!, inv.lineOrderFieldId!, inv.lineProductFieldId!, inv.lineQtyFieldId!, inv.linePriceFieldId!, inv.lineTotalFieldId!]) line(fieldId)
+      const supplierLink = catalog.fields.get(inv.purchaseSupplierFieldId!)
+      if (supplierLink && supplierLink.relationTableId !== inv.suppliersTableId) issue('purchase_supplier_relation', path, 'Заказ должен ссылаться на поставщиков')
+      const warehouseLink = catalog.fields.get(inv.purchaseWarehouseFieldId!)
+      if (warehouseLink && warehouseLink.relationTableId !== inv.warehousesTableId) issue('purchase_warehouse_relation', path, 'Склад заказа должен ссылаться на склады')
+      const linesLink = catalog.fields.get(inv.purchaseLinesFieldId!)
+      if (linesLink && linesLink.relationTableId !== inv.purchaseLinesTableId) issue('purchase_lines_relation', path, 'Состав заказа должен ссылаться на позиции')
+      const orderLink = catalog.fields.get(inv.lineOrderFieldId!)
+      if (orderLink && orderLink.relationTableId !== inv.purchaseOrdersTableId) issue('purchase_line_order', path, 'Позиция должна ссылаться на заказ поставщику')
+      const productLink = catalog.fields.get(inv.lineProductFieldId!)
+      if (productLink && productLink.relationTableId !== inv.itemsTableId) issue('purchase_line_product', path, 'Позиция должна ссылаться на товары')
+      const status = catalog.fields.get(inv.purchaseStatusFieldId!)
+      if (status && status.type !== 'single_select') issue('purchase_status_type', path, 'Статус заказа должен быть одиночным выбором')
+      const total = catalog.fields.get(inv.purchaseTotalFieldId!)
+      if (total && !['number', 'formula'].includes(total.type)) issue('purchase_total_type', path, 'Сумма заказа должна быть числом или формулой')
+      const payload = catalog.fields.get(inv.purchasePayloadFieldId!)
+      if (payload && payload.type !== 'long_text') issue('purchase_payload_type', path, 'Состав заказа в форме должен быть длинным текстом')
+      const lineTotal = catalog.fields.get(inv.lineTotalFieldId!)
+      if (lineTotal && lineTotal.type !== 'formula') issue('purchase_line_total', path, 'Сумма позиции считается формулой')
+      const statuses = [inv.statusDraft!, inv.statusOrdered!, inv.statusReceived!, inv.statusCancelled!]
+      if (new Set(statuses).size !== statuses.length) issue('purchase_status_ids', path, 'Статусы заказа должны различаться')
+    }
   }
   for (const rule of app.policy.tables) {
     const path = `policy.tables.${rule.tableId}`

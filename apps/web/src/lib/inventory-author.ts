@@ -23,11 +23,12 @@ export function formatInventoryAuthor(raw: string): string {
     .join(' ')
 }
 
-/** Compact journal warehouse label (drop trailing «склад» so meta fits on 390). */
+/** Compact journal warehouse label (drop trailing «склад»; cap length so author fits on 390). */
 export function formatInventoryJournalWarehouse(raw: string): string {
   const value = raw.trim()
   if (!value) return ''
-  return value.replace(/\s+склад$/iu, '').trim() || value
+  const short = value.replace(/\s+склад$/iu, '').trim() || value
+  return short.length > 12 ? `${short.slice(0, 11)}…` : short
 }
 
 /** Compact journal timestamp: «08.11, 10:00» (keep year when not current). */

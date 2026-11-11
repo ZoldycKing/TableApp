@@ -645,11 +645,9 @@
   gap: 6px 8px;
   min-width: 0;
   color: var(--v2-muted, #687568);
-  font-size: 12px;
+  /* Match list SKU size — readable on mobile. */
+  font-size: 13px;
   line-height: 16px;
-}
-@container builder-app (max-width: 440px) {
-  .recordJournalMeta { font-size: 11.5px; gap: 5px 6px; }
 }
 .recordJournalMeta > .statusBadge { flex: none; }
 .recordJournalMeta > small {
@@ -658,6 +656,12 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: inherit;
+}
+.journalPlace, .journalAuthor { font: inherit; color: inherit; }
+/* Mobile journal: chip + full warehouse + short date; author only on desktop. */
+@container builder-app (max-width: 640px) {
+  .journalAuthor { display: none; }
 }
 .recordButton[data-compact][data-journal] > .recordMetaDetail {
   grid-column: 2;

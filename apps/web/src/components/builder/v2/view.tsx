@@ -6,7 +6,7 @@ import {BuilderV2Chart} from './chart'
 import {BuilderV2Video} from './video'
 import {builderV2ButtonAction,builderV2NodeAction} from '@/lib/builder-v2-button-action'
 import {builderCalendarTime} from '@/lib/builder-v2-calendar'
-import { formatInventoryAuthor, formatInventoryJournalWarehouse, formatInventoryJournalWhen } from '@/lib/inventory-author'
+import { formatInventoryAuthor, formatInventoryJournalWhen } from '@/lib/inventory-author'
 import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 
 function InventoryTypeFilter({ choices, value, onChange }: { choices: readonly { id: string; name: string }[]; value: string; onChange: (id: string) => void }) {
@@ -329,11 +329,16 @@ export function AppV2Renderer(props: AppV2RendererProps) {
               ? moneySubtitle ? builderV2CatalogPrice(row, subtitleField) : cell(row, subtitleField.id)
               : subtitle
             const label = row ? cell(row, node.titleFieldId) || 'Без названия' : title
-            const journalMeta = inventoryJournalList && row && inventory ? [
-              formatInventoryJournalWarehouse(cell(row, inventory.movementWarehouseFieldId)),
-              formatInventoryJournalWhen(cell(row, inventory.movementDateFieldId)),
-              formatInventoryAuthor(cell(row, inventory.movementAuthorFieldId)),
-            ].filter(Boolean).join(' · ') : ''
+            const journalWarehouse = inventoryJournalList && row && inventory
+              ? cell(row, inventory.movementWarehouseFieldId)
+              : ''
+            const journalWhen = inventoryJournalList && row && inventory
+              ? formatInventoryJournalWhen(cell(row, inventory.movementDateFieldId))
+              : ''
+            const journalAuthor = inventoryJournalList && row && inventory
+              ? formatInventoryAuthor(cell(row, inventory.movementAuthorFieldId))
+              : ''
+            const journalPlace = [journalWarehouse, journalWhen].filter(Boolean).join(' · ')
             const lowBadge = inventoryStockList && row && row.values[inventory!.itemLowFieldId] === true
               ? <span className={ui.statusBadge} data-tone="rose">Мало</span>
               : null
@@ -354,7 +359,10 @@ export function AppV2Renderer(props: AppV2RendererProps) {
                 <strong title={label}>{label}</strong>
                 <span className={ui.recordJournalMeta}>
                   {subtitleValue ? <span className={ui.statusBadge} data-tone={builderV2StatusTone(subtitleValue)}>{subtitleValue}</span> : null}
-                  {journalMeta ? <small>{journalMeta}</small> : null}
+                  {(journalPlace || journalAuthor) ? <small>
+                    {journalPlace ? <span className={ui.journalPlace}>{journalPlace}</span> : null}
+                    {journalAuthor ? <span className={ui.journalAuthor}>{journalPlace ? ' · ' : ''}{journalAuthor}</span> : null}
+                  </small> : null}
                 </span>
                 {detailNode}
               </>

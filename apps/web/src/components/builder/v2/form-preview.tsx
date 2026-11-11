@@ -117,11 +117,14 @@ export function BuilderV2FormPreview({ app, form, screenId, recordId, enabled, e
   }:undefined
   const checkout = app.shop?.checkoutFormId === form.id
   const purchaseForm = Boolean(app.inventory && (form.id === app.inventory.createPurchaseFormId || form.id === app.inventory.editPurchaseFormId))
-  return <Context.Provider value={{ app, scope, inspect, state: visible.state, values: visible.values, errors: visible.errors, disabled, key:key+':'+refresh,upload,onPending, change: (id, value) => { if (disabled) return; generation.current++; setData(old=>old.key===key?{...old,values:{...old.values,[id]:value},errors:{},error:'',success:false}:old) } }}><form ref={formRef} className={`${styles.formBlock} ${ui.form} ${checkout ? ui.commerceForm : ''} ${purchaseForm ? ui.purchaseForm : ''}`} data-commerce={checkout ? 'checkout' : undefined} data-purchase={purchaseForm || undefined} noValidate onSubmit={event => { event.preventDefault(); void check() }} aria-label={formTitle} aria-busy={!editing && enabled && (visible.loading || visible.checking || pendingCount>0)}>
+  const countForm = Boolean(app.inventory && (form.id === app.inventory.createCountFormId || form.id === app.inventory.editCountFormId))
+  const reorderForm = Boolean(app.inventory && form.id === app.inventory.reorderFormId)
+  const inventoryDialogForm = purchaseForm || countForm
+  return <Context.Provider value={{ app, scope, inspect, state: visible.state, values: visible.values, errors: visible.errors, disabled, key:key+':'+refresh,upload,onPending, change: (id, value) => { if (disabled) return; generation.current++; setData(old=>old.key===key?{...old,values:{...old.values,[id]:value},errors:{},error:'',success:false}:old) } }}><form ref={formRef} className={`${styles.formBlock} ${ui.form} ${checkout ? ui.commerceForm : ''} ${inventoryDialogForm || reorderForm ? ui.purchaseForm : ''}`} data-commerce={checkout ? 'checkout' : undefined} data-purchase={purchaseForm || undefined} data-count={countForm || undefined} data-reorder={reorderForm || undefined} noValidate onSubmit={event => { event.preventDefault(); void check() }} aria-label={formTitle} aria-busy={!editing && enabled && (visible.loading || visible.checking || pendingCount>0)}>
     <h3 className={ui.formTitle} id={checkout ? 'shop-checkout' : undefined}>{checkout ? 'Оформление заказа' : formTitle}</h3>
     <ShopCheckoutSync />
     {!editing && enabled && visible.loading && <p role="status" className={ui.hint}>Подготавливаем форму…</p>}
-    <div className={`${styles.canvasBlocks}${purchaseForm ? ` ${ui.purchaseFields}` : ''}`}>{children}</div>
+    <div className={`${styles.canvasBlocks}${purchaseForm || countForm ? ` ${ui.purchaseFields}` : ''}`}>{children}</div>
     {!visible.confirmation&&visible.error && <div className={ui.liveData}><p role="alert" className={ui.dataError}>{visible.error}</p>{(!visible.state || visible.stale) && <button type="button" className={styles.textButton} onClick={() => working ? window.location.reload() : setRefresh(value => value + 1)}>Обновить форму</button>}</div>}
     {visible.success && !refreshesCard && !visible.effects?.some(effect => effect.type === 'notify') && <p role="status" className={ui.formSuccess}>{working ? form.mode === 'edit' ? 'Изменения сохранены.' : `Запись сохранена в таблице «${working.tableName}».` : 'Форма заполнена верно. Это проверка: запись в таблицу не добавлена.'}</p>}
     {Boolean(visible.effects?.length || visible.trace?.length) && <BuilderV2WorkflowFeedback appId={app.id} requestKey={visible.requestKey} effects={visible.effects} editor={working?.learning} backHref={working?.learning?working.listHref:form.mode==='edit'?working?.recordHref??working?.listHref:working?.listHref} trace={published ? undefined : visible.trace} />}
@@ -136,8 +139,9 @@ function RelationInput({ context, field, id, errorId }: { context: FormContext; 
   const inventory = context.app.inventory
   const purchaseSupplier = Boolean(inventory?.purchaseSupplierFieldId && field.fieldId === inventory.purchaseSupplierFieldId)
   const purchaseWarehouse = Boolean(inventory?.purchaseWarehouseFieldId && field.fieldId === inventory.purchaseWarehouseFieldId)
-  const warehouseField = Boolean(inventory && (field.fieldId === inventory.movementWarehouseFieldId || field.fieldId === inventory.movementWarehouseToFieldId || field.fieldId === inventory.itemWarehouseFieldId || purchaseWarehouse))
-  const purchaseRelation = purchaseSupplier || purchaseWarehouse
+  const countWarehouse = Boolean(inventory?.countWarehouseFieldId && field.fieldId === inventory.countWarehouseFieldId)
+  const warehouseField = Boolean(inventory && (field.fieldId === inventory.movementWarehouseFieldId || field.fieldId === inventory.movementWarehouseToFieldId || field.fieldId === inventory.itemWarehouseFieldId || purchaseWarehouse || countWarehouse))
+  const purchaseRelation = purchaseSupplier || purchaseWarehouse || countWarehouse
   const simpleSelect = warehouseField || purchaseRelation
   const [search, setSearch] = useState(''), [options, setOptions] = useState<{ key: string; values: { id: string; label: string }[]; next: string | null; loading: boolean; error: string }>({ key: '', values: [], next: null, loading: true, error: '' }), [refresh, setRefresh] = useState(0), generation = useRef(0)
   const key = JSON.stringify([context.scope, field.fieldId, simpleSelect ? '' : search]), current = useRef({ context, key }); current.current = { context, key }
@@ -224,13 +228,14 @@ export function BuilderV2FormInput({ node, table }: { node: BuilderV2Input; tabl
   const context = useContext(Context), published=usePublishedV2(), unique = useId(), field = context?.state?.fields.find(field => field.nodeId === node.id), column = table?.fields.find(field => field.id === node.fieldId)
   if (context?.app.shop && (node.fieldId === context.app.shop.cartFieldId || node.fieldId === context.app.shop.submissionFieldId)) return null
   if (context?.app.inventory?.purchasePayloadFieldId && node.fieldId === context.app.inventory.purchasePayloadFieldId) return null
+  if (context?.app.inventory?.countPayloadFieldId && node.fieldId === context.app.inventory.countPayloadFieldId) return null
   const inventory = context?.app.inventory
-  const inventoryDate = Boolean(inventory && (node.fieldId === inventory.movementDateFieldId || node.fieldId === inventory.purchaseDateFieldId))
+  const inventoryDate = Boolean(inventory && (node.fieldId === inventory.movementDateFieldId || node.fieldId === inventory.purchaseDateFieldId || node.fieldId === inventory.countDateFieldId))
   const inventoryQty = Boolean(inventory && node.fieldId === inventory.movementQtyFieldId)
   const purchaseField = inventory
     ? node.fieldId === inventory.purchaseSupplierFieldId ? 'supplier'
-      : node.fieldId === inventory.purchaseWarehouseFieldId ? 'warehouse'
-        : node.fieldId === inventory.purchaseDateFieldId ? 'date'
+      : node.fieldId === inventory.purchaseWarehouseFieldId || node.fieldId === inventory.countWarehouseFieldId ? 'warehouse'
+        : node.fieldId === inventory.purchaseDateFieldId || node.fieldId === inventory.countDateFieldId ? 'date'
           : node.fieldId === inventory.purchaseCommentFieldId ? 'comment'
             : null
     : null

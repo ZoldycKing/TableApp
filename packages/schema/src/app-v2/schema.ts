@@ -36,6 +36,11 @@ export type AppV2Step = { id: string } & (
   | { type: 'order_purchase_order' }
   | { type: 'receive_purchase_order' }
   | { type: 'cancel_purchase_order' }
+  | { type: 'create_inventory_count'; tableId: string; values: Record<string, AppV2Binding> }
+  | { type: 'update_inventory_count'; tableId: string; values: Record<string, AppV2Binding> }
+  | { type: 'post_inventory_count' }
+  | { type: 'cancel_inventory_count' }
+  | { type: 'create_reorder_orders'; tableId: string; values: Record<string, AppV2Binding> }
   | { type: 'update_row'; tableId: string; target: AppV2Target; values: Record<string, AppV2Binding> }
   | { type: 'delete_row'; tableId: string; target: AppV2Target; confirm: boolean }
   | { type: 'require'; condition: AppV2Condition; message: string }
@@ -54,6 +59,11 @@ export const appV2StepSchema: z.ZodType<AppV2Step> = z.lazy(() => z.discriminate
   z.strictObject({ id, type: z.literal('order_purchase_order') }),
   z.strictObject({ id, type: z.literal('receive_purchase_order') }),
   z.strictObject({ id, type: z.literal('cancel_purchase_order') }),
+  z.strictObject({ id, type: z.literal('create_inventory_count'), tableId: id, values }),
+  z.strictObject({ id, type: z.literal('update_inventory_count'), tableId: id, values }),
+  z.strictObject({ id, type: z.literal('post_inventory_count') }),
+  z.strictObject({ id, type: z.literal('cancel_inventory_count') }),
+  z.strictObject({ id, type: z.literal('create_reorder_orders'), tableId: id, values }),
   z.strictObject({ id, type: z.literal('update_row'), tableId: id, target, values }),
   z.strictObject({ id, type: z.literal('delete_row'), tableId: id, target, confirm: z.boolean() }),
   z.strictObject({ id, type: z.literal('require'), condition: appV2ConditionSchema, message: z.string().min(1).max(500) }),
@@ -157,6 +167,7 @@ export const appV2Schema = z.strictObject({
     movementBeforeFieldId: id.optional(), movementAfterFieldId: id.optional(),
     warehouseNameFieldId: id,
     typeReceipt: id, typeIssue: id, typeWriteOff: id, typeTransfer: id,
+    typeInventory: id.optional(),
     /** Stage 2 purchases. Absent on warehouses installed before supplier orders. */
     suppliersTableId: id.optional(),
     purchaseOrdersTableId: id.optional(),
@@ -204,6 +215,45 @@ export const appV2Schema = z.strictObject({
     statusOrdered: id.optional(),
     statusReceived: id.optional(),
     statusCancelled: id.optional(),
+    /** Stage 3a inventory counts and reorder suggestions. */
+    inventoryCountsTableId: id.optional(),
+    inventoryCountLinesTableId: id.optional(),
+    countsScreenId: id.optional(),
+    countScreenId: id.optional(),
+    createCountScreenId: id.optional(),
+    reorderScreenId: id.optional(),
+    createCountFormId: id.optional(),
+    editCountFormId: id.optional(),
+    reorderFormId: id.optional(),
+    countNameFieldId: id.optional(),
+    countNumberFieldId: id.optional(),
+    countWarehouseFieldId: id.optional(),
+    countDateFieldId: id.optional(),
+    countStatusFieldId: id.optional(),
+    countAuthorFieldId: id.optional(),
+    countLinesFieldId: id.optional(),
+    countProductCountFieldId: id.optional(),
+    countDiscrepancyCountFieldId: id.optional(),
+    countShortageFieldId: id.optional(),
+    countSurplusFieldId: id.optional(),
+    countPayloadFieldId: id.optional(),
+    countCreatedAtFieldId: id.optional(),
+    countCreatedByFieldId: id.optional(),
+    countPostedAtFieldId: id.optional(),
+    countPostedByFieldId: id.optional(),
+    countCancelledAtFieldId: id.optional(),
+    countCancelledByFieldId: id.optional(),
+    countLineNameFieldId: id.optional(),
+    countLineCountFieldId: id.optional(),
+    countLineProductFieldId: id.optional(),
+    countLineSystemFieldId: id.optional(),
+    countLineActualFieldId: id.optional(),
+    countLineDiffFieldId: id.optional(),
+    countLineAmountFieldId: id.optional(),
+    countStatusDraft: id.optional(),
+    countStatusPosted: id.optional(),
+    countStatusCancelled: id.optional(),
+    reorderPayloadFieldId: id.optional(),
   }).optional(),
 })
 export type AppV2 = z.infer<typeof appV2Schema>

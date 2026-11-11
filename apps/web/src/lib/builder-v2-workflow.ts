@@ -13,6 +13,8 @@ import {derivePublishedV2Rows,canReadPublishedV2Row} from './builder-v2-publishe
 import { placeShopOrder } from './shop-order'
 import { recordInventoryMovement } from './inventory-movement'
 import { cancelPurchaseOrder, createPurchaseOrder, orderPurchaseOrder, receivePurchaseOrder, updatePurchaseOrder } from './purchase-order'
+import { cancelInventoryCount, createInventoryCount, postInventoryCount, updateInventoryCount } from './inventory-count'
+import { createReorderOrders } from './inventory-reorder'
 
 export class BuilderV2WorkflowError extends Error {
   readonly trace: BuilderV2WorkflowTrace
@@ -26,7 +28,12 @@ export class BuilderV2WorkflowError extends Error {
 /** Carries a preview out of the savepoint; no mutation, receipt or journal entry is committed. */
 export class BuilderV2WorkflowConfirmationRequired extends Error {
   constructor(readonly confirmation: BuilderV2WorkflowConfirmation) {
-    super(confirmation.kind === 'cancel_purchase' ? 'Подтвердите отмену заказа' : 'Подтвердите удаление записей')
+    super(
+      confirmation.kind === 'cancel_purchase' ? 'Подтвердите отмену заказа'
+        : confirmation.kind === 'post_inventory_count' ? 'Подтвердите проведение инвентаризации'
+          : confirmation.kind === 'cancel_inventory_count' ? 'Подтвердите отмену инвентаризации'
+            : 'Подтвердите удаление записей',
+    )
   }
 }
 
@@ -38,8 +45,8 @@ export async function executeBuilderV2Workflow(options: { write: RowTransaction;
     ...(selected ? [selected.tableId] : []),
     ...(options.screenSelected ? [options.screenSelected.tableId] : []),
     ...all.flatMap(step => 'tableId' in step ? [step.tableId] : []),
-    ...(app.inventory && all.some(step => step.type === 'record_inventory_movement' || step.type === 'receive_purchase_order' || step.type === 'create_purchase_order' || step.type === 'update_purchase_order' || step.type === 'order_purchase_order' || step.type === 'cancel_purchase_order')
-      ? [app.inventory.itemsTableId, app.inventory.movementsTableId, app.inventory.warehousesTableId, ...(app.inventory.suppliersTableId ? [app.inventory.suppliersTableId] : []), ...(app.inventory.purchaseOrdersTableId ? [app.inventory.purchaseOrdersTableId] : []), ...(app.inventory.purchaseLinesTableId ? [app.inventory.purchaseLinesTableId] : [])]
+    ...(app.inventory && all.some(step => step.type === 'record_inventory_movement' || step.type === 'receive_purchase_order' || step.type === 'create_purchase_order' || step.type === 'update_purchase_order' || step.type === 'order_purchase_order' || step.type === 'cancel_purchase_order' || step.type === 'create_inventory_count' || step.type === 'update_inventory_count' || step.type === 'post_inventory_count' || step.type === 'cancel_inventory_count' || step.type === 'create_reorder_orders')
+      ? [app.inventory.itemsTableId, app.inventory.movementsTableId, app.inventory.warehousesTableId, ...(app.inventory.suppliersTableId ? [app.inventory.suppliersTableId] : []), ...(app.inventory.purchaseOrdersTableId ? [app.inventory.purchaseOrdersTableId] : []), ...(app.inventory.purchaseLinesTableId ? [app.inventory.purchaseLinesTableId] : []), ...(app.inventory.inventoryCountsTableId ? [app.inventory.inventoryCountsTableId] : []), ...(app.inventory.inventoryCountLinesTableId ? [app.inventory.inventoryCountLinesTableId] : [])]
       : []),
   ])]
   const meta = await loadBuilderV2ReadMetadata(write.tx, app.workspaceId, roots), needed = new Map<string, Set<string>>()
@@ -52,6 +59,8 @@ export async function executeBuilderV2Workflow(options: { write: RowTransaction;
   const context: AppV2Context = { actor, row: initial, screenRow: screenInitial, forms: new Map(form ? [[form.id, { tableId: form.tableId, values: form.values }]] : []), results }
   const created=new Map<string,string>(),deleted=new Set<string>(),deletions:{stepId:string;tableId:string;recordKey:string;version:number;recordLabel:string;tableName:string}[]=[]
   const cancellations:{stepId:string;tableId:string;recordKey:string;version:number;recordLabel:string;tableName:string;deductions:{productId:string;name:string;qty:number}[]}[]=[]
+  const countPosts:{stepId:string;tableId:string;recordKey:string;version:number;recordLabel:string;discrepancies:{productId:string;name:string;systemQty:number;actualQty:number;diff:number;amount:number}[]}[]=[]
+  const countCancels:{stepId:string;tableId:string;recordKey:string;version:number;recordLabel:string;deductions:{productId:string;name:string;qty:number}[]}[]=[]
   const resolve = (binding: AppV2Binding): AppV2Json => { const result = resolveAppV2Binding(binding, context); if (!result.ok) throw new RowWriteError('invalid', result.error); return result.value }
   const target = (value: AppV2Target): AppV2Record => { const result = value.kind === 'current' ? context.row : results.get(value.stepId); if (!result) throw new RowWriteError('invalid', 'Запись недоступна на этом шаге'); return result }
   const condition = (value: Parameters<typeof evaluateAppV2Condition>[0]) => { const result = evaluateAppV2Condition(value, context); if (!result.ok) throw new RowWriteError('invalid', result.error); return result.value }
@@ -121,6 +130,55 @@ export async function executeBuilderV2Workflow(options: { write: RowTransaction;
             if (context.row?.id === next.id) context.row = next
             if (context.screenRow?.id === next.id) context.screenRow = next
           }
+        } else if (step.type === 'create_inventory_count' || step.type === 'update_inventory_count') {
+          const values = await builderV2WorkflowValues(meta, step.tableId, Object.fromEntries(Object.entries(step.values).map(([id, value]) => [id, resolve(value)])), options.published ? { app, actor } : undefined)
+          const current = context.screenRow ?? context.row
+          const saved = step.type === 'create_inventory_count'
+            ? await createInventoryCount(write, app, actor, values)
+            : await updateInventoryCount(write, app, actor, values, current?.tableId === step.tableId ? current.id : undefined)
+          const next = await record(await workingBuilderV2Record(write.tx, step.tableId, saved.id))
+          results.set(step.id, next)
+          if (context.row?.id === next.id && context.row.tableId === step.tableId) context.row = next
+          if (context.screenRow?.id === next.id && context.screenRow.tableId === step.tableId) context.screenRow = next
+        } else if (step.type === 'post_inventory_count' || step.type === 'cancel_inventory_count') {
+          const current = context.screenRow ?? context.row
+          const countsId = app.inventory?.inventoryCountsTableId
+          if (!current || !countsId || current.tableId !== countsId) throw new RowWriteError('invalid', 'Откройте инвентаризацию')
+          const stored = await workingBuilderV2Record(write.tx, countsId, current.id, true)
+          if (step.type === 'post_inventory_count') {
+            const saved = await postInventoryCount(write, app, actor, current.id)
+            const next = await record(await workingBuilderV2Record(write.tx, countsId, saved.id))
+            results.set(step.id, next)
+            if (context.row?.id === next.id) context.row = next
+            if (context.screenRow?.id === next.id) context.screenRow = next
+            countPosts.push({
+              stepId: step.id,
+              tableId: countsId,
+              recordKey: stored.id,
+              version: stored.version,
+              recordLabel: saved.label || 'Инвентаризация',
+              discrepancies: saved.discrepancies,
+            })
+          } else {
+            const saved = await cancelInventoryCount(write, app, actor, current.id)
+            const next = await record(await workingBuilderV2Record(write.tx, countsId, saved.id))
+            results.set(step.id, next)
+            if (context.row?.id === next.id) context.row = next
+            if (context.screenRow?.id === next.id) context.screenRow = next
+            countCancels.push({
+              stepId: step.id,
+              tableId: countsId,
+              recordKey: stored.id,
+              version: stored.version,
+              recordLabel: saved.label || 'Инвентаризация',
+              deductions: saved.deductions,
+            })
+          }
+        } else if (step.type === 'create_reorder_orders') {
+          const values = await builderV2WorkflowValues(meta, step.tableId, Object.fromEntries(Object.entries(step.values).map(([id, value]) => [id, resolve(value)])), options.published ? { app, actor } : undefined)
+          const saved = await createReorderOrders(write, app, actor, values)
+          const next = await record(await workingBuilderV2Record(write.tx, step.tableId, saved.id))
+          results.set(step.id, next)
         } else if (step.type === 'create_row' || step.type === 'update_row') {
           const values = await builderV2WorkflowValues(meta, step.tableId, Object.fromEntries(Object.entries(step.values).map(([id, value]) => [id, resolve(value)])),options.published?{app,actor}:undefined), row = step.type === 'update_row' ? target(step.target) : undefined
           if (row && row.tableId !== step.tableId) throw new RowWriteError('denied', 'Запись относится к другой таблице')
@@ -176,7 +234,7 @@ export async function executeBuilderV2Workflow(options: { write: RowTransaction;
   await run(flow.steps)
   const finalFailure=(message:string,conflict=false):never=>{throw new BuilderV2WorkflowError(new RowWriteError(conflict?'conflict':'invalid',message),all.at(-1)?.id??'finish','Завершить действие',trace)}
   if(effects.some(effect=>effect.type==='open_screen'&&effect.recordId&&deleted.has(effect.recordId)))finalFailure('Нельзя открыть удалённую запись. Выберите другой экран после удаления.')
-  if(options.confirmation&&!deletions.length&&!cancellations.length)finalFailure('Условия действия изменились. Обновите данные и запустите его заново.',true)
+  if(options.confirmation&&!deletions.length&&!cancellations.length&&!countPosts.length&&!countCancels.length)finalFailure('Условия действия изменились. Обновите данные и запустите его заново.',true)
   if(cancellations.length){
     const fingerprint=builderV2Revision(['workflow-cancel-purchase',app.id,flow,actor,selected?[selected.id,selected.version]:null,screenInitial?.id,form?.values,cancellations])
     if(options.confirmation!==fingerprint)throw new BuilderV2WorkflowConfirmationRequired({
@@ -185,6 +243,40 @@ export async function executeBuilderV2Workflow(options: { write: RowTransaction;
       title: 'Отменить полученный заказ?',
       message: 'Отмена уменьшит остатки на складе. Если товара уже не хватает, отмена не пройдёт.',
       records: cancellations.flatMap(item => item.deductions.length
+        ? item.deductions.map(line => ({ tableName: '', recordLabel: line.name, productId: line.productId, qty: line.qty }))
+        : [{ tableName: '', recordLabel: item.recordLabel }]),
+    })
+  }
+  if(countPosts.length){
+    const fingerprint=builderV2Revision(['workflow-post-inventory-count',app.id,flow,actor,selected?[selected.id,selected.version]:null,screenInitial?.id,form?.values,countPosts])
+    if(options.confirmation!==fingerprint)throw new BuilderV2WorkflowConfirmationRequired({
+      fingerprint,
+      kind: 'post_inventory_count',
+      title: 'Провести инвентаризацию?',
+      message: countPosts.some(item => item.discrepancies.length)
+        ? 'По расхождениям будут созданы корректировки «Инвентаризация» в журнале движений. Остаток не станет отрицательным.'
+        : 'Расхождений нет — документ будет проведён без корректировок остатка.',
+      records: countPosts.flatMap(item => item.discrepancies.length
+        ? item.discrepancies.map(line => ({
+          tableName: '',
+          recordLabel: line.name,
+          productId: line.productId,
+          qty: line.diff,
+          systemQty: line.systemQty,
+          actualQty: line.actualQty,
+          amount: line.amount,
+        }))
+        : [{ tableName: '', recordLabel: item.recordLabel }]),
+    })
+  }
+  if(countCancels.length){
+    const fingerprint=builderV2Revision(['workflow-cancel-inventory-count',app.id,flow,actor,selected?[selected.id,selected.version]:null,screenInitial?.id,form?.values,countCancels])
+    if(options.confirmation!==fingerprint)throw new BuilderV2WorkflowConfirmationRequired({
+      fingerprint,
+      kind: 'cancel_inventory_count',
+      title: 'Отменить проведённую инвентаризацию?',
+      message: 'Отмена сторнирует корректировки. Если товара уже не хватает, отмена не пройдёт.',
+      records: countCancels.flatMap(item => item.deductions.length
         ? item.deductions.map(line => ({ tableName: '', recordLabel: line.name, productId: line.productId, qty: line.qty }))
         : [{ tableName: '', recordLabel: item.recordLabel }]),
     })

@@ -4,12 +4,12 @@ export type BuilderV2WorkflowEffect = { type: 'notify'; message: string } | { ty
 export type BuilderV2WorkflowTrace = { stepId: string; label: string; status: 'done' | 'skipped' | 'rolled_back' | 'failed'; detail?: string }[]
 export type BuilderV2WorkflowConfirmation = {
   fingerprint: string
-  kind?: 'delete' | 'cancel_purchase'
+  kind?: 'delete' | 'cancel_purchase' | 'post_inventory_count' | 'cancel_inventory_count'
   title?: string
   message?: string
-  records: { tableName: string; recordLabel: string; productId?: string; qty?: number }[]
+  records: { tableName: string; recordLabel: string; productId?: string; qty?: number; systemQty?: number; actualQty?: number; amount?: number }[]
 }
-export const BUILDER_V2_WORKFLOW_STEPS = new Set<AppV2Step['type']>(['require', 'branch', 'create_row', 'place_shop_order', 'record_inventory_movement', 'create_purchase_order', 'update_purchase_order', 'order_purchase_order', 'receive_purchase_order', 'cancel_purchase_order', 'update_row', 'delete_row', 'notify', 'open_screen', 'go_back', 'open_url', 'copy_value'])
+export const BUILDER_V2_WORKFLOW_STEPS = new Set<AppV2Step['type']>(['require', 'branch', 'create_row', 'place_shop_order', 'record_inventory_movement', 'create_purchase_order', 'update_purchase_order', 'order_purchase_order', 'receive_purchase_order', 'cancel_purchase_order', 'create_inventory_count', 'update_inventory_count', 'post_inventory_count', 'cancel_inventory_count', 'create_reorder_orders', 'update_row', 'delete_row', 'notify', 'open_screen', 'go_back', 'open_url', 'copy_value'])
 export function builderV2WorkflowSteps(steps: readonly AppV2Step[]): AppV2Step[] { return steps.flatMap(step => [step, ...(step.type === 'branch' ? [...builderV2WorkflowSteps(step.then), ...builderV2WorkflowSteps(step.else)] : [])]) }
 export function builderV2ExecutableWorkflow(flow: BuilderV2Workflow) { return builderV2WorkflowSteps(flow.steps).every(step => BUILDER_V2_WORKFLOW_STEPS.has(step.type)&&(step.type!=='delete_row'||step.confirm===true)) }
 export function builderV2StepLabel(step: AppV2Step, tables: readonly { id: string; name: string }[], screens: readonly { id: string; name: string }[]) {
@@ -19,6 +19,11 @@ export function builderV2StepLabel(step: AppV2Step, tables: readonly { id: strin
   if (step.type === 'order_purchase_order') return 'Отметить заказ заказанным'
   if (step.type === 'receive_purchase_order') return 'Принять заказ поставщика'
   if (step.type === 'cancel_purchase_order') return 'Отменить полученный заказ'
+  if (step.type === 'create_inventory_count') return 'Создать инвентаризацию'
+  if (step.type === 'update_inventory_count') return 'Сохранить черновик инвентаризации'
+  if (step.type === 'post_inventory_count') return 'Провести инвентаризацию'
+  if (step.type === 'cancel_inventory_count') return 'Отменить инвентаризацию'
+  if (step.type === 'create_reorder_orders') return 'Создать заказы из «Что заказать»'
   if (step.type === 'create_row' || step.type === 'place_shop_order') return `Добавить запись: ${tables.find(table => table.id === step.tableId)?.name ?? 'Таблица'}`
   if (step.type === 'update_row') return `Изменить запись: ${tables.find(table => table.id === step.tableId)?.name ?? 'Таблица'}`
   if (step.type === 'open_screen') return `Открыть экран: ${screens.find(screen => screen.id === step.screenId)?.name ?? 'Экран'}`

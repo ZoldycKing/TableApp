@@ -466,7 +466,7 @@ export function buildInventoryV2App(built: BuiltTemplate, meta: { id: string; wo
       { id: createCount, name: 'Создать инвентаризацию', input: { rowTableId: null, formId: createCountFormId, screenTableId: null }, steps: [
         { id: createCountStep, type: 'create_inventory_count', tableId: inventoryCountsTableId, values: Object.fromEntries(countCreateFields.map(fieldId => [fieldId, { kind: 'form' as const, formId: createCountFormId, fieldId }])) },
         { id: newId('action'), type: 'notify', message: { kind: 'literal', value: 'Инвентаризация сохранена как черновик.' } },
-        { id: newId('action'), type: 'open_screen', screenId: countsScreenId, record: null },
+        { id: newId('action'), type: 'open_screen', screenId: countScreenId, record: { kind: 'result', stepId: createCountStep } },
       ] },
       { id: saveCount, name: 'Изменить инвентаризацию', input: { rowTableId: inventoryCountsTableId, formId: editCountFormId, screenTableId: inventoryCountsTableId }, steps: [
         { id: newId('action'), type: 'update_inventory_count', tableId: inventoryCountsTableId, values: Object.fromEntries(countUpdateFields.map(fieldId => [fieldId, { kind: 'form' as const, formId: editCountFormId, fieldId }])) },

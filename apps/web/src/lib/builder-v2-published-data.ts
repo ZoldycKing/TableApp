@@ -34,6 +34,7 @@ export function publishedV2FormHostScreenId(app:AppV2,screenId:string,nodeId:str
   if(inv?.createItemFormId===nodeId&&inv.itemsScreenId===screenId&&inv.createItemScreenId)return inv.createItemScreenId
   if(inv?.createPurchaseFormId===nodeId&&(inv.purchasesScreenId===screenId||inv.supplierScreenId===screenId)&&inv.createPurchaseScreenId)return inv.createPurchaseScreenId
   if(inv?.createSupplierFormId===nodeId&&inv.suppliersScreenId===screenId&&inv.createSupplierScreenId)return inv.createSupplierScreenId
+  if(inv?.createCountFormId===nodeId&&inv.countsScreenId===screenId&&inv.createCountScreenId)return inv.createCountScreenId
   return screenId
 }
 export function publishedV2Node(app:AppV2,actor:AppV2Actor,screenId:string,nodeId:string,screenRow?:AppV2Record){

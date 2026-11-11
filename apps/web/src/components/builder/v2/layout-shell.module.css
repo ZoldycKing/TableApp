@@ -625,8 +625,8 @@
   border-bottom: 1px solid var(--shell-line);
 }
 
-.detail[data-layout='product'] .detailSideCol :global(.orderFacts),
-.detail[data-layout='product'] .detailSideCol :global(.facts) {
+.detail[data-layout='product'] .detailSideCol :global([class*='orderFacts']),
+.detail[data-layout='product'] .detailSideCol :global([class*='facts']) {
   border: 1px solid var(--shell-line);
   border-radius: 14px;
   background: var(--shell-surface);
@@ -634,13 +634,14 @@
   padding: 16px var(--shell-pad-x);
 }
 
-.detail[data-layout='product'] .detailSideCol :global(.orderFactsGrid) {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
+/* Beat view.module 2/3-col container queries — hashed class names need *=. */
+.detail[data-layout='product'] .detailSideCol :global([class*='orderFactsGrid']) {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) !important;
   gap: 0;
 }
 
-.detail[data-layout='product'] .detailSideCol :global(.orderFact) {
+.detail[data-layout='product'] .detailSideCol :global([class*='orderFact']:not([class*='orderFacts'])) {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
@@ -651,23 +652,23 @@
   word-break: normal;
 }
 
-.detail[data-layout='product'] .detailSideCol :global(.orderFact:last-child) {
+.detail[data-layout='product'] .detailSideCol :global([class*='orderFact']:not([class*='orderFacts']):last-child) {
   border-bottom: 0;
 }
 
-.detail[data-layout='product'] .detailSideCol :global(.orderFact > small) {
+.detail[data-layout='product'] .detailSideCol :global([class*='orderFact'] > small) {
   color: var(--shell-muted);
   font-weight: 600;
   white-space: nowrap;
 }
 
-.detail[data-layout='product'] .detailSideCol :global(.orderFact > strong) {
+.detail[data-layout='product'] .detailSideCol :global([class*='orderFact'] > strong) {
   text-align: right;
   font-weight: 700;
   white-space: nowrap;
 }
 
-.detail[data-layout='product'] .detailSideCol :global(.sectionTitle),
+.detail[data-layout='product'] .detailSideCol :global([class*='sectionTitle']),
 .detail[data-layout='product'] .detailSectionTitle {
   margin: 0 0 4px;
   font-size: 15px;

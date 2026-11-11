@@ -54,9 +54,28 @@ describe('inventory template v2 installation', () => {
     expect(app.homeScreenId).toBe(app.inventory!.itemsScreenId)
     expect(app.authentication).toMatchObject({ mode: 'invite_only', defaultRoleId: null })
     const inv = app.inventory!
-    expect(app.screens.filter(screen => screen.navigation).map(screen => screen.menuLabel)).toEqual(['Товары', 'Движения', 'Закупки'])
+    expect(app.screens.filter(screen => screen.navigation).map(screen => screen.menuLabel)).toEqual(['Товары', 'Движения', 'Закупки', 'Учёт'])
+    expect(app.screens.find(screen => screen.id === inv.countsScreenId)?.icon).toBe('list')
+    expect(app.screens.find(screen => screen.id === inv.purchasesScreenId)?.rootIds).toEqual(
+      expect.arrayContaining([expect.any(String)]),
+    )
+    expect(app.screens.find(screen => screen.id === inv.purchasesScreenId)?.rootIds).toEqual(
+      expect.arrayContaining(app.nodes.filter(node => node.type === 'button' && node.label === 'Что заказать').map(node => node.id)),
+    )
+    expect(app.screens.find(screen => screen.id === inv.itemsScreenId)?.rootIds).not.toEqual(
+      expect.arrayContaining(app.nodes.filter(node => node.type === 'button' && node.label === 'Что заказать').map(node => node.id)),
+    )
     expect(app.screens.some(screen => screen.id === inv.movementsScreenId && screen.navigation)).toBe(true)
+    expect(app.screens.some(screen => screen.id === inv.countsScreenId && screen.navigation)).toBe(true)
+    expect(app.screens.some(screen => screen.id === inv.reorderScreenId && !screen.navigation)).toBe(true)
+    expect(inv.typeInventory).toEqual(expect.any(String))
+    expect(inv.inventoryCountsTableId).toEqual(expect.any(String))
     expect(built.rows.filter(row => row.tableId === inv.suppliersTableId).length).toBe(2)
+    expect(built.rows.filter(row => row.tableId === inv.inventoryCountsTableId).length).toBe(1)
+    expect(built.rows.filter(row => row.tableId === inv.inventoryCountLinesTableId).length).toBe(4)
+    expect(app.workflows.some(flow => flow.steps.some(step => step.type === 'create_inventory_count'))).toBe(true)
+    expect(app.workflows.some(flow => flow.steps.some(step => step.type === 'post_inventory_count'))).toBe(true)
+    expect(app.workflows.some(flow => flow.steps.some(step => step.type === 'create_reorder_orders'))).toBe(true)
     const purchaseRows = built.rows.filter(row => row.tableId === inv.purchaseOrdersTableId)
     expect(purchaseRows).toHaveLength(3)
     expect(new Set(purchaseRows.map(row => row.data[inv.purchaseStatusFieldId!]))).toEqual(new Set([inv.statusDraft, inv.statusOrdered, inv.statusReceived]))
@@ -138,5 +157,15 @@ describe('inventory template v2 installation', () => {
     expect(authorizeAppV2Write(app, owner, { operation: 'update', row: supplierRow, values: supplierPatch }).ok).toBe(true)
     expect(canOpenAppV2Screen(app, staff, inv.purchasesScreenId!)).toBe(true)
     expect(canOpenAppV2Screen(app, staff, inv.createSupplierScreenId!)).toBe(false)
+    expect(canOpenAppV2Screen(app, staff, inv.countsScreenId!)).toBe(true)
+    expect(canOpenAppV2Screen(app, staff, inv.reorderScreenId!)).toBe(true)
+    const postCount = app.workflows.find(flow => flow.steps.some(step => step.type === 'post_inventory_count'))!
+    const cancelCount = app.workflows.find(flow => flow.steps.some(step => step.type === 'cancel_inventory_count'))!
+    const createCount = app.workflows.find(flow => flow.steps.some(step => step.type === 'create_inventory_count'))!
+    expect(canInvokeAppV2Workflow(app, staff, createCount.id)).toBe(true)
+    expect(canInvokeAppV2Workflow(app, staff, postCount.id)).toBe(false)
+    expect(canInvokeAppV2Workflow(app, owner, postCount.id)).toBe(true)
+    expect(canInvokeAppV2Workflow(app, staff, cancelCount.id)).toBe(false)
+    expect(canInvokeAppV2Workflow(app, owner, cancelCount.id)).toBe(true)
   })
 })

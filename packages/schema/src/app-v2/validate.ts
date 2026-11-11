@@ -275,7 +275,12 @@ export function validateAppV2(app: AppV2, catalog: AppV2Catalog, options: { mode
           if (!app.inventory || !ordersId) issue('missing_inventory', ownPath, 'Приёмка заказа доступна только в установленном складе')
           else if (current.rowTableId !== ordersId) issue('missing_record_context', ownPath, 'Откройте заказ поставщику')
           else { table(ordersId, ownPath); results.set(step.id, ordersId) }
-        } else if (step.type === 'create_row' || step.type === 'update_row' || step.type === 'place_shop_order' || step.type === 'record_inventory_movement' || step.type === 'create_purchase_order' || step.type === 'update_purchase_order') {
+        } else if (step.type === 'post_inventory_count' || step.type === 'cancel_inventory_count') {
+          const countsId = app.inventory?.inventoryCountsTableId
+          if (!app.inventory || !countsId) issue('missing_inventory', ownPath, 'Инвентаризация доступна только в установленном складе')
+          else if (current.rowTableId !== countsId) issue('missing_record_context', ownPath, 'Откройте инвентаризацию')
+          else { table(countsId, ownPath); results.set(step.id, countsId) }
+        } else if (step.type === 'create_row' || step.type === 'update_row' || step.type === 'place_shop_order' || step.type === 'record_inventory_movement' || step.type === 'create_purchase_order' || step.type === 'update_purchase_order' || step.type === 'create_inventory_count' || step.type === 'update_inventory_count' || step.type === 'create_reorder_orders') {
           const writeTableId = step.type === 'record_inventory_movement' ? app.inventory?.movementsTableId : step.tableId
           if (step.type === 'record_inventory_movement') {
             if (!app.inventory) issue('missing_inventory', ownPath, 'Складское движение доступно только в установленном складе')
@@ -302,6 +307,29 @@ export function validateAppV2(app: AppV2, catalog: AppV2Catalog, options: { mode
               if (serverFields.some(fieldId => fieldId && step.values[fieldId])) issue('purchase_server_field', ownPath, 'Название, статус, позиции и сумму заполняет сервер')
               if (step.type === 'update_purchase_order' && current.rowTableId !== step.tableId) issue('missing_record_context', ownPath, 'Откройте заказ поставщику')
             }
+          }
+          if (step.type === 'create_inventory_count' || step.type === 'update_inventory_count') {
+            const countsId = app.inventory?.inventoryCountsTableId
+            if (!app.inventory || !countsId) issue('missing_inventory', ownPath, 'Инвентаризация доступна только в установленном складе')
+            else if (step.tableId !== countsId) issue('inventory_count_table', ownPath, 'Инвентаризация записывает таблицу инвентаризаций')
+            else {
+              const inv = app.inventory
+              if (step.type === 'create_inventory_count') {
+                const required = [inv.countWarehouseFieldId, inv.countDateFieldId, inv.countPayloadFieldId]
+                if (required.some(fieldId => !fieldId || step.values[fieldId]?.kind !== 'form')) issue('inventory_count_form', ownPath, 'Склад, дата и состав берутся из формы')
+              } else {
+                const required = [inv.countDateFieldId, inv.countPayloadFieldId]
+                if (required.some(fieldId => !fieldId || step.values[fieldId]?.kind !== 'form')) issue('inventory_count_form', ownPath, 'Дата и состав берутся из формы')
+                if (current.rowTableId !== step.tableId) issue('missing_record_context', ownPath, 'Откройте инвентаризацию')
+              }
+            }
+          }
+          if (step.type === 'create_reorder_orders') {
+            const ordersId = app.inventory?.purchaseOrdersTableId
+            const payloadId = app.inventory?.reorderPayloadFieldId ?? app.inventory?.purchasePayloadFieldId
+            if (!app.inventory || !ordersId) issue('missing_inventory', ownPath, 'Заказ из остатков доступен только в установленном складе')
+            else if (step.tableId !== ordersId) issue('reorder_order_table', ownPath, 'Заказы из остатков пишут таблицу заказов')
+            else if (!payloadId || step.values[payloadId]?.kind !== 'form') issue('reorder_form_binding', ownPath, 'Список товаров берётся из формы')
           }
           if (step.type === 'record_inventory_movement' && app.inventory) {
             const inv = app.inventory
@@ -403,13 +431,27 @@ export function validateAppV2(app: AppV2, catalog: AppV2Catalog, options: { mode
       inv.lineNameFieldId, inv.lineOrderFieldId, inv.lineProductFieldId, inv.lineQtyFieldId, inv.linePriceFieldId, inv.lineTotalFieldId,
       inv.statusDraft, inv.statusOrdered, inv.statusReceived, inv.statusCancelled,
     ]
+    const countIds = [
+      inv.typeInventory, inv.inventoryCountsTableId, inv.inventoryCountLinesTableId,
+      inv.countsScreenId, inv.countScreenId, inv.createCountScreenId, inv.reorderScreenId,
+      inv.createCountFormId, inv.editCountFormId, inv.reorderFormId,
+      inv.countNameFieldId, inv.countNumberFieldId, inv.countWarehouseFieldId, inv.countDateFieldId, inv.countStatusFieldId,
+      inv.countAuthorFieldId, inv.countLinesFieldId, inv.countProductCountFieldId, inv.countDiscrepancyCountFieldId,
+      inv.countShortageFieldId, inv.countSurplusFieldId, inv.countPayloadFieldId,
+      inv.countLineNameFieldId, inv.countLineCountFieldId, inv.countLineProductFieldId,
+      inv.countLineSystemFieldId, inv.countLineActualFieldId, inv.countLineDiffFieldId, inv.countLineAmountFieldId,
+      inv.countStatusDraft, inv.countStatusPosted, inv.countStatusCancelled, inv.reorderPayloadFieldId,
+    ]
     const purchasesOn = purchaseIds.some(Boolean)
     const purchasesReady = purchaseIds.every(Boolean)
     if (purchasesOn && !purchasesReady) issue('inventory_purchases', path, 'Закупки настроены не полностью')
-    for (const screenId of [inv.itemsScreenId, inv.itemScreenId, inv.movementsScreenId, ...(inv.createItemScreenId ? [inv.createItemScreenId] : []), ...(purchasesReady ? [inv.purchasesScreenId!, inv.purchaseScreenId!, inv.createPurchaseScreenId!, inv.suppliersScreenId!, inv.supplierScreenId!, inv.createSupplierScreenId!] : [])]) {
+    const countsOn = countIds.some(Boolean)
+    const countsReady = countIds.every(Boolean)
+    if (countsOn && !countsReady) issue('inventory_counts', path, 'Инвентаризация настроена не полностью')
+    for (const screenId of [inv.itemsScreenId, inv.itemScreenId, inv.movementsScreenId, ...(inv.createItemScreenId ? [inv.createItemScreenId] : []), ...(purchasesReady ? [inv.purchasesScreenId!, inv.purchaseScreenId!, inv.createPurchaseScreenId!, inv.suppliersScreenId!, inv.supplierScreenId!, inv.createSupplierScreenId!] : []), ...(countsReady ? [inv.countsScreenId!, inv.countScreenId!, inv.createCountScreenId!, inv.reorderScreenId!] : [])]) {
       if (!screens.has(screenId)) issue('inventory_screen', path, 'Экран склада удалён')
     }
-    for (const formId of [inv.receiptFormId, inv.issueFormId, inv.writeOffFormId, inv.transferFormId, inv.itemEditFormId, ...(inv.createItemFormId ? [inv.createItemFormId] : []), ...(purchasesReady ? [inv.createPurchaseFormId!, inv.editPurchaseFormId!, inv.createSupplierFormId!, inv.editSupplierFormId!] : [])]) {
+    for (const formId of [inv.receiptFormId, inv.issueFormId, inv.writeOffFormId, inv.transferFormId, inv.itemEditFormId, ...(inv.createItemFormId ? [inv.createItemFormId] : []), ...(purchasesReady ? [inv.createPurchaseFormId!, inv.editPurchaseFormId!, inv.createSupplierFormId!, inv.editSupplierFormId!] : []), ...(countsReady ? [inv.createCountFormId!, inv.editCountFormId!, inv.reorderFormId!] : [])]) {
       if (nodes.get(formId)?.type !== 'form') issue('inventory_form', path, 'Форма склада удалена')
     }
     const item = (fieldId: string) => field(fieldId, inv.itemsTableId, path)

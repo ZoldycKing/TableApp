@@ -20,11 +20,43 @@ function InventoryTypeFilter({ choices, value, onChange }: { choices: readonly {
   </div>
 }
 
+/** Purchases toolbar link with live low-stock counter («Что заказать · N»). */
+function ReorderToolbarLink({
+  app, node, screenId, buttonClassName, buttonContent,
+}: {
+  app: AppV2
+  node: Extract<AppV2Node, { type: 'button' }>
+  screenId: string
+  buttonClassName: string
+  buttonContent?: ReactNode
+}) {
+  const published = usePublishedV2()
+  const inventory = app.inventory
+  const [count, setCount] = useState<number | null>(null)
+  useEffect(() => {
+    if (!published) return
+    let cancelled = false
+    void import('@/app/builder-v2-published-actions').then(async ({ readPublishedV2LowStockCountAction }) => {
+      const result = await readPublishedV2LowStockCountAction(published.slug, { revision: published.revision })
+      if (cancelled || !result.ok) return
+      setCount(result.count)
+    }).catch(() => {})
+    return () => { cancelled = true }
+  }, [published?.revision, published?.dataVersion])
+  const label = count != null && count > 0 ? `Что заказать · ${count}` : 'Что заказать'
+  return <PublishedV2Button
+    node={{ ...node, label }}
+    screenId={screenId}
+    buttonClassName={buttonClassName}
+    buttonContent={buttonContent}
+  />
+}
+
 /** Centred dialog on desktop, bottom sheet on a narrow screen. */
 function InventoryCreateDialog({
   label, children, defaultOpen = false, onDismiss, title = 'Новый товар', submitLabel = 'Сохранить товар', wide = false, buttonClassName, iconOnly, icon,
 }: {
-  label: string
+  label: ReactNode
   children: ReactNode
   defaultOpen?: boolean
   onDismiss?: () => void
@@ -75,11 +107,37 @@ function InventoryCreateDialog({
       </div>
     </aside>
   </OrderActionPanelContext.Provider>, document.body) : null
+  const labelText = typeof label === 'string' ? label : title
   return <>
-    <button type="button" className={buttonClassName ?? styles.primary} aria-label={iconOnly ? label : undefined} title={iconOnly ? label : undefined} onClick={() => setOpen(true)}>
+    <button type="button" className={buttonClassName ?? styles.primary} aria-label={iconOnly ? labelText : undefined} title={iconOnly ? labelText : undefined} onClick={() => setOpen(true)}>
       {iconOnly && icon ? <ProtoIcon name={icon} size={20} /> : label}
     </button>
     {dialog}
+  </>
+}
+
+function CountDiscrepancyRows({ rows, diffFieldId, renderRows }: {
+  rows: readonly AppV2Record[]
+  diffFieldId?: string
+  renderRows: (rows: readonly AppV2Record[]) => ReactNode
+}) {
+  const [onlyDiff, setOnlyDiff] = useState(false)
+  const hasDiff = Boolean(diffFieldId && rows.some(row => {
+    const value = Number(row.values[diffFieldId!])
+    return Number.isFinite(value) && value !== 0
+  }))
+  const visible = onlyDiff && diffFieldId
+    ? rows.filter(row => {
+      const value = Number(row.values[diffFieldId])
+      return Number.isFinite(value) && value !== 0
+    })
+    : rows
+  return <>
+    {hasDiff ? <label className={ui.countOnlyDiff}>
+      <input type="checkbox" checked={onlyDiff} onChange={event => setOnlyDiff(event.target.checked)} />
+      Только расхождения
+    </label> : null}
+    {visible.length ? renderRows(visible) : <div className={ui.collectionEmpty}><p>Нет расхождений</p></div>}
   </>
 }
 
@@ -316,6 +374,8 @@ import { builderV2ContactHref, builderV2StatusTone, isBuilderV2BusinessDetail, i
 import { RecordFieldLabel } from '@/components/runtime/record-field-label'
 import { BuilderV2OrderHero, BuilderV2RecordAvatar, InventoryProductThumb } from './record-visuals'
 import { PurchaseLinesEditor } from './purchase-lines'
+import { CountLinesEditor } from './count-lines'
+import { ReorderPanel } from './reorder-panel'
 import { BuilderV2OrderActionPanel, BuilderV2OrderFacts, BuilderV2OrderIdentity, BuilderV2OrderSummaryCard, BuilderV2ShopOrderLines, OrderActionPanelContext, builderV2BlankFact, builderV2OrderStatusChoices, type BuilderV2OrderActionTrigger } from './order-detail'
 
 const cell = (row: AppV2Record, fieldId: string) => (row as Partial<BuilderV2DataRecord>).display?.[fieldId] ?? String(row.values[fieldId] ?? '')
@@ -341,15 +401,19 @@ export function AppV2Renderer(props: AppV2RendererProps) {
       : screen.id === inventory.movementsScreenId ? rootButtonByLabel('Новая операция')
       : screen.id === inventory.purchasesScreenId ? rootButtonByLabel('Новый заказ')
       : screen.id === inventory.suppliersScreenId ? rootButtonByLabel('Новый поставщик')
+      : screen.id === inventory.countsScreenId ? rootButtonByLabel('Новая инвентаризация')
       : null
     : null
   const foldedExtraIds = new Set<string>()
   const suppliersLinkId = !props.editing && inventory && screen?.id === inventory.purchasesScreenId ? rootButtonByLabel('Поставщики') : null
   if (suppliersLinkId) foldedExtraIds.add(suppliersLinkId)
+  const reorderLinkId = !props.editing && inventory && screen?.id === inventory.purchasesScreenId ? rootButtonByLabel('Что заказать') : null
+  if (reorderLinkId) foldedExtraIds.add(reorderLinkId)
   const inventoryCreateFormId = !props.editing && inventory && screen?.id === inventory.itemsScreenId
     ? inventory.createItemFormId ?? null
     : screen?.id === inventory?.purchasesScreenId ? inventory?.createPurchaseFormId ?? null
     : screen?.id === inventory?.suppliersScreenId ? inventory?.createSupplierFormId ?? null
+    : screen?.id === inventory?.countsScreenId ? inventory?.createCountFormId ?? null
     : null
   const rootIds = (props.rootNodeIds ?? screen?.rootIds ?? []).filter(id => id !== inventoryCreateFormId)
   const visible = (node: AppV2Node, row = props.record) => {
@@ -450,16 +514,31 @@ export function AppV2Renderer(props: AppV2RendererProps) {
       }
       else if (node.type === 'business') content = <BuilderBusinessOperation node={node} link={props.businessLinks?.[node.id]} apps={props.businessApps} />
       else if (node.type === 'input') {
-        const purchasePayload = Boolean(inventory?.purchasePayloadFieldId && node.fieldId === inventory.purchasePayloadFieldId)
-        content = purchasePayload && !props.editing
-          ? <PurchaseLinesEditor record={record} />
-          : <BuilderV2FormInput node={node} table={props.tables.find(table => table.id === formTableId)} />
+        const countPayload = Boolean(inventory?.countPayloadFieldId && node.fieldId === inventory.countPayloadFieldId)
+        const parentForm = props.app.nodes.find(entry => entry.type === 'form' && entry.childIds.includes(node.id))
+        const reorderPayload = Boolean(inventory && parentForm?.id === inventory.reorderFormId
+          && (node.fieldId === inventory.reorderPayloadFieldId || node.fieldId === inventory.purchasePayloadFieldId))
+        const purchasePayload = Boolean(inventory?.purchasePayloadFieldId && node.fieldId === inventory.purchasePayloadFieldId && !reorderPayload)
+        content = !props.editing && countPayload
+          ? <CountLinesEditor record={record} />
+          : !props.editing && reorderPayload
+            ? <ReorderPanel />
+            : purchasePayload && !props.editing
+              ? <PurchaseLinesEditor record={record} />
+              : <BuilderV2FormInput node={node} table={props.tables.find(table => table.id === formTableId)} />
       }
       else if (node.type === 'form') {
         const supplierEdit = Boolean(inventory?.editSupplierFormId && node.id === inventory.editSupplierFormId)
         const preview = <BuilderV2FormPreview app={props.app} form={node} screenId={props.screenId} recordId={props.record?.id} enabled={Boolean(props.live)} editing={Boolean(props.editing)} working={props.workingForm?.formId === node.id ? props.workingForm : undefined}>{render(node.childIds, record, node.tableId)}{props.editing && <button type="button" className={styles.addInside} onClick={() => props.onAdd?.(node.id)}><ProtoIcon name="plus" />Добавить поле</button>}</BuilderV2FormPreview>
+        // Count draft facts edit inline on the card (no separate «Изменить» dialog).
         content = (node.id === inventory?.editPurchaseFormId || supplierEdit) && !props.editing
-          ? <InventoryCreateDialog label="Изменить" buttonClassName={styles.secondary} title={supplierEdit ? 'Изменить поставщика' : 'Изменить заказ'} submitLabel="Сохранить" wide={node.id === inventory?.editPurchaseFormId}>{preview}</InventoryCreateDialog>
+          ? <InventoryCreateDialog
+            label="Изменить"
+            buttonClassName={styles.secondary}
+            title={supplierEdit ? 'Изменить поставщика' : 'Изменить заказ'}
+            submitLabel="Сохранить"
+            wide={node.id === inventory?.editPurchaseFormId}
+          >{preview}</InventoryCreateDialog>
           : preview
       }
       else if (node.type === 'group' || node.type === 'columns') {
@@ -474,7 +553,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
         </div>
       } else {
         const inventoryListToolbar = (() => {
-          if (node.type !== 'collection' || (!foldedCreateId && !suppliersLinkId)) return undefined
+          if (node.type !== 'collection' || (!foldedCreateId && !suppliersLinkId && !reorderLinkId)) return undefined
           const parts: ReactNode[] = []
           if (suppliersLinkId) {
             const link = nodes.get(suppliersLinkId)
@@ -492,6 +571,22 @@ export function AppV2Renderer(props: AppV2RendererProps) {
               </span>)
             }
           }
+          if (reorderLinkId) {
+            const link = nodes.get(reorderLinkId)
+            if (link?.type === 'button' && visible(link)) {
+              parts.push(<span key={link.id} className={ui.purchaseSuppliersSlot}>
+                {published
+                  ? <>
+                    <ReorderToolbarLink app={props.app} node={link} screenId={props.screenId} buttonClassName={`${styles.secondary} ${ui.purchaseSuppliersDesktop}`} />
+                    <ReorderToolbarLink app={props.app} node={link} screenId={props.screenId} buttonClassName={`${ui.orderActionIcon} ${ui.purchaseSuppliersMobile}`} buttonContent={<ProtoIcon name="box" size={20} />} />
+                  </>
+                  : <>
+                    <button type="button" className={`${styles.secondary} ${ui.purchaseSuppliersDesktop}`} disabled>{link.label}</button>
+                    <button type="button" className={`${ui.orderActionIcon} ${ui.purchaseSuppliersMobile}`} aria-label={link.label} title={link.label} disabled><ProtoIcon name="box" size={20} /></button>
+                  </>}
+              </span>)
+            }
+          }
           if (foldedCreateId) {
             const button = nodes.get(foldedCreateId)
             if (button?.type === 'button' && visible(button)) {
@@ -499,27 +594,31 @@ export function AppV2Renderer(props: AppV2RendererProps) {
               const toolbarButton = inventory && screen?.id === inventory.movementsScreenId ? { ...button, label: 'Операция' } : button
               const purchaseCreate = Boolean(inventory && screen?.id === inventory.purchasesScreenId)
               const supplierCreate = Boolean(inventory && screen?.id === inventory.suppliersScreenId)
+              const countCreate = Boolean(inventory && screen?.id === inventory.countsScreenId)
+              const createLabel = countCreate
+                ? <><span className={ui.countCreateFull}>Новая инвентаризация</span><span className={ui.countCreateShort}>Новая</span></>
+                : toolbarButton.label
               if (inventoryCreateFormId && nodes.get(inventoryCreateFormId)) {
                 parts.push(<InventoryCreateDialog
                   key={button.id}
-                  label={toolbarButton.label}
-                  title={purchaseCreate ? 'Новый заказ' : supplierCreate ? 'Новый поставщик' : 'Новый товар'}
-                  submitLabel={purchaseCreate ? 'Сохранить заказ' : supplierCreate ? 'Сохранить поставщика' : 'Сохранить товар'}
-                  wide={purchaseCreate}
-                  defaultOpen={Boolean(props.openCreate && !purchaseCreate && !supplierCreate)}
+                  label={createLabel}
+                  title={purchaseCreate ? 'Новый заказ' : supplierCreate ? 'Новый поставщик' : countCreate ? 'Новая инвентаризация' : 'Новый товар'}
+                  submitLabel={purchaseCreate ? 'Сохранить заказ' : supplierCreate ? 'Сохранить поставщика' : countCreate ? 'Сохранить' : 'Сохранить товар'}
+                  wide={purchaseCreate || countCreate}
+                  defaultOpen={Boolean(props.openCreate && !purchaseCreate && !supplierCreate && !countCreate)}
                   onDismiss={() => {
-                    if (props.openCreate && inventory && published && !purchaseCreate && !supplierCreate) published.navigate(inventory.itemsScreenId, undefined, { replace: true })
+                    if (props.openCreate && inventory && published && !purchaseCreate && !supplierCreate && !countCreate) published.navigate(inventory.itemsScreenId, undefined, { replace: true })
                   }}
                 >{render([inventoryCreateFormId])}</InventoryCreateDialog>)
               } else {
                 parts.push(published
                   ? <PublishedV2Button key={button.id} node={toolbarButton} screenId={props.screenId} recordId={props.record?.id} />
-                  : <button key={button.id} type="button" className={buttonStyle} disabled>{toolbarButton.label}</button>)
+                  : <button key={button.id} type="button" className={buttonStyle} disabled>{createLabel}</button>)
               }
             }
           }
           if (!parts.length) return undefined
-          // Keep suppliers icon + primary create on one toolbar row (Товары pattern).
+          // Keep secondary icon + primary create on one toolbar row (Товары / Закупки pattern).
           return parts.length === 1 ? parts[0] : <div className={ui.purchaseToolbarEnd}>{parts}</div>
         })()
         const showCollectionHeading = Boolean(props.editing || screen?.name !== node.name)
@@ -557,6 +656,8 @@ export function AppV2Renderer(props: AppV2RendererProps) {
           const supplierOrdersList = Boolean(purchaseList && source?.screenTableId === inventory?.suppliersTableId)
           const purchaseLineList = Boolean(inventory?.purchaseLinesTableId && source?.tableId === inventory.purchaseLinesTableId)
           const supplierList = Boolean(inventory?.suppliersTableId && source?.tableId === inventory.suppliersTableId && node.layout === 'list' && !source?.screenTableId && screen?.id === inventory.suppliersScreenId)
+          const countList = Boolean(inventory?.inventoryCountsTableId && source?.tableId === inventory.inventoryCountsTableId && node.layout === 'list' && !source?.screenTableId)
+          const countLineList = Boolean(inventory?.inventoryCountLinesTableId && source?.tableId === inventory.inventoryCountLinesTableId)
           const inventoryHistory = Boolean(inventory && node.layout === 'timeline' && node.dateFieldId === inventory.movementDateFieldId)
           const unitOf = (row?: AppV2Record) => {
             if (!inventory || !row) return 'шт.'
@@ -668,6 +769,71 @@ export function AppV2Renderer(props: AppV2RendererProps) {
                 <span className={ui.purchaseListCol} data-col="warehouse">{warehouse || '—'}</span>
                 {statusLabel ? <span className={ui.statusBadge} data-tone={builderV2StatusTone(statusLabel)}>{statusLabel}</span> : <span />}
                 <span className={ui.purchaseListAmount}>{amount || '—'}</span>
+              </>
+            }
+            if (countList && inventory && row) {
+              const when = inventory.countDateFieldId ? formatPurchaseDate(cell(row, inventory.countDateFieldId) || String(row.values[inventory.countDateFieldId] ?? '')) : ''
+              const number = inventory.countNumberFieldId ? cell(row, inventory.countNumberFieldId) || String(row.values[inventory.countNumberFieldId] ?? '') : ''
+              const warehouse = inventory.countWarehouseFieldId ? cell(row, inventory.countWarehouseFieldId) : ''
+              const author = inventory.countAuthorFieldId
+                ? formatInventoryAuthor(cell(row, inventory.countAuthorFieldId) || String(row.values[inventory.countAuthorFieldId] ?? ''))
+                : ''
+              const statusLabel = inventory.countStatusFieldId ? cell(row, inventory.countStatusFieldId) : ''
+              const productsRaw = inventory.countProductCountFieldId ? Number(row.values[inventory.countProductCountFieldId]) : NaN
+              const products = Number.isFinite(productsRaw) ? String(Math.trunc(productsRaw)) : inventory.countProductCountFieldId ? cell(row, inventory.countProductCountFieldId) : ''
+              const discrepancyRaw = inventory.countDiscrepancyCountFieldId ? Number(row.values[inventory.countDiscrepancyCountFieldId]) : NaN
+              const discrepancy = Number.isFinite(discrepancyRaw) ? String(Math.trunc(discrepancyRaw)) : inventory.countDiscrepancyCountFieldId ? cell(row, inventory.countDiscrepancyCountFieldId) : ''
+              const shortageRaw = inventory.countShortageFieldId ? Number(row.values[inventory.countShortageFieldId]) : NaN
+              const surplusRaw = inventory.countSurplusFieldId ? Number(row.values[inventory.countSurplusFieldId]) : NaN
+              const shortage = Number.isFinite(shortageRaw) && shortageRaw > 0 ? shortageRaw : 0
+              const surplus = Number.isFinite(surplusRaw) && surplusRaw > 0 ? surplusRaw : 0
+              const amountParts = [
+                ...(shortage ? [`−${purchaseMoney(shortage)}`] : []),
+                ...(surplus ? [`+${purchaseMoney(surplus)}`] : []),
+              ]
+              const amount = amountParts.length ? amountParts.join(' / ') : '—'
+              return <>
+                <div className={ui.purchaseListCopy}>
+                  <strong>{number || '—'}</strong>
+                  <span className={ui.purchaseListDate}>{when || '—'}</span>
+                  <span className={ui.purchaseListMobileMeta}>
+                    {warehouse ? <span>{warehouse}</span> : null}
+                    {(author || products) ? <span>{[author, products && `${products}\u00a0тов.`].filter(Boolean).join(' · ')}</span> : null}
+                  </span>
+                </div>
+                <span className={ui.purchaseListCol} data-col="warehouse">{warehouse || '—'}</span>
+                <span className={ui.purchaseListCol} data-col="author">{author || '—'}</span>
+                <span className={ui.purchaseListCol} data-col="products">{products || '—'}</span>
+                <span className={ui.purchaseListCol} data-col="discrepancy">{discrepancy || '0'}</span>
+                {statusLabel ? <span className={ui.statusBadge} data-tone={builderV2StatusTone(statusLabel)}>{statusLabel}</span> : <span />}
+                <span className={ui.purchaseListAmount}>{amount}</span>
+              </>
+            }
+            if (countLineList && inventory && row) {
+              const productRaw = inventory.countLineProductFieldId ? row.values[inventory.countLineProductFieldId] : undefined
+              const productId = typeof productRaw === 'string' ? productRaw : Array.isArray(productRaw) ? productRaw.find((id): id is string => typeof id === 'string') : undefined
+              const system = inventory.countLineSystemFieldId ? cell(row, inventory.countLineSystemFieldId) : ''
+              const actual = inventory.countLineActualFieldId ? cell(row, inventory.countLineActualFieldId) : ''
+              const diffRaw = inventory.countLineDiffFieldId ? Number(row.values[inventory.countLineDiffFieldId]) : NaN
+              const diffLabel = Number.isFinite(diffRaw) ? `${diffRaw > 0 ? '+' : ''}${diffRaw}` : inventory.countLineDiffFieldId ? cell(row, inventory.countLineDiffFieldId) : ''
+              const amountRaw = inventory.countLineAmountFieldId ? Number(row.values[inventory.countLineAmountFieldId]) : NaN
+              const amountLabel = Number.isFinite(amountRaw) && amountRaw !== 0
+                ? `${amountRaw > 0 ? '+' : '−'}${purchaseMoney(Math.abs(amountRaw))}`
+                : Number.isFinite(amountRaw) ? '—' : inventory.countLineAmountFieldId ? cell(row, inventory.countLineAmountFieldId) : '—'
+              const tone = Number.isFinite(diffRaw) ? (diffRaw < 0 ? 'rose' : diffRaw > 0 ? 'mint' : undefined) : undefined
+              return <>
+                <InventoryRelatedThumb itemId={productId} inventory={inventory} label={label} size="journal" />
+                <div className={ui.purchaseLineCopy}>
+                  <strong>{label}</strong>
+                  <span className={ui.purchaseLineMeta}>
+                    <span>Учёт {system || '—'} · факт {actual || '—'}</span>
+                    {diffLabel && diffLabel !== '0' ? <span className={ui.countDiffBadge} data-tone={tone}>{diffLabel}</span> : null}
+                  </span>
+                </div>
+                <span className={ui.countLineCol} data-col="system">{system || '—'}</span>
+                <span className={ui.countLineCol} data-col="actual">{actual || '—'}</span>
+                <span className={ui.countLineCol} data-col="diff" data-tone={tone}>{diffLabel || '—'}</span>
+                <span className={ui.countLineCol} data-col="amount" data-tone={tone}>{amountLabel}</span>
               </>
             }
             if (purchaseLineList && inventory && row) {
@@ -795,7 +961,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
             </li>
           }
           const actionRow = (row:AppV2Record,as:'div'|'tr') => <CollectionActionRow key={row.id} appId={props.app.id} nodeId={node.id} screenId={props.screenId} recordId={props.record?.id} itemId={row.id} title={cell(row,node.titleFieldId)} actionName={rowAction!.name} as={as} whole={!node.itemIds.length&&as!=='tr'} content={!node.itemIds.length?(as==='tr'?cell(row,node.titleFieldId):<>{item(row)}<ProtoIcon name="arrow" size={16}/></>):undefined}>{control=>as==='tr'?node.itemIds.length?<td colSpan={subtitle?2:1}>{item(row)}{control}</td>:<><td>{control}</td>{subtitle&&<td>{cell(row,node.subtitleFieldId!)}</td>}</>:node.itemIds.length?<>{item(row)}{control}</>:control}</CollectionActionRow>
-          const showHeading = !['calendar','kanban'].includes(node.layout) && (props.editing || (screen?.name !== node.name && !(inventoryJournalList && screen?.id === inventory?.movementsScreenId)))
+          const showHeading = !['calendar','kanban'].includes(node.layout) && (props.editing || (screen?.name !== node.name && !(inventoryJournalList && screen?.id === inventory?.movementsScreenId) && !(countList && screen?.id === inventory?.countsScreenId)))
           const GroupHeading = showHeading ? 'h3' : 'h2'
           const groups = new Map<string, { label?: string; rows: AppV2Record[] }>()
           for (const row of rows ?? []) {
@@ -817,17 +983,21 @@ export function AppV2Renderer(props: AppV2RendererProps) {
             const defaultCard = !node.itemIds.length && (cardScreen || props.editing && cardTarget || cardLayout || compact)
             const RecordControl = cardScreen ? 'button' : 'div'
             const lowStock = Boolean(inventoryStockList && row.values[inventory!.itemLowFieldId] === true)
-            const body = rowAction ? actionRow(row, 'div') : <div key={row.id} className={catalog ? `${ui.row} ${presentation.catalogCard}` : ui.row} data-low={lowStock || undefined}>
-              {defaultCard ? <RecordControl className={ui.recordButton} data-compact={compact || undefined} data-status={(statusSubtitle && !inventoryStockList && !inventoryJournalList && !purchaseList && !supplierList) || undefined} data-stock={inventoryStockList || undefined} data-journal={inventoryJournalList || undefined} data-purchase={purchaseList || undefined} data-purchase-line={purchaseLineList || undefined} data-supplier={supplierList || undefined} data-supplier-orders={supplierOrdersList || undefined} data-low={lowStock || undefined} {...(cardScreen ? { type: 'button' as const, onClick: () => open(row) } : {})}>
-                {compact && !inventoryStockList && !inventoryJournalList && !purchaseList && !purchaseLineList && !supplierList && !(statusSubtitle) && <BuilderV2RecordAvatar id={row.id} name={orders ? undefined : cell(row, node.titleFieldId)} icon={orders ? 'receipt' : contacts ? 'users' : inventory ? 'box' : 'list'} tone />}
+            const countLineDiff = countLineList && inventory?.countLineDiffFieldId
+              ? Number(row.values[inventory.countLineDiffFieldId])
+              : NaN
+            const countLineMismatch = Number.isFinite(countLineDiff) && countLineDiff !== 0
+            const body = rowAction ? actionRow(row, 'div') : <div key={row.id} className={catalog ? `${ui.row} ${presentation.catalogCard}` : ui.row} data-low={lowStock || undefined} data-diff={countLineMismatch || undefined}>
+              {defaultCard ? <RecordControl className={ui.recordButton} data-compact={compact || undefined} data-status={(statusSubtitle && !inventoryStockList && !inventoryJournalList && !purchaseList && !countList && !supplierList) || undefined} data-stock={inventoryStockList || undefined} data-journal={inventoryJournalList || undefined} data-purchase={purchaseList || undefined} data-purchase-line={purchaseLineList || undefined} data-count-line={countLineList || undefined} data-count={countList || undefined} data-supplier={supplierList || undefined} data-supplier-orders={supplierOrdersList || undefined} data-low={lowStock || undefined} data-diff={countLineMismatch || undefined} {...(cardScreen ? { type: 'button' as const, onClick: () => open(row) } : {})}>
+                {compact && !inventoryStockList && !inventoryJournalList && !purchaseList && !purchaseLineList && !countList && !countLineList && !supplierList && !(statusSubtitle) && <BuilderV2RecordAvatar id={row.id} name={orders ? undefined : cell(row, node.titleFieldId)} icon={orders ? 'receipt' : contacts ? 'users' : inventory ? 'box' : 'list'} tone />}
                 {item(row)}
-                {!catalog && !inventoryStockList && !inventoryJournalList && !purchaseList && !purchaseLineList && (cardScreen || props.editing && cardTarget) && <ProtoIcon name="arrow" size={16} />}
+                {!catalog && !inventoryStockList && !inventoryJournalList && !purchaseList && !purchaseLineList && !countList && !countLineList && (cardScreen || props.editing && cardTarget) && <ProtoIcon name="arrow" size={16} />}
               </RecordControl> : <>{item(row)}{openRecord(row)}</>}
             </div>
             return node.layout === 'kanban' ? <BoardMoveRow key={row.id} row={row as BuilderV2DataRecord} label={cell(row, node.titleFieldId)}>{body}</BoardMoveRow> : body
           }
           const rowsClass = catalog ? `${ui.catalogRows} ${presentation.catalogGrid}` : cardLayout ? ui.cards : timeline ? ui.timelineList : node.layout === 'list' && !rowAction ? (node.recordGroup ? ui.groupedRecords : ui.plainList) : styles.collectionRows
-          const inventoryList = Boolean((inventoryStockList || inventoryJournalList || purchaseList || supplierList) && !node.recordGroup)
+          const inventoryList = Boolean((inventoryStockList || inventoryJournalList || purchaseList || countList || supplierList) && !node.recordGroup)
           const typeChoices = inventoryJournalList && inventory
             ? (table?.fields.find(field => field.id === inventory.movementTypeFieldId)?.choices ?? [])
               .filter(choice => ['Приход', 'Расход', 'Списание', 'Перемещение'].includes(choice.name))
@@ -862,6 +1032,27 @@ export function AppV2Renderer(props: AppV2RendererProps) {
                 <span>Сумма</span>
               </div>
               : null
+            const countHeader = countList && !node.recordGroup
+              ? <div className={ui.countListHeader} aria-hidden="true">
+                <span>№/Дата</span>
+                <span>Склад</span>
+                <span>Автор</span>
+                <span>Товаров</span>
+                <span>Расхождений</span>
+                <span>Статус</span>
+                <span>Недостача/излишек</span>
+              </div>
+              : null
+            const countLineHeader = countLineList && !node.recordGroup
+              ? <div className={ui.countLineListHeader} aria-hidden="true">
+                <span />
+                <span>Товар</span>
+                <span>Учёт</span>
+                <span>Факт</span>
+                <span>Разница</span>
+                <span>Сумма разницы</span>
+              </div>
+              : null
             const supplierHeader = supplierList && !node.recordGroup
               ? <div className={ui.supplierListHeader} aria-hidden="true">
                 <span>Поставщик</span>
@@ -873,9 +1064,11 @@ export function AppV2Renderer(props: AppV2RendererProps) {
               : null
             return [...buckets].map(([key, group]) => <div key={key} className={group.label ? ui.listGroup : undefined}>
               {group.label && <GroupHeading className={ui.listGroupHeading}>{group.label}</GroupHeading>}
-              <div className={rowsClass} data-inventory={inventoryList || undefined} data-stock={inventoryStockList || undefined} data-purchase={purchaseList || undefined} data-supplier={supplierList || undefined} data-supplier-orders={supplierOrdersList || undefined}>
+              <div className={rowsClass} data-inventory={inventoryList || countLineList || undefined} data-stock={inventoryStockList || undefined} data-purchase={purchaseList || undefined} data-count={countList || undefined} data-count-line={countLineList || undefined} data-supplier={supplierList || undefined} data-supplier-orders={supplierOrdersList || undefined}>
                 {stockHeader}
                 {purchaseHeader}
+                {countHeader}
+                {countLineHeader}
                 {supplierHeader}
                 {group.rows.map(listRow)}
               </div>
@@ -891,7 +1084,9 @@ export function AppV2Renderer(props: AppV2RendererProps) {
             : <div className={ui.placeholder}><span>Здесь появится хронология записей</span></div>)
           : rows ? (inventoryJournalList && inventory && typeChoices.length
             ? <InventoryJournalRows rows={rows} typeFieldId={inventory.movementTypeFieldId} choices={typeChoices} renderRows={renderListGroups} />
-            : renderListGroups(rows))
+            : countLineList && inventory
+              ? <CountDiscrepancyRows rows={rows} diffFieldId={inventory.countLineDiffFieldId} renderRows={renderListGroups} />
+              : renderListGroups(rows))
           : <div className={rowsClass}>
             {Array.from({ length: cardLayout && !node.itemIds.length ? 2 : 1 }, (_, index) => <div key={index} className={ui.placeholder}>{item()}<span>Здесь будут записи из этой таблицы</span></div>)}
           </div>
@@ -905,6 +1100,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
             if (inventoryStockList) return null
             if (inventoryJournalList) return null
             if (purchaseList) return null
+            if (countList) return null
             return 'Нет доступных записей'
           })()
           const emptyState = rows?.length === 0 ? (
@@ -930,6 +1126,12 @@ export function AppV2Renderer(props: AppV2RendererProps) {
               <p>Создайте заказ поставщику и примите его на склад, когда товар приедет.</p>
               {inventoryListToolbar}
             </div>
+            : countList ? <div className={ui.collectionEmpty} data-centered>
+              <ProtoIcon name="list" size={28} />
+              <strong>Инвентаризаций пока нет</strong>
+              <p>Создайте пересчёт склада и внесите фактические остатки.</p>
+              {inventoryListToolbar}
+            </div>
             : <p className={ui.hint}>{emptyCopy}</p>
           ) : null
           body = <div className={`${styles.collection} ${catalog ? presentation.catalog : cardLayout ? ui.cardCollection : timeline ? `${presentation.panel} ${ui.timelineCollection}` : ''} ${id === lines?.id ? `${presentation.panel} ${ui.orderLines}` : ''}`} data-catalog={catalog || undefined} data-tiles={node.layout === 'tiles' || undefined} data-timeline={timeline || undefined}>
@@ -947,6 +1149,106 @@ export function AppV2Renderer(props: AppV2RendererProps) {
         {props.editing && <button type="button" className={container ? styles.groupPick : styles.blockPick} aria-label={`Выбрать элемент «${node.name}»`} onClick={() => props.onSelect?.(id)}><span>{NODE_KINDS[node.type][0]}</span></button>}{content}
       </section>
     })
+  }
+  if (!props.editing && inventory?.reorderScreenId && screen?.id === inventory.reorderScreenId) {
+    const reorderForm = inventory.reorderFormId ? nodes.get(inventory.reorderFormId) : undefined
+    return <div className={`${styles.canvasBlocks} ${ui.reorderScreen}`}>
+      <header className={ui.reorderScreenHead}>
+        <h2 className={ui.purchaseCardTitle}>Что заказать</h2>
+        <p className={ui.purchaseComment}>Товары с остатком ниже минимума</p>
+      </header>
+      {reorderForm?.type === 'form' && visible(reorderForm) ? render([reorderForm.id]) : null}
+    </div>
+  }
+  if (!props.editing && inventory?.countScreenId && screen?.id === inventory.countScreenId && props.record) {
+    const countRecord = props.record
+    const number = inventory.countNumberFieldId
+      ? cell(countRecord, inventory.countNumberFieldId) || String(countRecord.values[inventory.countNumberFieldId] ?? '')
+      : ''
+    const status = inventory.countStatusFieldId ? cell(countRecord, inventory.countStatusFieldId) : ''
+    const draft = Boolean(inventory.countStatusDraft && inventory.countStatusFieldId
+      && countRecord.values[inventory.countStatusFieldId] === inventory.countStatusDraft)
+    const when = inventory.countDateFieldId
+      ? formatPurchaseDate(cell(countRecord, inventory.countDateFieldId) || String(countRecord.values[inventory.countDateFieldId] ?? ''))
+      : ''
+    const warehouse = inventory.countWarehouseFieldId ? cell(countRecord, inventory.countWarehouseFieldId) : ''
+    const author = inventory.countAuthorFieldId
+      ? formatInventoryAuthor(cell(countRecord, inventory.countAuthorFieldId) || String(countRecord.values[inventory.countAuthorFieldId] ?? ''))
+      : ''
+    const productCount = inventory.countProductCountFieldId ? cell(countRecord, inventory.countProductCountFieldId) : ''
+    const discrepancyRaw = inventory.countDiscrepancyCountFieldId ? Number(countRecord.values[inventory.countDiscrepancyCountFieldId]) : NaN
+    const discrepancy = Number.isFinite(discrepancyRaw) ? String(Math.trunc(discrepancyRaw)) : inventory.countDiscrepancyCountFieldId ? cell(countRecord, inventory.countDiscrepancyCountFieldId) : ''
+    const shortageRaw = inventory.countShortageFieldId ? countRecord.values[inventory.countShortageFieldId] : null
+    const surplusRaw = inventory.countSurplusFieldId ? countRecord.values[inventory.countSurplusFieldId] : null
+    const shortageNum = typeof shortageRaw === 'number' && Number.isFinite(shortageRaw) ? shortageRaw : NaN
+    const surplusNum = typeof surplusRaw === 'number' && Number.isFinite(surplusRaw) ? surplusRaw : NaN
+    const shortage = Number.isFinite(shortageNum) && shortageNum > 0 ? purchaseMoney(shortageNum) : ''
+    const surplus = Number.isFinite(surplusNum) && surplusNum > 0 ? purchaseMoney(surplusNum) : ''
+    const linesId = rootIds.find(id => nodes.get(id)?.type === 'collection')
+    const editFormId = rootIds.find(id => nodes.get(id)?.type === 'form' && visible(nodes.get(id)!))
+    const actionButtons = rootIds.flatMap(id => {
+      const node = nodes.get(id)
+      return node?.type === 'button' && visible(node) ? [node] : []
+    })
+    const primaryAction = actionButtons.find(node => node.variant === 'primary')
+    const secondaryActions = actionButtons.filter(node => node !== primaryAction)
+    const history = ([
+      { key: 'created', label: 'Создана', atId: inventory.countCreatedAtFieldId, byId: inventory.countCreatedByFieldId },
+      { key: 'posted', label: 'Проведена', atId: inventory.countPostedAtFieldId, byId: inventory.countPostedByFieldId },
+      { key: 'cancelled', label: 'Отменена', atId: inventory.countCancelledAtFieldId, byId: inventory.countCancelledByFieldId },
+    ] as const).flatMap(item => {
+      if (!item.atId) return []
+      const rawAt = String(countRecord.values[item.atId] ?? '')
+      const at = formatPurchaseDate(rawAt) || rawAt
+      if (!at) return []
+      const byRaw = item.byId ? String(countRecord.values[item.byId] ?? '') : ''
+      const by = formatInventoryAuthor(byRaw) || byRaw
+      return [{ ...item, at, by }]
+    })
+    // Draft: facts edit inline via CountLinesEditor — keep «Сохранить», hide «Изменить» dialog.
+    const hasActions = Boolean((!draft && editFormId) || primaryAction || secondaryActions.length)
+    const countTitle = number ? `Инвентаризация ${number}` : 'Инвентаризация'
+    const countActions = hasActions ? <div className={ui.purchaseCardActions}>
+      {primaryAction ? (published
+        ? <PublishedV2Button node={primaryAction} screenId={props.screenId} recordId={countRecord.id} refreshOnSuccess buttonClassName={styles.primary} />
+        : <button type="button" className={styles.primary} disabled>{primaryAction.label}</button>) : null}
+      {!draft && editFormId ? render([editFormId]) : null}
+      {secondaryActions.map(node => published
+        ? <PublishedV2Button key={node.id} node={node} screenId={props.screenId} recordId={countRecord.id} refreshOnSuccess buttonClassName={node.variant === 'danger' ? styles.danger : styles.secondary} />
+        : <button key={node.id} type="button" className={node.variant === 'danger' ? styles.danger : styles.secondary} disabled>{node.label}</button>)}
+    </div> : null
+    return <div className={`${styles.canvasBlocks} ${ui.purchaseCard} ${ui.countCard}`} data-draft={draft || undefined}>
+      <section className={`${presentation.panel} ${ui.orderIdentity}`} data-manage data-variant="pipeline" data-purchase-card aria-label="Главное об инвентаризации">
+        <div className={ui.orderIdentityMain}>
+          <div className={ui.purchaseCardHead}>
+            <div className={ui.purchaseCardIdentity}>
+              {status ? <span className={ui.heroStatus} data-tone={builderV2StatusTone(status)}>{status}</span> : null}
+              <h2 className={ui.purchaseCardTitle}>{countTitle}</h2>
+            </div>
+            {countActions ? <div className={ui.purchaseCardActionsDesktop}>{countActions}</div> : null}
+          </div>
+          <div className={ui.orderIdentityFacts} data-count="7">
+            <div className={ui.orderIdentityFact}><span>Склад</span><strong>{warehouse || '—'}</strong></div>
+            <div className={ui.orderIdentityFact}><span>Дата</span><strong>{when || '—'}</strong></div>
+            <div className={ui.orderIdentityFact}><span>Автор</span><strong>{author || '—'}</strong></div>
+            <div className={ui.orderIdentityFact}><span>Товаров</span><strong>{productCount || '—'}</strong></div>
+            <div className={ui.orderIdentityFact}><span>Расхождений</span><strong>{discrepancy || '—'}</strong></div>
+            <div className={ui.orderIdentityFact} data-kind="amount" data-tone="rose"><span>Недостача</span><strong>{shortage ? `−${shortage}` : '—'}</strong></div>
+            <div className={ui.orderIdentityFact} data-kind="amount" data-tone="mint"><span>Излишек</span><strong>{surplus ? `+${surplus}` : '—'}</strong></div>
+          </div>
+          {countActions ? <div className={ui.purchaseCardActionsMobile}>{countActions}</div> : null}
+        </div>
+      </section>
+      {draft && editFormId
+        ? <div className={`${presentation.panel} ${ui.orderLinesPanel} ${ui.countDraftPanel}`}>{render([editFormId])}</div>
+        : linesId ? <div className={`${presentation.panel} ${ui.orderLinesPanel}`}>{render([linesId])}</div> : null}
+      {history.length ? <section className={`${presentation.panel} ${ui.orderFacts}`} aria-label="История инвентаризации">
+        <h2 className={presentation.sectionTitle}>История</h2>
+        <ul className={ui.purchaseHistory}>
+          {history.map(item => <li key={item.key}><span>{item.label}</span><strong>{item.at}{item.by ? ` · ${item.by}` : ''}</strong></li>)}
+        </ul>
+      </section> : null}
+    </div>
   }
   if (!props.editing && inventory?.purchaseScreenId && screen?.id === inventory.purchaseScreenId && props.record) {
     const purchaseRecord = props.record

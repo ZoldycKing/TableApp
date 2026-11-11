@@ -153,6 +153,8 @@ describe.skipIf(!process.env.DATABASE_URL)('row writes against Postgres', () => 
     const { asInventory } = await import('./templates/inventory-app')
     const openings: Record<string, number> = { s1: 4, s2: 12, s3: 2, s4: 3, s5: 18, s6: 1, s7: 140, s8: 25 }
     const template = structuredClone(sklad)
+    // V1 enableInventory fixtures stay under the free table ceiling: drop stage 3a count tables.
+    template.tables = template.tables.filter(table => table.key !== 'inventory_counts' && table.key !== 'inventory_count_lines')
     for (const table of template.tables) {
       if (table.key === template.inventory!.tables.movements) table.rows = []
       if (table.key === template.inventory!.tables.items) {

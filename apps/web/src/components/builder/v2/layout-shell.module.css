@@ -689,7 +689,9 @@
   word-break: normal;
 }
 
-.detailBody :global([class*='orderFact']:not([class*='orderFacts']):last-child) {
+/* Only the last fact in the whole panel drops the divider — keep one between
+ * contact-block phone and the address block that follows. */
+.detailBody :global([class*='orderFacts'] > :last-child [class*='orderFact']:last-of-type) {
   border-bottom: 0;
 }
 

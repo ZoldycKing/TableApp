@@ -245,7 +245,7 @@ export function buildInventoryV2App(built: BuiltTemplate, meta: { id: string; wo
     homeScreenId: itemsScreenId,
     screens: [
       { id: itemsScreenId, name: 'Товары', menuLabel: 'Товары', icon: 'box', navigation: true, audience: team, contextTableId: null, rootIds: [newItemButton, itemsNode], events: { enter: null } },
-      { id: movementsScreenId, name: 'Движения', menuLabel: 'Движения', icon: 'truck', navigation: true, audience: team, contextTableId: null, rootIds: [newOperationButton, movementsNode], events: { enter: null } },
+      { id: movementsScreenId, name: 'Движения', menuLabel: 'Движения', icon: 'apps', navigation: true, audience: team, contextTableId: null, rootIds: [newOperationButton, movementsNode], events: { enter: null } },
       { id: purchasesScreenId, name: 'Закупки', menuLabel: 'Закупки', icon: 'clipboard', navigation: true, audience: team, contextTableId: null, rootIds: [suppliersButton, newPurchaseButton, purchasesNode], events: { enter: null } },
       // Deep-link screen; list toolbar opens the same form node in a centred dialog (not dual-rooted).
       { id: createItemScreenId, name: 'Новый товар', icon: 'box', navigation: false, audience: owners, contextTableId: null, rootIds: [createItemFormId], events: { enter: null } },
@@ -253,7 +253,7 @@ export function buildInventoryV2App(built: BuiltTemplate, meta: { id: string; wo
       { id: purchaseScreenId, name: 'Заказ поставщику', icon: 'clipboard', navigation: false, audience: team, contextTableId: purchaseOrdersTableId, recordTitleFieldId: purchaseNumber, rootIds: [purchaseLinesNode, editPurchaseFormId, orderPurchaseButton, receivePurchaseButton, cancelPurchaseButton], events: { enter: null } },
       { id: suppliersScreenId, name: 'Поставщики', icon: 'truck', navigation: false, audience: team, contextTableId: null, rootIds: [newSupplierButton, suppliersNode], events: { enter: null } },
       { id: createSupplierScreenId, name: 'Новый поставщик', icon: 'truck', navigation: false, audience: owners, contextTableId: null, rootIds: [createSupplierFormId], events: { enter: null } },
-      { id: supplierScreenId, name: 'Поставщик', icon: 'truck', navigation: false, audience: team, contextTableId: suppliersTableId, recordTitleFieldId: supplierName, rootIds: [`supplier_${supplierContact}`, `supplier_${supplierPhone}`, `supplier_${supplierComment}`, supplierOrdersNode, editSupplierFormId], events: { enter: null } },
+      { id: supplierScreenId, name: 'Поставщик', icon: 'truck', navigation: false, audience: team, contextTableId: suppliersTableId, recordTitleFieldId: supplierName, rootIds: [supplierOrdersNode, editSupplierFormId], events: { enter: null } },
       { id: itemScreenId, name: 'Товар', icon: 'box', navigation: false, audience: team, contextTableId: itemsTableId, recordTitleFieldId: itemName, rootIds: [
         ...identityFieldIds.map(id => `item_${id}`),
         ...factFieldIds.map(id => `item_${id}`),
@@ -291,9 +291,6 @@ export function buildInventoryV2App(built: BuiltTemplate, meta: { id: string; wo
       { id: purchaseLinesNode, name: 'Позиции', type: 'collection', visibleTo: null, visibleWhen: null, sourceId: purchaseLinesSource, layout: 'list', titleFieldId: lineName, subtitleFieldId: lineQty, cardDetailFieldId: lineTotal, itemIds: [], events: { itemPress: null } },
       { id: suppliersNode, name: 'Поставщики', type: 'collection', visibleTo: null, visibleWhen: null, sourceId: suppliersSource, layout: 'list', titleFieldId: supplierName, subtitleFieldId: supplierContact, cardDetailFieldId: supplierPhone, itemIds: [], events: { itemPress: openSupplier } },
       { id: supplierOrdersNode, name: 'Заказы', type: 'collection', visibleTo: null, visibleWhen: null, sourceId: supplierOrdersSource, layout: 'list', titleFieldId: purchaseNumber, subtitleFieldId: purchaseStatus, dateFieldId: purchaseDate, cardDetailFieldId: purchaseTotal, itemIds: [], events: { itemPress: openPurchase } },
-      node(`supplier_${supplierContact}`, 'Контакт', supplierContact),
-      node(`supplier_${supplierPhone}`, 'Телефон', supplierPhone),
-      node(`supplier_${supplierComment}`, 'Комментарий', supplierComment),
       { id: orderPurchaseButton, name: 'Заказать', type: 'button', label: 'Заказать', variant: 'primary', visibleTo: team, visibleWhen: whenStatus(statusDraft), events: { press: markOrdered } },
       { id: receivePurchaseButton, name: 'Получить', type: 'button', label: 'Получить', variant: 'primary', visibleTo: team, visibleWhen: whenStatus(statusOrdered), events: { press: receivePurchase } },
       { id: cancelPurchaseButton, name: 'Отменить', type: 'button', label: 'Отменить', variant: 'secondary', visibleTo: owners, visibleWhen: whenStatus(statusReceived), events: { press: cancelPurchase } },
@@ -313,7 +310,7 @@ export function buildInventoryV2App(built: BuiltTemplate, meta: { id: string; wo
       { id: purchasesSource, tableId: purchaseOrdersTableId, viewId: null, filter: null, sorts: [{ fieldId: purchaseDate, direction: 'desc' }, { fieldId: purchaseTotal, direction: 'desc' }, { fieldId: purchaseCount, direction: 'desc' }], searchFieldIds: [purchaseNumber, purchaseName, purchaseSupplier], pageSize: 30 },
       { id: purchaseLinesSource, tableId: purchaseLinesTableId, screenTableId: purchaseOrdersTableId, viewId: null, filter: { op: 'includes', left: { kind: 'row', fieldId: lineOrder }, right: { kind: 'screen_row_id' } }, sorts: [], searchFieldIds: [], pageSize: 50 },
       { id: suppliersSource, tableId: suppliersTableId, viewId: null, filter: null, sorts: [{ fieldId: supplierName, direction: 'asc' }], searchFieldIds: [supplierName, supplierContact], pageSize: 30 },
-      { id: supplierOrdersSource, tableId: purchaseOrdersTableId, screenTableId: suppliersTableId, viewId: null, filter: { op: 'includes', left: { kind: 'row', fieldId: purchaseSupplier }, right: { kind: 'screen_row_id' } }, sorts: [{ fieldId: purchaseDate, direction: 'desc' }], searchFieldIds: [purchaseNumber, purchaseName], pageSize: 30 },
+      { id: supplierOrdersSource, tableId: purchaseOrdersTableId, screenTableId: suppliersTableId, viewId: null, filter: { op: 'includes', left: { kind: 'row', fieldId: purchaseSupplier }, right: { kind: 'screen_row_id' } }, sorts: [{ fieldId: purchaseDate, direction: 'desc' }], searchFieldIds: [], pageSize: 30 },
     ],
     workflows: [
       { id: openItem, name: 'Открыть товар', input: { rowTableId: itemsTableId, formId: null, screenTableId: null }, steps: [{ id: newId('action'), type: 'open_screen', screenId: itemScreenId, record: { kind: 'current' } }] },

@@ -1337,36 +1337,46 @@ button.recordButton:hover strong { color: var(--v2-accent, #456849); }
 .listToolbar:has(.purchaseToolbarEnd) { flex-wrap: nowrap; }
 .plainList[data-purchase] {
   min-width: 0;
-  --inv-purchase-cols: 4.75rem 7.25rem minmax(0, 1.2fr) 4.5rem 8rem 6.25rem 7rem;
+  --inv-purchase-cols: 3.5rem 7.25rem minmax(0, 1.2fr) 4.5rem 8rem 6.25rem 7rem;
+}
+.plainList[data-purchase][data-supplier-orders] {
+  --inv-purchase-cols: 3.5rem 7.25rem 4.5rem 8rem 6.25rem 7rem;
 }
 .purchaseListHeader { display: none; }
 .purchaseThumbs {
-  display: inline-flex;
-  align-items: center;
-  gap: 0;
-  min-width: 0;
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  flex: none;
+  min-width: 52px;
 }
 .purchaseThumbs > .productThumb[data-size='journal'] {
   width: 52px;
   height: 52px;
-  margin-inline-start: -10px;
-  border: 2px solid var(--v2-surface, #fff);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--v2-line, #dce2d6) 70%, transparent);
+  margin: 0;
+  border: 0;
+  box-shadow: none;
 }
-.purchaseThumbs > .productThumb[data-size='journal']:first-child { margin-inline-start: 0; }
 .purchaseThumbsMore {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  z-index: 1;
   display: inline-grid;
   place-items: center;
-  min-width: 32px;
-  height: 32px;
-  margin-inline-start: -8px;
-  padding: 0 6px;
+  min-width: 22px;
+  height: 22px;
+  margin: 0;
+  padding: 0 5px;
   border-radius: 999px;
   border: 2px solid var(--v2-surface, #fff);
   background: var(--v2-control, #eef2ea);
-  color: var(--v2-muted, #687568);
-  font-size: 12px;
-  font-weight: 700;
+  color: var(--v2-ink, #253c2d);
+  font-size: 11px;
+  font-weight: 740;
+  line-height: 1;
 }
 .purchaseSuppliersSlot { display: contents; }
 .purchaseSuppliersDesktop { display: none; }
@@ -1377,7 +1387,7 @@ button.recordButton:hover strong { color: var(--v2-accent, #456849); }
 }
 .recordButton[data-compact][data-purchase] {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: 52px minmax(0, 1fr) auto;
   gap: 6px 10px;
   align-items: center;
   min-width: 0;
@@ -1512,6 +1522,21 @@ button.recordButton:hover strong { color: var(--v2-accent, #456849); }
   overflow-wrap: break-word;
   word-break: normal;
   hyphens: none;
+}
+.supplierCardContact {
+  margin: 0;
+  color: var(--v2-ink, #253c2d);
+  font-size: 15px;
+  line-height: 1.35;
+  font-weight: 560;
+}
+.supplierCard > .orderIdentity .orderIdentityFacts {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@media (min-width: 721px) {
+  .supplierCard > .orderIdentity .orderIdentityFacts {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }
 .purchaseHistory { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
 .purchaseHistory > li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 12px; min-width: 0; }
@@ -1679,6 +1704,27 @@ button.recordButton:hover strong { color: var(--v2-accent, #456849); }
 .purchasePick:disabled { cursor: default; opacity: 0.62; }
 .purchasePick:disabled .purchasePickAction { color: var(--v2-muted, #687568); }
 .purchaseForm { overflow-wrap: normal; gap: 12px; }
+.purchaseForm .input input,
+.purchaseForm .input select,
+.purchaseForm .input textarea {
+  color: var(--v2-ink, #253c2d);
+}
+.purchaseForm .input input[type='date'] {
+  color: var(--v2-ink, #253c2d);
+  color-scheme: light;
+}
+.purchaseForm .input input[type='date']::-webkit-datetime-edit,
+.purchaseForm .input input[type='date']::-webkit-datetime-edit-fields-wrapper,
+.purchaseForm .input input[type='date']::-webkit-datetime-edit-text,
+.purchaseForm .input input[type='date']::-webkit-datetime-edit-month-field,
+.purchaseForm .input input[type='date']::-webkit-datetime-edit-day-field,
+.purchaseForm .input input[type='date']::-webkit-datetime-edit-year-field {
+  color: var(--v2-ink, #253c2d);
+}
+.purchaseForm .relationInput select {
+  padding-inline-end: 2.25rem;
+  background-position: right 0.7rem center;
+}
 .purchaseFields {
   display: grid;
   gap: 12px;
@@ -1689,7 +1735,7 @@ button.recordButton:hover strong { color: var(--v2-accent, #456849); }
 .purchaseFields > :has([data-purchase-field='lines']) { margin-top: 0; }
 @media (min-width: 721px) {
   .purchaseFields {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1.5fr) minmax(0, 1fr);
     gap: 12px 14px;
   }
   .purchaseFields > :has([data-purchase-field='supplier']),

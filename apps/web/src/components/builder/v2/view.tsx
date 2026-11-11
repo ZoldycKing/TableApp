@@ -1504,10 +1504,10 @@ export function AppV2Renderer(props: AppV2RendererProps) {
       { key: 'shortage', value: shortage ? `−${shortage}` : '—', caption: 'Недостача', ...(shortage ? { tone: 'rose' as const } : {}) },
       { key: 'surplus', value: surplus ? `+${surplus}` : '—', caption: 'Излишек', ...(surplus ? { tone: 'mint' as const } : {}) },
     ]
-    const historyLine = history.map(item => `${item.label} ${item.at}${item.by ? ` · ${item.by}` : ''}`).join(' · ')
+    const posted = history.find(item => item.key === 'posted')
     const countSubtitle = [
       [warehouse, when].filter(Boolean).join(' · '),
-      historyLine || (author ? `Автор ${author}` : ''),
+      posted ? `${posted.label} ${posted.at}${posted.by ? ` · ${posted.by}` : ''}` : (author ? `Автор ${author}` : ''),
     ].filter(Boolean).join(' · ') || undefined
     const countBack = inventory.countsScreenId
       ? {
@@ -1772,26 +1772,28 @@ export function AppV2Renderer(props: AppV2RendererProps) {
         : clientText
       : undefined
     // Identity already shows the client / inventory warehouse+cost; keep only non-duplicated facts.
-    const deliveryFacts = factItems.filter(item => {
-      if (item.kind === 'reply') return false
+    const deliveryFacts = factItems.flatMap(item => {
+      if (item.kind === 'reply') return []
       const node = nodes.get(item.id)
       const fieldId = node?.type === 'field' && 'fieldId' in node.value ? node.value.fieldId : undefined
-      if (crmDeal && crm && fieldId === crm.clientRelationFieldId) return false
-      if (inventoryItem && inventory && fieldId && (fieldId === inventory.itemWarehouseFieldId || fieldId === inventory.itemCostFieldId)) return false
-      // Demo fixture emails must not surface as assignee labels.
-      const text = typeof item.value === 'string' ? item.value : ''
-      if (/@example\.(?:invalid|com|org|net)\b/i.test(text) || /^worker@/i.test(text)) return false
-      if (/исполнител/i.test(item.label) && (/@/.test(text) || text === 'worker')) {
-        const named = formatInventoryAuthor(text)
-        if (!named || /@/.test(named) || /^worker$/i.test(named)) return false
+      if (crmDeal && crm && fieldId === crm.clientRelationFieldId) return []
+      if (inventoryItem && inventory && fieldId && (fieldId === inventory.itemWarehouseFieldId || fieldId === inventory.itemCostFieldId)) return []
+      const raw = fieldId ? String(props.record!.values[fieldId] ?? (props.record as BuilderV2DataRecord).display?.[fieldId] ?? '') : ''
+      const text = typeof item.value === 'string' ? item.value : raw
+      const assigneeLike = /исполнител|почта|e-?mail|email/i.test(item.label)
+      if (assigneeLike) {
+        if (/@example\.(?:invalid|com|org|net)\b/i.test(text) || /@example\.(?:invalid|com|org|net)\b/i.test(raw)) {
+          const named = formatInventoryAuthor(raw || text)
+          if (!named || /@/.test(named)) return []
+          return [{ ...item, label: 'Исполнитель', value: named }]
+        }
+        if (/@/.test(text) || /@/.test(raw)) {
+          const named = formatInventoryAuthor(raw || text)
+          if (named && !/@/.test(named)) return [{ ...item, label: 'Исполнитель', value: named }]
+        }
       }
-      return true
-    }).map(item => {
-      if (!/исполнител/i.test(item.label)) return item
-      const text = typeof item.value === 'string' ? item.value : ''
-      if (!text || !/@/.test(text)) return item
-      const named = formatInventoryAuthor(text)
-      return named && !/@/.test(named) ? { ...item, value: named } : item
+      if (/@example\.(?:invalid|com|org|net)\b/i.test(text) || /@example\.(?:invalid|com|org|net)\b/i.test(raw)) return []
+      return [item]
     })
     const factsTitle = inventoryItem ? 'О товаре' : crmDeal ? 'О сделке' : crm ? (crmClient ? 'О клиенте' : 'Клиент') : 'Клиент и доставка'
     const sideFactsTitle = crm ? (crmClient ? 'О клиенте' : 'Клиент') : 'Доставка'
@@ -1926,7 +1928,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
         ? {
             dealTitle: title || 'Сделка',
             status: status || undefined,
-            subtitle: [clientText, status].filter(Boolean).join(' · ') || undefined,
+            subtitle: clientText || undefined,
             metrics: dealMetrics,
             back: dealBack,
             amount,

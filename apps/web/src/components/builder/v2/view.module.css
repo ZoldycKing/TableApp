@@ -547,8 +547,8 @@
   }
   .clientListHeader {
     display: grid;
-    grid-template-columns: 44px minmax(10rem, 1.3fr) 9.5rem 7.5rem 8.5rem 9rem;
-    column-gap: 18px;
+    grid-template-columns: 44px minmax(9rem, 1.2fr) 9rem 6.5rem minmax(7.5rem, 0.9fr) 8rem;
+    column-gap: 22px;
     align-items: center;
     padding: 10px 16px;
     border-bottom: 1px solid var(--v2-line, #dce2d6);
@@ -562,8 +562,8 @@
   .clientListHeader > span:nth-child(5),
   .clientListHeader > span:last-child { text-align: end; }
   .recordButton[data-compact][data-clients] {
-    grid-template-columns: 44px minmax(10rem, 1.3fr) 9.5rem 7.5rem 8.5rem 9rem;
-    column-gap: 18px;
+    grid-template-columns: 44px minmax(9rem, 1.2fr) 9rem 6.5rem minmax(7.5rem, 0.9fr) 8rem;
+    column-gap: 22px;
     align-items: center;
   }
   .recordButton[data-compact][data-clients] > .clientListCopy {

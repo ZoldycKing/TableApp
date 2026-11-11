@@ -170,7 +170,7 @@ export function DetailCardShell({
                 <h2 className={shell.detailTitle}>{title}</h2>
                 {badge}
               </div>
-              {actions ? <div className={shell.detailActions} data-desktop-only={product || undefined}>{actions}</div> : null}
+              {product && actions ? <div className={shell.detailActions} data-desktop-only>{actions}</div> : null}
             </div>
             {chips ? <div className={shell.detailChips}>{chips}</div> : null}
             {subtitle ? <p className={shell.detailSubtitle}>{subtitle}</p> : null}

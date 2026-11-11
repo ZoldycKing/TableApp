@@ -501,6 +501,13 @@
   border-bottom: 1px solid var(--shell-line);
 }
 
+/* Same no-empty-cell rule as list summary bands on 390. */
+.detailMetrics .metric[data-wide] { grid-column: 1 / -1; }
+.detailMetrics[data-count='3'] .metric:first-child { grid-column: 1 / -1; }
+.detailMetrics[data-count='2'] { grid-template-columns: 1fr 1fr; }
+.detailMetrics[data-count='2'] .metric,
+.detailMetrics[data-count='2'] .metric[data-wide] { grid-column: auto; }
+
 .detailMetrics[data-tiles] {
   border: 0;
   gap: 12px;
@@ -578,6 +585,8 @@
   color: var(--shell-ink);
   font-size: 15px;
   font-weight: 750;
+  letter-spacing: -0.012em;
+  word-spacing: 0.06em;
 }
 
 .detailSectionBody {
@@ -680,6 +689,14 @@
   border-bottom: 0;
 }
 
+/* Phone/email links must not inflate KV row height above siblings. */
+.detailBody :global([class*='contactLink']) {
+  min-height: 0;
+  padding-block: 0;
+  margin-block: 0;
+  align-items: baseline;
+}
+
 .detailBody :global([class*='orderFact'] > small) {
   color: var(--shell-muted);
   font-weight: 600;
@@ -736,6 +753,8 @@
   .detailMetrics {
     grid-template-columns: repeat(var(--shell-metrics, 4), minmax(0, 1fr));
   }
+  .detailMetrics[data-count='3'] .metric:first-child,
+  .detailMetrics .metric[data-wide] { grid-column: auto; }
   .detailMetrics[data-tiles] {
     grid-template-columns: repeat(var(--shell-metrics, 4), minmax(0, 1fr));
     gap: 16px;
@@ -838,8 +857,11 @@
   .stickyBar :global(.orderActionDock),
   .stickyBar :global([data-placement='mobile']),
   .stickyBar :global([class*='purchaseCardActions']) {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: stretch;
     gap: 8px;
     width: 100%;
     position: static;
@@ -848,6 +870,21 @@
     background: transparent;
     box-shadow: none;
     backdrop-filter: none;
+  }
+  /* Icon (✎) hugs; primary CTA fills the rest — one row, not a full-width pencil bar. */
+  .stickyBar :global([class*='purchaseCardActions']) > :global(button[class*='orderActionIcon']),
+  .stickyBar :global([class*='purchaseCardActions']) :global(button[class*='orderActionIcon']) {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    flex: none;
+  }
+  .stickyBar :global([class*='purchaseCardActions']) > :global(button.primary),
+  .stickyBar :global([class*='purchaseCardActions']) :global(button.primary) {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: auto;
   }
 }
 

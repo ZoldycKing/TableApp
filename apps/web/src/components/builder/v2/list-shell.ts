@@ -146,21 +146,27 @@ export function buildListShellMetrics(input: ShellMetricsInput): ShellMetric[] {
   }
 
   if (kind === 'inventory-purchases' && inventory) {
-    let amount = 0
     const statuses = new Map<string, number>()
+    let orderedAmount = 0
+    let receivedThisMonth = 0
+    const monthAgo = Date.now() - 30 * 86_400_000
     for (const row of rows) {
       const status = inventory.purchaseStatusFieldId ? String(row.values[inventory.purchaseStatusFieldId] ?? '') : ''
       if (status) statuses.set(status, (statuses.get(status) ?? 0) + 1)
       const totalRaw = inventory.purchaseTotalFieldId ? row.values[inventory.purchaseTotalFieldId] : null
-      if (typeof totalRaw === 'number' && Number.isFinite(totalRaw)) amount += totalRaw
+      const totalValue = typeof totalRaw === 'number' && Number.isFinite(totalRaw) ? totalRaw : 0
+      if (inventory.statusOrdered && status === inventory.statusOrdered) orderedAmount += totalValue
+      if (inventory.statusReceived && status === inventory.statusReceived) {
+        const dateRaw = inventory.purchaseDateFieldId ? row.values[inventory.purchaseDateFieldId] : null
+        const ms = typeof dateRaw === 'string' || typeof dateRaw === 'number' ? Date.parse(String(dateRaw)) : NaN
+        if (Number.isFinite(ms) && ms >= monthAgo) receivedThisMonth += 1
+      }
     }
-    const statusField = table?.fields.find(field => field.id === inventory.purchaseStatusFieldId)
-    const active = statusField?.choices?.find(choice => /заказ/i.test(choice.name))
-    const activeCount = active ? (statuses.get(active.id) ?? 0) : 0
+    const draftCount = inventory.statusDraft ? (statuses.get(inventory.statusDraft) ?? 0) : 0
     return [
-      { key: 'orders', value: formatShellCount(total, 'заказ', 'заказа', 'заказов'), caption: 'Всего' },
-      { key: 'active', value: String(activeCount), caption: active?.name ?? 'В работе' },
-      ...(amount > 0 ? [{ key: 'sum', value: formatShellMoney(amount), caption: 'Сумма в списке' }] : []),
+      { key: 'awaiting', value: formatShellMoney(orderedAmount), caption: 'Ожидается поставок' },
+      { key: 'drafts', value: String(draftCount), caption: 'Черновики' },
+      { key: 'received_month', value: String(receivedThisMonth), caption: 'Получено за месяц' },
     ]
   }
 
@@ -305,6 +311,8 @@ export function buildListShellMeta(input: ShellMetricsInput): string | undefined
   if (kind === 'crm-board') {
     return formatShellCount(total, 'сделка', 'сделки', 'сделок')
   }
+  // Purchases metrics already carry the counts — skip the duplicate «N записи» subtitle.
+  if (kind === 'inventory-purchases') return undefined
   if (INVENTORY_KINDS.has(kind)) {
     return formatShellCount(total, 'запись', 'записи', 'записей')
   }
@@ -362,11 +370,18 @@ export function buildListShellTabs(input: ShellMetricsInput & { activeTab: strin
       const status = String(row.values[inventory.purchaseStatusFieldId] ?? '')
       if (status) byStatus.set(status, (byStatus.get(status) ?? 0) + 1)
     }
+    // Hide empty terminal tabs like «Отменено 0» — they add noise without a filter target.
+    const visibleChoices = choices.filter(choice => {
+      const count = byStatus.get(choice.id) ?? 0
+      if (count > 0) return true
+      if (/отмен/i.test(choice.name)) return false
+      return true
+    })
     return {
       defaultTab: activeTab && (activeTab === 'all' || byStatus.has(activeTab)) ? activeTab : 'all',
       tabs: [
         { id: 'all', label: 'Все', count: page?.total ?? rows.length },
-        ...choices.map(choice => ({ id: choice.id, label: choice.name, count: byStatus.get(choice.id) ?? 0 })),
+        ...visibleChoices.map(choice => ({ id: choice.id, label: choice.name, count: byStatus.get(choice.id) ?? 0 })),
       ],
     }
   }

@@ -1708,6 +1708,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
   if (detail && !props.editing && props.record) {
     const titleFieldId = screen?.recordTitleFieldId ?? recordTable?.primaryFieldId
     const title = titleFieldId ? cell(props.record, titleFieldId) : screen?.name
+    const shop = props.app.shop
     const crmDeal = Boolean(crm && screen?.id === crm.dealScreenId)
     const crmClient = Boolean(crm && screen?.id === crm.clientScreenId)
     const inventoryItem = Boolean(inventory && screen?.id === inventory.itemScreenId)
@@ -1790,6 +1791,8 @@ export function AppV2Renderer(props: AppV2RendererProps) {
       const fieldId = node?.type === 'field' && 'fieldId' in node.value ? node.value.fieldId : undefined
       if (crmDeal && crm && fieldId === crm.clientRelationFieldId) return []
       if (inventoryItem && inventory && fieldId && (fieldId === inventory.itemWarehouseFieldId || fieldId === inventory.itemCostFieldId)) return []
+      // Shop metrics already show Отгрузка — don't repeat Дата отгрузки in the KV card.
+      if (shop && /дата отгрузки|отгрузк/i.test(item.label) && !/адрес/i.test(item.label)) return []
       const raw = fieldId ? String(props.record!.values[fieldId] ?? (props.record as BuilderV2DataRecord).display?.[fieldId] ?? '') : ''
       const text = typeof item.value === 'string' ? item.value : raw
       const isAssignee = /исполнител|ответственн/i.test(item.label)
@@ -1959,9 +1962,10 @@ export function AppV2Renderer(props: AppV2RendererProps) {
       : ''
     const clientSubtitle = [clientContact, clientCity].filter(Boolean).join(' · ') || undefined
     const clientStat = crmClient ? crmDealStats.stats.get(props.record.id) : undefined
+    // Sum first so the mobile 2-col band is full-width + pair (no empty half-cell).
     const clientMetrics = crmClient ? [
-      { key: 'deals', value: String(clientStat?.deals ?? 0), caption: 'Сделок' },
       { key: 'sum', value: clientStat && clientStat.sum > 0 ? purchaseMoney(clientStat.sum) : (amount || '—'), caption: 'Сумма' },
+      { key: 'deals', value: String(clientStat?.deals ?? 0), caption: 'Сделок' },
       { key: 'next', value: clientStat?.lastContact ? formatPurchaseDate(clientStat.lastContact) : '—', caption: 'След. контакт' },
     ] : undefined
     const clientCreateDeal = crmClient && crm?.createDealScreenId
@@ -1988,7 +1992,6 @@ export function AppV2Renderer(props: AppV2RendererProps) {
       >{render([clientEditFormId], props.record, crm?.clientsTableId)}</InventoryCreateDialog> : null}
       {clientCreateDeal ? <button type="button" className={styles.primary} onClick={clientCreateDeal}>Новая сделка</button> : null}
     </div> : null
-    const shop = props.app.shop
     const shopPositionIds = shop?.positionsFieldId && Array.isArray(props.record.values[shop.positionsFieldId])
       ? (props.record.values[shop.positionsFieldId] as unknown[]).filter((id): id is string => typeof id === 'string')
       : []
@@ -2001,6 +2004,11 @@ export function AppV2Renderer(props: AppV2RendererProps) {
     const shopShip = shopShipField && Object.hasOwn(props.record.values, shopShipField.id)
       ? formatPurchaseDate(cell(props.record, shopShipField.id) || String(props.record.values[shopShipField.id] ?? ''))
       : ''
+    const shopCustomerFieldId = resolveShopOrderCustomerFieldId(recordTable)
+    const shopCustomer = shopCustomerFieldId && Object.hasOwn(props.record.values, shopCustomerFieldId)
+      ? cell(props.record, shopCustomerFieldId).trim()
+      : ''
+    const shopSubtitle = [shopCustomer || null, shopCreated ? `от ${shopCreated}` : null].filter(Boolean).join(' · ') || undefined
     const shopMetrics = shop && !crm && !inventoryItem ? [
       ...(amount ? [{ key: 'amount', value: amount, caption: summary?.scoped ? 'Сумма доступных позиций' : 'Итого' }] : []),
       ...(shopPositionIds.length ? [{ key: 'positions', value: String(shopPositionIds.length), caption: 'Позиций' }] : []),
@@ -2077,11 +2085,12 @@ export function AppV2Renderer(props: AppV2RendererProps) {
           submitLabel="Сохранить"
           buttonClassName={ui.orderActionIcon}
         >{render([parts.editFormId!])}</InventoryCreateDialog> : null}
-        {hasProcess ? <button
-          type="button"
-          className={styles.primary}
-          onClick={() => document.getElementById('shop-order-processing')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-        >Обработать</button> : null}
+        {hasProcess ? <InventoryCreateDialog
+          label="Обработать"
+          title="Обработка заказа"
+          submitLabel="Сохранить"
+          buttonClassName={styles.primary}
+        >{render([parts.processingFormId!])}</InventoryCreateDialog> : null}
       </div>
     }
     const shopDetailBody = shopOrderDetail ? <>
@@ -2093,11 +2102,6 @@ export function AppV2Renderer(props: AppV2RendererProps) {
         <aside className={shellLayout.detailSideCol}>
           <BuilderV2OrderFacts items={deliveryFacts} title={factsTitle} />
           <BuilderV2OrderFacts items={replyFacts} title="Сообщение магазина" />
-          {parts.processingFormId
-            ? <div id="shop-order-processing">
-              <BuilderV2OrderActionPanel title={actionTitle} mode={actionMode}>{render([parts.processingFormId])}</BuilderV2OrderActionPanel>
-            </div>
-            : null}
         </aside>
       </div>
     </> : null
@@ -2121,7 +2125,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
               },
             } : undefined}
             title={title || 'Заказ'}
-            subtitle={amount || undefined}
+            subtitle={shopSubtitle}
             badge={status ? <span className={ui.heroStatus} data-tone={builderV2StatusTone(status)}>{status}</span> : undefined}
             actions={renderShopActions('desk')}
             stickyActions={renderShopActions('mob')}
@@ -2144,7 +2148,18 @@ export function AppV2Renderer(props: AppV2RendererProps) {
           >
             <div className={shellLayout.detailCols}>
               <div className={shellLayout.detailMainCol}>
-                {linesBlock}
+                {parts.collectionIds.map(id => {
+                  const node = nodes.get(id)
+                  const name = node && 'name' in node ? String(node.name || '') : ''
+                  const isDeals = /сделк/i.test(name)
+                  const isHistory = /истори|общен|запис/i.test(name)
+                  const titleText = isDeals
+                    ? `Сделки · ${clientStat?.deals ?? 0}`
+                    : isHistory
+                      ? 'История общения'
+                      : (name || undefined)
+                  return <DetailSection key={id} title={titleText}>{render([id])}</DetailSection>
+                })}
                 {render([...parts.buttonIds, ...parts.otherIds])}
               </div>
               <aside className={shellLayout.detailSideCol}>

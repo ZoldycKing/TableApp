@@ -176,8 +176,20 @@
   box-shadow: var(--v2-panel-shadow);
 }
 .orderActionOverflowMenu button { width: 100%; justify-content: center; }
-.orderActionIcon { display: inline-grid; place-items: center; width: 44px; height: 44px; flex: none; border: 1px solid var(--v2-line, #dce2d6); border-radius: var(--v2-control-radius, 8px); background: var(--v2-surface, #fff); color: var(--v2-ink, #253c2d); cursor: pointer; }
+.orderActionIcon { display: inline-grid; place-items: center; width: 36px; height: 36px; min-width: 36px; min-height: 36px; flex: none; border: 1px solid var(--v2-line, #dce2d6); border-radius: var(--v2-control-radius, 8px); background: var(--v2-surface, #fff); color: var(--v2-ink, #253c2d); cursor: pointer; padding: 0; }
 .orderActionIcon:hover { border-color: var(--v2-accent); color: var(--v2-accent); }
+/* Keep icon buttons square even when a parent forces `width: auto` / stretch. */
+.purchaseCardActions > .orderActionIcon,
+.purchaseCardActions :global(button.orderActionIcon),
+.detailActions :global(button.orderActionIcon),
+.stickyBar :global(button.orderActionIcon) {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  flex: none;
+  padding: 0;
+}
 .orderActionScrim { position: fixed; inset: 0; z-index: 80; border: 0; padding: 0; background: color-mix(in srgb, #122018 46%, transparent); cursor: pointer; }
 .orderActionPanel[data-dialog][data-wide='true'] { max-height: min(90dvh, 48rem); }
 @media (min-width: 721px) {
@@ -1506,8 +1518,8 @@ button.recordButton:hover strong { color: var(--v2-accent, #456849); }
   --inv-purchase-cols: 3.5rem 7.25rem minmax(0, 1.2fr) 4.5rem 8rem 6.25rem 7rem;
 }
 .plainList[data-purchase][data-supplier-orders] {
-  /* thumbs · number · count · warehouse · status · amount — warehouse/status hug content; amount absorbs slack. */
-  --inv-purchase-cols: 3.5rem 7.25rem 4.5rem minmax(7.5rem, max-content) max-content minmax(7rem, 1fr);
+  /* thumbs · number · count · warehouse · status · amount — slack in warehouse so status sits next to amount. */
+  --inv-purchase-cols: 3.5rem 7.25rem 4.5rem minmax(7.5rem, 1fr) 7rem 7rem;
 }
 .plainList[data-count] {
   min-width: 0;
@@ -1703,7 +1715,13 @@ button.recordButton:hover strong { color: var(--v2-accent, #456849); }
 }
 /* Flatten wrappers so Изменить / Получить sit on one row. */
 .purchaseCardActions > :is(section, .form) { display: contents; }
-.purchaseCardActions button { min-height: 44px; width: auto; flex: none; white-space: nowrap; }
+.purchaseCardActions > button:not(.orderActionIcon),
+.purchaseCardActions button:not(.orderActionIcon) {
+  min-height: 44px;
+  width: auto;
+  flex: none;
+  white-space: nowrap;
+}
 .purchaseCardActionsDesktop { display: none; min-width: 0; }
 .purchaseCardActionsMobile { display: grid; gap: 8px; min-width: 0; }
 .purchaseCardActionsMobile .purchaseCardActions {

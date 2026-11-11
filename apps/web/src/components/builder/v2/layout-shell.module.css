@@ -807,7 +807,8 @@
     aspect-ratio: 4 / 3;
   }
   .detailPage[data-sticky] {
-    padding-bottom: calc(6.75rem + env(safe-area-inset-bottom, 0px));
+    /* Sticky bar (~65px) + bottom nav (~56px) + gap so list rows aren't covered. */
+    padding-bottom: calc(9.5rem + env(safe-area-inset-bottom, 0px));
   }
   .detail[data-layout='product'] .detailHead {
     padding: 16px;
@@ -823,13 +824,15 @@
     position: fixed;
     left: 0;
     right: 0;
-    bottom: 0;
-    z-index: 4;
+    /* Sit above the app bottom nav (~56px) so Отменить / Обработать stay tappable. */
+    bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+    z-index: 6;
     display: grid;
     gap: 8px;
-    padding: 10px var(--shell-pad-x) calc(10px + env(safe-area-inset-bottom, 0px));
+    padding: 10px var(--shell-pad-x);
     border-top: 1px solid var(--shell-line);
-    background: color-mix(in srgb, var(--shell-surface) 92%, transparent);
+    border-bottom: 1px solid var(--shell-line);
+    background: color-mix(in srgb, var(--shell-surface) 94%, transparent);
     backdrop-filter: blur(10px);
   }
   .stickyBar :global(.orderActionDock),

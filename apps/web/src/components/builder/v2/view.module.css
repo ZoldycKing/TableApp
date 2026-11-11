@@ -1518,8 +1518,8 @@ button.recordButton:hover strong { color: var(--v2-accent, #456849); }
   --inv-purchase-cols: 3.5rem 7.25rem minmax(0, 1.2fr) 4.5rem 8rem 6.25rem 7rem;
 }
 .plainList[data-purchase][data-supplier-orders] {
-  /* thumbs · number · count · warehouse · status · amount — slack in warehouse so status sits next to amount. */
-  --inv-purchase-cols: 3.5rem 7.25rem 4.5rem minmax(7.5rem, 1fr) 7rem 7rem;
+  /* thumbs · number · count · warehouse · status · amount — slack in warehouse; status hugs chip next to amount. */
+  --inv-purchase-cols: 3.5rem 7.25rem 4.5rem minmax(7.5rem, 1fr) max-content 7rem;
 }
 .plainList[data-count] {
   min-width: 0;

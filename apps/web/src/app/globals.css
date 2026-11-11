@@ -94,13 +94,10 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-/* The site, account and portalled dialogs share one type family.
- * Keep light tracking on display headings, but pad word gaps so
- * one-letter prepositions («О сделке», «к разговору») stay readable. */
+/* The site, account and portalled dialogs share one type family. */
 h1, h2, h3 {
   font-family: var(--font-sans);
   letter-spacing: -0.018em;
-  word-spacing: 0.28em;
 }
 
 .accent-word {

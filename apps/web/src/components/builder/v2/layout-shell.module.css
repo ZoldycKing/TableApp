@@ -585,8 +585,6 @@
   color: var(--shell-ink);
   font-size: 15px;
   font-weight: 750;
-  letter-spacing: 0;
-  word-spacing: 0.28em;
 }
 
 .detailSectionBody {

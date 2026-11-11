@@ -311,8 +311,20 @@ export function buildListShellMeta(input: ShellMetricsInput): string | undefined
   if (kind === 'crm-board') {
     return formatShellCount(total, 'сделка', 'сделки', 'сделок')
   }
-  // Purchases metrics already carry the counts — skip the duplicate «N записи» subtitle.
-  if (kind === 'inventory-purchases') return undefined
+  if (kind === 'inventory-purchases' && inventory) {
+    const suppliers = new Set<string>()
+    for (const row of rows) {
+      const raw = inventory.purchaseSupplierFieldId ? row.values[inventory.purchaseSupplierFieldId] : null
+      const id = typeof raw === 'string' ? raw
+        : Array.isArray(raw) ? raw.find((value): value is string => typeof value === 'string' && Boolean(value))
+          : undefined
+      if (id) suppliers.add(id)
+    }
+    const supplierCount = suppliers.size
+    return `${formatShellCount(total, 'заказ', 'заказа', 'заказов')}${
+      supplierCount ? ` · ${formatShellCount(supplierCount, 'поставщик', 'поставщика', 'поставщиков')}` : ''
+    }`
+  }
   if (INVENTORY_KINDS.has(kind)) {
     return formatShellCount(total, 'запись', 'записи', 'записей')
   }

@@ -41,6 +41,11 @@ export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,childre
   const contained = fullScreen || scrollKey !== undefined
   const centered = app.appearance?.presentation === 'centered'
   const navigation = centered ? 'bottom' : app.appearance?.navigation ?? 'bottom'
+  // Mockup: one desktop top row (logo + pills + user). Detail back lives in page content.
+  const shellTopNav = Boolean(screens.length) && (navigation === 'tabs' || navigation === 'bottom')
+  // Compact mobile brand bar always; desktop chrome header only for catalog/profile/legacy titles.
+  const showChromeHeader = !shellTopNav || catalogDetail || profile || Boolean(title && !back) || true
+  const mobileBrandOnly = shellTopNav && !(catalogDetail || profile || (title && !back))
   useEffect(() => {
     if (contained && body.current) body.current.scrollTop = 0
   }, [contained, screenId, scrollKey])
@@ -71,31 +76,30 @@ export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,childre
   const overflow=screens.length>5,rest=screens.slice(4),activeExtra=rest.some(screen=>screen.id===sectionId)
   const appName = app.name || 'Моё приложение'
   const sectionScreen = app.screens.find(screen => screen.id === sectionId)
-  // Record cards show the parent section (Клиенты / Сделки). If the parent is
-  // unknown, sectionId falls back to the card itself — keep the app name then.
-  const headerEyebrow = back && sectionScreen && sectionId !== screenId ? sectionScreen.name : appName
   const mark = <BuilderV2AppMark logo={builderV2LogoUrl(app, draftLogo)} icon={app.appearance?.icon} />
+  const account = headerAction ? <span className={css.headerAction}>{headerAction}</span> : null
   return <div className={`${css.stage} ${centered && !phone ? css.centeredStage : ''}`} data-frame-stage data-fullscreen={fullScreen || undefined}>
     <div className={css.container} data-app-frame="" data-phone={phone} data-contained={contained || undefined} data-fullscreen={fullScreen || undefined}>
     {phone && <span className={css.island} aria-hidden="true" />}
-    <section className={`${styles.surface} ${css.frame}`} data-navigation={screens.length ? navigation : 'bottom'}>
-    <header className={`${styles.appHeader} ${css.header}`}>
+    <section className={`${styles.surface} ${css.frame}`} data-navigation={screens.length ? navigation : 'bottom'} data-shell-topnav={shellTopNav || undefined}>
+    {showChromeHeader ? <header className={`${styles.appHeader} ${css.header}`} data-brand-only={mobileBrandOnly || undefined}>
       <div className={`${css.chromeBar} ${presentation.contentWidth}`}>
-        {back ? <button type="button" className={presentation.iconControl} onClick={back} aria-label="Назад" title="Назад"><ProtoIcon name="back" /></button> : <span className={css.headerMark}>{mark}</span>}
+        {back && !shellTopNav ? <button type="button" className={presentation.iconControl} onClick={back} aria-label="Назад" title="Назад"><ProtoIcon name="back" /></button> : <span className={css.headerMark}>{mark}</span>}
+        {mobileBrandOnly ? <span className={css.railBrand}>{appName}</span> : null}
         {profile && <BuilderV2RecordAvatar name={title} id={scrollKey || screenId} icon="users" />}
-        {catalogDetail ? <span className={css.catalogIdentity}>{sectionScreen?.name ?? appName}</span>
-          : title || (back && headerEyebrow) ? <div>
-            {back && headerEyebrow ? <span className={css.headerIdentity}>{headerEyebrow}</span> : null}
-            {title ? <h1 className={presentation.pageTitle}>{title.replaceAll('-', '\u2011')}</h1> : null}
+        {!mobileBrandOnly && catalogDetail ? <span className={css.catalogIdentity}>{sectionScreen?.name ?? appName}</span>
+          : !mobileBrandOnly && title ? <div>
+            <h1 className={presentation.pageTitle}>{title.replaceAll('-', '\u2011')}</h1>
           </div> : null}
-        {headerAction&&<span className={css.headerAction}>{headerAction}</span>}
+        {account}
       </div>
-    </header>
+    </header> : null}
     <div ref={body} className={css.body} role={contained ? 'region' : undefined} aria-label={contained ? 'Содержимое экрана' : undefined} tabIndex={contained ? 0 : undefined}><div ref={contents} className={`${styles.appContent} ${css.content} ${presentation.contentWidth}`}>{notice}{children}</div></div>
     {screens.length>0&&<nav className={css.navigation} aria-label="Разделы приложения">
       <div className={navigation === 'sidebar' ? css.navStack : `${css.chromeBar} ${presentation.contentWidth}`}>
         <div className={css.railIdentity}>{mark}<strong>{appName}</strong></div>
         <div className={css.navItems}>{screens.map((screen,index)=><div key={screen.id} className={overflow&&index>=4?css.overflowItem:undefined}>{navButton(screen)}</div>)}{overflow&&<div className={css.more} ref={root}><button type="button" ref={trigger} aria-expanded={more} aria-controls={menuId} aria-current={activeExtra?'true':undefined} onClick={()=>setMore(!more)}><ProtoIcon name="more"/><span>Ещё</span></button>{more&&<div className={css.morePanel} id={menuId} role="region" aria-label="Другие разделы"><strong>Разделы</strong>{rest.map(screen=>navButton(screen,true))}</div>}</div>}</div>
+        {shellTopNav ? account : null}
       </div>
     </nav>}
   </section></div></div>

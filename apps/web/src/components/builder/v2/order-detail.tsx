@@ -275,6 +275,7 @@ export function BuilderV2OrderActionPanel({
     chips?: ReactNode
     subtitle?: ReactNode
     metrics?: readonly ShellMetric[]
+    back?: { label: string; onClick: () => void }
   }
   /** Extra sections under the product shell (warehouse / history / details). */
   detailBody?: ReactNode
@@ -366,15 +367,24 @@ export function BuilderV2OrderActionPanel({
     </OrderActionPanelContext.Provider>, document.body) : null
     if (identity?.productTitle) {
       const desktopItems = toolbarItems.filter(item => !(item.icon && !item.primary))
+      const editIcons = toolbarItems.filter(item => Boolean(item.icon) && !item.primary)
       return <>
         <DetailCardShell
           layout="product"
+          back={identity.back}
           media={identity.media}
           title={identity.productTitle}
           chips={identity.chips}
           subtitle={identity.subtitle}
           metrics={identity.metrics}
-          actions={<BuilderV2OrderActionToolbar items={desktopItems} onOpen={open} placement="desktop" textOnly />}
+          actions={<>
+            <BuilderV2OrderActionToolbar items={desktopItems} onOpen={open} placement="desktop" textOnly />
+            {editIcons.map(item => (
+              <button key={item.id} type="button" className={ui.orderActionIcon} aria-label={item.title} title={item.title} onClick={() => open(item.id)}>
+                <ProtoIcon name={item.icon!} size={20} />
+              </button>
+            ))}
+          </>}
           stickyActions={!active
             ? <BuilderV2OrderActionToolbar items={toolbarItems} onOpen={open} dockRef={dockRef} placement="mobile" textOnly collapseMobile />
             : undefined}

@@ -336,28 +336,19 @@ function useSupplierOrderStats(app: AppV2, inventory?: NonNullable<AppV2['invent
 }
 
 /** Open supplier purchase orders total (status «Заказано») for items metrics. */
-function useOpenPurchaseOrdersTotal(app: AppV2, inventory?: NonNullable<AppV2['inventory']> | null) {
+function useOpenPurchaseOrdersTotal(inventory?: NonNullable<AppV2['inventory']> | null) {
   const published = usePublishedV2()
   const [total, setTotal] = useState<number | null>(null)
   useEffect(() => {
     if (!published || !inventory?.purchaseOrdersTableId || !inventory.statusOrdered) return
-    const purchasesNode = app.nodes.find(node => node.type === 'collection' && node.layout === 'list'
-      && app.sources.some(source => source.id === node.sourceId && source.tableId === inventory.purchaseOrdersTableId && !source.screenTableId))
-    if (!purchasesNode || !inventory.purchasesScreenId) return
     let cancelled = false
-    void published.readData({ nodeId: purchasesNode.id, screenId: inventory.purchasesScreenId }).then(result => {
+    void import('@/app/builder-v2-published-actions').then(async ({ readPublishedV2OpenPurchaseTotalAction }) => {
+      const result = await readPublishedV2OpenPurchaseTotalAction(published.slug, { revision: published.revision })
       if (cancelled || !result.ok) return
-      let sum = 0
-      for (const row of result.page.rows) {
-        const status = inventory.purchaseStatusFieldId ? String(row.values[inventory.purchaseStatusFieldId] ?? '') : ''
-        if (status !== inventory.statusOrdered) continue
-        const totalRaw = inventory.purchaseTotalFieldId ? row.values[inventory.purchaseTotalFieldId] : null
-        if (typeof totalRaw === 'number' && Number.isFinite(totalRaw)) sum += totalRaw
-      }
-      setTotal(sum > 0 ? sum : null)
+      setTotal(result.total)
     }).catch(() => {})
     return () => { cancelled = true }
-  }, [published, published?.revision, published?.dataVersion, app.nodes, inventory])
+  }, [published, published?.revision, published?.dataVersion, inventory])
   return total
 }
 
@@ -438,12 +429,11 @@ function InventoryWarehouseFacts({ record, inventory, unit }: {
     return () => { cancelled = true }
   }, [published, record.id, record.values, inventory, unit])
   if (rows.length < 2) return null
-  return <section className={`${presentation.panel} ${ui.orderFacts}`} aria-label="Остатки по складам">
-    <h2 className={presentation.sectionTitle}>Остатки по складам</h2>
+  return <DetailSection title="Остатки по складам">
     <ul className={ui.warehouseBreakdown}>
       {rows.map(row => <li key={row.id}><span>{row.name}</span><strong>{row.qty} {unit}</strong></li>)}
     </ul>
-  </section>
+  </DetailSection>
 }
 import { appV2ChildIds, appV2NavigationUrl, evaluateAppV2Condition, matchesAppV2Audience, resolveAppV2Binding, type AppV2, type AppV2Actor, type AppV2Binding, type AppV2Node, type AppV2Record } from '@tableapp/schema/app-v2'
 import type { BuilderV2Table } from '@/lib/builder-v2'
@@ -485,6 +475,7 @@ import {
   buildListShellTabs,
   filterInventoryItemRows,
   filterListShellRows,
+  formatShellCount,
   inventoryStockListFooter,
   listShellScreen,
   listShellTitle,
@@ -583,7 +574,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
       : !orderGroup ? cell(props.record, statusColumn.id) : undefined
     : undefined
   const shellKind: ListShellKind | null = !props.editing && !props.record ? listShellScreen(props.app, props.screenId) : null
-  const openPurchaseTotal = useOpenPurchaseOrdersTotal(props.app, shellKind === 'inventory-items' ? inventory : null)
+  const openPurchaseTotal = useOpenPurchaseOrdersTotal(shellKind === 'inventory-items' ? inventory : null)
   const crmDealStats = useClientDealStats(props.app, shellKind === 'crm-clients' || shellKind === 'crm-board' ? crm : null)
   const shellCollectionId = shellKind && screen
     ? screen.rootIds.find(id => {
@@ -800,6 +791,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
         const useShell = Boolean(shellKind && shellCollectionId === id && !props.record)
         const inventoryListToolbar = node.type === 'collection' ? buildInventoryListToolbar() : undefined
         const showCollectionHeading = Boolean(props.editing || screen?.name !== node.name) && !useShell
+          && !(inventory && screen?.id === inventory.itemScreenId && node.name === 'История движений')
         const shellCollectionTable = props.tables.find(table => table.id === props.app.sources.find(source => source.id === node.sourceId)?.tableId)
         content = <BuilderV2DataNode app={props.app} node={node} live={Boolean(props.live)} allowWrites={Boolean(props.live&&!props.editing)} table={shellCollectionTable} heading={showCollectionHeading} toolbarEnd={useShell ? undefined : inventoryListToolbar} shell={useShell || undefined} searchValue={useShell ? shellSearch : undefined} onSearchChange={useShell ? setShellSearch : undefined} scope={{ screenId: props.screenId, ...(props.record ? { recordId: props.record.id } : {}) }} onPage={(page, pending) => {
           if (useShell) setShellPage(page)
@@ -902,17 +894,12 @@ export function AppV2Renderer(props: AppV2RendererProps) {
               : null
             if (clientList && crm && row) {
               const name = cell(row, crm.clientTitleFieldId)
-              const contactField = crm.clientNameFieldId
-                ?? table?.fields.find(field =>
-                  /^(?:контакт(?:ное лицо)?|имя(?:\s+контакт(?:а|ного)?)?)$/iu.test(field.name.trim())
-                  && field.id !== crm.clientTitleFieldId
-                  && field.id !== crm.clientPhoneFieldId)?.id
-              const contact = contactField && Object.hasOwn(row.values, contactField) ? cell(row, contactField) : ''
               const phone = Object.hasOwn(row.values, crm.clientPhoneFieldId) ? cell(row, crm.clientPhoneFieldId) : ''
               const logoField = table?.fields.find(field => field.type === 'image' && /logo|логотип|фото/iu.test(field.name))
               const logo = logoField ? builderV2MediaItems(row.values[logoField.id], published?.slug).find(item => item.image) : undefined
               const stat = crmDealStats.stats.get(row.id)
               const deals = stat?.deals ?? 0
+              const dealsLabel = formatShellCount(deals, 'сделка', 'сделки', 'сделок')
               const dealSum = stat && stat.sum > 0 ? purchaseMoney(stat.sum) : '—'
               const last = stat?.lastContact ? formatPurchaseDate(stat.lastContact) : '—'
               return <>
@@ -920,15 +907,13 @@ export function AppV2Renderer(props: AppV2RendererProps) {
                 <div className={ui.clientListCopy}>
                   <strong>{name || '—'}</strong>
                   <span className={ui.clientListMobileMeta}>
-                    {contact ? <span>{contact}</span> : null}
-                    {phone ? <span>{phone}</span> : null}
-                    <span>{deals} сделок · {dealSum}</span>
-                    {last !== '—' ? <span>Последний контакт {last}</span> : null}
+                    {phone ? <span className={ui.clientPhone}>{phone}</span> : null}
+                    <span>{dealsLabel} · {dealSum}</span>
+                    {last !== '—' ? <span>След. контакт {last}</span> : null}
                   </span>
                 </div>
-                <span className={ui.clientListCol} data-col="contact">{contact || '—'}</span>
-                <span className={ui.clientListCol} data-col="phone">{phone || '—'}</span>
-                <span className={ui.clientListCol} data-col="deals">{deals}</span>
+                <span className={ui.clientListCol} data-col="phone"><span className={ui.clientPhone}>{phone || '—'}</span></span>
+                <span className={ui.clientListCol} data-col="deals">{dealsLabel}</span>
                 <span className={ui.clientListCol} data-col="sum">{dealSum}</span>
                 <span className={ui.clientListCol} data-col="last">{last}</span>
               </>
@@ -1221,7 +1206,8 @@ export function AppV2Renderer(props: AppV2RendererProps) {
             </li>
           }
           const actionRow = (row:AppV2Record,as:'div'|'tr') => <CollectionActionRow key={row.id} appId={props.app.id} nodeId={node.id} screenId={props.screenId} recordId={props.record?.id} itemId={row.id} title={cell(row,node.titleFieldId)} actionName={rowAction!.name} as={as} whole={!node.itemIds.length&&as!=='tr'} content={!node.itemIds.length?(as==='tr'?cell(row,node.titleFieldId):<>{item(row)}<ProtoIcon name="arrow" size={16}/></>):undefined}>{control=>as==='tr'?node.itemIds.length?<td colSpan={subtitle?2:1}>{item(row)}{control}</td>:<><td>{control}</td>{subtitle&&<td>{cell(row,node.subtitleFieldId!)}</td>}</>:node.itemIds.length?<>{item(row)}{control}</>:control}</CollectionActionRow>
-          const showHeading = !useShell && !['calendar','kanban'].includes(node.layout) && (props.editing || (screen?.name !== node.name && !(inventoryJournalList && screen?.id === inventory?.movementsScreenId) && !(countList && screen?.id === inventory?.countsScreenId)))
+          const inventoryItemHistory = Boolean(inventory && screen?.id === inventory.itemScreenId && timeline)
+          const showHeading = !useShell && !inventoryItemHistory && !['calendar','kanban'].includes(node.layout) && (props.editing || (screen?.name !== node.name && !(inventoryJournalList && screen?.id === inventory?.movementsScreenId) && !(countList && screen?.id === inventory?.countsScreenId)))
           const GroupHeading = showHeading ? 'h3' : 'h2'
           const groups = new Map<string, { label?: string; rows: AppV2Record[] }>()
           for (const row of rows ?? []) {
@@ -1251,7 +1237,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
               {defaultCard ? <RecordControl className={ui.recordButton} data-compact={compact || undefined} data-status={(statusSubtitle && !inventoryStockList && !inventoryJournalList && !purchaseList && !countList && !supplierList && !shopOrdersList) || undefined} data-stock={inventoryStockList || undefined} data-journal={inventoryJournalList || undefined} data-purchase={purchaseList || shopOrdersList || undefined} data-purchase-line={purchaseLineList || undefined} data-count-line={countLineList || undefined} data-count={countList || undefined} data-supplier={supplierList || undefined} data-supplier-orders={supplierOrdersList || undefined} data-shop-orders={shopOrdersList || undefined} data-clients={clientList || undefined} data-low={lowStock || undefined} data-diff={countLineMismatch || undefined} {...(cardScreen ? { type: 'button' as const, onClick: () => open(row) } : {})}>
                 {compact && !inventoryStockList && !inventoryJournalList && !purchaseList && !purchaseLineList && !countList && !countLineList && !supplierList && !shopOrdersList && !clientList && !(statusSubtitle) && <BuilderV2RecordAvatar id={row.id} name={orders || clientList ? undefined : contacts ? undefined : cell(row, node.titleFieldId)} icon={orders || shopOrdersList ? 'receipt' : clientList ? 'building' : contacts ? 'users' : inventory ? 'box' : 'list'} tone forceIcon={Boolean(orders || clientList || contacts)} />}
                 {item(row)}
-                {!catalog && !inventoryStockList && !inventoryJournalList && !purchaseList && !purchaseLineList && !countList && !countLineList && !clientList && !supplierList && (cardScreen || props.editing && cardTarget) && <ProtoIcon name="arrow" size={16} />}
+                {!catalog && !inventoryStockList && !inventoryJournalList && !purchaseList && !purchaseLineList && !countList && !countLineList && !clientList && !supplierList && !shopOrdersList && (cardScreen || props.editing && cardTarget) && <ProtoIcon name="arrow" size={16} />}
               </RecordControl> : <>{item(row)}{openRecord(row)}</>}
             </div>
             return node.layout === 'kanban' ? <BoardMoveRow key={row.id} row={row as BuilderV2DataRecord} label={cell(row, node.titleFieldId)}>{body}</BoardMoveRow> : body
@@ -1296,11 +1282,10 @@ export function AppV2Renderer(props: AppV2RendererProps) {
               ? <div className={ui.clientListHeader} aria-hidden="true">
                 <span />
                 <span>Клиент</span>
-                <span>Контакт</span>
                 <span>Телефон</span>
                 <span>Сделок</span>
                 <span>Сумма</span>
-                <span>Последний контакт</span>
+                <span>След. контакт</span>
               </div>
               : null
             const purchaseHeader = purchaseList && !node.recordGroup
@@ -1818,26 +1803,28 @@ export function AppV2Renderer(props: AppV2RendererProps) {
       {
         key: 'stock',
         value: inventoryStockLabel || '—',
-        caption: 'Остаток',
+        caption: inventoryWarehouseLabel || 'Остаток',
         ...(inventoryLow ? { tone: 'rose' as const } : {}),
-        ...(inventoryWarehouseLabel ? { pill: inventoryWarehouseLabel } : {}),
       },
       ...(inventoryMinLabel ? [{ key: 'min', value: inventoryMinLabel, caption: 'Минимум' }] : []),
       ...(inventoryCostLabel ? [{ key: 'cost', value: inventoryCostLabel, caption: 'Себестоимость' }] : []),
       ...(inventoryStockValue ? [{
         key: 'stock_value',
         value: inventoryStockValue,
-        caption: 'Стоимость остатка',
-        ...(typeof rawTotal === 'number' && Number.isFinite(rawTotal) && inventoryCostLabel
-          ? { pill: `${rawTotal} ${inventoryUnit} × ${inventoryCostLabel}`.replace(/\s+/g, ' ').trim() }
-          : {}),
+        caption: typeof rawTotal === 'number' && Number.isFinite(rawTotal) && inventoryCostLabel
+          ? `${rawTotal} ${inventoryUnit} × ${inventoryCostLabel}`.replace(/\s+/g, ' ').trim()
+          : 'Стоимость остатка',
       }] : []),
     ] : undefined
-    const inventoryIdentityFacts = inventoryItem ? [
-      inventoryWarehouseLabel ? { id: 'warehouse', label: 'Склад', value: inventoryWarehouseLabel } : null,
-      inventoryCostLabel ? { id: 'cost', label: 'Себестоимость', value: inventoryCostLabel } : null,
-      inventoryStockValue ? { id: 'stock_value', label: 'Стоимость остатка', value: inventoryStockValue } : null,
-    ].filter(Boolean) as { id: string; label: string; value: string }[] : []
+    const inventoryBack = inventoryItem && inventory?.itemsScreenId
+      ? {
+          label: 'Товары',
+          onClick: () => {
+            if (published) published.back(inventory.itemsScreenId)
+            else props.onNavigate?.(inventory.itemsScreenId)
+          },
+        }
+      : undefined
     const revealIdentity = inventoryItem
       ? {
           amount: inventoryStockLabel,
@@ -1849,7 +1836,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
           chips: inventoryChips,
           subtitle: inventoryDesc || undefined,
           metrics: inventoryMetrics,
-          facts: inventoryIdentityFacts,
+          back: inventoryBack,
         }
       : {
           status: inventoryStatus,
@@ -1882,7 +1869,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
           {manage && crmDeal && triggers
             ? <BuilderV2OrderActionPanel title={actionTitle} mode="reveal" triggers={triggers} identity={revealIdentity} />
             : null}
-          {manage && !crmDeal && !inventoryItem && <BuilderV2OrderIdentity status={status} amount={amount} scoped={summary?.scoped} manage />}
+          {manage && !crmDeal && !inventoryItem && <BuilderV2OrderIdentity title={title || undefined} status={status} amount={amount} scoped={summary?.scoped} manage />}
           {!inventoryItem && linesBlock}
           {manage && !inventoryItem && <BuilderV2OrderFacts items={deliveryFacts} title={factsTitle} />}
           {manage && !inventoryItem && render([...parts.buttonIds, ...parts.otherIds])}
@@ -1970,7 +1957,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
         const catLabel = categoryField?.choices?.find(choice => choice.id === catKey)?.name
         if (catKey && catLabel) categories.set(catKey, catLabel)
       }
-      return <span className={shellLayout.filterSelects}>
+      return <>
         {warehouses.size > 1 ? <label className={shellLayout.filterSearch}>
           <select value={shellWarehouse} onChange={event => setShellWarehouse(event.target.value)} aria-label="Склад">
             <option value="all">Склад: все</option>
@@ -1983,7 +1970,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
             {[...categories.entries()].map(([id, label]) => <option key={id} value={id}>{label}</option>)}
           </select>
         </label> : null}
-      </span>
+      </>
     })()
     : undefined
   const shellBody = shellKind && shellCollectionId ? (

@@ -32,9 +32,8 @@ export function AppV2Preview({ app, tables, businessApps, actor, initialScreen, 
     : sectionId
   const showBack = Boolean(backTarget && (page?.contextTableId || suppliersHub || supplierCard || reorderHub))
   const shellList = !navigation.recordId && page?.id ? listShellScreen(app, page.id) : null
-  const frameTitle = shellList || (inventory && page?.id === inventory.itemScreenId) ? ''
-    : inventory && page?.id === inventory.purchaseScreenId ? 'Заказ'
-      : (record.title ?? page?.name ?? 'Экран')
+  const frameTitle = shellList || page?.contextTableId || suppliersHub || supplierCard || reorderHub ? ''
+    : (record.title ?? page?.name ?? 'Экран')
   return <BuilderV2Theme as="main" app={app} className={`${ui.preview} ${ui.standalonePreview}`}>
     <header>
       <Link href={`/apps/${app.id}?screen=${encodeURIComponent(page?.id ?? '')}${navigation.recordId ? `&row=${encodeURIComponent(navigation.recordId)}` : ''}`} className={styles.secondary}><ProtoIcon name="back" />К редактору</Link>

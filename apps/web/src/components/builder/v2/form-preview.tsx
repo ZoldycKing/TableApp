@@ -213,7 +213,7 @@ function InventoryDateInput({ id, disabled, errorId, required, label, value, onC
     const trimmed = raw.trim()
     if (!trimmed) { onChange(null); return }
     const match = trimmed.match(/^(\d{2})\.(\d{2})\.(\d{4})$/)
-    if (match) onChange(`${match[3]}-${match[2]}-${match[1]}T12:00`)
+    if (match) onChange(`${match[3]}-${match[2]}-${match[1]}`)
   }
   return <input id={id} disabled={disabled} aria-describedby={errorId} aria-invalid={Boolean(errorId)} aria-required={required} aria-label={label} type="text" inputMode="numeric" placeholder="дд.мм.гггг" autoComplete="off" value={draft} onChange={event => {
     const digits = event.target.value.replace(/\D/g, '').slice(0, 8)
@@ -251,17 +251,17 @@ export function BuilderV2FormInput({ node, table }: { node: BuilderV2Input; tabl
     return `На складе: ${qty} ${unit}`
   })()
   const readonly = field?.readOnly && context?.state
-  const dateValue = typeof value === 'string' ? value.includes('T') && (value.endsWith('Z') || inventoryDate) ? (() => {
+  const dateValue = typeof value === 'string' ? value.includes('T') ? (() => {
     const wall = value.endsWith('Z') ? instantToWallClock(value, field?.timeZone ?? 'Europe/Moscow') : { date: value.slice(0, 10), time: value.includes('T') ? value.slice(11, 16) : '12:00' }
-    return wall ? inventoryDate || type === 'date' ? wall.date : `${wall.date}T${wall.time}` : ''
-  })() : value : ''
+    return wall ? (inventoryDate || type === 'date' ? wall.date : `${wall.date}T${wall.time}`) : ''
+  })() : value.slice(0, 10) : ''
   const control = type==='image'||type==='attachment'?<BuilderV2AttachmentInput key={context?.key+':'+node.fieldId} id={unique} field={field??{nodeId:node.id,fieldId:node.fieldId,label,type,required:node.required,readOnly:Boolean(node.readOnly),supported:true}} value={value} disabled={disabled||Boolean(field?.readOnly)} errorId={errorId} slug={published?.slug} upload={context?.upload?(file,signal)=>context.upload!(node.fieldId,file,signal):undefined} onChange={change} onPending={context?.onPending??(()=>{})}/>:readonly ? <output id={unique} className={ui.autoValue}>{context.state?.labels[node.fieldId] || (type === 'checkbox' ? value ? 'Да' : 'Нет' : Array.isArray(value) ? value.join(', ') : String(value ?? 'Не заполнено'))}<small>Заполняется автоматически</small></output>
     : type === 'relation' && field && context ? <RelationInput context={context} field={field} id={unique} errorId={errorId} />
     : type === 'checkbox' ? <input {...common} type="checkbox" checked={value === true} onChange={event => change(event.target.checked)} />
     : type === 'single_select' || type === 'multi_select' ? <select {...common} multiple={type === 'multi_select'} value={type === 'multi_select' ? Array.isArray(value) ? value as string[] : [] : String(value ?? '')} onChange={event => change(type === 'multi_select' ? Array.from(event.target.selectedOptions).map(option => option.value) : event.target.value || null)}>{type === 'single_select' && <option value="">Выберите значение</option>}{(field?.choices ?? column?.choices)?.map(choice => <option key={choice.id} value={choice.id}>{choice.name}</option>)}</select>
     : type === 'long_text' ? <textarea {...common} rows={3} value={String(value ?? '')} maxLength={10000} onChange={event => change(event.target.value)} />
-    : inventoryDate ? <InventoryDateInput id={unique} disabled={disabled} errorId={errorId} required={node.required} label={label} value={dateValue} onChange={change} />
-    : type === 'date' || type === 'datetime' ? <input {...common} type={type === 'date' ? 'date' : 'datetime-local'} value={dateValue} onChange={event => {
+    : type === 'date' || inventoryDate ? <InventoryDateInput id={unique} disabled={disabled} errorId={errorId} required={node.required} label={label} value={dateValue} onChange={change} />
+    : type === 'datetime' ? <input {...common} type="datetime-local" value={dateValue} onChange={event => {
       const next = event.target.value
       if (!next) { change(null); return }
       change(next)

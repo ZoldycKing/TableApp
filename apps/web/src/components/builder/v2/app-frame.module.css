@@ -101,6 +101,7 @@
 .headerMark { display: inline-flex; flex: none; align-items: center; }
 .headerIdentity { font-size: 12px; line-height: 16px; color: var(--v2-muted, #687568); overflow-wrap: anywhere; }
 .railIdentity { display: none; }
+.railBrand { display: none; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .catalogIdentity { color: var(--v2-ink); font-weight: 650; overflow-wrap: anywhere; }
 .headerAction { margin-left: auto; flex-shrink: 0; display: inline-flex; align-items: center; gap: 8px; align-self: center; }
 .account { position: relative; }
@@ -172,6 +173,10 @@
   .frame:is([data-navigation="sidebar"],[data-navigation="tabs"],[data-navigation="bottom"]) .more { display: none; }
   .frame:is([data-navigation="tabs"],[data-navigation="bottom"]) { grid-template-areas: "header" "nav" "body"; }
   .container[data-contained="true"] .frame:is([data-navigation="tabs"],[data-navigation="bottom"]) { grid-template-rows: auto auto var(--v2-content-track); }
+  /* Mockup single top row: logo + name + pills + user. Drop the empty header band. */
+  .frame[data-shell-topnav]:is([data-navigation="tabs"],[data-navigation="bottom"]) { grid-template-areas: "nav" "body"; }
+  .container[data-contained="true"] .frame[data-shell-topnav]:is([data-navigation="tabs"],[data-navigation="bottom"]) { grid-template-rows: auto var(--v2-content-track); }
+  .frame[data-shell-topnav]:is([data-navigation="tabs"],[data-navigation="bottom"]) .header { display: none; }
   .frame:is([data-navigation="tabs"],[data-navigation="bottom"]) .navigation { position: static; top: 0; bottom: auto; border-top: 0; border-bottom: 1px solid var(--v2-line); padding-block: 8px; }
   .frame:is([data-navigation="tabs"],[data-navigation="bottom"]) .railIdentity { display: flex; align-items: center; gap: 10px; flex: none; min-width: 0; max-width: 12rem; padding-inline: 4px 12px; overflow-wrap: anywhere; }
   .frame:is([data-navigation="tabs"],[data-navigation="bottom"]) .railIdentity strong { font-size: 14px; font-weight: 700; line-height: 1.2; }
@@ -180,6 +185,17 @@
   .frame:is([data-navigation="tabs"],[data-navigation="bottom"]) .navItems > div { flex: 0 0 auto; max-width: 240px; }
   .frame:is([data-navigation="tabs"],[data-navigation="bottom"]) .navigation button { flex-direction: row; font-size: 14px; line-height: 20px; min-height: 40px; }
   .frame:is([data-navigation="tabs"],[data-navigation="bottom"]) .navigation .chromeBar { align-items: center; gap: 8px; }
+  .frame[data-shell-topnav] .navigation .headerAction { margin-left: 0; }
 }
-@container builder-app (max-width: 640px) { .navItems > div > button > span { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } }
+@container builder-app (max-width: 640px) {
+  .navItems > div > button > span { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: clip; }
+  /* Mobile brand row: logo + app name + user (pills stay in the bottom bar). */
+  .frame[data-shell-topnav] .header { min-height: 56px; padding-block: 8px; }
+  .frame[data-shell-topnav] .header .catalogIdentity,
+  .frame[data-shell-topnav] .header .pageTitle,
+  .frame[data-shell-topnav] .header h1 { display: none; }
+  .frame[data-shell-topnav] .railBrand { display: inline-flex; align-items: center; gap: 10px; min-width: 0; flex: 1; font-weight: 750; font-size: 15px; letter-spacing: -0.01em; }
+  .frame[data-shell-topnav] .navigation .headerAction { display: none; }
+}
+
 @container builder-app (max-width: 440px) { .container .header { gap: 12px; } .navigation { padding-block: 4px; padding-bottom: calc(4px + env(safe-area-inset-bottom,0px)); } .navigation button { padding: 8px 4px; } }

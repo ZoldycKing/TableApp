@@ -62,8 +62,8 @@ export function ListScreenShell({
     <div className={shell.panel}>
       {metricCount ? <div className={shell.summary} data-count={metricCount} style={{ '--shell-metrics': metricCount } as CSSProperties}>
         {visibleMetrics.map(metric => <div key={metric.key} className={shell.metric} data-wide={metric.wide || undefined}>
-          <p className={shell.metricCaption}>{metric.caption}</p>
           <p className={shell.metricValue}>{metric.value}</p>
+          <p className={shell.metricCaption}>{metric.caption}</p>
           {metric.pill ? <span className={shell.metricPill} data-tone={metric.tone}>{metric.pill}</span> : null}
         </div>)}
       </div> : null}
@@ -130,6 +130,7 @@ export function DetailCardShell({
   children,
   stickyActions,
   layout = 'card',
+  back,
 }: {
   media?: ReactNode
   title: ReactNode
@@ -142,6 +143,8 @@ export function DetailCardShell({
   stickyActions?: ReactNode
   /** `product` = large photo + chips + desktop actions beside the title (inventory item). */
   layout?: 'card' | 'product'
+  /** In-content back control («← Товары»), replaces chrome back on shell pages. */
+  back?: { label: string; onClick: () => void }
 }) {
   const visibleMetrics = metrics?.filter(metric => {
     if (metric.value == null || metric.value === '' || metric.value === '—') return false
@@ -150,6 +153,7 @@ export function DetailCardShell({
   const metricCount = visibleMetrics.length
   const product = layout === 'product'
   return <div className={shell.detail} data-layout={product ? 'product' : 'detail'}>
+    {back ? <button type="button" className={shell.detailBack} onClick={back.onClick}>← {back.label}</button> : null}
     <header className={shell.detailHead} data-product={product || undefined}>
       <div className={shell.detailIdentity} data-plain={!media || undefined} data-product={product || undefined}>
         {media ?? null}
@@ -167,8 +171,8 @@ export function DetailCardShell({
     </header>
     {metricCount ? <div className={shell.detailMetrics} style={{ '--shell-metrics': metricCount } as CSSProperties} data-count={metricCount}>
       {visibleMetrics.map(metric => <div key={metric.key} className={shell.metric}>
-        <p className={shell.metricCaption}>{metric.caption}</p>
         <p className={shell.metricValue} data-tone={metric.tone}>{metric.value}</p>
+        <p className={shell.metricCaption}>{metric.caption}</p>
         {metric.pill ? <span className={shell.metricPill}>{metric.pill}</span> : null}
       </div>)}
     </div> : null}

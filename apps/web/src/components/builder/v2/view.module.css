@@ -293,11 +293,17 @@
 .productThumb[data-size='list'] { width: 56px; height: 56px; }
 .productThumb[data-size='journal'] { width: 48px; height: 48px; border-radius: 10px; }
 .productThumb[data-size='card'] {
-  width: 100%;
-  height: auto;
-  aspect-ratio: 4 / 3;
+  width: 220px;
+  height: 220px;
+  max-width: 100%;
   border-radius: 16px;
-  max-height: none;
+}
+@media (max-width: 720px) {
+  .productThumb[data-size='card'] {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 4 / 3;
+  }
 }
 .productThumb[data-empty] { border: 1px solid var(--v2-line, #dce2d6); }
 .productIdentity {
@@ -335,10 +341,14 @@
 }
 .plainList[data-stock] {
   /* Shared fixed tracks so every stock row aligns column starts. */
-  --inv-stock-cols: 64px minmax(0, 1fr) 6.5rem 8rem minmax(6.5rem, 1fr) 5.5rem 5.75rem;
+  --inv-stock-cols: 64px minmax(12rem, 1.4fr) 7.5rem 8.5rem 7.5rem 8.5rem 8.5rem;
 }
 .stockListHeader {
   display: none;
+}
+.stockListHeader > span,
+.stockListMoney {
+  white-space: nowrap;
 }
 .recordButton[data-compact][data-stock] {
   display: grid;
@@ -448,7 +458,12 @@
 .recordStockCol[data-col='stock'] strong { font-weight: 750; }
 .plainList[data-shop-orders],
 .recordButton[data-shop-orders][data-compact][data-purchase] {
-  --inv-shop-order-cols: 52px minmax(0, 1fr) minmax(6rem, 1fr) 6.5rem 6.5rem 5.5rem;
+  --inv-shop-order-cols: 52px minmax(10rem, 1.4fr) minmax(8rem, 1fr) 7rem 7rem 7.5rem;
+}
+.plainList[data-shop-orders] .purchaseListDate,
+.plainList[data-shop-orders] .purchaseListCol[data-col='date'] {
+  color: var(--v2-muted, #687568);
+  text-decoration: none;
 }
 .shopOrdersListHeader,
 .clientListHeader { display: none; }
@@ -528,31 +543,33 @@
   .plainList[data-shop-orders] .recordButton[data-purchase] > .purchaseListMobileMeta { display: none; }
   .plainList[data-shop-orders] .recordButton[data-purchase] .purchaseListDate { display: none; }
   .plainList[data-shop-orders] .recordButton[data-purchase] {
-    grid-template-columns: 52px minmax(10rem, 1.4fr) minmax(8rem, 1fr) minmax(6rem, 0.8fr) auto minmax(5rem, 0.7fr) 16px;
+    grid-template-columns: var(--inv-shop-order-cols);
   }
   .clientListHeader {
     display: grid;
-    grid-template-columns: 44px minmax(0, 1.2fr) minmax(0, 1fr) 6.5rem 4.5rem 6rem 6.5rem;
+    grid-template-columns: 44px minmax(10rem, 1.3fr) 9.5rem 7.5rem 7.5rem 8.5rem;
     column-gap: 14px;
     padding: 10px 16px;
     border-bottom: 1px solid var(--v2-line, #dce2d6);
     color: var(--v2-muted, #687568);
     font-size: 12px;
     font-weight: 650;
+    white-space: nowrap;
     background: color-mix(in srgb, var(--v2-bg, #f8faf6) 88%, var(--v2-surface, #fff));
   }
+  .clientListHeader > span:nth-child(4),
   .clientListHeader > span:nth-child(5),
-  .clientListHeader > span:nth-child(6),
   .clientListHeader > span:last-child { text-align: end; }
   .recordButton[data-compact][data-clients] {
-    grid-template-columns: 44px minmax(0, 1.2fr) minmax(0, 1fr) 6.5rem 4.5rem 6rem 6.5rem;
+    grid-template-columns: 44px minmax(10rem, 1.3fr) 9.5rem 7.5rem 7.5rem 8.5rem;
     column-gap: 14px;
   }
-  .recordButton[data-compact][data-clients] > .clientListCol { display: block; align-self: center; }
+  .recordButton[data-compact][data-clients] > .clientListCol { display: block; align-self: center; white-space: nowrap; }
   .recordButton[data-compact][data-clients] > .clientListMobileMeta,
   .recordButton[data-compact][data-clients] .clientListMobileMeta { display: none; }
   .recordButton[data-compact][data-clients] > .clientListCol[data-col='sum'],
   .recordButton[data-compact][data-clients] > .clientListCol[data-col='deals'] { text-align: end; font-variant-numeric: tabular-nums; }
+  .clientPhone { white-space: nowrap; font-variant-numeric: tabular-nums; }
 }
 @container builder-app (min-width: 760px) {
   .productIdentity {
@@ -695,7 +712,9 @@
 .orderLinesTotal { display: flex; justify-content: space-between; gap: 16px; margin: 0; padding-top: 12px; border-top: 1px solid var(--v2-line); font-size: 15px; }
 .orderLinesTotal strong { font-size: 1.15rem; font-weight: 780; font-variant-numeric: tabular-nums; }
 .orderContactRow { display: grid; gap: 12px 18px; }
-.orderFact { display: grid; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
+.orderFact { display: grid; gap: 4px; min-width: 0; overflow-wrap: break-word; word-break: normal; }
+.orderFact > strong,
+.orderFact > span { overflow-wrap: break-word; word-break: normal; hyphens: none; }
 .orderFact small { color: var(--v2-muted); font-size: 12px; font-weight: 650; }
 .orderFact strong { font-size: 15px; font-weight: 650; }
 .orderFact[data-kind="note"] strong, .orderFact[data-kind="reply"] strong { font-weight: 560; line-height: 1.45; }
@@ -2315,6 +2334,8 @@ button.recordButton:hover strong { color: var(--v2-accent, #456849); }
 
 /* Shared detail skeleton: one surface, thin dividers — keep shop two-column manage intact. */
 .orderDetail[data-shell-detail] {
+  max-width: none;
+  width: 100%;
   gap: 0;
   background: var(--v2-surface, #fff);
   border: 1px solid color-mix(in srgb, var(--v2-line, #dce2d6) 88%, transparent);

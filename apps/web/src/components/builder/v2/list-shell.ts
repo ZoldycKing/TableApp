@@ -108,7 +108,7 @@ export function buildListShellMetrics(input: ShellMetricsInput): ShellMetric[] {
     const below = lowStockCount != null ? lowStockCount : low
     const metrics: ShellMetric[] = []
     if (stockValue > 0) {
-      metrics.push({ key: 'value', value: formatShellMoney(stockValue), caption: 'Стоимость остатка', wide: true })
+      metrics.push({ key: 'value', value: formatShellMoney(stockValue), caption: 'Стоимость остатка' })
     }
     metrics.push({
       key: 'low',
@@ -116,13 +116,11 @@ export function buildListShellMetrics(input: ShellMetricsInput): ShellMetric[] {
       caption: 'Ниже минимума',
       ...(below > 0 ? { pill: 'Заказать ›', tone: 'rose' as const } : {}),
     })
-    if (openPurchaseTotal != null && openPurchaseTotal > 0) {
-      metrics.push({
-        key: 'open_po',
-        value: formatShellMoney(openPurchaseTotal),
-        caption: 'В заказах у поставщиков',
-      })
-    }
+    metrics.push({
+      key: 'open_po',
+      value: formatShellMoney(openPurchaseTotal != null && openPurchaseTotal > 0 ? openPurchaseTotal : 0),
+      caption: 'В заказах поставщикам',
+    })
     return metrics
   }
 
@@ -210,9 +208,11 @@ export function buildListShellMetrics(input: ShellMetricsInput): ShellMetric[] {
 
   if (kind === 'crm-clients') {
     return [
-      { key: 'clients', value: formatShellCount(total, 'клиент', 'клиента', 'клиентов'), caption: 'Клиентов' },
-      ...(clientOpenDeals != null && clientOpenDeals > 0 ? [{ key: 'open', value: String(clientOpenDeals), caption: 'Открытых сделок' }] : []),
       ...(clientPipelineAmount != null && clientPipelineAmount > 0 ? [{ key: 'pipe', value: formatShellMoney(clientPipelineAmount), caption: 'Сумма сделок' }] : []),
+      { key: 'clients', value: formatShellCount(total, 'клиент', 'клиента', 'клиентов'), caption: 'Клиентов' },
+      ...(clientOpenDeals != null && clientOpenDeals > 0
+        ? [{ key: 'open', value: formatShellCount(clientOpenDeals, 'сделка', 'сделки', 'сделок'), caption: 'Открытых сделок' }]
+        : []),
     ]
   }
 
@@ -262,7 +262,9 @@ export function resolveShopOrderTotalFieldId(shop?: NonNullable<AppV2['shop']>, 
 }
 
 export function resolveShopOrderCustomerFieldId(table?: BuilderV2Table): string | undefined {
-  return table?.fields.find(field => /^(?:имя(?:\s+заказчика)?|request\s*name|клиент|покупатель)/iu.test(field.name.trim()))?.id
+  // Prefer «Имя клиента» / requestName over empty «Покупатель» leftover columns.
+  return table?.fields.find(field => /^(?:имя(?:\s+клиента|\s+заказчика)?|request\s*name)$/iu.test(field.name.trim()))?.id
+    ?? table?.fields.find(field => /^(?:клиент|покупатель)$/iu.test(field.name.trim()))?.id
 }
 
 export function buildListShellMeta(input: ShellMetricsInput): string | undefined {
@@ -277,10 +279,19 @@ export function buildListShellMeta(input: ShellMetricsInput): string | undefined
       if (whKey) warehouses.add(whKey)
     }
     const whCount = warehouses.size
-    return `${formatShellCount(total, 'товар', 'товара', 'товаров')}${whCount ? ` · ${whCount} ${whCount === 1 ? 'склад' : whCount < 5 ? 'склада' : 'складов'}` : ''}`
+    return `${formatShellCount(total, 'товар', 'товара', 'товаров')}${whCount ? ` · ${formatShellCount(whCount, 'склад', 'склада', 'складов')}` : ''}`
+  }
+  if (kind === 'crm-clients') {
+    return formatShellCount(total, 'клиент', 'клиента', 'клиентов')
+  }
+  if (kind === 'shop-orders') {
+    return formatShellCount(total, 'заказ', 'заказа', 'заказов')
+  }
+  if (kind === 'crm-board') {
+    return formatShellCount(total, 'сделка', 'сделки', 'сделок')
   }
   if (INVENTORY_KINDS.has(kind)) {
-    return `${total.toLocaleString('ru-RU')} записей`
+    return formatShellCount(total, 'запись', 'записи', 'записей')
   }
   return undefined
 }

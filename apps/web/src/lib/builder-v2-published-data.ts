@@ -245,6 +245,33 @@ export async function readPublishedV2LowStockCount(slug:string,request:{revision
   })
 }
 
+/** Sum of open purchase orders for the items list metric (purchases nodes are not shipped on that screen). */
+export async function readPublishedV2OpenPurchaseTotal(slug:string,request:{revision:string}){
+  return withPublishedV2Read(async tx=>{
+    const {app,actor,revision}=await publishedV2Context(slug,tx)
+    if(revision!==request.revision)throw new RowWriteError('conflict','Приложение обновлено. Обновите страницу.')
+    const inventory=app.inventory
+    if(!inventory?.itemsScreenId||!inventory.purchaseOrdersTableId||!inventory.statusOrdered||!inventory.purchaseStatusFieldId
+      ||!canOpenAppV2Screen(app,actor,inventory.itemsScreenId)){
+      throw new RowWriteError('denied','Товары недоступны')
+    }
+    if(!actor.roleIds.includes('owner')&&!actor.roleIds.includes('staff'))throw new RowWriteError('denied','Товары недоступны')
+    const stored=await tx.select().from(rows).where(and(
+      eq(rows.tableId,inventory.purchaseOrdersTableId),
+      isNull(rows.deletedAt),
+      publishedV2ReadSql(app,actor,inventory.purchaseOrdersTableId),
+    ))
+    let total=0
+    for(const row of stored){
+      const data=row.data as Record<string,unknown>
+      if(String(data[inventory.purchaseStatusFieldId]??'')!==inventory.statusOrdered)continue
+      const amount=inventory.purchaseTotalFieldId?Number(data[inventory.purchaseTotalFieldId]):NaN
+      if(Number.isFinite(amount))total+=amount
+    }
+    return {total}
+  })
+}
+
 /** Per-client open-deal counts for the CRM clients list shell (board nodes are not shipped on that screen). */
 export async function readPublishedV2ClientDealStats(slug:string,request:{revision:string}){
   return withPublishedV2Read(async tx=>{

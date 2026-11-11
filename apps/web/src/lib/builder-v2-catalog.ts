@@ -60,6 +60,9 @@ export function builderV2CatalogPrice(row: AppV2Record, field: Column | undefine
 export function builderV2FormattedAmount(value: number, fieldName: string): string {
   const symbol = fieldName.match(/[₽$€£₸]/u)?.[0]
     ?? (/^(?:сумма|итого|total|amount)\b/iu.test(fieldName.trim()) ? '₽' : undefined)
-  const amount = value.toLocaleString('ru-RU', { maximumFractionDigits: 2 })
+  const amount = value.toLocaleString('ru-RU', {
+    minimumFractionDigits: symbol ? 2 : 0,
+    maximumFractionDigits: 2,
+  })
   return symbol ? `${amount} ${symbol}` : amount
 }

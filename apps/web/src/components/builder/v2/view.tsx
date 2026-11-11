@@ -377,6 +377,17 @@ import { PurchaseLinesEditor } from './purchase-lines'
 import { CountLinesEditor } from './count-lines'
 import { ReorderPanel } from './reorder-panel'
 import { BuilderV2OrderActionPanel, BuilderV2OrderFacts, BuilderV2OrderIdentity, BuilderV2OrderSummaryCard, BuilderV2ShopOrderLines, OrderActionPanelContext, builderV2BlankFact, builderV2OrderStatusChoices, type BuilderV2OrderActionTrigger } from './order-detail'
+import { DetailCardShell, DetailSection, ListScreenShell, ShellSearchField } from './layout-shell'
+import {
+  aggregateSupplierStats,
+  buildListShellMeta,
+  buildListShellMetrics,
+  buildListShellTabs,
+  filterListShellRows,
+  listShellScreen,
+  listShellTitle,
+  type ListShellKind,
+} from './list-shell'
 
 const cell = (row: AppV2Record, fieldId: string) => (row as Partial<BuilderV2DataRecord>).display?.[fieldId] ?? String(row.values[fieldId] ?? '')
 
@@ -463,6 +474,32 @@ export function AppV2Renderer(props: AppV2RendererProps) {
     ? lines ? summary?.scoped ? undefined : summary?.status?.kind === 'mixed' ? 'Разные статусы позиций' : summary?.status?.label
       : !orderGroup ? cell(props.record, statusColumn.id) : undefined
     : undefined
+  const shellKind: ListShellKind | null = !props.editing && !props.record ? listShellScreen(props.app, props.screenId) : null
+  const shellCollectionId = shellKind && screen
+    ? screen.rootIds.find(id => {
+      const node = nodes.get(id)
+      return node?.type === 'collection' && node.layout !== 'calendar'
+    })
+    : undefined
+  const [shellSearch, setShellSearch] = useState('')
+  const [shellPage, setShellPage] = useState<BuilderV2DataPage | undefined>()
+  const [shellTab, setShellTab] = useState('all')
+  const [shellLowStock, setShellLowStock] = useState<number | null>(null)
+  useEffect(() => {
+    setShellSearch('')
+    setShellTab('all')
+    setShellPage(undefined)
+  }, [props.screenId])
+  useEffect(() => {
+    if (!published || !inventory || (shellKind !== 'inventory-items' && shellKind !== 'inventory-purchases')) return
+    let cancelled = false
+    void import('@/app/builder-v2-published-actions').then(async ({ readPublishedV2LowStockCountAction }) => {
+      const result = await readPublishedV2LowStockCountAction(published.slug, { revision: published.revision })
+      if (cancelled || !result.ok) return
+      setShellLowStock(result.count)
+    }).catch(() => {})
+    return () => { cancelled = true }
+  }, [published?.revision, published?.dataVersion, shellKind, inventory])
   const statusFormId = published ? props.statusFormId : detail && !lines && !orderGroup && statusColumn?.type === 'single_select' && !props.editing
     ? rootIds.find(id => {
       const form = nodes.get(id)
@@ -479,6 +516,87 @@ export function AppV2Renderer(props: AppV2RendererProps) {
     return value.kind === 'row' || value.kind === 'screen_row' ? props.tables.flatMap(table => table.fields).find(field => field.id === value.fieldId)?.name ?? 'Значение записи' : 'Значение появится здесь'
   }
   const raw=(value:AppV2Binding,record:AppV2Record|undefined)=>{const result=resolveAppV2Binding(value,{actor:props.actor,row:record,screenRow:props.record});return result.ok?result.value:null}
+  function buildInventoryListToolbar(): ReactNode | undefined {
+    if (!inventory || props.editing || (!foldedCreateId && !suppliersLinkId && !reorderLinkId)) return undefined
+    const parts: ReactNode[] = []
+    if (suppliersLinkId) {
+      const link = nodes.get(suppliersLinkId)
+      if (link?.type === 'button' && visible(link)) {
+        parts.push(<span key={link.id} className={ui.purchaseSuppliersSlot}>
+          {published
+            ? <>
+              <PublishedV2Button node={link} screenId={props.screenId} recordId={props.record?.id} buttonClassName={`${styles.secondary} ${ui.purchaseSuppliersDesktop}`} />
+              <PublishedV2Button node={link} screenId={props.screenId} recordId={props.record?.id} buttonClassName={`${ui.orderActionIcon} ${ui.purchaseSuppliersMobile}`} buttonContent={<ProtoIcon name="truck" size={20} />} />
+            </>
+            : <>
+              <button type="button" className={`${styles.secondary} ${ui.purchaseSuppliersDesktop}`} disabled>{link.label}</button>
+              <button type="button" className={`${ui.orderActionIcon} ${ui.purchaseSuppliersMobile}`} aria-label={link.label} title={link.label} disabled><ProtoIcon name="truck" size={20} /></button>
+            </>}
+        </span>)
+      }
+    }
+    if (reorderLinkId) {
+      const link = nodes.get(reorderLinkId)
+      if (link?.type === 'button' && visible(link)) {
+        parts.push(<span key={link.id} className={ui.purchaseSuppliersSlot}>
+          {published
+            ? <>
+              <ReorderToolbarLink app={props.app} node={link} screenId={props.screenId} buttonClassName={`${styles.secondary} ${ui.purchaseSuppliersDesktop}`} />
+              <ReorderToolbarLink app={props.app} node={link} screenId={props.screenId} buttonClassName={`${ui.orderActionIcon} ${ui.purchaseSuppliersMobile}`} buttonContent={<ProtoIcon name="box" size={20} />} />
+            </>
+            : <>
+              <button type="button" className={`${styles.secondary} ${ui.purchaseSuppliersDesktop}`} disabled>{link.label}</button>
+              <button type="button" className={`${ui.orderActionIcon} ${ui.purchaseSuppliersMobile}`} aria-label={link.label} title={link.label} disabled><ProtoIcon name="box" size={20} /></button>
+            </>}
+        </span>)
+      }
+    }
+    if (foldedCreateId) {
+      const button = nodes.get(foldedCreateId)
+      if (button?.type === 'button' && visible(button)) {
+        const toolbarButton = inventory && screen?.id === inventory.movementsScreenId ? { ...button, label: 'Операция' } : button
+        const purchaseCreate = Boolean(inventory && screen?.id === inventory.purchasesScreenId)
+        const supplierCreate = Boolean(inventory && screen?.id === inventory.suppliersScreenId)
+        const countCreate = Boolean(inventory && screen?.id === inventory.countsScreenId)
+        const createLabel = countCreate
+          ? <><span className={ui.countCreateFull}>Новая инвентаризация</span><span className={ui.countCreateShort}>Новая</span></>
+          : toolbarButton.label
+        if (inventoryCreateFormId && nodes.get(inventoryCreateFormId)) {
+          parts.push(<InventoryCreateDialog
+            key={button.id}
+            label={createLabel}
+            title={purchaseCreate ? 'Новый заказ' : supplierCreate ? 'Новый поставщик' : countCreate ? 'Новая инвентаризация' : 'Новый товар'}
+            submitLabel={purchaseCreate ? 'Сохранить заказ' : supplierCreate ? 'Сохранить поставщика' : countCreate ? 'Сохранить' : 'Сохранить товар'}
+            wide={purchaseCreate || countCreate}
+            defaultOpen={Boolean(props.openCreate && !purchaseCreate && !supplierCreate && !countCreate)}
+            onDismiss={() => {
+              if (props.openCreate && inventory && published && !purchaseCreate && !supplierCreate && !countCreate) published.navigate(inventory.itemsScreenId, undefined, { replace: true })
+            }}
+          >{render([inventoryCreateFormId])}</InventoryCreateDialog>)
+        } else {
+          parts.push(published
+            ? <PublishedV2Button key={button.id} node={toolbarButton} screenId={props.screenId} recordId={props.record?.id} />
+            : <button key={button.id} type="button" className={button.variant === 'primary' ? styles.primary : button.variant === 'danger' ? styles.danger : styles.secondary} disabled>{createLabel}</button>)
+        }
+      }
+    }
+    if (!parts.length) return undefined
+    return parts.length === 1 ? parts[0] : <div className={ui.purchaseToolbarEnd}>{parts}</div>
+  }
+  function buildShellRootActions(): ReactNode | undefined {
+    if (!shellKind || props.editing) return undefined
+    const inventoryToolbar = buildInventoryListToolbar()
+    if (inventoryToolbar) return inventoryToolbar
+    const parts = rootIds.flatMap(id => {
+      const node = nodes.get(id)
+      if (node?.type !== 'button' || !visible(node)) return []
+      const buttonStyle = node.variant === 'primary' ? styles.primary : node.variant === 'danger' ? styles.danger : styles.secondary
+      return [published
+        ? <PublishedV2Button key={node.id} node={node} screenId={props.screenId} recordId={props.record?.id} buttonClassName={buttonStyle} />
+        : <button key={node.id} type="button" className={buttonStyle} disabled>{node.label}</button>]
+    })
+    return parts.length ? <div className={ui.purchaseToolbarEnd}>{parts}</div> : undefined
+  }
   function render(ids: readonly string[], record = props.record, formTableId: string | null = null,itemId?:string,itemLabel?:string): ReactNode[] {
     return ids.map(id => {
       const node = nodes.get(id)
@@ -552,80 +670,20 @@ export function AppV2Renderer(props: AppV2RendererProps) {
           {props.editing && <button type="button" className={styles.addInside} style={{ gridColumn: '1 / -1' }} onClick={() => props.onAdd?.(node.id)}><ProtoIcon name="plus" />Добавить элемент</button>}
         </div>
       } else {
-        const inventoryListToolbar = (() => {
-          if (node.type !== 'collection' || (!foldedCreateId && !suppliersLinkId && !reorderLinkId)) return undefined
-          const parts: ReactNode[] = []
-          if (suppliersLinkId) {
-            const link = nodes.get(suppliersLinkId)
-            if (link?.type === 'button' && visible(link)) {
-              parts.push(<span key={link.id} className={ui.purchaseSuppliersSlot}>
-                {published
-                  ? <>
-                    <PublishedV2Button node={link} screenId={props.screenId} recordId={props.record?.id} buttonClassName={`${styles.secondary} ${ui.purchaseSuppliersDesktop}`} />
-                    <PublishedV2Button node={link} screenId={props.screenId} recordId={props.record?.id} buttonClassName={`${ui.orderActionIcon} ${ui.purchaseSuppliersMobile}`} buttonContent={<ProtoIcon name="truck" size={20} />} />
-                  </>
-                  : <>
-                    <button type="button" className={`${styles.secondary} ${ui.purchaseSuppliersDesktop}`} disabled>{link.label}</button>
-                    <button type="button" className={`${ui.orderActionIcon} ${ui.purchaseSuppliersMobile}`} aria-label={link.label} title={link.label} disabled><ProtoIcon name="truck" size={20} /></button>
-                  </>}
-              </span>)
-            }
-          }
-          if (reorderLinkId) {
-            const link = nodes.get(reorderLinkId)
-            if (link?.type === 'button' && visible(link)) {
-              parts.push(<span key={link.id} className={ui.purchaseSuppliersSlot}>
-                {published
-                  ? <>
-                    <ReorderToolbarLink app={props.app} node={link} screenId={props.screenId} buttonClassName={`${styles.secondary} ${ui.purchaseSuppliersDesktop}`} />
-                    <ReorderToolbarLink app={props.app} node={link} screenId={props.screenId} buttonClassName={`${ui.orderActionIcon} ${ui.purchaseSuppliersMobile}`} buttonContent={<ProtoIcon name="box" size={20} />} />
-                  </>
-                  : <>
-                    <button type="button" className={`${styles.secondary} ${ui.purchaseSuppliersDesktop}`} disabled>{link.label}</button>
-                    <button type="button" className={`${ui.orderActionIcon} ${ui.purchaseSuppliersMobile}`} aria-label={link.label} title={link.label} disabled><ProtoIcon name="box" size={20} /></button>
-                  </>}
-              </span>)
-            }
-          }
-          if (foldedCreateId) {
-            const button = nodes.get(foldedCreateId)
-            if (button?.type === 'button' && visible(button)) {
-              const buttonStyle = button.variant === 'primary' ? styles.primary : button.variant === 'danger' ? styles.danger : styles.secondary
-              const toolbarButton = inventory && screen?.id === inventory.movementsScreenId ? { ...button, label: 'Операция' } : button
-              const purchaseCreate = Boolean(inventory && screen?.id === inventory.purchasesScreenId)
-              const supplierCreate = Boolean(inventory && screen?.id === inventory.suppliersScreenId)
-              const countCreate = Boolean(inventory && screen?.id === inventory.countsScreenId)
-              const createLabel = countCreate
-                ? <><span className={ui.countCreateFull}>Новая инвентаризация</span><span className={ui.countCreateShort}>Новая</span></>
-                : toolbarButton.label
-              if (inventoryCreateFormId && nodes.get(inventoryCreateFormId)) {
-                parts.push(<InventoryCreateDialog
-                  key={button.id}
-                  label={createLabel}
-                  title={purchaseCreate ? 'Новый заказ' : supplierCreate ? 'Новый поставщик' : countCreate ? 'Новая инвентаризация' : 'Новый товар'}
-                  submitLabel={purchaseCreate ? 'Сохранить заказ' : supplierCreate ? 'Сохранить поставщика' : countCreate ? 'Сохранить' : 'Сохранить товар'}
-                  wide={purchaseCreate || countCreate}
-                  defaultOpen={Boolean(props.openCreate && !purchaseCreate && !supplierCreate && !countCreate)}
-                  onDismiss={() => {
-                    if (props.openCreate && inventory && published && !purchaseCreate && !supplierCreate && !countCreate) published.navigate(inventory.itemsScreenId, undefined, { replace: true })
-                  }}
-                >{render([inventoryCreateFormId])}</InventoryCreateDialog>)
-              } else {
-                parts.push(published
-                  ? <PublishedV2Button key={button.id} node={toolbarButton} screenId={props.screenId} recordId={props.record?.id} />
-                  : <button key={button.id} type="button" className={buttonStyle} disabled>{createLabel}</button>)
-              }
-            }
-          }
-          if (!parts.length) return undefined
-          // Keep secondary icon + primary create on one toolbar row (Товары / Закупки pattern).
-          return parts.length === 1 ? parts[0] : <div className={ui.purchaseToolbarEnd}>{parts}</div>
-        })()
-        const showCollectionHeading = Boolean(props.editing || screen?.name !== node.name)
-        content = <BuilderV2DataNode app={props.app} node={node} live={Boolean(props.live)} allowWrites={Boolean(props.live&&!props.editing)} table={props.tables.find(table=>table.id===props.app.sources.find(source=>source.id===node.sourceId)?.tableId)} heading={showCollectionHeading} toolbarEnd={inventoryListToolbar} scope={{ screenId: props.screenId, ...(props.record ? { recordId: props.record.id } : {}) }} onPage={id === lines?.id ? receiveSummary : undefined}>{page => {
+        const useShell = Boolean(shellKind && shellCollectionId === id && !props.record)
+        const inventoryListToolbar = node.type === 'collection' ? buildInventoryListToolbar() : undefined
+        const showCollectionHeading = Boolean(props.editing || screen?.name !== node.name) && !useShell
+        const shellCollectionTable = props.tables.find(table => table.id === props.app.sources.find(source => source.id === node.sourceId)?.tableId)
+        content = <BuilderV2DataNode app={props.app} node={node} live={Boolean(props.live)} allowWrites={Boolean(props.live&&!props.editing)} table={shellCollectionTable} heading={showCollectionHeading} toolbarEnd={useShell ? undefined : inventoryListToolbar} shell={useShell || undefined} searchValue={useShell ? shellSearch : undefined} onSearchChange={useShell ? setShellSearch : undefined} scope={{ screenId: props.screenId, ...(props.record ? { recordId: props.record.id } : {}) }} onPage={(page, pending) => {
+          if (useShell) setShellPage(page)
+          if (id === lines?.id) receiveSummary(page, pending)
+        }}>{page => {
         let body: ReactNode
         const source = props.app.sources.find(source => source.id === node.sourceId), table = props.tables.find(table => table.id === source?.tableId)
-        const rows = page ? page.rows : source && props.rows && Object.hasOwn(props.rows, source.id) ? props.rows[source.id] : undefined
+        const loadedRows = page ? page.rows : source && props.rows && Object.hasOwn(props.rows, source.id) ? props.rows[source.id] : undefined
+        const rows = useShell && shellKind && loadedRows
+          ? filterListShellRows(shellKind, shellTab, loadedRows, inventory ?? undefined)
+          : loadedRows
         if(node.type==='chart')body=<BuilderV2Chart node={node} data={page?.chart}/>
         else if (node.type === 'metric') {
           const numbers = rows?.map(row => row.values[node.fieldId ?? '']).filter((value): value is number => typeof value === 'number' && Number.isFinite(value)) ?? []
@@ -961,7 +1019,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
             </li>
           }
           const actionRow = (row:AppV2Record,as:'div'|'tr') => <CollectionActionRow key={row.id} appId={props.app.id} nodeId={node.id} screenId={props.screenId} recordId={props.record?.id} itemId={row.id} title={cell(row,node.titleFieldId)} actionName={rowAction!.name} as={as} whole={!node.itemIds.length&&as!=='tr'} content={!node.itemIds.length?(as==='tr'?cell(row,node.titleFieldId):<>{item(row)}<ProtoIcon name="arrow" size={16}/></>):undefined}>{control=>as==='tr'?node.itemIds.length?<td colSpan={subtitle?2:1}>{item(row)}{control}</td>:<><td>{control}</td>{subtitle&&<td>{cell(row,node.subtitleFieldId!)}</td>}</>:node.itemIds.length?<>{item(row)}{control}</>:control}</CollectionActionRow>
-          const showHeading = !['calendar','kanban'].includes(node.layout) && (props.editing || (screen?.name !== node.name && !(inventoryJournalList && screen?.id === inventory?.movementsScreenId) && !(countList && screen?.id === inventory?.countsScreenId)))
+          const showHeading = !useShell && !['calendar','kanban'].includes(node.layout) && (props.editing || (screen?.name !== node.name && !(inventoryJournalList && screen?.id === inventory?.movementsScreenId) && !(countList && screen?.id === inventory?.countsScreenId)))
           const GroupHeading = showHeading ? 'h3' : 'h2'
           const groups = new Map<string, { label?: string; rows: AppV2Record[] }>()
           for (const row of rows ?? []) {
@@ -1082,7 +1140,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
           </table></div> : timeline ? (rows
             ? <ol className={ui.timelineList} aria-label={node.name}>{rows.map(timelineItem)}</ol>
             : <div className={ui.placeholder}><span>Здесь появится хронология записей</span></div>)
-          : rows ? (inventoryJournalList && inventory && typeChoices.length
+          : rows ? (inventoryJournalList && inventory && typeChoices.length && !useShell
             ? <InventoryJournalRows rows={rows} typeFieldId={inventory.movementTypeFieldId} choices={typeChoices} renderRows={renderListGroups} />
             : countLineList && inventory
               ? <CountDiscrepancyRows rows={rows} diffFieldId={inventory.countLineDiffFieldId} renderRows={renderListGroups} />
@@ -1112,29 +1170,29 @@ export function AppV2Renderer(props: AppV2RendererProps) {
               <ProtoIcon name="box" size={28} />
               <strong>Товаров пока нет</strong>
               <p>Добавьте первую позицию, чтобы вести остатки.</p>
-              {inventoryListToolbar}
+              {!useShell && inventoryListToolbar}
             </div>
             : inventoryJournalList ? <div className={ui.collectionEmpty} data-centered>
               <ProtoIcon name="list" size={28} />
               <strong>Операций пока нет</strong>
               <p>Оформите приход, расход или перемещение — журнал заполнится сам.</p>
-              {inventoryListToolbar}
+              {!useShell && inventoryListToolbar}
             </div>
             : purchaseList ? <div className={ui.collectionEmpty} data-centered>
               <ProtoIcon name="clipboard" size={28} />
               <strong>Заказов пока нет</strong>
               <p>Создайте заказ поставщику и примите его на склад, когда товар приедет.</p>
-              {inventoryListToolbar}
+              {!useShell && inventoryListToolbar}
             </div>
             : countList ? <div className={ui.collectionEmpty} data-centered>
               <ProtoIcon name="list" size={28} />
               <strong>Инвентаризаций пока нет</strong>
               <p>Создайте пересчёт склада и внесите фактические остатки.</p>
-              {inventoryListToolbar}
+              {!useShell && inventoryListToolbar}
             </div>
             : <p className={ui.hint}>{emptyCopy}</p>
           ) : null
-          body = <div className={`${styles.collection} ${catalog ? presentation.catalog : cardLayout ? ui.cardCollection : timeline ? `${presentation.panel} ${ui.timelineCollection}` : ''} ${id === lines?.id ? `${presentation.panel} ${ui.orderLines}` : ''}`} data-catalog={catalog || undefined} data-tiles={node.layout === 'tiles' || undefined} data-timeline={timeline || undefined}>
+          body = <div className={`${styles.collection} ${catalog ? presentation.catalog : cardLayout ? ui.cardCollection : timeline ? `${presentation.panel} ${ui.timelineCollection}` : ''} ${id === lines?.id ? `${presentation.panel} ${ui.orderLines}` : ''}`} data-catalog={catalog || undefined} data-tiles={node.layout === 'tiles' || undefined} data-timeline={timeline || undefined} data-in-shell={useShell || undefined}>
             {showHeading && <div className={styles.collectionHeading}><h2 className={presentation.sectionTitle}>{node.name}</h2>{props.editing && table?.name !== node.name && <span>{table?.name ?? 'Таблица удалена'}</span>}</div>}
             {emptyState ?? collection}
             {props.editing && node.layout!=='kanban' && <button type="button" className={styles.addInside} onClick={() => props.onAdd?.(node.id)}><ProtoIcon name="plus" />{catalog?'Добавить элемент карточки':timeline?'Настроить запись ленты':'Настроить строку списка'}</button>}
@@ -1217,37 +1275,33 @@ export function AppV2Renderer(props: AppV2RendererProps) {
         ? <PublishedV2Button key={node.id} node={node} screenId={props.screenId} recordId={countRecord.id} refreshOnSuccess buttonClassName={node.variant === 'danger' ? styles.danger : styles.secondary} />
         : <button key={node.id} type="button" className={node.variant === 'danger' ? styles.danger : styles.secondary} disabled>{node.label}</button>)}
     </div> : null
+    const countMetrics = [
+      { key: 'warehouse', value: warehouse || '—', caption: 'Склад' },
+      { key: 'date', value: when || '—', caption: 'Дата' },
+      { key: 'author', value: author || '—', caption: 'Автор' },
+      { key: 'products', value: productCount || '—', caption: 'Товаров' },
+      { key: 'diff', value: discrepancy || '—', caption: 'Расхождений' },
+      { key: 'shortage', value: shortage ? `−${shortage}` : '—', caption: 'Недостача', tone: shortage ? 'rose' as const : undefined },
+      { key: 'surplus', value: surplus ? `+${surplus}` : '—', caption: 'Излишек', tone: surplus ? 'mint' as const : undefined },
+    ]
     return <div className={`${styles.canvasBlocks} ${ui.purchaseCard} ${ui.countCard}`} data-draft={draft || undefined}>
-      <section className={`${presentation.panel} ${ui.orderIdentity}`} data-manage data-variant="pipeline" data-purchase-card aria-label="Главное об инвентаризации">
-        <div className={ui.orderIdentityMain}>
-          <div className={ui.purchaseCardHead}>
-            <div className={ui.purchaseCardIdentity}>
-              {status ? <span className={ui.heroStatus} data-tone={builderV2StatusTone(status)}>{status}</span> : null}
-              <h2 className={ui.purchaseCardTitle}>{countTitle}</h2>
-            </div>
-            {countActions ? <div className={ui.purchaseCardActionsDesktop}>{countActions}</div> : null}
-          </div>
-          <div className={ui.orderIdentityFacts} data-count="7">
-            <div className={ui.orderIdentityFact}><span>Склад</span><strong>{warehouse || '—'}</strong></div>
-            <div className={ui.orderIdentityFact}><span>Дата</span><strong>{when || '—'}</strong></div>
-            <div className={ui.orderIdentityFact}><span>Автор</span><strong>{author || '—'}</strong></div>
-            <div className={ui.orderIdentityFact}><span>Товаров</span><strong>{productCount || '—'}</strong></div>
-            <div className={ui.orderIdentityFact}><span>Расхождений</span><strong>{discrepancy || '—'}</strong></div>
-            <div className={ui.orderIdentityFact} data-kind="amount" data-tone="rose"><span>Недостача</span><strong>{shortage ? `−${shortage}` : '—'}</strong></div>
-            <div className={ui.orderIdentityFact} data-kind="amount" data-tone="mint"><span>Излишек</span><strong>{surplus ? `+${surplus}` : '—'}</strong></div>
-          </div>
-          {countActions ? <div className={ui.purchaseCardActionsMobile}>{countActions}</div> : null}
-        </div>
-      </section>
-      {draft && editFormId
-        ? <div className={`${presentation.panel} ${ui.orderLinesPanel} ${ui.countDraftPanel}`}>{render([editFormId])}</div>
-        : linesId ? <div className={`${presentation.panel} ${ui.orderLinesPanel}`}>{render([linesId])}</div> : null}
-      {history.length ? <section className={`${presentation.panel} ${ui.orderFacts}`} aria-label="История инвентаризации">
-        <h2 className={presentation.sectionTitle}>История</h2>
-        <ul className={ui.purchaseHistory}>
-          {history.map(item => <li key={item.key}><span>{item.label}</span><strong>{item.at}{item.by ? ` · ${item.by}` : ''}</strong></li>)}
-        </ul>
-      </section> : null}
+      <DetailCardShell
+        title={countTitle}
+        subtitle={[warehouse, when].filter(Boolean).join(' · ') || undefined}
+        badge={status ? <span className={ui.heroStatus} data-tone={builderV2StatusTone(status)}>{status}</span> : undefined}
+        actions={countActions ? <div className={ui.purchaseCardActionsDesktop}>{countActions}</div> : undefined}
+        stickyActions={countActions ? <div className={ui.purchaseCardActionsMobile}>{countActions}</div> : undefined}
+        metrics={countMetrics}
+      >
+        {draft && editFormId
+          ? <DetailSection title="Строки пересчёта"><div className={ui.countDraftPanel}>{render([editFormId])}</div></DetailSection>
+          : linesId ? <DetailSection title="Строки пересчёта">{render([linesId])}</DetailSection> : null}
+        {history.length ? <DetailSection title="История">
+          <ul className={ui.purchaseHistory}>
+            {history.map(item => <li key={item.key}><span>{item.label}</span><strong>{item.at}{item.by ? ` · ${item.by}` : ''}</strong></li>)}
+          </ul>
+        </DetailSection> : null}
+      </DetailCardShell>
     </div>
   }
   if (!props.editing && inventory?.purchaseScreenId && screen?.id === inventory.purchaseScreenId && props.record) {
@@ -1300,34 +1354,30 @@ export function AppV2Renderer(props: AppV2RendererProps) {
         ? <PublishedV2Button key={node.id} node={node} screenId={props.screenId} recordId={purchaseRecord.id} refreshOnSuccess buttonClassName={styles.secondary} />
         : <button key={node.id} type="button" className={styles.secondary} disabled>{node.label}</button>)}
     </div> : null
+    const purchaseMetrics = [
+      { key: 'amount', value: amount || '—', caption: 'Сумма' },
+      { key: 'supplier', value: supplier || '—', caption: 'Поставщик' },
+      { key: 'warehouse', value: warehouse || '—', caption: 'Склад' },
+      { key: 'date', value: when || '—', caption: 'Дата' },
+      { key: 'count', value: count || '—', caption: 'Позиций' },
+    ]
     return <div className={`${styles.canvasBlocks} ${ui.purchaseCard}`}>
-      <section className={`${presentation.panel} ${ui.orderIdentity}`} data-manage data-variant="pipeline" data-purchase-card aria-label="Главное о заказе">
-        <div className={ui.orderIdentityMain}>
-          <div className={ui.purchaseCardHead}>
-            <div className={ui.purchaseCardIdentity}>
-              {status ? <span className={ui.heroStatus} data-tone={builderV2StatusTone(status)}>{status}</span> : null}
-              <h2 className={ui.purchaseCardTitle}>{purchaseTitle}</h2>
-            </div>
-            {purchaseActions ? <div className={ui.purchaseCardActionsDesktop}>{purchaseActions}</div> : null}
-          </div>
-          <div className={ui.orderIdentityFacts} data-count="5">
-            <div className={ui.orderIdentityFact} data-kind="amount"><span>Сумма</span><strong>{amount || '—'}</strong></div>
-            <div className={ui.orderIdentityFact}><span>Поставщик</span><strong>{supplier || '—'}</strong></div>
-            <div className={ui.orderIdentityFact}><span>Склад</span><strong>{warehouse || '—'}</strong></div>
-            <div className={ui.orderIdentityFact}><span>Дата</span><strong>{when || '—'}</strong></div>
-            <div className={ui.orderIdentityFact}><span>Позиций</span><strong>{count || '—'}</strong></div>
-          </div>
-          {comment ? <p className={ui.purchaseComment}>{comment}</p> : null}
-          {purchaseActions ? <div className={ui.purchaseCardActionsMobile}>{purchaseActions}</div> : null}
-        </div>
-      </section>
-      {linesId ? <div className={`${presentation.panel} ${ui.orderLinesPanel}`}>{render([linesId])}</div> : null}
-      {history.length ? <section className={`${presentation.panel} ${ui.orderFacts}`} aria-label="История заказа">
-        <h2 className={presentation.sectionTitle}>История</h2>
-        <ul className={ui.purchaseHistory}>
-          {history.map(item => <li key={item.key}><span>{item.label}</span><strong>{item.at}{item.by ? ` · ${item.by}` : ''}</strong></li>)}
-        </ul>
-      </section> : null}
+      <DetailCardShell
+        title={purchaseTitle}
+        subtitle={when || undefined}
+        badge={status ? <span className={ui.heroStatus} data-tone={builderV2StatusTone(status)}>{status}</span> : undefined}
+        actions={purchaseActions ? <div className={ui.purchaseCardActionsDesktop}>{purchaseActions}</div> : undefined}
+        stickyActions={purchaseActions ? <div className={ui.purchaseCardActionsMobile}>{purchaseActions}</div> : undefined}
+        metrics={purchaseMetrics}
+      >
+        {comment ? <DetailSection><p className={ui.purchaseComment}>{comment}</p></DetailSection> : null}
+        {linesId ? <DetailSection title="Позиции заказа">{render([linesId])}</DetailSection> : null}
+        {history.length ? <DetailSection title="История">
+          <ul className={ui.purchaseHistory}>
+            {history.map(item => <li key={item.key}><span>{item.label}</span><strong>{item.at}{item.by ? ` · ${item.by}` : ''}</strong></li>)}
+          </ul>
+        </DetailSection> : null}
+      </DetailCardShell>
     </div>
   }
   if (!props.editing && inventory?.supplierScreenId && screen?.id === inventory.supplierScreenId && props.record) {
@@ -1357,30 +1407,24 @@ export function AppV2Renderer(props: AppV2RendererProps) {
       >{render([createPurchaseForm.id], supplierRecord, createPurchaseForm.tableId)}</InventoryCreateDialog> : null}
       {editFormId ? render([editFormId]) : null}
     </div> : null
+    const supplierMetrics = [
+      { key: 'phone', value: phoneHref && phone ? <a className={ui.contactLink} href={phoneHref}>{phone}</a> : phone || '—', caption: 'Телефон' },
+      { key: 'orders', value: String(ordersCount), caption: 'Заказов' },
+      { key: 'last', value: lastOrder, caption: 'Последний заказ' },
+      { key: 'sum', value: purchased, caption: 'Закуплено на' },
+    ]
     return <div className={`${styles.canvasBlocks} ${ui.purchaseCard} ${ui.supplierCard}`}>
-      <section className={`${presentation.panel} ${ui.orderIdentity}`} data-manage data-variant="pipeline" data-purchase-card data-supplier-card aria-label="Главное о поставщике">
-        <div className={ui.orderIdentityMain}>
-          <div className={ui.purchaseCardHead}>
-            <div className={ui.purchaseCardIdentity}>
-              <h2 className={ui.purchaseCardTitle}>{name || 'Поставщик'}</h2>
-              {contact ? <p className={ui.supplierCardContact}>{contact}</p> : null}
-            </div>
-            {supplierActions ? <div className={ui.purchaseCardActionsDesktop}>{supplierActions}</div> : null}
-          </div>
-          <div className={ui.orderIdentityFacts} data-count="4">
-            <div className={ui.orderIdentityFact}>
-              <span>Телефон</span>
-              <strong>{phoneHref && phone ? <a className={ui.contactLink} href={phoneHref}>{phone}</a> : phone || '—'}</strong>
-            </div>
-            <div className={ui.orderIdentityFact}><span>Заказов</span><strong>{ordersCount}</strong></div>
-            <div className={ui.orderIdentityFact}><span>Последний заказ</span><strong>{lastOrder}</strong></div>
-            <div className={ui.orderIdentityFact} data-kind="amount"><span>Закуплено на</span><strong>{purchased}</strong></div>
-          </div>
-          {comment ? <p className={ui.purchaseComment}>{comment}</p> : null}
-          {supplierActions ? <div className={ui.purchaseCardActionsMobile}>{supplierActions}</div> : null}
-        </div>
-      </section>
-      {ordersId ? <div className={`${presentation.panel} ${ui.orderLinesPanel}`}>{render([ordersId])}</div> : null}
+      <DetailCardShell
+        media={<BuilderV2RecordAvatar id={supplierRecord.id} name={name} icon="truck" tone />}
+        title={name || 'Поставщик'}
+        subtitle={contact || undefined}
+        actions={supplierActions ? <div className={ui.purchaseCardActionsDesktop}>{supplierActions}</div> : undefined}
+        stickyActions={supplierActions ? <div className={ui.purchaseCardActionsMobile}>{supplierActions}</div> : undefined}
+        metrics={supplierMetrics}
+      >
+        {comment ? <DetailSection><p className={ui.purchaseComment}>{comment}</p></DetailSection> : null}
+        {ordersId ? <DetailSection title="Заказы поставщика">{render([ordersId])}</DetailSection> : null}
+      </DetailCardShell>
     </div>
   }
   if (screen?.catalog) {
@@ -1546,7 +1590,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
           due,
           client: clientFact,
         }
-    return <div className={`${styles.canvasBlocks} ${ui.screenBlocks} ${ui.businessDetail} ${ui.orderDetail}`} data-manage={manage || undefined} data-layout={stack ? 'stack' : undefined}>
+    return <div className={`${styles.canvasBlocks} ${ui.screenBlocks} ${ui.businessDetail} ${ui.orderDetail}`} data-manage={manage || undefined} data-layout={stack ? 'detail' : undefined}>
       {!manage && showCustomerIdentity && <BuilderV2OrderIdentity title={title || undefined} status={inventoryStatus} amount={undefined} scoped={summary?.scoped} progress={progress} manage={false} />}
       <div className={ui.orderDetailBody}>
         <div className={ui.orderDetailMain}>
@@ -1571,17 +1615,60 @@ export function AppV2Renderer(props: AppV2RendererProps) {
     </div>
   }
   const basketScreen = !props.editing && props.app.shop?.basketScreenId === screen?.id
-  return <div className={`${styles.canvasBlocks} ${ui.screenBlocks} ${screen?.contextTableId ? ui.businessDetail : ''} ${basketScreen ? ui.commerceScreen : ''}`} data-profile={profile || undefined} data-commerce={basketScreen ? 'basket' : undefined}>
-    {basketScreen ? <div className={ui.commerceLayout}>
-      <ShopBasketPanel app={props.app} tables={props.tables} actor={props.actor} onCheckout={() => document.getElementById('shop-checkout')?.querySelector<HTMLElement>('input,textarea,select')?.focus()} />
-      <div className={ui.commerceCheckout}>
-        <BuilderV2OrderHero status={status} amount={amount} scoped={summary?.scoped} loading={Boolean(props.live && summaryKey && (summaryState.key !== summaryKey || summaryState.pending))} editor={statusFormId ? render([statusFormId]) : undefined} />
-        {render(statusFormId ? rootIds.filter(id => id !== statusFormId) : rootIds)}
-      </div>
-    </div> : <>
-      <BuilderV2OrderHero status={status} amount={amount} scoped={summary?.scoped} loading={Boolean(props.live && summaryKey && (summaryState.key !== summaryKey || summaryState.pending))} editor={statusFormId ? render([statusFormId]) : undefined} />
+  const shellHiddenButtons = new Set([foldedCreateId, suppliersLinkId, reorderLinkId].filter((id): id is string => Boolean(id)))
+  const shellListRootIds = shellKind
+    ? rootIds.filter(id => {
+      const node = nodes.get(id)
+      if (node?.type === 'button' && shellHiddenButtons.has(id)) return false
+      if (node?.type === 'button' && shellKind !== 'inventory-items') return false
+      return true
+    })
+    : rootIds
+  const effectiveRootIds = statusFormId && !shellKind ? rootIds.filter(id => id !== statusFormId) : shellKind ? shellListRootIds : rootIds
+  const listCanvas = basketScreen ? <div className={ui.commerceLayout}>
+    <ShopBasketPanel app={props.app} tables={props.tables} actor={props.actor} onCheckout={() => document.getElementById('shop-checkout')?.querySelector<HTMLElement>('input,textarea,select')?.focus()} />
+    <div className={ui.commerceCheckout}>
+      {!shellKind && <BuilderV2OrderHero status={status} amount={amount} scoped={summary?.scoped} loading={Boolean(props.live && summaryKey && (summaryState.key !== summaryKey || summaryState.pending))} editor={statusFormId ? render([statusFormId]) : undefined} />}
       {render(statusFormId ? rootIds.filter(id => id !== statusFormId) : rootIds)}
-    </>}
-    {!rootIds.length && (props.editing ? <button type="button" className={styles.emptyCanvas} onClick={() => props.onAdd?.(null)}><ProtoIcon name="plus" size={24} /><strong>Добавьте первый элемент</strong><span>Текст, список или форму</span></button> : <p className={styles.empty}>На этом экране пока нет элементов</p>)}
+    </div>
+  </div> : <>
+    {!shellKind && <BuilderV2OrderHero status={status} amount={amount} scoped={summary?.scoped} loading={Boolean(props.live && summaryKey && (summaryState.key !== summaryKey || summaryState.pending))} editor={statusFormId ? render([statusFormId]) : undefined} />}
+    {render(effectiveRootIds)}
+  </>
+  const shellCollectionNode = shellCollectionId ? nodes.get(shellCollectionId) : undefined
+  const shellCollectionSource = shellCollectionNode && 'sourceId' in shellCollectionNode
+    ? props.app.sources.find(source => source.id === shellCollectionNode.sourceId)
+    : undefined
+  const shellCollectionTable = props.tables.find(table => table.id === shellCollectionSource?.tableId)
+  const supplierAgg = aggregateSupplierStats(supplierStats)
+  const shellMetricsInput = shellKind ? {
+    kind: shellKind,
+    page: shellPage,
+    rows: shellPage?.rows,
+    inventory: inventory ?? undefined,
+    table: shellCollectionTable,
+    lowStockCount: shellLowStock,
+    supplierOrdersTotal: supplierAgg.orders,
+    supplierPurchasedTotal: supplierAgg.purchased,
+    activeTab: shellTab,
+  } : null
+  const shellTabsConfig = shellMetricsInput ? buildListShellTabs(shellMetricsInput) : null
+  const shellBody = shellKind && shellCollectionId ? (
+    <ListScreenShell
+      title={screen?.name ?? listShellTitle(shellKind)}
+      meta={shellMetricsInput ? buildListShellMeta(shellMetricsInput) : undefined}
+      actions={buildShellRootActions()}
+      metrics={shellMetricsInput ? buildListShellMetrics(shellMetricsInput) : undefined}
+      tabs={shellTabsConfig?.tabs}
+      activeTab={shellTab}
+      onTabChange={setShellTab}
+      search={shellCollectionSource?.searchFieldIds.length ? <ShellSearchField value={shellSearch} onChange={setShellSearch} placeholder={shellKind === 'shop-orders' ? 'Найти заказ' : 'Найти в списке'} /> : undefined}
+    >
+      {listCanvas}
+    </ListScreenShell>
+  ) : listCanvas
+  return <div className={`${styles.canvasBlocks} ${ui.screenBlocks} ${screen?.contextTableId ? ui.businessDetail : ''} ${basketScreen ? ui.commerceScreen : ''} ${shellKind ? ui.shellScreen : ''}`} data-profile={profile || undefined} data-commerce={basketScreen ? 'basket' : undefined} data-layout={shellKind ? 'list' : undefined}>
+    {shellBody}
+    {!effectiveRootIds.length && (props.editing ? <button type="button" className={styles.emptyCanvas} onClick={() => props.onAdd?.(null)}><ProtoIcon name="plus" size={24} /><strong>Добавьте первый элемент</strong><span>Текст, список или форму</span></button> : <p className={styles.empty}>На этом экране пока нет элементов</p>)}
   </div>
 }

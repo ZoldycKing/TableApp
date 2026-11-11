@@ -2163,3 +2163,47 @@ button.recordButton:hover strong { color: var(--v2-accent, #456849); }
     gap: 16px;
   }
 }
+
+.shellScreen {
+  width: 100%;
+  max-width: none;
+}
+
+.shellScreen[data-layout="list"] .collection[data-in-shell] {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.shellScreen[data-layout="list"] [data-in-shell] .collectionHeading {
+  display: none;
+}
+
+.businessDetail[data-layout="detail"],
+.orderDetail[data-layout="detail"] {
+  max-width: none;
+  width: 100%;
+}
+
+.orderDetail[data-layout="detail"][data-manage] {
+  padding-bottom: calc(4.75rem + env(safe-area-inset-bottom, 0px));
+}
+
+.orderDetail[data-layout="detail"] .orderDetailBody {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.orderDetail[data-layout="detail"] .orderActionDock {
+  max-width: none;
+  width: 100%;
+}
+
+@media (max-width: 720px) {
+  .orderDetail[data-layout="detail"][data-manage] {
+    padding-bottom: 0;
+  }
+  .orderDetail[data-layout="detail"] .orderActionDock[data-placement="mobile"] {
+    display: none;
+  }
+}

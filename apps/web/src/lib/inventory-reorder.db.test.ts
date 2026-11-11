@@ -17,7 +17,6 @@ describe.skipIf(!process.env.DATABASE_URL)('inventory reorder', () => {
   let actions: typeof import('@/app/template-actions')
   let writeRows: typeof import('./row-mutations').writeRows
   let createReorderOrders: typeof import('./inventory-reorder').createReorderOrders
-  let receivePurchaseOrder: typeof import('./purchase-order').receivePurchaseOrder
   const userId = newId('user'), workspaceId = newId('workspace')
   const email = `reorder-${userId}@example.invalid`
   let appId: string
@@ -26,7 +25,6 @@ describe.skipIf(!process.env.DATABASE_URL)('inventory reorder', () => {
     actions = await import('@/app/template-actions')
     ;({ writeRows } = await import('./row-mutations'))
     ;({ createReorderOrders } = await import('./inventory-reorder'))
-    ;({ receivePurchaseOrder } = await import('./purchase-order'))
     await database.db.insert(database.users).values({ id: userId, email })
     await database.db.insert(database.workspaces).values({ id: workspaceId, ownerId: userId, name: 'Reorder', slug: `reorder-${workspaceId}` })
     await database.db.insert(database.workspaceMembers).values({ userId, workspaceId, role: 'owner' })
@@ -51,51 +49,60 @@ describe.skipIf(!process.env.DATABASE_URL)('inventory reorder', () => {
   }
   const actor = (roleIds: string[]): AppV2Actor => ({ authenticated: true, roleIds, id: userId, email, company: '' })
   const dataOf = (row: { data: unknown }) => row.data as Record<string, unknown>
+  const relationOne = (value: unknown) => Array.isArray(value) ? value[0] : typeof value === 'string' ? value : null
 
   const productBySku = async (inv: NonNullable<(Awaited<ReturnType<typeof definition>>)['inventory']>, sku: string) => {
     const products = await database.db.select().from(database.rows).where(and(eq(database.rows.tableId, inv!.itemsTableId), isNull(database.rows.deletedAt)))
     return products.find(row => dataOf(row)[inv!.itemSkuFieldId!] === sku)!
   }
 
+  const supplierByName = async (inv: NonNullable<(Awaited<ReturnType<typeof definition>>)['inventory']>, name: string) => {
+    const suppliers = await database.db.select().from(database.rows).where(and(eq(database.rows.tableId, inv!.suppliersTableId!), isNull(database.rows.deletedAt)))
+    return suppliers.find(row => dataOf(row)[inv!.supplierNameFieldId!] === name)!
+  }
+
   const payloadField = (inv: NonNullable<(Awaited<ReturnType<typeof definition>>)['inventory']>) =>
     inv!.reorderPayloadFieldId ?? inv!.purchasePayloadFieldId!
 
-  it('groups selected products into draft POs by last received supplier', async () => {
+  it('groups seed low-stock picks by last supplier without a prior receive', async () => {
     const app = await definition()
     const inv = app.inventory!
     const staff = actor(['staff'])
-    const orders = await database.db.select().from(database.rows).where(and(eq(database.rows.tableId, inv.purchaseOrdersTableId!), isNull(database.rows.deletedAt)))
-    const ordered = orders.find(row => dataOf(row)[inv.purchaseStatusFieldId!] === inv.statusOrdered)!
-    await writeRows(workspaceId, context => receivePurchaseOrder(context, app, staff, ordered.id))
-
+    const gloves = await productBySku(inv, 'GLV-10')
     const thermostat = await productBySku(inv, 'KTS-011')
-    const boxes = await productBySku(inv, 'BOX-403020')
+    const coolant = await productBySku(inv, 'R410-11')
+    const packing = await supplierByName(inv, 'Упаковка Плюс')
+    const climate = await supplierByName(inv, 'КлиматСервис')
+
     const result = await writeRows(workspaceId, context => createReorderOrders(context, app, staff, {
       [payloadField(inv)]: JSON.stringify({
-        products: [{ productId: thermostat.id }, { productId: boxes.id }],
+        products: [{ productId: gloves.id }, { productId: thermostat.id }, { productId: coolant.id }],
       }),
     }))
-    expect(result.groups).toBe(2)
-    expect(result.ids).toHaveLength(2)
+    expect(result.groups).toBe(3)
+    expect(result.ids).toHaveLength(3)
 
     const drafts = await database.db.select().from(database.rows).where(and(eq(database.rows.tableId, inv.purchaseOrdersTableId!), isNull(database.rows.deletedAt)))
     const created = result.ids.map(id => drafts.find(row => row.id === id)!)
     expect(created.every(row => dataOf(row)[inv.purchaseStatusFieldId!] === inv.statusDraft)).toBe(true)
-    const suppliers = created.map(row => {
-      const value = dataOf(row)[inv.purchaseSupplierFieldId!]
-      return Array.isArray(value) ? value[0] : value
-    })
-    expect(new Set(suppliers).size).toBe(2)
-    expect(suppliers.every(id => typeof id === 'string' && id.length > 0)).toBe(true)
+
+    const bySupplier = new Map(created.map(row => [relationOne(dataOf(row)[inv.purchaseSupplierFieldId!]) ?? null, row]))
+    expect(bySupplier.has(packing.id)).toBe(true)
+    expect(bySupplier.has(climate.id)).toBe(true)
+    expect(bySupplier.has(null)).toBe(true)
 
     const lines = await database.db.select().from(database.rows).where(and(eq(database.rows.tableId, inv.purchaseLinesTableId!), isNull(database.rows.deletedAt)))
-    for (const order of created) {
-      const lineIds = dataOf(order)[inv.purchaseLinesFieldId!] as string[]
-      expect(lineIds).toHaveLength(1)
-      const line = lines.find(row => row.id === lineIds[0]!)!
-      const productId = (dataOf(line)[inv.lineProductFieldId!] as string[])[0]!
-      expect([thermostat.id, boxes.id]).toContain(productId)
+    const productsOf = (orderId: string) => {
+      const order = created.find(row => row.id === orderId)!
+      return (dataOf(order)[inv.purchaseLinesFieldId!] as string[]).map(lineId => {
+        const line = lines.find(row => row.id === lineId)!
+        return relationOne(dataOf(line)[inv.lineProductFieldId!])
+      })
     }
+    expect(productsOf(bySupplier.get(packing.id)!.id)).toEqual([gloves.id])
+    expect(productsOf(bySupplier.get(climate.id)!.id)).toEqual([thermostat.id])
+    expect(productsOf(bySupplier.get(null)!.id)).toEqual([coolant.id])
+    expect(dataOf(bySupplier.get(null)!)[inv.purchaseSupplierFieldId!]).toEqual([])
   })
 
   it('puts a product without supplier history into a draft with empty supplier', async () => {

@@ -20,6 +20,39 @@ function InventoryTypeFilter({ choices, value, onChange }: { choices: readonly {
   </div>
 }
 
+/** Purchases toolbar link with live low-stock counter («Что заказать · N»). */
+function ReorderToolbarLink({
+  app, node, screenId, buttonClassName, buttonContent,
+}: {
+  app: AppV2
+  node: Extract<AppV2Node, { type: 'button' }>
+  screenId: string
+  buttonClassName: string
+  buttonContent?: ReactNode
+}) {
+  const published = usePublishedV2()
+  const inventory = app.inventory
+  const [count, setCount] = useState<number | null>(null)
+  useEffect(() => {
+    if (!published || !inventory?.reorderScreenId) return
+    const reorderScreen = app.screens.find(screen => screen.id === inventory.reorderScreenId)
+    const reorderNode = reorderScreen
+      ? app.nodes.find(entry => entry.type === 'collection' && reorderScreen.rootIds.includes(entry.id))
+      : undefined
+    if (!reorderNode) return
+    let cancelled = false
+    void published.readData({ nodeId: reorderNode.id, screenId: inventory.reorderScreenId }).then(result => {
+      if (cancelled || !result.ok) return
+      setCount(result.page.rows.length)
+    }).catch(() => {})
+    return () => { cancelled = true }
+  }, [published?.revision, published?.dataVersion, inventory?.reorderScreenId, app.id])
+  const labeled = count != null && count > 0
+    ? { ...node, label: `Что заказать · ${count}` }
+    : node
+  return <PublishedV2Button node={labeled} screenId={screenId} buttonClassName={buttonClassName} buttonContent={buttonContent} />
+}
+
 /** Centred dialog on desktop, bottom sheet on a narrow screen. */
 function InventoryCreateDialog({
   label, children, defaultOpen = false, onDismiss, title = 'Новый товар', submitLabel = 'Сохранить товар', wide = false, buttonClassName, iconOnly, icon,
@@ -545,8 +578,8 @@ export function AppV2Renderer(props: AppV2RendererProps) {
               parts.push(<span key={link.id} className={ui.purchaseSuppliersSlot}>
                 {published
                   ? <>
-                    <PublishedV2Button node={link} screenId={props.screenId} recordId={props.record?.id} buttonClassName={`${styles.secondary} ${ui.purchaseSuppliersDesktop}`} />
-                    <PublishedV2Button node={link} screenId={props.screenId} recordId={props.record?.id} buttonClassName={`${ui.orderActionIcon} ${ui.purchaseSuppliersMobile}`} buttonContent={<ProtoIcon name="box" size={20} />} />
+                    <ReorderToolbarLink app={props.app} node={link} screenId={props.screenId} buttonClassName={`${styles.secondary} ${ui.purchaseSuppliersDesktop}`} />
+                    <ReorderToolbarLink app={props.app} node={link} screenId={props.screenId} buttonClassName={`${ui.orderActionIcon} ${ui.purchaseSuppliersMobile}`} buttonContent={<ProtoIcon name="box" size={20} />} />
                   </>
                   : <>
                     <button type="button" className={`${styles.secondary} ${ui.purchaseSuppliersDesktop}`} disabled>{link.label}</button>

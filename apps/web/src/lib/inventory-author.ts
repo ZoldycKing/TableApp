@@ -7,8 +7,10 @@ export function formatInventoryAuthor(raw: string): string {
   const known: Record<string, string> = {
     owner: 'Иван Орлов',
     'owner-inv': 'Иван Орлов',
+    'owner-inv3a': 'Иван Орлов',
     staff: 'Мария Соколова',
     kladovshik: 'Мария Соколова',
+    'kladovshik3a': 'Мария Соколова',
     'ivan.orlov': 'Иван Орлов',
     'maria.sokolova': 'Мария Соколова',
     admin: 'Иван Орлов',

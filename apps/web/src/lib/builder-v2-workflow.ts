@@ -179,6 +179,8 @@ export async function executeBuilderV2Workflow(options: { write: RowTransaction;
           const saved = await createReorderOrders(write, app, actor, values)
           const next = await record(await workingBuilderV2Record(write.tx, step.tableId, saved.id))
           results.set(step.id, next)
+          const ordersWord = saved.groups === 1 ? 'заказ' : saved.groups >= 2 && saved.groups <= 4 ? 'заказа' : 'заказов'
+          effects.push({ type: 'notify', message: `Создано ${saved.groups} ${ordersWord}. Новые черновики — в списке закупок.` })
         } else if (step.type === 'create_row' || step.type === 'update_row') {
           const values = await builderV2WorkflowValues(meta, step.tableId, Object.fromEntries(Object.entries(step.values).map(([id, value]) => [id, resolve(value)])),options.published?{app,actor}:undefined), row = step.type === 'update_row' ? target(step.target) : undefined
           if (row && row.tableId !== step.tableId) throw new RowWriteError('denied', 'Запись относится к другой таблице')

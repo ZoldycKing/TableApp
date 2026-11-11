@@ -81,6 +81,21 @@ export function parseReorderPicks(raw: unknown): ReorderPick[] {
   return picks
 }
 
+function purchaseRecency(data: Record<string, unknown>, inv: ReorderInventory) {
+  const status = data[inv.purchaseStatusFieldId]
+  // Prefer received, then ordered, then draft; within a status use the latest stamp/date.
+  const rank = status === inv.statusReceived ? 3 : status === inv.statusOrdered ? 2 : status === inv.statusDraft ? 1 : 0
+  const at = String(
+    data[inv.purchaseReceivedAtFieldId]
+      ?? data[inv.purchaseOrderedAtFieldId]
+      ?? data[inv.purchaseCreatedAtFieldId]
+      ?? data[inv.purchaseDateFieldId]
+      ?? '',
+  )
+  return { rank, at }
+}
+
+/** Last supplier for a product: latest non-cancelled PO that contains it (received preferred). */
 async function lastPurchaseHint(
   write: RowTransaction,
   inv: ReorderInventory,
@@ -94,16 +109,19 @@ async function lastPurchaseHint(
   if (!orderIds.length) return { supplierId: null, price: 0 }
   const orders = await write.tx.select().from(rows)
     .where(and(eq(rows.tableId, inv.purchaseOrdersTableId), isNull(rows.deletedAt)))
-  let best: { at: string; supplierId: string | null; price: number } | null = null
+  let best: { rank: number; at: string; supplierId: string | null; price: number } | null = null
   for (const order of orders) {
     if (!orderIds.includes(order.id)) continue
     const data = order.data as Record<string, unknown>
-    if (data[inv.purchaseStatusFieldId] !== inv.statusReceived) continue
-    const at = String(data[inv.purchaseReceivedAtFieldId] ?? data[inv.purchaseDateFieldId] ?? '')
+    if (inv.statusCancelled && data[inv.purchaseStatusFieldId] === inv.statusCancelled) continue
+    const supplierId = relationId(data[inv.purchaseSupplierFieldId])
+    if (!supplierId) continue
+    const { rank, at } = purchaseRecency(data, inv)
+    if (!rank) continue
     const line = matching.find(row => relationId((row.data as Record<string, unknown>)[inv.lineOrderFieldId]) === order.id)
     const price = Number((line?.data as Record<string, unknown> | undefined)?.[inv.linePriceFieldId] ?? 0)
-    if (!best || at > best.at) {
-      best = { at, supplierId: relationId(data[inv.purchaseSupplierFieldId]), price: Number.isFinite(price) ? price : 0 }
+    if (!best || rank > best.rank || (rank === best.rank && at > best.at)) {
+      best = { rank, at, supplierId, price: Number.isFinite(price) ? price : 0 }
     }
   }
   return best ? { supplierId: best.supplierId, price: best.price } : { supplierId: null, price: 0 }

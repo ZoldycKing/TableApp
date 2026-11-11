@@ -154,7 +154,7 @@ describe('склад: вычисляемые колонки и отбор', () =
     const items = built.rows.filter(row => row.tableId === built.appTableId)
     for (const row of items) {
       const computed = computeDerivedRow(row.data, fields, related, formulas)
-      expect(computed[low.id]).toBe((computed[qty.id] as number) <= (row.data[min.id] as number))
+      expect(computed[low.id]).toBe((computed[qty.id] as number) < (row.data[min.id] as number))
     }
   })
 

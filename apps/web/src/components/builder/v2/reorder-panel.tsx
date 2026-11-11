@@ -88,11 +88,13 @@ export function ReorderPanel() {
         setLoading(false)
         return
       }
-      const mapped: ReorderRow[] = result.page.rows.map(row => {
+      // Strict below-minimum only (stock < min); ignore stale formula rows at equality.
+      const mapped: ReorderRow[] = result.page.rows.flatMap(row => {
         const stock = Number(row.values[inventory.itemStockFieldId])
         const min = Number(row.values[inventory.itemMinFieldId])
         const stockN = Number.isFinite(stock) ? Math.trunc(stock) : 0
         const minN = Number.isFinite(min) ? Math.trunc(min) : 0
+        if (!(stockN < minN)) return []
         const suggested = Math.max(1, minN - stockN)
         const image = inventory.itemPhotoFieldId
           ? builderV2MediaItems(row.values[inventory.itemPhotoFieldId], published.slug).find(item => item.image)
@@ -100,7 +102,7 @@ export function ReorderPanel() {
         const sku = inventory.itemSkuFieldId
           ? String(row.display[inventory.itemSkuFieldId] || row.values[inventory.itemSkuFieldId] || '').trim() || undefined
           : undefined
-        return {
+        return [{
           productId: row.id,
           name: row.display[inventory.itemNameFieldId] || 'Товар',
           sku,
@@ -110,7 +112,7 @@ export function ReorderPanel() {
           qty: suggested,
           selected: true,
           image,
-        }
+        }]
       })
       const productIds = mapped.map(row => row.productId)
       if (productIds.length) {

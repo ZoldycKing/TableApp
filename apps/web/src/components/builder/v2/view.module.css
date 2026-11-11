@@ -1992,6 +1992,14 @@ button.recordButton:hover strong { color: var(--v2-accent, #456849); }
 .countCard .orderIdentityFact[data-tone='mint'] > strong { color: light-dark(#047857, #abebcf); }
 .countDraftPanel form[data-count] .formTitle { display: none; }
 .countDraftPanel form[data-count] { border: 0; box-shadow: none; background: transparent; padding: 0; gap: 12px; }
+/* Draft card: facts only — warehouse/date stay in the summary block above. */
+.countDraftPanel form[data-count] .purchaseFields > :has([data-purchase-field='warehouse']),
+.countDraftPanel form[data-count] .purchaseFields > :has([data-purchase-field='date']) { display: none; }
+.countDraftPanel form[data-count] .purchaseFields {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr);
+}
 @media (min-width: 721px) {
   .countCard > .orderIdentity .orderIdentityFacts {
     grid-template-columns: repeat(4, minmax(0, 1fr));

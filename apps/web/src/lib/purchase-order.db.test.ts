@@ -67,12 +67,21 @@ describe.skipIf(!process.env.DATABASE_URL)('purchase orders', () => {
     const ordered = orders.find(row => dataOf(row)[inv.purchaseStatusFieldId!] === inv.statusOrdered)!
     const received = orders.find(row => dataOf(row)[inv.purchaseStatusFieldId!] === inv.statusReceived)!
     const lineIds = dataOf(ordered)[inv.purchaseLinesFieldId!] as string[]
-    const [line] = await database.db.select().from(database.rows).where(eq(database.rows.id, lineIds[0]!))
-    const productId = (dataOf(line!)[inv.lineProductFieldId!] as string[])[0]!
-    const qty = Number(dataOf(line!)[inv.lineQtyFieldId!])
+    expect(lineIds.length).toBeGreaterThan(1)
+    const lines = await database.db.select().from(database.rows).where(and(eq(database.rows.tableId, inv.purchaseLinesTableId!), isNull(database.rows.deletedAt)))
+    const orderedLines = lineIds.map(id => lines.find(row => row.id === id)!).filter(Boolean)
+    expect(orderedLines).toHaveLength(lineIds.length)
+    const expectedReceipts = orderedLines.map(line => ({
+      productId: (dataOf(line)[inv.lineProductFieldId!] as string[])[0]!,
+      qty: Number(dataOf(line)[inv.lineQtyFieldId!]),
+    }))
     const warehouseId = (dataOf(ordered)[inv.purchaseWarehouseFieldId!] as string[])[0]!
-    const [product] = await database.db.select().from(database.rows).where(eq(database.rows.id, productId))
-    const beforeLinks = (dataOf(product!)[inv.itemMovementsFieldId] as string[]).length
+    const productIds = [...new Set(expectedReceipts.map(item => item.productId))]
+    const productsBefore = await database.db.select().from(database.rows).where(and(eq(database.rows.tableId, inv.itemsTableId), isNull(database.rows.deletedAt)))
+    const beforeLinks = new Map(productIds.map(id => {
+      const product = productsBefore.find(row => row.id === id)!
+      return [id, (dataOf(product)[inv.itemMovementsFieldId] as string[]).length] as const
+    }))
     const movementsBefore = await database.db.select().from(database.rows).where(and(eq(database.rows.tableId, inv.movementsTableId), isNull(database.rows.deletedAt)))
 
     const staff = actor(['staff'])
@@ -87,17 +96,25 @@ describe.skipIf(!process.env.DATABASE_URL)('purchase orders', () => {
     expect(dataOf(got!)[inv.purchaseStatusFieldId!]).toBe(inv.statusReceived)
     const movements = await database.db.select().from(database.rows).where(and(eq(database.rows.tableId, inv.movementsTableId), isNull(database.rows.deletedAt)))
     const added = movements.filter(row => !movementsBefore.some(before => before.id === row.id))
-    expect(added).toHaveLength(1)
-    expect(dataOf(added[0]!)).toMatchObject({
-      [inv.movementQtyFieldId]: qty,
-      [inv.movementTypeFieldId]: inv.typeReceipt,
-      [inv.movementWarehouseFieldId]: [warehouseId],
-      [inv.movementItemFieldId]: [productId],
-    })
-    const [productAfter] = await database.db.select().from(database.rows).where(eq(database.rows.id, productId))
-    const links = dataOf(productAfter!)[inv.itemMovementsFieldId] as string[]
-    expect(links).toHaveLength(beforeLinks + 1)
-    expect(links).toContain(added[0]!.id)
+    expect(added).toHaveLength(expectedReceipts.length)
+    for (const receipt of expectedReceipts) {
+      const match = added.find(row => {
+        const data = dataOf(row)
+        return data[inv.movementQtyFieldId] === receipt.qty
+          && data[inv.movementTypeFieldId] === inv.typeReceipt
+          && JSON.stringify(data[inv.movementWarehouseFieldId]) === JSON.stringify([warehouseId])
+          && JSON.stringify(data[inv.movementItemFieldId]) === JSON.stringify([receipt.productId])
+      })
+      expect(match).toBeTruthy()
+    }
+    for (const productId of productIds) {
+      const [productAfter] = await database.db.select().from(database.rows).where(eq(database.rows.id, productId))
+      const links = dataOf(productAfter!)[inv.itemMovementsFieldId] as string[]
+      const receiptsForProduct = expectedReceipts.filter(item => item.productId === productId).length
+      expect(links).toHaveLength(beforeLinks.get(productId)! + receiptsForProduct)
+      const addedIds = added.filter(row => JSON.stringify(dataOf(row)[inv.movementItemFieldId]) === JSON.stringify([productId])).map(row => row.id)
+      for (const id of addedIds) expect(links).toContain(id)
+    }
     await expect(writeRows(workspaceId, context => receivePurchaseOrder(context, app, staff, ordered.id))).rejects.toThrow(/Повторная приёмка невозможна/)
 
     const movementsAtCancel = await database.db.select().from(database.rows).where(and(eq(database.rows.tableId, inv.movementsTableId), isNull(database.rows.deletedAt)))

@@ -84,7 +84,10 @@ export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,childre
         {back ? <button type="button" className={presentation.iconControl} onClick={back} aria-label="Назад" title="Назад"><ProtoIcon name="back" /></button> : <span className={css.headerMark}>{mark}</span>}
         {profile && <BuilderV2RecordAvatar name={title} id={scrollKey || screenId} icon="users" />}
         {catalogDetail ? <span className={css.catalogIdentity}>{sectionScreen?.name ?? appName}</span>
-          : <div><span className={css.headerIdentity}>{headerEyebrow}</span><h1 className={presentation.pageTitle}>{title.replaceAll('-', '\u2011')}</h1></div>}
+          : title || (back && headerEyebrow) ? <div>
+            {title ? <span className={css.headerIdentity}>{headerEyebrow}</span> : null}
+            {title ? <h1 className={presentation.pageTitle}>{title.replaceAll('-', '\u2011')}</h1> : null}
+          </div> : null}
         {headerAction&&<span className={css.headerAction}>{headerAction}</span>}
       </div>
     </header>

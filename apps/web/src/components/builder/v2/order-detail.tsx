@@ -212,6 +212,7 @@ function BuilderV2OrderActionToolbar({
   placement,
   iconsOnly = false,
   textOnly = false,
+  collapseMobile = false,
 }: {
   items: readonly { id: string; title: string; icon?: string; primary?: boolean }[]
   onOpen: (id: string) => void
@@ -219,17 +220,31 @@ function BuilderV2OrderActionToolbar({
   placement?: 'desktop' | 'mobile'
   iconsOnly?: boolean
   textOnly?: boolean
+  collapseMobile?: boolean
 }) {
+  const collapsed = textOnly && collapseMobile
+  const head = collapsed
+    ? items.filter(item => item.primary || item.title === 'Расход')
+    : []
+  const tail = collapsed ? items.filter(item => !head.includes(item)) : []
   const rendered = iconsOnly
     ? items.filter(item => Boolean(item.icon) && !item.primary)
-    : textOnly
-      ? items.filter(item => !(item.icon && !item.primary))
-      : items
+    : collapsed
+      ? head
+      : textOnly
+        ? items.filter(item => !(item.icon && !item.primary))
+        : items
   const inIdentity = placement === 'desktop' || iconsOnly
   return <div ref={dockRef} className={inIdentity ? ui.orderIdentityActions : ui.orderActionDock} data-mode={!inIdentity && placement === 'mobile' ? 'reveal' : undefined} data-placement={placement} aria-label="Действия">
     {rendered.map(item => item.icon && !item.primary
       ? <button key={item.id} type="button" className={ui.orderActionIcon} aria-label={item.title} title={item.title} onClick={() => onOpen(item.id)}><ProtoIcon name={item.icon} size={20} /></button>
       : <button key={item.id} type="button" data-primary={item.primary || undefined} className={`${item.primary ? styles.primary : styles.secondary} ${ui.orderActionTrigger}`} onClick={() => onOpen(item.id)}>{item.title}</button>)}
+    {collapsed && tail.length ? <details className={ui.orderActionOverflow}>
+      <summary className={ui.orderActionIcon} aria-label="Другие действия" title="Другие действия"><ProtoIcon name="more" size={20} /></summary>
+      <div className={ui.orderActionOverflowMenu} role="menu">
+        {tail.map(item => <button key={item.id} type="button" role="menuitem" className={styles.secondary} onClick={() => onOpen(item.id)}>{item.title}</button>)}
+      </div>
+    </details> : null}
   </div>
 }
 
@@ -348,7 +363,7 @@ export function BuilderV2OrderActionPanel({
           actions={<>
             <BuilderV2OrderActionToolbar items={toolbarItems} onOpen={open} placement="desktop" />
           </>} />
-        {!active && <BuilderV2OrderActionToolbar items={toolbarItems} onOpen={open} dockRef={dockRef} placement="mobile" textOnly />}
+        {!active && <BuilderV2OrderActionToolbar items={toolbarItems} onOpen={open} dockRef={dockRef} placement="mobile" textOnly collapseMobile={Boolean(identity?.productTitle)} />}
         {dialog}
       </>
     }

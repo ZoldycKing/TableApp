@@ -168,14 +168,18 @@
   .container[data-contained="true"] .frame[data-navigation="sidebar"] .navigation { overflow-y: auto; }
   .frame[data-navigation="sidebar"] .navItems { flex-direction: column; }
   .frame[data-navigation="sidebar"] .navigation button { flex-direction: row; justify-content: start; gap: 10px; text-align: left; font-size: 14px; line-height: 20px; }
-  .frame:is([data-navigation="sidebar"],[data-navigation="tabs"]) .overflowItem { display: block; }
-  .frame:is([data-navigation="sidebar"],[data-navigation="tabs"]) .more { display: none; }
-  .frame[data-navigation="tabs"] { grid-template-areas: "header" "nav" "body"; }
-  .container[data-contained="true"] .frame[data-navigation="tabs"] { grid-template-rows: auto auto var(--v2-content-track); }
-  .frame[data-navigation="tabs"] .navigation { top: 0; bottom: auto; border-top: 0; border-bottom: 1px solid var(--v2-line); padding-block: 8px; }
-  .frame[data-navigation="tabs"] .navItems { overflow-x: auto; }
-  .frame[data-navigation="tabs"] .navItems > div { flex: 0 0 auto; max-width: 240px; }
-  .frame[data-navigation="tabs"] .navigation button { flex-direction: row; font-size: 14px; line-height: 20px; }
+  .frame:is([data-navigation="sidebar"],[data-navigation="tabs"],[data-navigation="bottom"]) .overflowItem { display: block; }
+  .frame:is([data-navigation="sidebar"],[data-navigation="tabs"],[data-navigation="bottom"]) .more { display: none; }
+  .frame:is([data-navigation="tabs"],[data-navigation="bottom"]) { grid-template-areas: "header" "nav" "body"; }
+  .container[data-contained="true"] .frame:is([data-navigation="tabs"],[data-navigation="bottom"]) { grid-template-rows: auto auto var(--v2-content-track); }
+  .frame:is([data-navigation="tabs"],[data-navigation="bottom"]) .navigation { position: static; top: 0; bottom: auto; border-top: 0; border-bottom: 1px solid var(--v2-line); padding-block: 8px; }
+  .frame:is([data-navigation="tabs"],[data-navigation="bottom"]) .railIdentity { display: flex; align-items: center; gap: 10px; flex: none; min-width: 0; max-width: 12rem; padding-inline: 4px 12px; overflow-wrap: anywhere; }
+  .frame:is([data-navigation="tabs"],[data-navigation="bottom"]) .railIdentity strong { font-size: 14px; font-weight: 700; line-height: 1.2; }
+  .frame:is([data-navigation="tabs"],[data-navigation="bottom"]) .headerMark { display: none; }
+  .frame:is([data-navigation="tabs"],[data-navigation="bottom"]) .navItems { overflow-x: auto; flex: 1; min-width: 0; }
+  .frame:is([data-navigation="tabs"],[data-navigation="bottom"]) .navItems > div { flex: 0 0 auto; max-width: 240px; }
+  .frame:is([data-navigation="tabs"],[data-navigation="bottom"]) .navigation button { flex-direction: row; font-size: 14px; line-height: 20px; min-height: 40px; }
+  .frame:is([data-navigation="tabs"],[data-navigation="bottom"]) .navigation .chromeBar { align-items: center; gap: 8px; }
 }
 @container builder-app (max-width: 640px) { .navItems > div > button > span { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } }
 @container builder-app (max-width: 440px) { .container .header { gap: 12px; } .navigation { padding-block: 4px; padding-bottom: calc(4px + env(safe-area-inset-bottom,0px)); } .navigation button { padding: 8px 4px; } }

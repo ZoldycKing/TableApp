@@ -142,6 +142,24 @@
 .orderActionDock[data-mode="reveal"], .orderActionDock[data-placement="mobile"] { position: sticky; bottom: 12px; z-index: 4; padding: 10px; border-radius: var(--v2-card-radius, 12px); background: color-mix(in srgb, var(--v2-surface, #fff) 92%, transparent); box-shadow: var(--v2-panel-shadow); backdrop-filter: blur(8px); }
 .orderActionDock .orderActionTrigger { width: 100%; }
 .orderActionDock .orderActionTrigger[data-primary] { grid-column: 1 / -1; }
+.orderActionOverflow { position: relative; display: inline-flex; }
+.orderActionOverflow > summary { list-style: none; cursor: pointer; }
+.orderActionOverflow > summary::-webkit-details-marker { display: none; }
+.orderActionOverflowMenu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 6;
+  display: grid;
+  gap: 6px;
+  min-width: 12rem;
+  padding: 8px;
+  border: 1px solid var(--v2-line, #dce2d6);
+  border-radius: 10px;
+  background: var(--v2-surface, #fff);
+  box-shadow: var(--v2-panel-shadow);
+}
+.orderActionOverflowMenu button { width: 100%; justify-content: center; }
 .orderActionIcon { display: inline-grid; place-items: center; width: 44px; height: 44px; flex: none; border: 1px solid var(--v2-line, #dce2d6); border-radius: var(--v2-control-radius, 8px); background: var(--v2-surface, #fff); color: var(--v2-ink, #253c2d); cursor: pointer; }
 .orderActionIcon:hover { border-color: var(--v2-accent); color: var(--v2-accent); }
 .orderActionScrim { position: fixed; inset: 0; z-index: 80; border: 0; padding: 0; background: color-mix(in srgb, #122018 46%, transparent); cursor: pointer; }
@@ -295,7 +313,7 @@
 }
 .plainList[data-stock] {
   /* Shared fixed tracks so every stock row aligns column starts. */
-  --inv-stock-cols: 64px minmax(0, 1fr) 7.25rem 9rem 8.75rem 4.75rem;
+  --inv-stock-cols: 64px minmax(0, 1fr) 6.5rem 8rem minmax(6.5rem, 1fr) 5.5rem 5.75rem;
 }
 .stockListHeader {
   display: none;
@@ -392,20 +410,51 @@
 .recordButton[data-low='true'] .stockMinBar > i {
   background: color-mix(in srgb, #e11d48 70%, #fda4af);
 }
-.recordButton[data-compact][data-stock] > .recordMetaDetail {
-  grid-column: 3;
-  grid-row: 1 / span 2;
-  align-self: center;
-  justify-self: end;
-  margin: 0;
-  color: var(--v2-ink, #253c2d);
-  font-size: 14px;
-  font-weight: 700;
+.recordStockCol[data-col='cost'],
+.recordStockCol[data-col='value'],
+.stockListMoney {
+  text-align: end;
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
 }
-.recordButton[data-compact][data-stock][data-low='true'] > .recordMetaDetail {
-  color: #be123c;
+.recordStockCol[data-col='stock'] {
+  display: none;
+  gap: 4px;
+  color: var(--v2-ink, #253c2d);
+  font-size: 13px;
+  line-height: 1.3;
+}
+.recordStockCol[data-col='stock'] strong { font-weight: 750; }
+.plainList[data-shop-orders],
+.recordButton[data-shop-orders][data-compact][data-purchase] {
+  --inv-shop-order-cols: 52px minmax(0, 1fr) minmax(6rem, 1fr) 6.5rem 6.5rem 5.5rem;
+}
+.shopOrdersListHeader,
+.clientListHeader { display: none; }
+.clientListCol { display: none; min-width: 0; }
+.clientListCopy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.clientListMobileMeta {
+  display: grid;
+  gap: 2px;
+  color: var(--v2-muted, #687568);
+  font-size: 12px;
+  line-height: 1.35;
+}
+.recordButton[data-compact][data-clients] {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  column-gap: 12px;
+  align-items: center;
+}
+.recordButton[data-compact][data-clients] > .recordAvatar,
+.recordButton[data-compact][data-clients] > .productThumb {
+  grid-row: 1 / span 2;
+}
+.recordButton[data-compact][data-clients] > .clientListCopy {
+  display: grid;
 }
 @container builder-app (min-width: 900px) {
   .stockListHeader {
@@ -433,12 +482,49 @@
   }
   .recordButton[data-compact][data-stock] > .recordStockCopy > .recordStockMobileMeta { display: none; }
   .recordButton[data-compact][data-stock] > .recordStockCol { display: block; align-self: center; padding-top: 0; }
-  .recordButton[data-compact][data-stock] > .recordStockCol[data-col='min'] { display: grid; }
-  .recordButton[data-compact][data-stock] > .recordMetaDetail {
-    grid-column: 6;
-    grid-row: 1;
-    justify-self: end;
+  .recordButton[data-compact][data-stock] > .recordStockCol[data-col='stock'] { display: grid; }
+  .recordButton[data-compact][data-stock] > .recordStockCol[data-col='cost'],
+  .recordButton[data-compact][data-stock] > .recordStockCol[data-col='value'] { font-weight: 650; color: var(--v2-ink, #253c2d); }
+  .shopOrdersListHeader {
+    display: grid;
+    grid-template-columns: var(--inv-shop-order-cols);
+    column-gap: 14px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--v2-line, #dce2d6);
+    color: var(--v2-muted, #687568);
+    font-size: 12px;
+    font-weight: 650;
+    background: color-mix(in srgb, var(--v2-bg, #f8faf6) 88%, var(--v2-surface, #fff));
   }
+  .shopOrdersListHeader > span:last-child { text-align: end; }
+  .plainList[data-shop-orders] .recordButton[data-purchase] {
+    grid-template-columns: var(--inv-shop-order-cols);
+    column-gap: 14px;
+    align-items: center;
+  }
+  .plainList[data-shop-orders] .recordButton[data-purchase] > .purchaseListCol { display: block; }
+  .plainList[data-shop-orders] .recordButton[data-purchase] > .purchaseListMobileMeta { display: none; }
+  .clientListHeader {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) 6.5rem 4.5rem 6rem 6.5rem;
+    column-gap: 14px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--v2-line, #dce2d6);
+    color: var(--v2-muted, #687568);
+    font-size: 12px;
+    font-weight: 650;
+    background: color-mix(in srgb, var(--v2-bg, #f8faf6) 88%, var(--v2-surface, #fff));
+  }
+  .clientListHeader > span:last-child { text-align: end; }
+  .recordButton[data-compact][data-clients] {
+    grid-template-columns: 44px minmax(0, 1.2fr) minmax(0, 1fr) 6.5rem 4.5rem 6rem 6.5rem;
+    column-gap: 14px;
+  }
+  .recordButton[data-compact][data-clients] > .clientListCol { display: block; align-self: center; }
+  .recordButton[data-compact][data-clients] > .clientListMobileMeta,
+  .recordButton[data-compact][data-clients] .clientListMobileMeta { display: none; }
+  .recordButton[data-compact][data-clients] > .clientListCol[data-col='sum'],
+  .recordButton[data-compact][data-clients] > .clientListCol[data-col='deals'] { text-align: end; font-variant-numeric: tabular-nums; }
 }
 @container builder-app (min-width: 760px) {
   .productIdentity {

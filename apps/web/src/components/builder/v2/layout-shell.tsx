@@ -9,6 +9,7 @@ export type ShellMetric = {
   caption: string
   pill?: ReactNode
   tone?: 'rose' | 'amber' | 'mint'
+  wide?: boolean
 }
 
 export type ShellTab = {
@@ -29,6 +30,7 @@ export function ListScreenShell({
   search,
   selects,
   children,
+  footer,
   hideHeader,
 }: {
   title?: ReactNode
@@ -41,9 +43,14 @@ export function ListScreenShell({
   search?: ReactNode
   selects?: ReactNode
   children: ReactNode
+  footer?: ReactNode
   hideHeader?: boolean
 }) {
-  const metricCount = metrics?.length ?? 0
+  const visibleMetrics = metrics?.filter(metric => {
+    if (metric.value == null || metric.value === '' || metric.value === '—') return false
+    return true
+  }) ?? []
+  const metricCount = visibleMetrics.length
   return <div className={shell.shell} data-layout="list">
     {!hideHeader && (title || actions) ? <header className={shell.header}>
       <div className={shell.headerCopy}>
@@ -54,9 +61,9 @@ export function ListScreenShell({
     </header> : null}
     <div className={shell.panel}>
       {metricCount ? <div className={shell.summary} data-count={metricCount} style={{ '--shell-metrics': metricCount } as CSSProperties}>
-        {metrics!.map(metric => <div key={metric.key} className={shell.metric}>
-          <p className={shell.metricValue}>{metric.value}</p>
+        {visibleMetrics.map(metric => <div key={metric.key} className={shell.metric} data-wide={metric.wide || undefined}>
           <p className={shell.metricCaption}>{metric.caption}</p>
+          <p className={shell.metricValue}>{metric.value}</p>
           {metric.pill ? <span className={shell.metricPill} data-tone={metric.tone}>{metric.pill}</span> : null}
         </div>)}
       </div> : null}
@@ -81,6 +88,7 @@ export function ListScreenShell({
         </div> : null}
       </div> : null}
       <div className={shell.body}>{children}</div>
+      {footer ? <div className={shell.panelFooter}>{footer}</div> : null}
     </div>
   </div>
 }

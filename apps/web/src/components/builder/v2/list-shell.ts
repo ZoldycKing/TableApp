@@ -67,15 +67,24 @@ export function formatShellMoney(value: number): string {
   return purchaseMoney(value)
 }
 
+function metricVisible(value: ShellMetric['value']): boolean {
+  return value != null && value !== '' && value !== '—'
+}
+
 type ShellMetricsInput = {
   kind: ListShellKind
   page?: BuilderV2DataPage
   rows?: readonly AppV2Record[]
   inventory?: NonNullable<AppV2['inventory']>
+  crm?: NonNullable<AppV2['crm']>
+  shop?: NonNullable<AppV2['shop']>
   table?: BuilderV2Table
   lowStockCount?: number | null
   supplierPurchasedTotal?: number
   supplierOrdersTotal?: number
+  openPurchaseTotal?: number | null
+  clientOpenDeals?: number
+  clientPipelineAmount?: number
 }
 
 function rowsOf(input: ShellMetricsInput): readonly AppV2Record[] {
@@ -83,38 +92,38 @@ function rowsOf(input: ShellMetricsInput): readonly AppV2Record[] {
 }
 
 export function buildListShellMetrics(input: ShellMetricsInput): ShellMetric[] {
-  const { kind, page, inventory, table, lowStockCount } = input
+  const { kind, page, inventory, crm, shop, table, lowStockCount, openPurchaseTotal, clientOpenDeals, clientPipelineAmount } = input
   const rows = rowsOf(input)
   const total = page?.total ?? rows.length
 
   if (kind === 'inventory-items' && inventory) {
     let stockValue = 0
     let low = 0
-    const warehouses = new Set<string>()
     for (const row of rows) {
       if (row.values[inventory.itemLowFieldId] === true) low += 1
       const stock = Number(row.values[inventory.itemStockFieldId])
       const cost = Number(row.values[inventory.itemCostFieldId])
       if (Number.isFinite(stock) && Number.isFinite(cost)) stockValue += stock * cost
-      const wh = row.values[inventory.itemWarehouseFieldId]
-      const whKey = typeof wh === 'string' ? wh : Array.isArray(wh) ? wh.find((id): id is string => typeof id === 'string') : ''
-      if (whKey) warehouses.add(whKey)
     }
     const below = lowStockCount != null ? lowStockCount : low
-    return [
-      { key: 'value', value: stockValue > 0 ? formatShellMoney(stockValue) : '—', caption: 'Стоимость остатка' },
-      {
-        key: 'low',
-        value: String(below),
-        caption: 'Ниже минимума',
-        ...(below > 0 ? { pill: 'Нужно заказать', tone: 'rose' as const } : {}),
-      },
-      {
-        key: 'wh',
-        value: String(warehouses.size || total),
-        caption: warehouses.size ? 'Складов' : 'Товаров в списке',
-      },
-    ]
+    const metrics: ShellMetric[] = []
+    if (stockValue > 0) {
+      metrics.push({ key: 'value', value: formatShellMoney(stockValue), caption: 'Стоимость остатка', wide: true })
+    }
+    metrics.push({
+      key: 'low',
+      value: String(below),
+      caption: 'Ниже минимума',
+      ...(below > 0 ? { pill: 'Заказать ›', tone: 'rose' as const } : {}),
+    })
+    if (openPurchaseTotal != null && openPurchaseTotal > 0) {
+      metrics.push({
+        key: 'open_po',
+        value: formatShellMoney(openPurchaseTotal),
+        caption: 'В заказах у поставщиков',
+      })
+    }
+    return metrics
   }
 
   if (kind === 'inventory-movements' && inventory) {
@@ -133,8 +142,7 @@ export function buildListShellMetrics(input: ShellMetricsInput): ShellMetric[] {
     for (const [id, count] of top) {
       metrics.push({ key: id, value: String(count), caption: labels.get(id) ?? 'Операции' })
     }
-    while (metrics.length < 3) metrics.push({ key: `pad-${metrics.length}`, value: '—', caption: 'По типу' })
-    return metrics.slice(0, 4)
+    return metrics.filter(metric => metricVisible(metric.value))
   }
 
   if (kind === 'inventory-purchases' && inventory) {
@@ -152,7 +160,7 @@ export function buildListShellMetrics(input: ShellMetricsInput): ShellMetric[] {
     return [
       { key: 'orders', value: formatShellCount(total, 'заказ', 'заказа', 'заказов'), caption: 'Всего' },
       { key: 'active', value: String(activeCount), caption: active?.name ?? 'В работе' },
-      { key: 'sum', value: amount > 0 ? formatShellMoney(amount) : '—', caption: 'Сумма в списке' },
+      ...(amount > 0 ? [{ key: 'sum', value: formatShellMoney(amount), caption: 'Сумма в списке' }] : []),
     ]
   }
 
@@ -162,7 +170,7 @@ export function buildListShellMetrics(input: ShellMetricsInput): ShellMetric[] {
     return [
       { key: 'suppliers', value: formatShellCount(total, 'поставщик', 'поставщика', 'поставщиков'), caption: 'В базе' },
       { key: 'orders', value: String(orders), caption: 'Заказов всего' },
-      { key: 'sum', value: purchased > 0 ? formatShellMoney(purchased) : '—', caption: 'Закуплено' },
+      ...(purchased > 0 ? [{ key: 'sum', value: formatShellMoney(purchased), caption: 'Закуплено' }] : []),
     ]
   }
 
@@ -186,9 +194,14 @@ export function buildListShellMetrics(input: ShellMetricsInput): ShellMetric[] {
     if (columns?.length) {
       const open = columns.reduce((sum, col) => sum + col.total, 0)
       const won = columns.find(col => /выигр|успех|закрыт/i.test(col.name))?.total ?? 0
+      let pipeline = 0
+      for (const row of rows) {
+        const sum = crm ? Number(row.values[crm.sumFieldId]) : NaN
+        if (Number.isFinite(sum)) pipeline += sum
+      }
       return [
         { key: 'deals', value: formatShellCount(open, 'сделка', 'сделки', 'сделок'), caption: 'На воронке' },
-        { key: 'cols', value: String(columns.length), caption: 'Этапов' },
+        ...(pipeline > 0 ? [{ key: 'pipe', value: formatShellMoney(pipeline), caption: 'Сумма в воронке' }] : []),
         { key: 'won', value: String(won), caption: 'Выиграно' },
       ]
     }
@@ -196,27 +209,60 @@ export function buildListShellMetrics(input: ShellMetricsInput): ShellMetric[] {
   }
 
   if (kind === 'crm-clients') {
-    const withPhone = rows.filter(row => Object.values(row.values).some(value => typeof value === 'string' && /\+?\d[\d\s()-]{6,}/.test(value))).length
     return [
-      { key: 'clients', value: formatShellCount(total, 'клиент', 'клиента', 'клиентов'), caption: 'В базе' },
-      { key: 'loaded', value: String(rows.length), caption: 'В текущем списке' },
-      ...(withPhone ? [{ key: 'phone', value: String(withPhone), caption: 'С телефоном' }] : []),
+      { key: 'clients', value: formatShellCount(total, 'клиент', 'клиента', 'клиентов'), caption: 'Клиентов' },
+      ...(clientOpenDeals != null && clientOpenDeals > 0 ? [{ key: 'open', value: String(clientOpenDeals), caption: 'Открытых сделок' }] : []),
+      ...(clientPipelineAmount != null && clientPipelineAmount > 0 ? [{ key: 'pipe', value: formatShellMoney(clientPipelineAmount), caption: 'Сумма сделок' }] : []),
     ]
   }
 
   if (kind === 'shop-orders') {
     let amount = 0
+    let openCount = 0
+    let counted = 0
+    const statusField = shop?.statusFieldId ? table?.fields.find(field => field.id === shop.statusFieldId) : undefined
+    const terminal = new Set(shop?.terminalStatuses ?? [])
+    const totalFieldId = resolveShopOrderTotalFieldId(shop, table)
     for (const row of rows) {
       const summary = (row as BuilderV2DataRecord).summary
-      if (summary?.amount != null && Number.isFinite(summary.amount)) amount += summary.amount
+      let rowAmount: number | null = summary?.amount != null && Number.isFinite(summary.amount) ? summary.amount : null
+      if (rowAmount == null && totalFieldId) {
+        const raw = row.values[totalFieldId]
+        if (typeof raw === 'number' && Number.isFinite(raw)) rowAmount = raw
+      }
+      if (rowAmount != null) {
+        amount += rowAmount
+        counted += 1
+      }
+      const status = shop?.statusFieldId ? String(row.values[shop.statusFieldId] ?? '') : ''
+      if (status && !terminal.has(status)) openCount += 1
+      else if (!status) openCount += 1
     }
+    const avg = counted > 0 ? amount / counted : 0
     return [
-      { key: 'orders', value: formatShellCount(total, 'заказ', 'заказа', 'заказов'), caption: 'В списке' },
-      { key: 'sum', value: amount > 0 ? formatShellMoney(amount) : '—', caption: 'Сумма заказов' },
-    ]
+      ...(amount > 0 ? [{ key: 'sum', value: formatShellMoney(amount), caption: 'Сумма заказов' }] : []),
+      ...(openCount > 0 ? [{ key: 'open', value: String(openCount), caption: 'В работе' }] : []),
+      ...(avg > 0 ? [{ key: 'avg', value: formatShellMoney(avg), caption: 'Средний чек' }] : []),
+    ].filter(metric => metricVisible(metric.value))
   }
 
   return []
+}
+
+export function resolveShopOrderTotalFieldId(shop?: NonNullable<AppV2['shop']>, table?: BuilderV2Table): string | undefined {
+  if (!table) return undefined
+  if (shop?.orderTitleFieldId) {
+    const byBinding = table.fields.find(field => field.id !== shop.orderTitleFieldId && /^(?:сумма|итого|total)$/iu.test(field.name.trim()))
+    if (byBinding) return byBinding.id
+  }
+  return table.fields.find(field =>
+    ['number', 'formula', 'rollup'].includes(field.type) && /^(?:сумма(?: заказа)?|итого|total)(?:\s|[,(_]|$)/iu.test(field.name.trim())
+      && !/^(?:сумма (?:позиции|строки))/iu.test(field.name.trim())
+  )?.id
+}
+
+export function resolveShopOrderCustomerFieldId(table?: BuilderV2Table): string | undefined {
+  return table?.fields.find(field => /^(?:имя(?:\s+заказчика)?|request\s*name|клиент|покупатель)/iu.test(field.name.trim()))?.id
 }
 
 export function buildListShellMeta(input: ShellMetricsInput): string | undefined {
@@ -245,11 +291,19 @@ export function buildListShellTabs(input: ShellMetricsInput & { activeTab: strin
 
   if (kind === 'inventory-items' && inventory) {
     const low = lowStockCount ?? rows.filter(row => row.values[inventory.itemLowFieldId] === true).length
+    const categoryField = table?.fields.find(field => field.id === inventory.itemCategoryFieldId)
+    const categories = (categoryField?.choices ?? []).filter(choice => choice.name)
+    const byCategory = new Map<string, number>()
+    for (const row of rows) {
+      const key = String(row.values[inventory.itemCategoryFieldId] ?? '')
+      if (key) byCategory.set(key, (byCategory.get(key) ?? 0) + 1)
+    }
     return {
       defaultTab: 'all',
       tabs: [
         { id: 'all', label: 'Все', count: page?.total ?? rows.length },
         { id: 'low', label: 'Ниже минимума', count: low },
+        ...categories.map(choice => ({ id: choice.id, label: choice.name, count: byCategory.get(choice.id) ?? 0 })),
       ],
     }
   }
@@ -321,7 +375,8 @@ export function filterListShellRows(
 ): readonly AppV2Record[] {
   if (tab === 'all' || !tab) return rows
   if (kind === 'inventory-items' && inventory) {
-    return tab === 'low' ? rows.filter(row => row.values[inventory.itemLowFieldId] === true) : rows
+    if (tab === 'low') return rows.filter(row => row.values[inventory.itemLowFieldId] === true)
+    return rows.filter(row => String(row.values[inventory.itemCategoryFieldId] ?? '') === tab)
   }
   if (kind === 'inventory-movements' && inventory) {
     return rows.filter(row => row.values[inventory.movementTypeFieldId] === tab)
@@ -342,6 +397,24 @@ export function filterListShellRows(
   return rows
 }
 
+export function filterInventoryItemRows(
+  rows: readonly AppV2Record[],
+  inventory: NonNullable<AppV2['inventory']>,
+  options: { warehouse?: string; category?: string },
+): readonly AppV2Record[] {
+  return rows.filter(row => {
+    if (options.warehouse && options.warehouse !== 'all') {
+      const wh = String(row.values[inventory.itemWarehouseFieldId] ?? '')
+      if (wh !== options.warehouse) return false
+    }
+    if (options.category && options.category !== 'all') {
+      const cat = String(row.values[inventory.itemCategoryFieldId] ?? '')
+      if (cat !== options.category) return false
+    }
+    return true
+  })
+}
+
 export function aggregateSupplierStats(stats: Map<string, { orders: number; purchased: number }>): { orders: number; purchased: number } {
   let orders = 0
   let purchased = 0
@@ -350,4 +423,21 @@ export function aggregateSupplierStats(stats: Map<string, { orders: number; purc
     purchased += value.purchased
   }
   return { orders, purchased }
+}
+
+export function inventoryStockListFooter(rows: readonly AppV2Record[], inventory: NonNullable<AppV2['inventory']>): { label: string; units: string; total?: string } | null {
+  if (!rows.length) return null
+  let units = 0
+  let total = 0
+  for (const row of rows) {
+    const stock = Number(row.values[inventory.itemStockFieldId])
+    const cost = Number(row.values[inventory.itemCostFieldId])
+    if (Number.isFinite(stock)) units += stock
+    if (Number.isFinite(stock) && Number.isFinite(cost)) total += stock * cost
+  }
+  return {
+    label: formatShellCount(rows.length, 'товар', 'товара', 'товаров'),
+    units: `${units.toLocaleString('ru-RU')} шт.`,
+    ...(total > 0 ? { total: `Итого ${formatShellMoney(total)}` } : {}),
+  }
 }

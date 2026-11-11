@@ -102,7 +102,7 @@ export function buildShopV2App(built: BuiltTemplate, meta: { id: string; workspa
   }
   const app: AppV2 = {
     formatVersion: 2, id: meta.id, workspaceId: meta.workspaceId, name: meta.name, slug: meta.slug, purpose: 'business',
-    appearance: { navigation: 'bottom', icon: 'box', density: 'regular', corners: 'rounded' },
+    appearance: { navigation: 'tabs', icon: 'box', density: 'regular', corners: 'rounded' },
     theme: { accent: 'green', scheme: 'light', logoKey: null, iconKey: null },
     roles: [{ id: 'owner', name: 'Владелец' }, { id: 'staff', name: 'Сотрудник' }, { id: 'client', name: 'Клиент' }],
     authentication: { mode: 'verified_email', defaultRoleId: 'client', members: [{ email: meta.email.trim().toLowerCase(), roleIds: ['owner'], company: '' }] },
@@ -120,7 +120,7 @@ export function buildShopV2App(built: BuiltTemplate, meta: { id: string; workspa
       { id: intro, name: 'Пояснение', type: 'text', visibleTo: null, visibleWhen: null, value: { kind: 'literal', value: 'Проверьте состав и контакты. После оформления с вами свяжутся, чтобы подтвердить заказ и согласовать получение. Оплаты онлайн нет.' } },
       { id: checkoutFormId, name: 'Оформление заказа', type: 'form', visibleTo: buyers, visibleWhen: null, tableId: ordersTableId, mode: 'create', childIds: checkoutInputs.map(item => item.id), events: { submit: placeOrder }, submitLabel: 'Оформить заказ' },
       ...checkoutInputs,
-      { id: ordersNode, name: 'Заказы', type: 'collection', visibleTo: null, visibleWhen: null, sourceId: ordersSource, layout: 'list', titleFieldId: shop.orderTitleFieldId, subtitleFieldId: status, itemIds: [], events: { itemPress: openOrder } },
+      { id: ordersNode, name: 'Заказы', type: 'collection', visibleTo: null, visibleWhen: null, sourceId: ordersSource, layout: 'list', titleFieldId: shop.orderTitleFieldId, subtitleFieldId: status, dateFieldId: shop.createdFieldId, cardDetailFieldId: field(orders, 'total'), itemIds: [], events: { itemPress: openOrder } },
       ...orderFields.map(fieldId => node(`order_${fieldId}`, columns(ordersTableId).find(item => item.id === fieldId)!.name, fieldId)),
       { id: cancelButton, name: 'Отменить заказ', type: 'button', label: 'Отменить заказ', variant: 'danger', visibleTo: { ...roles, roleIds: ['client'] }, visibleWhen: null, events: { press: cancelOrder } },
       { id: statusFormId, name: 'Статус заказа', type: 'form', visibleTo: team, visibleWhen: null, tableId: ordersTableId, mode: 'edit', childIds: statusInputs.map(item => item.id), events: { submit: saveStatus }, submitLabel: 'Сохранить изменения' },

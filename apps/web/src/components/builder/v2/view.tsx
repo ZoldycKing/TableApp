@@ -6,7 +6,7 @@ import {BuilderV2Chart} from './chart'
 import {BuilderV2Video} from './video'
 import {builderV2ButtonAction,builderV2NodeAction} from '@/lib/builder-v2-button-action'
 import {builderCalendarTime} from '@/lib/builder-v2-calendar'
-import { formatInventoryAuthor } from '@/lib/inventory-author'
+import { formatInventoryAuthor, formatInventoryJournalWarehouse, formatInventoryJournalWhen } from '@/lib/inventory-author'
 import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 
 function InventoryTypeFilter({ choices, value, onChange }: { choices: readonly { id: string; name: string }[]; value: string; onChange: (id: string) => void }) {
@@ -330,8 +330,8 @@ export function AppV2Renderer(props: AppV2RendererProps) {
               : subtitle
             const label = row ? cell(row, node.titleFieldId) || 'Без названия' : title
             const journalMeta = inventoryJournalList && row && inventory ? [
-              cell(row, inventory.movementWarehouseFieldId),
-              cell(row, inventory.movementDateFieldId),
+              formatInventoryJournalWarehouse(cell(row, inventory.movementWarehouseFieldId)),
+              formatInventoryJournalWhen(cell(row, inventory.movementDateFieldId)),
               formatInventoryAuthor(cell(row, inventory.movementAuthorFieldId)),
             ].filter(Boolean).join(' · ') : ''
             const lowBadge = inventoryStockList && row && row.values[inventory!.itemLowFieldId] === true

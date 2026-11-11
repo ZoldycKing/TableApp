@@ -58,8 +58,8 @@ export function BuilderV2OrderIdentity({
   if (pipeline) {
     const amountValue = amount
       ? amountBadge
-        ? <span className={ui.stockWithBadge}><span>{amount}</span><span className={ui.warningBadge}>{amountBadge}</span></span>
-        : amount
+        ? <span className={ui.stockWithBadge}><span className={ui.stockQty}>{amount}</span><span className={ui.warningBadge}>{amountBadge}</span></span>
+        : <span className={ui.stockQty}>{amount}</span>
       : null
     const facts = [
       status ? { id: 'stage', label: statusLabel || 'Этап', value: status as ReactNode, tone: builderV2StatusTone(status) } : null,

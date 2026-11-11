@@ -98,7 +98,11 @@
 .orderIdentityFact[data-kind="stage"][data-tone="mint"] > strong { color: light-dark(#065f46, #abebcf); }
 .orderIdentityFact[data-kind="amount"] > strong { font-size: clamp(1.15rem, 2.4cqw, 1.35rem); font-weight: 780; font-variant-numeric: tabular-nums; letter-spacing: -.02em; color: var(--v2-ink); }
 /* Keep Остаток (+ badge) and Минимум as adjacent facts with normal gap — do not span 2. */
-.orderIdentityFact[data-kind="amount"] > strong:has(.stockWithBadge) { overflow-wrap: normal; word-break: normal; }
+.orderIdentityFact[data-kind="amount"] > strong:has(.stockWithBadge) {
+  overflow-wrap: normal;
+  word-break: normal;
+  white-space: normal;
+}
 .orderIdentityFact[data-tone="overdue"] > strong { color: light-dark(#9f1239, #ffc5d5); }
 .orderIdentityFact[data-tone="today"] > strong { color: light-dark(#854d0e, #f9d696); }
 .orderIdentityClient { margin: 0; color: var(--v2-ink); font-size: 1rem; line-height: 1.4; font-weight: 650; overflow-wrap: break-word; word-break: normal; }
@@ -127,6 +131,13 @@
 .orderActionDock { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; align-items: center; min-width: 0; }
 /* Primary + 3 secondaries: one full-width primary, then a 3-col row (no orphan cell). */
 .orderActionDock:has(> :nth-child(4):last-child) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.orderActionDock:has(> :nth-child(4):last-child) .orderActionTrigger:not([data-primary]) {
+  box-sizing: border-box;
+  padding-inline: 12px;
+  font-size: 12px;
+  letter-spacing: -.015em;
+  white-space: nowrap;
+}
 .orderDetail[data-layout="stack"][data-manage] { padding-bottom: calc(4.75rem + env(safe-area-inset-bottom, 0px)); }
 .orderActionDock[data-mode="reveal"], .orderActionDock[data-placement="mobile"] { position: sticky; bottom: 12px; z-index: 4; padding: 10px; border-radius: var(--v2-card-radius, 12px); background: color-mix(in srgb, var(--v2-surface, #fff) 92%, transparent); box-shadow: var(--v2-panel-shadow); backdrop-filter: blur(8px); }
 .orderActionDock .orderActionTrigger { width: 100%; }
@@ -264,7 +275,26 @@
 .stockHint { margin: 6px 0 0; color: var(--v2-muted, #687568); font-size: 13px; line-height: 1.35; }
 .warningBadge { display: inline-flex; align-items: center; gap: 6px; flex: none; width: max-content; max-width: none; padding: 6px 10px; border-radius: var(--radius-badge, 999px); background: color-mix(in srgb, #e11d48 12%, var(--v2-surface, #fff)); color: #be123c; font-size: 13px; line-height: 16px; font-weight: 740; white-space: nowrap; overflow-wrap: normal; word-break: normal; }
 .stockWithBadge { display: inline-flex; flex-wrap: nowrap; align-items: center; gap: 8px 10px; min-width: 0; max-width: 100%; }
+.stockQty { white-space: nowrap; overflow-wrap: normal; word-break: normal; font-variant-numeric: tabular-nums; }
 .stockWithBadge > .warningBadge { margin: 0; flex: none; }
+/* Mobile: never split «N шт.»; put the low-stock badge under the value. */
+@container builder-app (max-width: 640px) {
+  .stockWithBadge {
+    flex-direction: column;
+    align-items: flex-start;
+    flex-wrap: nowrap;
+    gap: 6px;
+    max-width: 100%;
+  }
+  .stockWithBadge > .stockQty {
+    white-space: nowrap;
+    overflow-wrap: normal;
+    word-break: keep-all;
+  }
+  .orderIdentityFact[data-kind="amount"] > strong:has(.stockWithBadge) {
+    min-width: 0;
+  }
+}
 .headerEditActions { display: inline-flex; align-items: center; gap: 8px; margin-inline-end: 4px; }
 @container builder-app (min-width: 900px) {
   .headerEditActions { display: none; }
@@ -615,8 +645,11 @@
   gap: 6px 8px;
   min-width: 0;
   color: var(--v2-muted, #687568);
-  font-size: 13px;
+  font-size: 12px;
   line-height: 16px;
+}
+@container builder-app (max-width: 440px) {
+  .recordJournalMeta { font-size: 11.5px; gap: 5px 6px; }
 }
 .recordJournalMeta > .statusBadge { flex: none; }
 .recordJournalMeta > small {

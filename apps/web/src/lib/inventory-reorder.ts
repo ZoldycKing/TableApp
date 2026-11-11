@@ -84,11 +84,16 @@ export function parseReorderPicks(raw: unknown): ReorderPick[] {
 function purchaseRecency(data: Record<string, unknown>, inv: ReorderInventory) {
   const status = data[inv.purchaseStatusFieldId]
   // Prefer received, then ordered, then draft; within a status use the latest stamp/date.
-  const rank = status === inv.statusReceived ? 3 : status === inv.statusOrdered ? 2 : status === inv.statusDraft ? 1 : 0
+  const rank = status === inv.statusReceived ? 3
+    : inv.statusOrdered && status === inv.statusOrdered ? 2
+      : inv.statusDraft && status === inv.statusDraft ? 1
+        : 0
+  const orderedAt = inv.purchaseOrderedAtFieldId ? data[inv.purchaseOrderedAtFieldId] : undefined
+  const createdAt = inv.purchaseCreatedAtFieldId ? data[inv.purchaseCreatedAtFieldId] : undefined
   const at = String(
     data[inv.purchaseReceivedAtFieldId]
-      ?? data[inv.purchaseOrderedAtFieldId]
-      ?? data[inv.purchaseCreatedAtFieldId]
+      ?? orderedAt
+      ?? createdAt
       ?? data[inv.purchaseDateFieldId]
       ?? '',
   )

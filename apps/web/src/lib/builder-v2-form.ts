@@ -56,6 +56,21 @@ export async function inspectBuilderV2Form(app: AppV2, member: Member, request: 
       if (app.inventory && form.mode === 'create' && input.fieldId === app.inventory.movementDateFieldId && blank(initial[field.id])) {
         initial[field.id] = now.toISOString()
       }
+      if (app.inventory && form.mode === 'create' && input.fieldId === app.inventory.purchaseDateFieldId && blank(initial[field.id])) {
+        initial[field.id] = now.toISOString()
+      }
+      const screenRow = context.screenRow
+      if (
+        app.inventory?.purchaseSupplierFieldId
+        && form.mode === 'create'
+        && form.id === app.inventory.createPurchaseFormId
+        && input.fieldId === app.inventory.purchaseSupplierFieldId
+        && blank(initial[field.id])
+        && screenRow
+        && screenRow.tableId === app.inventory.suppliersTableId
+      ) {
+        initial[field.id] = [screenRow.id]
+      }
     }
     const defaults = await withInitialValues(fields, initial, async (tableId, rowId, fieldId) => {
       if (!meta.fieldsByTable.get(tableId)?.some(field => field.id === fieldId && field.type === 'number')) return undefined

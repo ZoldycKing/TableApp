@@ -36,7 +36,8 @@ export function builderV2RecordTone(id: string) {
 
 export function builderV2StatusTone(label: string) {
   const value = label.trim().toLocaleLowerCase('ru-RU').replaceAll('ё', 'е')
-  if (/^(?:доставлен[оа]?|выполнен[оа]?|завершен[оа]?|выдан[оа]?|оплачен[оа]?|delivered|completed|done|paid)$/u.test(value)) return 'mint'
+  if (/^(?:доставлен[оа]?|выполнен[оа]?|завершен[оа]?|выдан[оа]?|оплачен[оа]?|получен[оа]?|delivered|completed|done|paid|received)$/u.test(value)) return 'mint'
+  if (/^(?:заказан[оа]?|ordered)$/u.test(value)) return 'amber'
   if (/^(?:отменен[оа]?|отказ|отмен[аы]|возврат|мало|заканчивается|cancelled|canceled|returned)$/u.test(value) || value.startsWith('ниже минимума')) return 'rose'
   if (/^(?:в работе|собирается|ожидает(?: .+)?|ожидание|pending|processing|in progress)$/u.test(value)) return 'amber'
   if (/^(?:отправлен[оа]?|в пути|в доставке|shipped|in transit)$/u.test(value)) return 'sky'

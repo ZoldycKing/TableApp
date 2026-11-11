@@ -31,7 +31,7 @@ function inventoryTableIds(draft: unknown): string[] | null {
   const v2 = appV2Schema.safeParse(draft)
   if (v2.success && v2.data.inventory) {
     const inv = v2.data.inventory
-    return [...new Set([inv.itemsTableId, inv.movementsTableId, inv.warehousesTableId])]
+    return [...new Set([inv.itemsTableId, inv.movementsTableId, inv.warehousesTableId, ...(inv.suppliersTableId ? [inv.suppliersTableId] : []), ...(inv.purchaseOrdersTableId ? [inv.purchaseOrdersTableId] : []), ...(inv.purchaseLinesTableId ? [inv.purchaseLinesTableId] : [])])]
   }
   return null
 }

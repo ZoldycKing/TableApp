@@ -1,5 +1,5 @@
 import {publishedV2EnterState} from './builder-v2-enter'
-import {builderV2RecordParent,collectionCardScreen} from '@/components/builder/v2/collection-navigation'
+import {builderV2InventoryPurchaseSection,builderV2RecordParent,collectionCardScreen} from '@/components/builder/v2/collection-navigation'
 import {publishedV2Node} from './builder-v2-published-data'
 import {builderV2NodeAction} from './builder-v2-button-action'
 import {db} from '@tableapp/db'
@@ -57,9 +57,25 @@ export async function loadPublishedV2Page(slug:string,request:{screen?:string;ro
       return kept
     }
     const rootIds=await visit(screen.rootIds)
-    // Include create form nodes on the items list so the toolbar dialog can render without navigating away.
-    if (app.inventory && screen.id === app.inventory.itemsScreenId && app.inventory.createItemFormId) {
-      await visit([app.inventory.createItemFormId])
+    // Toolbar dialogs render a form that lives on another screen, and the purchase
+    // line editor looks up the product list by node id. Keep those nodes on the page.
+    const inventory = app.inventory
+    if (inventory && screen.id === inventory.itemsScreenId && inventory.createItemFormId) {
+      await visit([inventory.createItemFormId])
+    }
+    if (inventory?.createPurchaseFormId && (screen.id === inventory.purchasesScreenId || screen.id === inventory.supplierScreenId)) {
+      await visit([inventory.createPurchaseFormId])
+    }
+    if (inventory?.createSupplierFormId && screen.id === inventory.suppliersScreenId) {
+      await visit([inventory.createSupplierFormId])
+    }
+    if (inventory && (screen.id === inventory.purchasesScreenId || screen.id === inventory.purchaseScreenId || screen.id === inventory.createPurchaseScreenId || screen.id === inventory.supplierScreenId)) {
+      const itemsList = app.nodes.find(node => node.type === 'collection' && node.layout === 'list' && app.sources.some(source => source.id === node.sourceId && source.tableId === inventory.itemsTableId && !source.screenTableId))
+      if (itemsList && !nodes.some(node => node.id === itemsList.id)) await visit([itemsList.id])
+    }
+    if (inventory?.purchasesScreenId && (screen.id === inventory.suppliersScreenId || screen.id === inventory.supplierScreenId)) {
+      const purchasesList = app.nodes.find(node => node.type === 'collection' && node.layout === 'list' && app.sources.some(source => source.id === node.sourceId && source.tableId === inventory.purchaseOrdersTableId && !source.screenTableId))
+      if (purchasesList && !nodes.some(node => node.id === purchasesList.id)) await visit([purchasesList.id])
     }
     const recordTable = current.tables.find(table => table.id === screen.contextTableId)
     const statusField = recordTable?.fields.find(field => field.type === 'single_select' && builderV2StatusColumn(field))
@@ -93,6 +109,8 @@ export async function loadPublishedV2Page(slug:string,request:{screen?:string;ro
     const safe:AppV2={...app,authentication:{mode:'invite_only',defaultRoleId:null,members:[]},roles:app.roles.filter(role=>actor.roleIds.includes(role.id)),policy:{tables:[],workflows:[]},screens:visibleScreens.map(item=>({...item,catalog:item.id===screen.id?item.catalog:undefined,rootIds:item.id===screen.id?rootIds:queue&&item.id===parent?.screenId?[queue.id]:[],events:{enter:null}})),nodes,sources,workflows}
     const enter=(!screen.contextTableId||request.row)?await publishedV2EnterState(current,tx,{screenId:screen.id,...(request.row?{recordId:request.row}:{})}):undefined
     const titleFieldId = screen.catalog?.titleFieldId ?? screen.recordTitleFieldId ?? current.tables.find(table=>table.id===screen.contextTableId)?.primaryFieldId
-    return {login:false as const,...(enter?{enter}:{}),app:safe,tables,actor,revision,screenId:screen.id,...(parent?{sectionId:parent.screenId}:{}),...(statusFormId?{statusFormId}:{}),...(openCreate?{openCreate:true as const}:{}),recordId:request.row,record:selected?.record,title:selected?(titleFieldId&&selected.record.display[titleFieldId]||'Запись'):screen.name,buttons,rowActions,...(Object.keys(businessLinks).length ? { businessLinks } : {})}
+    const purchaseSection = builderV2InventoryPurchaseSection(app, screen.id)
+    const sectionId = parent?.screenId ?? purchaseSection
+    return {login:false as const,...(enter?{enter}:{}),app:safe,tables,actor,revision,screenId:screen.id,...(sectionId?{sectionId}:{}),...(statusFormId?{statusFormId}:{}),...(openCreate?{openCreate:true as const}:{}),recordId:request.row,record:selected?.record,title:selected?(titleFieldId&&selected.record.display[titleFieldId]||'Запись'):screen.name,buttons,rowActions,...(Object.keys(businessLinks).length ? { businessLinks } : {})}
   })
 }

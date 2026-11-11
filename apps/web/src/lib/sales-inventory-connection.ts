@@ -10,6 +10,8 @@ export function connectSalesInventory(input: App, ownerEmail: string, existingFi
   const base = scopeModuleAccess(input, existingViews), order = customerCartWorkflow(base)
   if (!order?.catalog || !order.cart || base.inventory) throw new ModuleCompositionError('Склад подключается к продажам с каталогом и корзиной')
   const template = structuredClone(findTemplate('sklad')!)
+  // Sales connection only needs stock journals + warehouses — not purchase-order tables from stage 2.
+  template.tables = template.tables.filter(table => ['items', 'receipts', 'warehouses'].includes(table.key))
   const itemsDefinition = template.tables.find(table => table.key === template.inventory!.tables.items)!
   itemsDefinition.fields = itemsDefinition.fields.filter(field => ['name', 'photo', 'sku', 'opening', 'receipts', 'received', 'qty'].includes(field.key))
   itemsDefinition.views = [{ name: 'Товары на складе', type: 'grid' }]; itemsDefinition.rows = []

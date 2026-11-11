@@ -11,7 +11,7 @@ import {AppV2Renderer} from './view'
 import {BuilderV2AppFrame,BuilderV2Theme,BuilderV2Account} from './app-frame'
 import {BuilderV2WorkflowNotice} from './workflow-feedback'
 import ui from './view.module.css'
-import { builderV2RecordParent } from './collection-navigation'
+import { builderV2InventoryPurchaseSection, builderV2RecordParent } from './collection-navigation'
 import { BuilderV2OrderWorkbench } from './order-workbench'
 import { isBuilderV2ContactProfile } from './record-presentation'
 type Data=Extract<Awaited<ReturnType<typeof loadPublishedV2Page>>,{login:false}> & { openCreate?: boolean }
@@ -35,18 +35,28 @@ export function PublishedV2Runtime({data}:{data:Data}){
     else if(options?.replace)router.replace(url)
     else router.push(url)
   }
-  const transport:PublishedV2Transport={slug,revision,dataVersion,rowAction:id=>rowActions[id],invalidate:message=>{setNotice(message);setDataVersion(value=>value+1)},readData:request=>readPublishedV2DataAction(slug,{...request,revision}),readRecord:request=>readPublishedV2RecordAction(slug,{...request,revision}),inspectForm:request=>inspectPublishedV2FormAction(slug,{...request,revision}),submitForm:request=>submitPublishedV2FormAction(slug,request),inspectButton:request=>inspectPublishedV2ButtonAction(slug,{...request,revision}),submitButton:request=>submitPublishedV2ButtonAction(slug,request),inspectDelete:request=>inspectPublishedV2DeleteAction(slug,{...request,revision}),submitDelete:request=>submitPublishedV2DeleteAction(slug,request),navigate,back:(fallback,options)=>{enterNavigation.current.prepare(Boolean(options?.automatic));history.back(fallback)},refresh,tableName:tableId=>tables.find(table=>table.id===tableId)?.name??'Таблица',buttonState:id=>buttons[id],setHeaderAccessory}
+  const transport:PublishedV2Transport={slug,revision,dataVersion,inventory:app.inventory,rowAction:id=>rowActions[id],invalidate:message=>{setNotice(message);setDataVersion(value=>value+1)},readData:request=>readPublishedV2DataAction(slug,{...request,revision}),readRecord:request=>readPublishedV2RecordAction(slug,{...request,revision}),inspectForm:request=>inspectPublishedV2FormAction(slug,{...request,revision}),submitForm:request=>submitPublishedV2FormAction(slug,request),inspectButton:request=>inspectPublishedV2ButtonAction(slug,{...request,revision}),submitButton:request=>submitPublishedV2ButtonAction(slug,request),inspectDelete:request=>inspectPublishedV2DeleteAction(slug,{...request,revision}),submitDelete:request=>submitPublishedV2DeleteAction(slug,request),navigate,back:(fallback,options)=>{enterNavigation.current.prepare(Boolean(options?.automatic));history.back(fallback)},refresh,tableName:tableId=>tables.find(table=>table.id===tableId)?.name??'Таблица',buttonState:id=>buttons[id],setHeaderAccessory}
   const home=(app.homeScreenId?app.screens.find(screen=>screen.id===app.homeScreenId&&!screen.contextTableId)?.id:undefined)??app.screens.find(screen=>!screen.contextTableId)?.id
   const parent = builderV2RecordParent(app, screenId)
-  const backTarget = data.sectionId ?? home
+  const inventory = app.inventory
+  const purchaseSection = builderV2InventoryPurchaseSection(app, screenId)
+  const sectionId = data.sectionId ?? purchaseSection
+  const suppliersHub = Boolean(inventory && (screenId === inventory.suppliersScreenId || screenId === inventory.createSupplierScreenId))
+  const supplierCard = Boolean(inventory && screenId === inventory.supplierScreenId)
+  const backTarget = supplierCard && inventory?.suppliersScreenId
+    ? inventory.suppliersScreenId
+    : sectionId ?? home
+  const showBack = Boolean(backTarget && (page.contextTableId || suppliersHub || supplierCard))
   // Full product name lives under the photo; keep the chrome title short so stock stays in view.
-  const frameTitle = app.inventory && screenId === app.inventory.itemScreenId ? 'Товар' : title
+  const frameTitle = app.inventory && screenId === app.inventory.itemScreenId ? 'Товар'
+    : app.inventory && screenId === app.inventory.purchaseScreenId ? 'Заказ'
+      : title
   return <PublishedV2Context.Provider value={transport}>
     <BuilderV2Theme as="main" app={app} className={`${ui.preview} ${ui.published}`}>
       <BuilderV2AppFrame
-        fullScreen scrollKey={recordId ?? ''} app={app} screenId={screenId} sectionId={data.sectionId} title={frameTitle}
+        fullScreen scrollKey={recordId ?? ''} app={app} screenId={screenId} sectionId={sectionId} title={frameTitle}
         profile={Boolean(record && isBuilderV2ContactProfile(app, screenId, tables))}
-        back={page.contextTableId && backTarget ? () => { enterNavigation.current.prepare(); history.back(backTarget) } : undefined}
+        back={showBack ? () => { enterNavigation.current.prepare(); history.back(backTarget!) } : undefined}
         headerAction={<>{headerAccessory}<BuilderV2Account email={actor.email} authenticated={actor.authenticated} slug={slug} /></>}
         notice={<><BuilderV2WorkflowNotice appId={slug} />{notice && <p role="status" className={ui.context}>{notice}</p>}</>}
         onNavigate={id => navigate(id)}

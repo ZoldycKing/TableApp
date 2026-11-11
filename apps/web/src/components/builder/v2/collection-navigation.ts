@@ -35,3 +35,17 @@ export function builderV2PreviewRecordParent(app: AppV2, screenId: string, actor
     return !condition || (condition.ok && condition.value)
   })
 }
+
+/** Purchases tab stays highlighted on supplier/order nested screens. */
+export function builderV2InventoryPurchaseSection(app: AppV2, screenId: string) {
+  const inventory = app.inventory
+  if (!inventory?.purchasesScreenId) return
+  const nested = [
+    inventory.purchaseScreenId,
+    inventory.createPurchaseScreenId,
+    inventory.suppliersScreenId,
+    inventory.supplierScreenId,
+    inventory.createSupplierScreenId,
+  ]
+  return nested.includes(screenId) ? inventory.purchasesScreenId : undefined
+}

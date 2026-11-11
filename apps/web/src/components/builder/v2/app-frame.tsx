@@ -88,7 +88,7 @@ export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,childre
         {headerAction&&<span className={css.headerAction}>{headerAction}</span>}
       </div>
     </header>
-    <div ref={body} className={css.body} role={contained ? 'region' : undefined} aria-label={contained ? 'Содержимое экрана' : undefined} tabIndex={contained ? 0 : undefined}>{notice}<div ref={contents} className={`${styles.appContent} ${css.content} ${presentation.contentWidth}`}>{children}</div></div>
+    <div ref={body} className={css.body} role={contained ? 'region' : undefined} aria-label={contained ? 'Содержимое экрана' : undefined} tabIndex={contained ? 0 : undefined}><div ref={contents} className={`${styles.appContent} ${css.content} ${presentation.contentWidth}`}>{notice}{children}</div></div>
     {screens.length>0&&<nav className={css.navigation} aria-label="Разделы приложения">
       <div className={navigation === 'sidebar' ? css.navStack : `${css.chromeBar} ${presentation.contentWidth}`}>
         <div className={css.railIdentity}>{mark}<strong>{appName}</strong></div>

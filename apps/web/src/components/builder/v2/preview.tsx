@@ -11,7 +11,7 @@ import { useBuilderV2Record } from './use-record'
 import { BuilderV2RecordContent } from './record-content'
 import { AppV2Renderer } from './view'
 import {BuilderV2Account,BuilderV2AppFrame,BuilderV2Theme} from './app-frame'
-import { builderV2PreviewRecordParent } from './collection-navigation'
+import { builderV2InventoryPurchaseSection, builderV2PreviewRecordParent } from './collection-navigation'
 import { BuilderV2OrderWorkbench } from './order-workbench'
 import { isBuilderV2ContactProfile } from './record-presentation'
 
@@ -20,6 +20,18 @@ export function AppV2Preview({ app, tables, businessApps, actor, initialScreen, 
   const record = useBuilderV2Record(app, screenId, navigation.recordId)
   const page = app.screens.find(screen => screen.id === screenId) ?? app.screens[0]
   const parent = builderV2PreviewRecordParent(app, screenId, actor)
+  const inventory = app.inventory
+  const purchaseSection = builderV2InventoryPurchaseSection(app, screenId)
+  const sectionId = parent?.screenId ?? purchaseSection
+  const suppliersHub = Boolean(inventory && page && (page.id === inventory.suppliersScreenId || page.id === inventory.createSupplierScreenId))
+  const supplierCard = Boolean(inventory && page && page.id === inventory.supplierScreenId)
+  const backTarget = supplierCard && inventory?.suppliersScreenId
+    ? inventory.suppliersScreenId
+    : sectionId
+  const showBack = Boolean(backTarget && (page?.contextTableId || suppliersHub || supplierCard))
+  const frameTitle = inventory && page?.id === inventory.itemScreenId ? 'Товар'
+    : inventory && page?.id === inventory.purchaseScreenId ? 'Заказ'
+      : (record.title ?? page?.name ?? 'Экран')
   return <BuilderV2Theme as="main" app={app} className={`${ui.preview} ${ui.standalonePreview}`}>
     <header>
       <Link href={`/apps/${app.id}?screen=${encodeURIComponent(page?.id ?? '')}${navigation.recordId ? `&row=${encodeURIComponent(navigation.recordId)}` : ''}`} className={styles.secondary}><ProtoIcon name="back" />К редактору</Link>
@@ -27,7 +39,7 @@ export function AppV2Preview({ app, tables, businessApps, actor, initialScreen, 
       {page?.events.enter && canInvokeAppV2Workflow(app,actor,page.events.enter) && (!page.contextTableId || navigation.recordId) && <Link className={styles.secondary} href={`/apps/${encodeURIComponent(app.id)}/events/${encodeURIComponent(page.id)}${navigation.recordId ? `?row=${encodeURIComponent(navigation.recordId)}` : ''}`}>Проверить действие при открытии</Link>}
     </header>
     <div className={ui.previewBody}>
-      <BuilderV2AppFrame draftLogo scrollKey={navigation.recordId ?? ''} app={app} screenId={page?.id ?? ''} sectionId={parent?.screenId} back={page?.contextTableId ? () => navigation.back(parent?.screenId) : undefined} profile={Boolean(record.record && isBuilderV2ContactProfile(app, screenId, tables))} title={record.title ?? page?.name ?? 'Экран'} phone={phone} onNavigate={navigation.navigate} headerAction={<BuilderV2Account email={actor.email} authenticated={actor.authenticated} slug={app.slug} preview />}>
+      <BuilderV2AppFrame draftLogo scrollKey={navigation.recordId ?? ''} app={app} screenId={page?.id ?? ''} sectionId={sectionId} back={showBack ? () => navigation.back(backTarget) : undefined} profile={Boolean(record.record && isBuilderV2ContactProfile(app, screenId, tables))} title={frameTitle} phone={phone} onNavigate={navigation.navigate} headerAction={<BuilderV2Account email={actor.email} authenticated={actor.authenticated} slug={app.slug} preview />}>
         {page && <BuilderV2OrderWorkbench app={app} parent={parent} tables={tables} recordId={navigation.recordId} record={record.record} onOpen={id => navigation.navigate(screenId, id, true)}>
           <BuilderV2RecordContent contextual={Boolean(page.contextTableId)} recordId={navigation.recordId} data={record} editing={false}>
             <AppV2Renderer live app={app} tables={tables} businessApps={businessApps} actor={actor} screenId={page.id} record={record.record} onNavigate={navigation.navigate} />

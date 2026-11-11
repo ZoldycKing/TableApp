@@ -14,6 +14,9 @@ describe('table access settings',()=>{
     fireEvent.click(view.getByRole('button',{name:'Сохранить доступ'}))
     await waitFor(()=>expect(view.getByRole('alert').textContent).toContain('Роль изменилась'))
     expect((view.getByRole('combobox',{name:'Доступ: Финансы'}) as HTMLSelectElement).value).toBe('view')
+    // Wait until useTransition leaves pending — otherwise Отмена stays disabled.
+    await waitFor(()=>expect(view.getByRole('button',{name:'Сохранить доступ'})).toBeTruthy())
+    await waitFor(()=>expect((view.getByRole('button',{name:'Отмена'}) as HTMLButtonElement).disabled).toBe(false))
     fireEvent.click(view.getByRole('button',{name:'Отмена'}));expect(close).toHaveBeenCalledOnce()
     view.unmount();expect(document.body.style.overflow).not.toBe('hidden')
   })

@@ -317,10 +317,10 @@ export function buildInventoryV2App(built: BuiltTemplate, meta: { id: string; wo
     authentication: { mode: 'invite_only', defaultRoleId: null, members: [{ email: meta.email.trim().toLowerCase(), roleIds: ['owner'], company: '' }] },
     homeScreenId: itemsScreenId,
     screens: [
-      { id: itemsScreenId, name: 'Товары', menuLabel: 'Товары', icon: 'box', navigation: true, audience: team, contextTableId: null, rootIds: [newItemButton, reorderButton, itemsNode], events: { enter: null } },
+      { id: itemsScreenId, name: 'Товары', menuLabel: 'Товары', icon: 'box', navigation: true, audience: team, contextTableId: null, rootIds: [newItemButton, itemsNode], events: { enter: null } },
       { id: movementsScreenId, name: 'Движения', menuLabel: 'Движения', icon: 'apps', navigation: true, audience: team, contextTableId: null, rootIds: [newOperationButton, movementsNode], events: { enter: null } },
-      { id: purchasesScreenId, name: 'Закупки', menuLabel: 'Закупки', icon: 'clipboard', navigation: true, audience: team, contextTableId: null, rootIds: [suppliersButton, newPurchaseButton, purchasesNode], events: { enter: null } },
-      { id: countsScreenId, name: 'Инвентаризация', menuLabel: 'Инвентаризация', icon: 'clipboard', navigation: true, audience: team, contextTableId: null, rootIds: [newCountButton, countsNode], events: { enter: null } },
+      { id: purchasesScreenId, name: 'Закупки', menuLabel: 'Закупки', icon: 'clipboard', navigation: true, audience: team, contextTableId: null, rootIds: [suppliersButton, reorderButton, newPurchaseButton, purchasesNode], events: { enter: null } },
+      { id: countsScreenId, name: 'Инвентаризация', menuLabel: 'Учёт', icon: 'list', navigation: true, audience: team, contextTableId: null, rootIds: [newCountButton, countsNode], events: { enter: null } },
       // Deep-link screen; list toolbar opens the same form node in a centred dialog (not dual-rooted).
       { id: createItemScreenId, name: 'Новый товар', icon: 'box', navigation: false, audience: owners, contextTableId: null, rootIds: [createItemFormId], events: { enter: null } },
       { id: createPurchaseScreenId, name: 'Новый заказ', icon: 'clipboard', navigation: false, audience: team, contextTableId: null, rootIds: [createPurchaseFormId], events: { enter: null } },
@@ -328,9 +328,9 @@ export function buildInventoryV2App(built: BuiltTemplate, meta: { id: string; wo
       { id: suppliersScreenId, name: 'Поставщики', icon: 'truck', navigation: false, audience: team, contextTableId: null, rootIds: [newSupplierButton, suppliersNode], events: { enter: null } },
       { id: createSupplierScreenId, name: 'Новый поставщик', icon: 'truck', navigation: false, audience: owners, contextTableId: null, rootIds: [createSupplierFormId], events: { enter: null } },
       { id: supplierScreenId, name: 'Поставщик', icon: 'truck', navigation: false, audience: team, contextTableId: suppliersTableId, recordTitleFieldId: supplierName, rootIds: [supplierOrdersNode, editSupplierFormId], events: { enter: null } },
-      { id: createCountScreenId, name: 'Новая инвентаризация', icon: 'clipboard', navigation: false, audience: team, contextTableId: null, rootIds: [createCountFormId], events: { enter: null } },
-      { id: countScreenId, name: 'Инвентаризация', icon: 'clipboard', navigation: false, audience: team, contextTableId: inventoryCountsTableId, recordTitleFieldId: countNumber, rootIds: [countLinesNode, editCountFormId, postCountButton, cancelCountButton], events: { enter: null } },
-      { id: reorderScreenId, name: 'Что заказать', icon: 'box', navigation: false, audience: team, contextTableId: null, rootIds: [reorderNode, reorderFormId], events: { enter: null } },
+      { id: createCountScreenId, name: 'Новая инвентаризация', icon: 'list', navigation: false, audience: team, contextTableId: null, rootIds: [createCountFormId], events: { enter: null } },
+      { id: countScreenId, name: 'Инвентаризация', icon: 'list', navigation: false, audience: team, contextTableId: inventoryCountsTableId, recordTitleFieldId: countNumber, rootIds: [countLinesNode, editCountFormId, postCountButton, cancelCountButton], events: { enter: null } },
+      { id: reorderScreenId, name: 'Что заказать', icon: 'clipboard', navigation: false, audience: team, contextTableId: null, rootIds: [reorderNode, reorderFormId], events: { enter: null } },
       { id: itemScreenId, name: 'Товар', icon: 'box', navigation: false, audience: team, contextTableId: itemsTableId, recordTitleFieldId: itemName, rootIds: [
         ...identityFieldIds.map(id => `item_${id}`),
         ...factFieldIds.map(id => `item_${id}`),
@@ -482,7 +482,6 @@ export function buildInventoryV2App(built: BuiltTemplate, meta: { id: string; wo
       ] },
       { id: createReorder, name: 'Создать заказы по остаткам', input: { rowTableId: null, formId: reorderFormId, screenTableId: null }, steps: [
         { id: newId('action'), type: 'create_reorder_orders', tableId: purchaseOrdersTableId, values: { [reorderPayload]: { kind: 'form' as const, formId: reorderFormId, fieldId: reorderPayload } } },
-        { id: newId('action'), type: 'notify', message: { kind: 'literal', value: 'Черновики заказов поставщикам созданы.' } },
         { id: newId('action'), type: 'open_screen', screenId: purchasesScreenId, record: null },
       ] },
     ],

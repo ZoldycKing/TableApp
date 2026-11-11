@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { purchaseMoney } from '@/lib/purchase-format'
 import { builderV2MediaItems } from './media-values'
 import { InventoryProductThumb } from './record-visuals'
@@ -20,6 +20,8 @@ type ReorderRow = {
   lastPrice?: number
   image?: ReturnType<typeof builderV2MediaItems>[number]
 }
+
+const NO_SUPPLIER = '— не закупали'
 
 function idsOf(value: unknown) {
   if (typeof value === 'string' && value.trim()) return [value.trim()]
@@ -127,20 +129,34 @@ export function ReorderPanel() {
             if (purchasesNode) {
               const purchases = await published.readData({ nodeId: purchasesNode.id, screenId: inventory.purchasesScreenId })
               if (purchases.ok) {
-                const received = purchases.page.rows.filter(row => inventory.statusReceived
-                  && inventory.purchaseStatusFieldId
-                  && row.values[inventory.purchaseStatusFieldId] === inventory.statusReceived)
-                const allLineIds = received.flatMap(row => inventory.purchaseLinesFieldId ? idsOf(row.values[inventory.purchaseLinesFieldId]) : [])
+                // Same history window as create_reorder_orders: any non-cancelled PO (received preferred).
+                const history = purchases.page.rows.filter(row => {
+                  if (!inventory.purchaseStatusFieldId) return false
+                  const status = row.values[inventory.purchaseStatusFieldId]
+                  return status !== inventory.statusCancelled
+                })
+                const allLineIds = history.flatMap(row => inventory.purchaseLinesFieldId ? idsOf(row.values[inventory.purchaseLinesFieldId]) : [])
                 if (allLineIds.length) {
                   const lines = await readPublishedV2RelatedRowsAction(published.slug, {
                     revision: published.revision, tableId: inventory.purchaseLinesTableId, recordIds: allLineIds.slice(0, 200),
                   })
                   if (lines.ok) {
-                    const best = new Map<string, { at: string; supplier: string; price: number }>()
-                    for (const order of received) {
-                      const at = String(order.values[inventory.purchaseReceivedAtFieldId ?? '']
+                    const rankOf = (status: unknown) => status === inventory.statusReceived ? 3
+                      : status === inventory.statusOrdered ? 2
+                        : status === inventory.statusDraft ? 1
+                          : 0
+                    const best = new Map<string, { rank: number; at: string; supplier: string; price: number }>()
+                    for (const order of history) {
+                      const status = inventory.purchaseStatusFieldId ? order.values[inventory.purchaseStatusFieldId] : undefined
+                      const rank = rankOf(status)
+                      if (!rank) continue
+                      const at = String(
+                        order.values[inventory.purchaseReceivedAtFieldId ?? '']
+                        ?? order.values[inventory.purchaseOrderedAtFieldId ?? '']
+                        ?? order.values[inventory.purchaseCreatedAtFieldId ?? '']
                         ?? order.values[inventory.purchaseDateFieldId ?? '']
-                        ?? '')
+                        ?? '',
+                      )
                       const supplier = inventory.purchaseSupplierFieldId
                         ? String(order.display[inventory.purchaseSupplierFieldId] || '').trim()
                         : ''
@@ -151,8 +167,9 @@ export function ReorderPanel() {
                         if (!productId) continue
                         const price = Number(line.values[inventory.linePriceFieldId ?? ''])
                         const current = best.get(productId)
-                        if (!current || at > current.at) {
+                        if (!current || rank > current.rank || (rank === current.rank && at > current.at)) {
                           best.set(productId, {
+                            rank,
                             at,
                             supplier,
                             price: Number.isFinite(price) && price >= 0 ? price : 0,
@@ -188,11 +205,29 @@ export function ReorderPanel() {
     return () => { cancelled = true }
   }, [published?.revision, published?.dataVersion, payloadId, Boolean(context)])
 
+  const groups = useMemo(() => {
+    const map = new Map<string, ReorderRow[]>()
+    for (const row of rows) {
+      const key = row.lastSupplier?.trim() || NO_SUPPLIER
+      const list = map.get(key) ?? []
+      list.push(row)
+      map.set(key, list)
+    }
+    return [...map.entries()].sort(([a], [b]) => {
+      if (a === NO_SUPPLIER) return 1
+      if (b === NO_SUPPLIER) return -1
+      return a.localeCompare(b, 'ru')
+    })
+  }, [rows])
+
   if (!context || !inventory || !payloadId) return null
   const payloadInput = context.app.nodes.find(node => node.type === 'input' && node.fieldId === payloadId
     && context.app.nodes.some(form => form.id === context.scope.formId && form.type === 'form' && form.childIds.includes(node.id)))
   const error = payloadInput ? context.errors[payloadInput.id] : undefined
-  const selectedCount = rows.filter(row => row.selected).length
+  const selected = rows.filter(row => row.selected)
+  const selectedCount = selected.length
+  const selectedSum = selected.reduce((sum, row) => sum + row.qty * (row.lastPrice ?? 0), 0)
+  const orderGroups = new Set(selected.map(row => row.lastSupplier?.trim() || '')).size
 
   const toggle = (productId: string) => {
     sync(rows.map(row => row.productId === productId ? { ...row, selected: !row.selected } : row))
@@ -203,12 +238,14 @@ export function ReorderPanel() {
       ? { ...row, qty: Number.isFinite(qty) ? Math.min(1_000_000, Math.max(1, qty)) : row.qty, selected: true }
       : row))
   }
+  const bumpQty = (productId: string, delta: number) => {
+    sync(rows.map(row => {
+      if (row.productId !== productId) return row
+      return { ...row, qty: Math.min(1_000_000, Math.max(1, row.qty + delta)), selected: true }
+    }))
+  }
 
   return <div className={ui.reorderPanel} data-reorder-field="products">
-    <div className={ui.purchaseEditorHead}>
-      <h3>Товары ниже минимума</h3>
-      {rows.length ? <span>{selectedCount} из {rows.length}</span> : null}
-    </div>
     {error ? <p role="alert" className={ui.dataError}>{error}</p> : null}
     {note ? <p className={ui.hint}>{note}</p> : null}
     {loading ? <p className={ui.hint}>Загружаем товары…</p> : null}
@@ -216,36 +253,60 @@ export function ReorderPanel() {
       <strong>Всё в норме</strong>
       <p>Нет товаров с остатком ниже минимума.</p>
     </div> : null}
-    {rows.length ? <ul className={ui.reorderList}>
-      {rows.map(row => <li key={row.productId} className={ui.reorderRow} data-selected={row.selected || undefined}>
-        <label className={ui.reorderCheck}>
-          <input type="checkbox" checked={row.selected} onChange={() => toggle(row.productId)} aria-label={`Выбрать ${row.name}`} />
-          <InventoryProductThumb image={row.image} size="journal" label={row.name} />
-        </label>
-        <div className={ui.reorderCopy}>
-          <strong>{row.name}</strong>
-          {row.sku ? <span className={ui.purchaseEditorSku}>{row.sku}</span> : null}
-          <span className={ui.reorderMeta}>
-            <span>{row.stock} / мин. {row.min}</span>
-            {row.lastSupplier ? <span>{row.lastSupplier}</span> : null}
-            {row.lastPrice != null ? <span>{purchaseMoney(row.lastPrice)}</span> : null}
-          </span>
-        </div>
-        <label className={ui.purchaseEditorField} data-field="qty">
-          <span>Кол-во</span>
-          <input
-            type="number"
-            inputMode="numeric"
-            min={1}
-            max={1000000}
-            step={1}
-            value={row.qty}
-            disabled={!row.selected}
-            aria-label={`Количество: ${row.name}`}
-            onChange={event => updateQty(row.productId, event.target.value)}
-          />
-        </label>
-      </li>)}
-    </ul> : null}
+    {rows.length ? <div className={ui.reorderGroups}>
+      {groups.map(([supplier, items]) => <section key={supplier} className={ui.reorderGroup}>
+        <h3 className={ui.reorderGroupHeading}>{supplier}</h3>
+        <ul className={ui.reorderList}>
+          {items.map(row => {
+            const below = row.stock < row.min
+            const lineSum = row.qty * (row.lastPrice ?? 0)
+            return <li key={row.productId} className={ui.reorderRow} data-selected={row.selected || undefined} data-low={below || undefined}>
+              <label className={ui.reorderCheck}>
+                <input type="checkbox" checked={row.selected} onChange={() => toggle(row.productId)} aria-label={`Выбрать ${row.name}`} />
+              </label>
+              <InventoryProductThumb image={row.image} size="journal" label={row.name} />
+              <div className={ui.reorderCopy}>
+                <strong>{row.name}</strong>
+                {row.sku ? <span className={ui.purchaseEditorSku}>{row.sku}</span> : null}
+                <span className={ui.reorderMobileMeta}>
+                  <span data-low={below || undefined}>{row.stock} / мин. {row.min}</span>
+                  <span>{row.lastSupplier || NO_SUPPLIER}</span>
+                </span>
+              </div>
+              <span className={ui.reorderCol} data-col="stock" data-low={below || undefined}>{row.stock} / мин. {row.min}</span>
+              <span className={ui.reorderCol} data-col="supplier">{row.lastSupplier || NO_SUPPLIER}</span>
+              <span className={ui.reorderCol} data-col="price">{row.lastPrice != null ? purchaseMoney(row.lastPrice) : '—'}</span>
+              <div className={ui.reorderQty} data-field="qty">
+                <button type="button" className={ui.reorderStepper} aria-label={`Меньше: ${row.name}`} disabled={!row.selected || row.qty <= 1} onClick={() => bumpQty(row.productId, -1)}>−</button>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  max={1000000}
+                  step={1}
+                  value={row.qty}
+                  disabled={!row.selected}
+                  aria-label={`Количество: ${row.name}`}
+                  onChange={event => updateQty(row.productId, event.target.value)}
+                />
+                <button type="button" className={ui.reorderStepper} aria-label={`Больше: ${row.name}`} disabled={!row.selected} onClick={() => bumpQty(row.productId, 1)}>+</button>
+              </div>
+              <span className={ui.reorderCol} data-col="sum">{lineSum > 0 ? purchaseMoney(lineSum) : '—'}</span>
+              <span className={ui.reorderMobileSum}>{lineSum > 0 ? purchaseMoney(lineSum) : '—'}</span>
+            </li>
+          })}
+        </ul>
+      </section>)}
+    </div> : null}
+    {rows.length ? <div className={ui.reorderFooter}>
+      <p className={ui.reorderFooterSummary}>
+        Выбрано {selectedCount}
+        {selectedSum > 0 ? ` · ${purchaseMoney(selectedSum)}` : ''}
+        {selectedCount ? ` · будет создано ${orderGroups} ${orderGroups === 1 ? 'заказ' : orderGroups < 5 ? 'заказа' : 'заказов'}` : ''}
+      </p>
+      <button type="submit" className={ui.reorderFooterSubmit} disabled={!selectedCount || context.disabled}>
+        Создать заказы
+      </button>
+    </div> : null}
   </div>
 }

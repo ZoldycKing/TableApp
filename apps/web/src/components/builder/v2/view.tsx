@@ -336,12 +336,22 @@ export function AppV2Renderer(props: AppV2RendererProps) {
             if (inventoryStockList) {
               return <>
                 <div className={ui.recordStockCopy}>
-                  <strong>{label}</strong>
+                  <strong title={label}>{label}</strong>
                   <span className={ui.recordSkuLine}>
                     {subtitleValue ? <span>{subtitleValue}</span> : null}
                     {lowBadge}
                   </span>
                 </div>
+                {detailNode}
+              </>
+            }
+            if (inventoryJournalList) {
+              return <>
+                <strong title={label}>{label}</strong>
+                <span className={ui.recordJournalMeta}>
+                  {subtitleValue ? <span className={ui.statusBadge} data-tone={builderV2StatusTone(subtitleValue)}>{subtitleValue}</span> : null}
+                  {journalMeta ? <small>{journalMeta}</small> : null}
+                </span>
                 {detailNode}
               </>
             }
@@ -354,11 +364,10 @@ export function AppV2Renderer(props: AppV2RendererProps) {
               {subtitleValue && node.subtitleFieldId !== node.dateFieldId && (statusSubtitle
                 ? <span className={ui.recordMeta}>
                   <span className={ui.statusBadge} data-tone={builderV2StatusTone(subtitleValue)}>{subtitleValue}</span>
-                  {detailNode && !inventoryJournalList ? detailNode : null}
+                  {detailNode ? detailNode : null}
                 </span>
                 : <small data-money={moneySubtitle || undefined}>{subtitleValue}</small>)}
-              {journalMeta ? <small>{journalMeta}</small> : null}
-              {detailNode && (!statusSubtitle || inventoryJournalList) && (cardLayout || !subtitleValue || inventory) ? detailNode : null}
+              {detailNode && (!statusSubtitle) && (cardLayout || !subtitleValue || inventory) ? detailNode : null}
               {summary && <span className={ui.recordSummary}><span>Позиций: {summary.count}</span>{total && <strong>{total}</strong>}</span>}
             </>
           }
@@ -472,10 +481,18 @@ export function AppV2Renderer(props: AppV2RendererProps) {
               <p>Ничего не найдено</p>
               {clearSearch && <button type="button" className={styles.secondary} onClick={clearSearch}>Сбросить поиск</button>}
             </div>
-            : inventoryStockList ? <div className={ui.collectionEmpty}>
-              <p>На складе пока нет товаров. Добавьте первую позицию, чтобы вести остатки.</p>
+            : inventoryStockList ? <div className={ui.collectionEmpty} data-centered>
+              <ProtoIcon name="box" size={28} />
+              <strong>Товаров пока нет</strong>
+              <p>Добавьте первую позицию, чтобы вести остатки.</p>
+              {inventoryListToolbar}
             </div>
-            : inventoryJournalList ? <div className={ui.collectionEmpty}><p>Операций пока нет. Откройте товар и оформите приход, расход или перемещение.</p></div>
+            : inventoryJournalList ? <div className={ui.collectionEmpty} data-centered>
+              <ProtoIcon name="list" size={28} />
+              <strong>Операций пока нет</strong>
+              <p>Оформите приход, расход или перемещение — журнал заполнится сам.</p>
+              {inventoryListToolbar}
+            </div>
             : <p className={ui.hint}>{emptyCopy}</p>
           ) : null
           body = <div className={`${styles.collection} ${catalog ? presentation.catalog : cardLayout ? ui.cardCollection : timeline ? `${presentation.panel} ${ui.timelineCollection}` : ''} ${id === lines?.id ? `${presentation.panel} ${ui.orderLines}` : ''}`} data-catalog={catalog || undefined} data-tiles={node.layout === 'tiles' || undefined} data-timeline={timeline || undefined}>

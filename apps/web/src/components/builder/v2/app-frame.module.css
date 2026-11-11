@@ -80,15 +80,29 @@
 .container[data-contained="true"] .frame { --v2-content-track: minmax(0, 1fr); height: 100%; min-height: 0; max-width: none; box-shadow: var(--shadow-soft); }
 .container[data-fullscreen="true"] .frame { border: 0; border-radius: 0; box-shadow: none; }
 .container .header { grid-area: header; justify-content: start; min-height: 64px; padding: 12px 0; }
-/* Shared horizontal track for header / tabs / content — same padding + max-width. */
+/* Shared horizontal track for header / tabs / content — same padding + max-width.
+   Must beat prototype `.appHeader > div { display: grid }` or the icon/title/team stack vertically. */
 .chromeBar { display: flex; align-items: center; gap: 16px; width: 100%; min-width: 0; }
-.header .chromeBar { min-height: 40px; }
-.chromeBar > div { min-width: 0; }
+.header > .chromeBar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+}
+.header > .chromeBar > div {
+  display: grid;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
 .navStack { display: flex; flex-direction: column; gap: 0; width: 100%; min-width: 0; }
-.headerMark { display: inline-flex; flex: none; }
+.headerMark { display: inline-flex; flex: none; align-items: center; }
+.headerIdentity { font-size: 12px; line-height: 16px; color: var(--v2-muted, #687568); overflow-wrap: anywhere; }
 .railIdentity { display: none; }
 .catalogIdentity { color: var(--v2-ink); font-weight: 650; overflow-wrap: anywhere; }
-.headerAction { margin-left: auto; flex-shrink: 0; display: inline-flex; align-items: center; gap: 8px; }
+.headerAction { margin-left: auto; flex-shrink: 0; display: inline-flex; align-items: center; gap: 8px; align-self: center; }
 .account { position: relative; }
 .account summary { display: grid; place-items: center; width: 44px; height: 44px; border: 1px solid var(--v2-line); border-radius: 12px; cursor: pointer; color: var(--v2-accent); list-style: none; }
 .account summary::-webkit-details-marker { display: none; }
@@ -101,7 +115,8 @@
 .appIcon[data-custom="true"] { background: transparent; }
 .appIcon img { display: block; width: 100%; height: 100%; object-fit: contain; }
 .body { grid-area: body; min-width: 0; }
-.container[data-contained="true"] .body { min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-gutter: stable; scrollbar-width: thin; }
+/* No scrollbar-gutter here: it narrows body vs header/tabs and breaks the shared content track. */
+.container[data-contained="true"] .body { min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-width: thin; }
 .container[data-contained="true"] .body:focus-visible { outline-offset: -2px; }
 .container .content {
   display: grid;

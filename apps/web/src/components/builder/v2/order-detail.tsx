@@ -121,10 +121,12 @@ export function BuilderV2OrderFacts({
         <strong>{item.value}</strong>
       </div>)}
     </div>}
-    {rest.map(item => <div key={item.id} className={ui.orderFact} data-kind={item.kind}>
-      <small>{item.label}</small>
-      <strong>{item.value}</strong>
-    </div>)}
+    {rest.length > 0 && <div className={ui.orderFactsGrid}>
+      {rest.map(item => <div key={item.id} className={ui.orderFact} data-kind={item.kind}>
+        <small>{item.label}</small>
+        <strong>{item.value}</strong>
+      </div>)}
+    </div>}
   </section>
 }
 

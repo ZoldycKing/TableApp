@@ -50,7 +50,8 @@
 .recordSummary { grid-area: 1 / 2 / span 2; display: grid; align-self: center; justify-items: end; gap: 4px; min-width: 0; font-size: 12px; color: var(--v2-muted); }
 .recordSummary strong { grid-column: auto; color: var(--v2-ink); font-size: 15px; font-variant-numeric: tabular-nums; }
 .businessDetail { max-width: 920px; }
-.businessDetail[data-layout="stack"] { max-width: min(72rem, 100%); width: 100%; }
+/* Stack cards (inventory/CRM) share the same content track as list screens — no 72rem cap. */
+.businessDetail[data-layout="stack"] { max-width: none; width: 100%; }
 .businessDetail[data-profile] { width: 100%; max-width: 56rem; margin-inline: auto; }
 .facts { display: grid; gap: 16px; padding: clamp(16px, 2.5cqw, 24px); container: record-facts / inline-size; }
 .facts > .columns { gap: 18px 24px; padding-top: 14px; border-top: 1px solid var(--v2-line); }
@@ -96,7 +97,7 @@
 .orderIdentityFact[data-kind="stage"][data-tone="sky"] > strong { color: light-dark(#075985, #b7def9); }
 .orderIdentityFact[data-kind="stage"][data-tone="mint"] > strong { color: light-dark(#065f46, #abebcf); }
 .orderIdentityFact[data-kind="amount"] > strong { font-size: clamp(1.15rem, 2.4cqw, 1.35rem); font-weight: 780; font-variant-numeric: tabular-nums; letter-spacing: -.02em; color: var(--v2-ink); }
-.orderIdentityFact[data-kind="amount"]:has(.stockWithBadge) { grid-column: span 2; }
+/* Keep Остаток (+ badge) and Минимум as adjacent facts with normal gap — do not span 2. */
 .orderIdentityFact[data-kind="amount"] > strong:has(.stockWithBadge) { overflow-wrap: normal; word-break: normal; }
 .orderIdentityFact[data-tone="overdue"] > strong { color: light-dark(#9f1239, #ffc5d5); }
 .orderIdentityFact[data-tone="today"] > strong { color: light-dark(#854d0e, #f9d696); }
@@ -124,6 +125,8 @@
 .orderActionHeader .sectionTitle, .orderActionHeader :global(.sectionTitle) { margin: 0; min-width: 0; }
 .orderActionTrigger { width: 100%; min-height: 44px; justify-content: center; }
 .orderActionDock { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; align-items: center; min-width: 0; }
+/* Primary + 3 secondaries: one full-width primary, then a 3-col row (no orphan cell). */
+.orderActionDock:has(> :nth-child(4):last-child) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .orderDetail[data-layout="stack"][data-manage] { padding-bottom: calc(4.75rem + env(safe-area-inset-bottom, 0px)); }
 .orderActionDock[data-mode="reveal"], .orderActionDock[data-placement="mobile"] { position: sticky; bottom: 12px; z-index: 4; padding: 10px; border-radius: var(--v2-card-radius, 12px); background: color-mix(in srgb, var(--v2-surface, #fff) 92%, transparent); box-shadow: var(--v2-panel-shadow); backdrop-filter: blur(8px); }
 .orderActionDock .orderActionTrigger { width: 100%; }
@@ -140,7 +143,7 @@
 .orderActionPanel[data-dialog] .orderActionBody form { border: 0; box-shadow: none; background: transparent; padding: 0; border-radius: 0; }
 .orderActionFooter { display: none; }
 .orderDetail[data-layout="stack"] .orderDetailBody { grid-template-columns: minmax(0, 1fr); }
-.orderDetail[data-layout="stack"] .orderActionDock { max-width: 40rem; }
+.orderDetail[data-layout="stack"] .orderActionDock { max-width: none; width: 100%; }
 .timelineCollection { display: grid; gap: 14px; padding: clamp(16px, 2.4cqw, 22px); min-width: 0; }
 .timelineList { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
 .timelineItem { display: grid; grid-template-columns: minmax(5.5rem, 7.5rem) minmax(0, 1fr); gap: 12px 16px; padding-block: 12px; border-top: 1px solid var(--v2-line); }
@@ -226,8 +229,33 @@
 }
 .collectionEmpty[data-centered] > p { max-width: 28rem; }
 .collectionEmpty[data-centered] > :is(a, button) { justify-self: center; }
-.typeFilter { display: flex; flex-wrap: wrap; gap: 8px; margin-block: 4px 10px; }
-.typeFilter button { min-height: 36px; padding: 6px 12px; border: 1px solid var(--v2-line, #dce2d6); border-radius: var(--v2-control-radius, 8px); background: var(--v2-surface, #fff); color: var(--v2-muted, #687568); font: inherit; font-size: 13px; font-weight: 650; cursor: pointer; }
+.typeFilter {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  margin-block: 4px 10px;
+  width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.typeFilter::-webkit-scrollbar { display: none; }
+.typeFilter button {
+  flex: none;
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 1px solid var(--v2-line, #dce2d6);
+  border-radius: var(--v2-control-radius, 8px);
+  background: var(--v2-surface, #fff);
+  color: var(--v2-muted, #687568);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  white-space: nowrap;
+  cursor: pointer;
+}
 .typeFilter button[aria-pressed="true"] { border-color: var(--v2-accent, #456849); background: var(--v2-soft, #e8eee1); color: var(--v2-accent, #456849); }
 .warehouseBreakdown { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .warehouseBreakdown li { display: flex; justify-content: space-between; gap: 12px; min-width: 0; font-size: 14px; line-height: 1.4; }
@@ -287,6 +315,19 @@
 .orderFact small { color: var(--v2-muted); font-size: 12px; font-weight: 650; }
 .orderFact strong { font-size: 15px; font-weight: 650; }
 .orderFact[data-kind="note"] strong, .orderFact[data-kind="reply"] strong { font-weight: 560; line-height: 1.45; }
+/* «О товаре» / CRM facts: multi-column on desktop, single column on mobile. */
+.orderFactsGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px 24px;
+  min-width: 0;
+}
+@container builder-app (min-width: 720px) {
+  .orderFactsGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@container builder-app (min-width: 1100px) {
+  .orderFactsGrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
 .orderActionBody :global(.formTitle), .orderActionPanel :is(h3) { display: none; }
 .orderActionBody form, .orderActionPanel form { width: 100%; max-width: none; }
 @container builder-app (min-width: 900px) {
@@ -294,7 +335,7 @@
   .orderDetail[data-layout="stack"] .orderDetailBody { grid-template-columns: minmax(0, 1fr); }
   .orderIdentity:not([data-manage]) .orderIdentityMain { flex-direction: row; justify-content: space-between; align-items: end; }
   .orderIdentity[data-variant="pipeline"] .orderIdentityMain { grid-template-columns: minmax(0, 1fr) auto; gap: 16px 24px; align-items: start; }
-  .orderIdentityFacts { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .orderIdentityFacts { grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); }
   .orderIdentityActions[data-placement="desktop"] { display: flex; }
   .orderIdentityActions[data-placement="mobile"] { display: none; }
   .orderDetail[data-layout="stack"][data-manage] { padding-bottom: 0; }
@@ -498,10 +539,18 @@
 .listToolbar > :global(a) { flex: none; justify-self: end; white-space: nowrap; }
 @container builder-app (max-width: 520px) {
   /* Keep create inline with search (compact) — do not drop it onto a lone left row. */
-  .listToolbar { flex-wrap: nowrap; gap: 8px; }
+  .listToolbar { flex-wrap: nowrap; gap: 8px; align-items: center; }
   .listSearch { flex: 1 1 auto; min-width: 0; }
   .listToolbar > :global(button),
-  .listToolbar > :global(a) { flex: none; padding-inline: 12px; }
+  .listToolbar > :global(a) {
+    flex: none;
+    align-self: center;
+    min-height: 44px;
+    height: 44px;
+    padding-inline: 12px;
+    white-space: nowrap;
+    line-height: 1;
+  }
 }
 .dataError { color: var(--v2-danger, #8d3731); font-size: 12px; line-height: 1.6; }
 .search { width: 100%; min-width: 0; min-height: 44px; border: 1px solid var(--v2-line, #dce2d6); border-radius: 8px; padding: 8px 12px; color: var(--v2-ink, #253c2d); background: var(--v2-surface, #fff); font: inherit; }
@@ -561,7 +610,7 @@
 }
 .recordJournalMeta {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 6px 8px;
   min-width: 0;
@@ -569,7 +618,9 @@
   font-size: 13px;
   line-height: 16px;
 }
+.recordJournalMeta > .statusBadge { flex: none; }
 .recordJournalMeta > small {
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;

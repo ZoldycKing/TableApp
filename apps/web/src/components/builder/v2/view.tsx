@@ -253,9 +253,13 @@ export function AppV2Renderer(props: AppV2RendererProps) {
           const button = nodes.get(foldedCreateId)
           if (!button || button.type !== 'button' || !visible(button)) return undefined
           const buttonStyle = button.variant === 'primary' ? styles.primary : button.variant === 'danger' ? styles.danger : styles.secondary
+          // Short label on the movements toolbar so it stays one line next to search on 390.
+          const toolbarButton = inventory && screen?.id === inventory.movementsScreenId
+            ? { ...button, label: 'Операция' }
+            : button
           return published
-            ? <PublishedV2Button node={button} screenId={props.screenId} recordId={props.record?.id} />
-            : <button type="button" className={buttonStyle} disabled>{button.label}</button>
+            ? <PublishedV2Button node={toolbarButton} screenId={props.screenId} recordId={props.record?.id} />
+            : <button type="button" className={buttonStyle} disabled>{toolbarButton.label}</button>
         })()
         const showCollectionHeading = Boolean(props.editing || screen?.name !== node.name)
         content = <BuilderV2DataNode app={props.app} node={node} live={Boolean(props.live)} allowWrites={Boolean(props.live&&!props.editing)} table={props.tables.find(table=>table.id===props.app.sources.find(source=>source.id===node.sourceId)?.tableId)} heading={showCollectionHeading} toolbarEnd={inventoryListToolbar} scope={{ screenId: props.screenId, ...(props.record ? { recordId: props.record.id } : {}) }} onPage={id === lines?.id ? receiveSummary : undefined}>{page => {

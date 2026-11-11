@@ -1433,10 +1433,20 @@ button.recordButton:hover strong { color: var(--v2-accent, #456849); }
 }
 .purchaseLineCopy { min-width: 0; display: grid; gap: 2px; }
 .purchaseCard { display: grid; gap: 16px; min-width: 0; align-content: start; }
+/* Purchase card reuses pipeline chrome; keep facts under the title, not in a side column. */
+.purchaseCard > .orderIdentity[data-variant="pipeline"] .orderIdentityMain {
+  grid-template-columns: minmax(0, 1fr);
+}
+.purchaseCard > .orderIdentity .orderIdentityFacts {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
 .purchaseCard > .orderIdentity .heroStatus {
   width: max-content;
   max-width: 100%;
   flex: none;
+  margin-inline-start: 0;
+  text-align: start;
+  justify-self: start;
   overflow-wrap: normal;
   word-break: normal;
 }
@@ -1475,7 +1485,8 @@ button.recordButton:hover strong { color: var(--v2-accent, #456849); }
   flex-direction: column;
   width: 100%;
 }
-.purchaseCardActionsMobile .purchaseCardActions > :has(.primary) { order: -1; }
+.purchaseCardActionsMobile .purchaseCardActions > :has(.primary),
+.purchaseCardActionsMobile .purchaseCardActions > button.primary { order: -1; }
 .purchaseCardActionsMobile .purchaseCardActions button { width: 100%; }
 @media (min-width: 721px) {
   .purchaseCardHead {
@@ -1486,6 +1497,9 @@ button.recordButton:hover strong { color: var(--v2-accent, #456849); }
   .purchaseCardActionsDesktop { display: block; }
   .purchaseCardActionsMobile { display: none; }
   .purchaseCardActionsDesktop .purchaseCardActions { width: auto; margin: 0; }
+  .purchaseCard > .orderIdentity .orderIdentityFacts {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
   .recordButton[data-compact][data-purchase-line] {
     grid-template-columns: 48px minmax(0, 1fr) auto;
   }

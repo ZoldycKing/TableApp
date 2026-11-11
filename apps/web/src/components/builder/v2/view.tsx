@@ -991,10 +991,10 @@ export function AppV2Renderer(props: AppV2RendererProps) {
     const hasActions = Boolean(editFormId || primaryAction || secondaryActions.length)
     const purchaseTitle = [number && `Заказ ${number}`, supplier].filter(Boolean).join(' · ') || 'Заказ поставщику'
     const purchaseActions = hasActions ? <div className={ui.purchaseCardActions}>
-      {editFormId ? render([editFormId]) : null}
       {primaryAction ? (published
         ? <PublishedV2Button node={primaryAction} screenId={props.screenId} recordId={purchaseRecord.id} refreshOnSuccess buttonClassName={styles.primary} />
         : <button type="button" className={styles.primary} disabled>{primaryAction.label}</button>) : null}
+      {editFormId ? render([editFormId]) : null}
       {secondaryActions.map(node => published
         ? <PublishedV2Button key={node.id} node={node} screenId={props.screenId} recordId={purchaseRecord.id} refreshOnSuccess buttonClassName={styles.secondary} />
         : <button key={node.id} type="button" className={styles.secondary} disabled>{node.label}</button>)}

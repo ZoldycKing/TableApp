@@ -151,10 +151,10 @@ async function nextPurchaseNumber(write: RowTransaction, inv: PurchaseInventory)
   let max = 0
   for (const row of existing) {
     const value = String((row.data as Record<string, unknown>)[inv.purchaseNumberFieldId] ?? '').trim()
-    const match = /^З-(\d+)$/u.exec(value)
+    const match = /^ЗК?-(\d+)$/u.exec(value) || /^З-(\d+)$/u.exec(value)
     if (match) max = Math.max(max, Number(match[1]))
   }
-  return `З-${String(max + 1).padStart(4, '0')}`
+  return `ЗК-${String(max + 1).padStart(4, '0')}`
 }
 
 async function header(write: RowTransaction, app: AppV2, actor: AppV2Actor, values: Record<string, AppV2Json>, operation: 'create' | 'update', orderId?: string) {
@@ -351,8 +351,9 @@ export async function cancelPurchaseOrder(write: RowTransaction, app: AppV2, act
     const line = row.data as Record<string, unknown>
     const productId = relationId(line[inv.lineProductFieldId])
     const qty = Number(line[inv.lineQtyFieldId])
+    const lineName = String(line[inv.lineNameFieldId] ?? '').trim() || 'Товар'
     if (!productId || !Number.isSafeInteger(qty) || qty < 1) throw new RowWriteError('invalid', 'Проверьте позиции заказа')
-    return { productId, qty }
+    return { productId, qty, name: lineName }
   }).sort((a, b) => a.productId.localeCompare(b.productId))
   const name = String(data[inv.purchaseNameFieldId] ?? 'Заказ')
   const number = String(data[inv.purchaseNumberFieldId] ?? '').trim()
@@ -373,5 +374,5 @@ export async function cancelPurchaseOrder(write: RowTransaction, app: AppV2, act
     [inv.purchaseCancelledAtFieldId]: stamp.at,
     [inv.purchaseCancelledByFieldId]: stamp.by,
   }, actorKind(actor))
-  return { id: orderId, label }
+  return { id: orderId, label, deductions: lines }
 }

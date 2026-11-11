@@ -234,6 +234,8 @@ export const sklad: TemplateDef = {
       rows: [
         { key: 'pl1', values: { name: 'Фильтр воздушный FA-120', order: { rowKey: 'po1' }, product: { rowKey: 's1' }, qty: 8, price: 890 } },
         { key: 'pl2', values: { name: 'Коробка гофрокартон 400×300×200', order: { rowKey: 'po2' }, product: { rowKey: 's7' }, qty: 80, price: 42 } },
+        { key: 'pl2b', values: { name: 'Перчатки рабочие, пара', order: { rowKey: 'po2' }, product: { rowKey: 's8' }, qty: 24, price: 95 } },
+        { key: 'pl2c', values: { name: 'Гофра алюминиевая 125 мм, 3 м', order: { rowKey: 'po2' }, product: { rowKey: 's5' }, qty: 5, price: 640 } },
         { key: 'pl3', values: { name: 'Термостат KTS-011', order: { rowKey: 'po3' }, product: { rowKey: 's2' }, qty: 4, price: 2450 } },
       ],
     },
@@ -244,7 +246,7 @@ export const sklad: TemplateDef = {
       primary: 'name',
       fields: [
         { key: 'name', name: 'Заказ', type: 'text', help: 'Короткое название заказа. Сервер собирает его из поставщика.' },
-        { key: 'number', name: 'Номер', type: 'text', help: 'Номер заказа вида З-0001. Присваивается сервером при создании.' },
+        { key: 'number', name: 'Номер', type: 'text', help: 'Номер заказа вида ЗК-0001. Присваивается сервером при создании.' },
         { key: 'supplier', name: 'Поставщик', type: 'relation', relationTable: 'suppliers', allowMultiple: false, help: 'У кого заказываете. Одного поставщика на заказ.' },
         { key: 'warehouse', name: 'Склад', type: 'relation', relationTable: 'warehouses', allowMultiple: false, help: 'Куда придёт товар. Приёмка увеличит остаток на этом складе.' },
         { key: 'date', name: 'Дата', type: 'date', options: { defaultToday: true }, help: 'Дата заказа. В новом заказе подставляется сегодня.' },
@@ -280,7 +282,7 @@ export const sklad: TemplateDef = {
         {
           key: 'po1',
           values: {
-            name: 'Заказ · КлиматСервис', number: 'З-0001', supplier: { rowKey: 'sup1' }, warehouse: { rowKey: 'wh1' },
+            name: 'Заказ · КлиматСервис', number: 'ЗК-0001', supplier: { rowKey: 'sup1' }, warehouse: { rowKey: 'wh1' },
             date: inDays(3), status: 'Черновик', total: 7120, comment: 'Ждём счёт', lines: { rowKeys: ['pl1'] }, count: 1,
             createdAt: inDays(3), createdBy: 'maria.sokolova@example.invalid',
           },
@@ -288,8 +290,8 @@ export const sklad: TemplateDef = {
         {
           key: 'po2',
           values: {
-            name: 'Заказ · Упаковка Плюс', number: 'З-0002', supplier: { rowKey: 'sup2' }, warehouse: { rowKey: 'wh1' },
-            date: inDays(-1), status: 'Заказано', total: 3360, comment: 'Отгрузка на следующей неделе', lines: { rowKeys: ['pl2'] }, count: 1,
+            name: 'Заказ · Упаковка Плюс', number: 'ЗК-0002', supplier: { rowKey: 'sup2' }, warehouse: { rowKey: 'wh1' },
+            date: inDays(-1), status: 'Заказано', total: 8840, comment: 'Отгрузка на следующей неделе', lines: { rowKeys: ['pl2', 'pl2b', 'pl2c'] }, count: 3,
             createdAt: inDays(-3), createdBy: 'maria.sokolova@example.invalid',
             orderedAt: inDays(-1), orderedBy: 'ivan.orlov@example.invalid',
           },
@@ -297,7 +299,7 @@ export const sklad: TemplateDef = {
         {
           key: 'po3',
           values: {
-            name: 'Заказ · КлиматСервис', number: 'З-0003', supplier: { rowKey: 'sup1' }, warehouse: { rowKey: 'wh1' },
+            name: 'Заказ · КлиматСервис', number: 'ЗК-0003', supplier: { rowKey: 'sup1' }, warehouse: { rowKey: 'wh1' },
             date: inDays(-14), status: 'Получено', total: 9800, comment: 'Накладная ПН-104', lines: { rowKeys: ['pl3'] }, count: 1,
             createdAt: inDays(-16), createdBy: 'maria.sokolova@example.invalid',
             orderedAt: inDays(-15), orderedBy: 'ivan.orlov@example.invalid',

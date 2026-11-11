@@ -191,7 +191,7 @@ describe.skipIf(!process.env.DATABASE_URL)('purchase orders', () => {
       [inv.purchaseStatusFieldId!]: inv.statusDraft,
       [inv.purchaseTotalFieldId!]: 21,
       [inv.purchaseCountFieldId!]: 1,
-      [inv.purchaseNumberFieldId!]: 'З-0004',
+      [inv.purchaseNumberFieldId!]: 'ЗК-0004',
     })
     expect(String(dataOf(order!)[inv.purchaseCreatedAtFieldId!] ?? '')).toBeTruthy()
     expect(String(dataOf(order!)[inv.purchaseCreatedByFieldId!] ?? '')).toBeTruthy()

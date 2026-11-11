@@ -14,6 +14,7 @@ import { builderV2MediaItems } from './media-values'
 import { builderV2StatusTone } from './record-presentation'
 import { usePublishedV2 } from './published-context'
 import { DetailCardShell, type ShellMetric } from './layout-shell'
+import { ruPrepText } from './ru-prep-text'
 import ui from './view.module.css'
 
 export type BuilderV2OrderActionMode = 'persistent' | 'reveal'
@@ -143,7 +144,7 @@ export function BuilderV2OrderFacts({
   const contacts = visible.filter(item => item.kind === 'contact')
   const rest = visible.filter(item => item.kind !== 'contact')
   return <section className={`${presentation.panel} ${ui.orderFacts}`} aria-label={title}>
-    <h2 className={presentation.sectionTitle}>{title}</h2>
+    <h2 className={presentation.sectionTitle}>{ruPrepText(title)}</h2>
     {contacts.length > 0 && <div className={ui.orderContactRow}>
       {contacts.map(item => <div key={item.id} className={ui.orderFact} data-kind={item.kind}>
         <small>{item.label}</small>

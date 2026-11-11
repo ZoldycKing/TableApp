@@ -1,6 +1,7 @@
 'use client'
 import type { CSSProperties, ReactNode } from 'react'
 import { ProtoIcon } from '../prototype/icons'
+import { ruPrepText } from './ru-prep-text'
 import shell from './layout-shell.module.css'
 
 export type ShellMetric = {
@@ -195,7 +196,7 @@ export function DetailCardShell({
 
 export function DetailSection({ title, children }: { title?: ReactNode; children: ReactNode }) {
   return <section className={shell.detailSection}>
-    {title ? <h3 className={shell.detailSectionTitle}>{title}</h3> : null}
+    {title ? <h3 className={shell.detailSectionTitle}>{typeof title === 'string' ? ruPrepText(title) : title}</h3> : null}
     <div className={shell.detailSectionBody}>{children}</div>
   </section>
 }

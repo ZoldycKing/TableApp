@@ -1,0 +1,5 @@
+/* Cancel inherited heading tracking so the space after о/к/в/с/и is a normal glyph advance. */
+.prepNowrap {
+  white-space: nowrap;
+  letter-spacing: 0;
+}

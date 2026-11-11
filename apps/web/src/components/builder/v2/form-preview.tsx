@@ -20,6 +20,7 @@ import { useBuilderV2OrderActionPanel } from './order-detail'
 import { BuilderV2MoneyInput } from './money-input'
 import { builderV2IsMoneyFieldLabel, builderV2ParseMoneyInput } from '@/lib/builder-v2-money'
 import type { BuilderV2WorkflowEffect, BuilderV2WorkflowTrace } from '@/lib/builder-v2-workflow-types'
+import { ruPrepText } from './ru-prep-text'
 
 export type WorkingFormOptions = { tableName: string; listHref: string; recordHref?: string; learning?:boolean; revision?: string }
 type FormContext = { app: AppV2; scope: BuilderV2FormScope; state?: BuilderV2FormState; values: Record<string, AppV2Json>; errors: Record<string, string>; disabled: boolean; key:string; upload?: (fieldId:string,file:File,signal:AbortSignal)=>Promise<Attachment>; onPending:(id:string,pending:boolean)=>void; change: (id: string, value: AppV2Json) => void; inspect: (request: BuilderV2FormRequest) => Promise<BuilderV2FormResult | BuilderV2FormOptionsResult> }
@@ -279,5 +280,5 @@ export function BuilderV2FormInput({ node, table }: { node: BuilderV2Input; tabl
     : type === 'number' && builderV2IsMoneyFieldLabel(label)
       ? <BuilderV2MoneyInput {...common} value={value} onValueChange={change} maxLength={32} />
     : <input {...common} type={type === 'email' ? 'email' : type === 'phone' ? 'tel' : type === 'url' ? 'url' : type === 'number' ? 'number' : 'text'} inputMode={type === 'number' ? 'decimal' : undefined} value={String(value ?? '')} maxLength={10000} onChange={event => change(type === 'number' ? (event.target.value === '' ? null : Number(event.target.value)) : event.target.value)} />
-  return <div className={`${ui.input} ${type === 'checkbox' ? ui.checkInput : ''}`} data-kind={builderV2OrderFactKind(label)} data-purchase-field={purchaseField || undefined}><label htmlFor={unique}>{label}{node.required ? ' *' : ''}</label>{control}{stockHint && <p className={ui.stockHint}>{stockHint}</p>}{error && <span className={ui.dataError} id={errorId}>{error}</span>}</div>
+  return <div className={`${ui.input} ${type === 'checkbox' ? ui.checkInput : ''}`} data-kind={builderV2OrderFactKind(label)} data-purchase-field={purchaseField || undefined}><label htmlFor={unique}>{ruPrepText(label)}{node.required ? ' *' : ''}</label>{control}{stockHint && <p className={ui.stockHint}>{stockHint}</p>}{error && <span className={ui.dataError} id={errorId}>{error}</span>}</div>
 }

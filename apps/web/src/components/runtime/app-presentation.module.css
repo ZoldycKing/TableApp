@@ -45,8 +45,9 @@
   font-size: 17px;
   font-weight: 650;
   line-height: 1.4;
-  letter-spacing: -.012em;
-  word-spacing: 0.32em;
+  /* No negative tracking here — Manrope + tracking eats spaces after о/к/в/с/и. */
+  letter-spacing: 0;
+  word-spacing: 0.28em;
   overflow-wrap: anywhere;
 }
 

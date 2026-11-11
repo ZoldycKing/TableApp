@@ -140,16 +140,33 @@ async function capture(width: number, prefix: string, tableId: string, itemIds: 
     await page.waitForTimeout(500)
     const file = page.locator('[role=dialog] input[type=file]')
     if (await file.count()) {
-      await file.setInputFiles({
-        name: 'preview.png',
-        mimeType: 'image/png',
-        buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAADElEQVR4nGNgGAWjgAIAAAGAAAFUxSjHAAAAAElFTkSuQmCC', 'base64'),
-      })
+      const sample = resolve('/workspace/apps/web/public/template-media/inventory/FA-120.webp')
+      await file.setInputFiles(sample)
       await page.waitForSelector('[role=dialog] img', { timeout: 10_000 }).catch(() => {})
+      await page.getByRole('button', { name: 'Заменить фото' }).waitFor({ timeout: 10_000 }).catch(() => {})
       await page.waitForTimeout(400)
     }
     await inspect(page, `${prefix}-add`)
     await shot(page, `${prefix}-add`)
+    if (width < 1000) {
+      await page.evaluate(() => {
+        const dialog = document.querySelector('[role=dialog]') as HTMLElement | null
+        if (!dialog) return
+        const body = [...dialog.querySelectorAll('*')].find(el => {
+          const style = getComputedStyle(el)
+          return (style.overflowY === 'auto' || style.overflowY === 'scroll') && el.scrollHeight > el.clientHeight + 8
+        }) as HTMLElement | undefined
+        const unit = [...dialog.querySelectorAll('select, label')].find(el =>
+          (el.getAttribute('aria-label') || '').includes('Единица') || (el.textContent || '').includes('Единица'))
+        if (body && unit) {
+          const top = unit.getBoundingClientRect().top - body.getBoundingClientRect().top + body.scrollTop - 24
+          body.scrollTop = Math.max(0, top)
+        } else if (body) body.scrollTop = body.scrollHeight
+        else unit?.scrollIntoView({ block: 'center' })
+      })
+      await page.waitForTimeout(350)
+      await shot(page, `${prefix}-add-unit`)
+    }
   } else if (fixture.createUrl) {
     await goto(page, fixture.createUrl)
     await page.getByText('Наименование').first().waitFor({ timeout: 15_000 }).catch(() => {})

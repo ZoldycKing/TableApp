@@ -32,6 +32,15 @@ it('shows read-only attachments without removal controls and never uploads from 
  const view=render(<BuilderV2AttachmentInput id="photos" field={{...field,readOnly:true}} value={[attachment]} disabled slug="work" onChange={vi.fn()} onPending={vi.fn()}/>);expect(screen.queryByRole('button')).toBeNull();expect(view.container.querySelector('img')?.getAttribute('src')).toContain('?v2App=work')
  view.rerender(<BuilderV2AttachmentInput id="photos" field={field} value={[]} disabled={false} onChange={vi.fn()} onPending={vi.fn()}/>);expect((screen.getByRole('button') as HTMLButtonElement).disabled).toBe(true);expect(screen.getByText('Загрузка доступна в рабочей форме.')).toBeTruthy()
 })
+it('relabels a single-photo control to replace and swaps the file on pick',async()=>{
+ const single={...field,maxCount:1},next:Attachment={...attachment,id:'att_next',key:'workspace/next.png',name:'next.png'}
+ const upload=vi.fn().mockResolvedValue(next),change=vi.fn(),view=render(<BuilderV2AttachmentInput id="photos" field={single} value={[attachment]} disabled={false} upload={upload} onChange={change} onPending={vi.fn()}/>)
+ expect(screen.getByRole('button',{name:'Заменить фото'})).toBeTruthy()
+ await act(async()=>fireEvent.change(view.container.querySelector('input')!,{target:{files:[photo()]}}))
+ expect(change).toHaveBeenCalledWith([])
+ expect(upload).toHaveBeenCalledTimes(1)
+ expect(change).toHaveBeenLastCalledWith([next])
+})
 
 it('offers attachment values from the same form field without text, user names or unrelated file cells',()=>{
  const fields=[{id:'title',name:'Название',type:'text' as const},{id:'photos',name:'Фото',type:'image' as const},{id:'other',name:'Другое фото',type:'image' as const}],form={id:'form',type:'form' as const,name:'Новая запись',tableId:'orders',mode:'create' as const,childIds:[],submitLabel:'Сохранить',events:{submit:null},visibleTo:null,visibleWhen:null}

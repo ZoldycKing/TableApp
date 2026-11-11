@@ -20,7 +20,7 @@ const keep = new Set(['ЗК-0001', 'ЗК-0002', 'ЗК-0003'])
 const numberId = inv.purchaseNumberFieldId!
 const dateId = inv.purchaseDateFieldId!
 const createdAtId = inv.purchaseCreatedAtFieldId
-const orderField = inv.purchaseLineOrderFieldId
+const orderField = inv.lineOrderFieldId
 const now = new Date()
 const pastIso = new Date(Date.now() - 2 * 86_400_000).toISOString()
 

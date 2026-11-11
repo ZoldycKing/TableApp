@@ -30,7 +30,8 @@ export function publishedV2ReadSql(app:AppV2,actor:AppV2Actor,tableId:string){
 }
 /** Create-product form lives on its own screen but opens as a dialog on the items list. */
 export function publishedV2FormHostScreenId(app:AppV2,screenId:string,nodeId:string){
-  if(app.inventory&&nodeId===app.inventory.createItemFormId&&screenId===app.inventory.itemsScreenId)return app.inventory.createItemScreenId
+  const inv=app.inventory
+  if(inv?.createItemFormId===nodeId&&inv.itemsScreenId===screenId&&inv.createItemScreenId)return inv.createItemScreenId
   return screenId
 }
 export function publishedV2Node(app:AppV2,actor:AppV2Actor,screenId:string,nodeId:string,screenRow?:AppV2Record){

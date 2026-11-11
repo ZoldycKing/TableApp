@@ -106,7 +106,11 @@ describe.skipIf(!process.env.DATABASE_URL)('inventory create modal photo upload'
   })
 
   it('accepts create-form inspect from the items list, defaults unit to шт., and keeps an uploaded photo on the saved row', async () => {
-    const scope = { screenId: inv.itemsScreenId, formId: inv.createItemFormId }
+    expect(inv.createItemFormId).toBeTruthy()
+    expect(inv.itemPhotoFieldId).toBeTruthy()
+    const formId = inv.createItemFormId!
+    const photoFieldId = inv.itemPhotoFieldId!
+    const scope = { screenId: inv.itemsScreenId, formId }
     const initial = await forms.inspectPublishedV2FormRequest(slug, { ...scope, revision, mode: 'initial' })
     expect(initial).toMatchObject({ ok: true })
     if (!initial.ok || !('state' in initial) || !initial.state) throw new Error(JSON.stringify(initial))
@@ -119,7 +123,7 @@ describe.skipIf(!process.env.DATABASE_URL)('inventory create modal photo upload'
       kind: 'published',
       slug,
       ...scope,
-      fieldId: inv.itemPhotoFieldId,
+      fieldId: photoFieldId,
       revision,
       fingerprint: initial.state.fingerprint,
     }))
@@ -130,8 +134,8 @@ describe.skipIf(!process.env.DATABASE_URL)('inventory create modal photo upload'
     const values: Record<string, AppV2Json> = {
       [inv.itemNameFieldId]: 'Тестовый товар с фото',
       [inv.itemSkuFieldId]: 'TEST-PHOTO-1',
-      [inv.itemPhotoFieldId]: [attachment] as unknown as AppV2Json,
-      [inv.itemBarcodeFieldId]: null,
+      [photoFieldId]: [attachment] as unknown as AppV2Json,
+      ...(inv.itemBarcodeFieldId ? { [inv.itemBarcodeFieldId]: null } : {}),
       [inv.itemCategoryFieldId]: null,
       [inv.itemUnitFieldId]: unitChoiceId,
       [inv.itemMinFieldId]: 1,
@@ -149,7 +153,7 @@ describe.skipIf(!process.env.DATABASE_URL)('inventory create modal photo upload'
     if (!saved.ok || !saved.rowId) throw new Error(JSON.stringify(saved))
 
     const [row] = await database.db.select().from(database.rows).where(eq(database.rows.id, saved.rowId))
-    const photos = (row!.data as Record<string, unknown>)[inv.itemPhotoFieldId!]
+    const photos = (row!.data as Record<string, unknown>)[photoFieldId]
     expect(photos).toEqual([expect.objectContaining({ name: 'modal-photo.png', mime: 'image/png', key: attachment.key })])
     expect((row!.data as Record<string, unknown>)[inv.itemNameFieldId]).toBe('Тестовый товар с фото')
   })

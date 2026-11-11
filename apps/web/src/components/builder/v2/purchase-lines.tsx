@@ -109,7 +109,7 @@ export function PurchaseLinesEditor({ record }: { record?: AppV2Record }) {
     }
     setLookupReady(false)
     const timer = setTimeout(() => {
-      void published.readData({ nodeId: itemsNode.id, screenId: inventory.itemsScreenId, search: query.trim() }).then(result => {
+      void published.readData({ nodeId: itemsNode.id, screenId: inventory.itemsScreenId, search: query.trim() }).then(async result => {
         if (!result.ok) {
           setLookup(result.error)
           setHits([])
@@ -117,8 +117,7 @@ export function PurchaseLinesEditor({ record }: { record?: AppV2Record }) {
           return
         }
         setLookup('')
-        setLookupReady(true)
-        setHits(result.page.rows.slice(0, 8).map(row => {
+        const mapped = result.page.rows.slice(0, 8).map(row => {
           const price = Number(row.values[inventory.itemCostFieldId])
           const image = inventory.itemPhotoFieldId ? builderV2MediaItems(row.values[inventory.itemPhotoFieldId], published.slug).find(item => item.image) : undefined
           const sku = inventory.itemSkuFieldId
@@ -132,7 +131,20 @@ export function PurchaseLinesEditor({ record }: { record?: AppV2Record }) {
             price: Number.isFinite(price) && price >= 0 ? price : 0,
             image,
           }
-        }))
+        })
+        const missing = mapped.filter(hit => !(hit.price > 0)).map(hit => hit.productId)
+        if (missing.length) {
+          const { readPublishedV2PurchaseCostsAction } = await import('@/app/builder-v2-published-actions')
+          const costs = await readPublishedV2PurchaseCostsAction(published.slug, { revision: published.revision, productIds: missing })
+          if (costs.ok) {
+            for (const hit of mapped) {
+              const price = costs.costs[hit.productId]
+              if (typeof price === 'number' && Number.isFinite(price) && price >= 0) hit.price = price
+            }
+          }
+        }
+        setLookupReady(true)
+        setHits(mapped)
       }).catch(() => {
         setLookup('Не удалось загрузить товары')
         setHits([])
@@ -222,7 +234,7 @@ export function PurchaseLinesEditor({ record }: { record?: AppV2Record }) {
             </button>
           </li>
         })}
-      </ul> : <p className={ui.hint}>{lookup || (lookupReady && query.trim() ? 'Ничего не нашлось. Уточните название.' : !lookupReady ? 'Ищем товары…' : published ? 'Начните вводить название или артикул — или оставьте пустым, чтобы увидеть список.' : 'Список товаров откроется в опубликованном приложении.')}</p>}
+      </ul> : <p className={ui.hint}>{lookup || (!lookupReady ? 'Ищем товары…' : query.trim() ? 'Ничего не нашлось. Уточните название.' : published ? 'Товары не найдены.' : 'Список товаров откроется в опубликованном приложении.')}</p>}
     </div> : lines.length ? <button type="button" className={styles.secondary} onClick={() => setSearchOpen(true)}>Добавить товар</button> : null}
   </div>
 }

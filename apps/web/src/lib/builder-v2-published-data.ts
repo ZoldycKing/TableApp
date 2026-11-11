@@ -8,7 +8,7 @@ import {builderV2OrderAccumulator,builderV2OrderLineFields} from './builder-v2-o
 import {publishedV2ItemNodes} from './builder-v2-published-items'
 import {db,rows,views} from '@tableapp/db'
 import {compareRows,evalFilter,indexFields,normalizeView} from '@tableapp/schema'
-import {appV2ChildIds,evaluateAppV2Condition,matchesAppV2Audience,type AppV2,type AppV2Actor,type AppV2Node,type AppV2Record} from '@tableapp/schema/app-v2'
+import {appV2ChildIds,canOpenAppV2Screen,evaluateAppV2Condition,matchesAppV2Audience,type AppV2,type AppV2Actor,type AppV2Node,type AppV2Record} from '@tableapp/schema/app-v2'
 import {and,asc,eq,gt,inArray,isNull,or,sql} from 'drizzle-orm'
 import {withPublishedV2Read,publishedV2Context,publishedV2Screen} from './builder-v2-published'
 import {canReadPublishedV2Row,derivePublishedV2Rows,publishedV2Fields,publishedV2Row} from './builder-v2-published-rows'
@@ -177,5 +177,32 @@ export async function readPublishedV2RelatedRows(slug:string,request:{revision:s
     const derived=await derivePublishedV2Rows(meta,app,actor,visible)
     const byId=new Map(derived.map(row=>[row.id,output(row)]))
     return {rows:request.recordIds.flatMap(id=>byId.has(id)?[byId.get(id)!]:[])}
+  })
+}
+
+/** Default purchase line prices from product cost for staff/owner (cost stays hidden on product cards). */
+export async function readPublishedV2PurchaseCosts(slug:string,request:{revision:string;productIds:readonly string[]}){
+  return withPublishedV2Read(async tx=>{
+    const {app,actor,revision}=await publishedV2Context(slug,tx)
+    if(revision!==request.revision)throw new RowWriteError('conflict','Приложение обновлено. Обновите страницу.')
+    const inventory=app.inventory
+    if(!inventory?.purchasesScreenId||!inventory.itemCostFieldId||!canOpenAppV2Screen(app,actor,inventory.purchasesScreenId)){
+      throw new RowWriteError('denied','Закупки недоступны')
+    }
+    if(!actor.roleIds.includes('owner')&&!actor.roleIds.includes('staff'))throw new RowWriteError('denied','Закупки недоступны')
+    if(!request.productIds.length||request.productIds.length>100)throw new RowWriteError('invalid','Слишком много товаров')
+    const stored=await tx.select({id:rows.id,data:rows.data}).from(rows).where(and(
+      eq(rows.tableId,inventory.itemsTableId),
+      inArray(rows.id,[...request.productIds]),
+      isNull(rows.deletedAt),
+      publishedV2ReadSql(app,actor,inventory.itemsTableId),
+    ))
+    const costs:Record<string,number>={}
+    for(const row of stored){
+      const raw=(row.data as Record<string,unknown>)[inventory.itemCostFieldId]
+      const price=typeof raw==='number'?raw:Number(raw)
+      if(Number.isFinite(price)&&price>=0)costs[row.id]=price
+    }
+    return {costs}
   })
 }

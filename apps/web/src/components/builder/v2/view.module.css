@@ -1261,8 +1261,10 @@ button.recordButton:hover strong { color: var(--v2-accent, #456849); }
 .recordButton[data-compact][data-supplier] > .recordAvatar {
   grid-column: 1;
   grid-row: 1;
+  grid-area: auto;
   width: 40px;
   height: 40px;
+  align-self: start;
 }
 .supplierListCopy {
   grid-column: 2;
@@ -1270,6 +1272,7 @@ button.recordButton:hover strong { color: var(--v2-accent, #456849); }
   min-width: 0;
   display: grid;
   gap: 3px;
+  justify-items: start;
 }
 .supplierListCopy > strong {
   overflow-wrap: break-word;
@@ -1291,7 +1294,7 @@ button.recordButton:hover strong { color: var(--v2-accent, #456849); }
 .supplierListCol { display: none; min-width: 0; color: var(--v2-muted, #687568); font-size: 13px; line-height: 1.35; }
 .recordButton[data-compact][data-supplier] > .arrow,
 .recordButton[data-compact][data-supplier] > svg { grid-column: 3; grid-row: 1; align-self: center; }
-@media (min-width: 900px) {
+@container builder-app (min-width: 900px) {
   .supplierListHeader {
     display: grid;
     grid-template-columns: var(--inv-supplier-cols);
@@ -1661,23 +1664,27 @@ button.recordButton:hover strong { color: var(--v2-accent, #456849); }
 }
 .purchasePick:disabled { cursor: default; opacity: 0.62; }
 .purchasePick:disabled .purchasePickAction { color: var(--v2-muted, #687568); }
-form[data-purchase] > [data-purchase-fields] {
+.purchaseForm { overflow-wrap: normal; gap: 12px; }
+.purchaseFields {
   display: grid;
   gap: 12px;
   grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
 }
+.purchaseFields > :has([data-purchase-field='comment']) { margin-bottom: 0; }
+.purchaseFields > :has([data-purchase-field='lines']) { margin-top: 0; }
 @media (min-width: 721px) {
-  form[data-purchase] > [data-purchase-fields] {
+  .purchaseFields {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 12px 14px;
   }
-  form[data-purchase] > [data-purchase-fields] > :has([data-purchase-field='supplier']),
-  form[data-purchase] > [data-purchase-fields] > :has([data-purchase-field='warehouse']),
-  form[data-purchase] > [data-purchase-fields] > :has([data-purchase-field='date']) {
+  .purchaseFields > :has([data-purchase-field='supplier']),
+  .purchaseFields > :has([data-purchase-field='warehouse']),
+  .purchaseFields > :has([data-purchase-field='date']) {
     grid-column: auto;
   }
-  form[data-purchase] > [data-purchase-fields] > :has([data-purchase-field='comment']),
-  form[data-purchase] > [data-purchase-fields] > :has([data-purchase-field='lines']) {
+  .purchaseFields > :has([data-purchase-field='comment']),
+  .purchaseFields > :has([data-purchase-field='lines']) {
     grid-column: 1 / -1;
   }
   .purchaseEditorLine {

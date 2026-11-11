@@ -619,7 +619,9 @@ export function AppV2Renderer(props: AppV2RendererProps) {
               const stat = supplierStats.get(row.id)
               const lastOrder = stat?.lastOrder ? formatPurchaseDate(stat.lastOrder) : '—'
               const purchased = stat && stat.purchased > 0 ? purchaseMoney(stat.purchased) : '—'
-              const ordersLabel = stat ? `${stat.orders}` : '0'
+              const ordersCount = stat?.orders ?? 0
+              const ordersLabel = `${ordersCount}`
+              const ordersWord = ordersCount === 1 ? 'заказ' : ordersCount > 1 && ordersCount < 5 ? 'заказа' : 'заказов'
               return <>
                 <BuilderV2RecordAvatar id={row.id} name={name} icon="truck" tone />
                 <div className={ui.supplierListCopy}>
@@ -627,7 +629,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
                   {contact ? <span className={ui.supplierListContact}>{contact}</span> : null}
                   <span className={ui.supplierListMobileMeta}>
                     {phone ? <span>{phone}</span> : null}
-                    <span>{ordersLabel} заказов · {lastOrder}</span>
+                    <span>{ordersLabel} {ordersWord} · {lastOrder}</span>
                     <span>Закуплено на {purchased}</span>
                   </span>
                 </div>

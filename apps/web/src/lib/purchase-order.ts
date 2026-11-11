@@ -162,7 +162,6 @@ async function header(write: RowTransaction, app: AppV2, actor: AppV2Actor, valu
   team(actor)
   const supplierId = relationId(values[inv.purchaseSupplierFieldId])
   const warehouseId = relationId(values[inv.purchaseWarehouseFieldId])
-  if (!supplierId) throw new RowWriteError('invalid', 'Выберите поставщика')
   if (!warehouseId) throw new RowWriteError('invalid', 'Выберите склад')
   const date = textOf(values[inv.purchaseDateFieldId], 'Дата', 80)
   if (!date) throw new RowWriteError('invalid', 'Укажите дату заказа')
@@ -171,7 +170,7 @@ async function header(write: RowTransaction, app: AppV2, actor: AppV2Actor, valu
   const rawPayload = values[inv.purchasePayloadFieldId]
   const payload: AppV2Json = typeof rawPayload === 'string' ? rawPayload : JSON.stringify({ lines })
   const checked: Record<string, AppV2Json> = {
-    [inv.purchaseSupplierFieldId]: [supplierId],
+    [inv.purchaseSupplierFieldId]: supplierId ? [supplierId] : [],
     [inv.purchaseWarehouseFieldId]: [warehouseId],
     [inv.purchaseDateFieldId]: date,
     [inv.purchaseCommentFieldId]: comment,
@@ -181,13 +180,16 @@ async function header(write: RowTransaction, app: AppV2, actor: AppV2Actor, valu
     ? { operation: 'update', row: { id: orderId, tableId: inv.purchaseOrdersTableId, values }, values: checked }
     : { operation: 'create', tableId: inv.purchaseOrdersTableId, values: checked })
   if (!decision.ok) throw new RowWriteError('denied', decision.error)
-  const [supplier] = await liveRows(write, inv.suppliersTableId, [supplierId])
-  if (!supplier) throw new RowWriteError('invalid', 'Поставщик недоступен')
+  let supplierName = 'без поставщика'
+  if (supplierId) {
+    const [supplier] = await liveRows(write, inv.suppliersTableId, [supplierId])
+    if (!supplier) throw new RowWriteError('invalid', 'Поставщик недоступен')
+    supplierName = String((supplier.data as Record<string, unknown>)[inv.supplierNameFieldId] ?? 'Поставщик').trim() || 'Поставщик'
+  }
   const [warehouse] = await liveRows(write, inv.warehousesTableId, [warehouseId])
   if (!warehouse) throw new RowWriteError('invalid', 'Склад недоступен')
   const products = await liveRows(write, inv.itemsTableId, lines.map(line => line.productId))
   if (products.length !== lines.length) throw new RowWriteError('invalid', 'Товар недоступен')
-  const supplierName = String((supplier.data as Record<string, unknown>)[inv.supplierNameFieldId] ?? 'Поставщик').trim() || 'Поставщик'
   const names = new Map(products.map(row => [row.id, String((row.data as Record<string, unknown>)[inv.itemNameFieldId] ?? 'Товар')]))
   const total = money(lines.reduce((sum, line) => sum + line.qty * line.price, 0))
   return { inv, supplierId, warehouseId, date, comment, lines, names, total, title: `Заказ · ${supplierName}`.slice(0, 180) }
@@ -218,7 +220,7 @@ export async function createPurchaseOrder(write: RowTransaction, app: AppV2, act
   const created = await createRow(write, inv.purchaseOrdersTableId, {
     [inv.purchaseNameFieldId]: draft.title,
     [inv.purchaseNumberFieldId]: number,
-    [inv.purchaseSupplierFieldId]: [draft.supplierId],
+    [inv.purchaseSupplierFieldId]: draft.supplierId ? [draft.supplierId] : [],
     [inv.purchaseWarehouseFieldId]: [draft.warehouseId],
     [inv.purchaseDateFieldId]: draft.date,
     [inv.purchaseStatusFieldId]: inv.statusDraft,
@@ -251,7 +253,7 @@ export async function updatePurchaseOrder(write: RowTransaction, app: AppV2, act
   const lineIds = await replaceLines(write, inv, actor, orderId, previous, draft.lines, draft.names)
   await updateRow(write, inv.purchaseOrdersTableId, orderId, {
     [inv.purchaseNameFieldId]: draft.title,
-    [inv.purchaseSupplierFieldId]: [draft.supplierId],
+    [inv.purchaseSupplierFieldId]: draft.supplierId ? [draft.supplierId] : [],
     [inv.purchaseWarehouseFieldId]: [draft.warehouseId],
     [inv.purchaseDateFieldId]: draft.date,
     [inv.purchaseTotalFieldId]: draft.total,

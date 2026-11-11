@@ -1671,7 +1671,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
         metrics={supplierMetrics}
       >
         {comment ? <DetailSection><p className={ui.purchaseComment}>{comment}</p></DetailSection> : null}
-        {ordersId ? <DetailSection title="Заказы поставщика">{render([ordersId])}</DetailSection> : null}
+        {ordersId ? <DetailSection>{render([ordersId])}</DetailSection> : null}
       </DetailCardShell>
     </div>
   }

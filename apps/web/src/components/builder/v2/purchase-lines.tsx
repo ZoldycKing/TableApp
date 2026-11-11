@@ -1,10 +1,13 @@
 'use client'
 import { useEffect, useId, useRef, useState } from 'react'
 import type { AppV2Record } from '@tableapp/schema/app-v2'
+import { purchaseMoney } from '@/lib/purchase-format'
 import { builderV2MediaItems } from './media-values'
 import { InventoryProductThumb } from './record-visuals'
 import { useBuilderV2FormContext } from './form-preview'
 import { usePublishedV2 } from './published-context'
+import { usePurchaseDialogTotal } from './purchase-dialog-total'
+import styles from '../prototype/prototype.module.css'
 import ui from './view.module.css'
 
 type Line = { productId: string; name: string; qty: number; price: number; image?: ReturnType<typeof builderV2MediaItems>[number] }
@@ -15,14 +18,11 @@ function idsOf(value: unknown) {
   return value.filter((item): item is string => typeof item === 'string' && Boolean(item.trim()))
 }
 
-function money(value: number) {
-  return value.toLocaleString('ru-RU', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
-}
-
 /** Line editor for a purchase form. Writes JSON into the hidden payload field. */
 export function PurchaseLinesEditor({ record }: { record?: AppV2Record }) {
   const context = useBuilderV2FormContext()
   const published = usePublishedV2()
+  const setDialogTotal = usePurchaseDialogTotal()
   const inventory = context?.app.inventory
   const searchId = useId()
   const [lines, setLines] = useState<Line[]>([])
@@ -32,6 +32,7 @@ export function PurchaseLinesEditor({ record }: { record?: AppV2Record }) {
   const [note, setNote] = useState('')
   const [lookup, setLookup] = useState('')
   const [lookupReady, setLookupReady] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
   const hydrated = useRef<string | null>(null)
   const payloadId = inventory?.purchasePayloadFieldId
 
@@ -88,7 +89,7 @@ export function PurchaseLinesEditor({ record }: { record?: AppV2Record }) {
   }, [record?.id, published?.revision, payloadId])
 
   useEffect(() => {
-    if (!published || !inventory) return
+    if (!published || !inventory || !searchOpen) return
     const itemsNode = context?.app.nodes.find(node => node.type === 'collection' && node.layout === 'list' && context.app.sources.some(source => source.id === node.sourceId && source.tableId === inventory.itemsTableId && !source.screenTableId))
     if (!itemsNode) {
       setLookup('Список товаров недоступен')
@@ -117,22 +118,24 @@ export function PurchaseLinesEditor({ record }: { record?: AppV2Record }) {
       })
     }, 200)
     return () => clearTimeout(timer)
-  }, [query, published?.revision, published?.dataVersion, inventory?.itemsScreenId, Boolean(context)])
+  }, [query, searchOpen, published?.revision, published?.dataVersion, inventory?.itemsScreenId, Boolean(context)])
+
+  const total = lines.reduce((sum, line) => sum + line.qty * line.price, 0)
+  useEffect(() => {
+    setDialogTotal?.(total)
+    return () => setDialogTotal?.(null)
+  }, [total, setDialogTotal])
 
   if (!context || !inventory || !payloadId) return null
   const payloadInput = context.app.nodes.find(node => node.type === 'input' && node.fieldId === payloadId && context.app.nodes.some(form => form.id === context.scope.formId && form.type === 'form' && form.childIds.includes(node.id)))
   const error = payloadInput ? context.errors[payloadInput.id] : undefined
-  const total = lines.reduce((sum, line) => sum + line.qty * line.price, 0)
   const add = (hit: Line) => {
     if (lines.some(line => line.productId === hit.productId)) return
     sync([...lines, hit])
     setQuery('')
+    setSearchOpen(false)
   }
   return <div className={ui.purchaseEditor}>
-    <div className={ui.purchaseEditorHead}>
-      <h3>Позиции</h3>
-      <strong>{lines.length ? `${money(total)} ₽` : 'Добавьте товар'}</strong>
-    </div>
     {error ? <p role="alert" className={ui.dataError}>{error}</p> : null}
     {note ? <p className={ui.hint}>{note}</p> : null}
     {loading ? <p className={ui.hint}>Загружаем позиции…</p> : null}
@@ -141,7 +144,7 @@ export function PurchaseLinesEditor({ record }: { record?: AppV2Record }) {
         <InventoryProductThumb image={line.image} size="journal" label={line.name} />
         <div className={ui.purchaseEditorCopy}>
           <strong>{line.name}</strong>
-          <span>{money(line.qty * line.price)} ₽</span>
+          <span>{purchaseMoney(line.qty * line.price)}</span>
         </div>
         <label className={ui.purchaseEditorField}>
           <span>Кол-во</span>
@@ -160,21 +163,24 @@ export function PurchaseLinesEditor({ record }: { record?: AppV2Record }) {
         <button type="button" className={ui.purchaseEditorRemove} aria-label={`Убрать ${line.name}`} onClick={() => sync(lines.filter(item => item.productId !== line.productId))}>Убрать</button>
       </li>)}
     </ul>
-    <label className={ui.purchaseEditorSearch} htmlFor={searchId}>
-      <span>Товар</span>
-      <input id={searchId} type="search" placeholder="Найти по названию или артикулу" value={query} maxLength={200} onChange={event => setQuery(event.target.value)} />
-    </label>
-    {hits.length ? <ul className={ui.purchasePicks}>
-      {hits.map(hit => {
-        const taken = lines.some(line => line.productId === hit.productId)
-        return <li key={hit.productId}>
-          <button type="button" className={ui.purchasePick} disabled={taken} onClick={() => add(hit)}>
-            <InventoryProductThumb image={hit.image} size="journal" label={hit.name} />
-            <span>{hit.name}</span>
-            <strong>{taken ? 'Уже в заказе' : 'Добавить'}</strong>
-          </button>
-        </li>
-      })}
-    </ul> : <p className={ui.hint}>{lookup || (lookupReady && query.trim() ? 'Ничего не нашлось. Уточните название.' : published ? 'Найдите товар по названию или артикулу.' : 'Список товаров откроется в опубликованном приложении.')}</p>}
+    {!searchOpen ? <button type="button" className={styles.secondary} onClick={() => setSearchOpen(true)}>Добавить товар</button> : <div className={ui.purchaseEditorSearchBlock}>
+      <label className={ui.purchaseEditorSearch} htmlFor={searchId}>
+        <span>Найти товар</span>
+        <input id={searchId} type="search" placeholder="Название или артикул" value={query} maxLength={200} autoFocus onChange={event => setQuery(event.target.value)} />
+      </label>
+      <button type="button" className={styles.textButton} onClick={() => { setSearchOpen(false); setQuery('') }}>Скрыть поиск</button>
+      {hits.length ? <ul className={ui.purchasePicks}>
+        {hits.map(hit => {
+          const taken = lines.some(line => line.productId === hit.productId)
+          return <li key={hit.productId}>
+            <button type="button" className={ui.purchasePick} disabled={taken} onClick={() => add(hit)}>
+              <InventoryProductThumb image={hit.image} size="journal" label={hit.name} />
+              <span>{hit.name}</span>
+              <strong>{taken ? 'Уже в заказе' : 'Добавить'}</strong>
+            </button>
+          </li>
+        })}
+      </ul> : <p className={ui.hint}>{lookup || (lookupReady && query.trim() ? 'Ничего не нашлось. Уточните название.' : published ? 'Найдите товар по названию или артикулу.' : 'Список товаров откроется в опубликованном приложении.')}</p>}
+    </div>}
   </div>
 }

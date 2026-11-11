@@ -238,6 +238,22 @@
   min-width: 0;
 }
 .productIdentityCopy { display: grid; gap: 12px; min-width: 0; }
+.productIdentityHead {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  align-items: start;
+  justify-content: space-between;
+  min-width: 0;
+}
+.productIdentityHead > .productIdentityTitle {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+.productIdentityHead > .orderIdentityActions {
+  flex: 0 1 auto;
+  margin-inline-start: auto;
+}
 .productIdentityTitle {
   margin: 0;
   color: var(--v2-ink, #253c2d);
@@ -565,7 +581,10 @@
   .orderDetail[data-layout="stack"] .orderDetailBody { grid-template-columns: minmax(0, 1fr); }
   .orderIdentity:not([data-manage]) .orderIdentityMain { flex-direction: row; justify-content: space-between; align-items: end; }
   .orderIdentity[data-variant="pipeline"] .orderIdentityMain { grid-template-columns: minmax(0, 1fr) auto; gap: 16px 24px; align-items: start; }
+  /* Product card: actions live in the title row, so facts can use the full copy width. */
+  .orderIdentity[data-variant="pipeline"][data-product] .orderIdentityMain { grid-template-columns: minmax(0, 1fr); }
   .orderIdentityFacts { grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); }
+  .orderIdentity[data-product] .orderIdentityFacts { grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); }
   .orderIdentityActions[data-placement="desktop"] { display: flex; }
   .orderIdentityActions[data-placement="mobile"] { display: none; }
   .orderDetail[data-layout="stack"][data-manage] { padding-bottom: 0; }
@@ -850,18 +869,26 @@
   white-space: normal;
 }
 .recordJournalMeta {
-  display: block;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 6px;
+  row-gap: 2px;
   min-width: 0;
   color: var(--v2-muted, #687568);
   font-size: 13px;
   line-height: 1.35;
-  overflow-wrap: break-word;
-  word-break: normal;
 }
 .recordJournalMeta > .statusBadge {
   display: inline-flex;
+  flex: none;
   vertical-align: -0.15em;
-  margin-inline-end: 6px;
+}
+.journalMetaPrimary {
+  display: inline;
+  flex: 0 1 auto;
+  min-width: 0;
+  white-space: nowrap;
 }
 .journalUnit, .journalSep, .journalAuthor {
   display: inline;
@@ -870,10 +897,22 @@
 }
 .journalUnit { white-space: nowrap; }
 .journalSep { white-space: nowrap; }
-.journalAuthor { white-space: normal; }
-/* Mobile journal: chip stays inline at start of the meta line; author only on desktop. */
+/* Keep the full author name intact; wrap to its own meta line when the row is tight. */
+.journalAuthor {
+  flex: 0 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+}
+.journalMetaPrimary + .journalAuthor::before {
+  content: '· ';
+}
 @container builder-app (max-width: 640px) {
-  .journalAuthor { display: none; }
+  .journalAuthor {
+    flex: 1 0 100%;
+  }
+  .journalMetaPrimary + .journalAuthor::before {
+    content: none;
+  }
 }
 .recordButton[data-compact][data-journal] > .recordMetaDetail {
   grid-column: 3;

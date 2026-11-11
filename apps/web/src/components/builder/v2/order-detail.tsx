@@ -34,9 +34,16 @@ export function useBuilderV2OrderActionPanel() {
   return useContext(OrderActionPanelContext)
 }
 
+export type BuilderV2OrderIdentityFact = {
+  id: string
+  label: string
+  value: ReactNode
+  tone?: string
+}
+
 export function BuilderV2OrderIdentity({
   title, status, amount, scoped = false, progress, manage = false,
-  variant = 'order', amountLabel, statusLabel, due, client, actions, amountBadge, media, productTitle,
+  variant = 'order', amountLabel, statusLabel, due, client, actions, amountBadge, media, productTitle, facts: extraFacts,
 }: {
   title?: string
   status?: string
@@ -56,8 +63,10 @@ export function BuilderV2OrderIdentity({
   media?: ReactNode
   /** Full product name shown under/beside the photo (not truncated). */
   productTitle?: string
+  /** Extra pipeline facts (warehouse, cost, …) shown with Остаток/Минимум. */
+  facts?: readonly BuilderV2OrderIdentityFact[]
 }) {
-  if (!title && !status && !amount && !progress?.length && !due && !client && !actions && !media && !productTitle) return null
+  if (!title && !status && !amount && !progress?.length && !due && !client && !actions && !media && !productTitle && !extraFacts?.length) return null
   const pipeline = variant === 'pipeline' && manage
   const moneyLabel = amountLabel === undefined ? (scoped ? 'Сумма доступных позиций' : 'Итого') : amountLabel
   if (pipeline) {
@@ -66,36 +75,37 @@ export function BuilderV2OrderIdentity({
         ? <span className={ui.stockWithBadge}><span className={ui.stockQty}>{amount}</span><span className={ui.warningBadge}>{amountBadge}</span></span>
         : <span className={ui.stockQty}>{amount}</span>
       : null
+    const product = Boolean(media || productTitle)
     const facts = [
       status ? { id: 'stage', label: statusLabel || 'Этап', value: status as ReactNode, tone: builderV2StatusTone(status) } : null,
       amount ? { id: 'amount', label: moneyLabel || 'Сумма', value: amountValue as ReactNode, tone: 'amount' as const } : null,
       due ? { id: 'due', label: due.label, value: due.value as ReactNode, tone: due.tone } : null,
       client ? { id: 'client', label: 'Клиент', value: client } : null,
-    ].filter(Boolean) as { id: string; label: string; value: ReactNode; tone?: string }[]
-    return <section className={`${presentation.panel} ${ui.orderIdentity}`} data-manage data-variant="pipeline" data-product={media || productTitle ? 'true' : undefined} aria-label={amountBadge || statusLabel === undefined && moneyLabel === 'Остаток' ? 'Главное о товаре' : 'Главное о сделке'}>
+      ...(extraFacts ?? []),
+    ].filter(Boolean) as BuilderV2OrderIdentityFact[]
+    const renderFacts = (items: BuilderV2OrderIdentityFact[]) => items.length > 0 ? <div className={ui.orderIdentityFacts} data-count={items.length}>
+      {items.map(fact => <div key={fact.id} className={ui.orderIdentityFact} data-tone={fact.tone} data-kind={fact.id}>
+        {fact.label ? <span>{fact.label}</span> : null}
+        {fact.id === 'stage' && fact.tone === 'rose'
+          ? <strong className={ui.warningBadge}>{fact.value}</strong>
+          : <strong>{fact.value}</strong>}
+      </div>)}
+    </div> : null
+    return <section className={`${presentation.panel} ${ui.orderIdentity}`} data-manage data-variant="pipeline" data-product={product || undefined} aria-label={amountBadge || statusLabel === undefined && moneyLabel === 'Остаток' ? 'Главное о товаре' : 'Главное о сделке'}>
       <div className={ui.orderIdentityMain}>
-        {(media || productTitle) ? <div className={ui.productIdentity}>
+        {product ? <div className={ui.productIdentity}>
           {media}
           <div className={ui.productIdentityCopy}>
-            {productTitle ? <h2 className={ui.productIdentityTitle}>{productTitle}</h2> : null}
-            {facts.length > 0 && <div className={ui.orderIdentityFacts}>
-              {facts.map(fact => <div key={fact.id} className={ui.orderIdentityFact} data-tone={fact.tone} data-kind={fact.id}>
-                {fact.label ? <span>{fact.label}</span> : null}
-                {fact.id === 'stage' && fact.tone === 'rose'
-                  ? <strong className={ui.warningBadge}>{fact.value}</strong>
-                  : <strong>{fact.value}</strong>}
-              </div>)}
-            </div>}
+            <div className={ui.productIdentityHead}>
+              {productTitle ? <h2 className={ui.productIdentityTitle}>{productTitle}</h2> : null}
+              {actions}
+            </div>
+            {renderFacts(facts)}
           </div>
-        </div> : facts.length > 0 && <div className={ui.orderIdentityFacts}>
-          {facts.map(fact => <div key={fact.id} className={ui.orderIdentityFact} data-tone={fact.tone} data-kind={fact.id}>
-            {fact.label ? <span>{fact.label}</span> : null}
-            {fact.id === 'stage' && fact.tone === 'rose'
-              ? <strong className={ui.warningBadge}>{fact.value}</strong>
-              : <strong>{fact.value}</strong>}
-          </div>)}
-        </div>}
-        {actions}
+        </div> : <>
+          {renderFacts(facts)}
+          {actions}
+        </>}
       </div>
     </section>
   }
@@ -244,6 +254,7 @@ export function BuilderV2OrderActionPanel({
     client?: ReactNode
     media?: ReactNode
     productTitle?: string
+    facts?: readonly BuilderV2OrderIdentityFact[]
   }
 }) {
   const multi = Boolean(triggers?.length)
@@ -333,7 +344,7 @@ export function BuilderV2OrderActionPanel({
     </OrderActionPanelContext.Provider>, document.body) : null
     if (identity) {
       return <>
-        <BuilderV2OrderIdentity variant="pipeline" manage status={identity.status} statusLabel={identity.statusLabel} amount={identity.amount} amountLabel={identity.amountLabel ?? ''} amountBadge={identity.amountBadge} due={identity.due} client={identity.client} media={identity.media} productTitle={identity.productTitle}
+        <BuilderV2OrderIdentity variant="pipeline" manage status={identity.status} statusLabel={identity.statusLabel} amount={identity.amount} amountLabel={identity.amountLabel ?? ''} amountBadge={identity.amountBadge} due={identity.due} client={identity.client} media={identity.media} productTitle={identity.productTitle} facts={identity.facts}
           actions={<>
             <BuilderV2OrderActionToolbar items={toolbarItems} onOpen={open} placement="desktop" />
           </>} />

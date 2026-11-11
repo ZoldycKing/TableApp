@@ -493,10 +493,12 @@ export function AppV2Renderer(props: AppV2RendererProps) {
                   <strong>{label}</strong>
                   <span className={ui.recordJournalMeta}>
                     {subtitleValue ? <span className={ui.statusBadge} data-tone={builderV2StatusTone(subtitleValue)}>{subtitleValue}</span> : null}
-                    {journalWarehouse ? <span className={ui.journalUnit}>{journalWarehouse}</span> : null}
-                    {journalWarehouse && journalWhen ? <span className={ui.journalSep} aria-hidden="true"> · </span> : null}
-                    {journalWhen ? <span className={ui.journalUnit}>{journalWhen}</span> : null}
-                    {journalAuthor ? <span className={ui.journalAuthor}>{journalWarehouse || journalWhen ? ' · ' : ''}{journalAuthor}</span> : null}
+                    {(journalWarehouse || journalWhen) ? <span className={ui.journalMetaPrimary}>
+                      {journalWarehouse ? <span className={ui.journalUnit}>{journalWarehouse}</span> : null}
+                      {journalWarehouse && journalWhen ? <span className={ui.journalSep} aria-hidden="true"> · </span> : null}
+                      {journalWhen ? <span className={ui.journalUnit}>{journalWhen}</span> : null}
+                    </span> : null}
+                    {journalAuthor ? <span className={ui.journalAuthor}>{journalAuthor}</span> : null}
                   </span>
                 </div>
                 {detailNode}
@@ -799,6 +801,22 @@ export function AppV2Renderer(props: AppV2RendererProps) {
     const inventoryPhoto = inventoryItem && inventory?.itemPhotoFieldId
       ? builderV2MediaItems(props.record.values[inventory.itemPhotoFieldId], published?.slug).find(item => item.image)
       : undefined
+    const inventoryWarehouseLabel = inventoryItem && inventory
+      ? cell(props.record, inventory.itemWarehouseFieldId).trim()
+      : ''
+    const inventoryCostLabel = inventoryItem && inventory && Object.hasOwn(props.record.values, inventory.itemCostFieldId)
+      ? cell(props.record, inventory.itemCostFieldId).trim()
+      : ''
+    const inventoryCostRaw = inventoryItem && inventory ? props.record.values[inventory.itemCostFieldId] : undefined
+    const inventoryCostNum = typeof inventoryCostRaw === 'number' ? inventoryCostRaw : Number(inventoryCostRaw)
+    const inventoryStockValue = inventoryItem && Number.isFinite(inventoryCostNum) && typeof rawTotal === 'number' && Number.isFinite(rawTotal)
+      ? builderV2FormattedAmount(inventoryCostNum * rawTotal, 'Стоимость остатка, ₽')
+      : ''
+    const inventoryIdentityFacts = inventoryItem ? [
+      inventoryWarehouseLabel ? { id: 'warehouse', label: 'Склад', value: inventoryWarehouseLabel } : null,
+      inventoryCostLabel ? { id: 'cost', label: 'Себестоимость', value: inventoryCostLabel } : null,
+      inventoryStockValue ? { id: 'stock_value', label: 'Стоимость остатка', value: inventoryStockValue } : null,
+    ].filter(Boolean) as { id: string; label: string; value: string }[] : []
     const revealIdentity = inventoryItem
       ? {
           amount: inventoryStockLabel,
@@ -809,6 +827,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
             : undefined,
           media: <InventoryProductThumb image={inventoryPhoto} size="card" label={title || undefined} />,
           productTitle: title || undefined,
+          facts: inventoryIdentityFacts,
         }
       : {
           status: inventoryStatus,

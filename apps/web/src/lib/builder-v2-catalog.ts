@@ -58,8 +58,10 @@ export function builderV2CatalogPrice(row: AppV2Record, field: Column | undefine
 }
 
 export function builderV2FormattedAmount(value: number, fieldName: string): string {
-  const symbol = fieldName.match(/[₽$€£₸]/u)?.[0]
-    ?? (/^(?:сумма|итого|total|amount)\b/iu.test(fieldName.trim()) ? '₽' : undefined)
+  const name = fieldName.trim()
+  // Avoid `\b` — it is ASCII-only and fails on Cyrillic labels like «Итого».
+  const symbol = name.match(/[₽$€£₸]/u)?.[0]
+    ?? (/^(?:сумма|итого|total|amount)(?:\s|[,(_]|$)/iu.test(name) ? '₽' : undefined)
   const amount = value.toLocaleString('ru-RU', {
     minimumFractionDigits: symbol ? 2 : 0,
     maximumFractionDigits: 2,

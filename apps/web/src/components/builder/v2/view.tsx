@@ -642,11 +642,16 @@ export function AppV2Renderer(props: AppV2RendererProps) {
     }
     if (reorderOnList && inventory?.reorderScreenId) {
       const link = reorderLinkId ? nodes.get(reorderLinkId) : undefined
-      const reorderNode = link?.type === 'button' ? link : {
+      const localLow = shellPage?.rows?.filter(row => row.values[inventory.itemLowFieldId] === true).length
+        ?? shellLowStock
+        ?? 0
+      const lowCount = shellLowStock != null ? shellLowStock : localLow
+      const reorderLabel = lowCount > 0 ? `Что заказать · ${lowCount}` : 'Что заказать'
+      const reorderNode = link?.type === 'button' ? { ...link, label: reorderLabel } : {
         id: reorderLinkId ?? 'reorder-shell',
         name: 'Что заказать',
         type: 'button' as const,
-        label: 'Что заказать',
+        label: reorderLabel,
         variant: 'secondary' as const,
         visibleTo: null,
         visibleWhen: null,
@@ -656,16 +661,16 @@ export function AppV2Renderer(props: AppV2RendererProps) {
         {published
           ? link?.type === 'button'
             ? <>
-              <ReorderToolbarLink app={props.app} node={link} screenId={props.screenId} buttonClassName={`${styles.secondary} ${ui.purchaseSuppliersDesktop}`} />
-              <ReorderToolbarLink app={props.app} node={link} screenId={props.screenId} buttonClassName={`${ui.orderActionIcon} ${ui.purchaseSuppliersMobile}`} buttonContent={<ProtoIcon name="box" size={20} />} />
+              <PublishedV2Button node={reorderNode} screenId={props.screenId} buttonClassName={`${styles.secondary} ${ui.purchaseSuppliersDesktop}`} />
+              <PublishedV2Button node={link} screenId={props.screenId} buttonClassName={`${ui.orderActionIcon} ${ui.purchaseSuppliersMobile}`} buttonContent={<ProtoIcon name="box" size={20} />} />
             </>
             : <>
-              <button type="button" className={`${styles.secondary} ${ui.purchaseSuppliersDesktop}`} onClick={() => published.navigate(inventory.reorderScreenId!)}>Что заказать</button>
-              <button type="button" className={`${ui.orderActionIcon} ${ui.purchaseSuppliersMobile}`} aria-label="Что заказать" title="Что заказать" onClick={() => published.navigate(inventory.reorderScreenId!)}><ProtoIcon name="box" size={20} /></button>
+              <button type="button" className={`${styles.secondary} ${ui.purchaseSuppliersDesktop}`} onClick={() => published.navigate(inventory.reorderScreenId!)}>{reorderLabel}</button>
+              <button type="button" className={`${ui.orderActionIcon} ${ui.purchaseSuppliersMobile}`} aria-label={reorderLabel} title={reorderLabel} onClick={() => published.navigate(inventory.reorderScreenId!)}><ProtoIcon name="box" size={20} /></button>
             </>
           : <>
-            <button type="button" className={`${styles.secondary} ${ui.purchaseSuppliersDesktop}`} disabled>Что заказать</button>
-            <button type="button" className={`${ui.orderActionIcon} ${ui.purchaseSuppliersMobile}`} aria-label="Что заказать" title="Что заказать" disabled><ProtoIcon name="box" size={20} /></button>
+            <button type="button" className={`${styles.secondary} ${ui.purchaseSuppliersDesktop}`} disabled>{reorderLabel}</button>
+            <button type="button" className={`${ui.orderActionIcon} ${ui.purchaseSuppliersMobile}`} aria-label={reorderLabel} title={reorderLabel} disabled><ProtoIcon name="box" size={20} /></button>
           </>}
       </span>)
     }
@@ -1869,7 +1874,13 @@ export function AppV2Renderer(props: AppV2RendererProps) {
           {manage && crmDeal && triggers
             ? <BuilderV2OrderActionPanel title={actionTitle} mode="reveal" triggers={triggers} identity={revealIdentity} />
             : null}
-          {manage && !crmDeal && !inventoryItem && <BuilderV2OrderIdentity title={title || undefined} status={status} amount={amount} scoped={summary?.scoped} manage />}
+          {manage && !crmDeal && !inventoryItem ? <>
+            {props.app.shop?.ordersScreenId ? <button type="button" className={shellLayout.detailBack} style={{ marginInline: 0 }} onClick={() => {
+              if (published) published.back(props.app.shop!.ordersScreenId!)
+              else props.onNavigate?.(props.app.shop!.ordersScreenId!)
+            }}>← Заказы</button> : null}
+            <BuilderV2OrderIdentity title={title || undefined} status={status} amount={amount} scoped={summary?.scoped} manage />
+          </> : null}
           {!inventoryItem && linesBlock}
           {manage && !inventoryItem && <BuilderV2OrderFacts items={deliveryFacts} title={factsTitle} />}
           {manage && !inventoryItem && render([...parts.buttonIds, ...parts.otherIds])}

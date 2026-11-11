@@ -574,6 +574,7 @@
   .orderFactsGrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 .orderActionBody :global(.formTitle), .orderActionPanel :is(h3) { display: none; }
+.orderActionPanel[data-dialog] .purchaseEditorHead h3 { display: block; }
 .orderActionBody form, .orderActionPanel form { width: 100%; max-width: none; }
 @container builder-app (min-width: 900px) {
   .orderDetailBody { grid-template-columns: minmax(0, 1.45fr) minmax(17rem, 0.85fr); }

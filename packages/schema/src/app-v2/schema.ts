@@ -126,6 +126,10 @@ export const appV2Schema = z.strictObject({
   shop: z.strictObject({
     catalogTableId: id, catalogViewId: id, catalogScreenId: id, detailScreenId: id, basketScreenId: id, ordersScreenId: id, orderScreenId: id, checkoutFormId: id,
     activeFieldId: id, productTitleFieldId: id, priceFieldId: id, imageFieldId: id.optional(), descriptionFieldId: id.optional(),
+    /** Warehouse stock qty shown on the storefront; absent on older installs. */
+    stockFieldId: id.optional(),
+    /** Category for catalog tabs; absent on older installs that discover by field name. */
+    categoryFieldId: id.optional(),
     ordersTableId: id, itemsTableId: id, emailFieldId: id, statusFieldId: id, assignmentFieldId: id,
     initialStatus: z.string().min(1).max(80), cancelStatus: z.string().min(1).max(80),
     cancellableStatuses: z.array(z.string().min(1).max(80)).min(1).max(20), terminalStatuses: z.array(z.string().min(1).max(80)).max(20),

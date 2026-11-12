@@ -88,7 +88,7 @@ export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,childre
     {showChromeHeader ? <header className={`${styles.appHeader} ${css.header}`} data-brand-only={mobileBrandOnly || undefined}>
       <div className={`${css.chromeBar} ${presentation.contentWidth}`}>
         {back && !shellTopNav ? <button type="button" className={presentation.iconControl} onClick={back} aria-label="Назад" title="Назад"><ProtoIcon name="back" /></button> : <span className={css.headerMark}>{mark}</span>}
-        {mobileBrandOnly ? <span className={css.railBrand}>{appName}</span> : null}
+        {shellTopNav ? <span className={css.railBrand}>{appName}</span> : null}
         {profile && <BuilderV2RecordAvatar name={title} id={scrollKey || screenId} icon="users" />}
         {!mobileBrandOnly && catalogDetail ? <span className={css.catalogIdentity}>{sectionScreen?.name ?? appName}</span>
           : !mobileBrandOnly && title ? <div>

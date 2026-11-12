@@ -578,10 +578,17 @@ import {BoardMoveRow} from './board-move'
 import {CollectionActionRow} from './collection-action-row'
 import { BuilderBusinessOperation } from './business-operation'
 import type { BuilderBusinessApp, BuilderBusinessLink } from '@/lib/builder-v2-business-types'
-import { builderV2CardLayout, builderV2CatalogPrice, builderV2FormattedAmount } from '@/lib/builder-v2-catalog'
+import { builderV2CardLayout, builderV2CatalogCell, builderV2CatalogPrice, builderV2FormattedAmount } from '@/lib/builder-v2-catalog'
 import presentation from '@/components/runtime/app-presentation.module.css'
 import { BuilderV2CatalogDetail } from './catalog-detail'
-import { ShopAddToBasket, ShopBasketPanel } from './shop-basket'
+import { ShopBasketPanel } from './shop-basket'
+import {
+  ShopAddToBasketControls,
+  ShopCatalogLive,
+  ShopProductFacts,
+  ShopRelatedProducts,
+  shopProductStock,
+} from './shop-storefront'
 import { builderV2ContactHref, builderV2StatusTone, isBuilderV2BusinessDetail, isBuilderV2ContactProfile, isBuilderV2ContactTable, isBuilderV2OrderTable } from './record-presentation'
 import { RecordFieldLabel } from '@/components/runtime/record-field-label'
 import { BuilderV2OrderHero, BuilderV2RecordAvatar, InventoryProductThumb } from './record-visuals'
@@ -619,6 +626,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
   const profile = isBuilderV2ContactProfile(props.app, props.screenId, props.tables)
   const orderGroup = (published ? builderV2RecordParent(props.app, props.screenId) : builderV2PreviewRecordParent(props.app, props.screenId, props.actor))?.queue?.recordGroup
   const inventory = props.app.inventory
+  const shop = props.app.shop
   const supplierStats = useSupplierOrderStats(props.app, inventory && (screen?.id === inventory.suppliersScreenId || screen?.id === inventory.supplierScreenId) ? inventory : null)
   const supplierProducts = useSupplierProducts(
     props.app,
@@ -1865,23 +1873,96 @@ export function AppV2Renderer(props: AppV2RendererProps) {
       </DetailCardShell>
     </div>
   }
+  if (!props.editing && shop && screen?.id === shop.catalogScreenId) {
+    const catalogNode = rootIds.map(id => nodes.get(id)).find((node): node is Extract<AppV2Node, { type: 'collection' }> => node?.type === 'collection' && node.layout === 'catalog')
+    if (catalogNode) {
+      const table = props.tables.find(item => item.id === shop.catalogTableId)
+      return <div className={`${styles.canvasBlocks} ${ui.screenBlocks} ${ui.shellScreen}`} data-layout="list" data-commerce="catalog">
+        <ShopCatalogLive
+          app={props.app}
+          node={catalogNode}
+          table={table}
+          live={Boolean(props.live)}
+          scope={{ screenId: props.screenId, ...(props.record ? { recordId: props.record.id } : {}) }}
+          onOpen={row => {
+            if (published) published.navigate(shop.detailScreenId, row.id)
+            else props.onNavigate?.(shop.detailScreenId, row.id)
+          }}
+        />
+      </div>
+    }
+  }
   if (screen?.catalog) {
     const featured = new Set(Object.values(screen.catalog))
-    const specs: string[] = [], blocks: string[] = []
+    const blocks: string[] = []
     for (const id of rootIds) {
       const node = nodes.get(id)
       const bound = node && 'value' in node && (node.value.kind === 'row' || node.value.kind === 'screen_row') && node.value.fieldId
       if (!props.editing && bound && featured.has(bound) && (node.type === 'field' || node.type === 'heading' || node.type === 'gallery')) continue
-      if (!props.editing && node?.type === 'field') specs.push(id)
+      // Shop PDP builds meaningful specs itself — skip seeded unit/available/category field nodes.
+      if (!props.editing && shop && screen.id === shop.detailScreenId && node?.type === 'field') continue
+      if (!props.editing && node?.type === 'field') blocks.push(id)
       else blocks.push(id)
     }
-    const attributes = render(specs)
-    return <div className={`${styles.canvasBlocks} ${ui.catalogPage}`}>
-      <BuilderV2CatalogDetail catalog={screen.catalog} record={props.record} table={props.tables.find(table => table.id === screen.contextTableId)} slug={published?.slug} editing={props.editing}>
-        {attributes.some(Boolean) && <section className={ui.catalogSpecs}><h2>Характеристики</h2><div>{attributes}</div></section>}
-        {!props.editing && props.app.shop?.detailScreenId === screen.id && props.record && <ShopAddToBasket app={props.app} productId={props.record.id} actor={props.actor} />}
+    const table = props.tables.find(item => item.id === screen.contextTableId)
+    const stockMeta = shop && props.record && screen.id === shop.detailScreenId ? shopProductStock(props.record, shop, table) : null
+    const categoryValue = stockMeta?.fields.categoryFieldId && props.record
+      ? builderV2CatalogCell(props.record, stockMeta.fields.categoryFieldId).trim()
+      : ''
+    const goCatalog = () => {
+      if (!shop) return
+      if (published) published.back(shop.catalogScreenId)
+      else props.onNavigate?.(shop.catalogScreenId)
+    }
+    const openRelated = (id: string) => {
+      if (!shop) return
+      if (published) published.navigate(shop.detailScreenId, id)
+      else props.onNavigate?.(shop.detailScreenId, id)
+    }
+    const actions = !props.editing && shop && screen.id === shop.detailScreenId && props.record && stockMeta
+      ? <ShopAddToBasketControls
+        app={props.app}
+        productId={props.record.id}
+        actor={props.actor}
+        stock={stockMeta.stock}
+        active={stockMeta.active}
+      />
+      : null
+    return <div className={`${styles.canvasBlocks} ${ui.catalogPage}`} data-commerce="product">
+      <BuilderV2CatalogDetail
+        catalog={screen.catalog}
+        record={props.record}
+        table={table}
+        slug={published?.slug}
+        editing={props.editing}
+        shop={shop && screen.id === shop.detailScreenId ? shop : null}
+        onBack={!props.editing && shop && screen.id === shop.detailScreenId ? goCatalog : undefined}
+        actions={actions}
+      >
+        {!props.editing && shop && screen.id === shop.detailScreenId && props.record
+          ? <ShopProductFacts row={props.record} table={table} shop={shop} />
+          : null}
       </BuilderV2CatalogDetail>
+      {!props.editing && shop && screen.id === shop.detailScreenId && props.record && categoryValue
+        ? <ShopRelatedProducts
+          app={props.app}
+          currentId={props.record.id}
+          categoryValue={categoryValue}
+          table={table}
+          onOpen={openRelated}
+        />
+        : null}
       {render(blocks)}
+      {!props.editing && shop && screen.id === shop.detailScreenId && props.record && stockMeta
+        ? <ShopAddToBasketControls
+          app={props.app}
+          productId={props.record.id}
+          actor={props.actor}
+          stock={stockMeta.stock}
+          active={stockMeta.active}
+          sticky
+        />
+        : null}
     </div>
   }
   if (detail && !props.editing && props.record) {

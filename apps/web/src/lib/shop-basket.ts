@@ -11,17 +11,21 @@ export function shopBasketPayload(basket: ShopBasket) {
   return JSON.stringify({ requestId: basket.requestId, items: basket.items })
 }
 
-export function addShopBasketItem(basket: ShopBasket, id: string): ShopBasket {
+export function addShopBasketItem(basket: ShopBasket, id: string, maxQty = 1000): ShopBasket {
   if (!id || id.length > 100) return basket
+  const ceiling = Math.max(0, Math.min(1000, Math.trunc(maxQty) || 0))
+  if (ceiling < 1) return basket
   const current = basket.items.find(item => item.id === id)
   const items = current
-    ? basket.items.map(item => item.id === id ? { ...item, qty: Math.min(1000, item.qty + 1) } : item)
+    ? basket.items.map(item => item.id === id ? { ...item, qty: Math.min(ceiling, item.qty + 1) } : item)
     : [...basket.items, { id, qty: 1 }].slice(0, 100)
   return { ...basket, items }
 }
 
-export function changeShopBasketQty(basket: ShopBasket, id: string, qty: number): ShopBasket {
-  const next = Math.max(1, Math.min(1000, Math.trunc(qty) || 1))
+export function changeShopBasketQty(basket: ShopBasket, id: string, qty: number, maxQty = 1000): ShopBasket {
+  const ceiling = Math.max(0, Math.min(1000, Math.trunc(maxQty) || 0))
+  if (ceiling < 1) return { ...basket, items: basket.items.filter(item => item.id !== id) }
+  const next = Math.max(1, Math.min(ceiling, Math.trunc(qty) || 1))
   return { ...basket, items: basket.items.map(item => item.id === id ? { ...item, qty: next } : item) }
 }
 

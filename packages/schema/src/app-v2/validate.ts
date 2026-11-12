@@ -388,6 +388,8 @@ export function validateAppV2(app: AppV2, catalog: AppV2Catalog, options: { mode
     product(shop.activeFieldId, shop.catalogTableId); product(shop.productTitleFieldId, shop.catalogTableId); product(shop.priceFieldId, shop.catalogTableId)
     if (shop.imageFieldId) { const image = product(shop.imageFieldId, shop.catalogTableId); if (image && !['image', 'url'].includes(image.type)) issue('shop_image', path, 'Фото каталога должно быть изображением или ссылкой') }
     if (shop.descriptionFieldId) product(shop.descriptionFieldId, shop.catalogTableId)
+    if (shop.stockFieldId) { const stock = product(shop.stockFieldId, shop.catalogTableId); if (stock && !['number', 'formula', 'rollup'].includes(stock.type)) issue('shop_stock', path, 'Остаток каталога должен быть числом') }
+    if (shop.categoryFieldId) product(shop.categoryFieldId, shop.catalogTableId)
     for (const fieldId of [shop.emailFieldId, shop.statusFieldId, shop.assignmentFieldId, shop.submissionFieldId, shop.createdFieldId, shop.cartFieldId, shop.positionsFieldId, shop.orderTitleFieldId, shop.addressFieldId]) product(fieldId, shop.ordersTableId)
     for (const fieldId of [shop.itemNameFieldId, shop.itemQtyFieldId, shop.itemPriceFieldId, shop.itemEmailFieldId, shop.itemAssignmentFieldId, shop.productFieldId]) product(fieldId, shop.itemsTableId)
     const productRelation = catalog.fields.get(shop.productFieldId)

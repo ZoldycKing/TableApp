@@ -258,7 +258,7 @@
   }
   .catalogSidebar {
     display: grid;
-    gap: 10px;
+    gap: 8px;
     align-content: start;
     position: sticky;
     top: 12px;
@@ -272,7 +272,7 @@
     box-shadow: 0 1px 0 color-mix(in srgb, var(--shell-ink) 4%, transparent);
     scrollbar-width: thin;
   }
-  .catalogSidebarSection { display: grid; gap: 4px; min-width: 0; }
+  .catalogSidebarSection { display: grid; gap: 2px; min-width: 0; }
   .catalogSidebarSection > h3 {
     margin: 0;
     color: var(--shell-ink);
@@ -281,22 +281,23 @@
   }
   .catalogSidebarBody {
     display: grid;
-    gap: 10px;
+    gap: 8px;
     min-width: 0;
   }
   .catalogSidebar .filterSearch {
     width: 100%;
-    min-height: 36px;
+    min-height: 34px;
   }
-  .catalogSidebar .filterNav { gap: 1px; }
+  .catalogSidebar .filterNav { gap: 0; }
   .catalogSidebar .filterNavItem {
-    min-height: 30px;
+    min-height: 28px;
     font-size: 13px;
+    padding-inline: 8px;
   }
   .catalogSidebarReset {
     width: 100%;
-    min-height: 36px;
-    margin-top: 2px;
+    min-height: 34px;
+    margin-top: 0;
   }
   .catalogMain > .filterBar[data-mobile-only] { display: none; }
   .catalogResultBar {

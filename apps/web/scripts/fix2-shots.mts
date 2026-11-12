@@ -69,7 +69,7 @@ for (const h of [720, 800]) {
   await page.goto(catalog, { waitUntil: 'networkidle' })
   await page.waitForTimeout(1400)
   await save(page, 'd1280', 'catalog-default')
-  const price = page.locator('aside[aria-label="Фильтры каталога"] label').filter({ hasText: '1 000–3 000' }).first()
+  const price = page.locator('aside[aria-label="Фильтры каталога"] button').filter({ hasText: '1 000–3 000' }).first()
   await price.click()
   await page.waitForTimeout(400)
   await save(page, 'd1280', 'catalog-price-chips')

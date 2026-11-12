@@ -94,20 +94,21 @@ function patchForm(app: AppV2, formId: string | undefined, fieldIds: Array<{ id:
   if (!formId) return
   const form = app.nodes.find(node => node.id === formId && node.type === 'form')
   if (!form || form.type !== 'form') return
-  const have = new Set(form.childIds)
+  const owned = new Set(form.childIds)
+  const fieldCovered = new Set(
+    form.childIds.flatMap(id => {
+      const node = app.nodes.find(item => item.id === id)
+      return node?.type === 'input' ? [node.fieldId] : []
+    }),
+  )
   for (const item of fieldIds) {
-    const existing = app.nodes.find(node => node.type === 'input' && node.fieldId === item.id)
-    if (existing) {
-      if (!have.has(existing.id)) {
-        form.childIds = [...form.childIds, existing.id]
-        have.add(existing.id)
-      }
-      continue
-    }
+    if (fieldCovered.has(item.id)) continue
+    // Always create a form-local input — sharing nodes across forms fails validation.
     const node = inputNode(item.id, item.label)
     app.nodes.push(node)
     form.childIds = [...form.childIds, node.id]
-    have.add(node.id)
+    owned.add(node.id)
+    fieldCovered.add(item.id)
   }
 }
 

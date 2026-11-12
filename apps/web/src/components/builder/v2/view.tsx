@@ -1796,7 +1796,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
     </div> : null
     const supplierMetrics = [
       { key: 'orders', value: String(ordersCount), caption: 'Заказов' },
-      { key: 'open', value: String(openCount), caption: 'В работе' },
+      { key: 'open', value: String(openCount), caption: 'В работе/ожидается' },
       { key: 'last', value: lastOrder, caption: 'Последний заказ' },
       { key: 'sum', value: purchased, caption: 'Закуплено на' },
     ]

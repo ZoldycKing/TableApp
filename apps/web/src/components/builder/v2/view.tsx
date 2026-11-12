@@ -355,59 +355,63 @@ function useSupplierProducts(app: AppV2, supplierId: string | undefined, invento
   const published = usePublishedV2()
   const [products, setProducts] = useState<SupplierProductRow[]>([])
   useEffect(() => {
-    if (!published || !supplierId || !inventory?.purchaseOrdersTableId || !inventory.purchaseLinesTableId) {
+    if (!published || !supplierId || !inventory?.purchaseOrdersTableId || !inventory.purchaseLinesTableId || !inventory.purchasesScreenId) {
       setProducts([])
       return
     }
     const purchasesNode = app.nodes.find(node => node.type === 'collection' && node.layout === 'list'
       && app.sources.some(source => source.id === node.sourceId && source.tableId === inventory.purchaseOrdersTableId && !source.screenTableId))
-    const linesNode = app.nodes.find(node => node.type === 'collection'
-      && app.sources.some(source => source.id === node.sourceId && source.tableId === inventory.purchaseLinesTableId))
-    if (!purchasesNode || !linesNode) return
+    if (!purchasesNode) return
     let cancelled = false
     void (async () => {
       const orders = await published.readData({ nodeId: purchasesNode.id, screenId: inventory.purchasesScreenId! })
       if (cancelled || !orders.ok) return
-      const orderIds = new Set<string>()
-      const orderDates = new Map<string, string>()
+      const lineIds: string[] = []
+      const lineOrderDate = new Map<string, string>()
       for (const row of orders.page.rows) {
         const supplierRaw = inventory.purchaseSupplierFieldId ? row.values[inventory.purchaseSupplierFieldId] : undefined
         const sid = typeof supplierRaw === 'string' ? supplierRaw
           : Array.isArray(supplierRaw) ? supplierRaw.find((id): id is string => typeof id === 'string') : undefined
         if (sid !== supplierId) continue
-        orderIds.add(row.id)
-        orderDates.set(row.id, inventory.purchaseDateFieldId ? String(row.values[inventory.purchaseDateFieldId] ?? '') : '')
+        const date = inventory.purchaseDateFieldId ? String(row.values[inventory.purchaseDateFieldId] ?? '') : ''
+        const links = inventory.purchaseLinesFieldId && Array.isArray(row.values[inventory.purchaseLinesFieldId])
+          ? (row.values[inventory.purchaseLinesFieldId] as unknown[]).filter((id): id is string => typeof id === 'string')
+          : []
+        for (const lineId of links) {
+          lineIds.push(lineId)
+          lineOrderDate.set(lineId, date)
+        }
       }
-      if (!orderIds.size) { setProducts([]); return }
-      const lines = await published.readData({ nodeId: linesNode.id, screenId: inventory.purchasesScreenId! })
-      if (cancelled || !lines.ok) return
+      if (!lineIds.length) { setProducts([]); return }
+      const { readPublishedV2RelatedRowsAction } = await import('@/app/builder-v2-published-actions')
+      const lines = await readPublishedV2RelatedRowsAction(published.slug, {
+        revision: published.revision,
+        tableId: inventory.purchaseLinesTableId,
+        recordIds: [...new Set(lineIds)],
+      }).catch(() => null)
+      if (cancelled || !lines || !lines.ok) { setProducts([]); return }
       const byProduct = new Map<string, { name: string; price: number; date: string }>()
-      const productIds: string[] = []
-      for (const row of lines.page.rows) {
-        const orderRaw = inventory.lineOrderFieldId ? row.values[inventory.lineOrderFieldId] : undefined
-        const orderId = typeof orderRaw === 'string' ? orderRaw
-          : Array.isArray(orderRaw) ? orderRaw.find((id): id is string => typeof id === 'string') : undefined
-        if (!orderId || !orderIds.has(orderId)) continue
+      for (const row of lines.rows) {
         const productRaw = inventory.lineProductFieldId ? row.values[inventory.lineProductFieldId] : undefined
         const productId = typeof productRaw === 'string' ? productRaw
           : Array.isArray(productRaw) ? productRaw.find((id): id is string => typeof id === 'string') : undefined
         if (!productId) continue
         const priceRaw = inventory.linePriceFieldId ? row.values[inventory.linePriceFieldId] : null
         const price = typeof priceRaw === 'number' && Number.isFinite(priceRaw) ? priceRaw : 0
-        const name = inventory.lineNameFieldId ? String(row.display?.[inventory.lineNameFieldId] ?? row.values[inventory.lineNameFieldId] ?? 'Товар') : 'Товар'
-        const date = orderDates.get(orderId) || ''
+        const name = inventory.lineNameFieldId
+          ? String(row.display?.[inventory.lineNameFieldId] ?? row.values[inventory.lineNameFieldId] ?? 'Товар')
+          : 'Товар'
+        const date = lineOrderDate.get(row.id) || ''
         const prev = byProduct.get(productId)
         if (!prev || (date && date >= prev.date)) byProduct.set(productId, { name, price, date })
-        productIds.push(productId)
       }
       if (!byProduct.size) { setProducts([]); return }
       const uniqueIds = [...byProduct.keys()]
-      const related = await import('@/app/builder-v2-published-actions').then(({ readPublishedV2RelatedRowsAction }) =>
-        readPublishedV2RelatedRowsAction(published.slug, {
-          revision: published.revision,
-          tableId: inventory.itemsTableId,
-          recordIds: uniqueIds,
-        })).catch(() => null)
+      const related = await readPublishedV2RelatedRowsAction(published.slug, {
+        revision: published.revision,
+        tableId: inventory.itemsTableId,
+        recordIds: uniqueIds,
+      }).catch(() => null)
       if (cancelled || !related || !related.ok) {
         setProducts([...byProduct.entries()].map(([id, item]) => ({
           id, name: item.name, price: item.price, stock: 0, min: 0, unit: 'шт.',
@@ -2128,7 +2132,8 @@ export function AppV2Renderer(props: AppV2RendererProps) {
         : []),
     ] : undefined
     const clientContactField = crmClient
-      ? recordTable?.fields.find(field => /контакт/i.test(field.name))
+      ? recordTable?.fields.find(field => /^контактное лицо$/i.test(field.name.trim()))
+        ?? recordTable?.fields.find(field => /^контакт$/i.test(field.name.trim()))
       : undefined
     const clientCityField = crmClient
       ? recordTable?.fields.find(field => /город|city/i.test(field.name))

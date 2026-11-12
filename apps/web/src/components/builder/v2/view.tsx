@@ -1852,7 +1852,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
                 {supplierProducts.map(product => {
                   const low = product.min > 0 && product.stock <= product.min
                   return <div key={product.id} className={ui.supplierProductRow}>
-                    <InventoryProductThumb image={product.image} size="list" label={product.name} />
+                    <InventoryProductThumb image={product.image} size="journal" label={product.name} />
                     <div className={ui.supplierProductCopy}>
                       <strong>{product.name}</strong>
                       <span>
@@ -2458,6 +2458,14 @@ export function AppV2Renderer(props: AppV2RendererProps) {
     })
     : rootIds
   const effectiveRootIds = statusFormId && !shellKind ? rootIds.filter(id => id !== statusFormId) : shellKind ? shellListRootIds : rootIds
+  const basketCheckoutIds = basketScreen
+    ? rootIds.filter(id => {
+      if (id === statusFormId) return false
+      // Short checkout note lives in the form card — hide the old screen intro text.
+      const node = nodes.get(id)
+      return node?.type !== 'text'
+    })
+    : rootIds
   const listCanvas = basketScreen ? <ShopBasketPanel
     app={props.app}
     tables={props.tables}
@@ -2469,7 +2477,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
     }}
     checkout={<>
       {!shellKind && <BuilderV2OrderHero status={status} amount={amount} scoped={summary?.scoped} loading={Boolean(props.live && summaryKey && (summaryState.key !== summaryKey || summaryState.pending))} editor={statusFormId ? render([statusFormId]) : undefined} />}
-      {render(statusFormId ? rootIds.filter(id => id !== statusFormId) : rootIds)}
+      {render(basketCheckoutIds)}
     </>}
   /> : <>
     {!shellKind && <BuilderV2OrderHero status={status} amount={amount} scoped={summary?.scoped} loading={Boolean(props.live && summaryKey && (summaryState.key !== summaryKey || summaryState.pending))} editor={statusFormId ? render([statusFormId]) : undefined} />}

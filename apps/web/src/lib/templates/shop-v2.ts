@@ -120,7 +120,7 @@ export function buildShopV2App(built: BuiltTemplate, meta: { id: string; workspa
     nodes: [
       { id: catalogNode, name: 'Каталог товаров', type: 'collection', visibleTo: null, visibleWhen: null, sourceId: catalogSource, layout: 'catalog', titleFieldId: shop.productTitleFieldId, subtitleFieldId: null, ...(shop.imageFieldId ? { cardImageFieldId: shop.imageFieldId } : {}), cardDetailFieldId: shop.priceFieldId, itemIds: [], events: { itemPress: openProduct } },
       ...detailFields.map(fieldId => node(`detail_${fieldId}`, columns(catalogTableId).find(item => item.id === fieldId)!.name, fieldId)),
-      { id: intro, name: 'Пояснение', type: 'text', visibleTo: null, visibleWhen: null, value: { kind: 'literal', value: 'Проверьте состав и контакты. После оформления с вами свяжутся, чтобы подтвердить заказ и согласовать получение. Оплаты онлайн нет.' } },
+      { id: intro, name: 'Пояснение', type: 'text', visibleTo: null, visibleWhen: null, value: { kind: 'literal', value: 'После оформления мы свяжемся, чтобы подтвердить заказ. Оплата при получении.' } },
       { id: checkoutFormId, name: 'Оформление заказа', type: 'form', visibleTo: buyers, visibleWhen: null, tableId: ordersTableId, mode: 'create', childIds: checkoutInputs.map(item => item.id), events: { submit: placeOrder }, submitLabel: 'Оформить заказ' },
       ...checkoutInputs,
       { id: ordersNode, name: 'Заказы', type: 'collection', visibleTo: null, visibleWhen: null, sourceId: ordersSource, layout: 'list', titleFieldId: shop.orderTitleFieldId, subtitleFieldId: status, dateFieldId: shop.createdFieldId, cardDetailFieldId: field(orders, 'total'), itemIds: [], events: { itemPress: openOrder } },

@@ -813,11 +813,16 @@
   .headerActions > :global(.form) {
     flex: 1 1 auto;
   }
-  /* Mobile list: two selects share the row 50/50; don't overflow the card. */
+  /* Mobile list: search+sort share one row; two selects alone share 50/50. */
   .filterTools {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 8px;
+    align-items: center;
+  }
+  .filterTools:not(:has(> .filterSearch)) {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
-    gap: 8px;
   }
   .filterSelects {
     display: grid;
@@ -825,11 +830,21 @@
     width: 100%;
     flex: none;
   }
+  .filterTools:has(> .filterSearch) > .filterSelects {
+    display: inline-flex;
+    width: auto;
+    flex: 0 0 auto;
+  }
   .filterSelects > .filterSearch {
     flex: none;
     width: auto;
     max-width: none;
     min-width: 0;
+  }
+  .filterTools:has(> .filterSearch) > .filterSelects > .filterSearch {
+    flex: 0 0 148px;
+    width: 148px;
+    max-width: 148px;
   }
   .detailHead {
     grid-template-columns: minmax(0, 1fr);

@@ -1894,18 +1894,20 @@ export function AppV2Renderer(props: AppV2RendererProps) {
   }
   if (screen?.catalog) {
     const featured = new Set(Object.values(screen.catalog))
+    const specs: string[] = []
     const blocks: string[] = []
+    const shopDetail = Boolean(shop && screen.id === shop.detailScreenId)
     for (const id of rootIds) {
       const node = nodes.get(id)
       const bound = node && 'value' in node && (node.value.kind === 'row' || node.value.kind === 'screen_row') && node.value.fieldId
       if (!props.editing && bound && featured.has(bound) && (node.type === 'field' || node.type === 'heading' || node.type === 'gallery')) continue
       // Shop PDP builds meaningful specs itself — skip seeded unit/available/category field nodes.
-      if (!props.editing && shop && screen.id === shop.detailScreenId && node?.type === 'field') continue
-      if (!props.editing && node?.type === 'field') blocks.push(id)
+      if (!props.editing && shopDetail && node?.type === 'field') continue
+      if (!props.editing && node?.type === 'field') specs.push(id)
       else blocks.push(id)
     }
     const table = props.tables.find(item => item.id === screen.contextTableId)
-    const stockMeta = shop && props.record && screen.id === shop.detailScreenId ? shopProductStock(props.record, shop, table) : null
+    const stockMeta = shopDetail && props.record ? shopProductStock(props.record, shop!, table) : null
     const categoryValue = stockMeta?.fields.categoryFieldId && props.record
       ? builderV2CatalogCell(props.record, stockMeta.fields.categoryFieldId).trim()
       : ''
@@ -1919,7 +1921,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
       if (published) published.navigate(shop.detailScreenId, id)
       else props.onNavigate?.(shop.detailScreenId, id)
     }
-    const actions = !props.editing && shop && screen.id === shop.detailScreenId && props.record && stockMeta
+    const actions = !props.editing && shopDetail && props.record && stockMeta
       ? <ShopAddToBasketControls
         app={props.app}
         productId={props.record.id}
@@ -1928,6 +1930,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
         active={stockMeta.active}
       />
       : null
+    const attributes = render(specs)
     return <div className={`${styles.canvasBlocks} ${ui.catalogPage}`} data-commerce="product">
       <BuilderV2CatalogDetail
         catalog={screen.catalog}
@@ -1935,12 +1938,15 @@ export function AppV2Renderer(props: AppV2RendererProps) {
         table={table}
         slug={published?.slug}
         editing={props.editing}
-        shop={shop && screen.id === shop.detailScreenId ? shop : null}
-        onBack={!props.editing && shop && screen.id === shop.detailScreenId ? goCatalog : undefined}
+        shop={shopDetail ? shop : null}
+        onBack={!props.editing && shopDetail ? goCatalog : undefined}
         actions={actions}
       >
-        {!props.editing && shop && screen.id === shop.detailScreenId && props.record
-          ? <ShopProductFacts row={props.record} table={table} shop={shop} />
+        {!props.editing && shopDetail && props.record
+          ? <ShopProductFacts row={props.record} table={table} shop={shop!} />
+          : null}
+        {!props.editing && !shopDetail && attributes.some(Boolean)
+          ? <section className={ui.catalogSpecs}><h2>Характеристики</h2><div>{attributes}</div></section>
           : null}
       </BuilderV2CatalogDetail>
       {!props.editing && shop && screen.id === shop.detailScreenId && props.record

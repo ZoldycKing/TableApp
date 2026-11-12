@@ -128,6 +128,8 @@ export const appV2Schema = z.strictObject({
     activeFieldId: id, productTitleFieldId: id, priceFieldId: id, imageFieldId: id.optional(), descriptionFieldId: id.optional(),
     /** Warehouse stock qty shown on the storefront; absent on older installs. */
     stockFieldId: id.optional(),
+    /** Show the remaining quantity when stock is strictly below this threshold. */
+    lowStockThreshold: z.number().int().min(1).max(1000000).optional(),
     /** Category for catalog tabs; absent on older installs that discover by field name. */
     categoryFieldId: id.optional(),
     ordersTableId: id, itemsTableId: id, emailFieldId: id, statusFieldId: id, assignmentFieldId: id,

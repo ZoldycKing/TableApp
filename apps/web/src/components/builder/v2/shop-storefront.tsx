@@ -152,7 +152,7 @@ export function ShopCatalogCard({
   const price = builderV2CatalogPrice(row, table?.fields.find(field => field.id === shop.priceFieldId))
   const stock = builderV2ShopStockValue(row, fields.stockFieldId)
   const active = builderV2ShopProductActive(row, shop)
-  const state = builderV2ShopStockState(stock, active)
+  const state = builderV2ShopStockState(stock, active, shop.lowStockThreshold)
   const soldOut = state === 'out'
   const image = shop.imageFieldId
     ? builderV2MediaItems(row.values[shop.imageFieldId], published?.slug).find(entry => entry.image)
@@ -231,9 +231,12 @@ export function ShopCatalogLive({
   </BuilderV2DataNode>
 }
 
+type ShopCatalogFilters = { category: string[]; stock: string[]; priceMin: string; priceMax: string }
+const emptyCatalogFilters = (): ShopCatalogFilters => ({ category: [], stock: [], priceMin: '', priceMax: '' })
+
 function shopCatalogMatches(
   row: AppV2Record,
-  draft: Record<string, string>,
+  draft: ShopCatalogFilters,
   fields: ReturnType<typeof builderV2ShopCatalogFields>,
   shop: NonNullable<AppV2['shop']>,
   query: string,
@@ -243,22 +246,20 @@ function shopCatalogMatches(
     const name = builderV2CatalogCell(row, shop.productTitleFieldId).toLowerCase()
     if (!name.includes(q)) return false
   }
-  if (draft.category && draft.category !== 'all' && fields.categoryFieldId) {
+  if (draft.category.length && fields.categoryFieldId) {
     const label = builderV2CatalogCell(row, fields.categoryFieldId).trim() || 'Без категории'
-    if (label !== draft.category) return false
+    if (!draft.category.includes(label)) return false
   }
-  if (draft.stock && draft.stock !== 'all') {
+  if (draft.stock.includes('in')) {
     const stock = builderV2ShopStockValue(row, fields.stockFieldId)
     const active = builderV2ShopProductActive(row, shop)
-    const state = builderV2ShopStockState(stock, active)
-    if (state !== draft.stock) return false
+    if (!active || stock === 0) return false
   }
-  if (draft.price && draft.price !== 'all') {
+  if (draft.priceMin || draft.priceMax) {
     const price = Number(row.values[shop.priceFieldId])
     if (!Number.isFinite(price)) return false
-    if (draft.price === 'lt1000' && !(price < 1000)) return false
-    if (draft.price === '1000-3000' && !(price >= 1000 && price <= 3000)) return false
-    if (draft.price === 'gt3000' && !(price > 3000)) return false
+    if (draft.priceMin && !(price >= Number(draft.priceMin))) return false
+    if (draft.priceMax && !(price <= Number(draft.priceMax))) return false
   }
   return true
 }
@@ -284,7 +285,7 @@ export function ShopCatalogShell({
 }) {
   const shop = app.shop!
   const fields = builderV2ShopCatalogFields(shop, table)
-  const [filterValues, setFilterValues] = useState<Record<string, string>>({ category: 'all', stock: 'all', price: 'all' })
+  const [filterValues, setFilterValues] = useState(emptyCatalogFilters)
   const [sort, setSort] = useState<ShopCatalogSort>('popular')
   const categories = useMemo(() => {
     const counts = new Map<string, number>()
@@ -292,13 +293,9 @@ export function ShopCatalogShell({
       const label = fields.categoryFieldId ? builderV2CatalogCell(row, fields.categoryFieldId).trim() || 'Без категории' : 'Все'
       counts.set(label, (counts.get(label) ?? 0) + 1)
     }
+    for (const label of filterValues.category) if (!counts.has(label)) counts.set(label, 0)
     return [...counts.entries()].map(([label, count]) => ({ id: label, label, count }))
-  }, [rows, fields.categoryFieldId])
-  useEffect(() => {
-    if (filterValues.category !== 'all' && !categories.some(item => item.id === filterValues.category)) {
-      setFilterValues(current => ({ ...current, category: 'all' }))
-    }
-  }, [categories, filterValues.category])
+  }, [rows, fields.categoryFieldId, filterValues.category])
   const filtered = useMemo(() => {
     const base = rows.filter(row => shopCatalogMatches(row, filterValues, fields, shop, search))
     return builderV2SortShopCatalogRows(base, sort, shop.priceFieldId)
@@ -306,51 +303,32 @@ export function ShopCatalogShell({
   const countLabel = loading && !rows.length
     ? 'Загружаем…'
     : filtered.length === 1 ? '1 товар' : filtered.length > 1 && filtered.length < 5 ? `${filtered.length} товара` : `${filtered.length} товаров`
-  const stockCounts = useMemo(() => {
-    const counts = { in: 0, low: 0, out: 0 }
-    for (const row of rows) {
-      const stock = builderV2ShopStockValue(row, fields.stockFieldId)
-      const active = builderV2ShopProductActive(row, shop)
-      counts[builderV2ShopStockState(stock, active)] += 1
-    }
-    return counts
-  }, [rows, fields.stockFieldId, shop])
   const filterDefs: ListFilterDef[] = [
-    ...(fields.categoryFieldId && categories.length > 1 ? [{
+    ...(fields.categoryFieldId && categories.length ? [{
       id: 'category',
-      label: 'Категория',
-      appearance: 'nav' as const,
-      options: [{ id: 'all', label: 'Все', count: rows.length }, ...categories],
+      label: 'Категории',
+      multiple: true,
+      options: categories,
     }] : []),
     {
       id: 'stock',
       label: 'Наличие',
-      appearance: 'nav',
-      options: [
-        { id: 'all', label: 'Все', count: rows.length },
-        { id: 'in', label: 'В наличии', count: stockCounts.in },
-        { id: 'low', label: 'Мало', count: stockCounts.low },
-        { id: 'out', label: 'Нет в наличии', count: stockCounts.out },
-      ],
+      multiple: true,
+      options: [{ id: 'in', label: 'Только в наличии' }],
     },
     {
       id: 'price',
       label: 'Цена',
-      appearance: 'nav',
-      options: [
-        { id: 'all', label: 'Любая' },
-        { id: 'lt1000', label: 'До 1 000 ₽' },
-        { id: '1000-3000', label: '1 000–3 000 ₽' },
-        { id: 'gt3000', label: 'От 3 000 ₽' },
-      ],
+      range: { minId: 'priceMin', maxId: 'priceMax', unit: '₽' },
+      options: [],
     },
   ]
-  const filtersActive = Object.values(filterValues).some(value => value !== 'all') || Boolean(search.trim())
+  const filtersActive = Object.values(filterValues).some(value => value.length > 0) || Boolean(search.trim())
   const emptyHint = !filtered.length ? <div className={shell.filterEmpty}>
     <span>{filtersActive ? 'Ничего не нашли.' : 'В каталоге пока нет товаров.'}</span>
     {filtersActive ? <button type="button" className={styles.secondary} onClick={() => {
       onSearch('')
-      setFilterValues({ category: 'all', stock: 'all', price: 'all' })
+      setFilterValues(emptyCatalogFilters())
     }}>Сбросить фильтры</button> : null}
   </div> : null
   const grid = filtered.length ? <div className={ui.shopCatalogGrid} data-shop-catalog>
@@ -475,7 +453,7 @@ export function shopProductStock(row: AppV2Record, shop: NonNullable<AppV2['shop
   const fields = builderV2ShopCatalogFields(shop, table)
   const stock = builderV2ShopStockValue(row, fields.stockFieldId)
   const active = builderV2ShopProductActive(row, shop)
-  const state = builderV2ShopStockState(stock, active)
+  const state = builderV2ShopStockState(stock, active, shop.lowStockThreshold)
   return { stock, active, state, fields }
 }
 

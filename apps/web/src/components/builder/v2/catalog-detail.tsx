@@ -39,7 +39,7 @@ export function BuilderV2CatalogDetail({
     const fields = builderV2ShopCatalogFields(shop, table)
     const stock = builderV2ShopStockValue(record, fields.stockFieldId)
     const active = builderV2ShopProductActive(record, shop)
-    const state = builderV2ShopStockState(stock, active)
+    const state = builderV2ShopStockState(stock, active, shop.lowStockThreshold)
     return { stock, state, label: builderV2ShopStockLabel(state, stock) }
   })() : null
 

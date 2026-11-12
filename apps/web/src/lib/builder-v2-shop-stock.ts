@@ -3,6 +3,7 @@ import type { BuilderV2Table } from './builder-v2'
 import { builderV2CatalogCell } from './builder-v2-catalog'
 
 export type ShopStockState = 'in' | 'low' | 'out'
+export const SHOP_LOW_STOCK_THRESHOLD = 5
 
 /** Resolve warehouse stock for a shop product (numeric Остаток / stock field). */
 export function builderV2ShopStockValue(row: AppV2Record, stockFieldId: string | undefined): number | null {
@@ -16,15 +17,15 @@ export function builderV2ShopStockValue(row: AppV2Record, stockFieldId: string |
   return null
 }
 
-export function builderV2ShopStockState(stock: number | null, active: boolean): ShopStockState {
+export function builderV2ShopStockState(stock: number | null, active: boolean, threshold = SHOP_LOW_STOCK_THRESHOLD): ShopStockState {
   if (!active || stock === 0) return 'out'
-  if (stock != null && stock > 0 && stock <= 3) return 'low'
+  if (stock != null && stock > 0 && stock < threshold) return 'low'
   return 'in'
 }
 
 export function builderV2ShopStockLabel(state: ShopStockState, stock: number | null): string {
   if (state === 'out') return 'Нет в наличии'
-  if (state === 'low' && stock != null) return `Осталось ${stock}`
+  if (state === 'low' && stock != null) return `Осталось ${stock} шт.`
   return 'В наличии'
 }
 

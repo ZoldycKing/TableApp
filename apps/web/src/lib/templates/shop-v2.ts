@@ -95,6 +95,7 @@ export function buildShopV2App(built: BuiltTemplate, meta: { id: string; workspa
     activeFieldId: field(goods, 'available'), productTitleFieldId: field(goods, 'name'), priceFieldId: field(goods, 'price'),
     imageFieldId: ids[goods]?.photo ? field(goods, 'photo') : undefined, descriptionFieldId: ids[goods]?.descr ? field(goods, 'descr') : undefined,
     stockFieldId: ids[goods]?.stock ? field(goods, 'stock') : undefined,
+    lowStockThreshold: 5,
     categoryFieldId: ids[goods]?.category ? field(goods, 'category') : undefined,
     ordersTableId, itemsTableId, emailFieldId: email, statusFieldId: status, assignmentFieldId: field(orders, 'assignedEmail'),
     initialStatus, cancelStatus, cancellableStatuses, terminalStatuses,

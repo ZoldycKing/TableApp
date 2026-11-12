@@ -8,6 +8,29 @@ import ui from './view.module.css'
 import shell from './app-frame.module.css'
 import {BUILDER_V2_COLORS,BUILDER_V2_ICONS} from './appearance'
 import { BuilderV2AppMark } from './app-frame'
+import { SHOP_LOW_STOCK_THRESHOLD } from '@/lib/builder-v2-shop-stock'
+
+function ShopStockSettings({ app, onChange }: { app: AppV2; onChange: (app: AppV2) => void }) {
+  const threshold = app.shop?.lowStockThreshold ?? SHOP_LOW_STOCK_THRESHOLD
+  const [value, setValue] = useState(String(threshold))
+  const [invalid, setInvalid] = useState(false)
+  useEffect(() => { setValue(String(threshold)); setInvalid(false) }, [threshold])
+  return <fieldset className={shell.logoField}>
+    <legend>Остатки в каталоге</legend>
+    <label>Показывать количество, когда осталось меньше
+      <input type="number" min="1" max="1000000" step="1" value={value} aria-invalid={invalid} aria-describedby="shop-stock-hint"
+        onChange={event => {
+          const raw = event.target.value
+          setValue(raw)
+          const number = Number(raw)
+          const valid = raw !== '' && Number.isInteger(number) && number >= 1 && number <= 1000000
+          setInvalid(!valid)
+          if (valid && app.shop) onChange({ ...app, shop: { ...app.shop, lowStockThreshold: number } })
+        }} onBlur={() => { if (invalid) { setValue(String(threshold)); setInvalid(false) } }} />
+    </label>
+    <p id="shop-stock-hint" className={ui.hint}>{invalid ? 'Введите целое число от 1 до 1 000 000.' : threshold > 1 ? `При остатке ${threshold - 1} шт. покупатель увидит «Осталось ${threshold - 1} шт.». При остатке ${threshold} и более — «В наличии».` : 'При любом положительном остатке покупатель увидит «В наличии».'}</p>
+  </fieldset>
+}
 
 export function BuilderV2IconPicker({value,onChange,label}:{value:string;onChange:(value:string)=>void;label:string}) {
   return <label>{label}<span className={shell.iconField}><span aria-hidden><ProtoIcon name={value}/></span><select value={value} onChange={event=>onChange(event.target.value)}>{!BUILDER_V2_ICONS.some(([id])=>id===value)&&<option value={value}>Текущая иконка</option>}{BUILDER_V2_ICONS.map(([id,name])=><option value={id} key={id}>{name}</option>)}</select></span></label>
@@ -81,6 +104,7 @@ export function BuilderV2AppearanceSettings({ app, onChange, onScreens, onUpload
     <label>Плотность списка<select value={appearance.density ?? 'regular'} onChange={event => setAppearance({ density: event.target.value === 'compact' ? 'compact' : 'regular' })}><option value="regular">Обычная</option><option value="compact">Компактная</option></select></label>
     <label>Скругление<select value={appearance.corners ?? 'rounded'} onChange={event => setAppearance({ corners: event.target.value === 'subtle' ? 'subtle' : 'rounded' })}><option value="rounded">Обычное</option><option value="subtle">Минимальное</option></select></label>
     <p className={ui.hint}>На телефоне меню находится снизу. Изменения видны здесь сразу, а пользователям — после публикации.</p>
+    {app.shop && <ShopStockSettings app={app} onChange={onChange} />}
     <button type="button" className={styles.secondary} onClick={onScreens}>Настроить разделы<ProtoIcon name="arrow"/></button>
   </div>
 }

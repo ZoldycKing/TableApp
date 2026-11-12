@@ -31,8 +31,13 @@ import {
 } from '@/lib/shop-basket'
 import presentation from '@/components/runtime/app-presentation.module.css'
 import styles from '../prototype/prototype.module.css'
-import { ListScreenShell } from './layout-shell'
-import { ListFilterToolbar, type ListFilterDef } from './list-filters'
+import {
+  CatalogFilterSidebar,
+  ListFilterChips,
+  ListFilterToolbar,
+  ListSortControl,
+  type ListFilterDef,
+} from './list-filters'
 import shell from './layout-shell.module.css'
 import { BuilderV2Picture } from './media'
 import { builderV2MediaItems } from './media-values'
@@ -314,11 +319,13 @@ export function ShopCatalogShell({
     ...(fields.categoryFieldId && categories.length > 1 ? [{
       id: 'category',
       label: 'Категория',
+      appearance: 'nav' as const,
       options: [{ id: 'all', label: 'Все', count: rows.length }, ...categories],
     }] : []),
     {
       id: 'stock',
       label: 'Наличие',
+      appearance: 'checkbox',
       options: [
         { id: 'all', label: 'Все', count: rows.length },
         { id: 'in', label: 'В наличии', count: stockCounts.in },
@@ -329,6 +336,7 @@ export function ShopCatalogShell({
     {
       id: 'price',
       label: 'Цена',
+      appearance: 'checkbox',
       options: [
         { id: 'all', label: 'Любая' },
         { id: 'lt1000', label: 'До 1 000 ₽' },
@@ -337,38 +345,58 @@ export function ShopCatalogShell({
       ],
     },
   ]
-  const tabs = fields.categoryFieldId && categories.length > 1
-    ? [{ id: 'all', label: 'Все', count: rows.length }, ...categories]
-    : undefined
-  return <ListScreenShell
-    title="Каталог"
-    meta={countLabel}
-    filterBar={<ListFilterToolbar
-      search={search}
-      onSearch={onSearch}
-      filters={filterDefs}
-      values={filterValues}
-      onValuesChange={setFilterValues}
-      sort={sort}
-      sortOptions={SHOP_CATALOG_SORTS}
-      onSortChange={value => setSort(value as ShopCatalogSort)}
-      tabs={tabs}
-      activeTab={filterValues.category ?? 'all'}
-      onTabChange={id => setFilterValues(current => ({ ...current, category: id }))}
-      countMatches={draft => rows.filter(row => shopCatalogMatches(row, draft, fields, shop, search)).length}
-      emptyHint={!filtered.length ? <div className={shell.filterEmpty}>
-        <span>{search.trim() || Object.values(filterValues).some(value => value !== 'all') ? 'Ничего не нашли.' : 'В каталоге пока нет товаров.'}</span>
-        {(search.trim() || Object.values(filterValues).some(value => value !== 'all')) ? <button type="button" className={styles.secondary} onClick={() => {
-          onSearch('')
-          setFilterValues({ category: 'all', stock: 'all', price: 'all' })
-        }}>Сбросить фильтры</button> : null}
-      </div> : null}
-    />}
-  >
-    {filtered.length ? <div className={ui.shopCatalogGrid} data-shop-catalog>
-      {filtered.map(row => <ShopCatalogCard key={row.id} app={app} row={row} table={table} onOpen={() => onOpen(row)} />)}
-    </div> : null}
-  </ListScreenShell>
+  const filtersActive = Object.values(filterValues).some(value => value !== 'all') || Boolean(search.trim())
+  const emptyHint = !filtered.length ? <div className={shell.filterEmpty}>
+    <span>{filtersActive ? 'Ничего не нашли.' : 'В каталоге пока нет товаров.'}</span>
+    {filtersActive ? <button type="button" className={styles.secondary} onClick={() => {
+      onSearch('')
+      setFilterValues({ category: 'all', stock: 'all', price: 'all' })
+    }}>Сбросить фильтры</button> : null}
+  </div> : null
+  const grid = filtered.length ? <div className={ui.shopCatalogGrid} data-shop-catalog>
+    {filtered.map(row => <ShopCatalogCard key={row.id} app={app} row={row} table={table} onOpen={() => onOpen(row)} />)}
+  </div> : null
+  return <div className={shell.shell} data-layout="list" data-catalog-filters>
+    <header className={shell.header}>
+      <div className={shell.headerCopy}>
+        <h2 className={shell.headerTitle}>Каталог</h2>
+        <p className={shell.headerMeta}>{countLabel}</p>
+      </div>
+    </header>
+    <div className={shell.catalogLayout}>
+      <CatalogFilterSidebar
+        search={search}
+        onSearch={onSearch}
+        filters={filterDefs}
+        values={filterValues}
+        onValuesChange={setFilterValues}
+      />
+      <div className={shell.catalogMain}>
+        <ListFilterToolbar
+          mobileOnly
+          search={search}
+          onSearch={onSearch}
+          filters={filterDefs}
+          values={filterValues}
+          onValuesChange={setFilterValues}
+          sort={sort}
+          sortOptions={SHOP_CATALOG_SORTS}
+          onSortChange={value => setSort(value as ShopCatalogSort)}
+          countMatches={draft => rows.filter(row => shopCatalogMatches(row, draft, fields, shop, search)).length}
+        />
+        <div className={shell.panel}>
+          <div className={shell.catalogResultBar}>
+            <ListFilterChips filters={filterDefs} values={filterValues} onValuesChange={setFilterValues} />
+            <ListSortControl sort={sort} sortOptions={SHOP_CATALOG_SORTS} onSortChange={value => setSort(value as ShopCatalogSort)} />
+          </div>
+          <div className={shell.body}>
+            {grid}
+            {emptyHint}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 }
 
 export function ShopRelatedProducts({

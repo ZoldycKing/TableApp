@@ -1001,6 +1001,10 @@
 @container builder-app (min-width: 900px) {
   .shopCatalogGrid, .shopRelatedGrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
+/* Catalog with desktop sidebar still needs 3 columns at 1280 viewport. */
+@media (min-width: 1024px) {
+  .shopCatalogGrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
 .shopCatalogCard {
   display: grid;
   grid-template-rows: auto 1fr;

@@ -24,11 +24,7 @@
   gap: 12px 16px;
   align-items: end;
   min-width: 0;
-  padding-inline: var(--shell-pad-x);
-}
-
-/* Cart: H1 aligns with the 2fr/1fr cards (no extra inset). */
-.shell[data-commerce='basket'] > .header {
+  /* Align H1/meta with the card/panel edge below (same as cart). */
   padding-inline: 0;
 }
 
@@ -237,6 +233,70 @@
 }
 @media (max-width: 360px) {
   .filterTools { flex-wrap: wrap; }
+}
+
+/* —— Catalog desktop sidebar (shop only) —— */
+.catalogLayout {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  align-items: start;
+}
+.catalogSidebar { display: none; }
+.catalogMain {
+  display: grid;
+  gap: 0;
+  min-width: 0;
+}
+.catalogResultBar {
+  display: none;
+}
+@media (min-width: 1024px) {
+  .catalogLayout {
+    grid-template-columns: 240px minmax(0, 1fr);
+    gap: 16px;
+  }
+  .catalogSidebar {
+    display: grid;
+    gap: 16px;
+    align-content: start;
+    position: sticky;
+    top: 12px;
+    max-height: calc(100dvh - 24px);
+    overflow: auto;
+    padding: 14px 12px;
+    border: 1px solid color-mix(in srgb, var(--shell-line) 88%, transparent);
+    border-radius: 14px;
+    background: var(--shell-surface);
+    box-shadow: 0 1px 0 color-mix(in srgb, var(--shell-ink) 4%, transparent);
+    scrollbar-width: thin;
+  }
+  .catalogSidebarSection { display: grid; gap: 8px; min-width: 0; }
+  .catalogSidebarSection > h3 {
+    margin: 0;
+    color: var(--shell-ink);
+    font-size: 13px;
+    font-weight: 750;
+  }
+  .catalogSidebar .filterSearch { width: 100%; }
+  .catalogSidebar .secondary { justify-self: stretch; width: 100%; min-height: 40px; }
+  .catalogMain > .filterBar[data-mobile-only] { display: none; }
+  .catalogResultBar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    justify-content: space-between;
+    min-width: 0;
+    padding: 10px var(--shell-pad-x);
+    border-bottom: 1px solid var(--shell-line);
+    background: color-mix(in srgb, var(--shell-bg) 55%, var(--shell-surface));
+  }
+  .catalogResultBar > .filterChips {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .catalogResultBar > .filterSortWrap { margin-left: auto; }
 }
 
 /* —— Shared Glide-style list filters —— */
@@ -463,7 +523,7 @@
 }
 .filterFieldset > legend {
   margin: 0 0 8px;
-  color: var(--filter-ink);
+  color: var(--filter-ink, var(--shell-ink, #253c2d));
   font-size: 13px;
   font-weight: 750;
 }
@@ -477,22 +537,86 @@
   padding: 0 10px;
   border: 1px solid transparent;
   border-radius: 10px;
-  color: var(--filter-ink);
+  color: var(--filter-ink, var(--shell-ink, #253c2d));
   cursor: pointer;
   font-size: 14px;
   font-weight: 600;
 }
-.filterOption > input { margin: 0; }
+.filterOption > input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  pointer-events: none;
+}
+.filterMark {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border: 2px solid color-mix(in srgb, var(--filter-muted, var(--shell-muted, #687568)) 55%, var(--filter-line, #dce2d6));
+  border-radius: 999px;
+  background: var(--filter-surface, var(--shell-surface, #fff));
+  box-sizing: border-box;
+}
+.filterMark[data-appearance='checkbox'] { border-radius: 5px; }
+.filterMark[data-checked] {
+  border-color: var(--v2-accent, #456849);
+  background: var(--v2-accent, #456849);
+  box-shadow: inset 0 0 0 3px var(--filter-surface, #fff);
+}
+.filterMark[data-appearance='checkbox'][data-checked] {
+  box-shadow: none;
+  background:
+    var(--v2-accent, #456849)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='M3.5 8.2 6.4 11l6-6.5' stroke='%23fff' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    center / 12px 12px no-repeat;
+}
 .filterOption > span { min-width: 0; }
 .filterOption > strong {
-  color: var(--filter-muted);
+  color: var(--filter-muted, var(--shell-muted, #687568));
   font-variant-numeric: tabular-nums;
   font-weight: 700;
 }
 .filterOption[data-active] {
-  border-color: var(--filter-line);
-  background: color-mix(in srgb, var(--filter-bg) 70%, var(--filter-surface));
+  border-color: var(--filter-line, var(--shell-line, #dce2d6));
+  background: color-mix(in srgb, var(--filter-bg, var(--shell-bg, #f8faf6)) 70%, var(--filter-surface, #fff));
 }
+.filterOption:has(> input:focus-visible) {
+  outline: 2px solid color-mix(in srgb, var(--v2-accent, #456849) 45%, transparent);
+  outline-offset: 1px;
+}
+.filterNav { display: grid; gap: 2px; }
+.filterNavItem {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--shell-ink, #253c2d);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.filterNavItem > strong {
+  color: var(--shell-muted, #687568);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+.filterNavItem[data-active] {
+  background: color-mix(in srgb, var(--v2-accent, #456849) 12%, var(--shell-surface, #fff));
+  color: var(--v2-accent, #456849);
+}
+.filterNavItem[data-active] > strong { color: inherit; }
 .filterPanelFoot {
   display: grid;
   grid-template-columns: 1fr 1fr;

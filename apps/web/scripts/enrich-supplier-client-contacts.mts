@@ -8,6 +8,7 @@ import { db, apps, fields, rows } from '@tableapp/db'
 import { newId } from '@tableapp/schema'
 import { readAppDefinition } from '@tableapp/schema/app-definition'
 import type { AppV2, AppV2Node } from '@tableapp/schema/app-v2'
+import { configureBuilderV2FormSave } from '../src/lib/builder-v2-form-action'
 
 const EXTRA_SUPPLIER: Array<{ name: string; type: string; help: string }> = [
   { name: 'Почта', type: 'email', help: 'Куда отправлять заявку или счёт.' },
@@ -181,7 +182,12 @@ async function enrichInventory(slug: string) {
   patchForm(app, inv.createSupplierFormId, formFields)
   patchForm(app, inv.editSupplierFormId, formFields)
   grantFields(app, inv.suppliersTableId, [...ids.values()])
-  await db.update(apps).set({ published: app, draft: app, updatedAt: new Date() }).where(eq(apps.id, appRow.id))
+  let next = app
+  for (const formId of [inv.createSupplierFormId, inv.editSupplierFormId]) {
+    if (!formId) continue
+    next = configureBuilderV2FormSave(next, formId, ['owner', 'staff'])
+  }
+  await db.update(apps).set({ published: next, draft: next, updatedAt: new Date() }).where(eq(apps.id, appRow.id))
   console.log('inventory published patched', slug)
 }
 
@@ -233,7 +239,12 @@ async function enrichCrm(slug: string) {
     }
   }
   grantFields(app, crm.clientsTableId, [...ids.values()])
-  await db.update(apps).set({ published: app, draft: app, updatedAt: new Date() }).where(eq(apps.id, appRow.id))
+  let next = app
+  for (const formId of [crm.createClientFormId, crm.clientEditFormId]) {
+    if (!formId) continue
+    next = configureBuilderV2FormSave(next, formId, ['owner', 'staff'])
+  }
+  await db.update(apps).set({ published: next, draft: next, updatedAt: new Date() }).where(eq(apps.id, appRow.id))
   console.log('crm published patched', slug)
 }
 

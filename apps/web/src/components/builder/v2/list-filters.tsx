@@ -196,36 +196,38 @@ export function CatalogFilterSidebar({
         onChange={event => onSearch(event.target.value)}
       />
     </label>
-    {category ? <div className={shell.catalogSidebarSection}>
-      <h3>Категории</h3>
-      <div className={shell.filterNav} role="list">
-        {category.options.map(option => <FilterOptionControl
-          key={option.id}
-          name="catalog-category"
-          option={option}
-          checked={(values.category ?? ALL) === option.id}
-          appearance="nav"
-          onSelect={() => onValuesChange({ ...values, category: option.id })}
-        />)}
-      </div>
-    </div> : null}
-    {rest.map(filter => {
-      const allId = filter.allId ?? ALL
-      const value = values[filter.id] ?? allId
-      return <fieldset key={filter.id} className={shell.filterFieldset}>
-        <legend>{filter.label}</legend>
-        <div className={shell.filterOptions}>
-          {filter.options.map(option => <FilterOptionControl
+    <div className={shell.catalogSidebarBody}>
+      {category ? <div className={shell.catalogSidebarSection}>
+        <h3>Категории</h3>
+        <div className={shell.filterNav} role="list">
+          {category.options.map(option => <FilterOptionControl
             key={option.id}
-            name={`sidebar-${filter.id}`}
+            name="catalog-category"
             option={option}
-            checked={value === option.id}
-            appearance={filter.appearance ?? 'checkbox'}
-            onSelect={() => onValuesChange({ ...values, [filter.id]: option.id })}
+            checked={(values.category ?? ALL) === option.id}
+            appearance="nav"
+            onSelect={() => onValuesChange({ ...values, category: option.id })}
           />)}
         </div>
-      </fieldset>
-    })}
+      </div> : null}
+      {rest.map(filter => {
+        const allId = filter.allId ?? ALL
+        const value = values[filter.id] ?? allId
+        return <fieldset key={filter.id} className={shell.filterFieldset}>
+          <legend>{filter.label}</legend>
+          <div className={shell.filterOptions}>
+            {filter.options.map(option => <FilterOptionControl
+              key={option.id}
+              name={`sidebar-${filter.id}`}
+              option={option}
+              checked={value === option.id}
+              appearance={filter.appearance ?? 'checkbox'}
+              onSelect={() => onValuesChange({ ...values, [filter.id]: option.id })}
+            />)}
+          </div>
+        </fieldset>
+      })}
+    </div>
     <button
       type="button"
       className={styles.secondary}

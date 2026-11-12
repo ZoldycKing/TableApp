@@ -263,7 +263,8 @@
     align-content: start;
     position: sticky;
     top: 12px;
-    max-height: calc(100dvh - 24px);
+    /* Leave room for top nav + page H1 so «Сбросить» stays in the viewport. */
+    max-height: calc(100dvh - 170px);
     overflow: hidden;
     padding: 14px 12px 12px;
     border: 1px solid color-mix(in srgb, var(--shell-line) 88%, transparent);

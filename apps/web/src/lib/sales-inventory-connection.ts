@@ -33,6 +33,8 @@ export function connectSalesInventory(input: App, ownerEmail: string, existingFi
   let position = [...existingFields.values()].filter(field => field.tableId === order.catalog!.tableId).map(field => field.position).sort().at(-1) ?? null
   for (const field of fields.filter(field => field.tableId === order.catalog!.tableId)) {
     if (field.id === stock.item.sku && existingNames.has(field.name)) field.name = 'Складской артикул'
+    // Storefront seed may already expose a numeric «Остаток»; warehouse stock is a formula — keep both under distinct labels.
+    if (field.id === stock.item.stock && existingNames.has(field.name)) field.name = 'Складской остаток'
     if (existingNames.has(field.name)) throw new ModuleCompositionError(`Колонка «${field.name}» уже есть в каталоге. Перенос существующего складского учёта требует отдельной проверки.`)
     existingNames.add(field.name); field.position = position = positionBetween(position, null)
   }

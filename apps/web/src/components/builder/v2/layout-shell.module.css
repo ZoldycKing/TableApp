@@ -467,15 +467,9 @@
     display: flex;
   }
 }
-/* Portaled to document.body — do not rely on .shell token scope. */
-.filterScrim {
-  position: fixed;
-  inset: 0;
-  z-index: 80;
-  border: 0;
-  padding: 0;
+/* Native modal backdrop keeps page controls outside the filter dialog inert. */
+.filterPanel::backdrop {
   background: color-mix(in srgb, #122018 46%, transparent);
-  cursor: pointer;
 }
 .filterPanel {
   --filter-line: var(--v2-line, #dce2d6);
@@ -489,6 +483,8 @@
   z-index: 81;
   display: flex;
   flex-direction: column;
+  margin: 0;
+  padding: 0;
   width: min(calc(100% - 32px), 28rem);
   max-height: min(88dvh, 40rem);
   transform: translate(-50%, -50%);

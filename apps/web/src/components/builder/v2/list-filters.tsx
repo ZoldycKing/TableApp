@@ -1,8 +1,9 @@
 'use client'
 
 import { createPortal } from 'react-dom'
-import { useEffect, useId, useMemo, useState, type ReactNode } from 'react'
+import { useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ProtoIcon } from '../prototype/icons'
+import { BuilderThemeContext } from '../prototype/theme-context'
 import styles from '../prototype/prototype.module.css'
 import shell from './layout-shell.module.css'
 
@@ -126,25 +127,31 @@ export function ListSortControl({
   onSortChange: (id: string) => void
 }) {
   const [sortOpen, setSortOpen] = useState(false)
+  const root = useRef<HTMLDivElement>(null)
+  const trigger = useRef<HTMLButtonElement>(null)
   const currentSort = sortOptions.find(item => item.id === sort) ?? sortOptions[0]
   useEffect(() => {
     if (!sortOpen) return
-    const onPointer = (event: MouseEvent) => {
-      const target = event.target as Node | null
-      if (target && !(event.currentTarget instanceof Node)) {
-        /* close on any outside click via capture on window */
+    const onDoc = (event: MouseEvent) => {
+      if (root.current && event.target instanceof Node && !root.current.contains(event.target)) setSortOpen(false)
+    }
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        setSortOpen(false)
+        trigger.current?.focus()
       }
     }
-    const onDoc = (event: MouseEvent) => {
-      const root = document.querySelector(`.${shell.filterSortWrap}`)
-      if (root && event.target instanceof Node && !root.contains(event.target)) setSortOpen(false)
-    }
     window.addEventListener('mousedown', onDoc)
-    return () => window.removeEventListener('mousedown', onDoc)
-    void onPointer
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('mousedown', onDoc)
+      window.removeEventListener('keydown', onKey)
+    }
   }, [sortOpen])
-  return <div className={shell.filterSortWrap}>
+  return <div ref={root} className={shell.filterSortWrap}>
     <button
+      ref={trigger}
       type="button"
       className={shell.filterSortButton}
       aria-label={`Сортировка: ${currentSort?.label ?? ''}`}
@@ -276,6 +283,8 @@ export function ListFilterToolbar({
   const [open, setOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [draft, setDraft] = useState(values)
+  const dialog = useRef<HTMLDialogElement>(null)
+  const theme = useContext(BuilderThemeContext)
   const titleId = useId()
   const applied = listFilterActiveCount(filters, values)
   const preview = useMemo(() => countMatches(draft), [countMatches, draft])
@@ -286,11 +295,18 @@ export function ListFilterToolbar({
     setDraft(values)
   }, [open, values])
   useEffect(() => {
-    if (!open) return
-    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.preventDefault(); setOpen(false) } }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [open])
+    if (!open || !mounted || !dialog.current) return
+    const node = dialog.current
+    const previousFocus = document.activeElement
+    const previousOverflow = document.body.style.overflow
+    node.showModal()
+    document.body.style.overflow = 'hidden'
+    return () => {
+      node.close()
+      document.body.style.overflow = previousOverflow
+      if (previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus({ preventScroll: true })
+    }
+  }, [open, mounted])
 
   const applyDraft = () => {
     onValuesChange(draft)
@@ -301,9 +317,10 @@ export function ListFilterToolbar({
     setDraft(listFilterClearAll(filters))
   }
 
-  const panel = open && mounted ? createPortal(<>
-    <button type="button" className={shell.filterScrim} aria-label="Закрыть" onClick={() => setOpen(false)} />
-    <aside className={shell.filterPanel} role="dialog" aria-modal="true" aria-labelledby={titleId}>
+  const panel = open && mounted ? createPortal(
+    <dialog ref={dialog} className={`${shell.filterPanel} ${theme?.className ?? ''}`} data-scheme={theme?.scheme} style={theme?.style} aria-modal="true" aria-labelledby={titleId}
+      onCancel={event => { event.preventDefault(); setOpen(false) }}
+      onClick={event => { if (event.target === event.currentTarget) setOpen(false) }}>
       <div className={shell.filterPanelHead}>
         <h2 id={titleId}>Фильтры</h2>
         <button type="button" className={shell.filterIconButton} aria-label="Закрыть" onClick={() => setOpen(false)}>
@@ -334,8 +351,7 @@ export function ListFilterToolbar({
         <button type="button" className={styles.secondary} onClick={resetDraft}>Сбросить</button>
         <button type="button" className={styles.primary} onClick={applyDraft}>Показать {preview.toLocaleString('ru-RU')}</button>
       </div>
-    </aside>
-  </>, document.body) : null
+    </dialog>, document.body) : null
 
   return <div className={shell.filterBar} data-mobile-only={mobileOnly || undefined}>
     {tabs?.length ? <div className={shell.filterTabs} data-desktop-tabs role="tablist" aria-label="Быстрые фильтры">

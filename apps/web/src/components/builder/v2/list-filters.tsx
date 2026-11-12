@@ -221,21 +221,21 @@ export function CatalogFilterSidebar({
               name={`sidebar-${filter.id}`}
               option={option}
               checked={value === option.id}
-              appearance={filter.appearance ?? 'checkbox'}
+              appearance={filter.appearance === 'nav' ? 'nav' : 'radio'}
               onSelect={() => onValuesChange({ ...values, [filter.id]: option.id })}
             />)}
           </div>
         </fieldset>
       })}
+      <button
+        type="button"
+        className={`${styles.secondary} ${shell.catalogSidebarReset}`}
+        onClick={() => {
+          onSearch('')
+          onValuesChange(listFilterClearAll(filters))
+        }}
+      >Сбросить</button>
     </div>
-    <button
-      type="button"
-      className={styles.secondary}
-      onClick={() => {
-        onSearch('')
-        onValuesChange(listFilterClearAll(filters))
-      }}
-    >Сбросить</button>
   </aside>
 }
 
@@ -314,7 +314,7 @@ export function ListFilterToolbar({
         {filters.map(filter => {
           const allId = filter.allId ?? ALL
           const value = draft[filter.id] ?? allId
-          const appearance = filter.appearance ?? (filter.id === 'category' ? 'radio' : 'checkbox')
+          const appearance = filter.appearance === 'checkbox' ? 'radio' : (filter.appearance ?? 'radio')
           return <fieldset key={filter.id} className={shell.filterFieldset}>
             <legend>{filter.label}</legend>
             <div className={shell.filterOptions}>

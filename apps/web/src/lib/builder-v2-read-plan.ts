@@ -19,6 +19,16 @@ export function builderV2ReadPlan(app: AppV2, node: AppV2Node & { sourceId: stri
     if (node.cardImageFieldId) displayed.add(node.cardImageFieldId)
     if (node.cardDetailFieldId) displayed.add(node.cardDetailFieldId)
   }
+  // Native booking screens use these same records for photos, availability and visit cards.
+  // Keep author previews complete; published reads still apply their separate row/field grants.
+  if (node.type === 'collection' && app.booking) {
+    const booking = app.booking
+    const fields = source.tableId === booking.tables.services ? [...Object.values(booking.service), booking.servicePhotoFieldId, booking.serviceDescriptionFieldId]
+      : source.tableId === booking.tables.masters ? [...Object.values(booking.master), booking.masterPhotoFieldId, booking.masterDescriptionFieldId]
+      : source.tableId === booking.tables.visits ? Object.values(booking.visit)
+      : source.tableId === booking.tables.schedule ? Object.values(booking.schedule) : []
+    for (const field of fields) if (field) displayed.add(field)
+  }
   builderV2DataNodes(app, node).forEach(child => collect(child, displayed))
   const required = new Set([...displayed, ...(searching ? source.searchFieldIds : []), ...(node.type === 'collection' ? source.sorts.length ? source.sorts : view?.config.sorts ?? [] : []).map(sort => sort.fieldId), ...fieldsOfFilter(view?.config.filter)])
   if (node.type === 'collection' && node.recordGroup) {

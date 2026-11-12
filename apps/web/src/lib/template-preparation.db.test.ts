@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { and, eq, inArray, isNull } from 'drizzle-orm'
 import { appSchema, newId, positionBetween } from '@tableapp/schema'
+import { readAppDefinition } from '@tableapp/schema/app-definition'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { visibleScreensFor, visitorFor } from './app-roles'
 
@@ -46,15 +47,18 @@ describe.skipIf(!process.env.DATABASE_URL)('first launch of every starter in Pos
     const result = await actions.applyTemplateAction(id)
     if (!result.ok) throw new Error(result.error)
     const [record] = await database.db.select().from(database.apps).where(eq(database.apps.id, result.appId))
-    return { ...result, app: appSchema.parse(record!.draft) }
+    const read = readAppDefinition(record!.draft)
+    if (!read.ok) throw new Error('Installed definition is invalid')
+    return { ...result, app: read.app }
   }
-  // sklad installs as native App V2 (covered by inventory-preparation / inventory-v2 tests).
-  it.each(['salon', 'service', 'zayavki', 'nedvizhimost', 'dostavka', 'proizvodstvo'])('%s starts empty without losing its roles, screens or configuration', async id => {
+  // Native starters are tested separately; keep these legacy first-launch checks intact.
+  it.each(['service', 'zayavki', 'nedvizhimost', 'dostavka', 'proizvodstvo'])('%s starts empty without losing its roles, screens or configuration', async id => {
     const installed = await install(id)
-    expect(installed.app.allowlist).toContainEqual({ email, roleId: id === 'proizvodstvo' ? 'director' : 'manager', company: '' })
-    const creatorRole = installed.app.allowlist.find(entry => entry.email === email)!.roleId
-    expect(installed.app.roles.some(role => role.id === creatorRole)).toBe(true)
-    expect(visibleScreensFor(installed.app, visitorFor(installed.app, email)).some(screen => screen.tab)).toBe(true)
+    const legacy = appSchema.parse(installed.app)
+    expect(legacy.allowlist).toContainEqual({ email, roleId: id === 'proizvodstvo' ? 'director' : 'manager', company: '' })
+    const creatorRole = legacy.allowlist.find(entry => entry.email === email)!.roleId
+    expect(legacy.roles.some(role => role.id === creatorRole)).toBe(true)
+    expect(visibleScreensFor(legacy, visitorFor(legacy, email)).some(screen => screen.tab)).toBe(true)
     const before = await database.db.select().from(database.rows).where(inArray(database.rows.tableId, installed.tableIds))
     const state = await prepare.templatePreparation(workspaceId, installed.appId)
     expect(state!.samples).toBe(before.length)
@@ -65,6 +69,23 @@ describe.skipIf(!process.env.DATABASE_URL)('first launch of every starter in Pos
     expect(appSchema.parse(after!.draft)).toEqual(installed.app)
     expect(after!.published).toBeNull()
     expect(await actions.clearTemplateSamplesAction(installed.appId)).toEqual({ ok: true })
+  })
+  it('installs native booking with service photos and clears only untouched samples', async () => {
+    const installed = await install('salon')
+    expect(installed.app.formatVersion).toBe(2)
+    const read = readAppDefinition(installed.app)
+    if (!read.ok || read.formatVersion !== 2 || !read.app.booking) throw new Error('Native booking was not installed')
+    expect(read.app.authentication.members).toContainEqual({ email, roleIds: ['owner'], company: '' })
+    const services = await database.db.select().from(database.rows).where(eq(database.rows.tableId, read.app.booking.tables.services))
+    expect(services).toHaveLength(5)
+    expect(services.every(row => Array.isArray((row.data as Record<string, unknown>)[read.app.booking!.servicePhotoFieldId]))).toBe(true)
+    expect((await prepare.templatePreparation(workspaceId, installed.appId))!.samples).toBeGreaterThan(0)
+    expect(await actions.clearTemplateSamplesAction(installed.appId)).toEqual({ ok: true })
+    expect(await database.db.select().from(database.rows).where(and(inArray(database.rows.tableId, installed.tableIds), isNull(database.rows.deletedAt)))).toHaveLength(0)
+    expect(await actions.clearTemplateSamplesAction(installed.appId)).toEqual({ ok: true })
+    const [record] = await database.db.select().from(database.apps).where(eq(database.apps.id, installed.appId))
+    expect(record!.draft).toEqual(installed.app)
+    expect(record!.published).toBeNull()
   })
   it('protects source data referenced by a real row outside the app and never touches another installation', async () => {
     const installed = await install('salon'), { db, tables, fields, rows } = database
@@ -100,6 +121,6 @@ describe.skipIf(!process.env.DATABASE_URL)('first launch of every starter in Pos
     expect(results[0]!.appSlug).not.toBe(results[1]!.appSlug)
     const records = await database.db.select().from(database.apps).where(inArray(database.apps.id, results.map(result => result.ok ? result.appId : '')))
     expect(new Set(records.map(record => record.workspaceId))).toEqual(new Set([workspaceId, foreignId]))
-    expect(records.every(record => appSchema.parse(record.draft).slug === record.slug)).toBe(true)
+    expect(records.every(record => { const read = readAppDefinition(record.draft); return read.ok && read.app.slug === record.slug })).toBe(true)
   })
 })

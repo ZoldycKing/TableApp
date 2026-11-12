@@ -21,6 +21,8 @@ import { BuilderV2MoneyInput } from './money-input'
 import { builderV2IsMoneyFieldLabel, builderV2ParseMoneyInput } from '@/lib/builder-v2-money'
 import type { BuilderV2WorkflowEffect, BuilderV2WorkflowTrace } from '@/lib/builder-v2-workflow-types'
 import { ruPrepText } from './ru-prep-text'
+import { BookingDemoAvailability, BookingTimeFields } from './booking-time'
+import bookingCss from './booking.module.css'
 
 export type WorkingFormOptions = { tableName: string; listHref: string; recordHref?: string; learning?:boolean; revision?: string }
 type FormContext = { app: AppV2; scope: BuilderV2FormScope; state?: BuilderV2FormState; values: Record<string, AppV2Json>; errors: Record<string, string>; disabled: boolean; key:string; upload?: (fieldId:string,file:File,signal:AbortSignal)=>Promise<Attachment>; onPending:(id:string,pending:boolean)=>void; change: (id: string, value: AppV2Json) => void; inspect: (request: BuilderV2FormRequest) => Promise<BuilderV2FormResult | BuilderV2FormOptionsResult> }
@@ -31,6 +33,7 @@ const editSaveNotice = (effects: BuilderV2WorkflowEffect[] = []) => effects.leng
 
 export function BuilderV2FormPreview({ app, form, screenId, recordId, enabled, editing, working, children }: { app: AppV2; form: BuilderV2Form; screenId: string; recordId?: string; enabled: boolean; editing: boolean; working?: WorkingFormOptions; children: ReactNode }) {
   const published=usePublishedV2()
+  const bookingDemo = useContext(BookingDemoAvailability)
   const actionPanel = useBuilderV2OrderActionPanel()
   const formTitle=form.mode==='edit'&&(!form.name||form.name==='Новая запись')?'Изменить запись':form.name||'Новая запись'
   if(published) working??={tableName:published.tableName(form.tableId),listHref:`/a/${encodeURIComponent(published.slug)}`,revision:published.revision}
@@ -107,7 +110,7 @@ export function BuilderV2FormPreview({ app, form, screenId, recordId, enabled, e
     } catch { if (version === generation.current && current.current.key === key) setData({ ...visible, checking: false, success: false, uncertain: Boolean(working), error: working ? 'Не удалось подтвердить сохранение. Повторите запрос: действие не выполнится дважды.' : 'Не удалось проверить форму. Повторите попытку.' }) }
     finally { busy.current = false }
   }
-  const upload=working&&visible.state?.revision?async(fieldId:string,file:File,signal:AbortSignal):Promise<Attachment>=>{
+  const upload=!bookingDemo&&working&&visible.state?.revision?async(fieldId:string,file:File,signal:AbortSignal):Promise<Attachment>=>{
     const body=new FormData();body.set('file',file);body.set('context',JSON.stringify({kind:published?'published':'working',...(published?{slug:published.slug}:{appId:app.id}),...scope,fieldId,revision:visible.state!.revision,fingerprint:visible.state!.fingerprint}))
     let response:Response,result:{ok?:boolean;error?:string;attachment?:unknown}
     try{response=await fetch('/api/builder-v2/files',{method:'POST',body,signal});result=await response.json()}catch{throw new Error('Не удалось загрузить файл. Проверьте соединение и повторите попытку.')}
@@ -121,8 +124,10 @@ export function BuilderV2FormPreview({ app, form, screenId, recordId, enabled, e
   const countForm = Boolean(app.inventory && (form.id === app.inventory.createCountFormId || form.id === app.inventory.editCountFormId))
   const reorderForm = Boolean(app.inventory && form.id === app.inventory.reorderFormId)
   const inventoryDialogForm = purchaseForm || countForm
+  const bookingForm = Boolean(app.booking && [app.booking.createFormId, app.booking.ownerCreateFormId, app.booking.rescheduleFormId].includes(form.id))
   return <Context.Provider value={{ app, scope, inspect, state: visible.state, values: visible.values, errors: visible.errors, disabled, key:key+':'+refresh,upload,onPending, change: (id, value) => { if (disabled) return; generation.current++; setData(old=>old.key===key?{...old,values:{...old.values,[id]:value},errors:{},error:'',success:false}:old) } }}><form ref={formRef} className={`${styles.formBlock} ${ui.form} ${checkout ? ui.commerceForm : ''} ${inventoryDialogForm || reorderForm ? ui.purchaseForm : ''}`} data-commerce={checkout ? 'checkout' : undefined} data-purchase={purchaseForm || undefined} data-count={countForm || undefined} data-reorder={reorderForm || undefined} noValidate onSubmit={event => { event.preventDefault(); void check() }} aria-label={formTitle} aria-busy={!editing && enabled && (visible.loading || visible.checking || pendingCount>0)}>
     <h3 className={ui.formTitle} id={checkout ? 'shop-checkout' : undefined}>{checkout ? 'Оформление заказа' : formTitle}</h3>
+    {bookingForm && <div className={bookingCss.picker}><BookingTimeFields app={app} editing={editing} /></div>}
     {checkout ? <p className={ui.shopCheckoutNote}>После оформления мы свяжемся, чтобы подтвердить заказ. Оплата при получении.</p> : null}
     <ShopCheckoutSync />
     {!editing && enabled && visible.loading && <p role="status" className={ui.hint}>Подготавливаем форму…</p>}
@@ -237,6 +242,8 @@ function InventoryDateInput({ id, disabled, errorId, required, label, value, onC
 
 export function BuilderV2FormInput({ node, table }: { node: BuilderV2Input; table?: BuilderV2Table }) {
   const context = useContext(Context), published=usePublishedV2(), unique = useId(), field = context?.state?.fields.find(field => field.nodeId === node.id), column = table?.fields.find(field => field.id === node.fieldId)
+  const booking = context?.app.booking
+  if (booking && [booking.createFormId, booking.ownerCreateFormId, booking.rescheduleFormId].includes(context!.scope.formId) && [booking.visit.service, booking.visit.master, booking.visit.start, booking.visit.status].includes(node.fieldId)) return null
   if (context?.app.shop && (node.fieldId === context.app.shop.cartFieldId || node.fieldId === context.app.shop.submissionFieldId)) return null
   if (context?.app.inventory?.purchasePayloadFieldId && node.fieldId === context.app.inventory.purchasePayloadFieldId) return null
   if (context?.app.inventory?.countPayloadFieldId && node.fieldId === context.app.inventory.countPayloadFieldId) return null

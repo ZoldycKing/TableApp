@@ -565,6 +565,7 @@ import ui from './view.module.css'
 import { NODE_KINDS } from './model'
 import { builderV2PreviewRecordParent, builderV2RecordParent, collectionCardScreen } from './collection-navigation'
 import { BuilderV2FormPreview, BuilderV2FormInput, type WorkingFormOptions } from './form-preview'
+import { BookingScreen } from './booking-screens'
 import { BuilderV2DataNode } from './data-node'
 import type { BuilderV2DataPage, BuilderV2DataRecord, BuilderV2OrderSummary } from '@/lib/builder-v2-data-types'
 import { builderV2OrderLineFields, builderV2StatusColumn } from '@/lib/builder-v2-order-summary'
@@ -1881,6 +1882,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
       </DetailCardShell>
     </div>
   }
+  if (props.app.booking && screen && [props.app.booking.catalogScreenId, props.app.booking.serviceScreenId, props.app.booking.mastersScreenId, props.app.booking.masterScreenId, props.app.booking.visitScreenId, props.app.booking.clientScreenId, props.app.booking.listScreenId, props.app.booking.formScreenId, props.app.booking.rescheduleScreenId, props.app.booking.setupScreenId, props.app.booking.periodScreenId].includes(screen.id)) return <BookingScreen key={screen.id} {...props} renderNodes={ids => render(ids)} />
   if (!props.editing && shop && screen?.id === shop.catalogScreenId) {
     const catalogNode = rootIds.map(id => nodes.get(id)).find((node): node is Extract<AppV2Node, { type: 'collection' }> => node?.type === 'collection' && node.layout === 'catalog')
     if (catalogNode) {

@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { appThemeSchema, SLUG_PATTERN } from '../app'
+import { appThemeSchema, bookingConfigSchema, SLUG_PATTERN } from '../app'
 import { appV2BindingSchema, appV2ConditionSchema, appV2IdSchema as id, type AppV2Binding, type AppV2Condition } from './values'
 
 export const appV2AudienceSchema = z.discriminatedUnion('kind', [
@@ -122,6 +122,16 @@ export const appV2Schema = z.strictObject({
   workflows: z.array(flow).max(100),
   /** Presentation never grants data access. Missing grants always deny. */
   policy: z.strictObject({ tables: z.array(z.strictObject({ tableId: id, grants: z.array(grant).max(100) })).max(200), workflows: z.array(z.strictObject({ workflowId: id, audience: appV2AudienceSchema })).max(200) }),
+  /** Native booking starter shares the existing atomic booking rules and editable v2 nodes. */
+  booking: bookingConfigSchema.extend({
+    catalogScreenId: id, serviceScreenId: id, mastersScreenId: id, masterScreenId: id,
+    visitScreenId: id, clientScreenId: id, createFormId: id, rescheduleFormId: id, statusFormId: id,
+    servicePhotoFieldId: id, serviceDescriptionFieldId: id,
+    masterPhotoFieldId: id.optional(), masterDescriptionFieldId: id.optional(),
+    cancelButtonId: id,
+    periodScreenId: id.optional(),
+    ownerCreateFormId: id.optional(),
+  }).optional(),
   /** Explicit shop bindings. Absent for every app that is not the installed catalogue. */
   shop: z.strictObject({
     catalogTableId: id, catalogViewId: id, catalogScreenId: id, detailScreenId: id, basketScreenId: id, ordersScreenId: id, orderScreenId: id, checkoutFormId: id,

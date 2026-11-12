@@ -378,6 +378,20 @@ export function validateAppV2(app: AppV2, catalog: AppV2Catalog, options: { mode
       if (found && !['text', 'email', 'created_by', 'updated_by'].includes(found.type)) issue('owner_field_type', path, 'Для владельца записи нужно текстовое поле или почта')
     }
   }
+  if (app.booking) {
+    const booking = app.booking, path = 'booking'
+    for (const [key, values] of [["services", booking.service], ["masters", booking.master], ["schedule", booking.schedule], ["visits", booking.visit]] as const) {
+      table(booking.tables[key], path)
+      for (const fieldId of Object.values(values)) {
+        const column = catalog.fields.get(fieldId)
+        if (!column || column.tableId !== booking.tables[key]) issue('booking_field', path, 'Поле записи относится к другой таблице или удалено')
+      }
+    }
+    for (const screenId of [booking.catalogScreenId, booking.serviceScreenId, booking.mastersScreenId, booking.masterScreenId, booking.visitScreenId, booking.clientScreenId, booking.listScreenId, booking.formScreenId, booking.rescheduleScreenId, booking.setupScreenId]) if (!screenId || !screens.has(screenId)) issue('booking_screen', path, 'Экран онлайн-записи удалён')
+    for (const formId of [booking.createFormId, booking.rescheduleFormId, booking.statusFormId, ...(booking.ownerCreateFormId ? [booking.ownerCreateFormId] : [])]) if (nodes.get(formId)?.type !== 'form') issue('booking_form', path, 'Форма онлайн-записи удалена')
+    if (booking.periodScreenId && !screens.has(booking.periodScreenId)) issue('booking_screen', path, 'Экран рабочего времени удалён')
+    for (const [fieldId, tableId] of [[booking.servicePhotoFieldId, booking.tables.services], [booking.serviceDescriptionFieldId, booking.tables.services], [booking.masterPhotoFieldId, booking.tables.masters], [booking.masterDescriptionFieldId, booking.tables.masters]]) if (fieldId && catalog.fields.get(fieldId)?.tableId !== tableId) issue('booking_field', path, 'Поле карточки относится к другой таблице')
+  }
   if (app.shop) {
     const shop = app.shop, path = 'shop'
     table(shop.catalogTableId, path); table(shop.ordersTableId, path); table(shop.itemsTableId, path)

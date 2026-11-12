@@ -48,15 +48,17 @@ export const salon: TemplateDef = {
       key: 'masters', name: 'Мастера', icon: 'users', primary: 'name',
       fields: [
         { key: 'name', name: 'Мастер', type: 'text', help: 'Имя, которое увидит клиент при записи.' },
+        { key: 'photo', name: 'Фото мастера', type: 'image', help: 'Фотография для карточки мастера.' },
+        { key: 'description', name: 'О мастере', type: 'long_text', help: 'Специализация и подход к работе. Видно клиентам.' },
         { key: 'email', name: 'Почта мастера', type: 'email', help: 'Для личных записей мастера. Пригласите этот адрес с ролью «Мастер» в приложении.' },
         { key: 'services', name: 'Услуги мастера', type: 'relation', relationTable: 'services', allowMultiple: true, help: 'Выберите все услуги, на которые можно записаться к этому мастеру.' },
         { key: 'active', name: 'Принимает записи', type: 'checkbox', help: 'Выключите на время отсутствия. Уже принятые записи не отменяются.' },
       ],
       views: [{ name: 'Мастера', type: 'grid' }],
       rows: [
-        { key: 'm1', values: { name: 'Оля', email: 'olga@example.com', services: { rowKeys: ['s1', 's3', 's5'] }, active: true } },
-        { key: 'm2', values: { name: 'Женя', email: 'evgeniy@example.com', services: { rowKeys: ['s2'] }, active: true } },
-        { key: 'm3', values: { name: 'Наташа', email: 'natalia@example.com', services: { rowKeys: ['s1', 's4'] }, active: true } },
+        { key: 'm1', values: { name: 'Оля', description: 'Женские стрижки, окрашивание и укладки. Поможет подобрать форму и оттенок под ваш привычный уход.', email: 'olga@example.com', services: { rowKeys: ['s1', 's3', 's5'] }, active: true } },
+        { key: 'm2', values: { name: 'Женя', description: 'Мужские стрижки ножницами и машинкой. Аккуратная форма и внимание к деталям.', email: 'evgeniy@example.com', services: { rowKeys: ['s2'] }, active: true } },
+        { key: 'm3', values: { name: 'Наташа', description: 'Женские стрижки и маникюр с покрытием. Вместе обсудите форму, длину и ваши пожелания.', email: 'natalia@example.com', services: { rowKeys: ['s1', 's4'] }, active: true } },
       ],
     },
     {

@@ -5,6 +5,7 @@ import { MarketingShell } from '@/components/marketing/blocks'
 import { TemplateGallery } from '@/components/template-gallery'
 import { DeferredTemplatePreview } from '@/components/marketing/deferred-preview'
 import { ShopTemplateDemo } from '@/components/marketing/shop-template-demo'
+import { BookingTemplateDemo } from '@/components/marketing/booking-template-demo'
 import { TemplateShowcase } from '@/components/marketing/elaya/template-showcase'
 import { templateCardCopy } from '@/lib/templates/card-copy'
 import { templateAppPreview, templatePreviewRole } from '@/lib/templates/app-preview'
@@ -32,7 +33,7 @@ export default async function TemplatesPage({ searchParams }: { searchParams: Pr
     <header className={styles.templateIntro}><h1>Готовые приложения</h1><p>Выберите задачу и попробуйте приложение на примере. Затем добавьте свои данные.</p></header>
     <span id="client-apps" /><span id="internal-tools" />
     <TemplateShowcase templates={STARTER_TEMPLATES.map(item => ({ id:item.id, name:item.name, ...templateCardCopy(item), features:[...templateCardCopy(item).features] }))} selectedId={selected.id} canInstall={Boolean(member)} startHref={templateStart(selected.id, Boolean(member))}
-      featured={featured} preview={featured ? <ShopTemplateDemo example={example} path="/templates" view={view} device={device} /> : <StarterPreview key={selected.id} example={example} />} />
+      featured={featured} preview={featured ? <ShopTemplateDemo example={example} path="/templates" view={view} device={device} /> : selected.id === 'salon' ? <BookingTemplateDemo example={example} phone={device === 'phone'} /> : <StarterPreview key={selected.id} example={example} />} />
     <div className={styles.templateAfter}><p>Внутри учебные примеры. Свои данные добавите во время настройки.</p><Link href={member ? '/import' : '/login?next=%2Fimport'} className={styles.textLink}>Начать со своей таблицы<ArrowUpRightIcon size={18} aria-hidden /></Link></div>
   </div></MarketingShell>
 }

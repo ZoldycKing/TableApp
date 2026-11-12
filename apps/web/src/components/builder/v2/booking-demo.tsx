@@ -1,0 +1,142 @@
+'use client'
+import { useRef, useState } from 'react'
+import { instantToWallClock } from '@tableapp/schema'
+import { canOpenAppV2Screen, evaluateAppV2Condition, projectAppV2Row, resolveAppV2Binding, type AppV2, type AppV2Actor, type AppV2Json, type AppV2Record } from '@tableapp/schema/app-v2'
+import type { BuilderV2Table } from '@/lib/builder-v2'
+import type { BuilderV2DataRecord } from '@/lib/builder-v2-data-types'
+import type { BuilderV2FormRequest, BuilderV2FormResult, BuilderV2FormOptionsResult, BuilderV2FormState } from '@/lib/builder-v2-form-types'
+import { builderV2FormInputs } from '@/lib/builder-v2-form-types'
+import type { BuilderV2SubmitRequest } from '@/lib/builder-v2-submit-types'
+import { bookingV2Availability } from '@/lib/builder-v2-booking-availability'
+import { slotError, oneRelation, type BookingData } from '@/lib/booking'
+import { builderV2BookingWriteError } from '@/lib/builder-v2-booking-policy'
+import { BuilderV2AppFrame, BuilderV2Theme } from './app-frame'
+import { PublishedV2Context, type PublishedV2Transport } from './published-context'
+import { BookingDemoAvailability } from './booking-time'
+import { AppV2Renderer } from './view'
+import css from './booking.module.css'
+import styles from '../prototype/prototype.module.css'
+
+/** Synthetic, in-memory adapter. Real applications always use server-backed transport. */
+export function BookingDemo({ app, tables, initialRows, phone = false }: { app: AppV2; tables: BuilderV2Table[]; initialRows: AppV2Record[]; phone?: boolean }) {
+  const [role, setRole] = useState('client'), [screenId, setScreenId] = useState(app.homeScreenId!), [recordId, setRecordId] = useState<string>(), [rows, setRows] = useState(initialRows), [version, setVersion] = useState(0), [notice, setNotice] = useState('')
+  const [mobile, setMobile] = useState(phone)
+  const store = useRef(rows); store.current = rows
+  const booking = app.booking!, timeZone = tables.find(table => table.id === booking.tables.visits)?.fields.find(field => field.id === booking.visit.start)?.timeZone ?? 'Europe/Moscow'
+  const actor: AppV2Actor = { authenticated: true, id: `demo_${role}`, roleIds: [role], email: role === 'owner' ? 'owner@example.com' : 'irina@example.com', name: role === 'owner' ? 'Анна' : 'Ирина', company: '' }
+  const visibleApp = { ...app, screens: app.screens.filter(screen => canOpenAppV2Screen(app, actor, screen.id)) }
+  const format = (row: AppV2Record): BuilderV2DataRecord => {
+    const values = projectAppV2Row(app, actor, row)
+    const display = Object.fromEntries(Object.entries(values).map(([id, value]) => {
+      const field = tables.find(table => table.id === row.tableId)?.fields.find(field => field.id === id)
+      const label = field?.type === 'relation' && Array.isArray(value) ? value.map(id => {
+        const linked = store.current.find(row => row.id === id), primary = tables.find(table => table.id === linked?.tableId)?.primaryFieldId
+        return linked && primary ? String(projectAppV2Row(app, actor, linked)[primary] ?? '') : ''
+      }).filter(Boolean).join(', ') : field?.choices?.find(choice => choice.id === value)?.name ?? (typeof value === 'number' && id === booking.service.price ? `${value.toLocaleString('ru-RU')} ₽` : String(value ?? ''))
+      return [id, label]
+    }))
+    return { ...row, values, display }
+  }
+  const data = (): BookingData => {
+    const of = (tableId: string) => store.current.filter(row => row.tableId === tableId).map(row => ({ id: row.id, data: { ...row.values } }))
+    return { services: of(booking.tables.services), masters: of(booking.tables.masters), schedule: of(booking.tables.schedule), visits: of(booking.tables.visits), timeZone }
+  }
+  const navigate = (id: string, rowId?: string) => { setScreenId(id); setRecordId(rowId); setNotice('') }
+  const inspect = async (request: BuilderV2FormRequest): Promise<BuilderV2FormResult | BuilderV2FormOptionsResult> => {
+    const form = app.nodes.find(node => node.id === request.formId)
+    if (form?.type !== 'form') return { ok: false, error: 'Форма недоступна.' }
+    const record = store.current.find(row => row.id === request.recordId)
+    const fields = builderV2FormInputs(app, form)
+    if (request.mode === 'options') {
+      const input = fields.find(input => input.fieldId === request.fieldId)
+      const field = tables.find(table => table.id === form.tableId)?.fields.find(field => field.id === input?.fieldId)
+      if (!field?.relationTableId) return { ok: false, error: 'Поле недоступно.' }
+      const primary = tables.find(table => table.id === field.relationTableId)?.primaryFieldId
+      return { ok: true, next: null, options: store.current.filter(row => row.tableId === field.relationTableId && Object.keys(projectAppV2Row(app, actor, row)).length).map(row => ({ id: row.id, label: String(primary ? row.values[primary] ?? '' : '') })).filter(option => option.label.toLocaleLowerCase('ru-RU').includes(request.search.toLocaleLowerCase('ru-RU'))) }
+    }
+    const values: Record<string, AppV2Json> = {}, labels: Record<string, string> = {}
+    for (const input of fields) {
+      const result = input.initialValue ? resolveAppV2Binding(input.initialValue, { actor, row: record, screenRow: record }) : null
+      values[input.fieldId] = input.readOnly && result?.ok ? result.value : request.mode === 'check' && !input.readOnly ? request.values[input.fieldId] ?? null : form.mode === 'edit' ? record?.values[input.fieldId] ?? null : result?.ok ? result.value : null
+      const row = record ? format(record) : null
+      labels[input.fieldId] = row?.display[input.fieldId] ?? ''
+    }
+    const errors: Record<string, string> = {}
+    if (request.mode === 'check') for (const input of fields) if (input.required && (values[input.fieldId] === null || values[input.fieldId] === '' || Array.isArray(values[input.fieldId]) && !(values[input.fieldId] as unknown[]).length)) errors[input.id] = `Заполните поле «${input.label}»`
+    if (Object.keys(errors).length) return { ok: false, error: 'Заполните отмеченные поля.', errors }
+    const state: BuilderV2FormState & { revision: string } = { values, labels, revision: 'demo', fingerprint: `demo-${version}`, fields: fields.map(input => {
+      const field = tables.find(table => table.id === form.tableId)!.fields.find(field => field.id === input.fieldId)!
+      return { nodeId: input.id, fieldId: input.fieldId, type: field.type, label: input.label, required: input.required, readOnly: Boolean(input.readOnly), supported: true, choices: field.choices, timeZone: field.timeZone, allowMultiple: field.id === booking.master.services }
+    }) }
+    return { ok: true, state }
+  }
+  const submit = async (request: BuilderV2SubmitRequest) => {
+    const checked = await inspect({ ...request, mode: 'check' })
+    const form = app.nodes.find(node => node.id === request.formId)
+    if (!checked.ok || !('state' in checked) || form?.type !== 'form') return checked.ok ? { ok: false as const, error: 'Форма недоступна.' } : checked
+    const current = store.current.find(row => row.id === request.recordId)
+    const before = form.mode === 'edit' ? current : undefined
+    const policyError = builderV2BookingWriteError(app, actor, form.tableId, checked.state.values, before?.values as Record<string, unknown>, Date.now(), timeZone)
+    if (policyError) return { ok: false as const, error: policyError }
+    const values = { ...before?.values, ...checked.state.values }
+    if (form.tableId === booking.tables.visits) {
+      const serviceId = oneRelation(values[booking.visit.service]), masterId = oneRelation(values[booking.visit.master])
+      if (values[booking.visit.status] !== booking.statuses.cancelled && (form.id === booking.createFormId || form.id === booking.ownerCreateFormId || form.id === booking.rescheduleFormId)) {
+        const error = serviceId && masterId ? slotError(booking, data(), { serviceId, masterId, start: values[booking.visit.start], excludeId: before?.id, minutes: before ? Number(before.values[booking.visit.minutes]) : undefined }) : 'Выберите свободное время.'
+        if (error) return { ok: false as const, error }
+      }
+      if (!before && serviceId) {
+        const service = store.current.find(row => row.id === serviceId)!
+        values[booking.visit.price] = service.values[booking.service.price]!
+        values[booking.visit.minutes] = service.values[booking.service.minutes]!
+        if (role === 'client') values[booking.visit.email] = actor.email
+      }
+      if (masterId) values[booking.visit.masterEmail] = store.current.find(row => row.id === masterId)?.values[booking.master.email] ?? ''
+    }
+    const saved: AppV2Record = { id: before?.id ?? `demo_${crypto.randomUUID().replaceAll('-', '')}`, tableId: form.tableId, values }
+    const next = before ? store.current.map(row => row.id === saved.id ? saved : row) : [...store.current, saved]
+    store.current = next; setRows(next); setVersion(value => value + 1)
+    return { ok: true as const, repeated: false, rowId: saved.id, tableId: saved.tableId, effects: saved.tableId === booking.tables.visits
+      ? [{ type: 'open_screen' as const, screenId: booking.visitScreenId, recordId: saved.id }]
+      : [{ type: 'notify' as const, message: 'Изменения сохранены.' }] }
+  }
+  const buttonState = { revision: 'demo', fingerprint: `demo-${version}`, recordLabel: 'Визит', tableName: 'Записи', actionName: 'Отменить запись', stepCount: 1 }
+  const transport: PublishedV2Transport = {
+    slug: app.slug, revision: 'demo', dataVersion: version, navigate, back: id => navigate(id), invalidate: message => { setNotice(message); setVersion(value => value + 1) }, refresh: message => { setNotice(message ?? ''); setVersion(value => value + 1) },
+    tableName: id => tables.find(table => table.id === id)?.name ?? '', buttonState: () => buttonState,
+    readData: async request => {
+      const node = app.nodes.find(node => node.id === request.nodeId), source = node && 'sourceId' in node && app.sources.find(source => source.id === node.sourceId)
+      if (!source) return { ok: false, error: 'Источник недоступен.' }
+      const items = store.current.filter(row => row.tableId === source.tableId && Object.keys(projectAppV2Row(app, actor, row)).length).filter(row => {
+        if (source.filter) { const match = evaluateAppV2Condition(source.filter, { actor, row }); if (!match.ok || !match.value) return false }
+        if (request.calendarDay && instantToWallClock(String(row.values[booking.visit.start]), timeZone)?.date !== request.calendarDay) return false
+        return !request.search || String(row.values[source.searchFieldIds[0] ?? ''] ?? '').toLowerCase().includes(request.search.toLowerCase())
+      }).map(format)
+      return { ok: true, page: { kind: 'collection', rows: items, total: items.length, value: null, next: null } }
+    },
+    readRecord: async request => { const row = store.current.find(row => row.id === request.recordId); return row ? { ok: true, record: format(row), title: 'Запись' } : { ok: false, error: 'Запись недоступна.' } },
+    inspectForm: inspect, submitForm: submit,
+    inspectButton: async () => ({ ok: true, state: buttonState }),
+    submitButton: async request => {
+      const row = store.current.find(row => row.id === request.recordId)
+      if (!row) return { ok: false, error: 'Запись не найдена.' }
+      const error = builderV2BookingWriteError(app, actor, row.tableId, { [booking.visit.status]: booking.statuses.cancelled }, row.values as Record<string, unknown>)
+      if (error) return { ok: false, error }
+      const next = store.current.map(item => item.id === row.id ? { ...item, values: { ...item.values, [booking.visit.status]: booking.statuses.cancelled } } : item)
+      store.current = next; setRows(next); setVersion(value => value + 1)
+      return { ok: true, repeated: false, effects: [{ type: 'notify', message: 'Запись отменена.' }] }
+    },
+    inspectDelete: async () => ({ ok: false, error: 'Удаление недоступно в примере.' }), submitDelete: async () => ({ ok: false, error: 'Удаление недоступно в примере.' }),
+  }
+  const currentRecord = rows.find(row => row.id === recordId)
+  return <div className={css.demo}>
+    <div className={css.demoToolbar}><div className={css.switch}><button type="button" aria-pressed={role === 'client'} onClick={() => { setRole('client'); navigate(booking.catalogScreenId) }}>Клиент</button><button type="button" aria-pressed={role === 'owner'} onClick={() => { setRole('owner'); navigate(booking.listScreenId!) }}>Команда</button></div><div className={css.switch}><button type="button" aria-label="Вид на компьютере" aria-pressed={!mobile} onClick={() => setMobile(false)}><ProtoDevice phone={false} /></button><button type="button" aria-label="Вид на телефоне" aria-pressed={mobile} onClick={() => setMobile(true)}><ProtoDevice phone /></button></div><button type="button" className={styles.textButton} onClick={() => { store.current = initialRows; setRows(initialRows); setVersion(value => value + 1); navigate(booking.catalogScreenId) }}>Начать заново</button></div>
+    <BuilderV2Theme app={app}><PublishedV2Context value={transport}><BookingDemoAvailability value={input => bookingV2Availability(app, actor, data(), input)}>
+      <div className={css.demoFrame}><BuilderV2AppFrame app={visibleApp} phone={mobile} scrollKey={`${screenId}:${recordId ?? ''}`} screenId={screenId} title={visibleApp.screens.find(screen => screen.id === screenId)?.name ?? 'Запись'} onNavigate={id => navigate(id)}>
+        {notice && <p role="status">{notice}</p>}<AppV2Renderer key={`${role}:${screenId}:${recordId ?? ''}`} live app={visibleApp} tables={tables} actor={actor} screenId={screenId} record={currentRecord ? format(currentRecord) : undefined} onNavigate={navigate} />
+      </BuilderV2AppFrame></div>
+    </BookingDemoAvailability></PublishedV2Context></BuilderV2Theme>
+    <p className={css.demoNote}>Учебный пример. Открывайте услуги, выбирайте время и меняйте записи — данные сбросятся после обновления страницы.</p>
+  </div>
+}
+function ProtoDevice({ phone }: { phone: boolean }) { return <span>{phone ? 'Телефон' : 'Компьютер'}</span> }

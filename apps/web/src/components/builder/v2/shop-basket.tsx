@@ -80,7 +80,7 @@ export function ShopBasketPanel({
     const name = record ? builderV2CatalogCell(record, shop.productTitleFieldId) || 'Товар' : 'Загружаем товар…'
     const price = record ? Number(record.values[shop.priceFieldId]) : Number.NaN
     if (Number.isFinite(price)) total += price * item.qty
-    const unit = record && priceField ? builderV2CatalogPrice(record, priceField) : ''
+    const unit = Number.isFinite(price) ? builderV2FormattedAmount(price, 'Цена, ₽') : ''
     const lineTotal = Number.isFinite(price) ? builderV2FormattedAmount(price * item.qty, 'Сумма позиции') : unit
     const image = shop.imageFieldId && record
       ? builderV2MediaItems(record.values[shop.imageFieldId], published?.slug).find(entry => entry.image)

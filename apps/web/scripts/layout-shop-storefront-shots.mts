@@ -45,7 +45,11 @@ for (const [vp, w, h] of [['d1280', 1280, 900], ['m390', 390, 844]] as const) {
   await page.goto(product, { waitUntil: 'networkidle' })
   await page.waitForTimeout(1200)
   await page.getByText('Похожие товары').first().waitFor({ state: 'visible', timeout: 12_000 }).catch(() => {})
-  await page.waitForTimeout(600)
+  await page.waitForFunction(() => {
+    const imgs = [...document.querySelectorAll('[class*="shopRelated"] img')]
+    return imgs.length > 0 && imgs.every(img => (img as HTMLImageElement).naturalWidth > 0)
+  }, { timeout: 12_000 }).catch(() => {})
+  await page.waitForTimeout(400)
   await save(page, vp, 'product')
 
   // seed cart with one in-stock item then shoot cart

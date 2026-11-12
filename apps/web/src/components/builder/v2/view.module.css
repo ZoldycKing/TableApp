@@ -819,7 +819,7 @@
   display: grid;
   gap: 0;
   min-width: 0;
-  /* Stay inside section padding — match «Заказы» content inset, no full-bleed dividers. */
+  /* Same content box as «Заказы» plainList inside the section card. */
   margin-inline: 0;
 }
 .supplierProductRow {
@@ -827,7 +827,8 @@
   grid-template-columns: 48px minmax(0, 1fr) auto;
   column-gap: 14px;
   align-items: center;
-  padding: 12px 0;
+  /* Match purchase compact row inset (16px); divider stays full section-content width. */
+  padding: 12px 16px;
   border-top: 1px solid var(--v2-line, #e6e8e3);
   min-width: 0;
 }

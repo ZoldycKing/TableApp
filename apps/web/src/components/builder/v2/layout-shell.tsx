@@ -27,6 +27,7 @@ export function ListScreenShell({
   meta,
   actions,
   metrics,
+  compactMetrics = false,
   tabs,
   activeTab,
   onTabChange,
@@ -41,6 +42,8 @@ export function ListScreenShell({
   meta?: ReactNode
   actions?: ReactNode
   metrics?: readonly ShellMetric[]
+  /** Keep a small summary in one row, including inside the phone preview. */
+  compactMetrics?: boolean
   tabs?: readonly ShellTab[]
   activeTab?: string
   onTabChange?: (id: string) => void
@@ -66,7 +69,7 @@ export function ListScreenShell({
       {actions ? <div className={shell.headerActions}>{actions}</div> : null}
     </header> : null}
     <div className={shell.panel}>
-      {metricCount ? <div className={shell.summary} data-count={metricCount} style={{ '--shell-metrics': metricCount } as CSSProperties}>
+      {metricCount ? <div className={shell.summary} data-count={metricCount} data-compact={compactMetrics || undefined} style={{ '--shell-metrics': metricCount } as CSSProperties}>
         {visibleMetrics.map(metric => <div key={metric.key} className={shell.metric} data-wide={metric.wide || undefined}>
           <p className={shell.metricValue}>{metric.value}</p>
           <p className={shell.metricCaption}>{metric.caption}</p>

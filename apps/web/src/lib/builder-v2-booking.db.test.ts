@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
-import { eq } from 'drizzle-orm'
-import { newId, instantToWallClock } from '@tableapp/schema'
+import { eq, inArray } from 'drizzle-orm'
+import { newId, calendarDay, instantToWallClock, planOf, graceReserve } from '@tableapp/schema'
 import { buildTemplate } from './templates/build'
 import { findTemplate } from './templates/catalog'
 import { buildBookingV2App } from './templates/booking-v2'
@@ -127,5 +127,72 @@ describe.skipIf(!process.env.DATABASE_URL)('native v2 booking transactions', () 
     identity.email = 'customer@example.com'
     const own = await write.inspectPublishedV2FormRequest(app.slug, { screenId: config.rescheduleScreenId, formId: config.rescheduleFormId, recordId: stored!.id, mode: 'initial', revision: liveRevision() })
     expect(own.ok).toBe(true)
+  })
+  const scheduleScope = () => ({ screenId: config.setupScreenId, formId: app.nodes.find(node => node.type === 'form' && app.screens.find(screen => screen.id === config.setupScreenId)!.rootIds.includes(node.id))!.id, revision: liveRevision() })
+  async function scheduleRequest() {
+    identity.email = 'owner@example.com'
+    const scope = scheduleScope()
+    const checked = await availability.readPublishedV2BookingScheduleAction(app.slug, scope)
+    if (!checked.ok) throw new Error(JSON.stringify(checked))
+    return { ...scope, requestId: newId('action'), fingerprint: checked.state.fingerprint, input: { masterId: checked.state.masters[0]!.id, mode: 'weekly' as const, weekdays: [1, 2, 3, 4, 5], start: '09:00', end: '18:00', date: '', closed: false, breakStart: '', breakEnd: '' } }
+  }
+  it('saves five working days atomically using ordinary workflow grants and one retry receipt', async () => {
+    const request = await scheduleRequest()
+    const before = await db.db.select().from(db.rows).where(eq(db.rows.tableId, config.tables.schedule))
+    const result = await availability.savePublishedV2BookingScheduleAction(app.slug, request)
+    expect(result, JSON.stringify(result)).toEqual({ ok: true, repeated: false })
+    expect(await availability.savePublishedV2BookingScheduleAction(app.slug, request)).toEqual({ ok: true, repeated: true })
+    const after = await db.db.select().from(db.rows).where(eq(db.rows.tableId, config.tables.schedule))
+    const ids = new Set(before.map(row => row.id)), created = after.filter(row => !ids.has(row.id))
+    expect(created).toHaveLength(5)
+    expect(created.map(row => rowData(row)[config.schedule.weekday]).sort()).toEqual(config.weekdays.slice(1, 6).sort())
+    expect(created.every(row => rowData(row)[config.schedule.start] === '09:00' && rowData(row)[config.schedule.end] === '18:00')).toBe(true)
+    expect(await availability.savePublishedV2BookingScheduleAction(app.slug, { ...request, input: { ...request.input, end: '17:00' } })).toMatchObject({ ok: false })
+    identity.email = 'irina@example.com'
+    expect(await availability.readPublishedV2BookingScheduleAction(app.slug, scheduleScope())).toMatchObject({ ok: false })
+    expect(await availability.savePublishedV2BookingScheduleAction(app.slug, { ...request, requestId: newId('action') })).toMatchObject({ ok: false })
+    expect(await db.db.select().from(db.rows).where(eq(db.rows.tableId, config.tables.schedule))).toHaveLength(after.length)
+  })
+  it('rolls back the whole weekday batch when capacity runs out after the first period', async () => {
+    const request = await scheduleRequest()
+    const [usage] = await db.db.select().from(db.workspaceUsage).where(eq(db.workspaceUsage.workspaceId, workspaceId))
+    const before = await db.db.select().from(db.rows).where(eq(db.rows.tableId, config.tables.schedule))
+    const existing = await db.db.select({ id: db.rows.id }).from(db.rows).where(inArray(db.rows.tableId, built.tables.map(table => table.id)))
+    const limit = planOf('free').limits.rows, ceiling = limit + graceReserve(limit)
+    const filler = Array.from({ length: ceiling - 1 - existing.length }, (_, index) => ({ id: newId('row'), tableId: config.tables.services, position: `f${index.toString(36).padStart(4, '0')}`, data: { [config.service.name]: 'Capacity fixture' } }))
+    await db.db.insert(db.rows).values(filler)
+    await db.db.update(db.workspaces).set({ plan: 'free' }).where(eq(db.workspaces.id, workspaceId))
+    await db.db.update(db.workspaceUsage).set({ rows: ceiling - 1 }).where(eq(db.workspaceUsage.workspaceId, workspaceId))
+    try {
+      expect(await availability.savePublishedV2BookingScheduleAction(app.slug, request)).toMatchObject({ ok: false })
+      expect(await db.db.select().from(db.rows).where(eq(db.rows.tableId, config.tables.schedule))).toHaveLength(before.length)
+      const [same] = await db.db.select().from(db.workspaceUsage).where(eq(db.workspaceUsage.workspaceId, workspaceId))
+      expect(same!.rows).toBe(ceiling - 1)
+    } finally {
+      await db.db.update(db.workspaces).set({ plan: 'business' }).where(eq(db.workspaces.id, workspaceId))
+      await db.db.delete(db.rows).where(inArray(db.rows.id, filler.map(row => row.id)))
+      await db.db.update(db.workspaceUsage).set({ rows: usage!.rows }).where(eq(db.workspaceUsage.workspaceId, workspaceId))
+    }
+  })
+  it('creates a dated day off and edits that same period without adding another row', async () => {
+    const base = await scheduleRequest()
+    const before = await db.db.select().from(db.rows).where(eq(db.rows.tableId, config.tables.schedule))
+    const request = { ...base, input: { ...base.input, mode: 'date' as const, weekdays: [], date: '2026-11-16', closed: true } }
+    expect(await availability.savePublishedV2BookingScheduleAction(app.slug, request)).toEqual({ ok: true, repeated: false })
+    const after = await db.db.select().from(db.rows).where(eq(db.rows.tableId, config.tables.schedule))
+    const ids = new Set(before.map(row => row.id)), created = after.filter(row => !ids.has(row.id))
+    expect(created).toHaveLength(1)
+    expect(calendarDay(rowData(created[0]!)[config.schedule.date])).toBe('2026-11-16')
+    expect(rowData(created[0]!)[config.schedule.closed]).toBe(true)
+    const scope = { screenId: config.periodScreenId!, formId: app.nodes.find(node => node.type === 'form' && app.screens.find(screen => screen.id === config.periodScreenId)!.rootIds.includes(node.id))!.id, recordId: created[0]!.id, revision: liveRevision() }
+    const checked = await availability.readPublishedV2BookingScheduleAction(app.slug, scope)
+    if (!checked.ok) throw new Error(JSON.stringify(checked))
+    const result = await availability.savePublishedV2BookingScheduleAction(app.slug, { ...scope, requestId: newId('action'), fingerprint: checked.state.fingerprint, input: { ...request.input, closed: false, start: '10:00', end: '12:00' } })
+    expect(result, JSON.stringify(result)).toEqual({ ok: true, repeated: false })
+    const final = await db.db.select().from(db.rows).where(eq(db.rows.tableId, config.tables.schedule))
+    expect(final).toHaveLength(after.length)
+    const values = rowData(final.find(row => row.id === created[0]!.id)!)
+    expect(calendarDay(values[config.schedule.date])).toBe('2026-11-16')
+    expect(values).toMatchObject({ [config.schedule.closed]: false, [config.schedule.start]: '10:00', [config.schedule.end]: '12:00' })
   })
 })

@@ -13,6 +13,8 @@ import { builderV2BookingWriteError } from '@/lib/builder-v2-booking-policy'
 import { BuilderV2AppFrame, BuilderV2Theme } from './app-frame'
 import { PublishedV2Context, type PublishedV2Transport } from './published-context'
 import { BookingDemoAvailability } from './booking-time'
+import { BookingScheduleDemoContext } from './booking-schedule'
+import { bookingSchedulePlan, type BookingScheduleAdapter } from '@/lib/builder-v2-booking-schedule'
 import { AppV2Renderer } from './view'
 import css from './booking.module.css'
 import styles from '../prototype/prototype.module.css'
@@ -21,6 +23,7 @@ import styles from '../prototype/prototype.module.css'
 export function BookingDemo({ app, tables, initialRows, phone = false }: { app: AppV2; tables: BuilderV2Table[]; initialRows: AppV2Record[]; phone?: boolean }) {
   const [role, setRole] = useState('client'), [screenId, setScreenId] = useState(app.homeScreenId!), [recordId, setRecordId] = useState<string>(), [rows, setRows] = useState(initialRows), [version, setVersion] = useState(0), [notice, setNotice] = useState('')
   const [mobile, setMobile] = useState(phone)
+  const scheduleReceipts = useRef(new Map<string, string>())
   const store = useRef(rows); store.current = rows
   const booking = app.booking!, timeZone = tables.find(table => table.id === booking.tables.visits)?.fields.find(field => field.id === booking.visit.start)?.timeZone ?? 'Europe/Moscow'
   const actor: AppV2Actor = { authenticated: true, id: `demo_${role}`, roleIds: [role], email: role === 'owner' ? 'owner@example.com' : 'irina@example.com', name: role === 'owner' ? 'Анна' : 'Ирина', company: '' }
@@ -101,6 +104,32 @@ export function BookingDemo({ app, tables, initialRows, phone = false }: { app: 
       : [{ type: 'notify' as const, message: 'Изменения сохранены.' }] }
   }
   const buttonState = { revision: 'demo', fingerprint: `demo-${version}`, recordLabel: 'Визит', tableName: 'Записи', actionName: 'Отменить запись', stepCount: 1 }
+  const scheduleAdapter: BookingScheduleAdapter = {
+    read: async scope => {
+      if (role !== 'owner') return { ok: false, error: 'Рабочие часы доступны администратору.' }
+      const checked = await inspect({ ...scope, mode: 'initial' })
+      return checked.ok && 'state' in checked ? { ok: true, state: { revision: 'demo', fingerprint: checked.state.fingerprint, values: checked.state.values, masters: data().masters.map(row => ({ id: row.id, name: String(row.data[booking.master.name]) })) } } : { ok: false, error: 'Не удалось открыть рабочие часы.' }
+    },
+    save: async request => {
+      if (role !== 'owner') return { ok: false, error: 'Рабочие часы доступны администратору.' }
+      const payload = JSON.stringify(request)
+      const previous = scheduleReceipts.current.get(request.requestId)
+      if (previous) return previous === payload ? { ok: true, repeated: true } : { ok: false, error: 'Откройте рабочие часы заново.' }
+      if (request.fingerprint !== `demo-${version}`) return { ok: false, stale: true, error: 'Рабочие часы изменились. Откройте форму заново.' }
+      const master = data().masters.find(row => row.id === request.input.masterId)
+      if (!master) return { ok: false, error: 'Выберите мастера.' }
+      const plan = bookingSchedulePlan(booking, request.input, String(master.data[booking.master.name]))
+      if (!plan.ok) return plan
+      const next = [...store.current]
+      plan.rows.forEach((values, index) => {
+        const existing = index === 0 && request.recordId ? next.findIndex(row => row.id === request.recordId) : -1
+        const row = { id: existing >= 0 ? request.recordId! : `demo_${crypto.randomUUID().replaceAll('-', '')}`, tableId: booking.tables.schedule, values }
+        if (existing >= 0) next[existing] = row; else next.push(row)
+      })
+      store.current = next; setRows(next); setVersion(value => value + 1); scheduleReceipts.current.set(request.requestId, payload)
+      return { ok: true, repeated: false }
+    },
+  }
   const transport: PublishedV2Transport = {
     slug: app.slug, revision: 'demo', dataVersion: version, navigate, back: id => navigate(id), invalidate: message => { setNotice(message); setVersion(value => value + 1) }, refresh: message => { setNotice(message ?? ''); setVersion(value => value + 1) },
     tableName: id => tables.find(table => table.id === id)?.name ?? '', buttonState: () => buttonState,
@@ -131,11 +160,11 @@ export function BookingDemo({ app, tables, initialRows, phone = false }: { app: 
   const currentRecord = rows.find(row => row.id === recordId)
   return <div className={css.demo}>
     <div className={css.demoToolbar}><div className={css.switch}><button type="button" aria-pressed={role === 'client'} onClick={() => { setRole('client'); navigate(booking.catalogScreenId) }}>Клиент</button><button type="button" aria-pressed={role === 'owner'} onClick={() => { setRole('owner'); navigate(booking.listScreenId!) }}>Команда</button></div><div className={css.switch}><button type="button" aria-label="Вид на компьютере" aria-pressed={!mobile} onClick={() => setMobile(false)}><ProtoDevice phone={false} /></button><button type="button" aria-label="Вид на телефоне" aria-pressed={mobile} onClick={() => setMobile(true)}><ProtoDevice phone /></button></div><button type="button" className={styles.textButton} onClick={() => { store.current = initialRows; setRows(initialRows); setVersion(value => value + 1); navigate(booking.catalogScreenId) }}>Начать заново</button></div>
-    <BuilderV2Theme app={app}><PublishedV2Context value={transport}><BookingDemoAvailability value={input => bookingV2Availability(app, actor, data(), input)}>
+    <BuilderV2Theme app={app}><PublishedV2Context value={transport}><BookingDemoAvailability value={input => bookingV2Availability(app, actor, data(), input)}><BookingScheduleDemoContext value={scheduleAdapter}>
       <div className={css.demoFrame}><BuilderV2AppFrame app={visibleApp} phone={mobile} scrollKey={`${screenId}:${recordId ?? ''}`} screenId={screenId} title={visibleApp.screens.find(screen => screen.id === screenId)?.name ?? 'Запись'} onNavigate={id => navigate(id)}>
         {notice && <p role="status">{notice}</p>}<AppV2Renderer key={`${role}:${screenId}:${recordId ?? ''}`} live app={visibleApp} tables={tables} actor={actor} screenId={screenId} record={currentRecord ? format(currentRecord) : undefined} onNavigate={navigate} />
       </BuilderV2AppFrame></div>
-    </BookingDemoAvailability></PublishedV2Context></BuilderV2Theme>
+    </BookingScheduleDemoContext></BookingDemoAvailability></PublishedV2Context></BuilderV2Theme>
     <p className={css.demoNote}>Учебный пример. Открывайте услуги, выбирайте время и меняйте записи — данные сбросятся после обновления страницы.</p>
   </div>
 }

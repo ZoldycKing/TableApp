@@ -111,6 +111,11 @@
 .summary[data-count='4'] .metric:nth-child(3),
 .summary[data-count='4'] .metric:nth-child(4) { border-bottom: 0; }
 
+.summary[data-compact] { grid-template-columns: repeat(var(--shell-metrics, 3), minmax(0, 1fr)); }
+.summary[data-compact] .metric,
+.summary[data-compact] .metric:first-child { grid-column: auto; border-right: 1px solid var(--shell-line); border-bottom: 0; padding: 14px 12px; }
+.summary[data-compact] .metric:last-child { border-right: 0; }
+
 .metricValue {
   margin: 0;
   color: var(--shell-ink);

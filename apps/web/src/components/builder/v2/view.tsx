@@ -596,18 +596,23 @@ import { PurchaseLinesEditor } from './purchase-lines'
 import { CountLinesEditor } from './count-lines'
 import { ReorderPanel } from './reorder-panel'
 import { BuilderV2OrderActionPanel, BuilderV2OrderFacts, BuilderV2OrderIdentity, BuilderV2OrderSummaryCard, BuilderV2ShopOrderLines, OrderActionPanelContext, builderV2BlankFact, builderV2OrderStatusChoices, type BuilderV2OrderActionTrigger } from './order-detail'
-import { DetailCardShell, DetailSection, ListScreenShell, ShellSearchField } from './layout-shell'
+import { DetailCardShell, DetailSection, ListScreenShell } from './layout-shell'
 import shellLayout from './layout-shell.module.css'
+import { ListFilterToolbar } from './list-filters'
 import {
   aggregateSupplierStats,
+  applyListShellFilters,
+  buildListShellFilters,
   buildListShellMeta,
   buildListShellMetrics,
   buildListShellTabs,
-  filterInventoryItemRows,
-  filterListShellRows,
+  defaultListShellFilters,
   formatShellCount,
   inventoryStockListFooter,
+  listShellFiltersToTab,
+  listShellMetaForCount,
   listShellScreen,
+  listShellTabToFilters,
   listShellTitle,
   resolveShopOrderCustomerFieldId,
   resolveShopOrderTotalFieldId,
@@ -723,15 +728,11 @@ export function AppV2Renderer(props: AppV2RendererProps) {
     : undefined
   const [shellSearch, setShellSearch] = useState('')
   const [shellPage, setShellPage] = useState<BuilderV2DataPage | undefined>()
-  const [shellTab, setShellTab] = useState('all')
-  const [shellWarehouse, setShellWarehouse] = useState('all')
-  const [shellCategory, setShellCategory] = useState('all')
+  const [shellFilters, setShellFilters] = useState<Record<string, string>>({})
   const [shellLowStock, setShellLowStock] = useState<number | null>(null)
   useEffect(() => {
     setShellSearch('')
-    setShellTab('all')
-    setShellWarehouse('all')
-    setShellCategory('all')
+    setShellFilters({})
     setShellPage(undefined)
   }, [props.screenId])
   useEffect(() => {
@@ -948,11 +949,13 @@ export function AppV2Renderer(props: AppV2RendererProps) {
         const source = props.app.sources.find(source => source.id === node.sourceId), table = props.tables.find(table => table.id === source?.tableId)
         const loadedRows = page ? page.rows : source && props.rows && Object.hasOwn(props.rows, source.id) ? props.rows[source.id] : undefined
         let rows = useShell && shellKind && loadedRows
-          ? filterListShellRows(shellKind, shellTab, loadedRows, inventory ?? undefined)
+          ? applyListShellFilters(shellKind, shellFilterValues, loadedRows, {
+            inventory: inventory ?? undefined,
+            shop: props.app.shop ?? undefined,
+            supplierOrderCounts,
+            clientDealCounts,
+          })
           : loadedRows
-        if (useShell && shellKind === 'inventory-items' && inventory && rows) {
-          rows = filterInventoryItemRows(rows, inventory, { warehouse: shellWarehouse, category: shellCategory })
-        }
         if(node.type==='chart')body=<BuilderV2Chart node={node} data={page?.chart}/>
         else if (node.type === 'metric') {
           const numbers = rows?.map(row => row.values[node.fieldId ?? '']).filter((value): value is number => typeof value === 'number' && Number.isFinite(value)) ?? []
@@ -1513,6 +1516,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
           </div>
           const searching = Boolean((page as { search?: string } | undefined)?.search?.trim())
           const clearSearch = (page as { clearSearch?: () => void } | undefined)?.clearSearch
+          const filtersActive = useShell && Object.values(shellFilters).some(value => value && value !== 'all')
           const emptyCopy = (() => {
             if (node.layout === 'calendar') return page?.calendar?.month === 'undated' ? 'Записей без даты нет' : 'На этот день записей нет'
             if (node.layout === 'kanban') return 'В этой колонке записей нет'
@@ -1525,9 +1529,13 @@ export function AppV2Renderer(props: AppV2RendererProps) {
             return 'Нет доступных записей'
           })()
           const emptyState = rows?.length === 0 ? (
-            searching ? <div className={ui.collectionEmpty}>
+            (searching || filtersActive) ? <div className={ui.collectionEmpty}>
               <p>Ничего не найдено</p>
-              {clearSearch && <button type="button" className={styles.secondary} onClick={clearSearch}>Сбросить поиск</button>}
+              <button type="button" className={styles.secondary} onClick={() => {
+                clearSearch?.()
+                setShellSearch('')
+                setShellFilters({})
+              }}>Сбросить фильтры</button>
             </div>
             : inventoryStockList ? <div className={ui.collectionEmpty} data-centered>
               <ProtoIcon name="box" size={28} />
@@ -2495,6 +2503,14 @@ export function AppV2Renderer(props: AppV2RendererProps) {
     : undefined
   const shellCollectionTable = props.tables.find(table => table.id === shellCollectionSource?.tableId)
   const supplierAgg = aggregateSupplierStats(supplierStats)
+  const clientDealCounts = useMemo(
+    () => new Map([...crmDealStats.stats.entries()].map(([id, value]) => [id, value.deals])),
+    [crmDealStats.stats],
+  )
+  const supplierOrderCounts = useMemo(
+    () => new Map([...supplierStats.entries()].map(([id, value]) => [id, value.orders])),
+    [supplierStats],
+  )
   const shellMetricsInput = shellKind ? {
     kind: shellKind,
     page: shellPage,
@@ -2511,17 +2527,29 @@ export function AppV2Renderer(props: AppV2RendererProps) {
     clientPipelineAmount: crmDealStats.rollup.pipeline,
     clientDueToday: crmDealStats.rollup.dueToday,
     clientDueOverdue: crmDealStats.rollup.dueOverdue,
-    activeTab: shellTab,
+    activeTab: listShellFiltersToTab(shellKind, shellFilters),
   } : null
   const shellTabsConfig = shellMetricsInput ? buildListShellTabs(shellMetricsInput) : null
+  const shellFilterDefs = shellMetricsInput
+    ? buildListShellFilters({
+      ...shellMetricsInput,
+      supplierOrderCounts,
+      clientDealCounts,
+    })
+    : []
+  const shellFilterValues = useMemo(() => {
+    const defaults = defaultListShellFilters(shellFilterDefs)
+    return { ...defaults, ...shellFilters }
+  }, [shellFilterDefs, shellFilters])
   const shellDisplayRows = useMemo(() => {
     if (!shellKind || !shellPage?.rows) return []
-    let rows = filterListShellRows(shellKind, shellTab, shellPage.rows, inventory ?? undefined)
-    if (shellKind === 'inventory-items' && inventory) {
-      rows = filterInventoryItemRows(rows, inventory, { warehouse: shellWarehouse, category: shellCategory })
-    }
-    return rows
-  }, [shellKind, shellPage?.rows, shellTab, shellWarehouse, shellCategory, inventory])
+    return applyListShellFilters(shellKind, shellFilterValues, shellPage.rows, {
+      inventory: inventory ?? undefined,
+      shop: props.app.shop ?? undefined,
+      supplierOrderCounts,
+      clientDealCounts,
+    })
+  }, [shellKind, shellPage?.rows, shellFilterValues, inventory, props.app.shop, supplierOrderCounts, clientDealCounts])
   const shellFooter = shellKind === 'inventory-items' && inventory && shellDisplayRows.length
     ? (() => {
       const footer = inventoryStockListFooter(shellDisplayRows, inventory)
@@ -2529,46 +2557,34 @@ export function AppV2Renderer(props: AppV2RendererProps) {
       return <><span>{footer.label} · {footer.units}</span>{footer.total ? <span>{footer.total}</span> : null}</>
     })()
     : undefined
-  const inventoryShellSelects = shellKind === 'inventory-items' && inventory && shellPage?.rows?.length
-    ? (() => {
-      const warehouses = new Map<string, string>()
-      const categories = new Map<string, string>()
-      const categoryField = shellCollectionTable?.fields.find(field => field.id === inventory.itemCategoryFieldId)
-      for (const row of shellPage.rows) {
-        const wh = cell(row, inventory.itemWarehouseFieldId)
-        const whKey = String(row.values[inventory.itemWarehouseFieldId] ?? '')
-        if (whKey && wh) warehouses.set(whKey, wh)
-        const catKey = String(row.values[inventory.itemCategoryFieldId] ?? '')
-        const catLabel = categoryField?.choices?.find(choice => choice.id === catKey)?.name
-        if (catKey && catLabel) categories.set(catKey, catLabel)
-      }
-      return <>
-        {warehouses.size > 1 ? <label className={shellLayout.filterSearch}>
-          <select value={shellWarehouse} onChange={event => setShellWarehouse(event.target.value)} aria-label="Склад">
-            <option value="all">Склад: все</option>
-            {[...warehouses.entries()].map(([id, label]) => <option key={id} value={id}>{label}</option>)}
-          </select>
-        </label> : null}
-        {categories.size > 1 ? <label className={shellLayout.filterSearch}>
-          <select value={shellCategory} onChange={event => setShellCategory(event.target.value)} aria-label="Категория">
-            <option value="all">Категория: все</option>
-            {[...categories.entries()].map(([id, label]) => <option key={id} value={id}>{label}</option>)}
-          </select>
-        </label> : null}
-      </>
-    })()
+  const filtersActive = Object.values(shellFilterValues).some(value => value && value !== 'all')
+  const shellMeta = shellKind
+    ? (filtersActive || shellSearch.trim()
+      ? listShellMetaForCount(shellKind, shellDisplayRows.length)
+      : shellMetricsInput ? buildListShellMeta(shellMetricsInput) : undefined)
     : undefined
   const shellBody = shellKind && shellCollectionId ? (
     <ListScreenShell
       title={listShellTitle(shellKind)}
-      meta={shellMetricsInput ? buildListShellMeta(shellMetricsInput) : undefined}
+      meta={shellMeta}
       actions={buildShellRootActions()}
       metrics={shellMetricsInput ? buildListShellMetrics(shellMetricsInput) : undefined}
-      tabs={shellTabsConfig?.tabs}
-      activeTab={shellTab}
-      onTabChange={setShellTab}
-      search={shellCollectionSource?.searchFieldIds.length ? <ShellSearchField value={shellSearch} onChange={setShellSearch} placeholder={shellKind === 'shop-orders' ? 'Найти заказ' : shellKind === 'inventory-items' ? 'Поиск по названию или SKU' : 'Найти в списке'} /> : undefined}
-      selects={inventoryShellSelects}
+      filterBar={shellCollectionSource?.searchFieldIds.length || shellFilterDefs.length ? <ListFilterToolbar
+        search={shellSearch}
+        onSearch={setShellSearch}
+        filters={shellFilterDefs}
+        values={shellFilterValues}
+        onValuesChange={setShellFilters}
+        tabs={shellTabsConfig?.tabs}
+        activeTab={listShellFiltersToTab(shellKind, shellFilterValues)}
+        onTabChange={id => setShellFilters(current => listShellTabToFilters(shellKind, id, { ...shellFilterValues, ...current }))}
+        countMatches={draft => applyListShellFilters(shellKind, draft, shellPage?.rows ?? [], {
+          inventory: inventory ?? undefined,
+          shop: props.app.shop ?? undefined,
+          supplierOrderCounts,
+          clientDealCounts,
+        }).length}
+      /> : undefined}
       footer={shellFooter}
     >
       {listCanvas}

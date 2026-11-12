@@ -3,6 +3,7 @@ import type { BuilderV2DataPage, BuilderV2DataRecord } from '@/lib/builder-v2-da
 import type { BuilderV2Table } from '@/lib/builder-v2'
 import { purchaseMoney } from '@/lib/purchase-format'
 import type { ShellMetric, ShellTab } from './layout-shell'
+import type { ListFilterDef } from './list-filters'
 
 export type ListShellKind =
   | 'inventory-items'
@@ -466,6 +467,332 @@ export function filterInventoryItemRows(
     }
     return true
   })
+}
+
+const ALL = 'all'
+
+function cellId(row: AppV2Record, fieldId: string | undefined): string {
+  if (!fieldId) return ''
+  const raw = row.values[fieldId]
+  if (typeof raw === 'string') return raw
+  if (Array.isArray(raw)) return raw.find((value): value is string => typeof value === 'string' && Boolean(value)) ?? ''
+  return String(raw ?? '')
+}
+
+/** Default filter values for a shell kind (all → no filter). */
+export function defaultListShellFilters(defs: readonly ListFilterDef[]): Record<string, string> {
+  const next: Record<string, string> = {}
+  for (const filter of defs) next[filter.id] = filter.allId ?? ALL
+  return next
+}
+
+/** Build Glide panel filters from fields already present on each list. */
+export function buildListShellFilters(input: ShellMetricsInput & {
+  supplierOrderCounts?: ReadonlyMap<string, number>
+  clientDealCounts?: ReadonlyMap<string, number>
+}): ListFilterDef[] {
+  const { kind, page, inventory, shop, table, lowStockCount, supplierOrderCounts, clientDealCounts } = input
+  const rows = rowsOf(input)
+  const total = page?.total ?? rows.length
+  const defs: ListFilterDef[] = []
+
+  if (kind === 'inventory-items' && inventory) {
+    const low = lowStockCount ?? rows.filter(row => row.values[inventory.itemLowFieldId] === true).length
+    defs.push({
+      id: 'stock',
+      label: 'Остаток',
+      options: [
+        { id: ALL, label: 'Все', count: total },
+        { id: 'low', label: 'Ниже минимума', count: low },
+      ],
+    })
+    const warehouses = new Map<string, { label: string; count: number }>()
+    for (const row of rows) {
+      const id = cellId(row, inventory.itemWarehouseFieldId)
+      if (!id) continue
+      const label = (row as BuilderV2DataRecord).display?.[inventory.itemWarehouseFieldId] || id
+      const prev = warehouses.get(id)
+      warehouses.set(id, { label, count: (prev?.count ?? 0) + 1 })
+    }
+    if (warehouses.size > 1) {
+      defs.push({
+        id: 'warehouse',
+        label: 'Склад',
+        options: [
+          { id: ALL, label: 'Все', count: total },
+          ...[...warehouses.entries()].map(([id, value]) => ({ id, label: value.label, count: value.count })),
+        ],
+      })
+    }
+    const categoryField = table?.fields.find(field => field.id === inventory.itemCategoryFieldId)
+    const categories = (categoryField?.choices ?? []).filter(choice => choice.name)
+    if (categories.length > 1) {
+      const byCategory = new Map<string, number>()
+      for (const row of rows) {
+        const key = String(row.values[inventory.itemCategoryFieldId] ?? '')
+        if (key) byCategory.set(key, (byCategory.get(key) ?? 0) + 1)
+      }
+      defs.push({
+        id: 'category',
+        label: 'Категория',
+        options: [
+          { id: ALL, label: 'Все', count: total },
+          ...categories.map(choice => ({ id: choice.id, label: choice.name, count: byCategory.get(choice.id) ?? 0 })),
+        ],
+      })
+    }
+    return defs
+  }
+
+  if (kind === 'inventory-movements' && inventory) {
+    const typeField = table?.fields.find(field => field.id === inventory.movementTypeFieldId)
+    const choices = (typeField?.choices ?? []).filter(choice => ['Приход', 'Расход', 'Списание', 'Перемещение'].includes(choice.name))
+    if (choices.length) {
+      const byType = new Map<string, number>()
+      for (const row of rows) {
+        const key = typeof row.values[inventory.movementTypeFieldId] === 'string' ? String(row.values[inventory.movementTypeFieldId]) : ''
+        if (key) byType.set(key, (byType.get(key) ?? 0) + 1)
+      }
+      defs.push({
+        id: 'type',
+        label: 'Тип',
+        options: [
+          { id: ALL, label: 'Все', count: total },
+          ...choices.map(choice => ({ id: choice.id, label: choice.name, count: byType.get(choice.id) ?? 0 })),
+        ],
+      })
+    }
+    return defs
+  }
+
+  if (kind === 'inventory-purchases' && inventory?.purchaseStatusFieldId) {
+    const statusField = table?.fields.find(field => field.id === inventory.purchaseStatusFieldId)
+    const choices = (statusField?.choices ?? []).filter(choice => {
+      const count = rows.filter(row => String(row.values[inventory.purchaseStatusFieldId!] ?? '') === choice.id).length
+      if (count > 0) return true
+      return !/отмен/i.test(choice.name)
+    })
+    if (choices.length >= 2) {
+      const byStatus = new Map<string, number>()
+      for (const row of rows) {
+        const status = String(row.values[inventory.purchaseStatusFieldId] ?? '')
+        if (status) byStatus.set(status, (byStatus.get(status) ?? 0) + 1)
+      }
+      defs.push({
+        id: 'status',
+        label: 'Статус',
+        options: [
+          { id: ALL, label: 'Все', count: total },
+          ...choices.map(choice => ({ id: choice.id, label: choice.name, count: byStatus.get(choice.id) ?? 0 })),
+        ],
+      })
+    }
+    return defs
+  }
+
+  if (kind === 'inventory-counts' && inventory?.countStatusFieldId) {
+    let draft = 0
+    let posted = 0
+    for (const row of rows) {
+      const status = String(row.values[inventory.countStatusFieldId] ?? '')
+      if (inventory.countStatusDraft && status === inventory.countStatusDraft) draft += 1
+      else if (inventory.countStatusPosted && status === inventory.countStatusPosted) posted += 1
+    }
+    defs.push({
+      id: 'status',
+      label: 'Статус',
+      options: [
+        { id: ALL, label: 'Все', count: total },
+        { id: 'draft', label: 'Черновики', count: draft },
+        { id: 'posted', label: 'Проведено', count: posted },
+      ],
+    })
+    return defs
+  }
+
+  if (kind === 'inventory-suppliers') {
+    let withOrders = 0
+    for (const row of rows) {
+      if ((supplierOrderCounts?.get(row.id) ?? 0) > 0) withOrders += 1
+    }
+    defs.push({
+      id: 'activity',
+      label: 'Активность',
+      options: [
+        { id: ALL, label: 'Все', count: total },
+        { id: 'with-orders', label: 'С заказами', count: withOrders },
+        { id: 'without-orders', label: 'Без заказов', count: Math.max(0, total - withOrders) },
+      ],
+    })
+    return defs
+  }
+
+  if (kind === 'crm-clients') {
+    let withDeals = 0
+    for (const row of rows) {
+      if ((clientDealCounts?.get(row.id) ?? 0) > 0) withDeals += 1
+    }
+    defs.push({
+      id: 'deals',
+      label: 'Сделки',
+      options: [
+        { id: ALL, label: 'Все', count: total },
+        { id: 'with-deals', label: 'Со сделками', count: withDeals },
+        { id: 'without-deals', label: 'Без сделок', count: Math.max(0, total - withDeals) },
+      ],
+    })
+    return defs
+  }
+
+  if (kind === 'shop-orders' && shop?.statusFieldId) {
+    const statusField = table?.fields.find(field => field.id === shop.statusFieldId)
+    const choices = statusField?.choices ?? []
+    if (choices.length >= 2) {
+      const byStatus = new Map<string, number>()
+      for (const row of rows) {
+        const status = String(row.values[shop.statusFieldId] ?? '')
+        if (status) byStatus.set(status, (byStatus.get(status) ?? 0) + 1)
+      }
+      defs.push({
+        id: 'status',
+        label: 'Статус',
+        options: [
+          { id: ALL, label: 'Все', count: total },
+          ...choices.map(choice => ({ id: choice.id, label: choice.name, count: byStatus.get(choice.id) ?? 0 })),
+        ],
+      })
+    }
+    return defs
+  }
+
+  return defs
+}
+
+/** Apply Glide panel values to loaded list rows. */
+export function applyListShellFilters(
+  kind: ListShellKind,
+  filters: Record<string, string>,
+  rows: readonly AppV2Record[],
+  options?: {
+    inventory?: NonNullable<AppV2['inventory']>
+    shop?: NonNullable<AppV2['shop']>
+    supplierOrderCounts?: ReadonlyMap<string, number>
+    clientDealCounts?: ReadonlyMap<string, number>
+  },
+): readonly AppV2Record[] {
+  const inventory = options?.inventory
+  let next = rows
+
+  if (kind === 'inventory-items' && inventory) {
+    const stock = filters.stock ?? ALL
+    const warehouse = filters.warehouse ?? ALL
+    const category = filters.category ?? ALL
+    if (stock === 'low') next = next.filter(row => row.values[inventory.itemLowFieldId] === true)
+    next = filterInventoryItemRows(next, inventory, { warehouse, category })
+    return next
+  }
+
+  if (kind === 'inventory-movements' && inventory) {
+    const type = filters.type ?? ALL
+    if (type !== ALL) next = next.filter(row => row.values[inventory.movementTypeFieldId] === type)
+    return next
+  }
+
+  if (kind === 'inventory-purchases' && inventory?.purchaseStatusFieldId) {
+    const status = filters.status ?? ALL
+    if (status !== ALL) {
+      const statusFieldId = inventory.purchaseStatusFieldId
+      next = next.filter(row => String(row.values[statusFieldId] ?? '') === status)
+    }
+    return next
+  }
+
+  if (kind === 'inventory-counts' && inventory?.countStatusFieldId) {
+    const status = filters.status ?? ALL
+    const statusFieldId = inventory.countStatusFieldId
+    if (status === 'draft' && inventory.countStatusDraft) {
+      next = next.filter(row => String(row.values[statusFieldId] ?? '') === inventory.countStatusDraft)
+    } else if (status === 'posted' && inventory.countStatusPosted) {
+      next = next.filter(row => String(row.values[statusFieldId] ?? '') === inventory.countStatusPosted)
+    }
+    return next
+  }
+
+  if (kind === 'inventory-suppliers') {
+    const activity = filters.activity ?? ALL
+    if (activity === 'with-orders') {
+      next = next.filter(row => (options?.supplierOrderCounts?.get(row.id) ?? 0) > 0)
+    } else if (activity === 'without-orders') {
+      next = next.filter(row => (options?.supplierOrderCounts?.get(row.id) ?? 0) <= 0)
+    }
+    return next
+  }
+
+  if (kind === 'crm-clients') {
+    const deals = filters.deals ?? ALL
+    if (deals === 'with-deals') {
+      next = next.filter(row => (options?.clientDealCounts?.get(row.id) ?? 0) > 0)
+    } else if (deals === 'without-deals') {
+      next = next.filter(row => (options?.clientDealCounts?.get(row.id) ?? 0) <= 0)
+    }
+    return next
+  }
+
+  if (kind === 'shop-orders' && options?.shop?.statusFieldId) {
+    const status = filters.status ?? ALL
+    if (status !== ALL) {
+      const statusFieldId = options.shop.statusFieldId
+      next = next.filter(row => String(row.values[statusFieldId] ?? '') === status)
+    }
+    return next
+  }
+
+  return next
+}
+
+/** Map desktop quick-tab click onto panel filter values. */
+export function listShellTabToFilters(
+  kind: ListShellKind,
+  tab: string,
+  current: Record<string, string>,
+): Record<string, string> {
+  if (kind === 'inventory-items') {
+    if (tab === ALL) return { ...current, stock: ALL, category: ALL }
+    if (tab === 'low') return { ...current, stock: 'low', category: ALL }
+    return { ...current, stock: ALL, category: tab }
+  }
+  if (kind === 'inventory-movements') return { ...current, type: tab }
+  if (kind === 'inventory-purchases' || kind === 'inventory-counts' || kind === 'shop-orders') {
+    return { ...current, status: tab }
+  }
+  return current
+}
+
+export function listShellFiltersToTab(kind: ListShellKind, filters: Record<string, string>): string {
+  if (kind === 'inventory-items') {
+    if ((filters.stock ?? ALL) === 'low') return 'low'
+    const category = filters.category ?? ALL
+    if (category !== ALL) return category
+    return ALL
+  }
+  if (kind === 'inventory-movements') return filters.type ?? ALL
+  if (kind === 'inventory-purchases' || kind === 'inventory-counts' || kind === 'shop-orders') {
+    return filters.status ?? ALL
+  }
+  return ALL
+}
+
+export function listShellMetaForCount(kind: ListShellKind, count: number): string {
+  switch (kind) {
+    case 'inventory-items': return formatShellCount(count, 'товар', 'товара', 'товаров')
+    case 'crm-clients': return formatShellCount(count, 'клиент', 'клиента', 'клиентов')
+    case 'shop-orders':
+    case 'inventory-purchases': return formatShellCount(count, 'заказ', 'заказа', 'заказов')
+    case 'crm-board': return formatShellCount(count, 'сделка', 'сделки', 'сделок')
+    case 'inventory-suppliers': return formatShellCount(count, 'поставщик', 'поставщика', 'поставщиков')
+    case 'inventory-counts': return formatShellCount(count, 'документ', 'документа', 'документов')
+    case 'inventory-movements': return formatShellCount(count, 'операция', 'операции', 'операций')
+  }
 }
 
 export function aggregateSupplierStats(stats: Map<string, { orders: number; purchased: number }>): { orders: number; purchased: number } {

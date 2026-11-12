@@ -31,9 +31,9 @@ import {
 } from '@/lib/shop-basket'
 import presentation from '@/components/runtime/app-presentation.module.css'
 import styles from '../prototype/prototype.module.css'
-import { ListScreenShell, ShellSearchField } from './layout-shell'
+import { ListScreenShell } from './layout-shell'
+import { ListFilterToolbar, type ListFilterDef } from './list-filters'
 import shell from './layout-shell.module.css'
-// shell.filterSearch styles the sort select to match inventory list selects.
 import { BuilderV2Picture } from './media'
 import { builderV2MediaItems } from './media-values'
 import { usePublishedV2 } from './published-context'
@@ -226,10 +226,42 @@ export function ShopCatalogLive({
   </BuilderV2DataNode>
 }
 
+function shopCatalogMatches(
+  row: AppV2Record,
+  draft: Record<string, string>,
+  fields: ReturnType<typeof builderV2ShopCatalogFields>,
+  shop: NonNullable<AppV2['shop']>,
+  query: string,
+) {
+  const q = query.trim().toLowerCase()
+  if (q) {
+    const name = builderV2CatalogCell(row, shop.productTitleFieldId).toLowerCase()
+    if (!name.includes(q)) return false
+  }
+  if (draft.category && draft.category !== 'all' && fields.categoryFieldId) {
+    const label = builderV2CatalogCell(row, fields.categoryFieldId).trim() || 'Без категории'
+    if (label !== draft.category) return false
+  }
+  if (draft.stock && draft.stock !== 'all') {
+    const stock = builderV2ShopStockValue(row, fields.stockFieldId)
+    const active = builderV2ShopProductActive(row, shop)
+    const state = builderV2ShopStockState(stock, active)
+    if (state !== draft.stock) return false
+  }
+  if (draft.price && draft.price !== 'all') {
+    const price = Number(row.values[shop.priceFieldId])
+    if (!Number.isFinite(price)) return false
+    if (draft.price === 'lt1000' && !(price < 1000)) return false
+    if (draft.price === '1000-3000' && !(price >= 1000 && price <= 3000)) return false
+    if (draft.price === 'gt3000' && !(price > 3000)) return false
+  }
+  return true
+}
+
 export function ShopCatalogShell({
   app,
   rows,
-  total,
+  total: _total,
   table,
   search,
   onSearch,
@@ -247,7 +279,7 @@ export function ShopCatalogShell({
 }) {
   const shop = app.shop!
   const fields = builderV2ShopCatalogFields(shop, table)
-  const [category, setCategory] = useState('all')
+  const [filterValues, setFilterValues] = useState<Record<string, string>>({ category: 'all', stock: 'all', price: 'all' })
   const [sort, setSort] = useState<ShopCatalogSort>('popular')
   const categories = useMemo(() => {
     const counts = new Map<string, number>()
@@ -258,36 +290,84 @@ export function ShopCatalogShell({
     return [...counts.entries()].map(([label, count]) => ({ id: label, label, count }))
   }, [rows, fields.categoryFieldId])
   useEffect(() => {
-    if (category !== 'all' && !categories.some(item => item.id === category)) setCategory('all')
-  }, [categories, category])
+    if (filterValues.category !== 'all' && !categories.some(item => item.id === filterValues.category)) {
+      setFilterValues(current => ({ ...current, category: 'all' }))
+    }
+  }, [categories, filterValues.category])
   const filtered = useMemo(() => {
-    const base = category === 'all' || !fields.categoryFieldId
-      ? [...rows]
-      : rows.filter(row => (builderV2CatalogCell(row, fields.categoryFieldId!).trim() || 'Без категории') === category)
+    const base = rows.filter(row => shopCatalogMatches(row, filterValues, fields, shop, search))
     return builderV2SortShopCatalogRows(base, sort, shop.priceFieldId)
-  }, [rows, category, fields.categoryFieldId, sort, shop.priceFieldId])
-  const countLabel = total === 1 ? '1 товар' : total > 1 && total < 5 ? `${total} товара` : `${total} товаров`
-  const tabs = [
-    { id: 'all', label: 'Все', count: rows.length },
-    ...categories,
+  }, [rows, filterValues, fields, shop, search, sort])
+  const countLabel = loading && !rows.length
+    ? 'Загружаем…'
+    : filtered.length === 1 ? '1 товар' : filtered.length > 1 && filtered.length < 5 ? `${filtered.length} товара` : `${filtered.length} товаров`
+  const stockCounts = useMemo(() => {
+    const counts = { in: 0, low: 0, out: 0 }
+    for (const row of rows) {
+      const stock = builderV2ShopStockValue(row, fields.stockFieldId)
+      const active = builderV2ShopProductActive(row, shop)
+      counts[builderV2ShopStockState(stock, active)] += 1
+    }
+    return counts
+  }, [rows, fields.stockFieldId, shop])
+  const filterDefs: ListFilterDef[] = [
+    ...(fields.categoryFieldId && categories.length > 1 ? [{
+      id: 'category',
+      label: 'Категория',
+      options: [{ id: 'all', label: 'Все', count: rows.length }, ...categories],
+    }] : []),
+    {
+      id: 'stock',
+      label: 'Наличие',
+      options: [
+        { id: 'all', label: 'Все', count: rows.length },
+        { id: 'in', label: 'В наличии', count: stockCounts.in },
+        { id: 'low', label: 'Мало', count: stockCounts.low },
+        { id: 'out', label: 'Нет в наличии', count: stockCounts.out },
+      ],
+    },
+    {
+      id: 'price',
+      label: 'Цена',
+      options: [
+        { id: 'all', label: 'Любая' },
+        { id: 'lt1000', label: 'До 1 000 ₽' },
+        { id: '1000-3000', label: '1 000–3 000 ₽' },
+        { id: 'gt3000', label: 'От 3 000 ₽' },
+      ],
+    },
   ]
+  const tabs = fields.categoryFieldId && categories.length > 1
+    ? [{ id: 'all', label: 'Все', count: rows.length }, ...categories]
+    : undefined
   return <ListScreenShell
     title="Каталог"
-    meta={loading && !rows.length ? 'Загружаем…' : countLabel}
-    tabs={tabs}
-    activeTab={category}
-    onTabChange={setCategory}
-    search={<ShellSearchField value={search} onChange={onSearch} placeholder="Поиск по каталогу" />}
-    selects={<label className={shell.filterSearch}>
-      <span className={ui.srOnly}>Сортировка</span>
-      <select value={sort} onChange={event => setSort(event.target.value as ShopCatalogSort)} aria-label="Сортировка">
-        {SHOP_CATALOG_SORTS.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
-      </select>
-    </label>}
+    meta={countLabel}
+    filterBar={<ListFilterToolbar
+      search={search}
+      onSearch={onSearch}
+      filters={filterDefs}
+      values={filterValues}
+      onValuesChange={setFilterValues}
+      sort={sort}
+      sortOptions={SHOP_CATALOG_SORTS}
+      onSortChange={value => setSort(value as ShopCatalogSort)}
+      tabs={tabs}
+      activeTab={filterValues.category ?? 'all'}
+      onTabChange={id => setFilterValues(current => ({ ...current, category: id }))}
+      countMatches={draft => rows.filter(row => shopCatalogMatches(row, draft, fields, shop, search)).length}
+      emptyHint={!filtered.length ? <div className={shell.filterEmpty}>
+        <span>{search.trim() || Object.values(filterValues).some(value => value !== 'all') ? 'Ничего не нашли.' : 'В каталоге пока нет товаров.'}</span>
+        {(search.trim() || Object.values(filterValues).some(value => value !== 'all')) ? <button type="button" className={styles.secondary} onClick={() => {
+          onSearch('')
+          setFilterValues({ category: 'all', stock: 'all', price: 'all' })
+        }}>Сбросить фильтры</button> : null}
+      </div> : null}
+    />}
   >
     {filtered.length ? <div className={ui.shopCatalogGrid} data-shop-catalog>
       {filtered.map(row => <ShopCatalogCard key={row.id} app={app} row={row} table={table} onOpen={() => onOpen(row)} />)}
-    </div> : <p className={ui.hint}>{search.trim() ? 'Ничего не нашли по запросу.' : 'В каталоге пока нет товаров.'}</p>}
+    </div> : null}
   </ListScreenShell>
 }
 

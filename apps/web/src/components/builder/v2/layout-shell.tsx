@@ -32,6 +32,7 @@ export function ListScreenShell({
   onTabChange,
   search,
   selects,
+  filterBar,
   children,
   footer,
   hideHeader,
@@ -45,6 +46,8 @@ export function ListScreenShell({
   onTabChange?: (id: string) => void
   search?: ReactNode
   selects?: ReactNode
+  /** Shared Glide filter toolbar — replaces legacy tabs/search/selects when set. */
+  filterBar?: ReactNode
   children: ReactNode
   footer?: ReactNode
   hideHeader?: boolean
@@ -71,7 +74,7 @@ export function ListScreenShell({
           {metric.pill ? <span className={shell.metricPill} data-tone={metric.tone}>{metric.pill}</span> : null}
         </div>)}
       </div> : null}
-      {(tabs?.length || search || selects) ? <div className={shell.filters}>
+      {filterBar ?? ((tabs?.length || search || selects) ? <div className={shell.filters}>
         {tabs?.length ? <div className={shell.filterTabs} role="tablist" aria-label="Фильтры списка">
           {tabs.map(tab => <button
             key={tab.id}
@@ -90,7 +93,7 @@ export function ListScreenShell({
           {search ?? <span />}
           {selects ? <div className={shell.filterSelects}>{selects}</div> : null}
         </div> : null}
-      </div> : null}
+      </div> : null)}
       <div className={shell.body}>{children}</div>
       {footer ? <div className={shell.panelFooter}>{footer}</div> : null}
     </div>

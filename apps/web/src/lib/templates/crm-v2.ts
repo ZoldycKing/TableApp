@@ -81,6 +81,11 @@ export function buildCrmV2App(built: BuiltTemplate, meta: { id: string; workspac
     input(field('clients', 'phone'), 'Телефон', false),
     input(field('clients', 'email'), 'Почта', false),
     input(field('clients', 'city'), 'Город', false),
+    input(field('clients', 'telegram'), 'Telegram', false),
+    input(field('clients', 'whatsapp'), 'WhatsApp', false),
+    input(field('clients', 'max'), 'MAX', false),
+    input(field('clients', 'otherMessengerLabel'), 'Другой мессенджер', false),
+    input(field('clients', 'otherMessengerValue'), 'Контакт другого мессенджера', false),
     input(field('clients', 'note'), 'Заметки', false),
   ]
   // Journal: communication event + next due. Stage/sum live in the pencil edit form (no duplication).
@@ -99,12 +104,17 @@ export function buildCrmV2App(built: BuiltTemplate, meta: { id: string; workspac
     input(field('clients', 'phone'), 'Телефон', false),
     input(field('clients', 'email'), 'Почта', false),
     input(field('clients', 'city'), 'Город', false),
+    input(field('clients', 'telegram'), 'Telegram', false),
+    input(field('clients', 'whatsapp'), 'WhatsApp', false),
+    input(field('clients', 'max'), 'MAX', false),
+    input(field('clients', 'otherMessengerLabel'), 'Другой мессенджер', false),
+    input(field('clients', 'otherMessengerValue'), 'Контакт другого мессенджера', false),
     input(field('clients', 'note'), 'Заметки', false),
   ]
   // Stage/sum/due feed Identity; client + assignee stay as facts.
   const dealIdentityFieldIds = [stage, sum, due]
   const dealFieldIds = [clientRelation, assignment]
-  const clientFieldIds = ['contact', 'phone', 'email', 'city', 'note'].map(key => field('clients', key))
+  const clientFieldIds = ['contact', 'phone', 'email', 'city', 'telegram', 'whatsapp', 'max', 'otherMessengerLabel', 'otherMessengerValue', 'note'].map(key => field('clients', key))
 
   const crm: NonNullable<AppV2['crm']> = {
     dealsTableId, clientsTableId, contactsTableId,

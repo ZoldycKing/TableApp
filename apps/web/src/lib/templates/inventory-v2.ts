@@ -83,9 +83,18 @@ export function buildInventoryV2App(built: BuiltTemplate, meta: { id: string; wo
   const inventoryCountLinesTableId = built.tables.find(table => table.name === 'Позиции инвентаризации')?.id
   if (!inventoryCountsTableId || !inventoryCountLinesTableId) throw new Error('В складе нет таблиц инвентаризации')
   const supplierName = fieldByName(suppliersTableId, 'Название')
-  const supplierContact = fieldByName(suppliersTableId, 'Контакт')
+  const supplierContact = fieldByName(suppliersTableId, 'Контактное лицо')
   const supplierPhone = fieldByName(suppliersTableId, 'Телефон')
-  const supplierComment = fieldByName(suppliersTableId, 'Комментарий')
+  const supplierEmail = fieldByName(suppliersTableId, 'Почта')
+  const supplierCity = fieldByName(suppliersTableId, 'Город')
+  const supplierAddress = fieldByName(suppliersTableId, 'Адрес')
+  const supplierTerms = fieldByName(suppliersTableId, 'Срок поставки')
+  const supplierTelegram = fieldByName(suppliersTableId, 'Telegram')
+  const supplierWhatsapp = fieldByName(suppliersTableId, 'WhatsApp')
+  const supplierMax = fieldByName(suppliersTableId, 'MAX')
+  const supplierOtherMessengerLabel = fieldByName(suppliersTableId, 'Другой мессенджер')
+  const supplierOtherMessengerValue = fieldByName(suppliersTableId, 'Контакт другого мессенджера')
+  const supplierComment = fieldByName(suppliersTableId, 'Заметки')
   const purchaseName = fieldByName(purchaseOrdersTableId, 'Заказ')
   const purchaseNumber = fieldByName(purchaseOrdersTableId, 'Номер')
   const purchaseSupplier = fieldByName(purchaseOrdersTableId, 'Поставщик')
@@ -217,9 +226,18 @@ export function buildInventoryV2App(built: BuiltTemplate, meta: { id: string; wo
   ]
   const supplierFields = () => [
     input(supplierName, 'Название', true),
-    input(supplierContact, 'Контакт', false),
+    input(supplierContact, 'Контактное лицо', false),
     input(supplierPhone, 'Телефон', false),
-    input(supplierComment, 'Комментарий', false),
+    input(supplierEmail, 'Почта', false),
+    input(supplierCity, 'Город', false),
+    input(supplierAddress, 'Адрес', false),
+    input(supplierTerms, 'Срок поставки', false),
+    input(supplierTelegram, 'Telegram', false),
+    input(supplierWhatsapp, 'WhatsApp', false),
+    input(supplierMax, 'MAX', false),
+    input(supplierOtherMessengerLabel, 'Другой мессенджер', false),
+    input(supplierOtherMessengerValue, 'Контакт другого мессенджера', false),
+    input(supplierComment, 'Заметки', false),
   ]
   const createPurchaseInputs = purchaseFields()
   const editPurchaseInputs = purchaseFields()
@@ -236,7 +254,10 @@ export function buildInventoryV2App(built: BuiltTemplate, meta: { id: string; wo
   ]
   const reorderInputs = [input(reorderPayload, 'Товары к заказу', false)]
   const purchaseUserFields = [purchaseSupplier, purchaseWarehouse, purchaseDate, purchaseComment, purchasePayload]
-  const supplierUserFields = [supplierName, supplierContact, supplierPhone, supplierComment]
+  const supplierUserFields = [
+    supplierName, supplierContact, supplierPhone, supplierEmail, supplierCity, supplierAddress, supplierTerms,
+    supplierTelegram, supplierWhatsapp, supplierMax, supplierOtherMessengerLabel, supplierOtherMessengerValue, supplierComment,
+  ]
   const countCreateFields = [countWarehouse, countDate, countPayload]
   const countUpdateFields = [countDate, countPayload]
   const createPurchaseStep = newId('action')

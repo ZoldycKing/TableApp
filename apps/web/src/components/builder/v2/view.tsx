@@ -298,7 +298,17 @@ function ShopOrderThumbs({
   </span>
 }
 
-type SupplierOrderStat = { orders: number; lastOrder: string; purchased: number }
+type SupplierOrderStat = { orders: number; open: number; lastOrder: string; purchased: number }
+
+type SupplierProductRow = {
+  id: string
+  name: string
+  price: number
+  stock: number
+  min: number
+  unit: string
+  image?: ReturnType<typeof builderV2MediaItems>[number]
+}
 
 /** Loads purchase orders once and derives per-supplier list metrics. */
 function useSupplierOrderStats(app: AppV2, inventory?: NonNullable<AppV2['inventory']> | null) {
@@ -318,11 +328,16 @@ function useSupplierOrderStats(app: AppV2, inventory?: NonNullable<AppV2['invent
         const supplierId = typeof supplierRaw === 'string' ? supplierRaw
           : Array.isArray(supplierRaw) ? supplierRaw.find((id): id is string => typeof id === 'string') : undefined
         if (!supplierId) continue
-        const current = next.get(supplierId) ?? { orders: 0, lastOrder: '', purchased: 0 }
+        const current = next.get(supplierId) ?? { orders: 0, open: 0, lastOrder: '', purchased: 0 }
         current.orders += 1
         const rawDate = inventory.purchaseDateFieldId ? String(row.values[inventory.purchaseDateFieldId] ?? '') : ''
         if (rawDate && (!current.lastOrder || rawDate > current.lastOrder)) current.lastOrder = rawDate
         const status = inventory.purchaseStatusFieldId ? String(row.values[inventory.purchaseStatusFieldId] ?? '') : ''
+        const open = Boolean(
+          (inventory.statusDraft && status === inventory.statusDraft)
+          || (inventory.statusOrdered && status === inventory.statusOrdered),
+        )
+        if (open) current.open += 1
         const received = Boolean(inventory.statusReceived && status === inventory.statusReceived)
         const totalRaw = inventory.purchaseTotalFieldId ? row.values[inventory.purchaseTotalFieldId] : null
         if (received && typeof totalRaw === 'number' && Number.isFinite(totalRaw)) current.purchased += totalRaw
@@ -333,6 +348,102 @@ function useSupplierOrderStats(app: AppV2, inventory?: NonNullable<AppV2['invent
     return () => { cancelled = true }
   }, [published, published?.revision, published?.dataVersion, app.nodes, inventory])
   return stats
+}
+
+/** Products previously ordered from a supplier (last purchase price + current stock). */
+function useSupplierProducts(app: AppV2, supplierId: string | undefined, inventory?: NonNullable<AppV2['inventory']> | null) {
+  const published = usePublishedV2()
+  const [products, setProducts] = useState<SupplierProductRow[]>([])
+  useEffect(() => {
+    if (!published || !supplierId || !inventory?.purchaseOrdersTableId || !inventory.purchaseLinesTableId) {
+      setProducts([])
+      return
+    }
+    const purchasesNode = app.nodes.find(node => node.type === 'collection' && node.layout === 'list'
+      && app.sources.some(source => source.id === node.sourceId && source.tableId === inventory.purchaseOrdersTableId && !source.screenTableId))
+    const linesNode = app.nodes.find(node => node.type === 'collection'
+      && app.sources.some(source => source.id === node.sourceId && source.tableId === inventory.purchaseLinesTableId))
+    if (!purchasesNode || !linesNode) return
+    let cancelled = false
+    void (async () => {
+      const orders = await published.readData({ nodeId: purchasesNode.id, screenId: inventory.purchasesScreenId! })
+      if (cancelled || !orders.ok) return
+      const orderIds = new Set<string>()
+      const orderDates = new Map<string, string>()
+      for (const row of orders.page.rows) {
+        const supplierRaw = inventory.purchaseSupplierFieldId ? row.values[inventory.purchaseSupplierFieldId] : undefined
+        const sid = typeof supplierRaw === 'string' ? supplierRaw
+          : Array.isArray(supplierRaw) ? supplierRaw.find((id): id is string => typeof id === 'string') : undefined
+        if (sid !== supplierId) continue
+        orderIds.add(row.id)
+        orderDates.set(row.id, inventory.purchaseDateFieldId ? String(row.values[inventory.purchaseDateFieldId] ?? '') : '')
+      }
+      if (!orderIds.size) { setProducts([]); return }
+      const lines = await published.readData({ nodeId: linesNode.id, screenId: inventory.purchasesScreenId! })
+      if (cancelled || !lines.ok) return
+      const byProduct = new Map<string, { name: string; price: number; date: string }>()
+      const productIds: string[] = []
+      for (const row of lines.page.rows) {
+        const orderRaw = inventory.lineOrderFieldId ? row.values[inventory.lineOrderFieldId] : undefined
+        const orderId = typeof orderRaw === 'string' ? orderRaw
+          : Array.isArray(orderRaw) ? orderRaw.find((id): id is string => typeof id === 'string') : undefined
+        if (!orderId || !orderIds.has(orderId)) continue
+        const productRaw = inventory.lineProductFieldId ? row.values[inventory.lineProductFieldId] : undefined
+        const productId = typeof productRaw === 'string' ? productRaw
+          : Array.isArray(productRaw) ? productRaw.find((id): id is string => typeof id === 'string') : undefined
+        if (!productId) continue
+        const priceRaw = inventory.linePriceFieldId ? row.values[inventory.linePriceFieldId] : null
+        const price = typeof priceRaw === 'number' && Number.isFinite(priceRaw) ? priceRaw : 0
+        const name = inventory.lineNameFieldId ? String(row.display?.[inventory.lineNameFieldId] ?? row.values[inventory.lineNameFieldId] ?? 'Товар') : 'Товар'
+        const date = orderDates.get(orderId) || ''
+        const prev = byProduct.get(productId)
+        if (!prev || (date && date >= prev.date)) byProduct.set(productId, { name, price, date })
+        productIds.push(productId)
+      }
+      if (!byProduct.size) { setProducts([]); return }
+      const uniqueIds = [...byProduct.keys()]
+      const related = await import('@/app/builder-v2-published-actions').then(({ readPublishedV2RelatedRowsAction }) =>
+        readPublishedV2RelatedRowsAction(published.slug, {
+          revision: published.revision,
+          tableId: inventory.itemsTableId,
+          recordIds: uniqueIds,
+        })).catch(() => null)
+      if (cancelled || !related || !related.ok) {
+        setProducts([...byProduct.entries()].map(([id, item]) => ({
+          id, name: item.name, price: item.price, stock: 0, min: 0, unit: 'шт.',
+        })))
+        return
+      }
+      const next: SupplierProductRow[] = []
+      for (const [id, item] of byProduct) {
+        const row = related.rows.find(entry => entry.id === id)
+        const stockRaw = row && inventory.itemStockFieldId ? Number(row.values[inventory.itemStockFieldId]) : NaN
+        const minRaw = row && inventory.itemMinFieldId ? Number(row.values[inventory.itemMinFieldId]) : NaN
+        const unit = row && inventory.itemUnitFieldId
+          ? String(row.display?.[inventory.itemUnitFieldId] ?? row.values[inventory.itemUnitFieldId] ?? 'шт.')
+          : 'шт.'
+        const image = row && inventory.itemPhotoFieldId
+          ? builderV2MediaItems(row.values[inventory.itemPhotoFieldId], published.slug).find(entry => entry.image)
+          : undefined
+        const name = row && inventory.itemNameFieldId
+          ? String(row.display?.[inventory.itemNameFieldId] ?? row.values[inventory.itemNameFieldId] ?? item.name)
+          : item.name
+        next.push({
+          id,
+          name,
+          price: item.price,
+          stock: Number.isFinite(stockRaw) ? stockRaw : 0,
+          min: Number.isFinite(minRaw) ? minRaw : 0,
+          unit,
+          image,
+        })
+      }
+      next.sort((a, b) => a.name.localeCompare(b.name, 'ru'))
+      setProducts(next)
+    })()
+    return () => { cancelled = true }
+  }, [published, published?.revision, published?.dataVersion, app.nodes, inventory, supplierId])
+  return products
 }
 
 /** Open supplier purchase orders total (status «Заказано») for items metrics. */
@@ -453,7 +564,8 @@ import { BuilderV2FormPreview, BuilderV2FormInput, type WorkingFormOptions } fro
 import { BuilderV2DataNode } from './data-node'
 import type { BuilderV2DataPage, BuilderV2DataRecord, BuilderV2OrderSummary } from '@/lib/builder-v2-data-types'
 import { builderV2OrderLineFields, builderV2StatusColumn } from '@/lib/builder-v2-order-summary'
-import { builderV2DueTone, builderV2OrderDetailParts, builderV2OrderFactKind, builderV2OrderLineProductId, builderV2StatusProgress } from '@/lib/builder-v2-order-detail'
+import { builderV2DueTone, builderV2IsMessengerFactLabel, builderV2OrderDetailParts, builderV2OrderFactKind, builderV2OrderLineProductId, builderV2StatusProgress } from '@/lib/builder-v2-order-detail'
+import { builderV2MessengersFromRecord } from '@/lib/builder-v2-messengers'
 import { builderV2StatusForm } from '@/lib/builder-v2-status-form'
 import {usePublishedV2} from './published-context'
 import {PublishedV2Delete} from './published-delete'
@@ -504,6 +616,11 @@ export function AppV2Renderer(props: AppV2RendererProps) {
   const orderGroup = (published ? builderV2RecordParent(props.app, props.screenId) : builderV2PreviewRecordParent(props.app, props.screenId, props.actor))?.queue?.recordGroup
   const inventory = props.app.inventory
   const supplierStats = useSupplierOrderStats(props.app, inventory && (screen?.id === inventory.suppliersScreenId || screen?.id === inventory.supplierScreenId) ? inventory : null)
+  const supplierProducts = useSupplierProducts(
+    props.app,
+    inventory && screen?.id === inventory.supplierScreenId ? props.record?.id : undefined,
+    inventory && screen?.id === inventory.supplierScreenId ? inventory : null,
+  )
   const rootButtonByLabel = (label: string) => screen?.rootIds.find(id => {
     const node = nodes.get(id)
     return node?.type === 'button' && node.label === label
@@ -984,12 +1101,12 @@ export function AppV2Renderer(props: AppV2RendererProps) {
                   <strong>{name || '—'}</strong>
                   {contact ? <span className={ui.supplierListContact}>{contact}</span> : null}
                   <span className={ui.supplierListMobileMeta}>
-                    {phone ? <span>{phone}</span> : null}
+                    {phone ? <span className={ui.clientPhone}>{phone}</span> : null}
                     <span>{ordersLabel} {ordersWord} · {lastOrder}</span>
                     <span>Закуплено на {purchased}</span>
                   </span>
                 </div>
-                <span className={ui.supplierListCol} data-col="phone">{phone || '—'}</span>
+                <span className={ui.supplierListCol} data-col="phone"><span className={ui.clientPhone}>{phone || '—'}</span></span>
                 <span className={ui.supplierListCol} data-col="orders">{ordersLabel}</span>
                 <span className={ui.supplierListCol} data-col="last">{lastOrder}</span>
                 <span className={ui.supplierListCol} data-col="sum">{purchased}</span>
@@ -1630,22 +1747,45 @@ export function AppV2Renderer(props: AppV2RendererProps) {
   }
   if (!props.editing && inventory?.supplierScreenId && screen?.id === inventory.supplierScreenId && props.record) {
     const supplierRecord = props.record
-    const name = inventory.supplierNameFieldId ? cell(supplierRecord, inventory.supplierNameFieldId) : ''
-    const contact = inventory.supplierContactFieldId ? cell(supplierRecord, inventory.supplierContactFieldId) : ''
-    const phone = inventory.supplierPhoneFieldId ? cell(supplierRecord, inventory.supplierPhoneFieldId) : ''
-    const comment = inventory.supplierCommentFieldId ? cell(supplierRecord, inventory.supplierCommentFieldId) : ''
-    const phoneHref = inventory.supplierPhoneFieldId
-      ? builderV2ContactHref('phone', supplierRecord.values[inventory.supplierPhoneFieldId] ?? phone)
-      : undefined
+    const supplierTable = props.tables.find(table => table.id === inventory.suppliersTableId)
+    const fieldByName = (re: RegExp) => supplierTable?.fields.find(field => re.test(field.name.trim()))
+    const readField = (fieldId: string | undefined | null, fallbackRe?: RegExp) => {
+      const id = fieldId || (fallbackRe ? fieldByName(fallbackRe)?.id : undefined)
+      if (!id || !Object.hasOwn(supplierRecord.values, id)) return { id: id || '', text: '', raw: null as unknown }
+      return { id, text: cell(supplierRecord, id).trim(), raw: supplierRecord.values[id] }
+    }
+    const name = readField(inventory.supplierNameFieldId, /^название$/i).text
+    const contact = readField(inventory.supplierContactFieldId, /^контакт(?:ное лицо)?$/i).text
+    const phone = readField(inventory.supplierPhoneFieldId, /^телефон$/i)
+    const email = readField(null, /^почта|e-?mail|email$/i)
+    const city = readField(null, /^город$/i).text
+    const address = readField(null, /^адрес$/i).text
+    const terms = readField(null, /^срок поставки|условия(?: поставки)?$/i).text
+    const notes = readField(inventory.supplierCommentFieldId, /^заметки|комментарий$/i).text
+    const phoneHref = phone.id ? builderV2ContactHref('phone', phone.raw ?? phone.text) : undefined
+    const emailHref = email.id ? builderV2ContactHref('email', email.raw ?? email.text) : undefined
+    const messengers = builderV2MessengersFromRecord(supplierRecord.values, supplierTable?.fields ?? [])
     const stat = supplierStats.get(supplierRecord.id)
     const ordersCount = stat?.orders ?? 0
+    const openCount = stat?.open ?? 0
     const lastOrder = stat?.lastOrder ? formatPurchaseDate(stat.lastOrder) : '—'
     const purchased = stat && stat.purchased > 0 ? purchaseMoney(stat.purchased) : '—'
     const ordersId = rootIds.find(id => nodes.get(id)?.type === 'collection')
-    const editFormId = rootIds.find(id => nodes.get(id)?.type === 'form' && visible(nodes.get(id)!))
+    const editFormId = rootIds.find(id => {
+      const node = nodes.get(id)
+      return node?.type === 'form' && node.mode === 'edit' && visible(node)
+    }) ?? (inventory.editSupplierFormId && nodes.get(inventory.editSupplierFormId)?.type === 'form' ? inventory.editSupplierFormId : undefined)
     const createPurchaseForm = inventory.createPurchaseFormId ? nodes.get(inventory.createPurchaseFormId) : undefined
     const canCreatePurchase = Boolean(createPurchaseForm?.type === 'form' && visible(createPurchaseForm))
     const renderSupplierActions = (keyPrefix: string) => (canCreatePurchase || editFormId) ? <div key={keyPrefix} className={ui.purchaseCardActions}>
+      {editFormId ? <InventoryCreateDialog
+        label="Изменить"
+        iconOnly
+        icon="edit"
+        title="Изменить поставщика"
+        submitLabel="Сохранить"
+        buttonClassName={ui.orderActionIcon}
+      >{render([editFormId], supplierRecord, inventory.suppliersTableId)}</InventoryCreateDialog> : null}
       {canCreatePurchase && createPurchaseForm?.type === 'form' ? <InventoryCreateDialog
         label="Новый заказ"
         title="Новый заказ"
@@ -1653,11 +1793,10 @@ export function AppV2Renderer(props: AppV2RendererProps) {
         wide
         buttonClassName={styles.primary}
       >{render([createPurchaseForm.id], supplierRecord, createPurchaseForm.tableId)}</InventoryCreateDialog> : null}
-      {editFormId ? render([editFormId]) : null}
     </div> : null
     const supplierMetrics = [
-      { key: 'phone', value: phoneHref && phone ? <a className={ui.contactLink} href={phoneHref}>{phone}</a> : phone || '—', caption: 'Телефон' },
       { key: 'orders', value: String(ordersCount), caption: 'Заказов' },
+      { key: 'open', value: String(openCount), caption: 'В работе' },
       { key: 'last', value: lastOrder, caption: 'Последний заказ' },
       { key: 'sum', value: purchased, caption: 'Закуплено на' },
     ]
@@ -1671,18 +1810,54 @@ export function AppV2Renderer(props: AppV2RendererProps) {
           },
         }
       : undefined
-    return <div className={`${styles.canvasBlocks} ${ui.purchaseCard} ${ui.supplierCard}`}>
+    const subtitle = [contact, city].filter(Boolean).join(' · ') || undefined
+    const fact = (id: string, label: string, value: ReactNode, blank: boolean, kindLabel = label) => ({
+      id, label, value, blank, kind: builderV2OrderFactKind(kindLabel),
+    })
+    const supplierFacts = [
+      fact('contact', 'Контактное лицо', contact || '—', !contact),
+      fact('phone', 'Телефон', phoneHref && phone.text ? <a className={ui.contactLink} href={phoneHref}>{phone.text}</a> : phone.text || '—', !phone.text, 'Телефон'),
+      fact('email', 'Почта', emailHref && email.text ? <a className={ui.contactLink} href={emailHref}>{email.text}</a> : email.text || '—', !email.text, 'Почта'),
+      fact('address', 'Адрес', address || '—', !address, 'Адрес'),
+      fact('city', 'Город', city || '—', !city, 'Город'),
+      fact('terms', 'Срок поставки', terms || '—', !terms, 'Срок поставки'),
+      fact('notes', 'Заметки', notes || '—', !notes, 'Заметки'),
+    ]
+    return <div className={`${styles.canvasBlocks} ${ui.purchaseCard} ${ui.supplierCard} ${ui.orderDetail}`} data-layout="stack">
       <DetailCardShell
         back={supplierBack}
-        media={<BuilderV2RecordAvatar id={supplierRecord.id} icon="truck" forceIcon tone />}
         title={name || 'Поставщик'}
-        subtitle={contact || undefined}
+        subtitle={subtitle}
         actions={renderSupplierActions('desk')}
         stickyActions={renderSupplierActions('mob')}
         metrics={supplierMetrics}
       >
-        {comment ? <DetailSection><p className={ui.purchaseComment}>{comment}</p></DetailSection> : null}
-        {ordersId ? <DetailSection title="Заказы">{render([ordersId])}</DetailSection> : null}
+        <div className={shellLayout.detailCols}>
+          <div className={shellLayout.detailMainCol}>
+            {ordersId ? <DetailSection title={`Заказы · ${ordersCount}`}>{render([ordersId])}</DetailSection> : null}
+            {supplierProducts.length > 0 ? <DetailSection title="Товары поставщика">
+              <div className={ui.supplierProductList}>
+                {supplierProducts.map(product => {
+                  const low = product.min > 0 && product.stock <= product.min
+                  return <div key={product.id} className={ui.supplierProductRow}>
+                    <InventoryProductThumb image={product.image} size="list" label={product.name} />
+                    <div className={ui.supplierProductCopy}>
+                      <strong>{product.name}</strong>
+                      <span>
+                        Остаток {product.stock} {product.unit}
+                        {low ? ` · заказать (мин. ${product.min})` : ''}
+                      </span>
+                    </div>
+                    <span className={ui.supplierProductPrice}>{product.price > 0 ? purchaseMoney(product.price) : '—'}</span>
+                  </div>
+                })}
+              </div>
+            </DetailSection> : null}
+          </div>
+          <aside className={shellLayout.detailSideCol}>
+            <BuilderV2OrderFacts items={supplierFacts} title="О поставщике" messengers={messengers} />
+          </aside>
+        </div>
       </DetailCardShell>
     </div>
   }
@@ -1787,6 +1962,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
     // Identity already shows the client / inventory warehouse+cost; keep only non-duplicated facts.
     const deliveryFacts = factItems.flatMap(item => {
       if (item.kind === 'reply') return []
+      if (builderV2IsMessengerFactLabel(item.label)) return []
       const node = nodes.get(item.id)
       const fieldId = node?.type === 'field' && 'fieldId' in node.value ? node.value.fieldId : undefined
       if (crmDeal && crm && fieldId === crm.clientRelationFieldId) return []
@@ -1807,6 +1983,9 @@ export function AppV2Renderer(props: AppV2RendererProps) {
       if (isEmail && (/@example\.(?:invalid|com|org|net)\b/i.test(text) || /@example\.(?:invalid|com|org|net)\b/i.test(raw))) return []
       return [item]
     })
+    const profileMessengers = (crmClient || crmDeal)
+      ? builderV2MessengersFromRecord(props.record.values, recordTable?.fields ?? [])
+      : []
     const factsTitle = inventoryItem ? 'О товаре' : crmDeal ? 'О сделке' : crm ? (crmClient ? 'О клиенте' : 'Клиент') : 'Клиент и доставка'
     const sideFactsTitle = crm ? (crmClient ? 'О клиенте' : 'Клиент') : 'Доставка'
     const actionTitle = inventoryItem ? 'Складская операция' : crm ? 'Добавить запись' : 'Обработка заказа'
@@ -2163,7 +2342,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
                 {render([...parts.buttonIds, ...parts.otherIds])}
               </div>
               <aside className={shellLayout.detailSideCol}>
-                <BuilderV2OrderFacts items={deliveryFacts} title={sideFactsTitle} />
+                <BuilderV2OrderFacts items={deliveryFacts} title={sideFactsTitle} messengers={profileMessengers} />
               </aside>
             </div>
           </DetailCardShell> : null}

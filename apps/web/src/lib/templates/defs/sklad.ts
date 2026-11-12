@@ -207,14 +207,39 @@ export const sklad: TemplateDef = {
       primary: 'name',
       fields: [
         { key: 'name', name: 'Название', type: 'text', help: 'Как вы называете поставщика в заказах и в разговоре.' },
-        { key: 'contact', name: 'Контакт', type: 'text', help: 'Имя человека, с которым вы согласовываете поставку.' },
+        { key: 'contact', name: 'Контактное лицо', type: 'text', help: 'Имя человека, с которым вы согласовываете поставку.' },
         { key: 'phone', name: 'Телефон', type: 'phone', help: 'Телефон для звонка или сообщения по заказу.' },
-        { key: 'comment', name: 'Комментарий', type: 'text', help: 'Что обычно берёте у этого поставщика и на каких условиях.' },
+        { key: 'email', name: 'Почта', type: 'email', help: 'Куда отправлять заявку или счёт.' },
+        { key: 'city', name: 'Город', type: 'text', help: 'Город или регион склада поставщика.' },
+        { key: 'address', name: 'Адрес', type: 'text', help: 'Адрес склада или офиса, если нужен для самовывоза.' },
+        { key: 'terms', name: 'Срок поставки', type: 'text', help: 'Обычный срок или условия поставки.' },
+        { key: 'telegram', name: 'Telegram', type: 'text', help: 'Юзернейм или телефон в Telegram.' },
+        { key: 'whatsapp', name: 'WhatsApp', type: 'phone', help: 'Номер WhatsApp для переписки по заказам.' },
+        { key: 'max', name: 'MAX', type: 'text', help: 'Контакт в MAX, если переписываетесь там.' },
+        { key: 'otherMessengerLabel', name: 'Другой мессенджер', type: 'text', help: 'Название другого канала, если нужно.' },
+        { key: 'otherMessengerValue', name: 'Контакт другого мессенджера', type: 'text', help: 'Логин, ссылка или номер в этом канале.' },
+        { key: 'comment', name: 'Заметки', type: 'long_text', help: 'Что обычно берёте у этого поставщика и на каких условиях.' },
       ],
       views: [{ name: 'Все поставщики', type: 'grid' }],
       rows: [
-        { key: 'sup1', values: { name: 'КлиматСервис', contact: 'Анна Белова', phone: '+7 495 120-44-10', comment: 'Вентиляция и запчасти, счёт по запросу' } },
-        { key: 'sup2', values: { name: 'Упаковка Плюс', contact: 'Сергей Новиков', phone: '+7 812 300-19-40', comment: 'Гофротара, отгрузка со склада в Шушарах' } },
+        {
+          key: 'sup1',
+          values: {
+            name: 'КлиматСервис', contact: 'Анна Белова', phone: '+7 495 120-44-10', email: 'anna@klimatservice.ru',
+            city: 'Москва', address: 'ул. Складочная, 1с4', terms: '2–4 рабочих дня',
+            telegram: 'anna_klimat', whatsapp: '+7 495 120-44-10',
+            comment: 'Вентиляция и запчасти, счёт по запросу. Отсрочка 14 дней постоянным.',
+          },
+        },
+        {
+          key: 'sup2',
+          values: {
+            name: 'Упаковка Плюс', contact: 'Сергей Новиков', phone: '+7 812 300-19-40', email: 's.novikov@upakovkaplus.ru',
+            city: 'Санкт-Петербург', address: 'Шушары, Московское ш., 15', terms: 'Самовывоз со следующего дня',
+            max: 'sergey_upakovka', otherMessengerLabel: 'Viber', otherMessengerValue: '+7 812 300-19-40',
+            comment: 'Гофротара, отгрузка со склада в Шушарах. Минимальная партия 20 коробов.',
+          },
+        },
       ],
     },
     {

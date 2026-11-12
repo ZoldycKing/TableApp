@@ -765,6 +765,74 @@
 @container builder-app (min-width: 1100px) {
   .orderFactsGrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
+.messengerRow {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding-top: 4px;
+  border-top: 1px solid var(--v2-line, #e6e8e3);
+}
+.messengerRow > small {
+  color: var(--v2-muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+.messengerChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+.messengerChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 4px 10px 4px 6px;
+  border: 1px solid var(--v2-line, #dce3ed);
+  border-radius: 999px;
+  background: var(--v2-bg, #f6f7f4);
+  color: var(--v2-ink, #1c241c);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.2;
+  text-decoration: none;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.messengerChip:hover { background: var(--v2-soft, #e7efe4); border-color: color-mix(in srgb, var(--v2-accent, #456849) 28%, var(--v2-line, #dce3ed)); }
+.messengerMark {
+  display: inline-grid;
+  place-items: center;
+  min-width: 28px;
+  height: 22px;
+  padding-inline: 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--v2-accent, #456849) 14%, white);
+  color: var(--v2-accent, #456849);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+.supplierProductList {
+  display: grid;
+  gap: 0;
+  min-width: 0;
+}
+.supplierProductRow {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 0;
+  border-top: 1px solid var(--v2-line, #e6e8e3);
+  min-width: 0;
+}
+.supplierProductRow:first-child { border-top: 0; padding-top: 0; }
+.supplierProductCopy { display: grid; gap: 2px; min-width: 0; }
+.supplierProductCopy strong { font-size: 14px; font-weight: 700; overflow-wrap: anywhere; }
+.supplierProductCopy span { color: var(--v2-muted); font-size: 12px; line-height: 1.35; }
+.supplierProductPrice { font-size: 14px; font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .orderActionBody :global(.formTitle), .orderActionPanel :is(h3) { display: none; }
 .orderActionPanel[data-dialog] .purchaseEditorHead h3 { display: block; }
 .orderActionBody form, .orderActionPanel form { width: 100%; max-width: none; }

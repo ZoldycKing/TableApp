@@ -3,18 +3,24 @@ import type { BuilderV2Table } from '@/lib/builder-v2'
 
 export type OrderDetailFactKind = 'contact' | 'delivery' | 'note' | 'reply' | 'other'
 
-const CONTACT = /^(?:имя(?: клиента)?|телефон(?: клиента)?|email|e-mail|почта|клиент|customer|client|phone|name|контактное лицо|город)$/iu
-const DELIVERY = /^(?:адрес(?: доставки| получения)?|дата отгрузки|доставка|address|shipping|delivery|вернуться к разговору)$/iu
+const CONTACT = /^(?:имя(?: клиента)?|телефон(?: клиента)?|email|e-mail|почта|клиент|customer|client|phone|name|контакт(?:ное лицо)?|город)$/iu
+const DELIVERY = /^(?:адрес(?: доставки| получения)?|дата отгрузки|доставка|срок поставки|условия(?: поставки)?|address|shipping|delivery|вернуться к разговору)$/iu
 const NOTE = /^(?:комментарий|примечание|заметки|что обсудили|comment|note)$/iu
 const REPLY = /^(?:ответ клиенту|сообщение(?: магазина| клиенту)?|reply|response)$/iu
+const MESSENGER = /^(?:telegram|whatsapp|max|другой мессенджер|контакт другого мессенджера)$/iu
 
 export function builderV2OrderFactKind(label: string): OrderDetailFactKind {
   const value = label.trim()
+  if (MESSENGER.test(value)) return 'other'
   if (CONTACT.test(value)) return 'contact'
   if (DELIVERY.test(value)) return 'delivery'
   if (NOTE.test(value)) return 'note'
   if (REPLY.test(value)) return 'reply'
   return 'other'
+}
+
+export function builderV2IsMessengerFactLabel(label: string) {
+  return MESSENGER.test(label.trim())
 }
 
 export function builderV2OrderDetailParts(args: {

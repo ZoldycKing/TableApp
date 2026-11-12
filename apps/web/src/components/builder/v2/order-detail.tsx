@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import type { AppV2, AppV2Record } from '@tableapp/schema/app-v2'
 import { builderV2CatalogPrice, builderV2FormattedAmount } from '@/lib/builder-v2-catalog'
 import { builderV2OrderFactKind, builderV2OrderLineProductId, builderV2StatusProgress } from '@/lib/builder-v2-order-detail'
+import type { BuilderV2MessengerLink } from '@/lib/builder-v2-messengers'
 import type { BuilderV2DataRecord } from '@/lib/builder-v2-data-types'
 import type { BuilderV2Table } from '@/lib/builder-v2'
 import { ProtoIcon } from '../prototype/icons'
@@ -132,15 +133,41 @@ export function BuilderV2OrderIdentity({
   </section>
 }
 
+function MessengerChip({ link }: { link: BuilderV2MessengerLink }) {
+  const [copied, setCopied] = useState(false)
+  const onCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(link.value)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1200)
+    } catch {
+      setCopied(false)
+    }
+  }
+  const label = copied ? 'Скопировано' : link.label
+  if (link.href && !link.copyOnly) {
+    return <a className={ui.messengerChip} data-kind={link.kind} href={link.href} target="_blank" rel="noopener noreferrer" title={link.value}>
+      <span className={ui.messengerMark} aria-hidden>{link.kind === 'telegram' ? 'TG' : link.kind === 'whatsapp' ? 'WA' : link.kind === 'max' ? 'MAX' : '•'}</span>
+      <span>{label}</span>
+    </a>
+  }
+  return <button type="button" className={ui.messengerChip} data-kind={link.kind} onClick={() => void onCopy()} title={link.value}>
+    <span className={ui.messengerMark} aria-hidden>{link.kind === 'telegram' ? 'TG' : link.kind === 'whatsapp' ? 'WA' : link.kind === 'max' ? 'MAX' : '•'}</span>
+    <span>{label}</span>
+  </button>
+}
+
 export function BuilderV2OrderFacts({
   title = 'Клиент и доставка',
   items,
+  messengers = [],
 }: {
   title?: string
   items: readonly { id: string; label: string; value: ReactNode; blank?: boolean; kind: ReturnType<typeof builderV2OrderFactKind> }[]
+  messengers?: readonly BuilderV2MessengerLink[]
 }) {
   const visible = items.filter(item => !item.blank)
-  if (!visible.length) return null
+  if (!visible.length && !messengers.length) return null
   const contacts = visible.filter(item => item.kind === 'contact')
   const rest = visible.filter(item => item.kind !== 'contact')
   return <section className={`${presentation.panel} ${ui.orderFacts}`} aria-label={title}>
@@ -157,6 +184,12 @@ export function BuilderV2OrderFacts({
         <strong>{item.value}</strong>
       </div>)}
     </div>}
+    {messengers.length > 0 ? <div className={ui.messengerRow} aria-label="Мессенджеры">
+      <small>Мессенджеры</small>
+      <div className={ui.messengerChips}>
+        {messengers.map(link => <MessengerChip key={link.id} link={link} />)}
+      </div>
+    </div> : null}
   </section>
 }
 

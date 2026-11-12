@@ -900,16 +900,16 @@ export function AppV2Renderer(props: AppV2RendererProps) {
               : <BuilderV2FormInput node={node} table={props.tables.find(table => table.id === formTableId)} />
       }
       else if (node.type === 'form') {
-        const supplierEdit = Boolean(inventory?.editSupplierFormId && node.id === inventory.editSupplierFormId)
         const preview = <BuilderV2FormPreview app={props.app} form={node} screenId={props.screenId} recordId={props.record?.id} enabled={Boolean(props.live)} editing={Boolean(props.editing)} working={props.workingForm?.formId === node.id ? props.workingForm : undefined}>{render(node.childIds, record, node.tableId)}{props.editing && <button type="button" className={styles.addInside} onClick={() => props.onAdd?.(node.id)}><ProtoIcon name="plus" />Добавить поле</button>}</BuilderV2FormPreview>
-        // Count draft facts edit inline on the card (no separate «Изменить» dialog).
-        content = (node.id === inventory?.editPurchaseFormId || supplierEdit) && !props.editing
+        // Purchase edit still self-wraps when rendered from purchase detail actions.
+        // Supplier edit is opened from DetailCardShell header/sticky — do not nest another dialog.
+        content = node.id === inventory?.editPurchaseFormId && !props.editing
           ? <InventoryCreateDialog
             label="Изменить"
             buttonClassName={styles.secondary}
-            title={supplierEdit ? 'Изменить поставщика' : 'Изменить заказ'}
+            title="Изменить заказ"
             submitLabel="Сохранить"
-            wide={node.id === inventory?.editPurchaseFormId}
+            wide
           >{preview}</InventoryCreateDialog>
           : preview
       }

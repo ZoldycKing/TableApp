@@ -325,7 +325,7 @@ export function ShopCatalogShell({
     {
       id: 'stock',
       label: 'Наличие',
-      appearance: 'radio',
+      appearance: 'nav',
       options: [
         { id: 'all', label: 'Все', count: rows.length },
         { id: 'in', label: 'В наличии', count: stockCounts.in },
@@ -336,7 +336,7 @@ export function ShopCatalogShell({
     {
       id: 'price',
       label: 'Цена',
-      appearance: 'radio',
+      appearance: 'nav',
       options: [
         { id: 'all', label: 'Любая' },
         { id: 'lt1000', label: 'До 1 000 ₽' },

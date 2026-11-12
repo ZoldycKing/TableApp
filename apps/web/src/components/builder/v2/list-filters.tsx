@@ -213,19 +213,19 @@ export function CatalogFilterSidebar({
       {rest.map(filter => {
         const allId = filter.allId ?? ALL
         const value = values[filter.id] ?? allId
-        return <fieldset key={filter.id} className={shell.filterFieldset}>
-          <legend>{filter.label}</legend>
-          <div className={shell.filterOptions}>
+        return <div key={filter.id} className={shell.catalogSidebarSection}>
+          <h3>{filter.label}</h3>
+          <div className={shell.filterNav} role="list">
             {filter.options.map(option => <FilterOptionControl
               key={option.id}
               name={`sidebar-${filter.id}`}
               option={option}
               checked={value === option.id}
-              appearance={filter.appearance === 'nav' ? 'nav' : 'radio'}
+              appearance="nav"
               onSelect={() => onValuesChange({ ...values, [filter.id]: option.id })}
             />)}
           </div>
-        </fieldset>
+        </div>
       })}
       <button
         type="button"

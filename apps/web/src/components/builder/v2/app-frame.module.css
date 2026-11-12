@@ -134,9 +134,9 @@
 .container[data-contained="true"] .navigation { position: relative; }
 .navItems { display: flex; gap: 4px; min-width: 0; flex: 1; }
 .navItems > div { flex: 1; min-width: 0; }
-.navigation button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; width: 100%; min-height: 48px; border: 0; border-radius: var(--v2-control-radius, 8px); padding: 8px; background: transparent; color: var(--v2-muted); font-size: 12px; line-height: 16px; text-align: center; }
+.navigation button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; width: 100%; min-height: 48px; border: 0; border-radius: var(--v2-control-radius, 8px); padding: 8px 2px; background: transparent; color: var(--v2-muted); font-size: 11px; line-height: 14px; letter-spacing: -0.01em; text-align: center; }
 .navigation button svg { flex-shrink: 0; }
-.navigation button span { overflow-wrap: anywhere; }
+.navigation button span { max-width: 100%; white-space: nowrap; overflow: visible; }
 .navigation button:hover { background: var(--v2-bg); color: var(--v2-accent); }
 .navigation button[aria-current] { background: var(--v2-soft); color: var(--v2-accent); }
 .navigation button:active { transform: translateY(1px); }
@@ -188,7 +188,7 @@
   .frame[data-shell-topnav] .navigation .headerAction { margin-left: 0; }
 }
 @container builder-app (max-width: 640px) {
-  .navItems > div > button > span { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: clip; }
+  .navItems > div > button > span { max-width: 100%; white-space: nowrap; overflow: visible; text-overflow: clip; }
   /* Mobile brand row: logo + app name + user (pills stay in the bottom bar). */
   .frame[data-shell-topnav] .header { min-height: 56px; padding-block: 8px; }
   .frame[data-shell-topnav] .header .catalogIdentity,
@@ -198,4 +198,4 @@
   .frame[data-shell-topnav] .navigation .headerAction { display: none; }
 }
 
-@container builder-app (max-width: 440px) { .container .header { gap: 12px; } .navigation { padding-block: 4px; padding-bottom: calc(4px + env(safe-area-inset-bottom,0px)); } .navigation button { padding: 8px 4px; } }
+@container builder-app (max-width: 440px) { .container .header { gap: 12px; } .navigation { padding-block: 4px; padding-bottom: calc(4px + env(safe-area-inset-bottom,0px)); } .navigation button { padding: 6px 1px; font-size: 10.5px; line-height: 13px; letter-spacing: -0.02em; } }

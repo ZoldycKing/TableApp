@@ -45,7 +45,7 @@ export function listShellScreen(app: AppV2, screenId: string): ListShellKind | n
 export function listShellTitle(kind: ListShellKind): string {
   switch (kind) {
     case 'inventory-items': return 'Товары'
-    case 'inventory-movements': return 'Движения'
+    case 'inventory-movements': return 'История склада'
     case 'inventory-purchases': return 'Закупки'
     case 'inventory-suppliers': return 'Поставщики'
     case 'inventory-counts': return 'Инвентаризация'

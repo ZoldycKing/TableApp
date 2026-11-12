@@ -1409,7 +1409,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
             : inventoryJournalList ? <div className={ui.collectionEmpty} data-centered>
               <ProtoIcon name="list" size={28} />
               <strong>Операций пока нет</strong>
-              <p>Оформите приход, расход или перемещение — журнал заполнится сам.</p>
+              <p>Оформите приход, расход или перемещение — история склада заполнится сама.</p>
               {!useShell && inventoryListToolbar}
             </div>
             : purchaseList ? <div className={ui.collectionEmpty} data-centered>
@@ -2274,7 +2274,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
     : undefined
   const shellBody = shellKind && shellCollectionId ? (
     <ListScreenShell
-      title={screen?.name ?? listShellTitle(shellKind)}
+      title={listShellTitle(shellKind)}
       meta={shellMetricsInput ? buildListShellMeta(shellMetricsInput) : undefined}
       actions={buildShellRootActions()}
       metrics={shellMetricsInput ? buildListShellMetrics(shellMetricsInput) : undefined}

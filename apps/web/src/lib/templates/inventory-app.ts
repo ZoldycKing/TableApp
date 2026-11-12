@@ -97,7 +97,7 @@ export function withInventoryOperations(app: App, operations: NonNullable<NonNul
       const parts = [...screen.components, ...buttons]
       return { ...screen, components: parts.map((c, i) => ({ ...c, position: positionSequence(parts.length)[i]! })) }
     }
-    if (screen.id === journal.id && screen.type === 'list') return { ...screen, name: 'Движения', tab: { icon: 'truck', label: 'Движения' }, onTapScreenId: journalDetail.id }
+    if (screen.id === journal.id && screen.type === 'list') return { ...screen, name: 'История склада', tab: { icon: 'truck', label: 'История склада' }, onTapScreenId: journalDetail.id }
     return screen
   }), ...forms, journalDetail]
   return appSchema.parse({ ...app, screens: screens.map((s, i) => ({ ...s, position: positionSequence(screens.length)[i] })),

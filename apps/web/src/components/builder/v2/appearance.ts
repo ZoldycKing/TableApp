@@ -30,6 +30,7 @@ export function builderV2ThemeStyle(theme: AppV2['theme'], appearance?: AppV2['a
 export function builderV2Menu(app:AppV2) {
   return app.screens.filter(screen=>screen.navigation&&!screen.contextTableId)
 }
-export function builderV2MenuLabel(screen:AppV2['screens'][number]) {
+export function builderV2MenuLabel(screen:AppV2['screens'][number], app?: Pick<AppV2, 'inventory'>) {
+  if (app?.inventory?.movementsScreenId === screen.id) return 'История склада'
   return screen.menuLabel?.trim()||screen.name
 }

@@ -30,7 +30,7 @@ async function allow(
 ): Promise<{ ok: true; app: App; viewer: AppViewer | null; visitor: Visitor } | { ok: false; error: string }> {
   const app = await loadApp(slug)
   if (!app) return { ok: false, error: 'Приложение не опубликовано' }
-  if (app.inventory?.tables.movements === tableId) return { ok: false, error: 'Движения записываются через действия в карточке товара' }
+  if (app.inventory?.tables.movements === tableId) return { ok: false, error: 'Записи истории склада создаются через действия в карточке товара' }
   const tableError = await assertTableAllowed(app, tableId)
   if (tableError) return { ok: false, error: tableError }
 

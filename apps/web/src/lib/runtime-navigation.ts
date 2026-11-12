@@ -27,7 +27,7 @@ function displayScreen(app: App, module: AppModule, screen: Screen, views: ViewT
   if (collection(screen)) {
     const tableId = tableOf(screen, views)
     if (module.kind === 'inventory' && tableId === app.inventory?.tables.items) name = label(screen, ['Товары', 'Товары на складе', 'Склад', 'Остатки'], 'Остатки')
-    if (module.kind === 'inventory' && tableId === app.inventory?.tables.movements) name = label(screen, ['Приёмки', 'Движения', 'Журнал', 'Журнал склада', 'Движения товаров'], 'Движения товаров')
+    if (module.kind === 'inventory' && tableId === app.inventory?.tables.movements) name = label(screen, ['Приёмки', 'Движения', 'Журнал', 'Журнал склада', 'Движения товаров', 'История склада'], 'История склада')
     if (module.kind === 'production' && tableId === app.production?.tables.movements) name = label(screen, ['Журнал', 'Журнал склада', 'Движения', 'Движения материалов'], 'Движения материалов')
   }
   return { ...screen, name, tab: screen.tab ? { ...screen.tab, label: name } : null }

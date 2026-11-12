@@ -54,7 +54,7 @@ describe('inventory template v2 installation', () => {
     expect(app.homeScreenId).toBe(app.inventory!.itemsScreenId)
     expect(app.authentication).toMatchObject({ mode: 'invite_only', defaultRoleId: null })
     const inv = app.inventory!
-    expect(app.screens.filter(screen => screen.navigation).map(screen => screen.menuLabel)).toEqual(['Товары', 'Движения', 'Закупки', 'Учёт'])
+    expect(app.screens.filter(screen => screen.navigation).map(screen => screen.menuLabel)).toEqual(['Товары', 'История склада', 'Закупки', 'Учёт'])
     expect(app.screens.find(screen => screen.id === inv.countsScreenId)?.icon).toBe('list')
     expect(app.screens.find(screen => screen.id === inv.purchasesScreenId)?.rootIds).toEqual(
       expect.arrayContaining([expect.any(String)]),

@@ -318,7 +318,7 @@ export function buildInventoryV2App(built: BuiltTemplate, meta: { id: string; wo
     homeScreenId: itemsScreenId,
     screens: [
       { id: itemsScreenId, name: 'Товары', menuLabel: 'Товары', icon: 'box', navigation: true, audience: team, contextTableId: null, rootIds: [newItemButton, itemsNode], events: { enter: null } },
-      { id: movementsScreenId, name: 'Движения', menuLabel: 'Движения', icon: 'apps', navigation: true, audience: team, contextTableId: null, rootIds: [newOperationButton, movementsNode], events: { enter: null } },
+      { id: movementsScreenId, name: 'История склада', menuLabel: 'История склада', icon: 'apps', navigation: true, audience: team, contextTableId: null, rootIds: [newOperationButton, movementsNode], events: { enter: null } },
       { id: purchasesScreenId, name: 'Закупки', menuLabel: 'Закупки', icon: 'clipboard', navigation: true, audience: team, contextTableId: null, rootIds: [suppliersButton, reorderButton, newPurchaseButton, purchasesNode], events: { enter: null } },
       { id: countsScreenId, name: 'Инвентаризация', menuLabel: 'Учёт', icon: 'list', navigation: true, audience: team, contextTableId: null, rootIds: [newCountButton, countsNode], events: { enter: null } },
       // Deep-link screen; list toolbar opens the same form node in a centred dialog (not dual-rooted).
@@ -343,7 +343,7 @@ export function buildInventoryV2App(built: BuiltTemplate, meta: { id: string; wo
       { id: reorderButton, name: 'Что заказать', type: 'button', label: 'Что заказать', variant: 'secondary', visibleTo: team, visibleWhen: null, events: { press: openReorder } },
       { id: newOperationButton, name: 'Новая операция', type: 'button', label: 'Новая операция', variant: 'primary', visibleTo: team, visibleWhen: null, events: { press: openItemsForOperation } },
       { id: itemsNode, name: 'Товары', type: 'collection', visibleTo: null, visibleWhen: null, sourceId: itemsSource, layout: 'list', titleFieldId: itemName, subtitleFieldId: itemSku, ...(itemPhoto ? { cardImageFieldId: itemPhoto } : {}), cardDetailFieldId: itemStock, itemIds: [], events: { itemPress: openItem } },
-      { id: movementsNode, name: 'Движения', type: 'collection', visibleTo: null, visibleWhen: null, sourceId: movementsSource, layout: 'list', titleFieldId: movementItem, subtitleFieldId: movementType, cardDetailFieldId: movementQty, itemIds: [], events: { itemPress: null } },
+      { id: movementsNode, name: 'История склада', type: 'collection', visibleTo: null, visibleWhen: null, sourceId: movementsSource, layout: 'list', titleFieldId: movementItem, subtitleFieldId: movementType, cardDetailFieldId: movementQty, itemIds: [], events: { itemPress: null } },
       ...[...identityFieldIds, ...factFieldIds].map(fieldId => {
         const column = columns(itemsTableId).find(item => item.id === fieldId)!
         const label = fieldId === itemCost ? 'Себестоимость, ₽' : column.name

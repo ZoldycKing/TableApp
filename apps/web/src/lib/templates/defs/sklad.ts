@@ -170,7 +170,7 @@ export const sklad: TemplateDef = {
         { key: 'note', name: 'Комментарий', type: 'text', help: 'Номер накладной или пояснение сотрудника.' },
         { key: 'author', name: 'Кто записал', type: 'email', help: 'Почта вошедшего сотрудника ставится сервером.' },
       ],
-      views: [{ name: 'Все движения', type: 'grid' }],
+      views: [{ name: 'Вся история склада', type: 'grid' }],
       rows: [
         { key: 'mv1', values: { name: 'Приход · Фильтр воздушный FA-120', item: { rowKey: 's1' }, qty: 10, kind: 'Приход', warehouse: { rowKey: 'wh1' }, before: 0, after: 10, date: inDays(-14), note: 'Накладная ПН-104', author: 'ivan.orlov@example.invalid' } },
         { key: 'mv2', values: { name: 'Приход · Термостат KTS-011', item: { rowKey: 's2' }, qty: 12, kind: 'Приход', warehouse: { rowKey: 'wh1' }, before: 0, after: 12, date: inDays(-12), note: 'Поставка «КлиматСервис»', author: 'ivan.orlov@example.invalid' } },

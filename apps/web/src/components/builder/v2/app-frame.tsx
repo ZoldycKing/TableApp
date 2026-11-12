@@ -72,7 +72,10 @@ export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,childre
     return()=>{document.removeEventListener('pointerdown',outside);document.removeEventListener('keydown',escape)}
   },[more])
   const choose=(id:string)=>{setMore(false);onNavigate(id)}
-  const navButton=(screen:AppV2['screens'][number],extra=false)=><button type="button" key={screen.id} title={builderV2MenuLabel(screen)} aria-current={screen.id===sectionId?'page':undefined} className={extra?css.extraItem:undefined} onClick={()=>choose(screen.id)}><ProtoIcon name={screen.icon}/><span>{builderV2MenuLabel(screen)}</span></button>
+  const navButton=(screen:AppV2['screens'][number],extra=false)=>{
+    const label=builderV2MenuLabel(screen,app)
+    return <button type="button" key={screen.id} title={label} aria-current={screen.id===sectionId?'page':undefined} className={extra?css.extraItem:undefined} onClick={()=>choose(screen.id)}><ProtoIcon name={screen.icon}/><span>{label}</span></button>
+  }
   const overflow=screens.length>5,rest=screens.slice(4),activeExtra=rest.some(screen=>screen.id===sectionId)
   const appName = app.name || 'Моё приложение'
   const sectionScreen = app.screens.find(screen => screen.id === sectionId)

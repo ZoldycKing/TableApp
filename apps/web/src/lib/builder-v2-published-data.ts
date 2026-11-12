@@ -167,6 +167,21 @@ export async function readPublishedV2Record(slug:string,request:{screenId:string
 }
 
 /** Load related table rows by id for a published actor, honoring row/field grants. */
+/** Storefront related products — resolves catalog collection server-side (client detail payloads omit foreign screen nodes). */
+export async function readPublishedV2ShopCatalog(slug:string,request:{revision:string}):Promise<BuilderV2DataPage>{
+  const resolved=await withPublishedV2Read(async tx=>{
+    const {app,actor,revision}=await publishedV2Context(slug,tx)
+    if(revision!==request.revision)throw new RowWriteError('conflict','Приложение обновлено. Обновите страницу.')
+    const shop=app.shop
+    if(!shop||!canOpenAppV2Screen(app,actor,shop.catalogScreenId))throw new RowWriteError('denied','Каталог недоступен')
+    const node=app.nodes.find(item=>item.type==='collection'&&item.layout==='catalog'
+      &&app.sources.some(source=>source.id===item.sourceId&&source.tableId===shop.catalogTableId&&!source.screenTableId))
+    if(!node)throw new RowWriteError('missing','Каталог не найден')
+    return {nodeId:node.id,screenId:shop.catalogScreenId}
+  })
+  return readPublishedV2Data(slug,{revision:request.revision,nodeId:resolved.nodeId,screenId:resolved.screenId})
+}
+
 export async function readPublishedV2RelatedRows(slug:string,request:{revision:string;tableId:string;recordIds:readonly string[]}){
   return withPublishedV2Read(async tx=>{
     const {app,actor,revision}=await publishedV2Context(slug,tx)

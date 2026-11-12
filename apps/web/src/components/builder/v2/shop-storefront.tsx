@@ -154,7 +154,7 @@ export function ShopCatalogCard({
   const max = stock == null ? 1000 : stock
   return <article className={`${ui.shopCatalogCard} ${presentation.catalogCard}`}>
     <button type="button" className={ui.shopCatalogMedia} onClick={onOpen} aria-label={name}>
-      <span className={presentation.photo} data-illustrated={Boolean(image)} aria-hidden="true">
+      <span className={`${presentation.photo} ${ui.shopCatalogPhoto}`} data-illustrated={Boolean(image)} aria-hidden="true">
         {image ? <BuilderV2Picture item={image} /> : <BuilderV2RecordAvatar id={row.id} name={name} icon="box" />}
       </span>
     </button>
@@ -284,7 +284,7 @@ export function ShopCatalogShell({
       </select>
     </label>}
   >
-    {filtered.length ? <div className={`${ui.shopCatalogGrid} ${presentation.catalogGrid}`} data-shop-catalog>
+    {filtered.length ? <div className={ui.shopCatalogGrid} data-shop-catalog>
       {filtered.map(row => <ShopCatalogCard key={row.id} app={app} row={row} table={table} onOpen={() => onOpen(row)} />)}
     </div> : <p className={ui.hint}>{search.trim() ? 'Ничего не нашли по запросу.' : 'В каталоге пока нет товаров.'}</p>}
   </ListScreenShell>
@@ -307,27 +307,26 @@ export function ShopRelatedProducts({
   const published = usePublishedV2()
   const [rows, setRows] = useState<AppV2Record[]>([])
   useEffect(() => {
-    if (!published || !shop || !categoryValue) { setRows([]); return }
-    const node = app.nodes.find(item => item.type === 'collection' && item.layout === 'catalog'
-      && app.sources.some(source => source.id === item.sourceId && source.tableId === shop.catalogTableId && !source.screenTableId))
-    if (!node) return
+    if (!published || !shop) { setRows([]); return }
     let cancelled = false
-    void published.readData({ nodeId: node.id, screenId: shop.catalogScreenId }).then(result => {
+    // Detail payloads strip other screens' collection nodes — resolve catalog on the server.
+    void import('@/app/builder-v2-published-actions').then(async ({ readPublishedV2ShopCatalogAction }) => {
+      const result = await readPublishedV2ShopCatalogAction(published.slug, { revision: published.revision })
       if (cancelled || !result.ok) return
       const fields = builderV2ShopCatalogFields(shop, table)
       const others = result.page.rows.filter(row => row.id !== currentId)
-      const sameCategory = fields.categoryFieldId
+      const sameCategory = categoryValue && fields.categoryFieldId
         ? others.filter(row => builderV2CatalogCell(row, fields.categoryFieldId!).trim() === categoryValue)
-        : others
+        : []
       const related = (sameCategory.length >= 2 ? sameCategory : others).slice(0, 4)
       setRows(related)
     }).catch(() => {})
     return () => { cancelled = true }
-  }, [published, published?.revision, published?.dataVersion, app.nodes, shop, currentId, categoryValue, table])
+  }, [published, published?.revision, published?.dataVersion, published?.slug, shop, currentId, categoryValue, table])
   if (!rows.length) return null
   return <section className={ui.shopRelated} aria-label="Похожие товары">
     <h2>Похожие товары</h2>
-    <div className={`${ui.shopRelatedGrid} ${presentation.catalogGrid}`}>
+    <div className={ui.shopRelatedGrid}>
       {rows.map(row => <ShopCatalogCard key={row.id} app={app} row={row} table={table} onOpen={() => onOpen(row.id)} />)}
     </div>
   </section>

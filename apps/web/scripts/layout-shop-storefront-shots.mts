@@ -43,7 +43,9 @@ for (const [vp, w, h] of [['d1280', 1280, 900], ['m390', 390, 844]] as const) {
   await save(page, vp, 'catalog')
 
   await page.goto(product, { waitUntil: 'networkidle' })
-  await page.waitForTimeout(1500)
+  await page.waitForTimeout(1200)
+  await page.getByText('Похожие товары').first().waitFor({ state: 'visible', timeout: 12_000 }).catch(() => {})
+  await page.waitForTimeout(600)
   await save(page, vp, 'product')
 
   // seed cart with one in-stock item then shoot cart

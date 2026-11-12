@@ -232,7 +232,8 @@ async function enrichCrm(slug: string) {
       if (app.nodes.some(node => node.id === nodeId)) continue
       app.nodes.push(fieldNode(nodeId, item.label, item.id))
       if (!clientScreen.rootIds.includes(nodeId)) {
-        const editIdx = clientScreen.rootIds.indexOf(crm.clientEditFormId)
+        const editId = crm.clientEditFormId
+        const editIdx = editId ? clientScreen.rootIds.indexOf(editId) : -1
         if (editIdx >= 0) clientScreen.rootIds.splice(editIdx, 0, nodeId)
         else clientScreen.rootIds.push(nodeId)
       }

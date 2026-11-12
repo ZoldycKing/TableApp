@@ -1943,7 +1943,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
           ? <ShopProductFacts row={props.record} table={table} shop={shop} />
           : null}
       </BuilderV2CatalogDetail>
-      {!props.editing && shop && screen.id === shop.detailScreenId && props.record && categoryValue
+      {!props.editing && shop && screen.id === shop.detailScreenId && props.record
         ? <ShopRelatedProducts
           app={props.app}
           currentId={props.record.id}

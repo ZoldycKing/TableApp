@@ -43,16 +43,18 @@ export function BuilderV2CatalogDetail({
     return { stock, state, label: builderV2ShopStockLabel(state, stock) }
   })() : null
 
-  return <section className={ui.catalogHero} data-media={hasImage}>
-    {hasImage && <div className={ui.catalogHeroMedia}><BuilderV2Gallery value={image} caption="" columns={1} slug={slug} alt={title} /></div>}
-    <div className={ui.catalogSummary}>
-      {onBack ? <ShopCatalogBack onClick={onBack} /> : null}
-      <h1>{title}</h1>
-      {price && <p className={ui.catalogPrice}>{price}</p>}
-      {stockMeta ? <ShopStockPill state={stockMeta.state} stock={stockMeta.stock} /> : null}
-      {actions}
-      {description && <div className={ui.catalogDescription}><h2>Описание</h2><p>{description}</p></div>}
-      {children}
-    </div>
-  </section>
+  return <>
+    {onBack ? <div className={ui.catalogPageBack}><ShopCatalogBack onClick={onBack} /></div> : null}
+    <section className={ui.catalogHero} data-media={hasImage}>
+      {hasImage && <div className={ui.catalogHeroMedia}><BuilderV2Gallery value={image} caption="" columns={1} slug={slug} alt={title} /></div>}
+      <div className={ui.catalogSummary}>
+        <h1>{title}</h1>
+        {price && <p className={ui.catalogPrice}>{price}</p>}
+        {stockMeta ? <ShopStockPill state={stockMeta.state} stock={stockMeta.stock} /> : null}
+        {actions}
+        {description && <div className={ui.catalogDescription}><h2>Описание</h2><p>{description}</p></div>}
+        {children}
+      </div>
+    </section>
+  </>
 }

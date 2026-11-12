@@ -145,16 +145,39 @@ function MessengerChip({ link }: { link: BuilderV2MessengerLink }) {
     }
   }
   const label = copied ? 'Скопировано' : link.label
+  const mark = <span className={ui.messengerMark} aria-hidden><MessengerBrandIcon kind={link.kind} /></span>
   if (link.href && !link.copyOnly) {
     return <a className={ui.messengerChip} data-kind={link.kind} href={link.href} target="_blank" rel="noopener noreferrer" title={link.value}>
-      <span className={ui.messengerMark} aria-hidden>{link.kind === 'telegram' ? 'TG' : link.kind === 'whatsapp' ? 'WA' : link.kind === 'max' ? 'MAX' : '•'}</span>
+      {mark}
       <span>{label}</span>
     </a>
   }
   return <button type="button" className={ui.messengerChip} data-kind={link.kind} onClick={() => void onCopy()} title={link.value}>
-    <span className={ui.messengerMark} aria-hidden>{link.kind === 'telegram' ? 'TG' : link.kind === 'whatsapp' ? 'WA' : link.kind === 'max' ? 'MAX' : '•'}</span>
+    {mark}
     <span>{label}</span>
   </button>
+}
+
+function MessengerBrandIcon({ kind }: { kind: BuilderV2MessengerLink['kind'] }) {
+  if (kind === 'telegram') {
+    return <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M21.5 3.3 2.9 10.6c-1.3.5-1.3 1.2-.2 1.5l4.7 1.5 1.8 5.5c.2.7.1.9.8.9.5 0 .7-.2 1-.6l2.5-3.3 5.2 3.8c1 .5 1.6.2 1.9-.9L22.9 4.6c.3-1.2-.4-1.7-1.4-1.3Zm-3 3.2-9.3 8.4-.4 3.2-1.7-5.4 11.4-6.2Z" />
+    </svg>
+  }
+  if (kind === 'whatsapp') {
+    return <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M12 2a9.9 9.9 0 0 0-8.5 14.9L2 22l5.3-1.4A9.9 9.9 0 1 0 12 2Zm0 18a8.1 8.1 0 0 1-4.1-1.1l-.3-.2-3.1.8.8-3-.2-.3A8.1 8.1 0 1 1 12 20Zm4.5-6c-.2-.1-1.4-.7-1.6-.8s-.4-.1-.5.1-.6.8-.7.9-.3.2-.5.1a6.6 6.6 0 0 1-3.2-2.8c-.2-.4.2-.4.6-1.3.1-.1 0-.3 0-.4s-.5-1.2-.7-1.6-.4-.4-.5-.4h-.5a1 1 0 0 0-.7.3 2.9 2.9 0 0 0-.9 2.2 5 5 0 0 0 1.1 2.7 11.5 11.5 0 0 0 4.4 3.9 5.2 5.2 0 0 0 1.5.5 2.3 2.3 0 0 0 1.7-.7 2.3 2.3 0 0 0 .5-1.4c0-.2-.2-.3-.4-.4Z" />
+    </svg>
+  }
+  if (kind === 'max') {
+    return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M4 7.5 8.5 17 12 9.5 15.5 17 20 7.5" />
+    </svg>
+  }
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d="M21 12a8 8 0 0 1-11.7 7.1L4 20l1.1-4.1A8 8 0 1 1 21 12Z" />
+    <path d="M8.5 12h.01M12 12h.01M15.5 12h.01" />
+  </svg>
 }
 
 export function BuilderV2OrderFacts({

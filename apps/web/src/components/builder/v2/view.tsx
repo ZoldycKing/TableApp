@@ -2458,13 +2458,20 @@ export function AppV2Renderer(props: AppV2RendererProps) {
     })
     : rootIds
   const effectiveRootIds = statusFormId && !shellKind ? rootIds.filter(id => id !== statusFormId) : shellKind ? shellListRootIds : rootIds
-  const listCanvas = basketScreen ? <div className={ui.commerceLayout}>
-    <ShopBasketPanel app={props.app} tables={props.tables} actor={props.actor} onCheckout={() => document.getElementById('shop-checkout')?.querySelector<HTMLElement>('input,textarea,select')?.focus()} />
-    <div className={ui.commerceCheckout}>
+  const listCanvas = basketScreen ? <ShopBasketPanel
+    app={props.app}
+    tables={props.tables}
+    actor={props.actor}
+    onCheckout={() => {
+      const target = document.getElementById('shop-checkout')
+      target?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      target?.closest('form')?.querySelector<HTMLElement>('input,textarea,select')?.focus()
+    }}
+    checkout={<>
       {!shellKind && <BuilderV2OrderHero status={status} amount={amount} scoped={summary?.scoped} loading={Boolean(props.live && summaryKey && (summaryState.key !== summaryKey || summaryState.pending))} editor={statusFormId ? render([statusFormId]) : undefined} />}
       {render(statusFormId ? rootIds.filter(id => id !== statusFormId) : rootIds)}
-    </div>
-  </div> : <>
+    </>}
+  /> : <>
     {!shellKind && <BuilderV2OrderHero status={status} amount={amount} scoped={summary?.scoped} loading={Boolean(props.live && summaryKey && (summaryState.key !== summaryKey || summaryState.pending))} editor={statusFormId ? render([statusFormId]) : undefined} />}
     {render(effectiveRootIds)}
   </>

@@ -33,6 +33,7 @@ import presentation from '@/components/runtime/app-presentation.module.css'
 import styles from '../prototype/prototype.module.css'
 import { ListScreenShell, ShellSearchField } from './layout-shell'
 import shell from './layout-shell.module.css'
+// shell.filterSearch styles the sort select to match inventory list selects.
 import { BuilderV2Picture } from './media'
 import { builderV2MediaItems } from './media-values'
 import { usePublishedV2 } from './published-context'
@@ -277,7 +278,7 @@ export function ShopCatalogShell({
     activeTab={category}
     onTabChange={setCategory}
     search={<ShellSearchField value={search} onChange={onSearch} placeholder="Поиск по каталогу" />}
-    selects={<label className={ui.shopSort}>
+    selects={<label className={shell.filterSearch}>
       <span className={ui.srOnly}>Сортировка</span>
       <select value={sort} onChange={event => setSort(event.target.value as ShopCatalogSort)} aria-label="Сортировка">
         {SHOP_CATALOG_SORTS.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}

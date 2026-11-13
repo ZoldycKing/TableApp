@@ -7,7 +7,7 @@ const SHOP_SCREENS = [
   { id: 'catalog', label: 'Витрина' },
   { id: 'product', label: 'Карточка товара' },
   { id: 'client', label: 'Кабинет клиента' },
-  { id: 'team', label: 'Заказ у команды' },
+  { id: 'team', label: 'Команда' },
 ] as const
 
 export function ShopTemplateDemo({ example = templateExample('zakazy'), path, view, device }: {

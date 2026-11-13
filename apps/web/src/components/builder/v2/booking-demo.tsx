@@ -18,13 +18,15 @@ import { TemplateDemoStage } from '@/components/marketing/template-demo-stage'
 import { TemplateDemoControls } from '@/components/marketing/template-demo-controls'
 import { bookingSchedulePlan, type BookingScheduleAdapter } from '@/lib/builder-v2-booking-schedule'
 import { AppV2Renderer } from './view'
+import { BookingCalendarDemoContext } from './booking-calendar'
+import { bookingCalendarSnapshot } from '@/lib/builder-v2-booking-calendar'
 import css from './booking.module.css'
 
 const DEMO_SCREENS = [
   { id: 'catalog', label: 'Услуги' },
   { id: 'service', label: 'Карточка услуги' },
   { id: 'client', label: 'Кабинет клиента' },
-  { id: 'team', label: 'Запись у команды' },
+  { id: 'team', label: 'Команда' },
 ] as const
 
 /** Synthetic, in-memory adapter. Real applications always use server-backed transport. */
@@ -37,9 +39,7 @@ export function BookingDemo({ app, tables, initialRows, phone = false, initialVi
       return { role: 'client', screenId: service ? booking.serviceScreenId : booking.catalogScreenId, recordId: service?.id }
     }
     if (view === 'team') {
-      const visit = initialRows.find(row => row.tableId === booking.tables.visits && row.values[booking.visit.status] === booking.statuses.booked)
-        ?? initialRows.find(row => row.tableId === booking.tables.visits)
-      return { role: 'owner', screenId: visit ? booking.visitScreenId : booking.listScreenId!, recordId: visit?.id }
+      return { role: 'owner', screenId: booking.listScreenId!, recordId: undefined }
     }
     return { role: 'client', screenId: booking.catalogScreenId, recordId: undefined }
   }
@@ -189,11 +189,11 @@ export function BookingDemo({ app, tables, initialRows, phone = false, initialVi
         const next = target(view); setSelectedView(view); setRole(next.role); navigate(next.screenId, next.recordId)
       }}
     />} note="Это пример салона «Тихая студия». Открывайте услуги и записи на учебных данных.">
-    <BuilderV2Theme app={app}><PublishedV2Context value={transport}><BookingDemoAvailability value={input => bookingV2Availability(app, actor, data(), input)}><BookingScheduleDemoContext value={scheduleAdapter}>
+    <BuilderV2Theme app={app}><PublishedV2Context value={transport}><BookingDemoAvailability value={input => bookingV2Availability(app, actor, data(), input)}><BookingScheduleDemoContext value={scheduleAdapter}><BookingCalendarDemoContext value={request => bookingCalendarSnapshot(app, actor, data(), request)}>
       <div className={css.demoFrame} data-preview-screen={`${role}:${screenId}:${recordId ?? ''}`}><BuilderV2AppFrame app={visibleApp} screenId={screenId} title={visibleApp.screens.find(screen => screen.id === screenId)?.name ?? 'Запись'} onNavigate={id => navigate(id)}>
         {notice && <p role="status">{notice}</p>}<AppV2Renderer key={`${role}:${screenId}:${recordId ?? ''}`} live app={visibleApp} tables={tables} actor={actor} screenId={screenId} record={currentRecord ? format(currentRecord) : undefined} onNavigate={navigate} />
       </BuilderV2AppFrame></div>
-    </BookingScheduleDemoContext></BookingDemoAvailability></PublishedV2Context></BuilderV2Theme>
+    </BookingCalendarDemoContext></BookingScheduleDemoContext></BookingDemoAvailability></PublishedV2Context></BuilderV2Theme>
     </TemplateDemoStage>
   </div>
 }

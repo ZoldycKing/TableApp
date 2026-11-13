@@ -1,11 +1,9 @@
 'use client'
 import { lazy, Suspense, useState, type ReactNode } from 'react'
-import { calendarDay, dateInstant, instantToWallClock } from '@tableapp/schema'
+import { dateInstant, instantToWallClock } from '@tableapp/schema'
 import type { AppV2Record } from '@tableapp/schema/app-v2'
-import type { BuilderV2DataRecord } from '@/lib/builder-v2-data-types'
 import { builderV2CatalogCell, builderV2CatalogPrice } from '@/lib/builder-v2-catalog'
 import { bookingVisitSection } from '@/lib/booking-lifecycle'
-import { oneRelation } from '@/lib/booking'
 import type { AppV2RendererProps } from './view'
 import { usePublishedV2 } from './published-context'
 import { ListScreenShell, DetailCardShell, DetailSection, ShellSearchField } from './layout-shell'
@@ -13,7 +11,7 @@ import { BuilderV2CatalogDetail } from './catalog-detail'
 import { BuilderV2Picture } from './media'
 import { builderV2MediaItems } from './media-values'
 import { ProtoIcon } from '../prototype/icons'
-import { bookingDays, useBookingCollection } from './booking-data'
+import { useBookingCollection } from './booking-data'
 import css from './booking.module.css'
 import shell from './layout-shell.module.css'
 import styles from '../prototype/prototype.module.css'
@@ -21,6 +19,7 @@ import ui from './view.module.css'
 import presentation from '@/components/runtime/app-presentation.module.css'
 import { OrderActionPanelContext } from './order-detail'
 import { BookingScheduleForm } from './booking-schedule'
+import { BookingCalendarScreen } from './booking-calendar'
 const BookingLogin = lazy(async () => ({ default: (await import('@/components/runtime/app-login')).AppLogin }))
 
 type Props = AppV2RendererProps & { renderNodes: (ids: readonly string[]) => ReactNode }
@@ -37,10 +36,6 @@ function Status({ row, booking }: { row: AppV2Record; booking: NonNullable<Props
   const tone = Object.entries(booking.statuses).find(([, id]) => id === value)?.[0] ?? 'booked'
   return <span className={css.badge} data-tone={tone}>{label(row, booking.visit.status)}</span>
 }
-function scheduleDay(row: AppV2Record, booking: NonNullable<Props['app']['booking']>) {
-  const date = calendarDay(row.values[booking.schedule.date])
-  return date ? new Date(`${date}T12:00:00Z`).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }) : label(row, booking.schedule.weekday)
-}
 function Facts({ items }: { items: { name: string; value: ReactNode }[] }) {
   return <dl className={css.facts}>{items.filter(item => item.value).map(item => <div key={item.name}><dt>{item.name}</dt><dd>{item.value}</dd></div>)}</dl>
 }
@@ -50,17 +45,14 @@ export function BookingScreen(props: Props) {
   const screen = app.screens.find(screen => screen.id === props.screenId)!
   const collection = app.nodes.find(node => screen.rootIds.includes(node.id) && node.type === 'collection')
   const node = collection?.type === 'collection' ? collection : undefined
-  const [search, setSearch] = useState(''), [week, setWeek] = useState(false), [section, setSection] = useState('upcoming'), [master, setMaster] = useState('')
+  const [search, setSearch] = useState(''), [section, setSection] = useState('upcoming')
   const timeZone = props.tables.find(table => table.id === booking.tables.visits)?.fields.find(field => field.id === booking.visit.start)?.timeZone ?? 'Europe/Moscow'
-  const today = instantToWallClock(new Date(), timeZone)!.date
-  const [day, setDay] = useState(today)
   const [showForm, setShowForm] = useState(false)
   const agenda = screen.id === booking.listScreenId
-  const days = agenda ? bookingDays(day, week) : undefined
   const pageForm = app.nodes.find(node => screen.rootIds.includes(node.id) && node.type === 'form')
   const additional = screen.rootIds.filter(id => id !== node?.id && id !== pageForm?.id)
   const owner = props.actor.roleIds.includes('owner')
-  const data = useBookingCollection(app, screen.id, node?.id, { search, days, rows: node && props.rows?.[node.sourceId], enabled: Boolean(props.live) })
+  const data = useBookingCollection(app, screen.id, node?.id, { search, rows: node && props.rows?.[node.sourceId], enabled: Boolean(props.live) && !agenda && screen.id !== booking.setupScreenId })
   const navigate = (id: string, rowId?: string) => { if (published) published.navigate(id, rowId); else props.onNavigate?.(id, rowId) }
   const back = (id: string) => { if (published) published.back(id); else props.onNavigate?.(id) }
   const feedback = <>
@@ -131,33 +123,16 @@ export function BookingScreen(props: Props) {
       </div><aside className={shell.detailSideCol}><DetailSection title={client ? 'Контактные данные' : 'О клиенте'}><Facts items={[{ name: 'Клиент', value: label(record, booking.visit.client) }, { name: 'Телефон', value: <a href={`tel:${String(record.values[booking.visit.phone] ?? '').replace(/[^+\d]/g, '')}`}>{label(record, booking.visit.phone)}</a> }]} /></DetailSection></aside></div>
     </DetailCardShell></div>
   }
-  if (agenda || screen.id === booking.clientScreenId) {
-    const rows = data.rows.filter(row => {
-      const instant = dateInstant(row.values[booking.visit.start], timeZone)
-      const visitDay = instant === null ? '' : instantToWallClock(new Date(instant), timeZone)!.date
-      return (!agenda || days!.includes(visitDay)) && (!master || oneRelation(row.values[booking.visit.master]) === master) && (agenda || bookingVisitSection(booking, { id: row.id, data: { ...row.values } }, timeZone, Date.now()) === section)
-    }).sort((a, b) => (dateInstant(a.values[booking.visit.start], timeZone) ?? 0) - (dateInstant(b.values[booking.visit.start], timeZone) ?? 0))
-    const masters = [...new Map(data.rows.map(row => [oneRelation(row.values[booking.visit.master]), label(row, booking.visit.master)])).entries()].filter(([id]) => id)
-    const renderVisit = (row: AppV2Record) => {
-      const time = instantToWallClock(String(row.values[booking.visit.start]), timeZone)
-      return <button type="button" className={css.visit} key={row.id} onClick={() => navigate(booking.visitScreenId, row.id)}><span className={css.visitTime}>{time?.time}<small>{time ? new Date(`${time.date}T12:00:00Z`).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', timeZone: 'UTC' }) : ''}</small></span><span className={css.visitCopy}><strong>{label(row, booking.visit.service)}</strong><span>{agenda ? `${label(row, booking.visit.client)} · ` : ''}{label(row, booking.visit.master)}</span></span><span className={css.visitAside}><strong>{money(row.values[booking.visit.price])}</strong><Status row={row} booking={booking} /></span></button>
-    }
-    const partial = data.more
-    return <div className={`${css.page} ${agenda ? css.agendaPage : ''}`}><ListScreenShell title={screen.name} meta={agenda ? 'Записи и занятость мастеров' : 'Предстоящие визиты и история'} actions={!props.actor.roleIds.includes('staff') ? <button type="button" className={styles.primary} onClick={() => navigate(booking.catalogScreenId)}>{agenda ? 'Добавить запись' : 'Выбрать услугу'}<ProtoIcon name="plus" /></button> : undefined}
-      metrics={agenda && !data.loading && !data.error ? [
-        { key: 'visits', caption: week ? 'Записи за неделю' : 'Записи за день', value: master ? rows.length : data.total, icon: <ProtoIcon name="calendar" size={16} />, note: partial ? 'Полный список доступен ниже' : undefined },
-        { key: 'noShow', caption: 'Неявки', value: rows.filter(row => row.values[booking.visit.status] === booking.statuses.noShow).length, icon: <ProtoIcon name="users" size={16} />, note: partial ? 'По загруженным записям' : undefined },
-        { key: 'amount', caption: 'Стоимость записей', value: money(rows.filter(row => ![booking.statuses.cancelled, booking.statuses.noShow].includes(String(row.values[booking.visit.status]))).reduce((sum, row) => sum + Number(row.values[booking.visit.price] ?? 0), 0)), icon: <ProtoIcon name="chart" size={16} />, wide: true, note: partial ? 'По загруженным записям' : 'Без отмен и неявок' },
-      ] : undefined}
-      metricLayout="cards" tabs={!agenda ? [{ id: 'upcoming', label: 'Предстоящие' }, { id: 'history', label: 'История' }] : undefined} activeTab={section} onTabChange={setSection}
-      search={agenda ? <div className={css.tools}><div className={`${css.switch} ${css.agendaSwitch}`}><button type="button" aria-pressed={!week} onClick={() => setWeek(false)}>День</button><button type="button" aria-pressed={week} onClick={() => setWeek(true)}>Неделя</button></div><label className={css.agendaDate}>Дата<input aria-label="Дата расписания" type="date" value={day} onChange={event => { if (event.target.value) { setDay(event.target.value); setMaster('') } }} /></label><button type="button" className={`${styles.secondary} ${css.agendaToday}`} onClick={() => setDay(today)}>Сегодня</button><label className={css.agendaMaster}>Мастер<select aria-label="Мастер расписания" value={master} onChange={event => setMaster(event.target.value)}><option value="">Все мастера</option>{masters.map(([id, name]) => <option key={id} value={id!}>{name}</option>)}</select></label></div> : undefined}>
-      {agenda ? <div className={css.agenda}>{!data.loading && !data.error && days!.map(date => <section className={css.agendaDay} key={date}><h3>{new Date(`${date}T12:00:00Z`).toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' })}</h3><div className={css.visits}>{rows.filter(row => instantToWallClock(String(row.values[booking.visit.start]), timeZone)?.date === date).map(renderVisit)}</div>{!rows.some(row => instantToWallClock(String(row.values[booking.visit.start]), timeZone)?.date === date) && <p className={css.empty}>Записей на этот день нет.</p>}</section>)}</div> : <div className={`${css.visits} ${css.listBody}`}>{rows.map(renderVisit)}{!data.loading && !data.error && !rows.length && <p className={css.empty}>{section === 'upcoming' ? 'Предстоящих записей пока нет. Выберите услугу и удобное время.' : 'Здесь будут ваши прошедшие и отменённые визиты.'}</p>}</div>}
-      {feedback}
+  if (agenda || screen.id === booking.setupScreenId) return <div className={css.page} onClickCapture={() => { if (props.editing && node) props.onSelect?.(node.id) }}><BookingCalendarScreen app={app} screenId={screen.id} timeZone={timeZone} working={!agenda} editing={Boolean(props.editing)} onOpenVisit={id => navigate(booking.visitScreenId, id)} onOpenPeriod={booking.periodScreenId ? id => navigate(booking.periodScreenId!, id) : undefined} onAdd={agenda ? !props.actor.roleIds.includes('staff') ? () => navigate(booking.catalogScreenId) : undefined : pageForm ? () => setShowForm(true) : undefined} />{props.renderNodes(additional)}</div>
+  if (screen.id === booking.clientScreenId) {
+    const rows = data.rows.filter(row => bookingVisitSection(booking, { id: row.id, data: { ...row.values } }, timeZone, Date.now()) === section).sort((a, b) => (dateInstant(a.values[booking.visit.start], timeZone) ?? 0) - (dateInstant(b.values[booking.visit.start], timeZone) ?? 0))
+    return <div className={css.page}><ListScreenShell title={screen.name} meta="Предстоящие визиты и история" actions={<button type="button" className={styles.primary} onClick={() => navigate(booking.catalogScreenId)}>Выбрать услугу<ProtoIcon name="plus" /></button>} tabs={[{ id: 'upcoming', label: 'Предстоящие' }, { id: 'history', label: 'История' }]} activeTab={section} onTabChange={setSection}>
+      <div className={css.visits + ' ' + css.listBody}>{rows.map(row => {
+        const time = instantToWallClock(String(row.values[booking.visit.start]), timeZone)
+        return <button type="button" className={css.visit} key={row.id} onClick={() => navigate(booking.visitScreenId, row.id)}><span className={css.visitTime}>{time?.time}<small>{time ? new Date(time.date + 'T12:00:00Z').toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', timeZone: 'UTC' }) : ''}</small></span><span className={css.visitCopy}><strong>{label(row, booking.visit.service)}</strong><span>{label(row, booking.visit.master)}</span></span><span className={css.visitAside}><strong>{money(row.values[booking.visit.price])}</strong><Status row={row} booking={booking} /></span></button>
+      })}{!data.loading && !data.error && !rows.length && <p className={css.empty}>{section === 'upcoming' ? 'Предстоящих записей пока нет. Выберите услугу и удобное время.' : 'Здесь будут ваши прошедшие и отменённые визиты.'}</p>}</div>{feedback}
     </ListScreenShell>{props.renderNodes(additional)}</div>
   }
-  if (screen.id === booking.setupScreenId) return <div className={css.page}><ListScreenShell title="Рабочее время" meta="Периоды работы, перерывы и выходные мастеров" actions={pageForm && <button type="button" className={styles.primary} onClick={() => setShowForm(true)}>Добавить рабочее время</button>} search={<ShellSearchField value={search} onChange={setSearch} placeholder="Найти мастера или период" />}>
-    <div className={`${css.visits} ${css.listBody}`}>{data.rows.map(row => <button type="button" key={row.id} className={css.visit} onClick={() => booking.periodScreenId && navigate(booking.periodScreenId, row.id)}><span className={css.visitTime}><ProtoIcon name={row.values[booking.schedule.closed] ? 'calendar' : 'clock'} size={24} /></span><span className={css.visitCopy}><strong>{label(row, booking.schedule.master)}</strong><span>{scheduleDay(row, booking)}</span></span><span className={css.visitAside}>{row.values[booking.schedule.closed] ? 'Выходной' : `${label(row, booking.schedule.start)} — ${label(row, booking.schedule.end)}`}</span></button>)}</div>{feedback}
-  </ListScreenShell>{props.renderNodes(additional)}</div>
   if (screen.id === booking.periodScreenId && pageForm) return <div className={css.formPage}><button type="button" className={styles.textButton} onClick={() => back(booking.setupScreenId)}>← Рабочее время</button><BookingScheduleForm app={app} screenId={screen.id} formId={pageForm.id} recordId={record?.id} editing={Boolean(props.editing)} onSaved={() => back(booking.setupScreenId)} /></div>
   return <div className={css.page}><div className={css.formPage}><button type="button" className={styles.textButton} onClick={() => back(booking.setupScreenId)}>← Рабочее время</button>{props.renderNodes(screen.rootIds)}</div></div>
 }

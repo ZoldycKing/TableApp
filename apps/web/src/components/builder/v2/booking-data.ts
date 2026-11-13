@@ -5,14 +5,7 @@ import type { BuilderV2DataPage, BuilderV2DataRequest, BuilderV2DataResult } fro
 import { readBuilderV2DataAction } from '@/app/builder-v2-data-actions'
 import { usePublishedV2 } from './published-context'
 
-export function bookingDays(day: string, week: boolean): string[] {
-  const start = new Date(`${day}T12:00:00Z`)
-  if (!week) return [day]
-  start.setUTCDate(start.getUTCDate() - (start.getUTCDay() + 6) % 7)
-  return Array.from({ length: 7 }, (_, index) => {
-    const date = new Date(start); date.setUTCDate(start.getUTCDate() + index); return date.toISOString().slice(0, 10)
-  })
-}
+export { bookingCalendarDays as bookingDays } from '@/lib/builder-v2-booking-calendar'
 /** Requests each visible day explicitly, so a week spanning two months cannot lose visits. */
 export function useBookingCollection(app: AppV2, screenId: string, nodeId: string | undefined, options: { search?: string; days?: readonly string[]; rows?: readonly AppV2Record[]; enabled: boolean }) {
   const published = usePublishedV2()

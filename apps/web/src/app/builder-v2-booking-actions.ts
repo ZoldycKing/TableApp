@@ -12,6 +12,35 @@ import { RowWriteError } from '@/lib/row-mutations'
 import { isPlanLimitError } from '@/lib/limits'
 import { db } from '@tableapp/db'
 import { inspectPublishedV2Form } from '@/lib/builder-v2-published-form'
+import { bookingCalendarSnapshot, canOpenBookingCalendar, validBookingCalendarRequest, type BookingCalendarRequest, type BookingCalendarResult } from '@/lib/builder-v2-booking-calendar'
+
+export async function readPublishedV2BookingCalendarAction(slug: string, request: BookingCalendarRequest & { revision: string }): Promise<BookingCalendarResult> {
+  if (!validBookingCalendarRequest(request)) return { ok: false, error: 'Выберите корректную дату.' }
+  try { return await withPublishedV2Read(async tx => {
+    const { app, actor, revision } = await publishedV2Context(slug, tx)
+    if (revision !== request.revision) return { ok: false, error: 'Приложение обновлено. Обновите страницу.' }
+    if (!app.booking || !canOpenBookingCalendar(app, actor, request.screenId)) return { ok: false, error: 'Календарь недоступен.' }
+    const data = await loadBookingData(app.booking, app.workspaceId, tx)
+    return data ? bookingCalendarSnapshot(app, actor, data, request) : { ok: false, error: 'Проверьте настройки расписания.' }
+  }) } catch { return { ok: false, error: 'Не удалось загрузить календарь. Попробуйте ещё раз.' } }
+}
+export async function readBuilderV2BookingCalendarAction(appId: string, definition: unknown, request: BookingCalendarRequest): Promise<BookingCalendarResult> {
+  const auth = await authorizeApp(appId, false)
+  if (!auth.ok) return auth
+  if (!validBookingCalendarRequest(request)) return { ok: false, error: 'Выберите корректную дату.' }
+  try {
+    const read = readAppDefinition(definition), stored = await loadBuilderV2Draft(appId, auth.member.workspaceId)
+    if (!read.ok || read.formatVersion !== 2 || !stored || read.app.id !== stored.app.id || read.app.workspaceId !== auth.member.workspaceId || read.app.slug !== stored.app.slug) return { ok: false, error: 'Приложение недоступно.' }
+    const { catalog } = await loadBuilderV2Catalog(auth.member.workspaceId), valid = validateAppV2Definition(read.app, catalog)
+    if (!valid.ok || !valid.app.booking) return { ok: false, error: 'Проверьте настройки онлайн-записи.' }
+    const actor = builderV2MemberActor(valid.app, auth.member)
+    if (!canOpenBookingCalendar(valid.app, actor, request.screenId)) return { ok: false, error: 'Календарь недоступен.' }
+    return await db.transaction(async tx => {
+      const data = await loadBookingData(valid.app.booking!, valid.app.workspaceId, tx)
+      return data ? bookingCalendarSnapshot(valid.app, actor, data, request) : { ok: false, error: 'Проверьте таблицы расписания.' }
+    })
+  } catch { return { ok: false, error: 'Не удалось загрузить календарь. Попробуйте ещё раз.' } }
+}
 
 export async function readPublishedV2BookingAction(slug: string, request: BookingAvailabilityRequest & { revision: string }): Promise<BookingAvailabilityResult> {
   if (!validBookingAvailabilityRequest(request)) return { ok: false, error: 'Выберите корректную дату.' }

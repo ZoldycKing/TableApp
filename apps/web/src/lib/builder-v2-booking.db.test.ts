@@ -46,6 +46,29 @@ describe.skipIf(!process.env.DATABASE_URL)('native v2 booking transactions', () 
   })
   afterAll(async () => { if (db) { await db.db.delete(db.workspaces).where(eq(db.workspaces.id, workspaceId)); await db.db.delete(db.users).where(eq(db.users.id, userId)) } })
 
+  it('serves a bounded team calendar with the same row policy and without contact details', async () => {
+    const request = { screenId: config.listScreenId!, day, week: true, revision: liveRevision() }
+    identity.email = 'owner@example.com'
+    const owner = await availability.readPublishedV2BookingCalendarAction(app.slug, request)
+    expect(owner.ok, JSON.stringify(owner)).toBe(true)
+    if (owner.ok) {
+      expect(owner.data.days).toHaveLength(7)
+      expect(owner.data.masters).toHaveLength(3)
+      expect(owner.data.shifts).toHaveLength(21)
+      expect(JSON.stringify(owner)).not.toContain('@example.com')
+      expect(JSON.stringify(owner)).not.toContain('+7')
+    }
+    identity.email = 'olga@example.com'
+    const staff = await availability.readPublishedV2BookingCalendarAction(app.slug, request)
+    expect(staff.ok && staff.data.masters).toHaveLength(1)
+    expect(staff.ok && staff.data.shifts.every(shift => shift.windows === null)).toBe(true)
+    expect(await availability.readPublishedV2BookingCalendarAction(app.slug, { ...request, screenId: config.setupScreenId })).toMatchObject({ ok: false })
+    identity.email = 'irina@example.com'
+    expect(await availability.readPublishedV2BookingCalendarAction(app.slug, request)).toMatchObject({ ok: false })
+    identity.email = 'owner@example.com'
+    expect(await availability.readPublishedV2BookingCalendarAction(app.slug, { ...request, revision: 'outdated' })).toMatchObject({ ok: false })
+  })
+
   it('loads only free times, books through the common form engine, and does not duplicate a retry', async () => {
     const request = await draft('irina@example.com')
     const result = await write.submitPublishedV2(app.slug, 'form', request)

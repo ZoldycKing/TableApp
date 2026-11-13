@@ -8,12 +8,15 @@ import { usePublishedV2 } from './published-context'
 import { useBuilderV2FormContext } from './form-preview'
 import css from './booking.module.css'
 import styles from '../prototype/prototype.module.css'
+import { useBookingJourney } from './booking-journey'
 export const BookingDemoAvailability = createContext<((request: BookingAvailabilityRequest) => BookingAvailabilityResult) | null>(null)
 
 export function BookingTimeFields({ app, editing }: { app: AppV2; editing: boolean }) {
   const context = useBuilderV2FormContext(), published = usePublishedV2(), config = app.booking!
+  const journey = useBookingJourney(), seed = context?.scope.screenId === config.formScreenId ? journey?.intent : null
   const demoAvailability = useContext(BookingDemoAvailability)
-  const [day, setDay] = useState(''), [master, setMaster] = useState(''), [retry, setRetry] = useState(0)
+  const [day, setDay] = useState(seed?.day ?? ''), [master, setMaster] = useState(seed?.masterId ?? ''), [retry, setRetry] = useState(0), [seedNotice, setSeedNotice] = useState('')
+  const appliedTime = useRef(false), appliedClient = useRef(false)
   const [result, setResult] = useState<BookingAvailabilityResult>(), [loading, setLoading] = useState(false)
   const selected = oneRelation(context?.values[config.visit.master])
   const chosen = context?.values[config.visit.start]
@@ -25,6 +28,11 @@ export function BookingTimeFields({ app, editing }: { app: AppV2; editing: boole
   const today = instantToWallClock(new Date(), timeZone)!.date
   const selectedDay = day || (typeof chosen === 'string' && chosen ? instantToWallClock(chosen, timeZone)?.date : undefined) || today
   useEffect(() => {
+    if (editing || !context?.state || appliedClient.current || !seed || context.scope.formId !== config.ownerCreateFormId) return
+    appliedClient.current = true
+    for (const [fieldId, value] of [[config.visit.client, seed.client], [config.visit.phone, seed.phone], [config.visit.email, seed.email]] as const) if (value && context.state.fields.some(field => field.fieldId === fieldId && !field.readOnly)) context.change(fieldId, value)
+  }, [Boolean(context?.state), editing])
+  useEffect(() => {
     if (editing || !recordId || !screenId || !context?.state) return
     let cancelled = false
     setLoading(true)
@@ -35,7 +43,16 @@ export function BookingTimeFields({ app, editing }: { app: AppV2; editing: boole
       return published ? actions.readPublishedV2BookingAction(published.slug, { ...input, revision: published.revision }) : actions.readBuilderV2BookingAction(app.id, app, input)
     }
     void load()
-      .then(next => { if (!cancelled) setResult(next) })
+      .then(next => {
+        if (cancelled) return
+        setResult(next)
+        if (seed?.time && !appliedTime.current && next.ok) {
+          appliedTime.current = true
+          const slot = next.slots.find(slot => slot.time === seed.time && slot.masterId === seed.masterId && selectedDay === seed.day)
+          if (slot) { latest.current?.change(config.visit.master, [slot.masterId]); latest.current?.change(config.visit.start, slot.start) }
+          else setSeedNotice('Выбранное время занято или не подходит для этой услуги. Выберите другое свободное время или мастера.')
+        }
+      })
       .catch(() => { if (!cancelled) setResult({ ok: false, error: 'Не удалось проверить расписание. Попробуйте ещё раз.' }) })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
@@ -45,9 +62,10 @@ export function BookingTimeFields({ app, editing }: { app: AppV2; editing: boole
   return <div className={css.timeFields}>
     <div className={css.formIntro}><strong>{reschedule ? 'Выберите другое время' : 'Когда вам удобно?'}</strong><p>{reschedule ? 'Текущая запись останется за вами, пока новое время не сохранится.' : 'Свободные часы учитывают длительность услуги и перерывы мастера.'}</p></div>
     <div className={css.timeControls}>
-      <label>Мастер<select aria-label="Мастер" value={master} disabled={context?.disabled || editing || loading} onChange={event => { setDay(selectedDay); setMaster(event.target.value); resetChoice() }}><option value="">Любой свободный</option>{result?.ok && result.masters.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-      <label>Дата<input aria-label="Дата записи" type="date" min={today} max={new Date(new Date(`${today}T12:00:00Z`).getTime() + config.horizonDays * 86400000).toISOString().slice(0, 10)} value={selectedDay} disabled={context?.disabled || editing} onChange={event => { if (event.target.value) { setDay(event.target.value); resetChoice() } }} /></label>
+      <label>Мастер<select aria-label="Мастер" value={master} disabled={context?.disabled || editing || loading} onChange={event => { appliedTime.current = true; setSeedNotice(''); setDay(selectedDay); setMaster(event.target.value); resetChoice() }}><option value="">Любой свободный</option>{result?.ok && master && !result.masters.some(item => item.id === master) && <option value={master}>Не оказывает эту услугу</option>}{result?.ok && result.masters.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+      <label>Дата<input aria-label="Дата записи" type="date" min={today} max={new Date(new Date(`${today}T12:00:00Z`).getTime() + config.horizonDays * 86400000).toISOString().slice(0, 10)} value={selectedDay} disabled={context?.disabled || editing} onChange={event => { if (event.target.value) { appliedTime.current = true; setSeedNotice(''); setDay(event.target.value); resetChoice() } }} /></label>
     </div>
+    {seedNotice && <p role="status" className={css.timeHint}>{seedNotice}</p>}
     <fieldset disabled={context?.disabled || loading || editing}><legend>Свободное время</legend>
       {loading ? <p role="status">Проверяем расписание…</p> : result?.ok ? <>
         <p className={css.timeHint}>Местное время студии · {new Intl.DateTimeFormat('ru-RU', { timeZone, timeZoneName: 'shortOffset' }).formatToParts(new Date()).find(part => part.type === 'timeZoneName')?.value.replace('GMT', 'UTC')}</p>

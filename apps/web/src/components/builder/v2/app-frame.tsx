@@ -9,6 +9,7 @@ import { builderV2LogoUrl } from '@/lib/builder-v2-logo-types'
 import css from './app-frame.module.css'
 import presentation from '@/components/runtime/app-presentation.module.css'
 import { BuilderV2RecordAvatar } from './record-visuals'
+import { BookingJourneyProvider } from './booking-journey'
 
 export function BuilderV2Theme({app,children,className='',as:Tag='div'}:{app:Pick<AppV2,'theme'|'appearance'>;children:ReactNode;className?:string;as?:'div'|'main'}) {
   const theme={className:css.theme??'',style:builderV2ThemeStyle(app.theme, app.appearance),scheme:app.theme.scheme}
@@ -81,7 +82,7 @@ export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,childre
   const sectionScreen = app.screens.find(screen => screen.id === sectionId)
   const mark = <BuilderV2AppMark logo={builderV2LogoUrl(app, draftLogo)} icon={app.appearance?.icon} />
   const account = headerAction ? <span className={css.headerAction}>{headerAction}</span> : null
-  return <div className={`${css.stage} ${centered && !phone ? css.centeredStage : ''}`} data-frame-stage data-fullscreen={fullScreen || undefined}>
+  return <BookingJourneyProvider key={app.id}><div className={`${css.stage} ${centered && !phone ? css.centeredStage : ''}`} data-frame-stage data-fullscreen={fullScreen || undefined}>
     <div className={css.container} data-app-frame="" data-phone={phone} data-contained={contained || undefined} data-fullscreen={fullScreen || undefined}>
     {phone && <span className={css.island} aria-hidden="true" />}
     <section className={`${styles.surface} ${css.frame}`} data-navigation={screens.length ? navigation : 'bottom'} data-shell-topnav={shellTopNav || undefined}>
@@ -105,5 +106,5 @@ export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,childre
         {shellTopNav ? account : null}
       </div>
     </nav>}
-  </section></div></div>
+  </section></div></div></BookingJourneyProvider>
 }

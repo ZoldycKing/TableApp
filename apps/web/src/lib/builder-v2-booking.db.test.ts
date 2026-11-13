@@ -69,6 +69,19 @@ describe.skipIf(!process.env.DATABASE_URL)('native v2 booking transactions', () 
     expect(await availability.readPublishedV2BookingCalendarAction(app.slug, { ...request, revision: 'outdated' })).toMatchObject({ ok: false })
   })
 
+  it('restricts the people endpoint to the published owner and current revision', async () => {
+    const people = await import('@/app/builder-v2-booking-people-actions')
+    identity.email = 'owner@example.com'
+    const result = await people.readPublishedV2BookingPeopleAction(app.slug, config.mastersScreenId, liveRevision())
+    expect(result.ok, JSON.stringify(result)).toBe(true)
+    if (result.ok) expect(result.data.masters).toHaveLength(3)
+    expect((await people.readPublishedV2BookingPeopleAction(app.slug, config.mastersScreenId, 'outdated')).ok).toBe(false)
+    for (const email of ['olga@example.com','irina@example.com','unknown@example.com']) {
+      identity.email = email
+      expect((await people.readPublishedV2BookingPeopleAction(app.slug, config.mastersScreenId, liveRevision())).ok).toBe(false)
+    }
+  })
+
   it('loads only free times, books through the common form engine, and does not duplicate a retry', async () => {
     const request = await draft('irina@example.com')
     const result = await write.submitPublishedV2(app.slug, 'form', request)

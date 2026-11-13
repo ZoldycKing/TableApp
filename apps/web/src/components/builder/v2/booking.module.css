@@ -1,4 +1,7 @@
 .page { color: var(--v2-ink); min-width: 0; }
+.bookingIntent { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; justify-content: space-between; padding: 18px 20px; margin-bottom: 20px; background: var(--v2-surface); border: 1px solid var(--v2-line); border-radius: 12px; }
+.bookingIntent > span { display: grid; gap: 6px; }
+.bookingIntent small { color: var(--v2-muted); line-height: 1.5; }
 .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 20px; padding: 20px; }
 .serviceCards { min-width: 0; padding: 20px; }
 .cards[data-masters] { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }

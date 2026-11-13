@@ -6,7 +6,7 @@ export type BookingCalendarRequest = { screenId: string; day: string; week: bool
 export type BookingCalendarWindow = { id: string; start: number; end: number }
 export type BookingCalendarVisit = { id: string; masterId: string; day: string; start: number; end: number; service: string; client: string; status: string; price: number | null }
 export type BookingCalendarSnapshot = {
-  timeZone: string; days: string[]; masters: { id: string; name: string }[]
+  timeZone: string; days: string[]; masters: { id: string; name: string; photo?: AppV2Json }[]
   shifts: { masterId: string; day: string; windows: BookingCalendarWindow[] | null; exception: boolean; closed: boolean }[]
   visits: BookingCalendarVisit[]
 }
@@ -54,7 +54,8 @@ export function bookingCalendarSnapshot(app: AppV2, actor: AppV2Actor, data: Boo
     const values = project(config.tables.masters, row)
     if (!values[config.master.name]) return []
     if (!actor.roleIds.includes('owner') && String(row.data[config.master.email] ?? '').trim().toLowerCase() !== actor.email?.trim().toLowerCase()) return []
-    return [{ id: row.id, name: String(values[config.master.name]) }]
+    const photo = config.masterPhotoFieldId ? values[config.masterPhotoFieldId] : undefined
+    return [{ id: row.id, name: String(values[config.master.name]), ...(photo ? { photo } : {}) }]
   })
   const masterIds = new Set(masters.map(master => master.id))
   const periods = data.schedule.map(row => ({ id: row.id, data: project(config.tables.schedule, row) }))

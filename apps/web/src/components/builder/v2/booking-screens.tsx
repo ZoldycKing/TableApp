@@ -20,6 +20,8 @@ import presentation from '@/components/runtime/app-presentation.module.css'
 import { OrderActionPanelContext } from './order-detail'
 import { BookingScheduleForm } from './booking-schedule'
 import { BookingCalendarScreen } from './booking-calendar'
+import { BookingPeopleScreen } from './booking-people'
+import { useBookingJourney } from './booking-journey'
 const BookingLogin = lazy(async () => ({ default: (await import('@/components/runtime/app-login')).AppLogin }))
 
 type Props = AppV2RendererProps & { renderNodes: (ids: readonly string[]) => ReactNode }
@@ -47,12 +49,13 @@ export function BookingScreen(props: Props) {
   const node = collection?.type === 'collection' ? collection : undefined
   const [search, setSearch] = useState(''), [section, setSection] = useState('upcoming')
   const timeZone = props.tables.find(table => table.id === booking.tables.visits)?.fields.find(field => field.id === booking.visit.start)?.timeZone ?? 'Europe/Moscow'
-  const [showForm, setShowForm] = useState(false)
+  const [showForm, setShowForm] = useState(false), [showClient, setShowClient] = useState(false)
+  const journey = useBookingJourney()
   const agenda = screen.id === booking.listScreenId
   const pageForm = app.nodes.find(node => screen.rootIds.includes(node.id) && node.type === 'form')
   const additional = screen.rootIds.filter(id => id !== node?.id && id !== pageForm?.id)
   const owner = props.actor.roleIds.includes('owner')
-  const data = useBookingCollection(app, screen.id, node?.id, { search, rows: node && props.rows?.[node.sourceId], enabled: Boolean(props.live) && !agenda && screen.id !== booking.setupScreenId })
+  const data = useBookingCollection(app, screen.id, node?.id, { search, rows: node && props.rows?.[node.sourceId], enabled: Boolean(props.live) && !agenda && screen.id !== booking.setupScreenId && !(owner && screen.id === booking.mastersScreenId && node?.layout === 'list' && node.itemIds.length === 0) })
   const navigate = (id: string, rowId?: string) => { if (published) published.navigate(id, rowId); else props.onNavigate?.(id, rowId) }
   const back = (id: string) => { if (published) published.back(id); else props.onNavigate?.(id) }
   const feedback = <>
@@ -65,6 +68,7 @@ export function BookingScreen(props: Props) {
   // Changing a starter collection to another layout or custom item blocks uses
   // the regular component renderer, including its configured actions.
   if (node && (node.itemIds.length > 0 || screen.id === booking.catalogScreenId && node.layout !== 'catalog' || screen.id === booking.mastersScreenId && node.layout !== 'list' || agenda && node.layout !== 'calendar')) return <div className={css.page}>{props.renderNodes(screen.rootIds)}</div>
+  if (owner && (screen.id === booking.mastersScreenId || screen.id === booking.masterScreenId || showClient && screen.id === booking.visitScreenId)) return <div className={css.page}><BookingPeopleScreen app={app} screenId={screen.id} initialMasterId={screen.id === booking.masterScreenId ? record?.id : undefined} initialClientVisitId={showClient ? record?.id : undefined} onNavigate={navigate} onClose={showClient ? () => setShowClient(false) : screen.id === booking.masterScreenId ? () => back(booking.mastersScreenId) : undefined} onAddMaster={pageForm ? () => setShowForm(true) : undefined} onEditMaster={screen.id === booking.masterScreenId && pageForm ? () => setShowForm(true) : undefined} />{!showClient && props.renderNodes(additional)}</div>
   if (screen.id === booking.catalogScreenId || screen.id === booking.mastersScreenId) {
     const masters = screen.id === booking.mastersScreenId
     const rows = data.rows.filter(row => row.values[masters ? booking.master.active : booking.service.active] === true)
@@ -81,7 +85,7 @@ export function BookingScreen(props: Props) {
         <span className="mt-auto flex justify-end pt-3 text-[15px] font-bold tabular-nums">{builderV2CatalogPrice(row, table?.fields.find(field => field.id === (node?.cardDetailFieldId ?? booking.service.price)))}</span>
       </span>}
     </button>)
-    return <div className={css.page}><ListScreenShell title={screen.name} meta={masters ? 'Выберите своего мастера' : 'Выберите услугу и удобное время'} actions={owner && pageForm ? <button type="button" className={styles.primary} onClick={() => setShowForm(true)}><ProtoIcon name="plus" />{masters ? 'Добавить мастера' : 'Добавить услугу'}</button> : undefined} search={<ShellSearchField value={search} onChange={setSearch} placeholder={masters ? 'Найти мастера' : 'Найти услугу'} />}>
+    return <div className={css.page}>{!masters && journey?.intent && <div className={css.bookingIntent}><span><strong>{journey.intent.client ? `Запись клиента: ${journey.intent.client}` : 'Новая запись'}</strong><small>{journey.intent.day ? `${journey.intent.day.split('-').reverse().join('.')} · ${journey.intent.time ?? ''}. ` : ''}Выберите услугу — затем подтвердите время.</small></span><button type="button" className={styles.textButton} onClick={() => journey.setIntent(null)}>Сбросить выбор</button></div>}<ListScreenShell title={screen.name} meta={masters ? 'Выберите своего мастера' : 'Выберите услугу и удобное время'} actions={owner && pageForm ? <button type="button" className={styles.primary} onClick={() => setShowForm(true)}><ProtoIcon name="plus" />{masters ? 'Добавить мастера' : 'Добавить услугу'}</button> : undefined} search={<ShellSearchField value={search} onChange={setSearch} placeholder={masters ? 'Найти мастера' : 'Найти услугу'} />}>
       <div className={masters ? css.cards : `${css.serviceCards} ${presentation.catalog}`} data-booking-catalog data-masters={masters || undefined} onClickCapture={() => { if (props.editing && node) props.onSelect?.(node.id) }}>{masters ? cards : <div className={presentation.catalogGrid}>{cards}</div>}</div>
       {!data.loading && !data.error && !rows.length && <p className={css.empty}>{search ? 'Ничего не нашли. Попробуйте другое название.' : masters ? 'Мастера появятся здесь после настройки расписания.' : 'Услуги появятся здесь после добавления в таблицу.'}</p>}
       {feedback}
@@ -120,10 +124,10 @@ export function BookingScreen(props: Props) {
     return <div className={css.page}><DetailCardShell title={title} badge={<Status row={record} booking={booking} />} subtitle={date === null ? '' : new Date(date).toLocaleString('ru-RU', { dateStyle: 'long', timeStyle: 'short', timeZone })} back={{ label: client ? 'Мои записи' : 'Расписание', onClick: () => back(returnId) }} actions={actions} metrics={[{ key: 'price', caption: 'Стоимость визита', value: money(record.values[booking.visit.price]) }, { key: 'duration', caption: 'Продолжительность', value: `${label(record, booking.visit.minutes)} мин` }]}>
       <div className={css.visitColumns}><div className={shell.detailMainCol}><DetailSection title="Ваш визит"><Facts items={[{ name: 'Услуга', value: title }, { name: 'Мастер', value: label(record, booking.visit.master) }]} /></DetailSection>
         {!client && props.renderNodes([booking.statusFormId])}
-      </div><aside className={shell.detailSideCol}><DetailSection title={client ? 'Контактные данные' : 'О клиенте'}><Facts items={[{ name: 'Клиент', value: label(record, booking.visit.client) }, { name: 'Телефон', value: <a href={`tel:${String(record.values[booking.visit.phone] ?? '').replace(/[^+\d]/g, '')}`}>{label(record, booking.visit.phone)}</a> }]} /></DetailSection></aside></div>
+      </div><aside className={shell.detailSideCol}><DetailSection title={client ? 'Контактные данные' : 'О клиенте'}><Facts items={[{ name: 'Клиент', value: label(record, booking.visit.client) }, { name: 'Телефон', value: <a href={`tel:${String(record.values[booking.visit.phone] ?? '').replace(/[^+\d]/g, '')}`}>{label(record, booking.visit.phone)}</a> }]} />{owner && !props.editing && <button type="button" className={styles.textButton} onClick={() => setShowClient(true)}>Профиль и история клиента<ProtoIcon name="arrow" size={16} /></button>}</DetailSection></aside></div>
     </DetailCardShell></div>
   }
-  if (agenda || screen.id === booking.setupScreenId) return <div className={css.page} onClickCapture={() => { if (props.editing && node) props.onSelect?.(node.id) }}><BookingCalendarScreen app={app} screenId={screen.id} timeZone={timeZone} working={!agenda} editing={Boolean(props.editing)} onOpenVisit={id => navigate(booking.visitScreenId, id)} onOpenPeriod={booking.periodScreenId ? id => navigate(booking.periodScreenId!, id) : undefined} onAdd={agenda ? !props.actor.roleIds.includes('staff') ? () => navigate(booking.catalogScreenId) : undefined : pageForm ? () => setShowForm(true) : undefined} />{props.renderNodes(additional)}</div>
+  if (agenda || screen.id === booking.setupScreenId) return <div className={css.page} onClickCapture={() => { if (props.editing && node) props.onSelect?.(node.id) }}><BookingCalendarScreen app={app} screenId={screen.id} timeZone={timeZone} working={!agenda} editing={Boolean(props.editing)} onOpenVisit={id => navigate(booking.visitScreenId, id)} onOpenPeriod={booking.periodScreenId ? id => navigate(booking.periodScreenId!, id) : undefined} onCreate={owner ? intent => { journey?.setIntent(intent); navigate(booking.catalogScreenId) } : undefined} onAdd={agenda ? !props.actor.roleIds.includes('staff') ? () => { journey?.setIntent({}); navigate(booking.catalogScreenId) } : undefined : pageForm ? () => setShowForm(true) : undefined} />{props.renderNodes(additional)}</div>
   if (screen.id === booking.clientScreenId) {
     const rows = data.rows.filter(row => bookingVisitSection(booking, { id: row.id, data: { ...row.values } }, timeZone, Date.now()) === section).sort((a, b) => (dateInstant(a.values[booking.visit.start], timeZone) ?? 0) - (dateInstant(b.values[booking.visit.start], timeZone) ?? 0))
     return <div className={css.page}><ListScreenShell title={screen.name} meta="Предстоящие визиты и история" actions={<button type="button" className={styles.primary} onClick={() => navigate(booking.catalogScreenId)}>Выбрать услугу<ProtoIcon name="plus" /></button>} tabs={[{ id: 'upcoming', label: 'Предстоящие' }, { id: 'history', label: 'История' }]} activeTab={section} onTabChange={setSection}>

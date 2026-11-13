@@ -5,6 +5,7 @@ import css from './booking-calendar.module.css'
 
 export const bookingCalendarDateLabel = (day: string, options: Intl.DateTimeFormatOptions) => new Date(`${day}T12:00:00Z`).toLocaleDateString('ru-RU', { ...options, timeZone: 'UTC' })
 export const bookingCalendarStatusNames: Record<string, string> = { booked: 'Записан', arrived: 'Пришёл', completed: 'Завершено', noShow: 'Не пришёл', cancelled: 'Отменён' }
+export const bookingCountLabel = (count: number, forms: readonly [string,string,string] = ['запись','записи','записей']) => `${count} ${forms[count % 10 === 1 && count % 100 !== 11 ? 0 : count % 10 >= 2 && count % 10 <= 4 && !(count % 100 >= 12 && count % 100 <= 14) ? 1 : 2]}`
 export type BookingCalendarViewProps = {
   data: BookingCalendarSnapshot; masterId: string; working: boolean; editing: boolean
   onOpenVisit: (id: string) => void; onOpenPeriod?: (id: string) => void

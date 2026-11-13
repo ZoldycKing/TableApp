@@ -200,3 +200,6 @@
 }
 
 @container builder-app (max-width: 440px) { .container .header { gap: 12px; } .navigation { padding-block: 4px; padding-bottom: calc(4px + env(safe-area-inset-bottom,0px)); } .navigation button { padding: 6px 1px; font-size: 10.5px; line-height: 13px; letter-spacing: -0.02em; } }
+@container builder-app (max-width: 440px) {
+  .navigation button span { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; min-height: 26px; white-space: normal; overflow: hidden; overflow-wrap: anywhere; }
+}

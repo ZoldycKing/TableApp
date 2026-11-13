@@ -7,7 +7,7 @@ import { appV2Fixture } from './fixture.test-utils'
 import { BookingCalendarDemoContext, BookingCalendarScreen } from './booking-calendar'
 import { BookingWeekOverview } from './booking-calendar-views'
 
-afterEach(() => { cleanup(); vi.unstubAllGlobals() })
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks() })
 function fixture() {
   const day = instantToWallClock(new Date(), 'Europe/Moscow')!.date, days = bookingCalendarDays(day, true)
   const masters = [{ id: 'master_olya', name: 'Оля' }, { id: 'master_zhenya', name: 'Женя' }, { id: 'master_natasha', name: 'Наташа' }]
@@ -26,11 +26,11 @@ function resize(width: number) {
     disconnect() {}
   })
 }
-function show(data: BookingCalendarSnapshot, width: number, onOpenVisit = vi.fn(), onOpenPeriod = vi.fn()) {
+function show(data: BookingCalendarSnapshot, width: number, onOpenVisit = vi.fn(), onOpenPeriod = vi.fn(), onCreate = vi.fn()) {
   resize(width)
   const app = appV2Fixture()
-  render(<BookingCalendarDemoContext value={() => ({ ok: true, data })}><BookingCalendarScreen app={app} screenId={app.homeScreenId!} timeZone="Europe/Moscow" working onOpenVisit={onOpenVisit} onOpenPeriod={onOpenPeriod} /></BookingCalendarDemoContext>)
-  return { onOpenVisit, onOpenPeriod }
+  render(<BookingCalendarDemoContext value={() => ({ ok: true, data })}><BookingCalendarScreen app={app} screenId={app.homeScreenId!} timeZone="Europe/Moscow" working onOpenVisit={onOpenVisit} onOpenPeriod={onOpenPeriod} onCreate={onCreate} /></BookingCalendarDemoContext>)
+  return { onOpenVisit, onOpenPeriod, onCreate }
 }
 describe('one calendar for the whole team', () => {
   it('defaults to all masters and opens the detailed day from the week header', async () => {
@@ -61,6 +61,17 @@ describe('one calendar for the whole team', () => {
     data.visits = Array.from({ length: 18 }, (_, index) => visit(`busy_${index}`, 'master_olya', 540 + index * 15))
     render(<BookingWeekOverview data={data} masterId="" working editing={false} onOpenVisit={vi.fn()} onOpenDay={vi.fn()} />)
     expect(screen.getAllByRole('button', { name: /^Открыть запись:/ })).toHaveLength(18)
+  })
+  it('creates from a free working slot with the master/date/time, never from a break or occupied time', async () => {
+    const { data, day } = fixture(), app = appV2Fixture(), onCreate = vi.fn()
+    resize(1200)
+    vi.spyOn(Date, 'now').mockReturnValue(new Date(`${day}T00:00:00Z`).getTime())
+    render(<BookingCalendarDemoContext value={() => ({ ok: true, data })}><BookingCalendarScreen app={app} screenId={app.homeScreenId!} timeZone="Europe/Moscow" onOpenVisit={vi.fn()} onCreate={onCreate} /></BookingCalendarDemoContext>)
+    const free = await screen.findByRole('button', { name: `Записать клиента: Оля, ${day}, 09:00` })
+    fireEvent.click(free)
+    expect(onCreate).toHaveBeenCalledWith({ masterId: 'master_olya', day, time: '09:00' })
+    expect(screen.queryByRole('button', { name: `Записать клиента: Оля, ${day}, 13:00` })).toBeNull()
+    expect(screen.queryByRole('button', { name: `Записать клиента: Оля, ${day}, 10:00` })).toBeNull()
   })
   it('shows the whole team’s chosen day in chronological order on a phone', async () => {
     const { data } = fixture(), callbacks = show(data, 300)

@@ -15,19 +15,42 @@ import { PublishedV2Context, type PublishedV2Transport } from './published-conte
 import { BookingDemoAvailability } from './booking-time'
 import { BookingScheduleDemoContext } from './booking-schedule'
 import { TemplateDemoStage } from '@/components/marketing/template-demo-stage'
-import demo from '@/components/marketing/template-demo-stage.module.css'
+import { TemplateDemoControls } from '@/components/marketing/template-demo-controls'
 import { bookingSchedulePlan, type BookingScheduleAdapter } from '@/lib/builder-v2-booking-schedule'
 import { AppV2Renderer } from './view'
 import css from './booking.module.css'
-import { ProtoIcon } from '../prototype/icons'
+
+const DEMO_SCREENS = [
+  { id: 'catalog', label: 'Услуги' },
+  { id: 'service', label: 'Карточка услуги' },
+  { id: 'client', label: 'Кабинет клиента' },
+  { id: 'team', label: 'Запись у команды' },
+] as const
 
 /** Synthetic, in-memory adapter. Real applications always use server-backed transport. */
-export function BookingDemo({ app, tables, initialRows, phone = false }: { app: AppV2; tables: BuilderV2Table[]; initialRows: AppV2Record[]; phone?: boolean }) {
-  const [role, setRole] = useState('client'), [screenId, setScreenId] = useState(app.homeScreenId!), [recordId, setRecordId] = useState<string>(), [rows, setRows] = useState(initialRows), [version, setVersion] = useState(0), [notice, setNotice] = useState('')
+export function BookingDemo({ app, tables, initialRows, phone = false, initialView }: { app: AppV2; tables: BuilderV2Table[]; initialRows: AppV2Record[]; phone?: boolean; initialView?: string }) {
+  const booking = app.booking!
+  const target = (view: string) => {
+    if (view === 'client') return { role: 'client', screenId: booking.clientScreenId, recordId: undefined }
+    if (view === 'service') {
+      const service = initialRows.find(row => row.tableId === booking.tables.services)
+      return { role: 'client', screenId: service ? booking.serviceScreenId : booking.catalogScreenId, recordId: service?.id }
+    }
+    if (view === 'team') {
+      const visit = initialRows.find(row => row.tableId === booking.tables.visits && row.values[booking.visit.status] === booking.statuses.booked)
+        ?? initialRows.find(row => row.tableId === booking.tables.visits)
+      return { role: 'owner', screenId: visit ? booking.visitScreenId : booking.listScreenId!, recordId: visit?.id }
+    }
+    return { role: 'client', screenId: booking.catalogScreenId, recordId: undefined }
+  }
+  const initialTab = DEMO_SCREENS.find(screen => screen.id === initialView)?.id ?? 'catalog'
+  const initial = target(initialTab)
+  const [selectedView, setSelectedView] = useState<string>(initialTab)
+  const [role, setRole] = useState(initial.role), [screenId, setScreenId] = useState(initial.screenId), [recordId, setRecordId] = useState<string | undefined>(initial.recordId), [rows, setRows] = useState(initialRows), [version, setVersion] = useState(0), [notice, setNotice] = useState('')
   const [mobile, setMobile] = useState(phone)
   const scheduleReceipts = useRef(new Map<string, string>())
   const store = useRef(rows); store.current = rows
-  const booking = app.booking!, timeZone = tables.find(table => table.id === booking.tables.visits)?.fields.find(field => field.id === booking.visit.start)?.timeZone ?? 'Europe/Moscow'
+  const timeZone = tables.find(table => table.id === booking.tables.visits)?.fields.find(field => field.id === booking.visit.start)?.timeZone ?? 'Europe/Moscow'
   const actor: AppV2Actor = { authenticated: true, id: `demo_${role}`, roleIds: [role], email: role === 'owner' ? 'owner@example.com' : 'irina@example.com', name: role === 'owner' ? 'Анна' : 'Ирина', company: '' }
   const visibleApp = { ...app, screens: app.screens.filter(screen => canOpenAppV2Screen(app, actor, screen.id)) }
   const format = (row: AppV2Record): BuilderV2DataRecord => {
@@ -161,13 +184,13 @@ export function BookingDemo({ app, tables, initialRows, phone = false }: { app: 
   }
   const currentRecord = rows.find(row => row.id === recordId)
   return <div className={css.demo}>
-    <TemplateDemoStage phone={mobile} controls={<>
-      <div className={demo.screens} role="group" aria-label="Кто пользуется приложением"><button type="button" aria-pressed={role === 'client'} onClick={() => { setRole('client'); navigate(booking.catalogScreenId) }}>Клиент</button><button type="button" aria-pressed={role === 'owner'} onClick={() => { setRole('owner'); navigate(booking.listScreenId!) }}>Команда</button></div>
-      <div className={demo.devices} role="group" aria-label="Размер экрана"><button type="button" aria-label="Вид на компьютере" aria-pressed={!mobile} onClick={() => setMobile(false)}><ProtoIcon name="desktop" size={19} /></button><button type="button" aria-label="Вид на телефоне" aria-pressed={mobile} onClick={() => setMobile(true)}><ProtoIcon name="phone" size={19} /></button></div>
-      <button type="button" onClick={() => { store.current = initialRows; setRows(initialRows); setVersion(value => value + 1); navigate(booking.catalogScreenId) }}>Начать заново</button>
-    </>} note="Учебный пример. Открывайте услуги, выбирайте время и меняйте записи — данные сбросятся после обновления страницы.">
+    <TemplateDemoStage phone={mobile} controls={<TemplateDemoControls screens={DEMO_SCREENS} selected={selectedView}
+      phone={mobile} label="Экраны салона" onDeviceChange={setMobile} onScreenChange={view => {
+        const next = target(view); setSelectedView(view); setRole(next.role); navigate(next.screenId, next.recordId)
+      }}
+    />} note="Это пример салона «Тихая студия». Открывайте услуги и записи на учебных данных.">
     <BuilderV2Theme app={app}><PublishedV2Context value={transport}><BookingDemoAvailability value={input => bookingV2Availability(app, actor, data(), input)}><BookingScheduleDemoContext value={scheduleAdapter}>
-      <div className={css.demoFrame}><BuilderV2AppFrame app={visibleApp} scrollKey={`${screenId}:${recordId ?? ''}`} screenId={screenId} title={visibleApp.screens.find(screen => screen.id === screenId)?.name ?? 'Запись'} onNavigate={id => navigate(id)}>
+      <div className={css.demoFrame} data-preview-screen={`${role}:${screenId}:${recordId ?? ''}`}><BuilderV2AppFrame app={visibleApp} screenId={screenId} title={visibleApp.screens.find(screen => screen.id === screenId)?.name ?? 'Запись'} onNavigate={id => navigate(id)}>
         {notice && <p role="status">{notice}</p>}<AppV2Renderer key={`${role}:${screenId}:${recordId ?? ''}`} live app={visibleApp} tables={tables} actor={actor} screenId={screenId} record={currentRecord ? format(currentRecord) : undefined} onNavigate={navigate} />
       </BuilderV2AppFrame></div>
     </BookingScheduleDemoContext></BookingDemoAvailability></PublishedV2Context></BuilderV2Theme>

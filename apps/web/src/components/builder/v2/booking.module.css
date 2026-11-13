@@ -1,5 +1,6 @@
 .page { color: var(--v2-ink); min-width: 0; }
 .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 20px; padding: 20px; }
+.serviceCards { min-width: 0; padding: 20px; }
 .cards[data-masters] { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
 .cards[data-masters] .card { flex-direction: row; align-items: start; padding: 16px; gap: 16px; }
 .cards[data-masters] .cardCopy { padding: 0; }
@@ -55,7 +56,7 @@
 .timeHint { margin: 0 0 12px; }
 .slots { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 10px; max-height: 260px; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-width: thin; padding: 4px; }
 .slots button { display: grid; gap: 5px; justify-items: center; padding: 12px 8px; border-radius: 10px; border: 1px solid var(--v2-line); background: var(--v2-surface); color: var(--v2-ink); min-height: 64px; cursor: pointer; }
-.slots button strong { font-size: 16px; font-variant-numeric: tabular-nums; }
+.slots button strong { font-size: 16px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .slots button span { font-size: 11px; }
 .slots button[aria-pressed='true'] { background: var(--v2-primary); border-color: var(--v2-primary); color: var(--v2-on-primary); }
 .profilePhoto { width: 88px; height: 88px; border-radius: 16px; overflow: hidden; background: var(--v2-soft); color: var(--v2-accent); font-size: 30px; font-weight: 700; display: grid; place-items: center; }
@@ -71,6 +72,7 @@
 .actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .bodyCopy { margin: 0; font-size: 15px; line-height: 1.7; white-space: pre-wrap; }
 .demo { --v2-page: #edf1f7; --v2-surface: #fff; --v2-ink: #111827; --v2-muted: #526075; }
+.demo .slots { max-height: none; overflow: visible; }
 .demoFrame { height: 100%; min-width: 0; }
 .demoFrame > div { height: 100%; }
 .scheduleForm { display: grid; gap: 24px; min-width: 0; padding: 24px; border: 1px solid var(--v2-line); border-radius: 16px; background: var(--v2-surface); }
@@ -89,6 +91,7 @@
 .scheduleCheck { display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: 14px; }
 .scheduleTimes { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; min-width: 0; }
 @container builder-app (max-width: 600px) {
+  .serviceCards { padding: 12px; }
   .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 12px; }
   .cards[data-masters] { grid-template-columns: minmax(0, 1fr); }
   .agenda, .listBody { padding: 12px; }
@@ -103,7 +106,7 @@
   .visitCopy strong { font-size: 14px; }
   .visitTime { font-size: 15px; }
   .timeControls { grid-template-columns: minmax(0, 1fr); }
-  .slots { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .slots { grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); }
   .tools { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 12px; align-items: end; }
   .agendaSwitch, .agendaMaster { grid-column: 1 / -1; }
   .agendaSwitch button { flex: 1; }

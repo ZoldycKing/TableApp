@@ -909,7 +909,7 @@ export function AppShell({
      * на большом мониторе — включалось боковое меню и съедало почти всё,
      * оставляя списку полосу в две буквы.
      */
-    <div className="@container flex h-full bg-sand-50">
+    <div className="@container flex h-full bg-sand-50" data-runtime-app data-preview-screen={demo ? `${current.screenId}:${current.rowId ?? ''}` : undefined}>
       {hasNavigation ? (
         <aside className="hidden min-h-0 w-[clamp(208px,15cqw,256px)] shrink-0 flex-col border-r border-sand-200 bg-white @min-[641px]:flex">
           <div className="mx-3 mb-2 flex items-center gap-2.5 border-b border-sand-200 px-1 py-4">
@@ -945,7 +945,7 @@ export function AppShell({
         </aside>
       ) : null}
 
-      <div className="flex h-full min-w-0 flex-1 flex-col">
+      <div className="flex h-full min-w-0 flex-1 flex-col" data-runtime-column>
         <header className="sticky top-0 z-20 border-b border-sand-200 bg-white/90 backdrop-blur-md">
           <div className={`${presentation.contentWidth} flex min-h-16 items-center gap-3 py-3`}>
             {stack.length > 1 ? (
@@ -1017,7 +1017,7 @@ export function AppShell({
          * Прокрутка только вдоль: поперёк приложению разъезжаться нечем, и
          * полоса внизу означала бы, что вылезла карточка, а не что так задумано.
          */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden" data-runtime-body>
           <div ref={contentRef} className={`${presentation.contentWidth} py-5 sm:py-6 ${screen.type === 'tiles' ? '' : '[--app-content-width:1120px]'}`}>
             {screen.type === 'form' && draftConflict && !checkout && !intake ? <div className="mb-4 space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-ink-soft">
               <p>Запись изменилась после начала заполнения. Ваш ввод сохранён. Загрузка актуальных данных сбросит незавершённые правки.</p>

@@ -18,6 +18,7 @@ import css from './booking.module.css'
 import shell from './layout-shell.module.css'
 import styles from '../prototype/prototype.module.css'
 import ui from './view.module.css'
+import presentation from '@/components/runtime/app-presentation.module.css'
 import { OrderActionPanelContext } from './order-detail'
 import { BookingScheduleForm } from './booking-schedule'
 const BookingLogin = lazy(async () => ({ default: (await import('@/components/runtime/app-login')).AppLogin }))
@@ -26,10 +27,10 @@ type Props = AppV2RendererProps & { renderNodes: (ids: readonly string[]) => Rea
 const money = (value: unknown) => typeof value === 'number' && Number.isFinite(value) ? `${value.toLocaleString('ru-RU')} ₽` : 'Цена уточняется'
 const label = (row: AppV2Record, id: string) => builderV2CatalogCell(row, id)
 
-function Photo({ row, fieldId, person = false, large = false, name = '' }: { row: AppV2Record; fieldId?: string; person?: boolean; large?: boolean; name?: string }) {
+function Photo({ row, fieldId, person = false, large = false, name = '', className }: { row: AppV2Record; fieldId?: string; person?: boolean; large?: boolean; name?: string; className?: string }) {
   const published = usePublishedV2()
   const item = fieldId && builderV2MediaItems(row.values[fieldId], published?.slug).find(item => item.image)
-  return <span className={large ? css.profilePhoto : css.photo} data-person={person || undefined} aria-hidden="true">{item ? <BuilderV2Picture item={item} /> : person && name ? name.trim().split(/\s+/).slice(0, 2).map(word => word[0]).join('') : <ProtoIcon name={person ? 'user' : 'scissors'} size={large ? 32 : 48} />}</span>
+  return <span className={className ?? (large ? css.profilePhoto : css.photo)} data-person={person || undefined} aria-hidden="true">{item ? <BuilderV2Picture item={item} /> : person && name ? name.trim().split(/\s+/).slice(0, 2).map(word => word[0]).join('') : <ProtoIcon name={person ? 'user' : 'scissors'} size={large ? 32 : 48} />}</span>
 }
 function Status({ row, booking }: { row: AppV2Record; booking: NonNullable<Props['app']['booking']> }) {
   const value = row.values[booking.visit.status]
@@ -77,17 +78,19 @@ export function BookingScreen(props: Props) {
     const rows = data.rows.filter(row => row.values[masters ? booking.master.active : booking.service.active] === true)
     const table = props.tables.find(table => table.id === (masters ? booking.tables.masters : booking.tables.services))
     const titleField = node?.titleFieldId ?? (masters ? booking.master.name : booking.service.name)
+    const cards = rows.map(row => <button type="button" key={row.id} className={masters ? css.card : `${presentation.catalogCard} flex flex-col text-left transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-sage-600`} onClick={() => navigate(masters ? booking.masterScreenId : booking.serviceScreenId, row.id)}>
+      <Photo row={row} person={masters} name={label(row, titleField)} className={masters ? undefined : presentation.photo} fieldId={masters ? booking.masterPhotoFieldId : node?.cardImageFieldId ?? booking.servicePhotoFieldId} />
+      {masters ? <span className={css.cardCopy}><strong>{label(row, titleField)}</strong>
+        <span className={css.duration}>{label(row, booking.masterDescriptionFieldId!) || 'Поможет подобрать подходящую услугу'}</span>
+        <span className={css.cardAction}>О мастере<ProtoIcon name="arrow" size={16} /></span>
+      </span> : <span className="flex flex-1 flex-col gap-1 p-3.5">
+        <span className="line-clamp-2 text-sm font-semibold leading-snug">{label(row, titleField)}</span>
+        <span className={css.duration}>{label(row, booking.service.minutes)} мин</span>
+        <span className="mt-auto flex justify-end pt-3 text-[15px] font-bold tabular-nums">{builderV2CatalogPrice(row, table?.fields.find(field => field.id === (node?.cardDetailFieldId ?? booking.service.price)))}</span>
+      </span>}
+    </button>)
     return <div className={css.page}><ListScreenShell title={screen.name} meta={masters ? 'Выберите своего мастера' : 'Выберите услугу и удобное время'} actions={owner && pageForm ? <button type="button" className={styles.primary} onClick={() => setShowForm(true)}><ProtoIcon name="plus" />{masters ? 'Добавить мастера' : 'Добавить услугу'}</button> : undefined} search={<ShellSearchField value={search} onChange={setSearch} placeholder={masters ? 'Найти мастера' : 'Найти услугу'} />}>
-      <div className={css.cards} data-booking-catalog data-masters={masters || undefined} onClickCapture={() => { if (props.editing && node) props.onSelect?.(node.id) }}>
-        {rows.map(row => <button type="button" key={row.id} className={css.card} onClick={() => navigate(masters ? booking.masterScreenId : booking.serviceScreenId, row.id)}>
-          <Photo row={row} person={masters} name={label(row, titleField)} fieldId={masters ? booking.masterPhotoFieldId : node?.cardImageFieldId ?? booking.servicePhotoFieldId} />
-          <span className={css.cardCopy}><strong>{label(row, titleField)}</strong>
-            <span className={css.duration}>{masters ? label(row, booking.masterDescriptionFieldId!) || 'Поможет подобрать подходящую услугу' : `${label(row, booking.service.minutes)} мин`}</span>
-            {!masters && <span className={css.cardBottom}><span className={css.price}>{builderV2CatalogPrice(row, table?.fields.find(field => field.id === (node?.cardDetailFieldId ?? booking.service.price)))}</span></span>}
-            <span className={css.cardAction}>{masters ? 'О мастере' : 'Подробнее'}<ProtoIcon name="arrow" size={16} /></span>
-          </span>
-        </button>)}
-      </div>
+      <div className={masters ? css.cards : `${css.serviceCards} ${presentation.catalog}`} data-booking-catalog data-masters={masters || undefined} onClickCapture={() => { if (props.editing && node) props.onSelect?.(node.id) }}>{masters ? cards : <div className={presentation.catalogGrid}>{cards}</div>}</div>
       {!data.loading && !data.error && !rows.length && <p className={css.empty}>{search ? 'Ничего не нашли. Попробуйте другое название.' : masters ? 'Мастера появятся здесь после настройки расписания.' : 'Услуги появятся здесь после добавления в таблицу.'}</p>}
       {feedback}
     </ListScreenShell>{props.renderNodes(additional)}</div>

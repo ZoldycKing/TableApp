@@ -2,7 +2,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { instantToWallClock } from '@tableapp/schema'
 import type { AppV2 } from '@tableapp/schema/app-v2'
-import { bookingCalendarDays, bookingClock, bookingVisitLanes, type BookingCalendarRequest, type BookingCalendarResult, type BookingCalendarSnapshot } from '@/lib/builder-v2-booking-calendar'
+import { bookingCalendarDays, bookingCalendarShift, bookingClock, bookingVisitLanes, type BookingCalendarRequest, type BookingCalendarResult, type BookingCalendarSnapshot } from '@/lib/builder-v2-booking-calendar'
 import { usePublishedV2 } from './published-context'
 import { ListScreenShell } from './layout-shell'
 import { ProtoIcon } from '../prototype/icons'
@@ -73,7 +73,7 @@ export function BookingCalendarScreen({ app, screenId, timeZone, working = false
       {week && <nav className={css.mobileDays} aria-label="День недели">{range.map(date => <button type="button" key={date} aria-pressed={date === day} onClick={() => setDay(date)}><span>{dateLabel(date, { weekday: 'short' })}</span><strong>{dateLabel(date, { day: 'numeric' })}</strong></button>)}</nav>}
       {!result ? <p className={css.feedback} role="status">Загружаем календарь…</p> : !result.ok ? <div className={css.feedback} role="alert"><p>{result.error}</p><button type="button" className={styles.secondary} onClick={retry}>Повторить загрузку</button></div> : !data?.masters.length ? <p className={css.feedback}>Сначала добавьте мастера в разделе «Мастера».</p> : <>
         <CalendarGrid data={data} day={day} week={week} compact={compact} masterId={effectiveMaster} working={working} editing={editing} onOpenVisit={onOpenVisit} onOpenPeriod={onOpenPeriod} />
-        <div className={css.legend}><span><i data-kind="hours" />Рабочее время</span><span><i data-kind="visit" />Запись</span><span><i />Перерыв или нерабочее время</span></div>
+        <div className={css.legend}><span><i data-kind="hours" />Рабочая смена</span><span><i data-kind="visit" />Запись клиента</span><span><i />Перерыв или не работает</span></div>
         {visibleVisits.some(visit => visit.status === 'cancelled') && <div className={css.cancelled}><strong>Отменённые записи</strong>{visibleVisits.filter(visit => visit.status === 'cancelled').map(visit => <button key={visit.id} type="button" onClick={() => onOpenVisit(visit.id)}>{bookingClock(visit.start)} · {visit.service}{visit.client ? ` · ${visit.client}` : ''}</button>)}</div>}
       </>}
     </ListScreenShell>
@@ -89,20 +89,22 @@ function CalendarGrid({ data, day, week, compact, masterId, working, editing, on
   const relevant = (masterId: string, date: string) => data.visits.filter(visit => visit.masterId === masterId && visit.day === date && visit.status !== 'cancelled')
   const active = columns.flatMap(column => relevant(column.master.id, column.day))
   const shifts = columns.map(column => data.shifts.find(shift => shift.masterId === column.master.id && shift.day === column.day)!)
+  const workdays = shifts.map(shift => bookingCalendarShift(shift.windows ?? []))
   const windows = shifts.flatMap(shift => shift.windows ?? [])
-  const start = Math.max(0, Math.floor(Math.min(9 * 60, ...windows.map(window => window.start), ...active.map(visit => visit.start)) / 60) * 60)
-  const end = Math.min(1440, Math.ceil(Math.max(18 * 60, ...windows.map(window => window.end), ...active.map(visit => visit.end)) / 60) * 60)
-  const span = end - start, height = span / 60 * 64
+  const start = Math.max(0, Math.floor(Math.min(8 * 60, ...windows.map(window => window.start - 60), ...active.map(visit => visit.start - 60)) / 60) * 60)
+  const end = Math.min(1440, Math.ceil(Math.max(20 * 60, ...windows.map(window => window.end + 60), ...active.map(visit => visit.end + 60)) / 60) * 60)
+  const span = end - start, height = span / 60 * 56
   const ticks = Array.from({ length: span / 60 + 1 }, (_, index) => start + index * 60)
   const position = (from: number, to: number): CSSProperties => ({ top: `${(from - start) / span * 100}%`, height: `${(Math.min(to, end) - from) / span * 100}%` })
   return <div className={css.calendar} style={{ '--calendar-columns': columns.length, '--calendar-height': `${height}px` } as CSSProperties} aria-label="Календарь рабочих часов и записей">
-    <div className={css.head}><span className={css.axisHead}>Время</span>{columns.map(column => <div className={css.columnHead} key={`${column.master.id}:${column.day}`}>{!week && <span className={css.avatar} aria-hidden>{column.master.name.trim().split(/\s+/).slice(0, 2).map(word => word[0]).join('')}</span>}<strong>{week ? dateLabel(column.day, { weekday: 'short', day: 'numeric', month: 'short' }) : column.master.name}</strong><small>{week ? column.master.name : dateLabel(column.day, { day: 'numeric', month: 'long' })}</small></div>)}</div>
+    <div className={css.head}><span className={css.axisHead}>Время</span>{columns.map((column, index) => <div className={css.columnHead} key={`${column.master.id}:${column.day}`}>{!week && <span className={css.avatar} aria-hidden>{column.master.name.trim().split(/\s+/).slice(0, 2).map(word => word[0]).join('')}</span>}<strong>{week ? dateLabel(column.day, { weekday: 'short', day: 'numeric', month: 'short' }) : column.master.name}</strong><small>{week ? column.master.name : dateLabel(column.day, { day: 'numeric', month: 'long' })}</small><span className={css.shiftSummary} data-working={Boolean(workdays[index]) || undefined}>{workdays[index] ? <><span>Работает</span><b>{bookingClock(workdays[index]!.start)}–{bookingClock(workdays[index]!.end)}</b></> : shifts[index]!.windows === null ? 'Часы недоступны' : 'Не работает'}</span></div>)}</div>
     <div className={css.timeline}><div className={css.axis}>{ticks.map(time => <span key={time} style={{ top: `${(time - start) / span * 100}%` }}>{bookingClock(time)}</span>)}</div>{columns.map((column, index) => {
-      const shift = shifts[index]!, visits = relevant(column.master.id, column.day), periods = shift.windows ?? []
+      const shift = shifts[index]!, workday = workdays[index], visits = relevant(column.master.id, column.day), periods = shift.windows ?? []
       return <section className={css.column} key={`${column.master.id}:${column.day}`} aria-label={`${column.master.name}, ${dateLabel(column.day, { day: 'numeric', month: 'long' })}`}>
         {ticks.slice(0, -1).map(time => <span aria-hidden className={css.line} key={time} style={{ top: `${(time - start) / span * 100}%` }} />)}
-        {periods.map((window, windowIndex) => working && onOpenPeriod ? <button type="button" className={css.hours} key={`${window.id}:${windowIndex}`} style={position(window.start, window.end)} aria-label={`Изменить рабочий период: ${column.master.name}, ${dateLabel(column.day, { day: 'numeric', month: 'long' })}, ${bookingClock(window.start)}–${bookingClock(window.end)}`} disabled={editing} onClick={() => onOpenPeriod(window.id)}><span>{bookingClock(window.start)}–{bookingClock(window.end)}</span><small>Изменить часы</small></button> : <div className={css.hours} key={`${window.id}:${windowIndex}`} style={position(window.start, window.end)}><span>{bookingClock(window.start)}–{bookingClock(window.end)}</span></div>)}
-        {periods.slice(1).map((window, i) => window.start > periods[i]!.end ? <span className={css.break} key={`break-${window.id}`} style={position(periods[i]!.end, window.start)}>Перерыв</span> : null)}
+        {workday && <div className={css.shiftOutline} data-calendar-shift aria-hidden style={position(workday.start, workday.end)} />}
+        {working && onOpenPeriod && periods.map((window, windowIndex) => <button type="button" className={css.hours} key={`${window.id}:${windowIndex}`} style={position(window.start, window.end)} aria-label={`Изменить рабочий период: ${column.master.name}, ${dateLabel(column.day, { day: 'numeric', month: 'long' })}, ${bookingClock(window.start)}–${bookingClock(window.end)}`} title={`Изменить часы ${bookingClock(window.start)}–${bookingClock(window.end)}`} disabled={editing} onClick={() => onOpenPeriod(window.id)}><span>Изменить часы</span></button>)}
+        {workday?.breaks.map(pause => <span className={css.break} key={`break-${pause.start}`} style={position(pause.start, pause.end)}><strong>Перерыв</strong><span>{bookingClock(pause.start)}–{bookingClock(pause.end)}</span></span>)}
         {!periods.length && <p className={css.dayOff}>{shift.windows === null ? 'Рабочие часы недоступны' : shift.closed ? 'Выходной' : 'Нет рабочих часов'}</p>}
         {shift.exception && <span className={css.exception}>График на эту дату</span>}
         {bookingVisitLanes(visits).map(({ visit, lane, lanes }) => <button type="button" key={visit.id} className={css.visit} data-status={visit.status || undefined} data-short={visit.end - visit.start < 90 || undefined} disabled={editing} style={{ ...position(visit.start, visit.end), left: `calc(${lane / lanes * 100}% + 6px)`, width: `calc(${100 / lanes}% - 12px)` }} title={`${bookingClock(visit.start)}–${bookingClock(visit.end)} · ${visit.service} · ${visit.client} · ${statusNames[visit.status] ?? ''}`} aria-label={`Открыть запись: ${visit.service}, ${visit.client}, ${bookingClock(visit.start)}–${bookingClock(visit.end)}`} onClick={() => onOpenVisit(visit.id)}><span className={css.visitTime}>{bookingClock(visit.start)}–{bookingClock(visit.end)}</span><strong>{visit.service}</strong>{visit.client && <small>{visit.client}</small>}<span className={css.status}>{statusNames[visit.status] ?? ''}</span></button>)}

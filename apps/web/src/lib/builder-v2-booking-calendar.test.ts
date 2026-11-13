@@ -3,7 +3,7 @@ import type { AppV2Actor } from '@tableapp/schema/app-v2'
 import { buildTemplate } from './templates/build'
 import { salon } from './templates/defs/salon'
 import { buildBookingV2App } from './templates/booking-v2'
-import { bookingCalendarSnapshot, bookingCalendarDays, bookingVisitLanes, validBookingCalendarRequest, type BookingCalendarVisit } from './builder-v2-booking-calendar'
+import { bookingCalendarSnapshot, bookingCalendarDays, bookingCalendarShift, bookingVisitLanes, validBookingCalendarRequest, type BookingCalendarVisit } from './builder-v2-booking-calendar'
 import type { BookingData } from './booking'
 
 function fixture() {
@@ -16,6 +16,15 @@ function fixture() {
   return { app, config, data, owner, request: { screenId: config.listScreenId!, day: '2026-11-16', week: false } }
 }
 describe('team calendar and working-hours projection', () => {
+  it('presents split periods as one shift with an explicit lunch break', () => {
+    expect(bookingCalendarShift([{ id: 'morning', start: 540, end: 780 }, { id: 'evening', start: 840, end: 1140 }])).toEqual({ start: 540, end: 1140, breaks: [{ start: 780, end: 840 }] })
+    expect(bookingCalendarShift([])).toBeNull()
+  })
+  it('does not invent breaks inside overlapping or adjacent working windows', () => {
+    const periods = [{ id: 'a', start: 540, end: 1020 }, { id: 'b', start: 600, end: 720 }, { id: 'c', start: 840, end: 1140 }, { id: 'd', start: 1140, end: 1200 }]
+    expect(bookingCalendarShift(periods)).toEqual({ start: 540, end: 1200, breaks: [] })
+    expect(periods[0]!.end).toBe(1020)
+  })
   it('shows each master once with all working windows, rather than a card per period', () => {
     const f = fixture(), result = bookingCalendarSnapshot(f.app, f.owner, f.data, f.request)
     expect(result.ok).toBe(true)

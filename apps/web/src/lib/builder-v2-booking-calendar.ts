@@ -27,6 +27,17 @@ export function validBookingCalendarRequest(input: BookingCalendarRequest) {
   return Boolean(input && typeof input === 'object' && typeof input.screenId === 'string' && /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/.test(input.screenId) && typeof input.day === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(input.day) && calendarDay(input.day) === input.day && typeof input.week === 'boolean')
 }
 export const bookingClock = (minutes: number) => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`
+/** One visible shift with breaks, even when storage uses several or overlapping periods. */
+export function bookingCalendarShift(periods: readonly BookingCalendarWindow[]) {
+  const merged: { start: number; end: number }[] = []
+  for (const period of [...periods].sort((a, b) => a.start - b.start)) {
+    const previous = merged.at(-1)
+    if (previous && period.start <= previous.end) previous.end = Math.max(previous.end, period.end)
+    else merged.push({ start: period.start, end: period.end })
+  }
+  if (!merged.length) return null
+  return { start: merged[0]!.start, end: merged.at(-1)!.end, breaks: merged.slice(1).map((period, index) => ({ start: merged[index]!.end, end: period.start })) }
+}
 function minutes(value: unknown) {
   if (typeof value !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) return null
   const [hour, minute] = value.split(':').map(Number)

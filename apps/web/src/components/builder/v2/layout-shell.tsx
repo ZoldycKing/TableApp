@@ -8,6 +8,7 @@ export type ShellMetric = {
   key: string
   value: ReactNode
   caption: string
+  icon?: ReactNode
   /** Small context under the value (warehouse, formula, …). */
   note?: ReactNode
   pill?: ReactNode
@@ -27,7 +28,7 @@ export function ListScreenShell({
   meta,
   actions,
   metrics,
-  compactMetrics = false,
+  metricLayout = 'band',
   tabs,
   activeTab,
   onTabChange,
@@ -42,8 +43,8 @@ export function ListScreenShell({
   meta?: ReactNode
   actions?: ReactNode
   metrics?: readonly ShellMetric[]
-  /** Keep a small summary in one row, including inside the phone preview. */
-  compactMetrics?: boolean
+  /** Dashboard cards above the list, or the standard summary band inside it. */
+  metricLayout?: 'band' | 'cards'
   tabs?: readonly ShellTab[]
   activeTab?: string
   onTabChange?: (id: string) => void
@@ -60,6 +61,20 @@ export function ListScreenShell({
     return true
   }) ?? []
   const metricCount = visibleMetrics.length
+  const cards = metricLayout === 'cards'
+  const summary = metricCount ? <div className={shell.summary} data-count={metricCount} data-cards={cards || undefined} style={{ '--shell-metrics': metricCount } as CSSProperties}>
+    {visibleMetrics.map(metric => <div key={metric.key} className={shell.metric} data-tile={cards || undefined} data-wide={metric.wide || undefined}>
+      {cards ? <>
+        <p className={shell.metricCaption}>{metric.icon ? <span className={shell.metricIcon} aria-hidden="true">{metric.icon}</span> : null}{metric.caption}</p>
+        <p className={shell.metricValue}>{metric.value}</p>
+      </> : <>
+        <p className={shell.metricValue}>{metric.value}</p>
+        <p className={shell.metricCaption}>{metric.caption}</p>
+      </>}
+      {metric.note ? <p className={shell.metricNote}>{metric.note}</p> : null}
+      {metric.pill ? <span className={shell.metricPill} data-tone={metric.tone}>{metric.pill}</span> : null}
+    </div>)}
+  </div> : null
   return <div className={shell.shell} data-layout="list">
     {!hideHeader && (title || actions) ? <header className={shell.header}>
       <div className={shell.headerCopy}>
@@ -68,15 +83,9 @@ export function ListScreenShell({
       </div>
       {actions ? <div className={shell.headerActions}>{actions}</div> : null}
     </header> : null}
+    {cards ? summary : null}
     <div className={shell.panel}>
-      {metricCount ? <div className={shell.summary} data-count={metricCount} data-compact={compactMetrics || undefined} style={{ '--shell-metrics': metricCount } as CSSProperties}>
-        {visibleMetrics.map(metric => <div key={metric.key} className={shell.metric} data-wide={metric.wide || undefined}>
-          <p className={shell.metricValue}>{metric.value}</p>
-          <p className={shell.metricCaption}>{metric.caption}</p>
-          {metric.note ? <p className={shell.metricNote}>{metric.note}</p> : null}
-          {metric.pill ? <span className={shell.metricPill} data-tone={metric.tone}>{metric.pill}</span> : null}
-        </div>)}
-      </div> : null}
+      {!cards ? summary : null}
       {filterBar ?? ((tabs?.length || search || selects) ? <div className={shell.filters}>
         {tabs?.length ? <div className={shell.filterTabs} role="tablist" aria-label="Фильтры списка">
           {tabs.map(tab => <button

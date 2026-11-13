@@ -111,11 +111,6 @@
 .summary[data-count='4'] .metric:nth-child(3),
 .summary[data-count='4'] .metric:nth-child(4) { border-bottom: 0; }
 
-.summary[data-compact] { grid-template-columns: repeat(var(--shell-metrics, 3), minmax(0, 1fr)); }
-.summary[data-compact] .metric,
-.summary[data-compact] .metric:first-child { grid-column: auto; border-right: 1px solid var(--shell-line); border-bottom: 0; padding: 14px 12px; }
-.summary[data-compact] .metric:last-child { border-right: 0; }
-
 .metricValue {
   margin: 0;
   color: var(--shell-ink);
@@ -1367,4 +1362,24 @@
   .stickyBar[data-open] { display: grid; }
   /* Hide desktop header actions when sticky bar owns them. */
   .detailPage[data-sticky] .detailActions { display: none; }
+}
+
+/* Dashboard summary uses the same tiles as detail pages, outside the list panel.
+   Container queries keep phone previews independent of the browser's width. */
+.summary[data-cards] { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; border: 0; }
+.summary[data-cards] .metric[data-tile] { grid-column: auto; border: 1px solid var(--shell-line); gap: 10px; }
+.summary[data-cards] .metric[data-wide] { grid-column: 1 / -1; }
+.summary[data-cards] .metricCaption { display: flex; align-items: center; gap: 8px; font-weight: 500; }
+.metricIcon { display: grid; place-items: center; flex: 0 0 28px; width: 28px; height: 28px; border-radius: 8px; background: var(--v2-soft); color: var(--v2-accent); }
+.summary[data-cards] .metricValue { font-size: clamp(1.5rem, 3cqw, 1.75rem); line-height: 1.15; }
+.summary[data-cards] .metricNote { font-weight: 400; }
+@container builder-app (min-width: 641px) {
+  .summary[data-cards] { grid-template-columns: repeat(var(--shell-metrics, 3), minmax(0, 1fr)); }
+  .summary[data-cards] .metric[data-wide] { grid-column: auto; }
+}
+@container builder-app (max-width: 340px) {
+  .summary[data-cards] { grid-template-columns: minmax(0, 1fr); }
+  .summary[data-cards] .metric[data-tile]:not([data-wide]) { grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; align-items: center; }
+  .summary[data-cards] .metric:not([data-wide]) .metricValue { grid-column: 2; grid-row: 1; }
+  .summary[data-cards] .metric:not([data-wide]) .metricNote { grid-column: 1 / -1; }
 }

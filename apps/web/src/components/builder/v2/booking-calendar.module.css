@@ -67,7 +67,59 @@
 .cancelled { display: grid; gap: 8px; padding: 16px 20px; border-top: 1px solid var(--v2-line); }
 .cancelled strong { font-size: 12px; color: var(--v2-muted); }
 .cancelled button { text-align: left; border: 0; padding: 6px 0; font: inherit; font-size: 12px; color: var(--v2-muted); background: transparent; cursor: pointer; }
-@container booking-calendar (max-width: 699px) {
+.weekOverview { margin: 0 20px 20px; min-width: 0; border: 1px solid var(--v2-line); border-radius: 12px; overflow: clip; }
+.weekTable { width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 0; background: var(--v2-surface); }
+.masterColumn { width: clamp(100px, 11cqw, 144px); }
+.weekTable :is(th,td) { padding: 0; text-align: left; vertical-align: top; min-width: 0; }
+.weekTable tr > :not(:first-child) { border-left: 1px solid var(--v2-line); }
+.weekTable tbody tr > * { border-top: 1px solid var(--v2-line); }
+.weekTable thead { background: var(--v2-page); }
+.weekCorner { padding: 20px 12px !important; font-size: 12px; font-weight: 600; color: var(--v2-muted); }
+.openDay { display: grid; gap: 3px; width: 100%; min-height: 66px; padding: 12px 10px; border: 0; background: transparent; color: var(--v2-ink); text-align: left; font: inherit; cursor: pointer; }
+.openDay > span { font-size: 11px; font-weight: 400; color: var(--v2-muted); }
+.openDay > strong { font-size: 14px; font-weight: 700; }
+.openDay:hover { background: var(--v2-soft); }
+.weekTable .weekMaster { position: sticky; left: 0; z-index: 1; padding: 16px 12px; background: var(--v2-surface); }
+.weekMaster > .avatar { margin-bottom: 8px; }
+.weekMaster > strong { display: block; font-size: 13px; line-height: 1.5; font-weight: 700; overflow-wrap: anywhere; }
+.weekCell { display: grid; align-content: start; gap: 12px; min-height: 170px; padding: 12px 8px 16px; }
+.shiftInfo { display: grid; gap: 4px; min-width: 0; color: var(--v2-muted); font-size: 11px; line-height: 1.5; }
+.shiftInfo > span { display: flex; flex-wrap: wrap; gap: 2px 4px; }
+.shiftInfo b { font-weight: 650; white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--v2-ink); }
+.shiftInfo small { font-size: 10px; font-variant-numeric: tabular-nums; }
+.shiftInfo small > span { display: inline-block; white-space: nowrap; }
+.weekVisits, .agendaVisits { display: grid; gap: 8px; min-width: 0; }
+.weekVisit, .agendaVisit { display: grid; justify-items: start; gap: 5px; width: 100%; min-width: 0; padding: 9px 7px; border: 1px solid #c6d8ef; border-radius: 8px; background: #edf4ff; color: #214a79; text-align: left; font: inherit; cursor: pointer; }
+.weekVisit:hover, .agendaVisit:hover { border-color: #47749c; }
+.weekVisit[data-status=completed], .weekVisit[data-status=arrived], .agendaVisit[data-status=completed], .agendaVisit[data-status=arrived] { background: #edf5ee; border-color: #b9d5bf; color: #285a38; }
+.weekVisit[data-status=noShow], .agendaVisit[data-status=noShow] { background: #fff0ee; border-color: #e9c0bb; color: #8b342f; }
+.cardTime { font-size: 11px; line-height: 1.4; font-variant-numeric: tabular-nums; font-weight: 700; white-space: nowrap; }
+.weekVisit > strong, .agendaVisit > strong { font-size: 12px; line-height: 1.5; font-weight: 700; overflow-wrap: anywhere; }
+.weekVisit > small, .agendaVisit > small { font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.cardStatus { margin-top: 4px; font-size: 10px; font-weight: 600; }
+.noVisits { color: var(--v2-muted); font-size: 11px; line-height: 1.5; }
+.dayAgenda { min-width: 0; padding: 0 12px 20px; }
+.dayAgenda > h3 { margin: 0 0 14px; font-size: 14px; font-weight: 700; line-height: 1.5; }
+.dayAgenda > h3::first-letter { text-transform: uppercase; }
+.roster { display: grid; border-block: 1px solid var(--v2-line); }
+.rosterRow { display: grid; grid-template-columns: 32px minmax(0,1fr); align-items: center; gap: 5px 10px; padding: 12px 0; }
+.rosterRow + .rosterRow { border-top: 1px solid var(--v2-line); }
+.rosterRow > .avatar { grid-row: span 2; }
+.rosterRow > strong { font-size: 13px; line-height: 1.5; font-weight: 700; }
+.rosterRow > .shiftInfo { grid-column: 2; }
+.periodChoice { grid-column: 2; font-size: 11px; }
+.periodChoice summary { width: fit-content; padding-block: 7px; color: var(--v2-accent); cursor: pointer; }
+.periodChoice > div { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.periodChoice button { min-height: 38px; padding: 7px 9px; border: 1px solid var(--v2-line); border-radius: 8px; background: var(--v2-surface); color: var(--v2-ink); font: inherit; font-variant-numeric: tabular-nums; cursor: pointer; }
+.dayAgenda > h4 { display: flex; align-items: center; gap: 8px; margin: 22px 0 12px; font-size: 14px; font-weight: 700; }
+.dayAgenda > h4 > span { color: var(--v2-muted); font-size: 12px; font-weight: 400; }
+.agendaVisit { padding: 14px; gap: 7px; border-radius: 12px; }
+.agendaVisit > strong { font-size: 14px; }
+.agendaVisit .cardTime { font-size: 13px; }
+.cardMaster { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.miniAvatar { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 7px; background: var(--v2-surface); font-size: 10px; font-weight: 700; }
+.agendaEmpty { color: var(--v2-muted); margin: 0; font-size: 13px; line-height: 1.6; }
+@container booking-calendar (max-width: 759px) {
   .controls { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 10px; }
   .mode { grid-column: 1 / -1; }
   .mode button { flex: 1; }

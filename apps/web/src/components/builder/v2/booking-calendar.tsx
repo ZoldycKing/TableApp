@@ -8,11 +8,10 @@ import { ListScreenShell } from './layout-shell'
 import { ProtoIcon } from '../prototype/icons'
 import styles from '../prototype/prototype.module.css'
 import css from './booking-calendar.module.css'
+import { BookingWeekOverview, BookingDayAgenda, bookingCalendarDateLabel as dateLabel, bookingCalendarStatusNames as statusNames } from './booking-calendar-views'
 
 export const BookingCalendarDemoContext = createContext<((request: BookingCalendarRequest) => BookingCalendarResult) | null>(null)
-const dateLabel = (day: string, options: Intl.DateTimeFormatOptions) => new Date(`${day}T12:00:00Z`).toLocaleDateString('ru-RU', { ...options, timeZone: 'UTC' })
 const money = (value: number) => `${value.toLocaleString('ru-RU')} ₽`
-const statusNames: Record<string, string> = { booked: 'Записан', arrived: 'Пришёл', completed: 'Завершено', noShow: 'Не пришёл', cancelled: 'Отменён' }
 
 function useCalendar(app: AppV2, request: BookingCalendarRequest) {
   const demo = useContext(BookingCalendarDemoContext), published = usePublishedV2()
@@ -43,13 +42,13 @@ export function BookingCalendarScreen({ app, screenId, timeZone, working = false
   useEffect(() => {
     const element = root.current
     if (!element) return
-    const observer = new ResizeObserver(entries => setCompact((entries[0]?.contentRect.width ?? 0) < 700))
+    const observer = new ResizeObserver(entries => setCompact((entries[0]?.contentRect.width ?? 0) < 760))
     observer.observe(element)
     return () => observer.disconnect()
   }, [])
   const data = result?.ok ? result.data : undefined
   const selectedMaster = data?.masters.some(item => item.id === master) ? master : ''
-  const effectiveMaster = selectedMaster || (compact || week ? data?.masters[0]?.id ?? '' : '')
+  const effectiveMaster = selectedMaster
   const visibleVisits = data?.visits.filter(visit => !effectiveMaster || visit.masterId === effectiveMaster) ?? []
   const shiftDate = (direction: number) => {
     const next = new Date(`${day}T12:00:00Z`); next.setUTCDate(next.getUTCDate() + direction * (week ? 7 : 1)); setDay(next.toISOString().slice(0, 10))
@@ -67,25 +66,25 @@ export function BookingCalendarScreen({ app, screenId, timeZone, working = false
         <div className={css.mode} role="group" aria-label="Период календаря"><button type="button" aria-pressed={!week} onClick={() => setWeek(false)}>День</button><button type="button" aria-pressed={week} onClick={() => setWeek(true)}>Неделя</button></div>
         <div className={css.dateControls}><button type="button" aria-label={week ? 'Предыдущая неделя' : 'Предыдущий день'} onClick={() => shiftDate(-1)}><ProtoIcon name="back" size={17} /></button><label><span className="sr-only">Дата календаря</span><input type="date" aria-label="Дата календаря" value={day} onChange={event => { if (event.target.value) setDay(event.target.value) }} /></label><button type="button" aria-label={week ? 'Следующая неделя' : 'Следующий день'} onClick={() => shiftDate(1)}><ProtoIcon name="arrow" size={17} /></button></div>
         <button type="button" className={css.today} onClick={() => setDay(today)}>Сегодня</button>
-        <label className={css.master}><span className="sr-only">Мастер календаря</span><select aria-label="Мастер календаря" value={effectiveMaster} onChange={event => setMaster(event.target.value)}>{!compact && !week && <option value="">Все мастера</option>}{data?.masters.map(item => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label>
+        <label className={css.master}><span className="sr-only">Мастер календаря</span><select aria-label="Мастер календаря" value={effectiveMaster} onChange={event => setMaster(event.target.value)}><option value="">Все мастера</option>{data?.masters.map(item => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label>
       </div>}>
       <div className={css.caption}><h2>{periodLabel}</h2><span>Время студии · {new Intl.DateTimeFormat('ru-RU', { timeZone: data?.timeZone ?? timeZone, timeZoneName: 'shortOffset' }).formatToParts(new Date()).find(part => part.type === 'timeZoneName')?.value.replace('GMT', 'UTC')}</span></div>
       {week && <nav className={css.mobileDays} aria-label="День недели">{range.map(date => <button type="button" key={date} aria-pressed={date === day} onClick={() => setDay(date)}><span>{dateLabel(date, { weekday: 'short' })}</span><strong>{dateLabel(date, { day: 'numeric' })}</strong></button>)}</nav>}
       {!result ? <p className={css.feedback} role="status">Загружаем календарь…</p> : !result.ok ? <div className={css.feedback} role="alert"><p>{result.error}</p><button type="button" className={styles.secondary} onClick={retry}>Повторить загрузку</button></div> : !data?.masters.length ? <p className={css.feedback}>Сначала добавьте мастера в разделе «Мастера».</p> : <>
-        <CalendarGrid data={data} day={day} week={week} compact={compact} masterId={effectiveMaster} working={working} editing={editing} onOpenVisit={onOpenVisit} onOpenPeriod={onOpenPeriod} />
-        <div className={css.legend}><span><i data-kind="hours" />Рабочая смена</span><span><i data-kind="visit" />Запись клиента</span><span><i />Перерыв или не работает</span></div>
-        {visibleVisits.some(visit => visit.status === 'cancelled') && <div className={css.cancelled}><strong>Отменённые записи</strong>{visibleVisits.filter(visit => visit.status === 'cancelled').map(visit => <button key={visit.id} type="button" onClick={() => onOpenVisit(visit.id)}>{bookingClock(visit.start)} · {visit.service}{visit.client ? ` · ${visit.client}` : ''}</button>)}</div>}
+        {compact ? <BookingDayAgenda data={data} day={day} masterId={effectiveMaster} working={working} editing={editing} onOpenVisit={onOpenVisit} onOpenPeriod={onOpenPeriod} /> : week ? <BookingWeekOverview data={data} masterId={effectiveMaster} working={working} editing={editing} onOpenVisit={onOpenVisit} onOpenPeriod={onOpenPeriod} onOpenDay={date => { setDay(date); setWeek(false) }} /> : <CalendarGrid data={data} day={day} masterId={effectiveMaster} working={working} editing={editing} onOpenVisit={onOpenVisit} onOpenPeriod={onOpenPeriod} />}
+        {!compact && !week && <div className={css.legend}><span><i data-kind="hours" />Рабочая смена</span><span><i data-kind="visit" />Запись клиента</span><span><i />Перерыв или не работает</span></div>}
+        {visibleVisits.some(visit => visit.status === 'cancelled' && (!compact || visit.day === day)) && <div className={css.cancelled}><strong>Отменённые записи</strong>{visibleVisits.filter(visit => visit.status === 'cancelled' && (!compact || visit.day === day)).map(visit => <button key={visit.id} type="button" onClick={() => onOpenVisit(visit.id)}>{week && !compact ? `${dateLabel(visit.day, { day: 'numeric', month: 'short' })} · ` : ''}{bookingClock(visit.start)} · {data.masters.find(master => master.id === visit.masterId)?.name} · {visit.service}{visit.client ? ` · ${visit.client}` : ''}</button>)}</div>}
       </>}
     </ListScreenShell>
   </div>
 }
 
-function CalendarGrid({ data, day, week, compact, masterId, working, editing, onOpenVisit, onOpenPeriod }: {
-  data: BookingCalendarSnapshot; day: string; week: boolean; compact: boolean; masterId: string; working: boolean; editing: boolean
+function CalendarGrid({ data, day, masterId, working, editing, onOpenVisit, onOpenPeriod }: {
+  data: BookingCalendarSnapshot; day: string; masterId: string; working: boolean; editing: boolean
   onOpenVisit: (id: string) => void; onOpenPeriod?: (id: string) => void
 }) {
   const masters = data.masters.filter(master => !masterId || master.id === masterId)
-  const columns = week ? (compact ? [day] : data.days).map(date => ({ day: date, master: masters[0]! })) : masters.map(master => ({ day, master }))
+  const columns = masters.map(master => ({ day, master }))
   const relevant = (masterId: string, date: string) => data.visits.filter(visit => visit.masterId === masterId && visit.day === date && visit.status !== 'cancelled')
   const active = columns.flatMap(column => relevant(column.master.id, column.day))
   const shifts = columns.map(column => data.shifts.find(shift => shift.masterId === column.master.id && shift.day === column.day)!)
@@ -97,7 +96,7 @@ function CalendarGrid({ data, day, week, compact, masterId, working, editing, on
   const ticks = Array.from({ length: span / 60 + 1 }, (_, index) => start + index * 60)
   const position = (from: number, to: number): CSSProperties => ({ top: `${(from - start) / span * 100}%`, height: `${(Math.min(to, end) - from) / span * 100}%` })
   return <div className={css.calendar} style={{ '--calendar-columns': columns.length, '--calendar-height': `${height}px` } as CSSProperties} aria-label="Календарь рабочих часов и записей">
-    <div className={css.head}><span className={css.axisHead}>Время</span>{columns.map((column, index) => <div className={css.columnHead} key={`${column.master.id}:${column.day}`}>{!week && <span className={css.avatar} aria-hidden>{column.master.name.trim().split(/\s+/).slice(0, 2).map(word => word[0]).join('')}</span>}<strong>{week ? dateLabel(column.day, { weekday: 'short', day: 'numeric', month: 'short' }) : column.master.name}</strong><small>{week ? column.master.name : dateLabel(column.day, { day: 'numeric', month: 'long' })}</small><span className={css.shiftSummary} data-working={Boolean(workdays[index]) || undefined}>{workdays[index] ? <><span>Работает</span><b>{bookingClock(workdays[index]!.start)}–{bookingClock(workdays[index]!.end)}</b></> : shifts[index]!.windows === null ? 'Часы недоступны' : 'Не работает'}</span></div>)}</div>
+    <div className={css.head}><span className={css.axisHead}>Время</span>{columns.map((column, index) => <div className={css.columnHead} key={`${column.master.id}:${column.day}`}><span className={css.avatar} aria-hidden>{column.master.name.trim().split(/\s+/).slice(0, 2).map(word => word[0]).join('')}</span><strong>{column.master.name}</strong><small>{dateLabel(column.day, { day: 'numeric', month: 'long' })}</small><span className={css.shiftSummary} data-working={Boolean(workdays[index]) || undefined}>{workdays[index] ? <><span>Работает</span><b>{bookingClock(workdays[index]!.start)}–{bookingClock(workdays[index]!.end)}</b></> : shifts[index]!.windows === null ? 'Часы недоступны' : 'Не работает'}</span></div>)}</div>
     <div className={css.timeline}><div className={css.axis}>{ticks.map(time => <span key={time} style={{ top: `${(time - start) / span * 100}%` }}>{bookingClock(time)}</span>)}</div>{columns.map((column, index) => {
       const shift = shifts[index]!, workday = workdays[index], visits = relevant(column.master.id, column.day), periods = shift.windows ?? []
       return <section className={css.column} key={`${column.master.id}:${column.day}`} aria-label={`${column.master.name}, ${dateLabel(column.day, { day: 'numeric', month: 'long' })}`}>

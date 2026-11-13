@@ -82,13 +82,49 @@ describe.skipIf(!process.env.DATABASE_URL)('native v2 booking transactions', () 
     }
   })
 
+  it('creates and edits a standalone client while keeping visit history on its stable ID', async () => {
+    identity.email = 'owner@example.com'
+    const c = config.clients!, people = await import('@/app/builder-v2-booking-people-actions')
+    const createScope = { screenId: config.customersScreenId!, formId: config.customerCreateFormId!, revision: liveRevision() }
+    const initial = await write.inspectPublishedV2FormRequest(app.slug, { ...createScope, mode: 'initial' })
+    if (!initial.ok || !('state' in initial) || !initial.state) throw new Error(JSON.stringify(initial))
+    expect((await write.submitPublishedV2(app.slug, 'form', { ...createScope, fingerprint: initial.state.fingerprint, requestId: newId('action'), values: { [c.name]: 'Новый клиент', [c.phone]: '+7 900 123-45-67', [c.email]: 'new-client@example.com', [c.note]: 'Предпочитает утро' } })).ok).toBe(true)
+    const directory = await people.readPublishedV2BookingPeopleAction(app.slug, config.customersScreenId!, liveRevision())
+    expect(directory.ok && directory.data.clients.some(client => client.name === 'Новый клиент' && client.persistent)).toBe(true)
+    const client = built.rows.find(row => row.tableId === c.tableId && row.data[c.email] === 'irina@example.com')!
+    const editScope = { screenId: config.customerScreenId!, formId: config.customerEditFormId!, recordId: client.id, revision: liveRevision() }
+    const edit = await write.inspectPublishedV2FormRequest(app.slug, { ...editScope, mode: 'initial' })
+    if (!edit.ok || !('state' in edit) || !edit.state) throw new Error(JSON.stringify(edit))
+    expect((await write.submitPublishedV2(app.slug, 'form', { ...editScope, fingerprint: edit.state.fingerprint, requestId: newId('action'), values: { [c.name]: 'Ирина Новое Имя', [c.phone]: '+7 900 777-66-55', [c.email]: 'irina@example.com', [c.note]: 'Новые заметки' } })).ok).toBe(true)
+    const updated = await people.readPublishedV2BookingPeopleAction(app.slug, config.customersScreenId!, liveRevision())
+    expect(updated.ok && updated.data.clients.find(item => item.id === client.id)).toMatchObject({ name: 'Ирина Новое Имя', phone: '+7 900 777-66-55', note: 'Новые заметки' })
+    expect(updated.ok && updated.data.visits.filter(visit => visit.clientId === client.id)).toHaveLength(2)
+  })
+
+  it('uses current stored contacts for a selected client and rejects a customer forging that link', async () => {
+    identity.email = 'owner@example.com'
+    const c = config.clients!, client = built.rows.find(row => row.tableId === c.tableId && row.data[c.email] === 'irina@example.com')!
+    const free = await availability.readPublishedV2BookingAction(app.slug, { screenId: config.formScreenId, recordId: service.id, day, revision: liveRevision() })
+    if (!free.ok || !free.slots.length) throw new Error(JSON.stringify(free))
+    const ownerScope = { screenId: config.formScreenId, formId: config.ownerCreateFormId!, recordId: service.id, revision: liveRevision() }
+    const initial = await write.inspectPublishedV2FormRequest(app.slug, { ...ownerScope, mode: 'initial' })
+    if (!initial.ok || !('state' in initial) || !initial.state) throw new Error(JSON.stringify(initial))
+    const chosen = free.slots[0]!
+    const result = await write.submitPublishedV2(app.slug, 'form', { ...ownerScope, fingerprint: initial.state.fingerprint, requestId: newId('action'), values: { [c.linkFieldId]: [client.id], [config.visit.client]: 'Подменённое имя', [config.visit.phone]: '+7 900 000-00-00', [config.visit.email]: 'fake@example.com', [config.visit.master]: [chosen.masterId], [config.visit.start]: chosen.start } })
+    expect(result.ok, JSON.stringify(result)).toBe(true)
+    const [saved] = (await db.db.select().from(db.rows).where(eq(db.rows.tableId, config.tables.visits))).filter(row => rowData(row)[config.visit.start] === chosen.start)
+    expect(rowData(saved!)).toMatchObject({ [c.linkFieldId]: [client.id], [config.visit.client]: 'Ирина Новое Имя', [config.visit.phone]: '+7 900 777-66-55', [config.visit.email]: 'irina@example.com' })
+    const forged = await draft('forged-client@example.com')
+    await expect(write.submitPublishedV2(app.slug,'form',{ ...forged, values: { ...forged.values, [c.linkFieldId]: [client.id] } })).rejects.toThrow('недоступное поле')
+  })
+
   it('loads only free times, books through the common form engine, and does not duplicate a retry', async () => {
     const request = await draft('irina@example.com')
     const result = await write.submitPublishedV2(app.slug, 'form', request)
     expect(result.ok, JSON.stringify(result)).toBe(true)
     expect(await write.submitPublishedV2(app.slug, 'form', request)).toMatchObject({ ok: true, repeated: true })
     const stored = await db.db.select().from(db.rows).where(eq(db.rows.tableId, config.tables.visits))
-    const found = stored.filter(row => rowData(row)[config.visit.start] === request.values[config.visit.start] && rowData(row)[config.visit.email] === 'irina@example.com')
+    const found = stored.filter(row => rowData(row)[config.visit.start] === request.values[config.visit.start] && JSON.stringify(rowData(row)[config.visit.master]) === JSON.stringify(request.values[config.visit.master]) && rowData(row)[config.visit.email] === 'irina@example.com')
     expect(found).toHaveLength(1)
     expect(found[0]!.data).toMatchObject({ [config.visit.price]: service.data[config.service.price], [config.visit.minutes]: service.data[config.service.minutes], [config.visit.status]: config.statuses.booked })
     const available = await availability.readPublishedV2BookingAction(app.slug, { screenId: scope.screenId, recordId: service.id, day, revision: liveRevision(), masterId: request.values[config.visit.master]![0]! })
@@ -126,6 +162,8 @@ describe.skipIf(!process.env.DATABASE_URL)('native v2 booking transactions', () 
     const second = await draft('race@example.com', { masterId: first.values[config.visit.master]![0]!, start: String(first.values[config.visit.start]) })
     const results = await Promise.all([write.submitPublishedV2(app.slug, 'form', first), write.submitPublishedV2(app.slug, 'form', second)])
     expect(results.filter(result => result.ok)).toHaveLength(1)
+    const clients = (await db.db.select().from(db.rows).where(eq(db.rows.tableId, config.clients!.tableId))).filter(row => rowData(row)[config.clients!.email] === 'race@example.com')
+    expect(clients).toHaveLength(1)
   })
   it('moves atomically without repricing a visit and lets the client cancel it', async () => {
     identity.email = 'irina@example.com'

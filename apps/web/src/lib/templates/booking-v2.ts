@@ -35,6 +35,8 @@ export function buildBookingV2App(built: BuiltTemplate, meta: { id: string; work
     masterPhotoFieldId: field('masters', 'photo'), masterDescriptionFieldId: field('masters', 'description'),
     periodScreenId: newId('screen'),
     ownerCreateFormId: newId('component'),
+    clients: { tableId: table('clients').id, ...group('clients', { name: 'name', phone: 'phone', email: 'email', note: 'note' }), linkFieldId: field('visits', 'profile') },
+    customersScreenId: newId('screen'), customerScreenId: newId('screen'), customerCreateFormId: newId('component'), customerEditFormId: newId('component'),
   }
   const nodes: AppV2Node[] = [], sources: AppV2['sources'] = [], workflows: AppV2['workflows'] = [], screens: AppV2['screens'] = [], rules: AppV2['policy']['workflows'] = []
   const flow = (name: string, input: AppV2['workflows'][number]['input'], steps: AppV2['workflows'][number]['steps'], allowed: AppV2Audience) => {
@@ -72,6 +74,7 @@ export function buildBookingV2App(built: BuiltTemplate, meta: { id: string; work
   screen(booking.mastersScreenId, 'Мастера', 'users', everyone, null, [collection(booking.mastersScreenId, 'Мастера', booking.tables.masters, booking.master.name, booking.masterScreenId, everyone)])
   screen(booking.masterScreenId, 'Мастер', 'user', everyone, booking.tables.masters, [], false)
   screen(booking.listScreenId!, 'Расписание', 'calendar', team, null, [collection(booking.listScreenId!, 'Расписание', booking.tables.visits, visit.client, booking.visitScreenId, team, 'calendar', visit.service)])
+  screens.at(-1)!.menuLabel = 'Записи'
   screen(booking.clientScreenId, 'Мои записи', 'calendar', audience('client'), null, [collection(booking.clientScreenId, 'Мои записи', booking.tables.visits, visit.service, booking.visitScreenId, audience('client'), 'list', visit.start)])
   screen(booking.formScreenId, 'Записаться', 'calendar', everyone, booking.tables.services, [form(booking.createFormId, 'Записаться на услугу', booking.formScreenId, booking.tables.visits, 'create', [
     { fieldId: visit.service, label: 'Услуга', required: true, readOnly: true, initialValue: { kind: 'record_ids', tableId: booking.tables.services, record: { kind: 'row' } } },
@@ -82,6 +85,7 @@ export function buildBookingV2App(built: BuiltTemplate, meta: { id: string; work
   screens.find(item => item.id === booking.formScreenId)!.rootIds.push(form(booking.ownerCreateFormId!, 'Новая запись клиента', booking.formScreenId, booking.tables.visits, 'create', [
     { fieldId: visit.service, label: 'Услуга', required: true, readOnly: true, initialValue: { kind: 'record_ids', tableId: booking.tables.services, record: { kind: 'row' } } },
     { fieldId: visit.master, label: 'Мастер', required: true }, { fieldId: visit.start, label: 'Дата и время', required: true },
+    { fieldId: booking.clients!.linkFieldId, label: 'Клиент' },
     { fieldId: visit.client, label: 'Имя клиента', required: true }, { fieldId: visit.phone, label: 'Телефон клиента', required: true }, { fieldId: visit.email, label: 'Почта клиента для личного кабинета' },
     { fieldId: visit.status, label: 'Статус', readOnly: true, initialValue: { kind: 'literal', value: booking.statuses.booked } },
   ], owner, booking.tables.services))
@@ -97,12 +101,21 @@ export function buildBookingV2App(built: BuiltTemplate, meta: { id: string; work
   screen(booking.visitScreenId, 'Запись', 'calendar', audience('owner', 'staff', 'client'), booking.tables.visits, [...facts, statusForm, booking.cancelButtonId], false)
   const scheduleForm = form(newId('component'), 'Рабочее время мастера', booking.setupScreenId, booking.tables.schedule, 'create', Object.values(booking.schedule).map(fieldId => ({ fieldId, label: built.fields.find(item => item.id === fieldId)!.name, required: [booking.schedule.name, booking.schedule.master].includes(fieldId) })), owner, null)
   screen(booking.setupScreenId, 'Рабочее время', 'clock', owner, null, [collection(booking.setupScreenId, 'Рабочее время', booking.tables.schedule, booking.schedule.name, null, owner), scheduleForm])
+  screens.at(-1)!.menuLabel = 'График'
   const manageFields = (tableId: string, creating: boolean) => built.fields.filter(item => item.tableId === tableId).map(item => ({ fieldId: item.id, label: item.name, required: ['text', 'email'].includes(item.type) && item.type !== 'long_text' || item.id === service.price || item.id === service.minutes || item.id === booking.master.services, ...(creating && [service.active, booking.master.active].includes(item.id) ? { initialValue: { kind: 'literal' as const, value: true } } : {}) }))
   for (const [listId, detailId, tableId, name] of [[booking.catalogScreenId, booking.serviceScreenId, booking.tables.services, 'Услуга'], [booking.mastersScreenId, booking.masterScreenId, booking.tables.masters, 'Мастер']] as const) {
     screens.find(item => item.id === listId)!.rootIds.push(form(newId('component'), name === 'Услуга' ? 'Добавить услугу' : 'Добавить мастера', listId!, tableId!, 'create', manageFields(tableId!, true), owner, null))
     screens.find(item => item.id === detailId)!.rootIds.push(form(newId('component'), name === 'Услуга' ? 'Изменить услугу' : 'Изменить мастера', detailId!, tableId!, 'edit', manageFields(tableId!, false), owner, tableId!))
   }
   screen(booking.periodScreenId!, 'Рабочий период', 'clock', owner, booking.tables.schedule, [form(newId('component'), 'Изменить рабочее время', booking.periodScreenId!, booking.tables.schedule, 'edit', Object.values(booking.schedule).map(fieldId => ({ fieldId, label: built.fields.find(item => item.id === fieldId)!.name, required: [booking.schedule.name, booking.schedule.master].includes(fieldId) })), owner, booking.tables.schedule)], false)
+  const clientFields = [
+    { fieldId: booking.clients!.name, label: 'Имя клиента', required: true },
+    { fieldId: booking.clients!.phone, label: 'Телефон', required: true },
+    { fieldId: booking.clients!.email, label: 'Почта' },
+    { fieldId: booking.clients!.note, label: 'Заметки о клиенте' },
+  ]
+  screen(booking.customersScreenId!, 'Клиенты', 'users', owner, null, [collection(booking.customersScreenId!, 'Клиенты', booking.clients!.tableId, booking.clients!.name, booking.customerScreenId!, owner), form(booking.customerCreateFormId!, 'Добавить клиента', booking.customersScreenId!, booking.clients!.tableId, 'create', clientFields, owner, null)])
+  screen(booking.customerScreenId!, 'Клиент', 'user', owner, booking.clients!.tableId, [form(booking.customerEditFormId!, 'Изменить клиента', booking.customerScreenId!, booking.clients!.tableId, 'edit', clientFields, owner, booking.clients!.tableId)], false)
   const grant = (allowed: AppV2Audience, value: Omit<AppV2Grant, 'audience'>): AppV2Grant => ({ audience: allowed, ...value })
   const columns = (tableId: string) => built.fields.filter(item => item.tableId === tableId).map(item => item.id)
   return {
@@ -111,6 +124,7 @@ export function buildBookingV2App(built: BuiltTemplate, meta: { id: string; work
     authentication: { mode: 'verified_email', defaultRoleId: 'client', members: [{ email: meta.email.trim().toLowerCase(), roleIds: ['owner'], company: '' }] },
     homeScreenId: booking.catalogScreenId, booking, screens, nodes, sources, workflows,
     policy: { workflows: rules, tables: [
+      { tableId: booking.clients!.tableId, grants: [grant(owner, { read: { fieldIds: columns(booking.clients!.tableId), rows: all }, create: { fieldIds: columns(booking.clients!.tableId) }, update: { fieldIds: columns(booking.clients!.tableId), rows: all } })] },
       { tableId: booking.tables.services, grants: [grant(everyone, { read: { fieldIds: publicServiceFields, rows: all } }), grant(owner, { create: { fieldIds: columns(booking.tables.services) }, update: { fieldIds: columns(booking.tables.services), rows: all } })] },
       { tableId: booking.tables.masters, grants: [grant(everyone, { read: { fieldIds: publicMasterFields, rows: all } }), grant(owner, { read: { fieldIds: columns(booking.tables.masters), rows: all }, create: { fieldIds: columns(booking.tables.masters) }, update: { fieldIds: columns(booking.tables.masters), rows: all } })] },
       { tableId: booking.tables.schedule, grants: [grant(owner, { read: { fieldIds: columns(booking.tables.schedule), rows: all }, create: { fieldIds: columns(booking.tables.schedule) }, update: { fieldIds: columns(booking.tables.schedule), rows: all } })] },

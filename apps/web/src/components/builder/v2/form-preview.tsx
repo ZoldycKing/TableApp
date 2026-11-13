@@ -244,6 +244,7 @@ export function BuilderV2FormInput({ node, table }: { node: BuilderV2Input; tabl
   const context = useContext(Context), published=usePublishedV2(), unique = useId(), field = context?.state?.fields.find(field => field.nodeId === node.id), column = table?.fields.find(field => field.id === node.fieldId)
   const booking = context?.app.booking
   if (booking && [booking.createFormId, booking.ownerCreateFormId, booking.rescheduleFormId].includes(context!.scope.formId) && [booking.visit.service, booking.visit.master, booking.visit.start, booking.visit.status].includes(node.fieldId)) return null
+  if (booking?.clients && context!.scope.formId === booking.ownerCreateFormId && (node.fieldId === booking.clients.linkFieldId || Array.isArray(context!.values[booking.clients.linkFieldId]) && (context!.values[booking.clients.linkFieldId] as unknown[]).length > 0 && [booking.visit.client,booking.visit.phone,booking.visit.email].includes(node.fieldId))) return null
   if (context?.app.shop && (node.fieldId === context.app.shop.cartFieldId || node.fieldId === context.app.shop.submissionFieldId)) return null
   if (context?.app.inventory?.purchasePayloadFieldId && node.fieldId === context.app.inventory.purchasePayloadFieldId) return null
   if (context?.app.inventory?.countPayloadFieldId && node.fieldId === context.app.inventory.countPayloadFieldId) return null

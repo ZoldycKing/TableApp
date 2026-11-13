@@ -1882,7 +1882,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
       </DetailCardShell>
     </div>
   }
-  if (props.app.booking && screen && [props.app.booking.catalogScreenId, props.app.booking.serviceScreenId, props.app.booking.mastersScreenId, props.app.booking.masterScreenId, props.app.booking.visitScreenId, props.app.booking.clientScreenId, props.app.booking.listScreenId, props.app.booking.formScreenId, props.app.booking.rescheduleScreenId, props.app.booking.setupScreenId, props.app.booking.periodScreenId].includes(screen.id)) return <BookingScreen key={screen.id} {...props} renderNodes={ids => render(ids)} />
+  if (props.app.booking && screen && [props.app.booking.catalogScreenId, props.app.booking.serviceScreenId, props.app.booking.mastersScreenId, props.app.booking.masterScreenId, props.app.booking.visitScreenId, props.app.booking.clientScreenId, props.app.booking.listScreenId, props.app.booking.formScreenId, props.app.booking.rescheduleScreenId, props.app.booking.setupScreenId, props.app.booking.periodScreenId, props.app.booking.customersScreenId, props.app.booking.customerScreenId].includes(screen.id)) return <BookingScreen key={screen.id} {...props} renderNodes={ids => render(ids)} />
   if (!props.editing && shop && screen?.id === shop.catalogScreenId) {
     const catalogNode = rootIds.map(id => nodes.get(id)).find((node): node is Extract<AppV2Node, { type: 'collection' }> => node?.type === 'collection' && node.layout === 'catalog')
     if (catalogNode) {

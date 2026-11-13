@@ -1,7 +1,7 @@
 'use client'
 import { createContext, useContext, useState, type ReactNode } from 'react'
 
-export type BookingIntent = { masterId?: string; day?: string; time?: string; client?: string; phone?: string; email?: string }
+export type BookingIntent = { masterId?: string; day?: string; time?: string; clientId?: string; client?: string; phone?: string; email?: string }
 type Journey = { intent: BookingIntent | null; setIntent: (value: BookingIntent | null) => void; calendar: BookingIntent | null; setCalendar: (value: BookingIntent | null) => void }
 const Context = createContext<Journey | null>(null)
 export function BookingJourneyProvider({ children }: { children: ReactNode }) {

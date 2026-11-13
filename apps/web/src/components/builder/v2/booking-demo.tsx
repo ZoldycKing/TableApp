@@ -69,7 +69,7 @@ export function BookingDemo({ app, tables, initialRows, phone = false, initialVi
   }
   const data = (): BookingData => {
     const of = (tableId: string) => store.current.filter(row => row.tableId === tableId).map(row => ({ id: row.id, data: { ...row.values } }))
-    return { services: of(booking.tables.services), masters: of(booking.tables.masters), schedule: of(booking.tables.schedule), visits: of(booking.tables.visits), timeZone }
+    return { services: of(booking.tables.services), masters: of(booking.tables.masters), schedule: of(booking.tables.schedule), visits: of(booking.tables.visits), ...(booking.clients ? { clients: of(booking.clients.tableId) } : {}), timeZone }
   }
   const navigate = (id: string, rowId?: string) => { setScreenId(id); setRecordId(rowId); setNotice('') }
   const inspect = async (request: BuilderV2FormRequest): Promise<BuilderV2FormResult | BuilderV2FormOptionsResult> => {
@@ -109,6 +109,7 @@ export function BookingDemo({ app, tables, initialRows, phone = false, initialVi
     const policyError = builderV2BookingWriteError(app, actor, form.tableId, checked.state.values, before?.values as Record<string, unknown>, Date.now(), timeZone)
     if (policyError) return { ok: false as const, error: policyError }
     const values = { ...before?.values, ...checked.state.values }
+    const newClients: AppV2Record[] = []
     if (form.tableId === booking.tables.visits) {
       const serviceId = oneRelation(values[booking.visit.service]), masterId = oneRelation(values[booking.visit.master])
       if (values[booking.visit.status] !== booking.statuses.cancelled && (form.id === booking.createFormId || form.id === booking.ownerCreateFormId || form.id === booking.rescheduleFormId)) {
@@ -122,9 +123,18 @@ export function BookingDemo({ app, tables, initialRows, phone = false, initialVi
         if (role === 'client') values[booking.visit.email] = actor.email
       }
       if (masterId) values[booking.visit.masterEmail] = store.current.find(row => row.id === masterId)?.values[booking.master.email] ?? ''
+      if (!before && booking.clients) {
+        const c = booking.clients, linkedId = oneRelation(values[c.linkFieldId]), email = String(values[booking.visit.email] ?? '').trim().toLowerCase()
+        const matches = email ? store.current.filter(row => row.tableId === c.tableId && String(row.values[c.email] ?? '').trim().toLowerCase() === email) : []
+        let client = linkedId ? store.current.find(row => row.tableId === c.tableId && row.id === linkedId) : matches.length === 1 ? matches[0] : undefined
+        if (linkedId && !client) return { ok: false as const, error: 'Клиент не найден.' }
+        if (!client) { client = { id: `demo_${crypto.randomUUID().replaceAll('-', '')}`, tableId: c.tableId, values: { [c.name]: values[booking.visit.client]!, [c.phone]: values[booking.visit.phone]!, [c.email]: email, [c.note]: '' } }; newClients.push(client) }
+        if (linkedId) { values[booking.visit.client] = client.values[c.name]!; values[booking.visit.phone] = client.values[c.phone]!; values[booking.visit.email] = client.values[c.email] ?? '' }
+        values[c.linkFieldId] = [client.id]
+      }
     }
     const saved: AppV2Record = { id: before?.id ?? `demo_${crypto.randomUUID().replaceAll('-', '')}`, tableId: form.tableId, values }
-    const next = before ? store.current.map(row => row.id === saved.id ? saved : row) : [...store.current, saved]
+    const next = before ? store.current.map(row => row.id === saved.id ? saved : row) : [...store.current, ...newClients, saved]
     store.current = next; setRows(next); setVersion(value => value + 1)
     return { ok: true as const, repeated: false, rowId: saved.id, tableId: saved.tableId, effects: saved.tableId === booking.tables.visits
       ? [{ type: 'open_screen' as const, screenId: booking.visitScreenId, recordId: saved.id }]

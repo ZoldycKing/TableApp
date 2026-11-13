@@ -49,6 +49,10 @@
 .formPage h2 { font-size: 26px; line-height: 1.3; }
 .picker { margin-bottom: 24px; }
 .timeFields { display: grid; gap: 24px; }
+.clientPicker { display: grid; gap: 10px; min-width: 0; padding-bottom: 20px; border-bottom: 1px solid var(--v2-line); }
+.clientPicker label { display: grid; gap: 8px; font-size: 14px; }
+.clientPicker select { width: 100%; min-width: 0; padding: 10px 12px; min-height: 44px; border: 1px solid var(--v2-line); border-radius: 10px; background: var(--v2-surface); color: var(--v2-ink); font: inherit; }
+.clientPicker p { color: var(--v2-muted); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
 .formIntro { display: grid; gap: 8px; }
 .formIntro strong { font-size: 18px; }
 .formIntro p { margin: 0; color: var(--v2-muted); line-height: 1.6; }

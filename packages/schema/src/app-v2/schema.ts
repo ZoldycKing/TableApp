@@ -131,6 +131,7 @@ export const appV2Schema = z.strictObject({
     cancelButtonId: id,
     periodScreenId: id.optional(),
     ownerCreateFormId: id.optional(),
+    customersScreenId: id.optional(), customerScreenId: id.optional(), customerCreateFormId: id.optional(), customerEditFormId: id.optional(),
   }).optional(),
   /** Explicit shop bindings. Absent for every app that is not the installed catalogue. */
   shop: z.strictObject({

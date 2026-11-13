@@ -24,14 +24,15 @@ function Visits({ visits, timeZone, masters, onOpen }: { visits: BookingPersonVi
   </button>)}</div>
 }
 
-export function BookingPeopleScreen({ app, screenId, initialMasterId, initialClientVisitId, onNavigate, onClose, onAddMaster, onEditMaster }: { app: AppV2; screenId: string; initialMasterId?: string; initialClientVisitId?: string; onNavigate: (screenId: string, rowId?: string) => void; onClose?: () => void; onAddMaster?: () => void; onEditMaster?: () => void }) {
+export function BookingPeopleScreen({ app, screenId, initialMasterId, initialClientVisitId, initialClientId, onNavigate, onClose, onAddMaster, onEditMaster, onAddClient, onEditClient }: { app: AppV2; screenId: string; initialMasterId?: string; initialClientVisitId?: string; initialClientId?: string; onNavigate: (screenId: string, rowId?: string) => void; onClose?: () => void; onAddMaster?: () => void; onEditMaster?: () => void; onAddClient?: () => void; onEditClient?: () => void }) {
   const { result, retry } = useBookingPeople(app, screenId), journey = useBookingJourney()
-  const [tab, setTab] = useState('masters'), [search, setSearch] = useState(''), [selected, setSelected] = useState<{ type: 'master' | 'client'; id: string } | null>(initialMasterId ? { type: 'master', id: initialMasterId } : null), [profileTab, setProfileTab] = useState('history')
+  const clientsOnly = screenId === app.booking?.customersScreenId
+  const [tab, setTab] = useState(clientsOnly ? 'clients' : 'masters'), [search, setSearch] = useState(''), [selected, setSelected] = useState<{ type: 'master' | 'client'; id: string } | null>(initialMasterId ? { type: 'master', id: initialMasterId } : null), [profileTab, setProfileTab] = useState('history')
   if (!result) return <p role="status" className={css.feedback}>Загружаем команду и клиентов…</p>
   if (!result.ok) return <div role="alert" className={css.feedback}><p>{result.error}</p><button type="button" className={styles.secondary} onClick={retry}>Повторить загрузку</button></div>
   const data = result.data, booking = app.booking!
   const selectedClient = initialClientVisitId ? data.visits.find(visit => visit.id === initialClientVisitId)?.clientId : undefined
-  const choice = initialMasterId ? { type: 'master', id: initialMasterId } : selectedClient ? { type: 'client', id: selectedClient } : selected
+  const choice = initialClientId ? { type: 'client', id: initialClientId } : initialMasterId ? { type: 'master', id: initialMasterId } : selectedClient ? { type: 'client', id: selectedClient } : selected
   const close = () => { if (onClose) onClose(); else { setSelected(null); setProfileTab('history') } }
   const book = (intent: Parameters<NonNullable<typeof journey>['setIntent']>[0]) => { journey?.setIntent(intent); onNavigate(booking.catalogScreenId) }
   const schedule = (masterId: string) => { journey?.setCalendar({ masterId, day: data.day }); onNavigate(booking.listScreenId!) }
@@ -47,25 +48,25 @@ export function BookingPeopleScreen({ app, screenId, initialMasterId, initialCli
   const todayVisits = (masterId: string) => data.visits.filter(visit => visit.masterId === masterId && visit.status !== 'cancelled' && instantToWallClock(visit.start, data.timeZone)?.date === data.day)
   const client = choice?.type === 'client' ? data.clients.find(client => client.id === choice.id) : undefined
   const master = choice?.type === 'master' ? data.masters.find(master => master.id === choice.id) : undefined
-  if ((initialClientVisitId || initialMasterId) && !client && !master) return <div className={css.profile}><button type="button" className={styles.textButton} onClick={close}><ProtoIcon name="back" />Назад</button><p className={css.feedback}>Профиль недоступен. Проверьте, что запись и её данные доступны вашему аккаунту.</p></div>
+  if ((initialClientVisitId || initialMasterId || initialClientId) && !client && !master) return <div className={css.profile}><button type="button" className={styles.textButton} onClick={close}><ProtoIcon name="back" />Назад</button><p className={css.feedback}>Профиль недоступен. Проверьте, что запись и её данные доступны вашему аккаунту.</p></div>
 
   if (client) {
     const visits = data.visits.filter(visit => visit.clientId === client.id), completed = visits.filter(visit => visit.status === 'completed'), upcoming = visits.filter(future), next = upcoming[0]
     const total = completed.some(visit => visit.price === null) ? null : completed.reduce((sum, visit) => sum + visit.price!, 0)
     const notes = [...visits].reverse().filter(visit => visit.note.trim())
     return <div className={css.profile} data-booking-client-profile>
-      <button type="button" className={styles.textButton} onClick={close}><ProtoIcon name="back" />{onClose ? 'К записи' : 'Клиенты'}</button>
+      <button type="button" className={styles.textButton} onClick={close}><ProtoIcon name="back" />{initialClientVisitId ? 'К записи' : 'Клиенты'}</button>
       <section className={css.profileCard}>
         <div className={css.identity}><BookingAvatar name={client.name} /><div><h2>{client.name}</h2><div className={css.contacts}>
           {client.phone && <a href={`tel:${client.phone.replace(/[^+\d]/g, '')}`}><ProtoIcon name="phone" size={15} />{client.phone}</a>}
           {client.email && <a href={`mailto:${client.email}`}><ProtoIcon name="mail" size={15} />{client.email}</a>}
         </div></div></div>
         <dl className={css.metrics}><div><dd>{completed.length}</dd><dt>Завершённых визитов</dt></div><div><dd>{money(total)}</dd><dt>За завершённые визиты</dt></div><div><dd>{upcoming.length}</dd><dt>Предстоящих записей</dt></div></dl>
-        <button type="button" className={styles.primary} onClick={() => book({ client: client.name, phone: client.phone, email: client.email })}><ProtoIcon name="plus" />Записать клиента</button>
+        <div className={css.actions}><button type="button" className={styles.primary} onClick={() => book({ ...(client.persistent ? { clientId: client.id } : {}), client: client.name, phone: client.phone, email: client.email })}><ProtoIcon name="plus" />Записать клиента</button>{onEditClient && client.persistent && <button type="button" className={styles.secondary} onClick={onEditClient}>Изменить клиента</button>}</div>
       </section>
       {next && <button type="button" className={css.nextVisit} onClick={() => openVisit(next.id)}><ProtoIcon name="calendar" /><span><strong>Ближайший визит · {when(next.start, data.timeZone, true)}</strong><small>{next.service} · {data.masters.find(master => master.id === next.masterId)?.name}</small></span><ProtoIcon name="arrow" size={16} /></button>}
       <div className={css.profileTabs} role="group" aria-label="Раздел профиля клиента"><button type="button" aria-pressed={profileTab === 'history'} onClick={() => setProfileTab('history')}>История посещений</button><button type="button" aria-pressed={profileTab === 'notes'} onClick={() => setProfileTab('notes')}>Заметки</button></div>
-      {profileTab === 'history' ? <Visits visits={[...visits].reverse()} timeZone={data.timeZone} masters={data.masters} onOpen={openVisit} /> : notes.length ? <div className={css.notes}>{notes.map(visit => <article key={visit.id}><small>{when(visit.start, data.timeZone, true)} · {visit.service}</small><p>{visit.note}</p><button type="button" className={styles.textButton} onClick={() => openVisit(visit.id)}>Открыть визит и изменить заметку<ProtoIcon name="arrow" size={15} /></button></article>)}</div> : <p className={css.feedback}>Заметок пока нет. Их можно добавить в карточке визита.</p>}
+      {profileTab === 'history' ? visits.length ? <Visits visits={[...visits].reverse()} timeZone={data.timeZone} masters={data.masters} onOpen={openVisit} /> : <p className={css.feedback}>Визитов пока нет. Нажмите «Записать клиента», чтобы выбрать услугу и время.</p> : <div className={css.notes}>{client.note && <article><h3>Заметки о клиенте</h3><p>{client.note}</p></article>}{notes.map(visit => <article key={visit.id}><small>{when(visit.start, data.timeZone, true)} · {visit.service}</small><p>{visit.note}</p><button type="button" className={styles.textButton} onClick={() => openVisit(visit.id)}>Открыть визит и изменить заметку<ProtoIcon name="arrow" size={15} /></button></article>)}{!client.note && !notes.length && <p className={css.feedback}>Заметок пока нет.{client.persistent ? ' Добавьте их через «Изменить клиента».' : ' Их можно добавить в карточке визита.'}</p>}</div>}
     </div>
   }
   if (master) {
@@ -79,13 +80,13 @@ export function BookingPeopleScreen({ app, screenId, initialMasterId, initialCli
       <h3 className={css.sectionTitle}>Записи сегодня</h3><Visits visits={visits} timeZone={data.timeZone} masters={data.masters} onOpen={openVisit} />{!visits.length && <p className={css.feedback}>На сегодня записей нет.</p>}
     </div>
   }
-  return <div data-booking-people><ListScreenShell title="Команда и клиенты" meta="Мастера, контакты и история посещений" actions={tab === 'masters' && onAddMaster && <button type="button" className={styles.primary} onClick={onAddMaster}><ProtoIcon name="plus" />Добавить мастера</button>} tabs={[{ id: 'masters', label: 'Мастера' }, { id: 'clients', label: 'Клиенты' }]} activeTab={tab} onTabChange={value => { setTab(value); setSearch('') }} search={<ShellSearchField value={search} onChange={setSearch} placeholder={tab === 'masters' ? 'Найти мастера' : 'Имя, телефон или почта клиента'} />}>
+  return <div data-booking-people><ListScreenShell title={clientsOnly ? 'Клиенты' : booking.clients ? 'Мастера' : 'Команда и клиенты'} meta={clientsOnly ? 'Контакты и история посещений' : 'Услуги, график и записи мастеров'} actions={tab === 'clients' && onAddClient ? <button type="button" className={styles.primary} onClick={onAddClient}><ProtoIcon name="plus" />Добавить клиента</button> : tab === 'masters' && onAddMaster && <button type="button" className={styles.primary} onClick={onAddMaster}><ProtoIcon name="plus" />Добавить мастера</button>} tabs={booking.clients ? undefined : [{ id: 'masters', label: 'Мастера' }, { id: 'clients', label: 'Клиенты' }]} activeTab={tab} onTabChange={value => { setTab(value); setSearch('') }} search={<ShellSearchField value={search} onChange={setSearch} placeholder={tab === 'masters' ? 'Найти мастера' : 'Имя, телефон или почта клиента'} />}>
     <div className={css.directory}>{tab === 'masters' ? filteredMasters.map(master => {
       const visits = todayVisits(master.id), next = visits.find(future)
       return <button type="button" key={master.id} className={css.personCard} onClick={() => onNavigate(booking.masterScreenId, master.id)}><BookingAvatar name={master.name} photo={master.photo} /><span className={css.personCopy}><strong>{master.name}</strong><small>{master.services.join(' · ') || 'Мастер студии'}</small><span className={css.personMeta}><span>{hoursLabel(master.id)}</span><span>{bookingCountLabel(visits.length)} сегодня</span></span><span className={css.personLink}>{next ? `Ближайшая · ${when(next.start, data.timeZone)}` : 'Открыть профиль'}<ProtoIcon name="arrow" size={16} /></span></span></button>
     }) : filteredClients.map(client => {
       const visits = data.visits.filter(visit => visit.clientId === client.id), next = visits.find(future)
-      return <button type="button" key={client.id} className={css.personCard} onClick={() => { setSelected({ type: 'client', id: client.id }); setProfileTab('history') }}><BookingAvatar name={client.name} /><span className={css.personCopy}><strong>{client.name}</strong><small>{client.phone || client.email || 'Контакты не указаны'}</small><span className={css.personMeta}>{bookingCountLabel(visits.length, ['визит','визита','визитов'])}</span><span className={css.personLink}>{next ? `Ближайший · ${when(next.start, data.timeZone, true)}` : 'История посещений'}<ProtoIcon name="arrow" size={16} /></span></span></button>
+      return <button type="button" key={client.id} className={css.personCard} onClick={() => { if (client.persistent && booking.customerScreenId) onNavigate(booking.customerScreenId, client.id); else { setSelected({ type: 'client', id: client.id }); setProfileTab('history') } }}><BookingAvatar name={client.name} /><span className={css.personCopy}><strong>{client.name}</strong><small>{client.phone || client.email || 'Контакты не указаны'}</small><span className={css.personMeta}>{bookingCountLabel(visits.length, ['визит','визита','визитов'])}</span><span className={css.personLink}>{next ? `Ближайший · ${when(next.start, data.timeZone, true)}` : 'История посещений'}<ProtoIcon name="arrow" size={16} /></span></span></button>
     })}</div>
     {tab === 'clients' && !data.clients.length && <p className={css.feedback}>Клиенты появятся здесь после первой записи на услугу.</p>}
     {query && !(tab === 'masters' ? filteredMasters.length : filteredClients.length) && <p className={css.feedback}>Ничего не нашли. Измените имя или очистите поиск.</p>}

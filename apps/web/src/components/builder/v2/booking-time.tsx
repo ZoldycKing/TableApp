@@ -9,6 +9,7 @@ import { useBuilderV2FormContext } from './form-preview'
 import css from './booking.module.css'
 import styles from '../prototype/prototype.module.css'
 import { useBookingJourney } from './booking-journey'
+import { BookingClientPicker } from './booking-client-picker'
 export const BookingDemoAvailability = createContext<((request: BookingAvailabilityRequest) => BookingAvailabilityResult) | null>(null)
 
 export function BookingTimeFields({ app, editing }: { app: AppV2; editing: boolean }) {
@@ -60,6 +61,7 @@ export function BookingTimeFields({ app, editing }: { app: AppV2; editing: boole
   const change = (fieldId: string, value: AppV2Json) => latest.current?.change(fieldId, value)
   const resetChoice = () => { change(config.visit.master, []); change(config.visit.start, null) }
   return <div className={css.timeFields}>
+    {config.clients && context && context.scope.formId === config.ownerCreateFormId && context.state?.fields.some(field => field.fieldId === config.clients!.linkFieldId && !field.readOnly) && !editing && <BookingClientPicker app={app} />}
     <div className={css.formIntro}><strong>{reschedule ? 'Выберите другое время' : 'Когда вам удобно?'}</strong><p>{reschedule ? 'Текущая запись останется за вами, пока новое время не сохранится.' : 'Свободные часы учитывают длительность услуги и перерывы мастера.'}</p></div>
     <div className={css.timeControls}>
       <label>Мастер<select aria-label="Мастер" value={master} disabled={context?.disabled || editing || loading} onChange={event => { appliedTime.current = true; setSeedNotice(''); setDay(selectedDay); setMaster(event.target.value); resetChoice() }}><option value="">Любой свободный</option>{result?.ok && master && !result.masters.some(item => item.id === master) && <option value={master}>Не оказывает эту услугу</option>}{result?.ok && result.masters.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>

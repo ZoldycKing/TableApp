@@ -8,6 +8,7 @@ import { buildBookingV2App } from '@/lib/templates/booking-v2'
 import type { BookingAvailabilityResult } from '@/lib/builder-v2-booking-availability'
 import { BookingJourneyProvider, useBookingJourney, type BookingIntent } from './booking-journey'
 import { BookingDemoAvailability, BookingTimeFields } from './booking-time'
+import { BookingPeopleDemoContext } from './booking-people-data'
 
 const mocked = vi.hoisted(() => ({ context: null as ReturnType<typeof import('./form-preview')['useBuilderV2FormContext']> }))
 vi.mock('./form-preview', () => ({ useBuilderV2FormContext: () => mocked.context }))
@@ -21,7 +22,7 @@ function seedFixture(available = true, owner = true) {
   function Seed() {
     const journey = useBookingJourney()!
     useEffect(() => journey.setIntent(seed), [])
-    return journey.intent ? <BookingDemoAvailability value={() => availability}><BookingTimeFields app={app} editing={false} /></BookingDemoAvailability> : null
+    return journey.intent ? <BookingPeopleDemoContext value={() => ({ ok: true, data: { timeZone: 'Europe/Moscow', day: '2026-11-20', masters: [], clients: [], visits: [], shifts: [] } })}><BookingDemoAvailability value={() => availability}><BookingTimeFields app={app} editing={false} /></BookingDemoAvailability></BookingPeopleDemoContext> : null
   }
   render(<BookingJourneyProvider><Seed /></BookingJourneyProvider>)
   return { b, change }

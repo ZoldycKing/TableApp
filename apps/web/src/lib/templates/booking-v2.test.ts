@@ -19,7 +19,7 @@ describe('native online booking starter', () => {
     const { app, catalog } = bookingFixture()
     expect(appV2Schema.safeParse(app).success).toBe(true)
     expect(validateAppV2(app, catalog, { mode: 'publish' })).toEqual([])
-    expect(app.screens.filter(screen => screen.navigation).map(screen => screen.name)).toEqual(['Услуги', 'Мастера', 'Расписание', 'Мои записи', 'Рабочее время'])
+    expect(app.screens.filter(screen => screen.navigation).map(screen => screen.name)).toEqual(['Услуги', 'Мастера', 'Расписание', 'Мои записи', 'Рабочее время', 'Клиенты'])
     expect(app.authentication.members[0]!.roleIds).toEqual(['owner'])
   })
   it('isolates private visits, internal notes and master email addresses', () => {
@@ -34,6 +34,13 @@ describe('native online booking starter', () => {
     expect(projectAppV2Row(app, client, record)).not.toHaveProperty(booking.visit.note)
     expect(projectAppV2Row(app, staff, record)).toHaveProperty(booking.visit.note)
     expect(canOpenAppV2Screen(app, client, booking.listScreenId!)).toBe(false)
+    const clientRow = built.rows.find(row => row.tableId === booking.clients!.tableId)!
+    for (const viewer of [guest, client, staff]) {
+      expect(projectAppV2Row(app, viewer, { id: clientRow.id, tableId: clientRow.tableId, values: clientRow.data as Record<string, string> })).toEqual({})
+      expect(canOpenAppV2Screen(app, viewer, booking.customersScreenId!)).toBe(false)
+      expect(canOpenAppV2Screen(app, viewer, booking.customerScreenId!)).toBe(false)
+      expect(builderV2BookingWriteError(app, viewer, booking.clients!.tableId, clientRow.data)).toContain('только администратор')
+    }
     const master = built.rows.find(row => row.tableId === booking.tables.masters)!
     expect(projectAppV2Row(app, guest, { id: master.id, tableId: master.tableId, values: master.data as Record<string, string> })).not.toHaveProperty(booking.master.email)
   })

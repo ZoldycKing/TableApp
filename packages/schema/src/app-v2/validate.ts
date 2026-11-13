@@ -390,6 +390,15 @@ export function validateAppV2(app: AppV2, catalog: AppV2Catalog, options: { mode
     for (const screenId of [booking.catalogScreenId, booking.serviceScreenId, booking.mastersScreenId, booking.masterScreenId, booking.visitScreenId, booking.clientScreenId, booking.listScreenId, booking.formScreenId, booking.rescheduleScreenId, booking.setupScreenId]) if (!screenId || !screens.has(screenId)) issue('booking_screen', path, 'Экран онлайн-записи удалён')
     for (const formId of [booking.createFormId, booking.rescheduleFormId, booking.statusFormId, ...(booking.ownerCreateFormId ? [booking.ownerCreateFormId] : [])]) if (nodes.get(formId)?.type !== 'form') issue('booking_form', path, 'Форма онлайн-записи удалена')
     if (booking.periodScreenId && !screens.has(booking.periodScreenId)) issue('booking_screen', path, 'Экран рабочего времени удалён')
+    if (booking.clients) {
+      const clients = booking.clients
+      table(clients.tableId, path)
+      for (const id of [clients.name,clients.phone,clients.email,clients.note]) field(id, clients.tableId, path)
+      const relation = field(clients.linkFieldId, booking.tables.visits, path)
+      if (relation && (relation.type !== 'relation' || relation.relationTableId !== clients.tableId)) issue('booking_client_relation', path, 'Визит должен ссылаться на таблицу клиентов')
+      for (const id of [booking.customersScreenId,booking.customerScreenId]) if (!id || !screens.has(id)) issue('booking_screen', path, 'Экран клиентов удалён')
+      for (const id of [booking.customerCreateFormId,booking.customerEditFormId]) if (!id || nodes.get(id)?.type !== 'form') issue('booking_form', path, 'Форма клиента удалена')
+    }
     for (const [fieldId, tableId] of [[booking.servicePhotoFieldId, booking.tables.services], [booking.serviceDescriptionFieldId, booking.tables.services], [booking.masterPhotoFieldId, booking.tables.masters], [booking.masterDescriptionFieldId, booking.tables.masters]]) if (fieldId && catalog.fields.get(fieldId)?.tableId !== tableId) issue('booking_field', path, 'Поле карточки относится к другой таблице')
   }
   if (app.shop) {

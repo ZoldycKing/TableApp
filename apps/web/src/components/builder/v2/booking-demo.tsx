@@ -14,10 +14,12 @@ import { BuilderV2AppFrame, BuilderV2Theme } from './app-frame'
 import { PublishedV2Context, type PublishedV2Transport } from './published-context'
 import { BookingDemoAvailability } from './booking-time'
 import { BookingScheduleDemoContext } from './booking-schedule'
+import { TemplateDemoStage } from '@/components/marketing/template-demo-stage'
+import demo from '@/components/marketing/template-demo-stage.module.css'
 import { bookingSchedulePlan, type BookingScheduleAdapter } from '@/lib/builder-v2-booking-schedule'
 import { AppV2Renderer } from './view'
 import css from './booking.module.css'
-import styles from '../prototype/prototype.module.css'
+import { ProtoIcon } from '../prototype/icons'
 
 /** Synthetic, in-memory adapter. Real applications always use server-backed transport. */
 export function BookingDemo({ app, tables, initialRows, phone = false }: { app: AppV2; tables: BuilderV2Table[]; initialRows: AppV2Record[]; phone?: boolean }) {
@@ -159,13 +161,16 @@ export function BookingDemo({ app, tables, initialRows, phone = false }: { app: 
   }
   const currentRecord = rows.find(row => row.id === recordId)
   return <div className={css.demo}>
-    <div className={css.demoToolbar}><div className={css.switch}><button type="button" aria-pressed={role === 'client'} onClick={() => { setRole('client'); navigate(booking.catalogScreenId) }}>Клиент</button><button type="button" aria-pressed={role === 'owner'} onClick={() => { setRole('owner'); navigate(booking.listScreenId!) }}>Команда</button></div><div className={css.switch}><button type="button" aria-label="Вид на компьютере" aria-pressed={!mobile} onClick={() => setMobile(false)}><ProtoDevice phone={false} /></button><button type="button" aria-label="Вид на телефоне" aria-pressed={mobile} onClick={() => setMobile(true)}><ProtoDevice phone /></button></div><button type="button" className={styles.textButton} onClick={() => { store.current = initialRows; setRows(initialRows); setVersion(value => value + 1); navigate(booking.catalogScreenId) }}>Начать заново</button></div>
+    <TemplateDemoStage phone={mobile} controls={<>
+      <div className={demo.screens} role="group" aria-label="Кто пользуется приложением"><button type="button" aria-pressed={role === 'client'} onClick={() => { setRole('client'); navigate(booking.catalogScreenId) }}>Клиент</button><button type="button" aria-pressed={role === 'owner'} onClick={() => { setRole('owner'); navigate(booking.listScreenId!) }}>Команда</button></div>
+      <div className={demo.devices} role="group" aria-label="Размер экрана"><button type="button" aria-label="Вид на компьютере" aria-pressed={!mobile} onClick={() => setMobile(false)}><ProtoIcon name="desktop" size={19} /></button><button type="button" aria-label="Вид на телефоне" aria-pressed={mobile} onClick={() => setMobile(true)}><ProtoIcon name="phone" size={19} /></button></div>
+      <button type="button" onClick={() => { store.current = initialRows; setRows(initialRows); setVersion(value => value + 1); navigate(booking.catalogScreenId) }}>Начать заново</button>
+    </>} note="Учебный пример. Открывайте услуги, выбирайте время и меняйте записи — данные сбросятся после обновления страницы.">
     <BuilderV2Theme app={app}><PublishedV2Context value={transport}><BookingDemoAvailability value={input => bookingV2Availability(app, actor, data(), input)}><BookingScheduleDemoContext value={scheduleAdapter}>
-      <div className={css.demoFrame}><BuilderV2AppFrame app={visibleApp} phone={mobile} scrollKey={`${screenId}:${recordId ?? ''}`} screenId={screenId} title={visibleApp.screens.find(screen => screen.id === screenId)?.name ?? 'Запись'} onNavigate={id => navigate(id)}>
+      <div className={css.demoFrame}><BuilderV2AppFrame app={visibleApp} scrollKey={`${screenId}:${recordId ?? ''}`} screenId={screenId} title={visibleApp.screens.find(screen => screen.id === screenId)?.name ?? 'Запись'} onNavigate={id => navigate(id)}>
         {notice && <p role="status">{notice}</p>}<AppV2Renderer key={`${role}:${screenId}:${recordId ?? ''}`} live app={visibleApp} tables={tables} actor={actor} screenId={screenId} record={currentRecord ? format(currentRecord) : undefined} onNavigate={navigate} />
       </BuilderV2AppFrame></div>
     </BookingScheduleDemoContext></BookingDemoAvailability></PublishedV2Context></BuilderV2Theme>
-    <p className={css.demoNote}>Учебный пример. Открывайте услуги, выбирайте время и меняйте записи — данные сбросятся после обновления страницы.</p>
+    </TemplateDemoStage>
   </div>
 }
-function ProtoDevice({ phone }: { phone: boolean }) { return <span>{phone ? 'Телефон' : 'Компьютер'}</span> }

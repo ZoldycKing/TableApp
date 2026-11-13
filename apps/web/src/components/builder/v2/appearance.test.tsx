@@ -6,10 +6,25 @@ import {BuilderV2Theme,BuilderV2AppFrame,BuilderV2Account} from './app-frame'
 import {BUILDER_V2_COLORS,builderV2Menu,builderV2MenuLabel,builderV2ThemeStyle} from './appearance'
 import {BuilderV2AppearanceSettings} from './appearance-settings'
 import {PrototypeDialog} from '../prototype/dialog'
+import { buildTemplate } from '@/lib/templates/build'
+import { salon } from '@/lib/templates/defs/salon'
+import { buildBookingV2App } from '@/lib/templates/booking-v2'
 vi.mock('../prototype/icons',()=>({ProtoIcon:()=>null}))
 beforeEach(()=>{HTMLDialogElement.prototype.showModal=function(){this.setAttribute('open','')};HTMLDialogElement.prototype.close=function(){this.removeAttribute('open')}})
 afterEach(cleanup)
 function menuApp(){const app=appV2Fixture();app.screens=Array.from({length:8},(_,i)=>({...app.screens[0]!,id:`page_${i}`,name:`Экран ${i+1}`,menuLabel:i===6?'Финансы':'',rootIds:[]}));app.screens.push({...app.screens[0]!,id:'hidden',name:'Скрытый раздел',navigation:false},{...app.screens[0]!,id:'card',name:'Карточка записи',contextTableId:'requests'});return app}
+it('consolidates an older salon menu without rewriting its saved screens or hiding a custom replacement',()=>{
+ const app=buildBookingV2App(buildTemplate({template:salon,workspaceId:'wsp_menu'}),{id:'app_menu',workspaceId:'wsp_menu',name:'Салон',slug:'salon-menu',email:'owner@example.com'})
+ const booking=app.booking!,hours=app.screens.find(screen=>screen.id===booking.setupScreenId)!,calendar=app.screens.find(screen=>screen.id===booking.listScreenId)!
+ hours.navigation=true;calendar.menuLabel='Записи'
+ const snapshot=structuredClone(app)
+ expect(builderV2Menu(app).some(screen=>screen.id===hours.id)).toBe(false)
+ expect(builderV2MenuLabel(calendar,app)).toBe('Расписание')
+ expect(app).toEqual(snapshot)
+ const node=app.nodes.find(node=>calendar.rootIds.includes(node.id)&&node.type==='collection')!
+ if(node.type==='collection')node.layout='cards'
+ expect(builderV2Menu(app).some(screen=>screen.id===hours.id)).toBe(true)
+})
 it('keeps record screens and hidden screens out of navigation and separates the menu label from the heading',()=>{
  const app=menuApp();expect(builderV2Menu(app)).toHaveLength(8);expect(builderV2MenuLabel(app.screens[6]!)).toBe('Финансы');expect(builderV2MenuLabel(app.screens[0]!)).toBe('Экран 1')
  const navigate=vi.fn();render(<BuilderV2AppFrame app={app} screenId="page_6" title="Подробный финансовый отчёт" onNavigate={navigate}><p>Данные</p></BuilderV2AppFrame>)

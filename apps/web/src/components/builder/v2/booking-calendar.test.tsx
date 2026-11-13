@@ -6,6 +6,8 @@ import { bookingCalendarDays, type BookingCalendarSnapshot, type BookingCalendar
 import { appV2Fixture } from './fixture.test-utils'
 import { BookingCalendarDemoContext, BookingCalendarScreen } from './booking-calendar'
 import { BookingWeekOverview } from './booking-calendar-views'
+import { useState } from 'react'
+import { BookingJourneyProvider } from './booking-journey'
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks() })
 function fixture() {
@@ -33,6 +35,33 @@ function show(data: BookingCalendarSnapshot, width: number, onOpenVisit = vi.fn(
   return { onOpenVisit, onOpenPeriod, onCreate }
 }
 describe('one calendar for the whole team', () => {
+  it('keeps bookings and working hours as separate actions of one calendar and restores the selected period',async()=>{
+    const {data,day}=fixture(),create=vi.fn();resize(1200)
+    function Harness(){const[settings,setSettings]=useState(false);return <BookingJourneyProvider><BookingCalendarDemoContext value={()=>({ok:true,data})}>{settings?<button onClick={()=>setSettings(false)}>Вернуться к календарю</button>:<BookingCalendarScreen app={appV2Fixture()} screenId="home" timeZone="Europe/Moscow" onOpenVisit={vi.fn()} onAdd={vi.fn()} onCreate={create} onConfigure={()=>setSettings(true)}/>}</BookingCalendarDemoContext></BookingJourneyProvider>}
+    render(<Harness/>);await screen.findByLabelText('Календарь рабочих часов и записей')
+    fireEvent.click(screen.getByRole('button',{name:'Неделя'}));await screen.findByRole('table')
+    fireEvent.change(screen.getByRole('combobox',{name:'Мастер календаря'}),{target:{value:'master_zhenya'}})
+    fireEvent.click(screen.getByRole('button',{name:'Настроить рабочие часы'}))
+    expect(create).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button',{name:'Вернуться к календарю'}));await screen.findByRole('table')
+    expect(screen.getByRole('button',{name:'Неделя'}).getAttribute('aria-pressed')).toBe('true')
+    expect((screen.getByRole('combobox',{name:'Мастер календаря'})as HTMLSelectElement).value).toBe('master_zhenya')
+    expect((screen.getByLabelText('Дата календаря')as HTMLInputElement).value).toBe(day)
+    fireEvent.click(screen.getByRole('button',{name:'Добавить запись'}))
+    expect(create).toHaveBeenCalledWith({day,masterId:'master_zhenya'})
+  })
+  it('keeps period editing out of the visit hit areas and out of a staff calendar',async()=>{
+    const{data}=fixture(),edit=vi.fn();resize(1200)
+    const view=render(<BookingCalendarDemoContext value={()=>({ok:true,data})}><BookingCalendarScreen app={appV2Fixture()} screenId="home" timeZone="Europe/Moscow" onOpenVisit={vi.fn()} onOpenPeriod={edit}/></BookingCalendarDemoContext>)
+    await screen.findByLabelText('Календарь рабочих часов и записей')
+    const summary=screen.getAllByText('Изменить часы',{selector:'summary',exact:false})[0]!,details=summary.parentElement!
+    details.setAttribute('open','');fireEvent.click(within(details).getAllByRole('button')[0]!)
+    expect(edit).toHaveBeenCalledWith('master_olya_morning')
+    expect(details.closest('[aria-label="Календарь рабочих часов и записей"]')).toBeTruthy()
+    view.rerender(<BookingCalendarDemoContext value={()=>({ok:true,data})}><BookingCalendarScreen app={appV2Fixture()} screenId="home" timeZone="Europe/Moscow" onOpenVisit={vi.fn()}/></BookingCalendarDemoContext>)
+    expect(screen.queryByRole('button',{name:'Настроить рабочие часы'})).toBeNull()
+    expect(screen.queryByText('Изменить часы',{selector:'summary',exact:false})).toBeNull()
+  })
   it('defaults to all masters and opens the detailed day from the week header', async () => {
     const { data } = fixture()
     show(data, 1200)

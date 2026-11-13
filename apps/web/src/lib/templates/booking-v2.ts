@@ -74,7 +74,7 @@ export function buildBookingV2App(built: BuiltTemplate, meta: { id: string; work
   screen(booking.mastersScreenId, 'Мастера', 'users', everyone, null, [collection(booking.mastersScreenId, 'Мастера', booking.tables.masters, booking.master.name, booking.masterScreenId, everyone)])
   screen(booking.masterScreenId, 'Мастер', 'user', everyone, booking.tables.masters, [], false)
   screen(booking.listScreenId!, 'Расписание', 'calendar', team, null, [collection(booking.listScreenId!, 'Расписание', booking.tables.visits, visit.client, booking.visitScreenId, team, 'calendar', visit.service)])
-  screens.at(-1)!.menuLabel = 'Записи'
+  screens.at(-1)!.menuLabel = 'Расписание'
   screen(booking.clientScreenId, 'Мои записи', 'calendar', audience('client'), null, [collection(booking.clientScreenId, 'Мои записи', booking.tables.visits, visit.service, booking.visitScreenId, audience('client'), 'list', visit.start)])
   screen(booking.formScreenId, 'Записаться', 'calendar', everyone, booking.tables.services, [form(booking.createFormId, 'Записаться на услугу', booking.formScreenId, booking.tables.visits, 'create', [
     { fieldId: visit.service, label: 'Услуга', required: true, readOnly: true, initialValue: { kind: 'record_ids', tableId: booking.tables.services, record: { kind: 'row' } } },
@@ -100,8 +100,7 @@ export function buildBookingV2App(built: BuiltTemplate, meta: { id: string; work
   })
   screen(booking.visitScreenId, 'Запись', 'calendar', audience('owner', 'staff', 'client'), booking.tables.visits, [...facts, statusForm, booking.cancelButtonId], false)
   const scheduleForm = form(newId('component'), 'Рабочее время мастера', booking.setupScreenId, booking.tables.schedule, 'create', Object.values(booking.schedule).map(fieldId => ({ fieldId, label: built.fields.find(item => item.id === fieldId)!.name, required: [booking.schedule.name, booking.schedule.master].includes(fieldId) })), owner, null)
-  screen(booking.setupScreenId, 'Рабочее время', 'clock', owner, null, [collection(booking.setupScreenId, 'Рабочее время', booking.tables.schedule, booking.schedule.name, null, owner), scheduleForm])
-  screens.at(-1)!.menuLabel = 'График'
+  screen(booking.setupScreenId, 'Рабочие часы', 'clock', owner, null, [collection(booking.setupScreenId, 'Рабочее время', booking.tables.schedule, booking.schedule.name, null, owner), scheduleForm], false)
   const manageFields = (tableId: string, creating: boolean) => built.fields.filter(item => item.tableId === tableId).map(item => ({ fieldId: item.id, label: item.name, required: ['text', 'email'].includes(item.type) && item.type !== 'long_text' || item.id === service.price || item.id === service.minutes || item.id === booking.master.services, ...(creating && [service.active, booking.master.active].includes(item.id) ? { initialValue: { kind: 'literal' as const, value: true } } : {}) }))
   for (const [listId, detailId, tableId, name] of [[booking.catalogScreenId, booking.serviceScreenId, booking.tables.services, 'Услуга'], [booking.mastersScreenId, booking.masterScreenId, booking.tables.masters, 'Мастер']] as const) {
     screens.find(item => item.id === listId)!.rootIds.push(form(newId('component'), name === 'Услуга' ? 'Добавить услугу' : 'Добавить мастера', listId!, tableId!, 'create', manageFields(tableId!, true), owner, null))

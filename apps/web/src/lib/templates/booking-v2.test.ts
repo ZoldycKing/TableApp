@@ -19,7 +19,8 @@ describe('native online booking starter', () => {
     const { app, catalog } = bookingFixture()
     expect(appV2Schema.safeParse(app).success).toBe(true)
     expect(validateAppV2(app, catalog, { mode: 'publish' })).toEqual([])
-    expect(app.screens.filter(screen => screen.navigation).map(screen => screen.name)).toEqual(['Услуги', 'Мастера', 'Расписание', 'Мои записи', 'Рабочее время', 'Клиенты'])
+    expect(app.screens.filter(screen => screen.navigation).map(screen => screen.name)).toEqual(['Услуги', 'Мастера', 'Расписание', 'Мои записи', 'Клиенты'])
+    expect(app.screens.find(screen => screen.id === app.booking!.setupScreenId)?.navigation).toBe(false)
     expect(app.authentication.members[0]!.roleIds).toEqual(['owner'])
   })
   it('isolates private visits, internal notes and master email addresses', () => {

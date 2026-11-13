@@ -13,6 +13,11 @@ export type BookingCalendarViewProps = {
 const initials = (name: string) => name.trim().split(/\s+/).slice(0, 2).map(word => word[0]).join('')
 const dayName = (day: string) => bookingCalendarDateLabel(day, { weekday: 'long', day: 'numeric', month: 'long' })
 
+export function BookingPeriodChoice({ periods, master, editing, onOpenPeriod }: { periods: NonNullable<BookingCalendarSnapshot['shifts'][number]['windows']>; master: string; editing: boolean; onOpenPeriod?: (id: string) => void }) {
+  if (!onOpenPeriod || !periods.length) return null
+  return <details className={css.periodChoice}><summary>Изменить часы<span className="sr-only">: {master}</span></summary><div>{periods.map(period => <button type="button" key={period.id} disabled={editing} aria-label={`Изменить рабочий период: ${master}, ${bookingClock(period.start)}–${bookingClock(period.end)}`} onClick={() => onOpenPeriod(period.id)}>{bookingClock(period.start)}–{bookingClock(period.end)}</button>)}</div></details>
+}
+
 function VisitCard({ visit, master, editing, onOpenVisit, agenda = false }: {
   visit: BookingCalendarVisit; master: string; editing: boolean; onOpenVisit: (id: string) => void; agenda?: boolean
 }) {
@@ -35,7 +40,7 @@ function ShiftInfo({ data, masterId, day }: { data: BookingCalendarSnapshot; mas
 }
 
 /** Every master and every appointment stays visible; the row grows with its busiest day. */
-export function BookingWeekOverview({ data, masterId, editing, onOpenVisit, onOpenDay }: BookingCalendarViewProps & { onOpenDay: (day: string) => void }) {
+export function BookingWeekOverview({ data, masterId, editing, onOpenVisit, onOpenPeriod, onOpenDay }: BookingCalendarViewProps & { onOpenDay: (day: string) => void }) {
   const masters = data.masters.filter(master => !masterId || master.id === masterId)
   return <div className={css.weekOverview} data-calendar-week>
     <table className={css.weekTable} aria-label="Неделя всех мастеров">
@@ -47,6 +52,7 @@ export function BookingWeekOverview({ data, masterId, editing, onOpenVisit, onOp
           const visits = data.visits.filter(visit => visit.masterId === master.id && visit.day === day && visit.status !== 'cancelled')
           return <td key={day}><section className={css.weekCell} aria-label={`${master.name}, ${dayName(day)}`}>
             <ShiftInfo data={data} masterId={master.id} day={day} />
+            <BookingPeriodChoice periods={data.shifts.find(shift => shift.masterId === master.id && shift.day === day)?.windows ?? []} master={`${master.name}, ${dayName(day)}`} editing={editing} onOpenPeriod={onOpenPeriod}/>
             <div className={css.weekVisits}>{visits.map(visit => <VisitCard key={visit.id} visit={visit} master={master.name} editing={editing} onOpenVisit={onOpenVisit} />)}</div>
             {!visits.length && <span className={css.noVisits}>Нет записей</span>}
           </section></td>
@@ -68,7 +74,7 @@ export function BookingDayAgenda({ data, masterId, day, working, editing, onOpen
       return <div className={css.rosterRow} key={master.id}>
         <span className={css.avatar} aria-hidden>{initials(master.name)}</span><strong>{master.name}</strong>
         <ShiftInfo data={data} masterId={master.id} day={day} />
-        {working && onOpenPeriod && periods.length > 0 && <details className={css.periodChoice}><summary>Изменить часы<span className="sr-only">: {master.name}</span></summary><div>{periods.map(period => <button type="button" key={period.id} disabled={editing} aria-label={`Изменить рабочий период: ${master.name}, ${bookingClock(period.start)}–${bookingClock(period.end)}`} onClick={() => onOpenPeriod(period.id)}>{bookingClock(period.start)}–{bookingClock(period.end)}</button>)}</div></details>}
+        {working && <BookingPeriodChoice periods={periods} master={master.name} editing={editing} onOpenPeriod={onOpenPeriod}/>}
       </div>
     })}</div>
     <h4>Записи на день <span>{visits.length}</span></h4>

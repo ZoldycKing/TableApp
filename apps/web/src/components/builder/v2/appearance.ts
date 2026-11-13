@@ -28,9 +28,12 @@ export function builderV2ThemeStyle(theme: AppV2['theme'], appearance?: AppV2['a
   } as CSSProperties
 }
 export function builderV2Menu(app:AppV2) {
-  return app.screens.filter(screen=>screen.navigation&&!screen.contextTableId)
+  const calendar = app.booking && app.screens.find(screen => screen.id === app.booking!.listScreenId && screen.navigation)
+  const unified = calendar?.rootIds.some(id => app.nodes.some(node => node.id === id && node.type === 'collection' && node.layout === 'calendar'))
+  return app.screens.filter(screen=>screen.navigation&&!screen.contextTableId&&!(unified && screen.id === app.booking?.setupScreenId))
 }
-export function builderV2MenuLabel(screen:AppV2['screens'][number], app?: Pick<AppV2, 'inventory'>) {
+export function builderV2MenuLabel(screen:AppV2['screens'][number], app?: Pick<AppV2, 'inventory'|'booking'>) {
   if (app?.inventory?.movementsScreenId === screen.id) return 'История склада'
+  if (app?.booking?.listScreenId === screen.id && (!screen.menuLabel?.trim() || screen.menuLabel === 'Записи')) return 'Расписание'
   return screen.menuLabel?.trim()||screen.name
 }

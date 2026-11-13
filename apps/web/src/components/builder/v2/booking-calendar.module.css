@@ -1,4 +1,6 @@
 .root { min-width: 0; container: booking-calendar / inline-size; }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.columnHead > details { grid-column: 1 / -1; }
 .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; min-width: 0; }
 .controls button, .controls input, .controls select { min-width: 0; min-height: 42px; font: inherit; font-size: 13px; border: 1px solid var(--v2-line); border-radius: 9px; color: var(--v2-ink); background: var(--v2-surface); }
 .controls button { display: inline-flex; align-items: center; justify-content: center; padding: 8px 12px; cursor: pointer; }
@@ -115,6 +117,7 @@
 .rosterRow > strong { font-size: 13px; line-height: 1.5; font-weight: 700; }
 .rosterRow > .shiftInfo { grid-column: 2; }
 .periodChoice { grid-column: 2; font-size: 11px; }
+.weekCell > .periodChoice { grid-column: auto; }
 .periodChoice summary { width: fit-content; padding-block: 7px; color: var(--v2-accent); cursor: pointer; }
 .periodChoice > div { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
 .periodChoice button { min-height: 38px; padding: 7px 9px; border: 1px solid var(--v2-line); border-radius: 8px; background: var(--v2-surface); color: var(--v2-ink); font: inherit; font-variant-numeric: tabular-nums; cursor: pointer; }

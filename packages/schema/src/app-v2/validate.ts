@@ -142,6 +142,12 @@ export function validateAppV2(app: AppV2, catalog: AppV2Catalog, options: { mode
     if (node.visibleTo) audience(node.visibleTo, `${ownPath}.visibleTo`)
     if (node.visibleWhen) condition(node.visibleWhen, context, `${ownPath}.visibleWhen`)
     if ('value' in node) binding(node.value, context, `${ownPath}.value`)
+    if (node.type === 'profile') {
+      binding(node.title, context, `${ownPath}.title`)
+      if (node.subtitle) binding(node.subtitle, context, `${ownPath}.subtitle`)
+      if (node.image) binding(node.image, context, `${ownPath}.image`)
+      node.contacts.forEach((contact, i) => binding(contact.value, context, `${ownPath}.contacts.${i}`))
+    }
     if((node.type==='gallery'||node.type==='files')&&(node.value.kind==='row'||node.value.kind==='screen_row')){
       const selected=catalog.fields.get(node.value.fieldId)
       if(selected&&!['image','attachment','url','text','long_text'].includes(selected.type))issue('media_field_type',ownPath,'Выберите поле с фотографиями, файлами или ссылками')
@@ -188,6 +194,9 @@ export function validateAppV2(app: AppV2, catalog: AppV2Catalog, options: { mode
         if(node.kanbanMoveRoleIds)for(const id of node.kanbanMoveRoleIds)if(!roles.has(id))issue('missing_role',ownPath,'Выберите существующую роль для смены статуса')
         if(node.layout==='calendar'&&!node.dateFieldId)issue('missing_calendar_field',ownPath,'Выберите поле даты для календаря')
         if(node.layout==='timeline'&&!node.dateFieldId)issue('missing_timeline_field',ownPath,'Выберите поле даты для ленты')
+        if(node.layout==='history'&&!node.dateFieldId)issue('missing_history_field',ownPath,'Выберите дату события для истории')
+        if(node.statusFieldId){const found=field(node.statusFieldId,source.tableId,ownPath);if(found&&found.type!=='single_select')issue('history_status_type',ownPath,'Для статуса выберите поле с одним вариантом')}
+        if(node.historyNoteFieldId)field(node.historyNoteFieldId,source.tableId,ownPath)
         if(node.layout==='kanban'&&!node.groupFieldId)issue('missing_board_field',ownPath,'Выберите поле статуса для канбана')
         if (node.subtitleFieldId) field(node.subtitleFieldId, source.tableId, ownPath)
         if (node.cardImageFieldId) {

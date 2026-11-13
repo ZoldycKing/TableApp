@@ -101,6 +101,29 @@ describe.skipIf(!process.env.DATABASE_URL)('native v2 booking transactions', () 
     expect(updated.ok && updated.data.visits.filter(visit => visit.clientId === client.id)).toHaveLength(2)
   })
 
+  it('reads configurable profile bindings and related history through the same protected published data path', async () => {
+    const { readPublishedV2Data, readPublishedV2Record } = await import('./builder-v2-published-data')
+    const { builderV2ScreenFields } = await import('./builder-v2-record')
+    const c = config.clients!, client = built.rows.find(row => row.tableId === c.tableId && row.data[c.email] === 'irina@example.com')!
+    const history = app.nodes.find(node => node.type === 'collection' && node.layout === 'history')!
+    const scope = { screenId: config.customerScreenId!, recordId: client.id, revision: liveRevision() }
+    expect([...builderV2ScreenFields(app,scope.screenId)]).toEqual(expect.arrayContaining([c.name,c.phone,c.email]))
+    identity.email = 'owner@example.com'
+    const profile = await readPublishedV2Record(app.slug,scope)
+    expect(profile.record.values).toMatchObject({ [c.name]: 'Ирина Новое Имя', [c.phone]: '+7 900 777-66-55' })
+    const page = await readPublishedV2Data(app.slug,{ ...scope, nodeId: history.id })
+    expect(page.total).toBe(2)
+    expect(page.rows.map(row => row.id).sort()).toEqual(built.rows.filter(row => row.tableId === config.tables.visits && (row.data[c.linkFieldId] as string[])?.includes(client.id)).map(row=>row.id).sort())
+    expect(page.rows.some(row=>row.values[config.visit.note])).toBe(true)
+    const metric = app.nodes.find(node => node.type === 'metric' && node.format === 'currency')!
+    expect((await readPublishedV2Data(app.slug,{ ...scope,nodeId:metric.id })).value).toBe(2500)
+    for (const email of ['olga@example.com','irina@example.com','other@example.com']) {
+      identity.email=email
+      await expect(readPublishedV2Data(app.slug,{ ...scope,nodeId:history.id })).rejects.toThrow()
+      await expect(readPublishedV2Record(app.slug,scope)).rejects.toThrow()
+    }
+  })
+
   it('uses current stored contacts for a selected client and rejects a customer forging that link', async () => {
     identity.email = 'owner@example.com'
     const c = config.clients!, client = built.rows.find(row => row.tableId === c.tableId && row.data[c.email] === 'irina@example.com')!

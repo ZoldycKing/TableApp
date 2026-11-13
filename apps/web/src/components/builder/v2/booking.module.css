@@ -126,3 +126,5 @@
   .scheduleForm .switch button { flex: 1; min-width: 0; }
   .scheduleTimes { gap: 12px; }
 }
+.configuredProfile { display: grid; gap: 20px; width: 100%; max-width: 1100px; margin-inline: auto; min-width: 0; }
+.configuredProfile > button { justify-self: start; }

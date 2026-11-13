@@ -20,8 +20,10 @@ import presentation from '@/components/runtime/app-presentation.module.css'
 import { OrderActionPanelContext } from './order-detail'
 import { BookingScheduleForm } from './booking-schedule'
 import { BookingCalendarScreen } from './booking-calendar'
-import { BookingPeopleScreen } from './booking-people'
+import { BookingPeopleScreen, BookingClientNextVisit } from './booking-people'
 import { useBookingJourney } from './booking-journey'
+import { builderV2ScreenNodes } from '@/lib/builder-v2-data-types'
+import { RecordProfileActions } from './record-blocks'
 const BookingLogin = lazy(async () => ({ default: (await import('@/components/runtime/app-login')).AppLogin }))
 
 type Props = AppV2RendererProps & { renderNodes: (ids: readonly string[]) => ReactNode }
@@ -65,6 +67,12 @@ export function BookingScreen(props: Props) {
   </>
   // Forms stay in the same app viewport, including the phone preview in the editor.
   if (showForm && pageForm) return <div className={css.formPage}><button type="button" className={styles.textButton} onClick={() => setShowForm(false)}>← Назад</button>{screen.id === booking.setupScreenId ? <BookingScheduleForm app={app} screenId={screen.id} formId={pageForm.id} editing={Boolean(props.editing)} onSaved={() => setShowForm(false)} /> : <OrderActionPanelContext value={{ mode: 'reveal', close: () => setShowForm(false) }}>{props.renderNodes([pageForm.id])}</OrderActionPanelContext>}</div>
+  const profile = screen.id === booking.customerScreenId ? builderV2ScreenNodes(app, screen.id).find(node => node.type === 'profile') : undefined
+  if (owner && profile && booking.clients) {
+    const c = booking.clients
+    const actions = <><button type="button" className={styles.primary} disabled={props.editing || !record} onClick={() => { if (!record) return; journey?.setIntent({ clientId: record.id, client: String(record.values[c.name] ?? ''), phone: String(record.values[c.phone] ?? ''), email: String(record.values[c.email] ?? '') }); navigate(booking.catalogScreenId) }}><ProtoIcon name="plus"/>Записать клиента</button>{pageForm && <button type="button" className={styles.secondary} onClick={() => setShowForm(true)}>Изменить клиента</button>}</>
+    return <div className={css.configuredProfile} data-booking-client-profile><button type="button" className={styles.textButton} onClick={() => back(booking.customersScreenId!)}><ProtoIcon name="back"/>Клиенты</button>{record && <BookingClientNextVisit app={app} screenId={screen.id} clientId={record.id} onOpen={id => navigate(booking.visitScreenId,id)}/>}<RecordProfileActions value={{ nodeId: profile.id, actions }}>{props.renderNodes(screen.rootIds.filter(id => id !== pageForm?.id))}</RecordProfileActions></div>
+  }
   // Changing a starter collection to another layout or custom item blocks uses
   // the regular component renderer, including its configured actions.
   if (node && (node.itemIds.length > 0 || screen.id === booking.catalogScreenId && node.layout !== 'catalog' || [booking.mastersScreenId, booking.customersScreenId].includes(screen.id) && node.layout !== 'list' || agenda && node.layout !== 'calendar')) return <div className={css.page}>{props.renderNodes(screen.rootIds)}</div>

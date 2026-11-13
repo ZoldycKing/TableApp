@@ -24,6 +24,7 @@ export function builderV2ScreenFields(app: AppV2, screenId: string): Set<string>
       seen.add(id); const node = app.nodes.find(node => node.id === id)
       if (!node) continue
       if ('value' in node) collect(node.value, repeated)
+      if (node.type === 'profile') collect([node.title, node.subtitle, node.image, ...node.contacts.map(contact => contact.value)], repeated)
       if (node.type === 'input') collect(node.initialValue, repeated)
       collect(node.visibleWhen, repeated)
       visit(appV2ChildIds(node), repeated || node.type === 'collection')

@@ -116,6 +116,30 @@ export function buildBookingV2App(built: BuiltTemplate, meta: { id: string; work
   ]
   screen(booking.customersScreenId!, 'Клиенты', 'users', owner, null, [collection(booking.customersScreenId!, 'Клиенты', booking.clients!.tableId, booking.clients!.name, booking.customerScreenId!, owner), form(booking.customerCreateFormId!, 'Добавить клиента', booking.customersScreenId!, booking.clients!.tableId, 'create', clientFields, owner, null)])
   screen(booking.customerScreenId!, 'Клиент', 'user', owner, booking.clients!.tableId, [form(booking.customerEditFormId!, 'Изменить клиента', booking.customerScreenId!, booking.clients!.tableId, 'edit', clientFields, owner, booking.clients!.tableId)], false)
+  const clientCard = screens.at(-1)!, c = booking.clients!, profileId = newId('component'), historyId = newId('component'), layoutId = newId('component'), sideId = newId('component')
+  const clientSource = (extra?: AppV2['sources'][number]['filter']) => {
+    const sourceId = newId('component')
+    const related = { op: 'includes' as const, left: { kind: 'row' as const, fieldId: c.linkFieldId }, right: { kind: 'screen_row_id' as const } }
+    sources.push({ id: sourceId, tableId: booking.tables.visits, screenTableId: c.tableId, viewId: null, filter: extra ? { op: 'and', conditions: [related,extra] } : related, sorts: [{ fieldId: visit.start, direction: 'desc' }], searchFieldIds: [], pageSize: 30 })
+    return sourceId
+  }
+  const done = { op: 'eq' as const, left: { kind: 'row' as const, fieldId: visit.status }, right: { kind: 'literal' as const, value: booking.statuses.completed! } }
+  const metricIds = ['Завершённых визитов','За завершённые визиты'].map((name,index) => {
+    const id = newId('component'); nodes.push({ id, name, type: 'metric', sourceId: clientSource(done), operation: index ? 'sum' : 'count', fieldId: index ? visit.price : null, format: index ? 'currency' : 'number', visibleTo: null, visibleWhen: null }); return id
+  })
+  const metricsId = newId('component'), notesId = newId('component'), notesHeadingId = newId('component')
+  const historyOpen = flow('Открыть визит из истории', { rowTableId: booking.tables.visits, screenTableId: c.tableId, formId: null }, [{ id: newId('action'), type: 'open_screen', screenId: booking.visitScreenId, record: { kind: 'current' } }], owner)
+  nodes.push(
+    { id: profileId, name: 'Профиль клиента', type: 'profile', title: { kind: 'row', fieldId: c.name }, subtitle: null, image: null, contacts: [{ label: 'Телефон', kind: 'phone', value: { kind: 'row', fieldId: c.phone } },{ label: 'Почта', kind: 'email', value: { kind: 'row', fieldId: c.email } }], childIds: [metricsId], visibleTo: null, visibleWhen: null },
+    { id: metricsId, name: 'Посещения клиента', type: 'columns', columns: 2, childIds: metricIds, visibleTo: null, visibleWhen: null },
+    { id: historyId, name: 'История посещений', type: 'collection', sourceId: clientSource(), layout: 'history', historyNoteFieldId: visit.note, titleFieldId: visit.service, subtitleFieldId: visit.master, dateFieldId: visit.start, statusFieldId: visit.status, cardDetailFieldId: visit.price, itemIds: [], events: { itemPress: historyOpen }, visibleTo: null, visibleWhen: null },
+    { id: notesHeadingId, name: 'Заметки о клиенте', type: 'heading', size: 's', value: { kind: 'literal', value: 'Заметки о клиенте' }, visibleTo: null, visibleWhen: { op: 'not_empty', value: { kind: 'row', fieldId: c.note } } },
+    { id: notesId, name: 'Заметки', type: 'text', value: { kind: 'row', fieldId: c.note }, visibleTo: null, visibleWhen: { op: 'not_empty', value: { kind: 'row', fieldId: c.note } } },
+    { id: sideId, name: 'История и заметки', type: 'group', appearance: 'plain', childIds: [historyId,notesHeadingId,notesId], visibleTo: null, visibleWhen: null },
+    { id: layoutId, name: 'Профиль и история', type: 'columns', columns: 2, childIds: [profileId,sideId], visibleTo: null, visibleWhen: null },
+  )
+  clientCard.recordTitleFieldId = c.name
+  clientCard.rootIds.unshift(layoutId)
   const grant = (allowed: AppV2Audience, value: Omit<AppV2Grant, 'audience'>): AppV2Grant => ({ audience: allowed, ...value })
   const columns = (tableId: string) => built.fields.filter(item => item.tableId === tableId).map(item => item.id)
   return {

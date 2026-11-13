@@ -1,13 +1,10 @@
 import { isComputed, type FieldType } from '@tableapp/schema'
-import { appV2ChildIds, type AppV2, type AppV2Node, type AppV2Step } from '@tableapp/schema/app-v2'
+import { appV2ChildIds, appV2ComponentCatalog, type AppV2, type AppV2Node, type AppV2Step } from '@tableapp/schema/app-v2'
 import { BUILDER_V2_FORM_TYPES } from '@/lib/builder-v2-form-types'
 import { collectionCardScreen } from './collection-navigation'
 import type { BuilderV2Table } from '@/lib/builder-v2'
 
-export const NODE_KINDS = {
-  business: ['Бизнес-операция', 'Склад, производство или запись по времени', 'action'],
-  gallery: ['Галерея', 'Фотографии из записи или по ссылкам', 'image'], files: ['Файлы', 'Документы и вложения записи', 'file'], heading: ['Заголовок', 'Название раздела', 'text'], text: ['Текст', 'Описание или пояснение', 'text'], group: ['Группа', 'Элементы в одном блоке', 'apps'], columns: ['Колонки', 'Элементы рядом', 'apps'], collection: ['Список', 'Записи из таблицы', 'table'], metric: ['Показатель', 'Количество или сумма', 'gauge'], chart: ['Диаграмма', 'Сравнение категорий и изменения по датам', 'chart'], video: ['Видео', 'Видео по прямой ссылке', 'video'], button: ['Кнопка', 'Переход или действие', 'action'], image: ['Изображение', 'Картинка по ссылке', 'apps'], divider: ['Разделитель', 'Линия между блоками', 'text'], form: ['Форма', 'Поля для создания или изменения записи', 'plus'], input: ['Поле ввода', 'Поле внутри формы', 'text'], field: ['Поле записи', 'Значение выбранной записи', 'template'],
-} as const
+export const NODE_KINDS = appV2ComponentCatalog
 export const v2Id = () => `node_${crypto.randomUUID().replaceAll('-', '')}`
 export const newScreen = (app: AppV2, name: string): AppV2 => { const id = v2Id(); return { ...app, homeScreenId: app.homeScreenId ?? id, screens: [...app.screens, { id, name, icon: 'apps', navigation: true, audience: { kind: 'roles', roleIds: app.roles.map(role => role.id) }, contextTableId: null, rootIds: [], events: { enter: null } }] } }
 export function editorCatalog(app: AppV2, tables: readonly BuilderV2Table[]) { return { workspaceId: app.workspaceId, tables: new Map(tables.map(table => [table.id, { workspaceId: app.workspaceId }])), fields: new Map(tables.flatMap(table => table.fields.map(field => [field.id, { tableId: table.id, type: field.type, ...(field.relationTableId ? { relationTableId: field.relationTableId } : {}) }] as const))), views: new Map(tables.flatMap(table => table.views.map(view => [view.id, { tableId: table.id }] as const))) } }
@@ -106,12 +103,18 @@ export function duplicateNode(app: AppV2, screenId: string, nodeId: string): { a
   return { app: next, id: ids.get(nodeId)! }
 }
 
-export function addNode(app: AppV2, screenId: string, type: AppV2Node['type'], tables: readonly BuilderV2Table[], parentId: string | null, tableId: string, inputFieldId?: string, options?: { editCurrentRecord?: boolean }): { app: AppV2; id: string } {
+export function addNode(app: AppV2, screenId: string, type: AppV2Node['type'], tables: readonly BuilderV2Table[], parentId: string | null, tableId: string, inputFieldId?: string, options?: { editCurrentRecord?: boolean; history?: boolean }): { app: AppV2; id: string } {
   if(type==='chart'&&parentId&&app.nodes.some(node=>node.type==='collection'&&nodeDescendants(app,node.id).has(parentId)))throw new Error('Разместите диаграмму вне строк списка')
   const id = v2Id(), base = { id, name: NODE_KINDS[type][0], visibleTo: null, visibleWhen: null }, context = nodeContext(app, screenId, parentId)
   const table = tables.find(table => table.id === tableId), form = app.nodes.find(node => node.id === context.formId)
   let next = app, node: AppV2Node
   if (type === 'heading') node = { ...base, type, value: { kind: 'literal', value: 'Новый заголовок' }, size: 'm' }
+  else if (type === 'profile') {
+    const own = tables.find(table => table.id === context.rowTableId), fields = own?.fields ?? []
+    const title = fields.find(field => /имя|название|name/i.test(field.name)) ?? fields.find(field => field.id === own?.primaryFieldId) ?? fields[0]
+    const image = fields.find(field => field.type === 'image')
+    node = { ...base, type, title: title ? { kind: 'row', fieldId: title.id } : { kind: 'literal', value: 'Новый профиль' }, subtitle: null, image: image ? { kind: 'row', fieldId: image.id } : null, contacts: fields.filter(field => ['phone','email'].includes(field.type)).slice(0,8).map(field => ({ label: field.name, kind: field.type as 'phone'|'email', value: { kind: 'row' as const, fieldId: field.id } })), childIds: [] }
+  }
   else if (type === 'text') node = { ...base, type, value: { kind: 'literal', value: 'Добавьте свой текст' } }
   else if(type==='gallery'||type==='files'){const columns=tables.find(table=>table.id===context.rowTableId)?.fields??[],field=columns.find(field=>field.type===(type==='gallery'?'image':'attachment'))??columns.find(field=>['image','attachment'].includes(field.type));const value=field?{kind:'row' as const,fieldId:field.id}:{kind:'literal' as const,value:''};node=type==='gallery'?{...base,type,value,caption:'',columns:3}:{...base,type,value,caption:''}}
   else if(type==='video')node={...base,type,value:{kind:'literal',value:''},caption:''}
@@ -153,6 +156,12 @@ export function addNode(app: AppV2, screenId: string, type: AppV2Node['type'], t
       if(type==='chart'){const group=table.fields.find(field=>field.type==='single_select')??table.fields.find(field=>['date','datetime'].includes(field.type))??table.fields.find(field=>['text','long_text','checkbox'].includes(field.type));if(!group)throw new Error('Для диаграммы добавьте поле с текстом, статусом или датой');node={...base,type,sourceId:source.id,chartType:'bar',groupFieldId:group.id,operation:'count',fieldId:null,dateGrouping:'month',limit:10}}
       else node = type === 'collection' ? { ...base, type, sourceId: source.id, layout: 'list', titleFieldId: table.fields.find(field => field.id === table.primaryFieldId)?.id ?? table.fields[0]!.id, subtitleFieldId: null, itemIds: [], events: { itemPress: null } } : { ...base, type: 'metric', sourceId: source.id, operation: 'count', fieldId: null }
     }
+  }
+  if (node.type === 'collection' && options?.history) {
+    const date = table?.fields.find(field => ['date','datetime'].includes(field.type))
+    if (!date) throw new Error('Для истории нужна таблица с датой события')
+    node = { ...node, name: 'История', layout: 'history', dateFieldId: date.id, statusFieldId: table?.fields.find(field => field.type === 'single_select')?.id, cardDetailFieldId: table?.fields.find(field => field.type === 'number')?.id }
+    next = { ...next, sources: next.sources.map(source => source.id === (node as Extract<AppV2Node,{type:'collection'}>).sourceId ? { ...source, sorts: [{ fieldId: date.id, direction: 'desc' }] } : source) }
   }
   return { app: placeNode({ ...next, nodes: [...next.nodes, node] }, screenId, id, parentId), id }
 }

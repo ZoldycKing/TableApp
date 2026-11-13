@@ -62,7 +62,7 @@ export function BookingDemo({ app, tables, initialRows, phone = false, initialVi
       const label = field?.type === 'relation' && Array.isArray(value) ? value.map(id => {
         const linked = store.current.find(row => row.id === id), primary = tables.find(table => table.id === linked?.tableId)?.primaryFieldId
         return linked && primary ? String(projectAppV2Row(app, actor, linked)[primary] ?? '') : ''
-      }).filter(Boolean).join(', ') : field?.choices?.find(choice => choice.id === value)?.name ?? (typeof value === 'number' && id === booking.service.price ? `${value.toLocaleString('ru-RU')} ₽` : String(value ?? ''))
+      }).filter(Boolean).join(', ') : field?.choices?.find(choice => choice.id === value)?.name ?? (typeof value === 'number' && [booking.service.price,booking.visit.price].includes(id) ? `${value.toLocaleString('ru-RU')} ₽` : String(value ?? ''))
       return [id, label]
     }))
     return { ...row, values, display }
@@ -174,11 +174,15 @@ export function BookingDemo({ app, tables, initialRows, phone = false, initialVi
       const node = app.nodes.find(node => node.id === request.nodeId), source = node && 'sourceId' in node && app.sources.find(source => source.id === node.sourceId)
       if (!source) return { ok: false, error: 'Источник недоступен.' }
       const items = store.current.filter(row => row.tableId === source.tableId && Object.keys(projectAppV2Row(app, actor, row)).length).filter(row => {
-        if (source.filter) { const match = evaluateAppV2Condition(source.filter, { actor, row }); if (!match.ok || !match.value) return false }
+        if (source.filter) { const match = evaluateAppV2Condition(source.filter, { actor, row, screenRow: store.current.find(item => item.id === request.recordId) }); if (!match.ok || !match.value) return false }
         if (request.calendarDay && instantToWallClock(String(row.values[booking.visit.start]), timeZone)?.date !== request.calendarDay) return false
         return !request.search || String(row.values[source.searchFieldIds[0] ?? ''] ?? '').toLowerCase().includes(request.search.toLowerCase())
       }).map(format)
-      return { ok: true, page: { kind: 'collection', rows: items, total: items.length, value: null, next: null } }
+      for (const sort of [...source.sorts].reverse()) items.sort((a,b) => String(a.values[sort.fieldId] ?? '').localeCompare(String(b.values[sort.fieldId] ?? '')) * (sort.direction === 'desc' ? -1 : 1))
+      const numbers = node?.type === 'metric' ? items.map(row => row.values[node.fieldId ?? '']).filter((value): value is number => typeof value === 'number' && Number.isFinite(value)) : []
+      const sum = numbers.reduce((total,value) => total + value,0)
+      const value = node?.type !== 'metric' ? null : node.operation === 'count' ? items.length : node.operation === 'sum' ? sum : !numbers.length ? null : node.operation === 'avg' ? sum / numbers.length : node.operation === 'min' ? Math.min(...numbers) : Math.max(...numbers)
+      return { ok: true, page: { kind: node?.type === 'metric' ? 'metric' : 'collection', rows: items, total: items.length, value, next: null } }
     },
     readRecord: async request => { const row = store.current.find(row => row.id === request.recordId); return row ? { ok: true, record: format(row), title: 'Запись' } : { ok: false, error: 'Запись недоступна.' } },
     inspectForm: inspect, submitForm: submit,

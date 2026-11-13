@@ -19,6 +19,11 @@ export function builderV2ReadPlan(app: AppV2, node: AppV2Node & { sourceId: stri
     if (node.cardImageFieldId) displayed.add(node.cardImageFieldId)
     if (node.cardDetailFieldId) displayed.add(node.cardDetailFieldId)
   }
+  if (node.type === 'collection' && node.layout === 'history') {
+    if (node.statusFieldId) displayed.add(node.statusFieldId)
+    if (node.historyNoteFieldId) displayed.add(node.historyNoteFieldId)
+    if (node.cardDetailFieldId) displayed.add(node.cardDetailFieldId)
+  }
   // Native booking screens use these same records for photos, availability and visit cards.
   // Keep author previews complete; published reads still apply their separate row/field grants.
   if (node.type === 'collection' && app.booking) {

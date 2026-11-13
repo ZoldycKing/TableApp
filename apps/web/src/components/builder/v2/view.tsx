@@ -4,6 +4,8 @@ import {builderV2MediaItems} from './media-values'
 import Link from 'next/link'
 import {BuilderV2Chart} from './chart'
 import {BuilderV2Video} from './video'
+import { BuilderV2Profile, RecordHistoryItem, RecordHistoryContent, recordHistoryStyles } from './record-blocks'
+import { builderV2HistoryDate } from '@/lib/builder-v2-history-date'
 import {builderV2ButtonAction,builderV2NodeAction} from '@/lib/builder-v2-button-action'
 import {builderCalendarTime} from '@/lib/builder-v2-calendar'
 import { formatInventoryAuthor, formatInventoryJournalWhen } from '@/lib/inventory-author'
@@ -870,6 +872,11 @@ export function AppV2Renderer(props: AppV2RendererProps) {
       if (!props.editing && !visible(node, record)) return null
       let content: ReactNode
       if (node.type === 'heading') content = <h2 className={ui.heading} data-size={node.size}>{resolve(node.value, record)}</h2>
+      else if (node.type === 'profile') {
+        const text = (binding: AppV2Binding | null) => binding && raw(binding, record) !== null ? resolve(binding, record) : ''
+        const image = node.image ? builderV2MediaItems(raw(node.image, record), published?.slug).find(item => item.image) : undefined
+        content = <BuilderV2Profile nodeId={node.id} title={text(node.title)} subtitle={text(node.subtitle)} image={image} contacts={node.contacts.map(contact => ({ ...contact, value: text(contact.value) }))}>{node.childIds.length ? render(node.childIds, record, formTableId, itemId, itemLabel) : undefined}</BuilderV2Profile>
+      }
       else if (node.type === 'text') content = <p className={styles.bodyText}>{resolve(node.value, record)}</p>
       else if (node.type === 'field') {
         const fieldId = 'fieldId' in node.value ? node.value.fieldId : undefined
@@ -962,7 +969,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
           const numbers = rows?.map(row => row.values[node.fieldId ?? '']).filter((value): value is number => typeof value === 'number' && Number.isFinite(value)) ?? []
           const sum = numbers.reduce((sum, value) => sum + value, 0)
           const result = page ? page.value : !rows ? null : node.operation === 'count' ? rows.length : node.operation === 'sum' ? sum : !numbers.length ? null : node.operation === 'avg' ? sum / numbers.length : node.operation === 'min' ? Math.min(...numbers) : Math.max(...numbers)
-          body = <div className={`${styles.metric} ${presentation.panel}`}><span>{node.name}</span><strong>{result ?? '—'}</strong><small>{table?.name ?? 'Выберите источник'}</small></div>
+          body = <div className={`${styles.metric} ${presentation.panel}`} data-metric><span>{node.name}</span><strong>{result === null ? '—' : node.format === 'currency' ? `${result.toLocaleString('ru-RU')} ₽` : result.toLocaleString('ru-RU')}</strong><small>{table?.name ?? 'Выберите источник'}</small></div>
         } else {
           const catalog = node.layout === 'catalog'
           const timeline = node.layout === 'timeline'
@@ -1522,6 +1529,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
             if (node.layout === 'calendar') return page?.calendar?.month === 'undated' ? 'Записей без даты нет' : 'На этот день записей нет'
             if (node.layout === 'kanban') return 'В этой колонке записей нет'
             if (timeline) return inventoryHistory ? 'Операций по этому товару пока нет' : 'Записей в истории пока нет'
+            if (node.layout === 'history') return 'Событий в истории пока нет'
             if (catalog) return 'В каталоге пока ничего нет'
             if (inventoryStockList) return null
             if (inventoryJournalList) return null
@@ -1564,9 +1572,14 @@ export function AppV2Renderer(props: AppV2RendererProps) {
             </div>
             : <p className={ui.hint}>{emptyCopy}</p>
           ) : null
+          const historyRows = node.layout === 'history' && rows ? <ol className={recordHistoryStyles.history} aria-label={node.name}>{rows.map(row => {
+            const dateField = table?.fields.find(field => field.id === node.dateFieldId)
+            const content = { title: cell(row,node.titleFieldId) || 'Без названия', date: node.dateFieldId ? builderV2HistoryDate(row.values[node.dateFieldId],dateField?.type ?? 'datetime',dateField?.timeZone) : '', subtitle: node.subtitleFieldId ? cell(row,node.subtitleFieldId) : '', status: node.statusFieldId ? cell(row,node.statusFieldId) : '', amount: node.cardDetailFieldId ? cell(row,node.cardDetailFieldId) : '', note: node.historyNoteFieldId ? cell(row,node.historyNoteFieldId) : '' }
+            return <li key={row.id}>{node.itemIds.length ? item(row) : rowAction ? <CollectionActionRow appId={props.app.id} nodeId={node.id} screenId={props.screenId} recordId={props.record?.id} itemId={row.id} title={content.title} actionName={rowAction.name} as="div" whole content={<RecordHistoryContent {...content}/>}>{control => control}</CollectionActionRow> : <RecordHistoryItem {...content} onOpen={cardScreen ? () => open(row) : undefined}/>}</li>
+          })}</ol> : null
           body = <div className={`${styles.collection} ${catalog ? presentation.catalog : cardLayout ? ui.cardCollection : timeline ? `${presentation.panel} ${ui.timelineCollection}` : ''} ${id === lines?.id ? `${presentation.panel} ${ui.orderLines}` : ''}`} data-catalog={catalog || undefined} data-tiles={node.layout === 'tiles' || undefined} data-timeline={timeline || undefined} data-in-shell={useShell || undefined}>
             {showHeading && <div className={styles.collectionHeading}><h2 className={presentation.sectionTitle}>{node.name}</h2>{props.editing && table?.name !== node.name && <span>{table?.name ?? 'Таблица удалена'}</span>}</div>}
-            {emptyState ?? collection}
+            {emptyState ?? historyRows ?? collection}
             {props.editing && node.layout!=='kanban' && <button type="button" className={styles.addInside} onClick={() => props.onAdd?.(node.id)}><ProtoIcon name="plus" />{catalog?'Добавить элемент карточки':timeline?'Настроить запись ленты':'Настроить строку списка'}</button>}
           </div>
         }

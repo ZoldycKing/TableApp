@@ -13,7 +13,7 @@ import { AppV2Renderer } from './view'
 import {BuilderV2Account,BuilderV2AppFrame,BuilderV2Theme} from './app-frame'
 import { builderV2InventoryPurchaseSection, builderV2PreviewRecordParent } from './collection-navigation'
 import { BuilderV2OrderWorkbench } from './order-workbench'
-import { isBuilderV2ContactProfile } from './record-presentation'
+import { builderV2HeaderProfile } from './record-presentation'
 import { listShellScreen } from './list-shell'
 
 export function AppV2Preview({ app, tables, businessApps, actor, initialScreen, initialRecordId, phone }: { app: AppV2; tables: readonly BuilderV2Table[]; businessApps?: readonly BuilderBusinessApp[]; actor: AppV2Actor; initialScreen?: string; initialRecordId?: string; phone: boolean }) {
@@ -41,7 +41,7 @@ export function AppV2Preview({ app, tables, businessApps, actor, initialScreen, 
       {page?.events.enter && canInvokeAppV2Workflow(app,actor,page.events.enter) && (!page.contextTableId || navigation.recordId) && <Link className={styles.secondary} href={`/apps/${encodeURIComponent(app.id)}/events/${encodeURIComponent(page.id)}${navigation.recordId ? `?row=${encodeURIComponent(navigation.recordId)}` : ''}`}>Проверить действие при открытии</Link>}
     </header>
     <div className={ui.previewBody}>
-      <BuilderV2AppFrame draftLogo scrollKey={navigation.recordId ?? ''} app={app} screenId={page?.id ?? ''} sectionId={sectionId} back={showBack ? () => navigation.back(backTarget) : undefined} profile={Boolean(record.record && isBuilderV2ContactProfile(app, screenId, tables))} title={frameTitle} phone={phone} onNavigate={navigation.navigate} headerAction={<BuilderV2Account email={actor.email} authenticated={actor.authenticated} slug={app.slug} preview />}>
+      <BuilderV2AppFrame draftLogo scrollKey={navigation.recordId ?? ''} app={app} screenId={page?.id ?? ''} sectionId={sectionId} back={showBack ? () => navigation.back(backTarget) : undefined} profile={builderV2HeaderProfile(app, screenId, tables, record.record)} title={frameTitle} phone={phone} deviceMode={phone ? 'phone' : 'desktop'} onNavigate={navigation.navigate} headerAction={<BuilderV2Account email={actor.email} authenticated={actor.authenticated} slug={app.slug} preview />}>
         {page && <BuilderV2OrderWorkbench app={app} parent={parent} tables={tables} recordId={navigation.recordId} record={record.record} onOpen={id => navigation.navigate(screenId, id, true)}>
           <BuilderV2RecordContent contextual={Boolean(page.contextTableId)} recordId={navigation.recordId} data={record} editing={false}>
             <AppV2Renderer live app={app} tables={tables} businessApps={businessApps} actor={actor} screenId={page.id} record={record.record} onNavigate={navigation.navigate} />

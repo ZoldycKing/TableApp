@@ -14,6 +14,7 @@ import {
 } from '@/lib/team-calendar-core'
 import type { CalendarSlot } from '@/lib/team-calendar-prefill'
 import { usePublishedV2 } from './published-context'
+import { AppFrameDeviceContext } from './app-frame'
 import { ListScreenShell } from './layout-shell'
 import { ProtoIcon } from '../prototype/icons'
 import styles from '../prototype/prototype.module.css'
@@ -99,8 +100,10 @@ export function TeamCalendarView({
   const [view, setView] = useState<'list' | 'day' | 'week'>(saved?.view ?? (saved?.week ? 'week' : defaultView))
   const [resource, setResource] = useState(saved?.masterId ?? '')
   const [focusId, setFocusId] = useState('')
-  const [compact, setCompact] = useState(false)
+  const frameDevice = useContext(AppFrameDeviceContext)
+  const [narrow, setNarrow] = useState(false)
   const week = view === 'week'
+  const compact = frameDevice === 'phone' || (frameDevice === 'auto' && narrow)
   const root = useRef<HTMLDivElement>(null)
   useEffect(() => {
     journey?.setCalendar({ day, masterId: resource, week, view, ...(calendarKey ? { key: calendarKey } : {}) })
@@ -109,7 +112,7 @@ export function TeamCalendarView({
   useEffect(() => {
     const element = root.current
     if (!element) return
-    const observer = new ResizeObserver(entries => setCompact((entries[0]?.contentRect.width ?? 0) < 760))
+    const observer = new ResizeObserver(entries => setNarrow((entries[0]?.contentRect.width ?? 0) < 760))
     observer.observe(element)
     return () => observer.disconnect()
   }, [])
@@ -373,7 +376,7 @@ function CalendarGrid({
                     key={event.id}
                     className={css.visit}
                     data-status={event.status || undefined}
-                    data-short={event.end - event.start < 45 || undefined}
+                    data-short={event.end - event.start <= 60 || undefined}
                     disabled={editing}
                     style={{ ...position(event.start, event.end), left: `calc(${lane / lanes * 100}% + 6px)`, width: `calc(${100 / lanes}% - 12px)` }}
                     title={`${event.subtitle || event.title} · ${calendarClock(event.start)}–${calendarClock(event.end)} · ${statusNames[event.status] ?? ''}`}

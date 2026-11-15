@@ -9,6 +9,13 @@ export function isBuilderV2OrderTable(table?: BuilderV2Table) {
   return Boolean(table && /^(заказы|позиции заказов|orders|order items)$/iu.test(table.name.trim()))
 }
 
+/** Header mark on a contact record. Salon cards already show the portrait, so a second people icon is not added. */
+export function builderV2HeaderProfile(app: AppV2, screenId: string, tables: readonly BuilderV2Table[], record: unknown) {
+  const booking = app.booking
+  if (booking && (screenId === booking.customerScreenId || screenId === booking.masterScreenId)) return false
+  return Boolean(record && isBuilderV2ContactProfile(app, screenId, tables))
+}
+
 export function isBuilderV2ContactProfile(app: AppV2, screenId: string, tables: readonly BuilderV2Table[]) {
   // CRM client/deal cards reuse the shared order-detail composition, not the stacked profile shell.
   if (app.crm && (screenId === app.crm.clientScreenId || screenId === app.crm.dealScreenId)) return false

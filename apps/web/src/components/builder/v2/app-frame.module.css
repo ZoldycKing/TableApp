@@ -197,7 +197,8 @@
   .frame[data-shell-topnav] .header .catalogIdentity,
   .frame[data-shell-topnav] .header .pageTitle,
   .frame[data-shell-topnav] .header h1 { display: none; }
-  .frame[data-shell-topnav] .railBrand { display: block; min-width: 0; flex: 1; overflow: hidden; font-weight: 750; font-size: 15px; letter-spacing: -0.01em; line-height: 1.25; }
+  .frame[data-shell-topnav] .railBrand { display: block; min-width: 0; flex: 1 1 auto; overflow: visible; font-weight: 750; font-size: 15px; letter-spacing: -0.01em; line-height: 1.25; }
+  .frame[data-shell-topnav] .railBrand > span { overflow: visible; text-overflow: unset; white-space: normal; overflow-wrap: break-word; }
   .frame[data-shell-topnav] .navigation .headerAction { display: none; }
 }
 

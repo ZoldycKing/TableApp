@@ -14,7 +14,7 @@ import { listShellScreen } from './list-shell'
 import ui from './view.module.css'
 import { builderV2InventoryPurchaseSection, builderV2RecordParent } from './collection-navigation'
 import { BuilderV2OrderWorkbench } from './order-workbench'
-import { isBuilderV2ContactProfile } from './record-presentation'
+import { builderV2HeaderProfile } from './record-presentation'
 type Data=Extract<Awaited<ReturnType<typeof loadPublishedV2Page>>,{login:false}> & { openCreate?: boolean }
 export function PublishedV2Runtime({data}:{data:Data}){
   const router=useRouter(),{app,actor,revision,screenId,recordId,record,title,buttons,tables,rowActions,enter,openCreate}=data,slug=app.slug,page=app.screens.find(screen=>screen.id===screenId)!
@@ -58,7 +58,7 @@ export function PublishedV2Runtime({data}:{data:Data}){
     <BuilderV2Theme as="main" app={app} className={`${ui.preview} ${ui.published}`}>
       <BuilderV2AppFrame
         fullScreen scrollKey={recordId ?? ''} app={app} screenId={screenId} sectionId={sectionId} title={frameTitle}
-        profile={Boolean(record && isBuilderV2ContactProfile(app, screenId, tables))}
+        profile={builderV2HeaderProfile(app, screenId, tables, record)}
         back={showBack ? () => { enterNavigation.current.prepare(); history.back(backTarget!) } : undefined}
         headerAction={<>{headerAccessory}<BuilderV2Account email={actor.email} authenticated={actor.authenticated} slug={slug} /></>}
         notice={<><BuilderV2WorkflowNotice appId={slug} />{notice && <p role="status" className={ui.context}>{notice}</p>}</>}

@@ -1,5 +1,5 @@
 'use client'
-import {useEffect,useId,useLayoutEffect,useRef,useState,type ReactNode} from 'react'
+import {createContext,useEffect,useId,useLayoutEffect,useRef,useState,type ReactNode} from 'react'
 import type {AppV2} from '@tableapp/schema/app-v2'
 import {ProtoIcon} from '../prototype/icons'
 import styles from '../prototype/prototype.module.css'
@@ -10,6 +10,9 @@ import css from './app-frame.module.css'
 import presentation from '@/components/runtime/app-presentation.module.css'
 import { BuilderV2RecordAvatar } from './record-visuals'
 import { BookingJourneyProvider } from './booking-journey'
+
+/** Desktop and phone toggles in the builder override width. Published apps measure themselves. */
+export const AppFrameDeviceContext = createContext<'auto' | 'desktop' | 'phone'>('auto')
 
 export function BuilderV2Theme({app,children,className='',as:Tag='div'}:{app:Pick<AppV2,'theme'|'appearance'>;children:ReactNode;className?:string;as?:'div'|'main'}) {
   const theme={className:css.theme??'',style:builderV2ThemeStyle(app.theme, app.appearance),scheme:app.theme.scheme}
@@ -33,7 +36,7 @@ export function BuilderV2AppMark({ logo, icon = 'apps' }: { logo?: string; icon?
   </span>
 }
 
-export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,children,onNavigate,back,notice,phone=false,headerAction,draftLogo=false,fullScreen=false,scrollKey,profile=false}:{app:AppV2;screenId:string;sectionId?:string;title:string;children:ReactNode;onNavigate:(id:string)=>void;back?:()=>void;notice?:ReactNode;phone?:boolean;headerAction?:ReactNode;draftLogo?:boolean;fullScreen?:boolean;scrollKey?:string;profile?:boolean}) {
+export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,children,onNavigate,back,notice,phone=false,deviceMode='auto',headerAction,draftLogo=false,fullScreen=false,scrollKey,profile=false}:{app:AppV2;screenId:string;sectionId?:string;title:string;children:ReactNode;onNavigate:(id:string)=>void;back?:()=>void;notice?:ReactNode;phone?:boolean;deviceMode?:'auto'|'desktop'|'phone';headerAction?:ReactNode;draftLogo?:boolean;fullScreen?:boolean;scrollKey?:string;profile?:boolean}) {
   const screenTitle = title
   const calendarScreen = app.screens.find(screen => screen.id === screenId)?.rootIds.some(id => app.nodes.some(node => node.id === id && node.type === 'team_calendar'))
   if (calendarScreen) title = ''
@@ -131,7 +134,7 @@ export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,childre
         {account}
       </div>
     </header> : null}
-    <div ref={body} className={css.body} role={contained ? 'region' : undefined} aria-label={contained ? 'Содержимое экрана' : undefined} tabIndex={contained ? 0 : undefined}><div ref={contents} className={`${styles.appContent} ${css.content} ${presentation.contentWidth}`}>{notice}{children}</div></div>
+    <div ref={body} className={css.body} role={contained ? 'region' : undefined} aria-label={contained ? 'Содержимое экрана' : undefined} tabIndex={contained ? 0 : undefined}><AppFrameDeviceContext.Provider value={deviceMode}><div ref={contents} className={`${styles.appContent} ${css.content} ${presentation.contentWidth}`}>{notice}{children}</div></AppFrameDeviceContext.Provider></div>
     {screens.length>0&&<nav className={css.navigation} aria-label="Разделы приложения">
       <div className={navigation === 'sidebar' ? css.navStack : `${css.chromeBar} ${presentation.contentWidth}`}>
         <div className={css.railIdentity}>{mark}<strong>{appName}</strong></div>

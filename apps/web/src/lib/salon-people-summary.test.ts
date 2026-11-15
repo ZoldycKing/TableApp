@@ -46,6 +46,6 @@ describe('salon client and master summaries', () => {
       visit({ masterId: 'zhenya', start: '2026-11-15T11:00:00Z', status: 'completed', price: 1500 }),
     ], 'olya', zone, nowDate)
     expect(stats.appointments).toBe(4)
-    expect(stats.revenue).toBe(4300)
+    expect(stats.revenue).toBe(11300)
   })
 })

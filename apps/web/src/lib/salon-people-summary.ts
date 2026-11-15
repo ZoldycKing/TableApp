@@ -28,7 +28,7 @@ export function clientVisitSummary(visits: readonly SalonSummaryVisit[], now = D
   }
 }
 
-/** Appointments and earned revenue for one person in the current calendar month. */
+/** Appointments and their prices for one person in the current calendar month. Cancelled rows are left out of both figures. */
 export function masterMonthSummary(
   visits: readonly SalonSummaryVisit[],
   masterId: string,
@@ -40,8 +40,6 @@ export function masterMonthSummary(
     if (visit.masterId !== masterId || visit.status === 'cancelled' || !month) return false
     return instantToWallClock(visit.start, timeZone)?.date.slice(0, 7) === month
   })
-  const revenue = rows
-    .filter(visit => visit.status === 'completed' || visit.status === 'arrived')
-    .reduce((sum, visit) => sum + (visit.price ?? 0), 0)
+  const revenue = rows.reduce((sum, visit) => sum + (visit.price ?? 0), 0)
   return { appointments: rows.length, revenue }
 }

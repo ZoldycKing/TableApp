@@ -30,6 +30,7 @@ import { buildInventoryV2App, isInventoryTemplate } from '@/lib/templates/invent
 import { buildShopV2App, isShopTemplate } from '@/lib/templates/shop-v2'
 import { buildBookingV2App, isBookingTemplate } from '@/lib/templates/booking-v2'
 import { stageBookingSampleFile } from '@/lib/templates/booking-sample-files'
+import { stageSalonPortrait } from '@/lib/templates/salon-portraits'
 import { discardInventorySampleFiles, stageInventorySampleFile } from '@/lib/templates/inventory-sample-files'
 import { discardShopSampleFiles, stageShopSampleFile } from '@/lib/templates/shop-sample-files'
 import { linkAttachments } from '@/lib/attachments'
@@ -104,6 +105,15 @@ export async function applyTemplateAction(
       if (image) for (const row of built.rows.filter(row => row.tableId === tableId)) {
         const file = await stageBookingSampleFile(workspaceId, auth.member.userId, row.data[draft.booking.service.name])
         if (file) { row.data[image.id] = [file]; sampleFiles.push({ tableId, rowId: row.id, fieldId: image.id, file }) }
+      }
+      for (const [tableName, fieldName] of [['Мастера', 'Фото мастера'], ['Клиенты', 'Фото клиента']] as const) {
+        const portraitTable = built.tables.find(table => table.name === tableName)
+        const photo = portraitTable && built.fields.find(field => field.tableId === portraitTable.id && field.name === fieldName)
+        if (!portraitTable?.primaryFieldId || !photo) continue
+        for (const row of built.rows.filter(item => item.tableId === portraitTable.id)) {
+          const file = await stageSalonPortrait(workspaceId, auth.member.userId, row.data[portraitTable.primaryFieldId])
+          if (file) { row.data[photo.id] = [file]; sampleFiles.push({ tableId: portraitTable.id, rowId: row.id, fieldId: photo.id, file }) }
+        }
       }
     }
     if (template.id === 'zakazy' && draft.customer?.catalog) {

@@ -59,6 +59,11 @@
   align-items: center;
   min-width: 0;
 }
+/* The phone preview is a narrow container inside a wide window, so the viewport query never stacks this row. */
+@container builder-app (max-width: 480px) {
+  .header { grid-template-columns: minmax(0, 1fr); align-items: start; }
+  .headerTitle { overflow-wrap: normal; }
+}
 
 .panel {
   display: grid;

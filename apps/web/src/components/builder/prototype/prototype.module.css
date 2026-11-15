@@ -131,9 +131,10 @@
 .canvasBlock { position: relative; min-width: 0; border-radius: 12px; overflow-wrap: anywhere; }
 .canvasBlock[data-editing="true"] { outline: 1px solid transparent; outline-offset: 4px; }
 .canvasBlock[data-editing="true"]:hover { outline-color: var(--v2-accent, #a8bea0); }
-.canvasBlock[data-selected="true"] { outline: 2px solid var(--v2-accent, #456849); outline-offset: 0; padding: 36px 16px 16px; }
+.canvasBlock[data-selected="true"] { outline: 2px solid var(--v2-accent, #456849); outline-offset: 0; padding: 44px 16px 16px; }
 .blockPick { position: absolute; z-index: 2; inset: -4px; width: calc(100% + 8px); background: transparent; border: 0; border-radius: 12px; }
-.blockPick > span { position: absolute; top: -28px; left: 8px; max-width: calc(100% - 16px); padding: 2px 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: var(--v2-accent, #456849); color: var(--v2-on-primary, #fff); border-radius: 4px; font-size: 12px; opacity: 0; pointer-events: none; }
+/* The label sits inside the selection outline. A label above the block is clipped by the app header and by the preview scrollport. */
+.blockPick > span { position: absolute; top: 10px; left: 12px; max-width: calc(100% - 24px); padding: 2px 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: var(--v2-accent, #456849); color: var(--v2-on-primary, #fff); border-radius: 4px; font-size: 12px; line-height: 16px; opacity: 0; pointer-events: none; }
 .blockPick:hover > span, .blockPick:focus-visible > span, .canvasBlock[data-selected="true"] > .blockPick > span { opacity: 1; }
 .groupPick { display: flex; align-items: center; min-height: 32px; padding: 4px 8px; margin: -4px 0 16px; border: 0; border-radius: 8px; background: var(--v2-soft, #e8eee1); color: var(--v2-accent, #456849); font-size: 12px !important; }
 .headingBlock h2, .fieldsBlock h2 { font-size: 24px; line-height: 1.3; font-weight: 600; }

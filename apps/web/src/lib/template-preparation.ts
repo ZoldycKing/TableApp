@@ -33,7 +33,9 @@ export async function templatePreparation(workspaceId: string, appId: string, co
     ? [shop.catalogTableId, shop.ordersTableId, shop.itemsTableId]
     : crm
       ? [crm.dealsTableId, crm.clientsTableId, ...(crm.contactsTableId ? [crm.contactsTableId] : [])]
-      : booking ? Object.values(booking.tables) : legacyIds
+      : booking
+        ? [...Object.values(booking.tables), ...(booking.clients?.tableId ? [booking.clients.tableId] : [])]
+        : legacyIds
   if (!ids?.length) return null
   const own = await connection.select({ id: tables.id }).from(tables).where(and(eq(tables.workspaceId, workspaceId), inArray(tables.id, ids)))
   if (own.length !== ids.length) return null

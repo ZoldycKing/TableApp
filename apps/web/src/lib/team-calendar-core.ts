@@ -1,21 +1,51 @@
 import type { AppV2Json } from '@tableapp/schema/app-v2'
 
 export type TeamCalendarWindow = { id: string; start: number; end: number }
-export type TeamCalendarEvent = { id: string; masterId: string; day: string; start: number; end: number; service: string; client: string; status: string; statusLabel?: string; price: number | null }
+export type TeamCalendarEvent = {
+  id: string
+  resourceId: string
+  day: string
+  start: number
+  end: number
+  title: string
+  subtitle: string
+  status: string
+  statusLabel?: string
+  amount: number | null
+}
+export type TeamCalendarShift = {
+  resourceId: string
+  day: string
+  windows: TeamCalendarWindow[] | null
+  exception: boolean
+  closed: boolean
+}
 export type TeamCalendarSnapshot = {
-  timeZone: string; days: string[]; masters: { id: string; name: string; photo?: AppV2Json }[]
-  shifts: { masterId: string; day: string; windows: TeamCalendarWindow[] | null; exception: boolean; closed: boolean }[]
-  visits: TeamCalendarEvent[]
+  timeZone: string
+  days: string[]
+  resources: { id: string; name: string; photo?: AppV2Json }[]
+  shifts: TeamCalendarShift[]
+  events: TeamCalendarEvent[]
+  /** Rows skipped because time, duration or the employee link could not be read. */
+  omitted: number
 }
+
+export function shiftIsoDay(day: string, delta: number): string {
+  const date = new Date(`${day}T12:00:00Z`)
+  date.setUTCDate(date.getUTCDate() + delta)
+  return date.toISOString().slice(0, 10)
+}
+
 export function calendarDays(day: string, week: boolean): string[] {
-  const start = new Date(`${day}T12:00:00Z`)
   if (!week) return [day]
+  const start = new Date(`${day}T12:00:00Z`)
   start.setUTCDate(start.getUTCDate() - (start.getUTCDay() + 6) % 7)
-  return Array.from({ length: 7 }, (_, index) => {
-    const date = new Date(start); date.setUTCDate(start.getUTCDate() + index); return date.toISOString().slice(0, 10)
-  })
+  return Array.from({ length: 7 }, (_, index) => shiftIsoDay(start.toISOString().slice(0, 10), index))
 }
-export const calendarClock = (minutes: number) => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`
+
+export const calendarClock = (minutes: number) =>
+  `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`
+
 /** One visible shift with breaks, even when storage uses several or overlapping periods. */
 export function calendarShift(periods: readonly TeamCalendarWindow[]) {
   const merged: { start: number; end: number }[] = []
@@ -25,19 +55,33 @@ export function calendarShift(periods: readonly TeamCalendarWindow[]) {
     else merged.push({ start: period.start, end: period.end })
   }
   if (!merged.length) return null
-  return { start: merged[0]!.start, end: merged.at(-1)!.end, breaks: merged.slice(1).map((period, index) => ({ start: merged[index]!.end, end: period.start })) }
+  return {
+    start: merged[0]!.start,
+    end: merged.at(-1)!.end,
+    breaks: merged.slice(1).map((period, index) => ({ start: merged[index]!.end, end: period.start })),
+  }
 }
+
 /** Overlapping appointments get separate lanes rather than covering one another. */
-export function calendarEventLanes(visits: readonly TeamCalendarEvent[]) {
-  const result: { visit: TeamCalendarEvent; lane: number; lanes: number }[] = []
-  let group: typeof result = [], ends: number[] = [], groupEnd = -1
-  const flush = () => { for (const item of group) item.lanes = ends.length; result.push(...group); group = []; ends = []; groupEnd = -1 }
-  for (const visit of [...visits].sort((a, b) => a.start - b.start || b.end - a.end)) {
-    if (group.length && visit.start >= groupEnd) flush()
-    let lane = ends.findIndex(end => end <= visit.start)
+export function calendarEventLanes(events: readonly TeamCalendarEvent[]) {
+  const result: { event: TeamCalendarEvent; lane: number; lanes: number }[] = []
+  let group: typeof result = []
+  let ends: number[] = []
+  let groupEnd = -1
+  const flush = () => {
+    for (const item of group) item.lanes = ends.length
+    result.push(...group)
+    group = []
+    ends = []
+    groupEnd = -1
+  }
+  for (const event of [...events].sort((a, b) => a.start - b.start || b.end - a.end)) {
+    if (group.length && event.start >= groupEnd) flush()
+    let lane = ends.findIndex(end => end <= event.start)
     if (lane < 0) lane = ends.length
-    ends[lane] = visit.end; groupEnd = Math.max(groupEnd, visit.end)
-    group.push({ visit, lane, lanes: 1 })
+    ends[lane] = event.end
+    groupEnd = Math.max(groupEnd, event.end)
+    group.push({ event, lane, lanes: 1 })
   }
   flush()
   return result

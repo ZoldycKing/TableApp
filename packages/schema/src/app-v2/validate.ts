@@ -11,7 +11,7 @@ export const appV2ListGroupFieldTypes: ReadonlySet<FieldType> = new Set(['single
 export type AppV2Catalog = {
   workspaceId: string
   tables: ReadonlyMap<string, { workspaceId: string }>
-  fields: ReadonlyMap<string, { tableId: string; type: FieldType; relationTableId?: string }>
+  fields: ReadonlyMap<string, { tableId: string; type: FieldType; relationTableId?: string; choiceIds?: readonly string[] }>
   views: ReadonlyMap<string, { tableId: string }>
 }
 export type AppV2Issue = { code: string; path: string; message: string }

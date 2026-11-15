@@ -12,16 +12,18 @@ import { RowWriteError } from '@/lib/row-mutations'
 import { isPlanLimitError } from '@/lib/limits'
 import { db } from '@tableapp/db'
 import { inspectPublishedV2Form } from '@/lib/builder-v2-published-form'
-import { bookingCalendarSnapshot, canOpenBookingCalendar, validBookingCalendarRequest, type BookingCalendarRequest, type BookingCalendarResult } from '@/lib/builder-v2-booking-calendar'
+import { canOpenBookingCalendar, validBookingCalendarRequest, type BookingCalendarRequest, type BookingCalendarResult } from '@/lib/builder-v2-booking-calendar'
+import { readTeamCalendar } from '@/lib/team-calendar-read'
 
 export async function readPublishedV2BookingCalendarAction(slug: string, request: BookingCalendarRequest & { revision: string }): Promise<BookingCalendarResult> {
   if (!validBookingCalendarRequest(request)) return { ok: false, error: 'Выберите корректную дату.' }
   try { return await withPublishedV2Read(async tx => {
     const { app, actor, revision } = await publishedV2Context(slug, tx)
     if (revision !== request.revision) return { ok: false, error: 'Приложение обновлено. Обновите страницу.' }
-    if (!app.booking || !canOpenBookingCalendar(app, actor, request.screenId)) return { ok: false, error: 'Календарь недоступен.' }
-    const data = await loadBookingData(app.booking, app.workspaceId, tx)
-    return data ? bookingCalendarSnapshot(app, actor, data, request) : { ok: false, error: 'Проверьте настройки расписания.' }
+    if (!canOpenBookingCalendar(app, actor, request.screenId)) return { ok: false, error: 'Календарь недоступен.' }
+    const node = app.nodes.find(item => item.type === 'team_calendar' && app.screens.some(screen => screen.id === request.screenId && screen.rootIds.includes(item.id)))
+    if (!node || node.type !== 'team_calendar') return { ok: false, error: 'Календарь недоступен.' }
+    return { ok: true, data: await readTeamCalendar(tx, app, actor, node, { ...request, nodeId: node.id }, true) }
   }) } catch { return { ok: false, error: 'Не удалось загрузить календарь. Попробуйте ещё раз.' } }
 }
 export async function readBuilderV2BookingCalendarAction(appId: string, definition: unknown, request: BookingCalendarRequest): Promise<BookingCalendarResult> {
@@ -35,10 +37,9 @@ export async function readBuilderV2BookingCalendarAction(appId: string, definiti
     if (!valid.ok || !valid.app.booking) return { ok: false, error: 'Проверьте настройки онлайн-записи.' }
     const actor = builderV2MemberActor(valid.app, auth.member)
     if (!canOpenBookingCalendar(valid.app, actor, request.screenId)) return { ok: false, error: 'Календарь недоступен.' }
-    return await db.transaction(async tx => {
-      const data = await loadBookingData(valid.app.booking!, valid.app.workspaceId, tx)
-      return data ? bookingCalendarSnapshot(valid.app, actor, data, request) : { ok: false, error: 'Проверьте таблицы расписания.' }
-    })
+    const node = valid.app.nodes.find(item => item.type === 'team_calendar' && valid.app.screens.some(screen => screen.id === request.screenId && screen.rootIds.includes(item.id)))
+    if (!node || node.type !== 'team_calendar') return { ok: false, error: 'Календарь недоступен.' }
+    return await db.transaction(async tx => ({ ok: true as const, data: await readTeamCalendar(tx, valid.app, actor, node, { ...request, nodeId: node.id }, false) }))
   } catch { return { ok: false, error: 'Не удалось загрузить календарь. Попробуйте ещё раз.' } }
 }
 

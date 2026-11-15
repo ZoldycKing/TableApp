@@ -47,9 +47,9 @@ export function BookingPeopleScreen({ app, screenId, initialMasterId, initialCli
   const schedule = (masterId: string) => { journey?.setCalendar({ masterId, day: data.day }); onNavigate(booking.listScreenId!) }
   const openVisit = (id: string) => onNavigate(booking.visitScreenId, id)
   const query = search.toLocaleLowerCase('ru-RU').trim()
-  const shifts = (masterId: string) => bookingCalendarShift(data.shifts.find(shift => shift.masterId === masterId)?.windows ?? [])
+  const shifts = (masterId: string) => bookingCalendarShift(data.shifts.find(shift => shift.resourceId === masterId)?.windows ?? [])
   const hoursLabel = (masterId: string) => {
-    const row = data.shifts.find(shift => shift.masterId === masterId), shift = shifts(masterId)
+    const row = data.shifts.find(shift => shift.resourceId === masterId), shift = shifts(masterId)
     return shift ? `${bookingClock(shift.start)}–${bookingClock(shift.end)}` : !row || row.windows === null ? 'Часы недоступны' : row.closed ? 'Выходной' : 'Нет смены сегодня'
   }
   const filteredMasters = data.masters.filter(master => `${master.name} ${master.description}`.toLocaleLowerCase('ru-RU').includes(query))

@@ -13,11 +13,11 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks() })
 function fixture() {
   const day = instantToWallClock(new Date(), 'Europe/Moscow')!.date, days = bookingCalendarDays(day, true)
   const masters = [{ id: 'master_olya', name: 'Оля' }, { id: 'master_zhenya', name: 'Женя' }, { id: 'master_natasha', name: 'Наташа' }]
-  const visit = (id: string, masterId: string, start: number, date = day, status = 'booked'): BookingCalendarVisit => ({ id, masterId, start, end: start + 60, day: date, status, service: `Услуга ${id}`, client: `Клиент ${id}`, price: 1500 })
+  const visit = (id: string, resourceId: string, start: number, date = day, status = 'booked'): BookingCalendarVisit => ({ id, resourceId, start, end: start + 60, day: date, status, title: `Услуга ${id}`, subtitle: `Клиент ${id}`, amount: 1500 })
   const data: BookingCalendarSnapshot = {
-    timeZone: 'Europe/Moscow', days, masters,
-    shifts: masters.flatMap(master => days.map(date => ({ masterId: master.id, day: date, windows: [{ id: `${master.id}_morning`, start: 540, end: 780 }, { id: `${master.id}_evening`, start: 840, end: 1140 }], closed: false, exception: false }))),
-    visits: [visit('early', masters[1]!.id, 540), visit('middle', masters[0]!.id, 600), visit('late', masters[2]!.id, 720), visit('another_day', masters[2]!.id, 540, days.find(date => date !== day)!), visit('cancelled', masters[0]!.id, 540, day, 'cancelled')],
+    timeZone: 'Europe/Moscow', days, resources: masters, omitted: 0,
+    shifts: masters.flatMap(master => days.map(date => ({ resourceId: master.id, day: date, windows: [{ id: `${master.id}_morning`, start: 540, end: 780 }, { id: `${master.id}_evening`, start: 840, end: 1140 }], closed: false, exception: false }))),
+    events: [visit('early', masters[1]!.id, 540), visit('middle', masters[0]!.id, 600), visit('late', masters[2]!.id, 720), visit('another_day', masters[2]!.id, 540, days.find(date => date !== day)!), visit('cancelled', masters[0]!.id, 540, day, 'cancelled')],
   }
   return { data, day, visit }
 }
@@ -48,7 +48,7 @@ describe('one calendar for the whole team', () => {
     expect((screen.getByRole('combobox',{name:'Мастер календаря'})as HTMLSelectElement).value).toBe('master_zhenya')
     expect((screen.getByLabelText('Дата календаря')as HTMLInputElement).value).toBe(day)
     fireEvent.click(screen.getByRole('button',{name:'Добавить запись'}))
-    expect(create).toHaveBeenCalledWith({day,masterId:'master_zhenya'})
+    expect(create).toHaveBeenCalledWith({day,resourceId:'master_zhenya'})
   })
   it('keeps period editing out of the visit hit areas and out of a staff calendar',async()=>{
     const{data}=fixture(),edit=vi.fn();resize(1200)
@@ -67,7 +67,7 @@ describe('one calendar for the whole team', () => {
     show(data, 1200)
     const table = await screen.findByRole('table', { name: 'Неделя всех мастеров' })
     expect(within(table).getAllByRole('rowheader')).toHaveLength(3)
-    for (const master of data.masters) expect(within(table).getByRole('rowheader', { name: master.name })).toBeTruthy()
+    for (const master of data.resources) expect(within(table).getByRole('rowheader', { name: master.name })).toBeTruthy()
     expect(within(table).getAllByRole('cell')).toHaveLength(21)
     expect(within(table).getAllByRole('button', { name: /^Открыть запись:/ })).toHaveLength(4)
     expect((screen.getByRole('combobox', { name: 'Мастер календаря' }) as HTMLSelectElement).value).toBe('')
@@ -87,8 +87,8 @@ describe('one calendar for the whole team', () => {
   })
   it('shows every appointment on a busy day without a hidden remainder', () => {
     const { data, visit } = fixture()
-    data.visits = Array.from({ length: 18 }, (_, index) => visit(`busy_${index}`, 'master_olya', 540 + index * 15))
-    render(<BookingWeekOverview data={data} masterId="" working editing={false} onOpenVisit={vi.fn()} onOpenDay={vi.fn()} />)
+    data.events = Array.from({ length: 18 }, (_, index) => visit(`busy_${index}`, 'master_olya', 540 + index * 15))
+    render(<BookingWeekOverview data={data} resourceId="" working editing={false} onOpenVisit={vi.fn()} onOpenDay={vi.fn()} />)
     expect(screen.getAllByRole('button', { name: /^Открыть запись:/ })).toHaveLength(18)
   })
   it('creates from a free working slot with the master/date/time, never from a break or occupied time', async () => {
@@ -96,11 +96,11 @@ describe('one calendar for the whole team', () => {
     resize(1200)
     vi.spyOn(Date, 'now').mockReturnValue(new Date(`${day}T00:00:00Z`).getTime())
     render(<BookingCalendarDemoContext value={() => ({ ok: true, data })}><BookingCalendarScreen app={app} screenId={app.homeScreenId!} timeZone="Europe/Moscow" onOpenVisit={vi.fn()} onCreate={onCreate} /></BookingCalendarDemoContext>)
-    const free = await screen.findByRole('button', { name: `Записать клиента: Оля, ${day}, 09:00` })
+    const free = await screen.findByRole('button', { name: `Добавить запись: Оля, ${day}, 09:00` })
     fireEvent.click(free)
-    expect(onCreate).toHaveBeenCalledWith({ masterId: 'master_olya', day, time: '09:00' })
-    expect(screen.queryByRole('button', { name: `Записать клиента: Оля, ${day}, 13:00` })).toBeNull()
-    expect(screen.queryByRole('button', { name: `Записать клиента: Оля, ${day}, 10:00` })).toBeNull()
+    expect(onCreate).toHaveBeenCalledWith({ resourceId: 'master_olya', day, time: '09:00' })
+    expect(screen.queryByRole('button', { name: `Добавить запись: Оля, ${day}, 13:00` })).toBeNull()
+    expect(screen.queryByRole('button', { name: `Добавить запись: Оля, ${day}, 10:00` })).toBeNull()
   })
   it('shows the whole team’s chosen day in chronological order on a phone', async () => {
     const { data } = fixture(), callbacks = show(data, 300)

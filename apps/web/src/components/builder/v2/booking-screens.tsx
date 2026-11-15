@@ -19,6 +19,7 @@ import ui from './view.module.css'
 import presentation from '@/components/runtime/app-presentation.module.css'
 import { OrderActionPanelContext } from './order-detail'
 import { BookingScheduleForm } from './booking-schedule'
+import { AppDialog } from './app-dialog'
 import { BookingCalendarScreen } from './booking-calendar'
 import { BookingPeopleScreen, BookingClientNextVisit } from './booking-people'
 import { useBookingJourney } from './booking-journey'
@@ -33,7 +34,7 @@ const label = (row: AppV2Record, id: string) => builderV2CatalogCell(row, id)
 function Photo({ row, fieldId, person = false, large = false, name = '', className }: { row: AppV2Record; fieldId?: string; person?: boolean; large?: boolean; name?: string; className?: string }) {
   const published = usePublishedV2()
   const item = fieldId && builderV2MediaItems(row.values[fieldId], published?.slug).find(item => item.image)
-  return <span className={className ?? (large ? css.profilePhoto : css.photo)} data-person={person || undefined} aria-hidden="true">{item ? <BuilderV2Picture item={item} /> : person && name ? name.trim().split(/\s+/).slice(0, 2).map(word => word[0]).join('') : <ProtoIcon name={person ? 'user' : 'scissors'} size={large ? 32 : 48} />}</span>
+  return <span className={className ?? (large ? css.profilePhoto : css.photo)} data-person={person || undefined} aria-hidden="true">{item ? <BuilderV2Picture item={item} /> : <ProtoIcon name={person ? 'user' : 'image'} size={large ? 32 : 48} />}</span>
 }
 function Status({ row, booking }: { row: AppV2Record; booking: NonNullable<Props['app']['booking']> }) {
   const value = row.values[booking.visit.status]
@@ -68,7 +69,7 @@ export function BookingScreen(props: Props) {
   // Forms stay in the same app viewport, including the phone preview in the editor.
   if (agenda && screen.rootIds.some(id=>app.nodes.some(node=>node.id===id&&node.type==='team_calendar'))) return <div className={css.page}>{props.renderNodes(screen.rootIds)}</div>
   if (showForm && pageForm) return <div className={css.formPage}><button type="button" className={styles.textButton} onClick={() => setShowForm(false)}>← Назад</button>{screen.id === booking.setupScreenId ? <BookingScheduleForm app={app} screenId={screen.id} formId={pageForm.id} editing={Boolean(props.editing)} onSaved={() => setShowForm(false)} /> : <OrderActionPanelContext value={{ mode: 'reveal', close: () => setShowForm(false) }}>{props.renderNodes([pageForm.id])}</OrderActionPanelContext>}</div>
-  if (screen.id === booking.setupScreenId && pageForm) return <div className={css.formPage}><button type="button" className={styles.textButton} onClick={() => back(booking.listScreenId!)}>← Расписание</button><BookingScheduleForm app={app} screenId={screen.id} formId={pageForm.id} editing={Boolean(props.editing)} onSaved={() => back(booking.listScreenId!)}/></div>
+  if (screen.id === booking.setupScreenId && pageForm) return <AppDialog title="Рабочие часы" onClose={() => back(booking.listScreenId!)}><BookingScheduleForm app={app} screenId={screen.id} formId={pageForm.id} editing={Boolean(props.editing)} onSaved={() => back(booking.listScreenId!)} /></AppDialog>
   const profile = screen.id === booking.customerScreenId ? builderV2ScreenNodes(app, screen.id).find(node => node.type === 'profile') : undefined
   if (owner && profile && booking.clients) {
     const c = booking.clients
@@ -151,6 +152,6 @@ export function BookingScreen(props: Props) {
       })}{!data.loading && !data.error && !rows.length && <p className={css.empty}>{section === 'upcoming' ? 'Предстоящих записей пока нет. Выберите услугу и удобное время.' : 'Здесь будут ваши прошедшие и отменённые визиты.'}</p>}</div>{feedback}
     </ListScreenShell>{props.renderNodes(additional)}</div>
   }
-  if (screen.id === booking.periodScreenId && pageForm) return <div className={css.formPage}><button type="button" className={styles.textButton} onClick={() => back(booking.listScreenId!)}>← Расписание</button><BookingScheduleForm app={app} screenId={screen.id} formId={pageForm.id} recordId={record?.id} editing={Boolean(props.editing)} onSaved={() => back(booking.listScreenId!)} /></div>
+  if (screen.id === booking.periodScreenId && pageForm) return <AppDialog title="Изменить рабочие часы" onClose={() => back(booking.listScreenId!)}><BookingScheduleForm app={app} screenId={screen.id} formId={pageForm.id} recordId={record?.id} editing={Boolean(props.editing)} onSaved={() => back(booking.listScreenId!)} /></AppDialog>
   return <div className={css.page}><div className={css.formPage}><button type="button" className={styles.textButton} onClick={() => back(booking.listScreenId!)}>← Расписание</button>{props.renderNodes(screen.rootIds)}</div></div>
 }

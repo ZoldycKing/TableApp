@@ -34,7 +34,9 @@ export function BuilderV2AppMark({ logo, icon = 'apps' }: { logo?: string; icon?
 }
 
 export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,children,onNavigate,back,notice,phone=false,headerAction,draftLogo=false,fullScreen=false,scrollKey,profile=false}:{app:AppV2;screenId:string;sectionId?:string;title:string;children:ReactNode;onNavigate:(id:string)=>void;back?:()=>void;notice?:ReactNode;phone?:boolean;headerAction?:ReactNode;draftLogo?:boolean;fullScreen?:boolean;scrollKey?:string;profile?:boolean}) {
-  if (app.screens.find(screen=>screen.id===screenId)?.rootIds.some(id=>app.nodes.some(node=>node.id===id&&node.type==='team_calendar'))) title=''
+  const screenTitle = title
+  const calendarScreen = app.screens.find(screen => screen.id === screenId)?.rootIds.some(id => app.nodes.some(node => node.id === id && node.type === 'team_calendar'))
+  if (calendarScreen) title = ''
   const screens=builderV2Menu(app),[more,setMore]=useState(false),menuId=useId(),root=useRef<HTMLDivElement>(null),trigger=useRef<HTMLButtonElement>(null)
   const catalogDetail = Boolean(app.screens.find(screen => screen.id === screenId)?.catalog)
   const body = useRef<HTMLDivElement>(null)
@@ -95,7 +97,7 @@ export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,childre
         {!mobileBrandOnly && catalogDetail ? <span className={css.catalogIdentity}>{sectionScreen?.name ?? appName}</span>
           : !mobileBrandOnly && title ? <div>
             <h1 className={presentation.pageTitle}>{title.replaceAll('-', '\u2011')}</h1>
-          </div> : null}
+          </div> : calendarScreen ? <h1 className="sr-only">{screenTitle}</h1> : null}
         {account}
       </div>
     </header> : null}

@@ -1,58 +1,168 @@
 import { rows, views } from '@tableapp/db'
-import { APP_TIME_ZONE, compareRows, evalFilter, fieldsOfFilter, indexFields, normalizeView } from '@tableapp/schema'
-import { matchesAppV2Audience, type AppV2, type AppV2Actor, type AppV2Node } from '@tableapp/schema/app-v2'
-import { and, asc, eq, gt, isNull } from 'drizzle-orm'
+import { compareRows, evalFilter, fieldTimeZone, fieldsOfFilter, indexFields, normalizeView } from '@tableapp/schema'
+import { matchesAppV2Audience, readableAppV2Fields, type AppV2, type AppV2Actor, type AppV2Node } from '@tableapp/schema/app-v2'
+import { and, asc, eq, gt, isNull, or, sql, type SQL } from 'drizzle-orm'
 import type { Transaction } from './db-transaction'
 import { builderV2CalculationPlan } from './builder-v2-read-plan'
 import { deriveBuilderV2Rows, loadBuilderV2ReadMetadata, projectBuilderV2Record } from './builder-v2-row-data'
-import { derivePublishedV2Rows, publishedV2Row, publishedV2Fields } from './builder-v2-published-rows'
-import { publishedV2Node } from './builder-v2-published-data'
+import { derivePublishedV2Rows, publishedV2Fields } from './builder-v2-published-rows'
+import { publishedV2Node, publishedV2ReadSql } from './builder-v2-published-data'
 import type { RuntimeSourceRow } from './runtime-project'
 import { RowWriteError } from './row-mutations'
 import type { BuilderV2DataRecord } from './builder-v2-data-types'
-import { teamCalendarSnapshot, type TeamCalendarRequest } from './team-calendar-model'
+import { TEAM_CALENDAR_ROW_LIMIT, teamCalendarSnapshot, type TeamCalendarRequest } from './team-calendar-model'
+import { calendarDays, shiftIsoDay } from './team-calendar-core'
 
-/** Three real table readers in one consistent snapshot; raw rows never leave the server. */
-export async function readTeamCalendar(tx: Transaction, app: AppV2, actor: AppV2Actor, node: Extract<AppV2Node,{type:'team_calendar'}>, query: TeamCalendarRequest, published: boolean) {
+type Source = { tableId: string; viewId: string | null }
+type CalendarNode = Extract<AppV2Node, { type: 'team_calendar' }>
+
+const hasKeys = (row: BuilderV2DataRecord, ids: readonly string[]) => ids.every(id => Object.hasOwn(row.values, id))
+
+/** Hours are readable when the actor's grants cover the shift itself, not only a closed or date flag. */
+export function teamCalendarHoursReadable(app: AppV2, actor: AppV2Actor, tableId: string, fieldIds: readonly string[], rows: readonly BuilderV2DataRecord[]) {
+  const probe = readableAppV2Fields(app, actor, { id: '', tableId, values: {} })
+  if (fieldIds.every(id => probe.has(id))) return true
+  return rows.some(row => hasKeys(row, fieldIds))
+}
+
+function dateWindow(fieldId: string, from: string, to: string): SQL {
+  const cell = sql`${rows.data}->>${fieldId}`
+  return sql`left(${cell}, 10) >= ${from} and left(${cell}, 10) <= ${to}`
+}
+
+function hoursWindow(dateFieldId: string, days: readonly string[]): SQL {
+  const cell = sql`btrim(${rows.data}->>${dateFieldId})`
+  const listed = days.map(day => sql`${day}`)
+  return sql`(${rows.data}->>${dateFieldId} is null or ${cell} = '' or ${cell} in (${sql.join(listed, sql`, `)}))`
+}
+
+function linkedTo(fieldId: string, ids: readonly string[]): SQL | undefined {
+  if (!ids.length || ids.length > 40) return undefined
+  const matches = ids.map(id => sql`${rows.data}->${fieldId} @> ${JSON.stringify([id])}::jsonb`)
+  return or(...matches) ?? sql`false`
+}
+
+function emailEquals(fieldId: string, email: string): SQL {
+  return sql`lower(btrim(${rows.data}->>${fieldId})) = ${email.trim().toLowerCase()}`
+}
+
+/** Three table readers in one snapshot. Only the requested dates, people and fields leave the database. */
+export async function readTeamCalendar(
+  tx: Transaction,
+  app: AppV2,
+  actor: AppV2Actor,
+  node: CalendarNode,
+  query: TeamCalendarRequest,
+  published: boolean,
+  rowLimit = TEAM_CALENDAR_ROW_LIMIT,
+) {
   const data = node.data
-  if (!data) throw new RowWriteError('invalid','Выберите таблицы и поля календаря в конструкторе.')
-  const screen = app.screens.find(screen=>screen.id===query.screenId)
-  if (!screen || Boolean(screen.contextTableId)!==Boolean(query.recordId)) throw new RowWriteError('denied','Экран календаря недоступен.')
-  const roots = [data.tableId,data.resources.tableId,...(data.hours?[data.hours.tableId]:[]),...(screen.contextTableId?[screen.contextTableId]:[])]
-  const meta = await loadBuilderV2ReadMetadata(tx,app.workspaceId,roots)
-  const selected = published && screen.contextTableId ? (await publishedV2Row(meta,app,actor,screen.contextTableId,query.recordId)).record : undefined
-  if (published) publishedV2Node(app,actor,screen.id,node.id,selected)
+  if (!data) throw new RowWriteError('invalid', 'Выберите таблицы и поля календаря в конструкторе.')
+  const screen = app.screens.find(item => item.id === query.screenId)
+  if (!screen || screen.contextTableId) throw new RowWriteError('denied', 'Добавьте календарь на отдельный экран, без карточки записи.')
+  if (node.visibleTo && !matchesAppV2Audience(node.visibleTo, actor)) throw new RowWriteError('denied', 'Календарь недоступен.')
+  const roots = [data.tableId, data.resources.tableId, ...(data.hours ? [data.hours.tableId] : [])]
+  const meta = await loadBuilderV2ReadMetadata(tx, app.workspaceId, roots)
+  if (published) publishedV2Node(app, actor, screen.id, node.id)
   const asOf = Date.now()
-  const read = async (source:{tableId:string;viewId:string|null}, required:string[], ownerEmailFieldId?:string|null):Promise<BuilderV2DataRecord[]> => {
-    const [storedView] = source.viewId ? await tx.select().from(views).where(and(eq(views.id,source.viewId),eq(views.tableId,source.tableId))) : []
-    if(source.viewId&&!storedView)throw new RowWriteError('missing','Представление календаря удалено. Выберите другое.')
-    const view = storedView ? normalizeView(storedView) : null, fields = meta.fieldsByTable.get(source.tableId)??[]
-    const plan = builderV2CalculationPlan(meta.fieldsByTable,meta.primaryByTable,new Map([[source.tableId,new Set([...required,...fieldsOfFilter(view?.config.filter),...(view?.config.sorts??[]).map(sort=>sort.fieldId)])]]))
-    const result:{record:BuilderV2DataRecord;order:Awaited<ReturnType<typeof deriveBuilderV2Rows>>[number]}[]=[];let after:string|undefined,total=0
-    while(true){
-      const batch=await tx.select().from(rows).where(and(eq(rows.tableId,source.tableId),isNull(rows.deletedAt),after?gt(rows.id,after):undefined)).orderBy(asc(rows.id)).limit(200)
-      if(!batch.length)break
-      total+=batch.length
-      if(total>20000)throw new RowWriteError('invalid','Для одного календаря поддерживается до 20 000 строк в каждой таблице. Разделите данные.')
-      after=batch.at(-1)!.id
-      const own = ownerEmailFieldId && !actor.roleIds.some(id=>node.actions.manageRoleIds.includes(id)) ? batch.filter(row=>Boolean(actor.email)&&String((row.data as Record<string,unknown>)[ownerEmailFieldId]??'').trim().toLowerCase()===actor.email!.trim().toLowerCase()) : batch
-      const permitted = published ? new Map(own.map(row=>[row.id,publishedV2Fields(app,actor,row as RuntimeSourceRow)])) : null
-      const projected=published?await derivePublishedV2Rows(meta,app,actor,own as RuntimeSourceRow[],asOf):await deriveBuilderV2Rows(meta,own as RuntimeSourceRow[],plan,asOf)
-      for(const row of projected){
-        if(view&&!evalFilter(view.config.filter,row.data,indexFields(fields)))continue
-        result.push({record:projectBuilderV2Record(meta,row,new Set(required.filter(id=>!published||permitted?.get(row.id)?.has(id)))),order:row})
+  const days = calendarDays(query.day, query.week)
+  const manage = actor.roleIds.some(id => node.actions.manageRoleIds.includes(id))
+  const ownEmail = !manage && data.resources.ownerEmailFieldId && actor.email?.trim()
+    ? data.resources.ownerEmailFieldId
+    : null
+
+  const read = async (
+    source: Source,
+    required: string[],
+    window?: SQL,
+    extra?: SQL,
+  ): Promise<BuilderV2DataRecord[]> => {
+    const [storedView] = source.viewId
+      ? await tx.select().from(views).where(and(eq(views.id, source.viewId), eq(views.tableId, source.tableId)))
+      : []
+    if (source.viewId && !storedView) throw new RowWriteError('missing', 'Представление календаря удалено. Выберите другое.')
+    const view = storedView ? normalizeView(storedView) : null
+    const fields = meta.fieldsByTable.get(source.tableId) ?? []
+    const needed = new Set([
+      ...required,
+      ...fieldsOfFilter(view?.config.filter),
+      ...(view?.config.sorts ?? []).map(sort => sort.fieldId),
+    ])
+    const plan = builderV2CalculationPlan(meta.fieldsByTable, meta.primaryByTable, new Map([[source.tableId, needed]]))
+    const result: { record: BuilderV2DataRecord; order: Awaited<ReturnType<typeof deriveBuilderV2Rows>>[number] }[] = []
+    let after: string | undefined
+    let total = 0
+    while (true) {
+      const batch = await tx.select().from(rows).where(and(
+        eq(rows.tableId, source.tableId),
+        isNull(rows.deletedAt),
+        after ? gt(rows.id, after) : undefined,
+        window,
+        extra,
+        published ? publishedV2ReadSql(app, actor, source.tableId) : undefined,
+      )).orderBy(asc(rows.id)).limit(200)
+      if (!batch.length) break
+      total += batch.length
+      if (total > rowLimit) {
+        throw new RowWriteError('invalid', `Для одного календаря поддерживается до ${rowLimit.toLocaleString('ru-RU')} строк в выбранном периоде. Сузьте даты или представление.`)
       }
-      if(batch.length<200)break
+      after = batch.at(-1)!.id
+      const permitted = published ? new Map(batch.map(row => [row.id, publishedV2Fields(app, actor, row as RuntimeSourceRow)])) : null
+      const projected = published
+        ? await derivePublishedV2Rows(meta, app, actor, batch as RuntimeSourceRow[], asOf)
+        : await deriveBuilderV2Rows(meta, batch as RuntimeSourceRow[], plan, asOf)
+      for (const row of projected) {
+        if (view && !evalFilter(view.config.filter, row.data, indexFields(fields))) continue
+        const visible = required.filter(id => !published || permitted?.get(row.id)?.has(id))
+        result.push({ record: projectBuilderV2Record(meta, row, new Set(visible)), order: row })
+      }
+      if (batch.length < 200) break
     }
-    return result.sort((a,b)=>view?.config.sorts.length?compareRows(a.order,b.order,view.config.sorts,indexFields(fields)):a.order.position.localeCompare(b.order.position)||a.order.id.localeCompare(b.order.id)).map(item=>item.record)
+    return result
+      .sort((a, b) => view?.config.sorts.length
+        ? compareRows(a.order, b.order, view.config.sorts, indexFields(fields))
+        : a.order.position.localeCompare(b.order.position) || a.order.id.localeCompare(b.order.id))
+      .map(item => item.record)
   }
-  const eventFields=[data.titleFieldId,data.subtitleFieldId,data.startFieldId,data.durationFieldId,data.endFieldId,data.resourceFieldId,data.statusFieldId,data.amountFieldId].filter((id):id is string=>Boolean(id))
-  const events=await read(data,eventFields),resources=await read(data.resources,[data.resources.titleFieldId,...(data.resources.photoFieldId?[data.resources.photoFieldId]:[])],data.resources.ownerEmailFieldId)
-  const h=data.hours,required=h?[h.resourceFieldId,h.weekdayFieldId,h.dateFieldId,h.startFieldId,h.endFieldId,h.closedFieldId].filter((id):id is string=>Boolean(id)):[]
-  const periods=h?await read(h,required):null
-  // Empty strings are legitimate stored values. Missing keys mean the field was denied.
-  const readable= !published || !h || required.every(id=>app.policy.tables.find(rule=>rule.tableId===h.tableId)?.grants.some(grant=>grant.read?.fieldIds.includes(id)&&matchesAppV2Audience(grant.audience,actor)))
-  const hours=readable?periods?.filter(row=>required.every(id=>Object.hasOwn(row.values,id)))??null:null
-  const timeZone=meta.fieldsByTable.get(data.tableId)?.find(field=>field.id===data.startFieldId)?.options
-  return teamCalendarSnapshot(data,{events,resources,hours},query,timeZone&&'timeZone'in timeZone&&typeof timeZone.timeZone==='string'?timeZone.timeZone:APP_TIME_ZONE)
+
+  const resourceFields = [
+    data.resources.titleFieldId,
+    ...(data.resources.photoFieldId ? [data.resources.photoFieldId] : []),
+    ...(ownEmail ? [ownEmail] : []),
+  ]
+  const resources = await read(
+    data.resources,
+    resourceFields,
+    undefined,
+    ownEmail && actor.email ? emailEquals(ownEmail, actor.email) : undefined,
+  )
+  const eventFields = [
+    data.titleFieldId, data.subtitleFieldId, data.startFieldId, data.durationFieldId,
+    data.endFieldId, data.resourceFieldId, data.statusFieldId, data.amountFieldId,
+  ].filter((id): id is string => Boolean(id))
+  const events = resources.length
+    ? await read(
+      data,
+      eventFields,
+      dateWindow(data.startFieldId, shiftIsoDay(days[0]!, -8), days.at(-1)!),
+      linkedTo(data.resourceFieldId, resources.map(row => row.id)),
+    )
+    : []
+  const hoursConfig = data.hours
+  let hours: BuilderV2DataRecord[] | null = null
+  if (hoursConfig) {
+    const core = [hoursConfig.resourceFieldId, hoursConfig.startFieldId, hoursConfig.endFieldId]
+    const optional = [hoursConfig.weekdayFieldId, hoursConfig.dateFieldId, hoursConfig.closedFieldId].filter((id): id is string => Boolean(id))
+    const loaded = await read(
+      hoursConfig,
+      [...core, ...optional],
+      hoursConfig.dateFieldId ? hoursWindow(hoursConfig.dateFieldId, days) : undefined,
+      linkedTo(hoursConfig.resourceFieldId, resources.map(row => row.id)),
+    )
+    const readable = !published || teamCalendarHoursReadable(app, actor, hoursConfig.tableId, core, loaded)
+    hours = readable ? loaded.filter(row => hasKeys(row, core)) : null
+  }
+  const startField = meta.fieldsByTable.get(data.tableId)?.find(field => field.id === data.startFieldId)
+  const timeZone = startField ? fieldTimeZone(startField) : 'Europe/Moscow'
+  return teamCalendarSnapshot(data, { events, resources, hours }, query, timeZone)
 }

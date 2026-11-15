@@ -25,7 +25,7 @@ beforeEach(()=>vi.stubGlobal('ResizeObserver',class{constructor(private callback
 afterEach(()=>{cleanup();vi.unstubAllGlobals()})
 it('renders a calendar outside the salon adapter, opens records and preserves controls while editing',async()=>{
  const navigate=vi.fn(),query={screenId:app.homeScreenId!,nodeId:node.id,day:instantToWallClock(new Date(),'Europe/Moscow')!.date,week:false}
- const data={timeZone:'Europe/Moscow',days:[query.day],masters:[{id:'person',name:'Анна'}],shifts:[{masterId:'person',day:query.day,windows:[{id:'shift',start:540,end:1080}],exception:false,closed:false}],visits:[{id:'event',masterId:'person',day:query.day,start:600,end:660,service:'Консультация',client:'Иван',status:'',price:null}]}
+ const data={timeZone:'Europe/Moscow',days:[query.day],omitted:0,resources:[{id:'person',name:'Анна'}],shifts:[{resourceId:'person',day:query.day,windows:[{id:'shift',start:540,end:1080}],exception:false,closed:false}],events:[{id:'event',resourceId:'person',day:query.day,start:600,end:660,title:'Консультация',subtitle:'Иван',status:'',amount:null}]}
  const show=(editing:boolean)=><TeamCalendarDemoContext value={()=>({ok:true,data})}><BuilderV2TeamCalendar app={app} node={calendar} screenId={query.screenId} actor={actor} tables={tables} onNavigate={navigate} editing={editing}/></TeamCalendarDemoContext>
  const view=render(show(false));const event=await screen.findByRole('button',{name:/Открыть запись:/});fireEvent.click(event)
  expect(navigate).toHaveBeenCalledWith(calendar.actions.itemScreenId,'event')
@@ -37,7 +37,7 @@ it('renders a calendar outside the salon adapter, opens records and preserves co
 it('carries the selected time and employee into a generic create form without executing a write',async()=>{
  const navigate=vi.fn(),day=instantToWallClock(new Date(Date.now()+2*86400000),'Europe/Moscow')!.date
  function State(){const journey=useBookingJourney();return <output data-testid="selection">{JSON.stringify(journey?.calendarForm)}</output>}
- render(<BookingJourneyProvider><TeamCalendarDemoContext value={(_node,query)=>({ok:true,data:{timeZone:'Europe/Moscow',days:calendarDays(query.day,query.week),masters:[{id:'person',name:'Анна'}],shifts:calendarDays(query.day,query.week).map(day=>({masterId:'person',day,windows:[{id:'shift',start:540,end:1080}],exception:false,closed:false})),visits:[]}})}><BuilderV2TeamCalendar app={app} node={calendar} screenId={app.homeScreenId!} actor={actor} tables={tables} onNavigate={navigate}/><State/></TeamCalendarDemoContext></BookingJourneyProvider>)
+ const view=render(<BookingJourneyProvider><TeamCalendarDemoContext value={(_node,query)=>({ok:true,data:{timeZone:'Europe/Moscow',days:calendarDays(query.day,query.week),omitted:0,resources:[{id:'person',name:'Анна'}],shifts:calendarDays(query.day,query.week).map(day=>({resourceId:'person',day,windows:[{id:'shift',start:540,end:1080}],exception:false,closed:false})),events:[]}})}><BuilderV2TeamCalendar app={app} node={calendar} screenId={app.homeScreenId!} actor={actor} tables={tables} onNavigate={navigate}/><State/></TeamCalendarDemoContext></BookingJourneyProvider>)
  await screen.findByLabelText('Календарь рабочих часов и записей')
  fireEvent.change(screen.getByLabelText('Дата календаря'),{target:{value:day}})
  const slot=await screen.findByRole('button',{name:new RegExp(`Анна, ${day}, 09:00`)})
@@ -45,10 +45,16 @@ it('carries the selected time and employee into a generic create form without ex
  const state=JSON.parse(screen.getByTestId('selection').textContent!)
  expect(state).toMatchObject({tableId:calendar.data!.tableId,screenId:calendar.actions.createScreenId,values:{[calendar.data!.resourceFieldId]:['person'],[calendar.data!.startFieldId]:`${day}T06:00:00.000Z`}})
  expect(navigate).toHaveBeenCalledWith(calendar.actions.createScreenId,undefined)
+ view.rerender(<BookingJourneyProvider><TeamCalendarDemoContext value={(_node,query)=>({ok:true,data:{timeZone:'Europe/Moscow',days:calendarDays(query.day,query.week),omitted:0,resources:[{id:'person',name:'Анна'}],shifts:calendarDays(query.day,query.week).map(day=>({resourceId:'person',day,windows:[{id:'shift',start:540,end:1080}],exception:false,closed:false})),events:[]}})}><BuilderV2TeamCalendar app={app} node={calendar} screenId={app.homeScreenId!} actor={actor} tables={tables} onNavigate={navigate} editing/><State/></TeamCalendarDemoContext></BookingJourneyProvider>)
+ const editingSlot=await screen.findByRole('button',{name:new RegExp(`Анна, ${day}, 09:00`)})
+ fireEvent.click(editingSlot)
+ expect(JSON.parse(screen.getByTestId('selection').textContent!)).toEqual(state)
+ expect(navigate).toHaveBeenCalledTimes(1)
 })
 it('shows weekday names rather than internal choice IDs and stores display and action settings',async()=>{
  function Settings(){const[value,setValue]=useState(calendar);return <><TeamCalendarSettings app={app} node={value} tables={tables} onChange={setValue}/><output data-testid="settings">{JSON.stringify(value)}</output></>}
  render(<Settings/>)
+ fireEvent.click(screen.getByRole('button',{name:'Часы'}))
  const monday=screen.getByRole('combobox',{name:'Значение дня: Понедельник'})as HTMLSelectElement
  expect(monday.selectedOptions[0]!.textContent).toBe('Понедельник')
  fireEvent.click(screen.getByRole('button',{name:'Вид'}))

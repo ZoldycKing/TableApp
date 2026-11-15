@@ -101,7 +101,17 @@ export async function loadPublishedV2Page(slug:string,request:{screen?:string;ro
     const queue = selected ? parent?.queue : undefined
     if (queue) nodes.push({ ...queue, visibleTo: null, visibleWhen: null })
     const sourceIds=new Set(nodes.flatMap(node=>'sourceId'in node?[node.sourceId]:[])),tableIds=new Set(nodes.flatMap(node=>node.type==='form'?[node.tableId]:[]))
-    for (const node of nodes) if (node.type === 'team_calendar' && node.data) for (const id of [node.data.tableId,node.data.resources.tableId,...(node.data.hours?[node.data.hours.tableId]:[])]) tableIds.add(id)
+    for (const node of nodes) if (node.type === 'team_calendar' && node.data) {
+      const granted = (tableId: string) => new Set(app.policy.tables.find(rule => rule.tableId === tableId)?.grants.flatMap(grant => grant.read && matchesAppV2Audience(grant.audience, actor) ? grant.read.fieldIds : []) ?? [])
+      const add = (tableId: string, fieldIds: readonly (string | null | undefined)[]) => {
+        const allowed = granted(tableId)
+        if (fieldIds.some(id => id && allowed.has(id))) tableIds.add(tableId)
+      }
+      const calendar = node.data
+      add(calendar.tableId, [calendar.titleFieldId, calendar.startFieldId, calendar.endFieldId, calendar.durationFieldId, calendar.resourceFieldId])
+      add(calendar.resources.tableId, [calendar.resources.titleFieldId, calendar.resources.photoFieldId, calendar.resources.ownerEmailFieldId])
+      if (calendar.hours) add(calendar.hours.tableId, [calendar.hours.resourceFieldId, calendar.hours.startFieldId, calendar.hours.endFieldId, calendar.hours.weekdayFieldId, calendar.hours.dateFieldId])
+    }
     if(screen.contextTableId)tableIds.add(screen.contextTableId)
     const sources=app.sources.filter(source=>sourceIds.has(source.id)).map(source=>{tableIds.add(source.tableId);return {...source,filter:null,sorts:[],viewId:null}})
     const fields=new Map<string,Set<string>>()

@@ -39,11 +39,11 @@ describe.skipIf(!process.env.DATABASE_URL)('configurable team calendar reads',()
     const result=await actions.readPublishedTeamCalendarAction(app.slug,request())
     expect(result.ok,JSON.stringify(result)).toBe(true)
     if(!result.ok)return
-    expect(result.data.masters).toHaveLength(3);expect(result.data.shifts).toHaveLength(21)
-    expect(result.data.masters.map(row=>row.id)).toEqual(built.rows.filter(row=>row.tableId===booking.tables.masters).map(row=>row.id))
+    expect(result.data.resources).toHaveLength(3);expect(result.data.shifts).toHaveLength(21)
+    expect(result.data.resources.map(row=>row.id).sort()).toEqual(built.rows.filter(row=>row.tableId===booking.tables.masters).map(row=>row.id).sort())
     expect(result.data.shifts.some(shift=>shift.windows?.some(window=>window.start===540&&window.end===780))).toBe(true)
-    expect(result.data.visits.length).toBeGreaterThan(0)
-    expect(result.data.visits.some(visit=>visit.service.includes('стрижка'))).toBe(true)
+    expect(result.data.events.length).toBeGreaterThan(0)
+    expect(result.data.events.some(event=>event.title.includes('стрижка'))).toBe(true)
     expect(JSON.stringify(result)).not.toMatch(/example\.com|\+7|прошлый раз|fingerprint|revision/)
   })
   it('applies staff ownership and withholds unreadable working hours',async()=>{
@@ -51,8 +51,8 @@ describe.skipIf(!process.env.DATABASE_URL)('configurable team calendar reads',()
     const result=await actions.readPublishedTeamCalendarAction(app.slug,request())
     expect(result.ok,JSON.stringify(result)).toBe(true)
     if(!result.ok)return
-    expect(result.data.masters.map(row=>row.id)).toEqual([master.id])
-    expect(result.data.visits.every(visit=>visit.masterId===master.id)).toBe(true)
+    expect(result.data.resources.map(row=>row.id)).toEqual([master.id])
+    expect(result.data.events.every(event=>event.resourceId===master.id)).toBe(true)
     expect(result.data.shifts.every(shift=>shift.windows===null)).toBe(true)
   })
   it('rejects guest access, unrelated screens, fabricated data and stale publication',async()=>{
@@ -89,13 +89,13 @@ describe.skipIf(!process.env.DATABASE_URL)('configurable team calendar reads',()
       await data.db.update(data.apps).set({published:current}).where(eq(data.apps.id,app.id))
       const filtered=await actions.readPublishedTeamCalendarAction(app.slug,{...request(),revision:builderV2Revision(current)})
       expect(filtered.ok,JSON.stringify(filtered)).toBe(true)
-      if(filtered.ok){expect(filtered.data.visits.length).toBeGreaterThan(0);expect(filtered.data.visits.every(visit=>visit.masterId===master.id)).toBe(true)}
+      if(filtered.ok){expect(filtered.data.events.length).toBeGreaterThan(0);expect(filtered.data.events.every(event=>event.resourceId===master.id)).toBe(true)}
       const rule=current.policy.tables.find(rule=>rule.tableId===booking.tables.visits)!
       for(const grant of rule.grants)if(grant.read)grant.read.fieldIds=grant.read.fieldIds.filter(id=>id!==booking.visit.start)
       await data.db.update(data.apps).set({published:current}).where(eq(data.apps.id,app.id))
       const denied=await actions.readPublishedTeamCalendarAction(app.slug,{...request(),revision:builderV2Revision(current)})
       expect(denied.ok,JSON.stringify(denied)).toBe(true)
-      if(denied.ok)expect(denied.data.visits).toEqual([])
+      if(denied.ok)expect(denied.data.events).toEqual([])
     }finally{await data.db.update(data.apps).set({published:app}).where(eq(data.apps.id,app.id))}
   })
 })

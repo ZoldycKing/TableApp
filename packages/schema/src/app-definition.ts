@@ -1,5 +1,6 @@
 import { appSchema, type App } from './app'
 import { appV2Schema, type AppV2 } from './app-v2/schema'
+import { upgradeBookingTeamCalendar } from './app-v2/team-calendar-migrate'
 import { appDefinitionInputError } from './app-v2/values'
 import { validateAppV2, type AppV2Catalog, type AppV2Issue } from './app-v2/validate'
 
@@ -19,7 +20,9 @@ function readCheckedAppDefinition(value: unknown): AppDefinitionRead {
   const version = Object.hasOwn(value, 'formatVersion') ? (value as { formatVersion: unknown }).formatVersion : 1
   if (version === 2) {
     const result = appV2Schema.safeParse(value)
-    return result.success ? { ok: true, formatVersion: 2, app: result.data } : { ok: false, code: 'invalid_definition', error: 'Описание нового приложения содержит некорректные настройки' }
+    return result.success
+      ? { ok: true, formatVersion: 2, app: upgradeBookingTeamCalendar(result.data) }
+      : { ok: false, code: 'invalid_definition', error: 'Описание нового приложения содержит некорректные настройки' }
   }
   if (version !== 1) return { ok: false, code: 'unsupported_version', error: 'Эта версия формата приложения пока не поддерживается' }
   const result = appSchema.safeParse(value)

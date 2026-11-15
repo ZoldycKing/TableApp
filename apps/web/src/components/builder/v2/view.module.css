@@ -1168,7 +1168,7 @@
 .dataSettings h3 { font-size: 14px; font-weight: 600; }
 .inspectorTabs { display: flex; gap: 6px; padding: 6px; border-radius: 14px; background: var(--v2-page, #edf1e7); }
 .inspectorTabs button { flex: 1; min-height: 40px; padding: 8px 10px; border: 0; border-radius: 10px; background: transparent; color: var(--v2-muted, #687568); }
-.calendarTabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 8px; }
+.calendarTabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 8px; margin-bottom: 20px; }
 .calendarTabs button { min-height: 40px; padding: 8px 12px; }
 .inspectorTabs button:is([aria-selected="true"],[aria-pressed="true"]) { background: var(--v2-surface, #fff); color: var(--v2-ink, #253c2d); }
 .inspectorPanel { display: grid; gap: 24px; }

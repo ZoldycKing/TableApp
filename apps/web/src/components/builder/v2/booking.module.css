@@ -122,6 +122,12 @@
 .scheduleCheck input:checked { background: var(--v2-accent, #456849); border-color: var(--v2-accent, #456849); }
 .scheduleCheck input:checked::after { transform: translateX(18px); }
 .scheduleCheck input:focus-visible { outline: 2px solid var(--v2-accent); outline-offset: 3px; }
+.scheduleSkeleton { display: grid; gap: 16px; min-height: 22rem; }
+.scheduleSkeleton > span, .scheduleSkeleton > i, .scheduleSkeleton > em { display: block; height: 44px; border-radius: 10px; background: var(--v2-page, #edf1e7); }
+.scheduleSkeleton > span { height: 14px; width: 72%; }
+.scheduleSkeleton > span + span { width: 42%; height: 12px; }
+.scheduleSkeleton > div { display: flex; flex-wrap: wrap; gap: 8px; }
+.scheduleSkeleton b { width: 44px; height: 44px; border-radius: 999px; background: var(--v2-page, #edf1e7); }
 .scheduleScroll { min-height: 0; overflow: auto; padding: 8px 18px 12px; }
 .scheduleFooter {
   position: sticky;

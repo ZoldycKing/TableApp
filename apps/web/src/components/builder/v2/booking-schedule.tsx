@@ -56,7 +56,7 @@ export function BookingScheduleForm({ app, screenId, formId, recordId, editing =
   return <form className={css.scheduleForm} onSubmit={submit} aria-label={recordId ? 'Изменить рабочие часы' : 'Добавить рабочие часы'} aria-busy={pending || !read} noValidate>
     <div className={css.scheduleScroll}>
     <div className={css.formIntro}><h2>{recordId ? 'Изменить рабочие часы' : 'Рабочие часы мастера'}</h2><p>{recordId ? 'Измените этот период. Другие периоды останутся без изменений.' : 'Выберите рабочие дни и задайте одинаковые часы для всех выбранных дней.'}</p></div>
-    {!read ? <p role="status">Загружаем мастеров…</p> : !read.ok ? <div role="alert"><p>{read.error}</p><button type="button" className={styles.secondary} onClick={() => setRetry(value => value + 1)}>Попробовать ещё раз</button></div> : <>
+    {!read ? <><p className="sr-only" role="status">Загружаем мастеров…</p><div className={css.scheduleSkeleton} aria-hidden="true"><span /><span /><i /><div>{BOOKING_WEEKDAYS.map(day => <b key={day.value} />)}</div><em /><em /></div></> : !read.ok ? <div role="alert"><p>{read.error}</p><button type="button" className={styles.secondary} onClick={() => setRetry(value => value + 1)}>Попробовать ещё раз</button></div> : <>
       <fieldset className={css.scheduleFields} disabled={pending || editing || stale || uncertain}>
         <label className={css.scheduleLabel}>Мастер<select value={input.masterId} onChange={event => change({ masterId: event.target.value })}><option value="">Выберите мастера</option>{read.state.masters.map(master => <option key={master.id} value={master.id}>{master.name}</option>)}</select></label>
         {!read.state.masters.length && <p className={css.timeHint}>Сначала добавьте мастера в разделе «Мастера».</p>}
@@ -67,9 +67,9 @@ export function BookingScheduleForm({ app, screenId, formId, recordId, editing =
       </fieldset>
     </>}
     </div>
-    {read?.ok && <div className={css.scheduleFooter}>
+    {(read?.ok || !read) && <div className={css.scheduleFooter}>
       {error && <p role="alert" className={css.error}>{error}</p>}{notice && <p role="status">{notice}</p>}
-      {stale ? <button type="button" className={styles.secondary} onClick={() => setRetry(value => value + 1)}>Обновить рабочие часы</button> : <button type="submit" className={styles.primary} disabled={pending || editing}>{pending ? 'Сохраняем…' : uncertain ? 'Повторить сохранение' : 'Сохранить рабочие часы'}</button>}
+      {stale ? <button type="button" className={styles.secondary} onClick={() => setRetry(value => value + 1)}>Обновить рабочие часы</button> : <button type="submit" className={styles.primary} disabled={pending || editing || !read}>{pending ? 'Сохраняем…' : uncertain ? 'Повторить сохранение' : 'Сохранить рабочие часы'}</button>}
     </div>}
   </form>
 }

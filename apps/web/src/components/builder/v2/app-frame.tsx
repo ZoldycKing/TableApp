@@ -1,5 +1,5 @@
 'use client'
-import {useEffect,useId,useRef,useState,type ReactNode} from 'react'
+import {useEffect,useId,useLayoutEffect,useRef,useState,type ReactNode} from 'react'
 import type {AppV2} from '@tableapp/schema/app-v2'
 import {ProtoIcon} from '../prototype/icons'
 import styles from '../prototype/prototype.module.css'
@@ -37,7 +37,9 @@ export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,childre
   const screenTitle = title
   const calendarScreen = app.screens.find(screen => screen.id === screenId)?.rootIds.some(id => app.nodes.some(node => node.id === id && node.type === 'team_calendar'))
   if (calendarScreen) title = ''
-  const screens=builderV2Menu(app),[more,setMore]=useState(false),menuId=useId(),root=useRef<HTMLDivElement>(null),trigger=useRef<HTMLButtonElement>(null)
+  const screens=builderV2Menu(app),[more,setMore]=useState(false),menuId=useId(),root=useRef<HTMLDivElement>(null),trigger=useRef<HTMLButtonElement>(null),navItems=useRef<HTMLDivElement>(null)
+  const staticFit=screens.length>5?4:screens.length
+  const [fit,setFit]=useState(staticFit)
   const catalogDetail = Boolean(app.screens.find(screen => screen.id === screenId)?.catalog)
   const body = useRef<HTMLDivElement>(null)
   const contents = useRef<HTMLDivElement>(null)
@@ -68,6 +70,33 @@ export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,childre
     return () => { active = false; reset?.() }
   }, [phone, screenId])
   useEffect(()=>setMore(false),[screenId,navigation])
+  useLayoutEffect(()=>{
+    const row=navItems.current
+    if(!row)return
+    const measure=()=>{
+      if(navigation==='sidebar'||row.clientWidth<8){setFit(navigation==='sidebar'?screens.length:screens.length>5?4:screens.length);return}
+      const tabs=[...row.querySelectorAll<HTMLElement>(':scope > [data-nav-item]')]
+      const extra=row.querySelector<HTMLElement>(':scope > [data-nav-more]')
+      const reveal=(count:number)=>{
+        tabs.forEach((tab,index)=>{tab.hidden=index>=count})
+        if(extra)extra.hidden=count>=tabs.length
+      }
+      reveal(tabs.length)
+      if(row.scrollWidth<=row.clientWidth+1){setFit(current=>current===tabs.length?current:tabs.length);return}
+      let count=tabs.length
+      while(count>0){
+        count-=1
+        reveal(count)
+        if(row.scrollWidth<=row.clientWidth+1)break
+      }
+      setFit(current=>current===count?current:count)
+    }
+    measure()
+    if(typeof ResizeObserver==='undefined')return
+    const observer=new ResizeObserver(measure)
+    observer.observe(row)
+    return()=>observer.disconnect()
+  },[screens.map(screen=>screen.id).join('|'),navigation,phone])
   useEffect(()=>{
     if(!more)return
     const outside=(event:PointerEvent)=>{if(event.target instanceof Node&&!root.current?.contains(event.target))setMore(false)}
@@ -80,8 +109,9 @@ export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,childre
     const label=builderV2MenuLabel(screen,app)
     return <button type="button" key={screen.id} title={label} aria-current={screen.id===sectionId?'page':undefined} className={extra?css.extraItem:undefined} onClick={()=>choose(screen.id)}><ProtoIcon name={screen.icon}/><span>{label}</span></button>
   }
-  const overflow=screens.length>5,rest=screens.slice(4),activeExtra=rest.some(screen=>screen.id===sectionId)
-  const appName = app.name || 'Моё приложение'
+  const limit=navigation==='sidebar'?screens.length:fit
+  const rest=screens.slice(limit),overflow=rest.length>0,activeExtra=rest.some(screen=>screen.id===sectionId)
+  const appName = (app.name || 'Моё приложение').replaceAll(' · ', '\u00A0·\u00A0')
   const sectionScreen = app.screens.find(screen => screen.id === sectionId)
   const mark = <BuilderV2AppMark logo={builderV2LogoUrl(app, draftLogo)} icon={app.appearance?.icon} />
   const account = headerAction ? <span className={css.headerAction}>{headerAction}</span> : null
@@ -92,7 +122,7 @@ export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,childre
     {showChromeHeader ? <header className={`${styles.appHeader} ${css.header}`} data-brand-only={mobileBrandOnly || undefined}>
       <div className={`${css.chromeBar} ${presentation.contentWidth}`}>
         {back && !shellTopNav ? <button type="button" className={presentation.iconControl} onClick={back} aria-label="Назад" title="Назад"><ProtoIcon name="back" /></button> : <span className={css.headerMark}>{mark}</span>}
-        {shellTopNav ? <span className={css.railBrand}>{appName}</span> : null}
+        {shellTopNav ? <span className={css.railBrand}><span>{appName}</span></span> : null}
         {profile && <BuilderV2RecordAvatar name={title} id={scrollKey || screenId} icon="users" />}
         {!mobileBrandOnly && catalogDetail ? <span className={css.catalogIdentity}>{sectionScreen?.name ?? appName}</span>
           : !mobileBrandOnly && title ? <div>
@@ -105,7 +135,7 @@ export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,childre
     {screens.length>0&&<nav className={css.navigation} aria-label="Разделы приложения">
       <div className={navigation === 'sidebar' ? css.navStack : `${css.chromeBar} ${presentation.contentWidth}`}>
         <div className={css.railIdentity}>{mark}<strong>{appName}</strong></div>
-        <div className={css.navItems}>{screens.map((screen,index)=><div key={screen.id} className={overflow&&index>=4?css.overflowItem:undefined}>{navButton(screen)}</div>)}{overflow&&<div className={css.more} ref={root}><button type="button" ref={trigger} aria-expanded={more} aria-controls={menuId} aria-current={activeExtra?'true':undefined} onClick={()=>setMore(!more)}><ProtoIcon name="more"/><span>Ещё</span></button>{more&&<div className={css.morePanel} id={menuId} role="region" aria-label="Другие разделы"><strong>Разделы</strong>{rest.map(screen=>navButton(screen,true))}</div>}</div>}</div>
+        <div className={css.navItems} ref={navItems}>{screens.map((screen,index)=><div key={screen.id} data-nav-item="" hidden={index>=limit}>{navButton(screen)}</div>)}<div className={css.more} data-nav-more="" ref={root} hidden={!overflow}><button type="button" ref={trigger} aria-expanded={more} aria-controls={menuId} aria-current={activeExtra?'true':undefined} onClick={()=>setMore(!more)}><ProtoIcon name="more"/><span>Ещё</span></button>{more&&<div className={css.morePanel} id={menuId} role="region" aria-label="Другие разделы"><strong>Разделы</strong>{rest.map(screen=>navButton(screen,true))}</div>}</div></div>
         {shellTopNav ? account : null}
       </div>
     </nav>}

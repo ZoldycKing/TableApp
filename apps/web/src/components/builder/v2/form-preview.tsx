@@ -1,5 +1,6 @@
 'use client'
 import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { useBookingJourney } from './booking-journey'
 import {BuilderV2AttachmentInput} from './attachment-input'
 import {attachmentSchema,type Attachment} from '@tableapp/schema'
 import { instantToWallClock } from '@tableapp/schema'
@@ -20,6 +21,9 @@ import { useBuilderV2OrderActionPanel } from './order-detail'
 import { BuilderV2MoneyInput } from './money-input'
 import { builderV2IsMoneyFieldLabel, builderV2ParseMoneyInput } from '@/lib/builder-v2-money'
 import type { BuilderV2WorkflowEffect, BuilderV2WorkflowTrace } from '@/lib/builder-v2-workflow-types'
+import { ruPrepText } from './ru-prep-text'
+import { BookingDemoAvailability, BookingTimeFields } from './booking-time'
+import bookingCss from './booking.module.css'
 
 export type WorkingFormOptions = { tableName: string; listHref: string; recordHref?: string; learning?:boolean; revision?: string }
 type FormContext = { app: AppV2; scope: BuilderV2FormScope; state?: BuilderV2FormState; values: Record<string, AppV2Json>; errors: Record<string, string>; disabled: boolean; key:string; upload?: (fieldId:string,file:File,signal:AbortSignal)=>Promise<Attachment>; onPending:(id:string,pending:boolean)=>void; change: (id: string, value: AppV2Json) => void; inspect: (request: BuilderV2FormRequest) => Promise<BuilderV2FormResult | BuilderV2FormOptionsResult> }
@@ -30,6 +34,8 @@ const editSaveNotice = (effects: BuilderV2WorkflowEffect[] = []) => effects.leng
 
 export function BuilderV2FormPreview({ app, form, screenId, recordId, enabled, editing, working, children }: { app: AppV2; form: BuilderV2Form; screenId: string; recordId?: string; enabled: boolean; editing: boolean; working?: WorkingFormOptions; children: ReactNode }) {
   const published=usePublishedV2()
+  const journey=useBookingJourney()
+  const bookingDemo = useContext(BookingDemoAvailability)
   const actionPanel = useBuilderV2OrderActionPanel()
   const formTitle=form.mode==='edit'&&(!form.name||form.name==='Новая запись')?'Изменить запись':form.name||'Новая запись'
   if(published) working??={tableName:published.tableName(form.tableId),listHref:`/a/${encodeURIComponent(published.slug)}`,revision:published.revision}
@@ -54,7 +60,10 @@ export function BuilderV2FormPreview({ app, form, screenId, recordId, enabled, e
         if (working?.revision && result.ok && 'state' in result && (!('revision' in result.state) || result.state.revision !== working.revision)) {
           setData({ key, values: {}, errors: {}, error: 'Настройки изменились. Обновите страницу формы.', loading: false, checking: false, success: false, stale: true }); return
         }
-        setData(result.ok && 'state' in result ? { key, state: result.state, values: result.state.values, errors: {}, error: '', loading: false, checking: false, success: false } : { key, values: {}, errors: {}, error: result.ok ? 'Не удалось загрузить форму' : result.error, loading: false, checking: false, success: false })
+        const prefill=journey?.calendarForm
+        const values=result.ok&&'state'in result?{...result.state.values}:{}
+        if(result.ok&&'state'in result&&form.mode==='create'&&prefill?.screenId===screenId&&prefill.tableId===form.tableId){for(const field of result.state.fields)if(!field.readOnly&&Object.hasOwn(prefill.values,field.fieldId))values[field.fieldId]=prefill.values[field.fieldId]!;journey?.setCalendarForm(null)}
+        setData(result.ok && 'state' in result ? { key, state: result.state, values, errors: {}, error: '', loading: false, checking: false, success: false } : { key, values: {}, errors: {}, error: result.ok ? 'Не удалось загрузить форму' : result.error, loading: false, checking: false, success: false })
       }
       catch { if (version === generation.current) setData({ key, values: {}, errors: {}, error: 'Не удалось загрузить форму. Повторите попытку.', loading: false, checking: false, success: false }) }
     }, 150)
@@ -106,7 +115,7 @@ export function BuilderV2FormPreview({ app, form, screenId, recordId, enabled, e
     } catch { if (version === generation.current && current.current.key === key) setData({ ...visible, checking: false, success: false, uncertain: Boolean(working), error: working ? 'Не удалось подтвердить сохранение. Повторите запрос: действие не выполнится дважды.' : 'Не удалось проверить форму. Повторите попытку.' }) }
     finally { busy.current = false }
   }
-  const upload=working&&visible.state?.revision?async(fieldId:string,file:File,signal:AbortSignal):Promise<Attachment>=>{
+  const upload=!bookingDemo&&working&&visible.state?.revision?async(fieldId:string,file:File,signal:AbortSignal):Promise<Attachment>=>{
     const body=new FormData();body.set('file',file);body.set('context',JSON.stringify({kind:published?'published':'working',...(published?{slug:published.slug}:{appId:app.id}),...scope,fieldId,revision:visible.state!.revision,fingerprint:visible.state!.fingerprint}))
     let response:Response,result:{ok?:boolean;error?:string;attachment?:unknown}
     try{response=await fetch('/api/builder-v2/files',{method:'POST',body,signal});result=await response.json()}catch{throw new Error('Не удалось загрузить файл. Проверьте соединение и повторите попытку.')}
@@ -120,8 +129,11 @@ export function BuilderV2FormPreview({ app, form, screenId, recordId, enabled, e
   const countForm = Boolean(app.inventory && (form.id === app.inventory.createCountFormId || form.id === app.inventory.editCountFormId))
   const reorderForm = Boolean(app.inventory && form.id === app.inventory.reorderFormId)
   const inventoryDialogForm = purchaseForm || countForm
+  const bookingForm = Boolean(app.booking && [app.booking.createFormId, app.booking.ownerCreateFormId, app.booking.rescheduleFormId].includes(form.id))
   return <Context.Provider value={{ app, scope, inspect, state: visible.state, values: visible.values, errors: visible.errors, disabled, key:key+':'+refresh,upload,onPending, change: (id, value) => { if (disabled) return; generation.current++; setData(old=>old.key===key?{...old,values:{...old.values,[id]:value},errors:{},error:'',success:false}:old) } }}><form ref={formRef} className={`${styles.formBlock} ${ui.form} ${checkout ? ui.commerceForm : ''} ${inventoryDialogForm || reorderForm ? ui.purchaseForm : ''}`} data-commerce={checkout ? 'checkout' : undefined} data-purchase={purchaseForm || undefined} data-count={countForm || undefined} data-reorder={reorderForm || undefined} noValidate onSubmit={event => { event.preventDefault(); void check() }} aria-label={formTitle} aria-busy={!editing && enabled && (visible.loading || visible.checking || pendingCount>0)}>
     <h3 className={ui.formTitle} id={checkout ? 'shop-checkout' : undefined}>{checkout ? 'Оформление заказа' : formTitle}</h3>
+    {bookingForm && <div className={bookingCss.picker}><BookingTimeFields app={app} editing={editing} /></div>}
+    {checkout ? <p className={ui.shopCheckoutNote}>После оформления мы свяжемся, чтобы подтвердить заказ. Оплата при получении.</p> : null}
     <ShopCheckoutSync />
     {!editing && enabled && visible.loading && <p role="status" className={ui.hint}>Подготавливаем форму…</p>}
     <div className={`${styles.canvasBlocks}${purchaseForm || countForm ? ` ${ui.purchaseFields}` : ''}`}>{children}</div>
@@ -212,11 +224,20 @@ function InventoryDateInput({ id, disabled, errorId, required, label, value, onC
   const commit = (raw: string) => {
     const trimmed = raw.trim()
     if (!trimmed) { onChange(null); return }
+    // Programmatic / paste ISO (YYYY-MM-DD) — keep the posted value, show RU mask.
+    const iso = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+    if (iso) {
+      setDraft(`${iso[3]}.${iso[2]}.${iso[1]}`)
+      onChange(`${iso[1]}-${iso[2]}-${iso[3]}`)
+      return
+    }
     const match = trimmed.match(/^(\d{2})\.(\d{2})\.(\d{4})$/)
-    if (match) onChange(`${match[3]}-${match[2]}-${match[1]}T12:00`)
+    if (match) onChange(`${match[3]}-${match[2]}-${match[1]}`)
   }
   return <input id={id} disabled={disabled} aria-describedby={errorId} aria-invalid={Boolean(errorId)} aria-required={required} aria-label={label} type="text" inputMode="numeric" placeholder="дд.мм.гггг" autoComplete="off" value={draft} onChange={event => {
-    const digits = event.target.value.replace(/\D/g, '').slice(0, 8)
+    const raw = event.target.value.trim()
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) { commit(raw); return }
+    const digits = raw.replace(/\D/g, '').slice(0, 8)
     const next = digits.length <= 2 ? digits : digits.length <= 4 ? `${digits.slice(0, 2)}.${digits.slice(2)}` : `${digits.slice(0, 2)}.${digits.slice(2, 4)}.${digits.slice(4)}`
     setDraft(next)
     if (!digits.length) onChange(null)
@@ -226,6 +247,9 @@ function InventoryDateInput({ id, disabled, errorId, required, label, value, onC
 
 export function BuilderV2FormInput({ node, table }: { node: BuilderV2Input; table?: BuilderV2Table }) {
   const context = useContext(Context), published=usePublishedV2(), unique = useId(), field = context?.state?.fields.find(field => field.nodeId === node.id), column = table?.fields.find(field => field.id === node.fieldId)
+  const booking = context?.app.booking
+  if (booking && [booking.createFormId, booking.ownerCreateFormId, booking.rescheduleFormId].includes(context!.scope.formId) && [booking.visit.service, booking.visit.master, booking.visit.start, booking.visit.status].includes(node.fieldId)) return null
+  if (booking?.clients && context!.scope.formId === booking.ownerCreateFormId && (node.fieldId === booking.clients.linkFieldId || Array.isArray(context!.values[booking.clients.linkFieldId]) && (context!.values[booking.clients.linkFieldId] as unknown[]).length > 0 && [booking.visit.client,booking.visit.phone,booking.visit.email].includes(node.fieldId))) return null
   if (context?.app.shop && (node.fieldId === context.app.shop.cartFieldId || node.fieldId === context.app.shop.submissionFieldId)) return null
   if (context?.app.inventory?.purchasePayloadFieldId && node.fieldId === context.app.inventory.purchasePayloadFieldId) return null
   if (context?.app.inventory?.countPayloadFieldId && node.fieldId === context.app.inventory.countPayloadFieldId) return null
@@ -251,17 +275,17 @@ export function BuilderV2FormInput({ node, table }: { node: BuilderV2Input; tabl
     return `На складе: ${qty} ${unit}`
   })()
   const readonly = field?.readOnly && context?.state
-  const dateValue = typeof value === 'string' ? value.includes('T') && (value.endsWith('Z') || inventoryDate) ? (() => {
+  const dateValue = typeof value === 'string' ? value.includes('T') ? (() => {
     const wall = value.endsWith('Z') ? instantToWallClock(value, field?.timeZone ?? 'Europe/Moscow') : { date: value.slice(0, 10), time: value.includes('T') ? value.slice(11, 16) : '12:00' }
-    return wall ? inventoryDate || type === 'date' ? wall.date : `${wall.date}T${wall.time}` : ''
-  })() : value : ''
+    return wall ? (inventoryDate || type === 'date' ? wall.date : `${wall.date}T${wall.time}`) : ''
+  })() : value.slice(0, 10) : ''
   const control = type==='image'||type==='attachment'?<BuilderV2AttachmentInput key={context?.key+':'+node.fieldId} id={unique} field={field??{nodeId:node.id,fieldId:node.fieldId,label,type,required:node.required,readOnly:Boolean(node.readOnly),supported:true}} value={value} disabled={disabled||Boolean(field?.readOnly)} errorId={errorId} slug={published?.slug} upload={context?.upload?(file,signal)=>context.upload!(node.fieldId,file,signal):undefined} onChange={change} onPending={context?.onPending??(()=>{})}/>:readonly ? <output id={unique} className={ui.autoValue}>{context.state?.labels[node.fieldId] || (type === 'checkbox' ? value ? 'Да' : 'Нет' : Array.isArray(value) ? value.join(', ') : String(value ?? 'Не заполнено'))}<small>Заполняется автоматически</small></output>
     : type === 'relation' && field && context ? <RelationInput context={context} field={field} id={unique} errorId={errorId} />
     : type === 'checkbox' ? <input {...common} type="checkbox" checked={value === true} onChange={event => change(event.target.checked)} />
     : type === 'single_select' || type === 'multi_select' ? <select {...common} multiple={type === 'multi_select'} value={type === 'multi_select' ? Array.isArray(value) ? value as string[] : [] : String(value ?? '')} onChange={event => change(type === 'multi_select' ? Array.from(event.target.selectedOptions).map(option => option.value) : event.target.value || null)}>{type === 'single_select' && <option value="">Выберите значение</option>}{(field?.choices ?? column?.choices)?.map(choice => <option key={choice.id} value={choice.id}>{choice.name}</option>)}</select>
     : type === 'long_text' ? <textarea {...common} rows={3} value={String(value ?? '')} maxLength={10000} onChange={event => change(event.target.value)} />
-    : inventoryDate ? <InventoryDateInput id={unique} disabled={disabled} errorId={errorId} required={node.required} label={label} value={dateValue} onChange={change} />
-    : type === 'date' || type === 'datetime' ? <input {...common} type={type === 'date' ? 'date' : 'datetime-local'} value={dateValue} onChange={event => {
+    : type === 'date' || inventoryDate ? <InventoryDateInput id={unique} disabled={disabled} errorId={errorId} required={node.required} label={label} value={dateValue} onChange={change} />
+    : type === 'datetime' ? <input {...common} type="datetime-local" value={dateValue} onChange={event => {
       const next = event.target.value
       if (!next) { change(null); return }
       change(next)
@@ -270,5 +294,5 @@ export function BuilderV2FormInput({ node, table }: { node: BuilderV2Input; tabl
     : type === 'number' && builderV2IsMoneyFieldLabel(label)
       ? <BuilderV2MoneyInput {...common} value={value} onValueChange={change} maxLength={32} />
     : <input {...common} type={type === 'email' ? 'email' : type === 'phone' ? 'tel' : type === 'url' ? 'url' : type === 'number' ? 'number' : 'text'} inputMode={type === 'number' ? 'decimal' : undefined} value={String(value ?? '')} maxLength={10000} onChange={event => change(type === 'number' ? (event.target.value === '' ? null : Number(event.target.value)) : event.target.value)} />
-  return <div className={`${ui.input} ${type === 'checkbox' ? ui.checkInput : ''}`} data-kind={builderV2OrderFactKind(label)} data-purchase-field={purchaseField || undefined}><label htmlFor={unique}>{label}{node.required ? ' *' : ''}</label>{control}{stockHint && <p className={ui.stockHint}>{stockHint}</p>}{error && <span className={ui.dataError} id={errorId}>{error}</span>}</div>
+  return <div className={`${ui.input} ${type === 'checkbox' ? ui.checkInput : ''}`} data-kind={builderV2OrderFactKind(label)} data-purchase-field={purchaseField || undefined}><label htmlFor={unique}>{ruPrepText(label)}{node.required ? ' *' : ''}</label>{control}{stockHint && <p className={ui.stockHint}>{stockHint}</p>}{error && <span className={ui.dataError} id={errorId}>{error}</span>}</div>
 }

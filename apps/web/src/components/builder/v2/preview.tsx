@@ -14,6 +14,7 @@ import {BuilderV2Account,BuilderV2AppFrame,BuilderV2Theme} from './app-frame'
 import { builderV2InventoryPurchaseSection, builderV2PreviewRecordParent } from './collection-navigation'
 import { BuilderV2OrderWorkbench } from './order-workbench'
 import { isBuilderV2ContactProfile } from './record-presentation'
+import { listShellScreen } from './list-shell'
 
 export function AppV2Preview({ app, tables, businessApps, actor, initialScreen, initialRecordId, phone }: { app: AppV2; tables: readonly BuilderV2Table[]; businessApps?: readonly BuilderBusinessApp[]; actor: AppV2Actor; initialScreen?: string; initialRecordId?: string; phone: boolean }) {
   const navigation = useBuilderV2Navigation(app, initialScreen, initialRecordId), screenId = navigation.screenId
@@ -30,9 +31,9 @@ export function AppV2Preview({ app, tables, businessApps, actor, initialScreen, 
     ? inventory.suppliersScreenId
     : sectionId
   const showBack = Boolean(backTarget && (page?.contextTableId || suppliersHub || supplierCard || reorderHub))
-  const frameTitle = inventory && page?.id === inventory.itemScreenId ? 'Товар'
-    : inventory && page?.id === inventory.purchaseScreenId ? 'Заказ'
-      : (record.title ?? page?.name ?? 'Экран')
+  const shellList = !navigation.recordId && page?.id ? listShellScreen(app, page.id) : null
+  const frameTitle = shellList || page?.contextTableId || suppliersHub || supplierCard || reorderHub ? ''
+    : (record.title ?? page?.name ?? 'Экран')
   return <BuilderV2Theme as="main" app={app} className={`${ui.preview} ${ui.standalonePreview}`}>
     <header>
       <Link href={`/apps/${app.id}?screen=${encodeURIComponent(page?.id ?? '')}${navigation.recordId ? `&row=${encodeURIComponent(navigation.recordId)}` : ''}`} className={styles.secondary}><ProtoIcon name="back" />К редактору</Link>

@@ -40,7 +40,7 @@ describe('permission-projected work navigation', () => {
     expect(sales.screens.map(screen => screen.id)).toContain(catalog.id)
     expect(stock.screens.map(screen => screen.id)).not.toContain(catalog.id)
     expect(stock.screens.some(screen => screen.name === 'Остатки')).toBe(true)
-    expect(stock.screens.some(screen => screen.name === 'Движения товаров')).toBe(true)
+    expect(stock.screens.some(screen => screen.name === 'История склада')).toBe(true)
     expect(production.screens.some(screen => screen.name === 'Движения материалов')).toBe(true)
     for (const [group, title] of [[sales, 'Сводка продаж'], [stock, 'Сводка склада'], [production, 'Сводка производства']] as const) {
       for (const dashboard of group.screens.filter(screen => screen.type === 'dashboard')) {

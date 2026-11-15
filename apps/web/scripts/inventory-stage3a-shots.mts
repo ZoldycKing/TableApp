@@ -155,6 +155,19 @@ async function selectAndCreate(page: Page, max: number) {
   await m.context.close()
 }
 
+// Reorder creates drafts on the shared visual demo — remove non-seed leftovers so
+// supplier/purchases screens stay clean for layout QA.
+{
+  const { spawnSync } = await import('node:child_process')
+  const { resolve } = await import('node:path')
+  const cleaned = spawnSync('pnpm', ['exec', 'tsx', 'scripts/cleanup-inventory-demo-pos.mts'], {
+    cwd: resolve('/workspace/apps/web'),
+    encoding: 'utf8',
+  })
+  if (cleaned.status !== 0) console.warn('demo PO cleanup failed', cleaned.stderr || cleaned.stdout)
+  else console.log('demo PO cleanup', (cleaned.stdout || '').trim())
+}
+
 writeFileSync('/tmp/inventory-stage3a-shots.json', JSON.stringify({ sha, ok: true }, null, 2))
 await browser.close()
 console.log('done', sha)

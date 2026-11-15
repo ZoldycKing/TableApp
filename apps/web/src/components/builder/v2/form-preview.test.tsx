@@ -5,6 +5,8 @@ import { inspectBuilderV2FormAction, inspectWorkingBuilderV2FormAction, submitBu
 import type { BuilderV2Form, BuilderV2FormState, BuilderV2FormResult } from '@/lib/builder-v2-form-types'
 import { appV2Fixture, fixtureActor, fixtureTables } from './fixture.test-utils'
 import { AppV2Renderer } from './view'
+import { BookingJourneyProvider, useBookingJourney } from './booking-journey'
+import { useEffect, useState } from 'react'
 
 const navigation=vi.hoisted(()=>({push:vi.fn()}))
 vi.mock('next/navigation',()=>({useRouter:()=>navigation}))
@@ -16,6 +18,16 @@ afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals() })
 const tick = () => act(async () => { await vi.advanceTimersByTimeAsync(350) })
 const initial: BuilderV2FormState = { values: { r_title: '', r_amount: 0 }, labels: {}, fingerprint: 'a'.repeat(64), fields: [{ nodeId: 'title_input', fieldId: 'r_title', label: 'Название', type: 'text', required: true, readOnly: false, supported: true }, { nodeId: 'amount_input', fieldId: 'r_amount', label: 'Сумма, ₽', type: 'number', required: false, readOnly: false, supported: true }] }
 const props = () => ({ app: appV2Fixture(), screenId: 'new', tables: fixtureTables, actor: fixtureActor, live: true })
+
+it('uses calendar defaults only for writable fields of the selected create form',async()=>{
+  const appProps=props(),state={...initial,values:{r_title:'Не менять',r_amount:0},fields:initial.fields.map(field=>({...field,readOnly:field.fieldId==='r_title'}))}
+  vi.mocked(inspectBuilderV2FormAction).mockResolvedValue({ok:true,state})
+  function Seed(){const journey=useBookingJourney(),[ready,setReady]=useState(false);useEffect(()=>{journey?.setCalendarForm({screenId:'new',tableId:'requests',values:{r_title:'Подмена',r_amount:15,foreign:'Недоступно'}});setReady(true)},[]);return ready?<AppV2Renderer {...appProps}/>:null}
+  render(<BookingJourneyProvider><Seed/></BookingJourneyProvider>);await tick()
+  expect(screen.getByText('Не менять')).toBeTruthy()
+  expect(screen.queryByText('Подмена')).toBeNull()
+  expect((screen.getByLabelText('Сумма, ₽',{exact:true})as HTMLInputElement).value).toBe('15')
+})
 
 it('preserves typed decimal input and sends the parsed decimal and checks the form without executing a submit workflow', async () => {
   vi.mocked(inspectBuilderV2FormAction).mockResolvedValueOnce({ ok: true, state: initial }).mockResolvedValueOnce({ ok: true, state: { ...initial, values: { r_title: 'Заказ', r_amount: 12.5 } } })
@@ -73,7 +85,8 @@ it('keeps a date after server normalization and posts an unchecked checkbox as f
   await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Проверить форму' })))
   const request = vi.mocked(inspectBuilderV2FormAction).mock.calls.at(-1)![2] as { values: Record<string, unknown> }
   expect(request.values).toMatchObject({ due: '2026-11-08', done: false })
-  expect((screen.getByLabelText('Готов к') as HTMLInputElement).value).toBe('2026-11-08')
+  // Date fields use the RU text mask; ISO in → dd.mm.yyyy on screen, ISO out on submit.
+  expect((screen.getByLabelText('Готов к') as HTMLInputElement).value).toBe('08.11.2026')
 })
 
 const workingProps = () => ({ ...props(), workingForm: { formId: 'create_form', tableName: 'Заявки', listHref: '/apps/app_pilot/preview?screen=home' } })

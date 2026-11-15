@@ -23,7 +23,7 @@
   gap: 4px;
 }
 
-.controls a {
+.controls :is(a, button) {
   display: flex;
   align-items: center;
   min-height: 40px;
@@ -33,12 +33,16 @@
   font-weight: 600;
   text-align: start;
   color: #4a5869;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
 }
 
-.controls a:hover { background: #e8edf3; }
-.controls a[aria-current] { color: #183e65; background: #e0e9f3; }
-.controls a:focus-visible { outline: 2px solid #285984; outline-offset: 2px; }
-.devices a { display: grid; place-items: center; min-width: 44px; padding-inline: 6px; }
+.controls :is(a, button):hover { background: #e8edf3; }
+.controls :is(a[aria-current], button[aria-pressed=true]) { color: #183e65; background: #e0e9f3; }
+.controls :is(a, button):focus-visible { outline: 2px solid #285984; outline-offset: 2px; }
+.devices { margin-left: auto; }
+.devices :is(a, button) { display: grid; place-items: center; min-width: 44px; padding-inline: 6px; }
 
 .canvas {
   display: flex;
@@ -47,10 +51,12 @@
 }
 
 .app {
+  scroll-margin-top: 104px;
   width: 100%;
   min-width: 0;
-  height: clamp(480px, 68vh, 640px);
-  overflow: hidden;
+  min-height: 640px;
+  height: auto;
+  overflow: clip;
   isolation: isolate;
   border: 1px solid #e0e5e9;
   border-radius: 14px;
@@ -64,6 +70,12 @@
 }
 
 .stage[data-phone=true] .app { max-width: 390px; }
+.app > div { height: auto; min-height: 0; }
+/* Examples grow with their real screens; published apps keep their viewport scrolling. */
+.app [data-runtime-app] { height: auto; min-height: 640px; }
+.app [data-runtime-column] { height: auto; }
+.app [data-runtime-body] { flex: 1 0 auto; overflow: visible; }
+.app [data-runtime-column] > header { position: static; }
 .note { margin: 12px 2px 0; color: #4a5869; font-size: 13px; line-height: 1.5; }
 
 @container (max-width: 620px) {
@@ -73,5 +85,5 @@
 
 @container (max-width: 430px) {
   .screens { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
-  .controls a { padding: 6px 8px; }
+  .controls :is(a, button) { padding: 6px 8px; }
 }

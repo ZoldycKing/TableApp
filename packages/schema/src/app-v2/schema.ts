@@ -1,5 +1,6 @@
 import { z } from 'zod'
-import { appThemeSchema, SLUG_PATTERN } from '../app'
+import { appThemeSchema, bookingConfigSchema, SLUG_PATTERN } from '../app'
+import { appV2TeamCalendarShape } from './team-calendar'
 import { appV2BindingSchema, appV2ConditionSchema, appV2IdSchema as id, type AppV2Binding, type AppV2Condition } from './values'
 
 export const appV2AudienceSchema = z.discriminatedUnion('kind', [
@@ -83,6 +84,7 @@ export const appV2BusinessOperationSchema = z.enum([
 export type AppV2BusinessOperation = z.infer<typeof appV2BusinessOperationSchema>
 /** Normalized tree: ordered child identifiers keep the shape finite even for invalid input. */
 export const appV2NodeSchema = z.discriminatedUnion('type', [
+  z.strictObject({ ...base, type: z.literal('team_calendar'), ...appV2TeamCalendarShape }),
   z.strictObject({ ...base, type: z.literal('heading'), value: appV2BindingSchema, size: z.enum(['s', 'm', 'l']).default('m') }),
   z.strictObject({ ...base, type: z.literal('text'), value: appV2BindingSchema }),
   z.strictObject({ ...base, type: z.literal('image'), value: appV2BindingSchema, alt: z.string().max(200) }),
@@ -90,14 +92,15 @@ export const appV2NodeSchema = z.discriminatedUnion('type', [
   z.strictObject({ ...base, type: z.literal('gallery'), value: appV2BindingSchema, caption: z.string().max(200), columns: z.number().int().min(2).max(4) }),
   z.strictObject({ ...base, type: z.literal('files'), value: appV2BindingSchema, caption: z.string().max(200) }),
   z.strictObject({ ...base, type: z.literal('field'), value: appV2BindingSchema, label: z.string().max(120) }),
+  z.strictObject({ ...base, type: z.literal('profile'), title: appV2BindingSchema, subtitle: appV2BindingSchema.nullable(), image: appV2BindingSchema.nullable(), contacts: z.array(z.strictObject({ label: z.string().max(80), kind: z.enum(['phone', 'email', 'text']), value: appV2BindingSchema })).max(8), childIds: z.array(id).max(100) }),
   z.strictObject({ ...base, type: z.literal('button'), label: z.string().min(1).max(100), variant: z.enum(['primary', 'secondary', 'danger']).default('primary'), events: z.strictObject({ press: id.nullable() }) }),
   z.strictObject({ ...base, type: z.literal('business'), target: z.strictObject({ appId: id, operation: appV2BusinessOperationSchema }).nullable() }),
   z.strictObject({ ...base, type: z.literal('divider') }),
   z.strictObject({ ...base, type: z.literal('group'), appearance: z.enum(['plain', 'card']).default('plain'), childIds: z.array(id).max(500) }),
   z.strictObject({ ...base, type: z.literal('columns'), columns: z.number().int().min(1).max(4), childIds: z.array(id).max(500) }),
-  z.strictObject({ ...base, type: z.literal('collection'), sourceId: id, layout: z.enum(['list', 'cards', 'tiles', 'catalog', 'table', 'calendar', 'kanban', 'timeline']), listGroupFieldId: id.optional(), recordGroup: z.strictObject({ fieldId: id, amountFieldId: id.optional() }).optional(), dateFieldId:id.optional(),groupFieldId:id.optional(),kanbanMoveRoleIds:z.array(id).min(1).max(100).optional(), titleFieldId: id, subtitleFieldId: id.nullable(), cardImageFieldId: id.optional(), cardDetailFieldId: id.optional(), itemIds: z.array(id).max(100), events: z.strictObject({ itemPress: id.nullable() }) }),
+  z.strictObject({ ...base, type: z.literal('collection'), sourceId: id, layout: z.enum(['list', 'cards', 'tiles', 'catalog', 'table', 'calendar', 'kanban', 'timeline', 'history']), listGroupFieldId: id.optional(), recordGroup: z.strictObject({ fieldId: id, amountFieldId: id.optional() }).optional(), dateFieldId:id.optional(),groupFieldId:id.optional(),statusFieldId:id.optional(),historyNoteFieldId:id.optional(),kanbanMoveRoleIds:z.array(id).min(1).max(100).optional(), titleFieldId: id, subtitleFieldId: id.nullable(), cardImageFieldId: id.optional(), cardDetailFieldId: id.optional(), itemIds: z.array(id).max(100), events: z.strictObject({ itemPress: id.nullable() }) }),
   z.strictObject({ ...base, type: z.literal('chart'), sourceId:id, chartType:z.enum(['bar','line','donut']), groupFieldId:id, operation:z.enum(['count','sum','avg']), fieldId:id.nullable(), dateGrouping:z.enum(['day','month']), limit:z.number().int().min(3).max(24) }),
-  z.strictObject({ ...base, type: z.literal('metric'), sourceId: id, operation: z.enum(['count', 'sum', 'avg', 'min', 'max']), fieldId: id.nullable() }),
+  z.strictObject({ ...base, type: z.literal('metric'), sourceId: id, operation: z.enum(['count', 'sum', 'avg', 'min', 'max']), fieldId: id.nullable(), format: z.enum(['number', 'currency']).optional() }),
   z.strictObject({ ...base, type: z.literal('form'), tableId: id, mode: z.enum(['create', 'edit']), childIds: z.array(id).max(500), events: z.strictObject({ submit: id.nullable() }), submitLabel: z.string().min(1).max(100).optional() }),
   z.strictObject({ ...base, type: z.literal('input'), fieldId: id, label: z.string().max(120), required: z.boolean(), initialValue: appV2BindingSchema.nullable(), readOnly: z.boolean().optional() }),
 ])
@@ -122,10 +125,27 @@ export const appV2Schema = z.strictObject({
   workflows: z.array(flow).max(100),
   /** Presentation never grants data access. Missing grants always deny. */
   policy: z.strictObject({ tables: z.array(z.strictObject({ tableId: id, grants: z.array(grant).max(100) })).max(200), workflows: z.array(z.strictObject({ workflowId: id, audience: appV2AudienceSchema })).max(200) }),
+  /** Native booking starter shares the existing atomic booking rules and editable v2 nodes. */
+  booking: bookingConfigSchema.extend({
+    catalogScreenId: id, serviceScreenId: id, mastersScreenId: id, masterScreenId: id,
+    visitScreenId: id, clientScreenId: id, createFormId: id, rescheduleFormId: id, statusFormId: id,
+    servicePhotoFieldId: id, serviceDescriptionFieldId: id,
+    masterPhotoFieldId: id.optional(), masterDescriptionFieldId: id.optional(),
+    cancelButtonId: id,
+    periodScreenId: id.optional(),
+    ownerCreateFormId: id.optional(),
+    customersScreenId: id.optional(), customerScreenId: id.optional(), customerCreateFormId: id.optional(), customerEditFormId: id.optional(),
+  }).optional(),
   /** Explicit shop bindings. Absent for every app that is not the installed catalogue. */
   shop: z.strictObject({
     catalogTableId: id, catalogViewId: id, catalogScreenId: id, detailScreenId: id, basketScreenId: id, ordersScreenId: id, orderScreenId: id, checkoutFormId: id,
     activeFieldId: id, productTitleFieldId: id, priceFieldId: id, imageFieldId: id.optional(), descriptionFieldId: id.optional(),
+    /** Warehouse stock qty shown on the storefront; absent on older installs. */
+    stockFieldId: id.optional(),
+    /** Show the remaining quantity when stock is strictly below this threshold. */
+    lowStockThreshold: z.number().int().min(1).max(1000000).optional(),
+    /** Category for catalog tabs; absent on older installs that discover by field name. */
+    categoryFieldId: id.optional(),
     ordersTableId: id, itemsTableId: id, emailFieldId: id, statusFieldId: id, assignmentFieldId: id,
     initialStatus: z.string().min(1).max(80), cancelStatus: z.string().min(1).max(80),
     cancellableStatuses: z.array(z.string().min(1).max(80)).min(1).max(20), terminalStatuses: z.array(z.string().min(1).max(80)).max(20),
@@ -142,6 +162,8 @@ export const appV2Schema = z.strictObject({
     createDealFormId: id, createClientFormId: id, contactFormId: id,
     /** Compact stage/due/sum editor; absent on older drafts that only had the journal form. */
     dealEditFormId: id.optional(),
+    /** Pencil editor on the client card; absent on older drafts. */
+    clientEditFormId: id.optional(),
     titleFieldId: id, stageFieldId: id, dueFieldId: id, noteFieldId: id, sumFieldId: id,
     clientRelationFieldId: id, assignmentFieldId: id, clientNameFieldId: id,
     clientTitleFieldId: id, clientPhoneFieldId: id, clientEmailFieldId: id, clientNoteFieldId: id,

@@ -1,7 +1,7 @@
 import { calendarDay, dateInstant, instantToWallClock, type BookingConfig } from '@tableapp/schema'
 
 export type BookingRow = { id: string; data: Record<string, unknown> }
-export type BookingData = { services: BookingRow[]; masters: BookingRow[]; schedule: BookingRow[]; visits: BookingRow[]; timeZone: string }
+export type BookingData = { services: BookingRow[]; masters: BookingRow[]; schedule: BookingRow[]; visits: BookingRow[]; clients?: BookingRow[]; timeZone: string }
 export type BookingSlot = { start: string; time: string; masterId: string; masterName: string }
 export function oneRelation(value: unknown): string | null {
   return Array.isArray(value) && value.length === 1 && typeof value[0] === 'string' ? value[0] : null

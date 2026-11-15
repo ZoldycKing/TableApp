@@ -19,10 +19,16 @@ export function asSalesStarter(definition: TemplateDef): TemplateDef {
     [...new Set(SHOP_SAMPLE_PRODUCTS.map(product => product.category))].map(name => ({ name, color: 'blue' }))
   goods.rows = SHOP_SAMPLE_PRODUCTS.map(product => ({ key: product.code, values: {
     name: product.name, descr: product.description, price: product.price, category: product.category,
-    unit: 'шт.', available: true, lead: 'Со склада',
+    unit: 'шт.',
+    available: product.stock > 0,
+    stock: product.stock,
+    size: product.size,
+    color: product.color,
+    material: product.material,
+    lead: product.stock > 0 ? 'Со склада · самовывоз или доставка' : 'Под заказ',
   } }))
   goods.fields.find(field => field.key === 'available')!.name = 'Доступен для заказа'
-  goods.fields.find(field => field.key === 'available')!.help = 'Отметьте позиции, которые можно заказать. Это доступность в каталоге, а не складской остаток.'
+  goods.fields.find(field => field.key === 'available')!.help = 'Снимается автоматически при нулевом остатке. На витрине остаток берётся из поля «Остаток».'
   goods.views = goods.views.map(view => view.name === 'В наличии' ? { ...view, name: 'Доступные' } : view)
   template.tables = template.tables.map(table => table.key === 'goods' ? goods : table)
   const orderTable = template.tables.find(table => table.key === 'orders')!
@@ -62,8 +68,8 @@ export function asSalesStarter(definition: TemplateDef): TemplateDef {
     'Склад и доставку можно подключить к приложению; перенос отдельного действующего склада требует проверки товаров и истории',
   ]
   template.customer!.catalog = {
-    ...template.customer!.catalog!, view: 'Доступные',
-    fields: ['name', 'photo', 'descr', 'price', 'unit', 'category', 'lead'],
+    ...template.customer!.catalog!, view: 'Весь каталог',
+    fields: ['name', 'photo', 'descr', 'price', 'unit', 'category', 'stock', 'size', 'color', 'material', 'lead'],
   }
   return template
 }

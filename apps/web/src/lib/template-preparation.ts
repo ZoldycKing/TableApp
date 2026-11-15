@@ -14,7 +14,8 @@ export async function templatePreparation(workspaceId: string, appId: string, co
   const read = readAppDefinition(record?.draft)
   const shop = read.ok && read.formatVersion === 2 ? read.app.shop : null
   const crm = read.ok && read.formatVersion === 2 ? read.app.crm : null
-  if (!parsed.success && !shop && !crm) return null
+  const booking = read.ok && read.formatVersion === 2 ? read.app.booking : null
+  if (!parsed.success && !shop && !crm && !booking) return null
   const relationFields = await connection.select({ id: fields.id, tableId: fields.tableId, options: fields.options }).from(fields)
     .innerJoin(tables, eq(tables.id, fields.tableId)).where(and(eq(tables.workspaceId, workspaceId), eq(fields.type, 'relation')))
   const allRelations = relationFields.flatMap(field => {
@@ -32,7 +33,9 @@ export async function templatePreparation(workspaceId: string, appId: string, co
     ? [shop.catalogTableId, shop.ordersTableId, shop.itemsTableId]
     : crm
       ? [crm.dealsTableId, crm.clientsTableId, ...(crm.contactsTableId ? [crm.contactsTableId] : [])]
-      : legacyIds
+      : booking
+        ? [...Object.values(booking.tables), ...(booking.clients?.tableId ? [booking.clients.tableId] : [])]
+        : legacyIds
   if (!ids?.length) return null
   const own = await connection.select({ id: tables.id }).from(tables).where(and(eq(tables.workspaceId, workspaceId), inArray(tables.id, ids)))
   if (own.length !== ids.length) return null

@@ -10,6 +10,7 @@ import {PublishedV2Context,type PublishedV2Transport} from './published-context'
 import {AppV2Renderer} from './view'
 import {BuilderV2AppFrame,BuilderV2Theme,BuilderV2Account} from './app-frame'
 import {BuilderV2WorkflowNotice} from './workflow-feedback'
+import { listShellScreen } from './list-shell'
 import ui from './view.module.css'
 import { builderV2InventoryPurchaseSection, builderV2RecordParent } from './collection-navigation'
 import { BuilderV2OrderWorkbench } from './order-workbench'
@@ -48,10 +49,11 @@ export function PublishedV2Runtime({data}:{data:Data}){
     ? inventory.suppliersScreenId
     : sectionId ?? home
   const showBack = Boolean(backTarget && (page.contextTableId || suppliersHub || supplierCard || reorderHub))
-  // Full product name lives under the photo; keep the chrome title short so stock stays in view.
-  const frameTitle = app.inventory && screenId === app.inventory.itemScreenId ? 'Товар'
-    : app.inventory && screenId === app.inventory.purchaseScreenId ? 'Заказ'
-      : title
+  const shellList = !recordId && listShellScreen(app, screenId)
+  const shopCatalog = Boolean(app.shop && screenId === app.shop.catalogScreenId)
+  const shopBasket = Boolean(app.shop && screenId === app.shop.basketScreenId)
+  // Mockup: chrome is logo + pills + user only. List/detail H1s live in page content.
+  const frameTitle = shellList || shopCatalog || shopBasket || page.contextTableId || suppliersHub || supplierCard || reorderHub ? '' : title
   return <PublishedV2Context.Provider value={transport}>
     <BuilderV2Theme as="main" app={app} className={`${ui.preview} ${ui.published}`}>
       <BuilderV2AppFrame

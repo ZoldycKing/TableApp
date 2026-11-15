@@ -49,8 +49,8 @@ export function buildShopV2App(built: BuiltTemplate, meta: { id: string; workspa
     if (!match) throw new Error(`В магазине нет статуса «${name}»`)
     return match.id
   }
-  const catalogViewId = views[goods]?.['Доступные'] ?? views[goods]?.['В наличии']
-  if (!catalogViewId) throw new Error('У каталога нет представления доступных товаров')
+  const catalogViewId = views[goods]?.['Весь каталог'] ?? views[goods]?.['Доступные'] ?? views[goods]?.['В наличии']
+  if (!catalogViewId) throw new Error('У каталога нет представления витрины')
 
   const catalogTableId = built.fields.find(item => item.id === field(goods, 'name'))!.tableId
   const ordersTableId = customer.tableId
@@ -70,9 +70,10 @@ export function buildShopV2App(built: BuiltTemplate, meta: { id: string; workspa
   const placeStep = newId('action')
   const formValue = (fieldId: string): AppV2Binding => ({ kind: 'form', formId: checkoutFormId, fieldId })
   const checkoutFields = ['requestName', 'requestPhone', 'address', 'note', 'cart', 'submissionId'].map(key => field(orders, key))
-  const detailFields = ['unit', 'category', 'lead', 'available'].flatMap(key => ids[goods]?.[key] ? [field(goods, key)] : [])
+  const detailFields = ['category', 'size', 'color', 'material', 'lead'].flatMap(key => ids[goods]?.[key] ? [field(goods, key)] : [])
   const orderFields = ['requestName', 'requestPhone', 'status', 'total', 'date', 'address', 'note', 'positions', 'clientSummary'].map(key => field(orders, key))
-  const publicGoods = ['name', 'photo', 'descr', 'price', 'unit', 'category', 'lead', 'available'].map(key => field(goods, key))
+  const publicGoods = ['name', 'photo', 'descr', 'price', 'unit', 'category', 'stock', 'size', 'color', 'material', 'lead', 'available']
+    .flatMap(key => ids[goods]?.[key] ? [field(goods, key)] : [])
   const clientOrderRead = ['title', 'status', 'positions', 'total', 'count', 'date', 'address', 'note', 'clientSummary', 'requestDate', 'requestName', 'requestPhone'].map(key => field(orders, key))
   const itemRead = ['name', 'qty', 'price', 'cost', 'product'].map(key => field(items, key))
   const hiddenOrder = new Set([field(orders, 'cart'), field(orders, 'submissionId')])
@@ -93,6 +94,9 @@ export function buildShopV2App(built: BuiltTemplate, meta: { id: string; workspa
     catalogTableId, catalogViewId, catalogScreenId, detailScreenId, basketScreenId, ordersScreenId, orderScreenId, checkoutFormId,
     activeFieldId: field(goods, 'available'), productTitleFieldId: field(goods, 'name'), priceFieldId: field(goods, 'price'),
     imageFieldId: ids[goods]?.photo ? field(goods, 'photo') : undefined, descriptionFieldId: ids[goods]?.descr ? field(goods, 'descr') : undefined,
+    stockFieldId: ids[goods]?.stock ? field(goods, 'stock') : undefined,
+    lowStockThreshold: 5,
+    categoryFieldId: ids[goods]?.category ? field(goods, 'category') : undefined,
     ordersTableId, itemsTableId, emailFieldId: email, statusFieldId: status, assignmentFieldId: field(orders, 'assignedEmail'),
     initialStatus, cancelStatus, cancellableStatuses, terminalStatuses,
     submissionFieldId: field(orders, 'submissionId'), createdFieldId: field(orders, 'requestDate'), cartFieldId: field(orders, 'cart'),
@@ -102,13 +106,13 @@ export function buildShopV2App(built: BuiltTemplate, meta: { id: string; workspa
   }
   const app: AppV2 = {
     formatVersion: 2, id: meta.id, workspaceId: meta.workspaceId, name: meta.name, slug: meta.slug, purpose: 'business',
-    appearance: { navigation: 'bottom', icon: 'box', density: 'regular', corners: 'rounded' },
+    appearance: { navigation: 'tabs', icon: 'box', density: 'regular', corners: 'rounded' },
     theme: { accent: 'green', scheme: 'light', logoKey: null, iconKey: null },
     roles: [{ id: 'owner', name: 'Владелец' }, { id: 'staff', name: 'Сотрудник' }, { id: 'client', name: 'Клиент' }],
     authentication: { mode: 'verified_email', defaultRoleId: 'client', members: [{ email: meta.email.trim().toLowerCase(), roleIds: ['owner'], company: '' }] },
     homeScreenId: catalogScreenId,
     screens: [
-      { id: catalogScreenId, name: 'Каталог', icon: 'box', navigation: true, audience: { kind: 'public' }, contextTableId: null, rootIds: [catalogNode], events: { enter: null } },
+      { id: catalogScreenId, name: 'Каталог', menuLabel: 'Каталог', icon: 'box', navigation: true, audience: { kind: 'public' }, contextTableId: null, rootIds: [catalogNode], events: { enter: null } },
       { id: detailScreenId, name: 'Товар', icon: 'tag', navigation: false, audience: { kind: 'public' }, contextTableId: catalogTableId, recordTitleFieldId: shop.productTitleFieldId, catalog: { titleFieldId: shop.productTitleFieldId, ...(shop.imageFieldId ? { imageFieldId: shop.imageFieldId } : {}), priceFieldId: shop.priceFieldId, ...(shop.descriptionFieldId ? { descriptionFieldId: shop.descriptionFieldId } : {}) }, rootIds: detailFields.map(fieldId => `detail_${fieldId}`), events: { enter: null } },
       { id: basketScreenId, name: 'Корзина', icon: 'clipboard', navigation: true, audience: { kind: 'public' }, contextTableId: null, rootIds: [intro, checkoutFormId], events: { enter: null } },
       { id: ordersScreenId, name: 'Заказы', menuLabel: 'Заказы', icon: 'receipt', navigation: true, audience: shoppers, contextTableId: null, rootIds: [ordersNode], events: { enter: null } },
@@ -117,10 +121,10 @@ export function buildShopV2App(built: BuiltTemplate, meta: { id: string; workspa
     nodes: [
       { id: catalogNode, name: 'Каталог товаров', type: 'collection', visibleTo: null, visibleWhen: null, sourceId: catalogSource, layout: 'catalog', titleFieldId: shop.productTitleFieldId, subtitleFieldId: null, ...(shop.imageFieldId ? { cardImageFieldId: shop.imageFieldId } : {}), cardDetailFieldId: shop.priceFieldId, itemIds: [], events: { itemPress: openProduct } },
       ...detailFields.map(fieldId => node(`detail_${fieldId}`, columns(catalogTableId).find(item => item.id === fieldId)!.name, fieldId)),
-      { id: intro, name: 'Пояснение', type: 'text', visibleTo: null, visibleWhen: null, value: { kind: 'literal', value: 'Проверьте состав и контакты. После оформления с вами свяжутся, чтобы подтвердить заказ и согласовать получение. Оплаты онлайн нет.' } },
+      { id: intro, name: 'Пояснение', type: 'text', visibleTo: null, visibleWhen: null, value: { kind: 'literal', value: 'После оформления мы свяжемся, чтобы подтвердить заказ. Оплата при получении.' } },
       { id: checkoutFormId, name: 'Оформление заказа', type: 'form', visibleTo: buyers, visibleWhen: null, tableId: ordersTableId, mode: 'create', childIds: checkoutInputs.map(item => item.id), events: { submit: placeOrder }, submitLabel: 'Оформить заказ' },
       ...checkoutInputs,
-      { id: ordersNode, name: 'Заказы', type: 'collection', visibleTo: null, visibleWhen: null, sourceId: ordersSource, layout: 'list', titleFieldId: shop.orderTitleFieldId, subtitleFieldId: status, itemIds: [], events: { itemPress: openOrder } },
+      { id: ordersNode, name: 'Заказы', type: 'collection', visibleTo: null, visibleWhen: null, sourceId: ordersSource, layout: 'list', titleFieldId: shop.orderTitleFieldId, subtitleFieldId: status, dateFieldId: shop.createdFieldId, cardDetailFieldId: field(orders, 'total'), itemIds: [], events: { itemPress: openOrder } },
       ...orderFields.map(fieldId => node(`order_${fieldId}`, columns(ordersTableId).find(item => item.id === fieldId)!.name, fieldId)),
       { id: cancelButton, name: 'Отменить заказ', type: 'button', label: 'Отменить заказ', variant: 'danger', visibleTo: { ...roles, roleIds: ['client'] }, visibleWhen: null, events: { press: cancelOrder } },
       { id: statusFormId, name: 'Статус заказа', type: 'form', visibleTo: team, visibleWhen: null, tableId: ordersTableId, mode: 'edit', childIds: statusInputs.map(item => item.id), events: { submit: saveStatus }, submitLabel: 'Сохранить изменения' },

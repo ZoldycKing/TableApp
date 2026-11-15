@@ -167,6 +167,21 @@ export async function readPublishedV2Record(slug:string,request:{screenId:string
 }
 
 /** Load related table rows by id for a published actor, honoring row/field grants. */
+/** Storefront related products — resolves catalog collection server-side (client detail payloads omit foreign screen nodes). */
+export async function readPublishedV2ShopCatalog(slug:string,request:{revision:string}):Promise<BuilderV2DataPage>{
+  const resolved=await withPublishedV2Read(async tx=>{
+    const {app,actor,revision}=await publishedV2Context(slug,tx)
+    if(revision!==request.revision)throw new RowWriteError('conflict','Приложение обновлено. Обновите страницу.')
+    const shop=app.shop
+    if(!shop||!canOpenAppV2Screen(app,actor,shop.catalogScreenId))throw new RowWriteError('denied','Каталог недоступен')
+    const node=app.nodes.find(item=>item.type==='collection'&&item.layout==='catalog'
+      &&app.sources.some(source=>source.id===item.sourceId&&source.tableId===shop.catalogTableId&&!source.screenTableId))
+    if(!node)throw new RowWriteError('missing','Каталог не найден')
+    return {nodeId:node.id,screenId:shop.catalogScreenId}
+  })
+  return readPublishedV2Data(slug,{revision:request.revision,nodeId:resolved.nodeId,screenId:resolved.screenId})
+}
+
 export async function readPublishedV2RelatedRows(slug:string,request:{revision:string;tableId:string;recordIds:readonly string[]}){
   return withPublishedV2Read(async tx=>{
     const {app,actor,revision}=await publishedV2Context(slug,tx)
@@ -242,6 +257,88 @@ export async function readPublishedV2LowStockCount(slug:string,request:{revision
       if(Number.isFinite(stock)&&Number.isFinite(min)&&stock<min)count+=1
     }
     return {count}
+  })
+}
+
+/** Sum of open purchase orders for the items list metric (purchases nodes are not shipped on that screen). */
+export async function readPublishedV2OpenPurchaseTotal(slug:string,request:{revision:string}){
+  return withPublishedV2Read(async tx=>{
+    const {app,actor,revision}=await publishedV2Context(slug,tx)
+    if(revision!==request.revision)throw new RowWriteError('conflict','Приложение обновлено. Обновите страницу.')
+    const inventory=app.inventory
+    if(!inventory?.itemsScreenId||!inventory.purchaseOrdersTableId||!inventory.statusOrdered||!inventory.purchaseStatusFieldId
+      ||!canOpenAppV2Screen(app,actor,inventory.itemsScreenId)){
+      throw new RowWriteError('denied','Товары недоступны')
+    }
+    if(!actor.roleIds.includes('owner')&&!actor.roleIds.includes('staff'))throw new RowWriteError('denied','Товары недоступны')
+    const stored=await tx.select().from(rows).where(and(
+      eq(rows.tableId,inventory.purchaseOrdersTableId),
+      isNull(rows.deletedAt),
+      publishedV2ReadSql(app,actor,inventory.purchaseOrdersTableId),
+    ))
+    let total=0
+    for(const row of stored){
+      const data=row.data as Record<string,unknown>
+      if(String(data[inventory.purchaseStatusFieldId]??'')!==inventory.statusOrdered)continue
+      const amount=inventory.purchaseTotalFieldId?Number(data[inventory.purchaseTotalFieldId]):NaN
+      if(Number.isFinite(amount))total+=amount
+    }
+    return {total}
+  })
+}
+
+/** Per-client open-deal counts for the CRM clients list shell (board nodes are not shipped on that screen). */
+export async function readPublishedV2ClientDealStats(slug:string,request:{revision:string}){
+  return withPublishedV2Read(async tx=>{
+    const {app,actor,revision}=await publishedV2Context(slug,tx)
+    if(revision!==request.revision)throw new RowWriteError('conflict','Приложение обновлено. Обновите страницу.')
+    const crm=app.crm
+    if(!crm?.clientsScreenId||!crm.dealsTableId||!canOpenAppV2Screen(app,actor,crm.clientsScreenId)){
+      throw new RowWriteError('denied','Клиенты недоступны')
+    }
+    if(!actor.roleIds.includes('owner')&&!actor.roleIds.includes('staff'))throw new RowWriteError('denied','Клиенты недоступны')
+    const stored=await tx.select().from(rows).where(and(
+      eq(rows.tableId,crm.dealsTableId),
+      isNull(rows.deletedAt),
+      publishedV2ReadSql(app,actor,crm.dealsTableId),
+    ))
+    const terminal=new Set(crm.terminalStages??[])
+    const stats:Record<string,{deals:number;sum:number;lastContact:string}>={}
+    let openDeals=0
+    let pipeline=0
+    let dueToday=0
+    let dueOverdue=0
+    const startOfToday=(()=>{const d=new Date();d.setHours(0,0,0,0);return d.getTime()})()
+    const endOfToday=startOfToday+86_400_000-1
+    for(const row of stored){
+      const data=row.data as Record<string,unknown>
+      const clientRaw=data[crm.clientRelationFieldId]
+      const clientId=typeof clientRaw==='string'?clientRaw
+        :Array.isArray(clientRaw)?clientRaw.find((id):id is string=>typeof id==='string'):undefined
+      if(!clientId)continue
+      const stage=String(data[crm.stageFieldId]??'')
+      const open=!terminal.has(stage)
+      const sumRaw=Number(data[crm.sumFieldId])
+      const sum=Number.isFinite(sumRaw)?sumRaw:0
+      const due=String(data[crm.dueFieldId]??'')
+      const current=stats[clientId]??{deals:0,sum:0,lastContact:''}
+      current.deals+=1
+      if(open){
+        current.sum+=sum
+        openDeals+=1
+        pipeline+=sum
+        if(due){
+          const dueMs=Date.parse(due)
+          if(Number.isFinite(dueMs)){
+            if(dueMs<startOfToday)dueOverdue+=1
+            else if(dueMs<=endOfToday)dueToday+=1
+          }
+        }
+      }
+      if(due&&(!current.lastContact||due>current.lastContact))current.lastContact=due
+      stats[clientId]=current
+    }
+    return {stats,openDeals,pipeline,dueToday,dueOverdue}
   })
 }
 

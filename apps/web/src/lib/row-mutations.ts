@@ -138,7 +138,7 @@ export async function createRow(context: RowTransaction, tableId: string, data: 
   const intakeError = await moduleIntakeError(context, tableId)
   if (intakeError) throw new RowWriteError('denied', intakeError)
   let clean = await initialValues(context, fields, parsePatch(fields, data), true)
-  const booking = await prepareBookingWrite(context.tx, context.workspaceId, tableId, clean)
+  const booking = await prepareBookingWrite(context.tx, context.workspaceId, tableId, clean, undefined, id, { context, actor, origin: options.origin })
   if (booking.error) throw new RowWriteError('invalid', booking.error)
   clean = booking.data
   clean = await prepareCustomerWrite(context, tableId, clean, null, actor, id)

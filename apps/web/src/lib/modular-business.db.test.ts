@@ -15,6 +15,9 @@ const state = vi.hoisted(() => ({ member: null as import('./session').Member | n
 vi.mock('@/lib/session', async original => ({ ...await original<typeof import('./session')>(), currentMember: async () => state.member }))
 vi.mock('next/headers', () => ({ cookies: async () => ({ get: () => state.cookie ? { value: state.cookie } : undefined }) }))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
+// This suite exercises compatibility of already-installed V1 modules. New native booking
+// installation and V2 permissions are covered in booking-v2 / template-preparation tests.
+vi.mock('@/lib/templates/booking-v2', async original => ({ ...await original<typeof import('./templates/booking-v2')>(), isBookingTemplate: () => false }))
 vi.mock('@/lib/app-references', async original => {
   const actual = await original<typeof import('./app-references')>()
   return { ...actual, checkAppReferences: (app: App, catalog: import('./app-references').AppReferenceCatalog) => state.fail && app.modules?.length === 2 ? 'Synthetic failure after resource creation' : actual.checkAppReferences(app, catalog) }

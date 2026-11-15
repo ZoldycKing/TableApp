@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import type { AppV2, AppV2Record } from '@tableapp/schema/app-v2'
 import { builderV2CatalogPrice, builderV2FormattedAmount } from '@/lib/builder-v2-catalog'
 import { builderV2OrderFactKind, builderV2OrderLineProductId, builderV2StatusProgress } from '@/lib/builder-v2-order-detail'
+import type { BuilderV2MessengerLink } from '@/lib/builder-v2-messengers'
 import type { BuilderV2DataRecord } from '@/lib/builder-v2-data-types'
 import type { BuilderV2Table } from '@/lib/builder-v2'
 import { ProtoIcon } from '../prototype/icons'
@@ -13,6 +14,8 @@ import styles from '../prototype/prototype.module.css'
 import { builderV2MediaItems } from './media-values'
 import { builderV2StatusTone } from './record-presentation'
 import { usePublishedV2 } from './published-context'
+import { DetailCardShell, type ShellMetric } from './layout-shell'
+import { ruPrepText } from './ru-prep-text'
 import ui from './view.module.css'
 
 export type BuilderV2OrderActionMode = 'persistent' | 'reveal'
@@ -130,19 +133,68 @@ export function BuilderV2OrderIdentity({
   </section>
 }
 
+function MessengerChip({ link }: { link: BuilderV2MessengerLink }) {
+  const [copied, setCopied] = useState(false)
+  const onCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(link.value)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1200)
+    } catch {
+      setCopied(false)
+    }
+  }
+  const label = copied ? 'Скопировано' : link.label
+  const mark = <span className={ui.messengerMark} aria-hidden><MessengerBrandIcon kind={link.kind} /></span>
+  if (link.href && !link.copyOnly) {
+    return <a className={ui.messengerChip} data-kind={link.kind} href={link.href} target="_blank" rel="noopener noreferrer" title={link.value}>
+      {mark}
+      <span>{label}</span>
+    </a>
+  }
+  return <button type="button" className={ui.messengerChip} data-kind={link.kind} onClick={() => void onCopy()} title={link.value}>
+    {mark}
+    <span>{label}</span>
+  </button>
+}
+
+function MessengerBrandIcon({ kind }: { kind: BuilderV2MessengerLink['kind'] }) {
+  if (kind === 'telegram') {
+    return <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M21.5 3.3 2.9 10.6c-1.3.5-1.3 1.2-.2 1.5l4.7 1.5 1.8 5.5c.2.7.1.9.8.9.5 0 .7-.2 1-.6l2.5-3.3 5.2 3.8c1 .5 1.6.2 1.9-.9L22.9 4.6c.3-1.2-.4-1.7-1.4-1.3Zm-3 3.2-9.3 8.4-.4 3.2-1.7-5.4 11.4-6.2Z" />
+    </svg>
+  }
+  if (kind === 'whatsapp') {
+    return <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M12 2a9.9 9.9 0 0 0-8.5 14.9L2 22l5.3-1.4A9.9 9.9 0 1 0 12 2Zm0 18a8.1 8.1 0 0 1-4.1-1.1l-.3-.2-3.1.8.8-3-.2-.3A8.1 8.1 0 1 1 12 20Zm4.5-6c-.2-.1-1.4-.7-1.6-.8s-.4-.1-.5.1-.6.8-.7.9-.3.2-.5.1a6.6 6.6 0 0 1-3.2-2.8c-.2-.4.2-.4.6-1.3.1-.1 0-.3 0-.4s-.5-1.2-.7-1.6-.4-.4-.5-.4h-.5a1 1 0 0 0-.7.3 2.9 2.9 0 0 0-.9 2.2 5 5 0 0 0 1.1 2.7 11.5 11.5 0 0 0 4.4 3.9 5.2 5.2 0 0 0 1.5.5 2.3 2.3 0 0 0 1.7-.7 2.3 2.3 0 0 0 .5-1.4c0-.2-.2-.3-.4-.4Z" />
+    </svg>
+  }
+  if (kind === 'max') {
+    return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M4 7.5 8.5 17 12 9.5 15.5 17 20 7.5" />
+    </svg>
+  }
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d="M21 12a8 8 0 0 1-11.7 7.1L4 20l1.1-4.1A8 8 0 1 1 21 12Z" />
+    <path d="M8.5 12h.01M12 12h.01M15.5 12h.01" />
+  </svg>
+}
+
 export function BuilderV2OrderFacts({
   title = 'Клиент и доставка',
   items,
+  messengers = [],
 }: {
   title?: string
   items: readonly { id: string; label: string; value: ReactNode; blank?: boolean; kind: ReturnType<typeof builderV2OrderFactKind> }[]
+  messengers?: readonly BuilderV2MessengerLink[]
 }) {
   const visible = items.filter(item => !item.blank)
-  if (!visible.length) return null
+  if (!visible.length && !messengers.length) return null
   const contacts = visible.filter(item => item.kind === 'contact')
   const rest = visible.filter(item => item.kind !== 'contact')
   return <section className={`${presentation.panel} ${ui.orderFacts}`} aria-label={title}>
-    <h2 className={presentation.sectionTitle}>{title}</h2>
+    <h2 className={presentation.sectionTitle}>{ruPrepText(title)}</h2>
     {contacts.length > 0 && <div className={ui.orderContactRow}>
       {contacts.map(item => <div key={item.id} className={ui.orderFact} data-kind={item.kind}>
         <small>{item.label}</small>
@@ -155,6 +207,12 @@ export function BuilderV2OrderFacts({
         <strong>{item.value}</strong>
       </div>)}
     </div>}
+    {messengers.length > 0 ? <div className={ui.messengerRow} aria-label="Мессенджеры">
+      <small>Мессенджеры</small>
+      <div className={ui.messengerChips}>
+        {messengers.map(link => <MessengerChip key={link.id} link={link} />)}
+      </div>
+    </div> : null}
   </section>
 }
 
@@ -212,6 +270,7 @@ function BuilderV2OrderActionToolbar({
   placement,
   iconsOnly = false,
   textOnly = false,
+  collapseMobile = false,
 }: {
   items: readonly { id: string; title: string; icon?: string; primary?: boolean }[]
   onOpen: (id: string) => void
@@ -219,17 +278,31 @@ function BuilderV2OrderActionToolbar({
   placement?: 'desktop' | 'mobile'
   iconsOnly?: boolean
   textOnly?: boolean
+  collapseMobile?: boolean
 }) {
+  const collapsed = textOnly && collapseMobile
+  const head = collapsed
+    ? items.filter(item => item.primary || item.title === 'Расход')
+    : []
+  const tail = collapsed ? items.filter(item => !head.includes(item)) : []
   const rendered = iconsOnly
     ? items.filter(item => Boolean(item.icon) && !item.primary)
-    : textOnly
-      ? items.filter(item => !(item.icon && !item.primary))
-      : items
+    : collapsed
+      ? head
+      : textOnly
+        ? items.filter(item => !(item.icon && !item.primary))
+        : items
   const inIdentity = placement === 'desktop' || iconsOnly
   return <div ref={dockRef} className={inIdentity ? ui.orderIdentityActions : ui.orderActionDock} data-mode={!inIdentity && placement === 'mobile' ? 'reveal' : undefined} data-placement={placement} aria-label="Действия">
     {rendered.map(item => item.icon && !item.primary
       ? <button key={item.id} type="button" className={ui.orderActionIcon} aria-label={item.title} title={item.title} onClick={() => onOpen(item.id)}><ProtoIcon name={item.icon} size={20} /></button>
       : <button key={item.id} type="button" data-primary={item.primary || undefined} className={`${item.primary ? styles.primary : styles.secondary} ${ui.orderActionTrigger}`} onClick={() => onOpen(item.id)}>{item.title}</button>)}
+    {collapsed && tail.length ? <details className={ui.orderActionOverflow}>
+      <summary className={ui.orderActionIcon} aria-label="Другие действия" title="Другие действия"><ProtoIcon name="more" size={20} /></summary>
+      <div className={ui.orderActionOverflowMenu} role="menu">
+        {tail.map(item => <button key={item.id} type="button" role="menuitem" className={styles.secondary} onClick={() => onOpen(item.id)}>{item.title}</button>)}
+      </div>
+    </details> : null}
   </div>
 }
 
@@ -239,6 +312,7 @@ export function BuilderV2OrderActionPanel({
   triggers,
   children,
   identity,
+  detailBody,
 }: {
   title?: string
   mode?: BuilderV2OrderActionMode
@@ -254,8 +328,16 @@ export function BuilderV2OrderActionPanel({
     client?: ReactNode
     media?: ReactNode
     productTitle?: string
+    /** CRM deal H1 — routes to DetailCardShell with back + metrics. */
+    dealTitle?: string
     facts?: readonly BuilderV2OrderIdentityFact[]
+    chips?: ReactNode
+    subtitle?: ReactNode
+    metrics?: readonly ShellMetric[]
+    back?: { label: string; onClick: () => void }
   }
+  /** Extra sections under the product shell (warehouse / history / details). */
+  detailBody?: ReactNode
 }) {
   const multi = Boolean(triggers?.length)
   const published = usePublishedV2()
@@ -342,13 +424,81 @@ export function BuilderV2OrderActionPanel({
         </div>
       </aside>
     </OrderActionPanelContext.Provider>, document.body) : null
+    if (identity?.productTitle) {
+      const desktopItems = toolbarItems.filter(item => !(item.icon && !item.primary))
+      const editIcons = toolbarItems.filter(item => Boolean(item.icon) && !item.primary)
+      const mobileItems = toolbarItems.filter(item => !(item.icon && !item.primary))
+      return <>
+        <DetailCardShell
+          layout="product"
+          back={identity.back}
+          media={identity.media}
+          title={identity.productTitle}
+          chips={identity.chips}
+          subtitle={identity.subtitle}
+          metrics={identity.metrics}
+          actions={<>
+            <BuilderV2OrderActionToolbar items={desktopItems} onOpen={open} placement="desktop" textOnly />
+            {editIcons.map(item => (
+              <button key={item.id} type="button" className={ui.orderActionIcon} aria-label={item.title} title={item.title} onClick={() => open(item.id)}>
+                <ProtoIcon name={item.icon!} size={20} />
+              </button>
+            ))}
+          </>}
+          stickyActions={!active
+            ? <BuilderV2OrderActionToolbar
+                items={[
+                  ...mobileItems,
+                  // Keep pencil reachable from the sticky dock (not only the app header).
+                  ...editIcons.map(item => ({ ...item, primary: false as const })),
+                ]}
+                onOpen={open}
+                dockRef={dockRef}
+                placement="mobile"
+                textOnly
+                collapseMobile
+              />
+            : undefined}
+        >
+          {detailBody}
+        </DetailCardShell>
+        {dialog}
+      </>
+    }
+    if (identity?.dealTitle) {
+      const desktopItems = toolbarItems.filter(item => !(item.icon && !item.primary))
+      const editIcons = toolbarItems.filter(item => Boolean(item.icon) && !item.primary)
+      return <>
+        <DetailCardShell
+          back={identity.back}
+          title={identity.dealTitle}
+          subtitle={identity.subtitle}
+          badge={identity.status ? <span className={ui.heroStatus} data-tone={builderV2StatusTone(identity.status)}>{identity.status}</span> : undefined}
+          metrics={identity.metrics}
+          actions={<>
+            {editIcons.map(item => (
+              <button key={item.id} type="button" className={ui.orderActionIcon} aria-label={item.title} title={item.title} onClick={() => open(item.id)}>
+                <ProtoIcon name={item.icon!} size={20} />
+              </button>
+            ))}
+            <BuilderV2OrderActionToolbar items={desktopItems} onOpen={open} placement="desktop" textOnly />
+          </>}
+          stickyActions={!active
+            ? <BuilderV2OrderActionToolbar items={toolbarItems} onOpen={open} dockRef={dockRef} placement="mobile" textOnly collapseMobile />
+            : undefined}
+        >
+          {detailBody}
+        </DetailCardShell>
+        {dialog}
+      </>
+    }
     if (identity) {
       return <>
         <BuilderV2OrderIdentity variant="pipeline" manage status={identity.status} statusLabel={identity.statusLabel} amount={identity.amount} amountLabel={identity.amountLabel ?? ''} amountBadge={identity.amountBadge} due={identity.due} client={identity.client} media={identity.media} productTitle={identity.productTitle} facts={identity.facts}
           actions={<>
             <BuilderV2OrderActionToolbar items={toolbarItems} onOpen={open} placement="desktop" />
           </>} />
-        {!active && <BuilderV2OrderActionToolbar items={toolbarItems} onOpen={open} dockRef={dockRef} placement="mobile" textOnly />}
+        {!active && <BuilderV2OrderActionToolbar items={toolbarItems} onOpen={open} dockRef={dockRef} placement="mobile" textOnly collapseMobile={Boolean(identity?.productTitle)} />}
         {dialog}
       </>
     }

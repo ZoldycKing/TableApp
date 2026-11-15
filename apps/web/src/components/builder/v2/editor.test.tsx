@@ -32,6 +32,24 @@ const mount = (canEdit = true) => render(<AppV2Editor initialApp={appV2Fixture()
 const rename = (name: string) => fireEvent.change(screen.getByLabelText('Название приложения'), { target: { value: name } })
 const tick = () => act(async () => { await vi.advanceTimersByTimeAsync(900) })
 
+it('adds profile and history from the library, changes their settings and saves ordinary editable nodes',async()=>{
+  vi.mocked(saveBuilderV2DraftAction).mockResolvedValue({ok:true,revision:'a'.repeat(64)})
+  const tables=fixtureTables.map(table=>table.id==='requests'?{...table,fields:[...table.fields,{id:'r_date',name:'Дата события',type:'datetime' as const}]}:table)
+  render(<AppV2Editor initialApp={appV2Fixture()} initialRevision={'a'.repeat(64)} tables={tables} actor={fixtureActor} canEdit/>)
+  fireEvent.click(screen.getAllByRole('button',{name:'Добавить элемент'})[0]!)
+  fireEvent.click(within(screen.getByRole('dialog',{name:'Добавить элемент'})).getByRole('button',{name:/^Профиль/}))
+  fireEvent.change(screen.getByLabelText('Текст',{exact:true}),{target:{value:'Наталья'}})
+  await tick()
+  expect(screen.getByRole('heading',{name:'Наталья'})).toBeTruthy()
+  expect(saveBuilderV2DraftAction).toHaveBeenLastCalledWith('app_pilot',expect.objectContaining({nodes:expect.arrayContaining([expect.objectContaining({type:'profile',title:{kind:'literal',value:'Наталья'}})])}),'a'.repeat(64))
+  fireEvent.click(screen.getAllByRole('button',{name:'Добавить элемент'})[0]!)
+  fireEvent.click(within(screen.getByRole('dialog',{name:'Добавить элемент'})).getByRole('button',{name:/^История/}))
+  fireEvent.click(within(screen.getByRole('dialog',{name:'Выберите таблицу'})).getByRole('button',{name:'Добавить элемент'}))
+  expect((screen.getByLabelText('Внешний вид') as HTMLSelectElement).value).toBe('history')
+  await tick()
+  expect(saveBuilderV2DraftAction).toHaveBeenLastCalledWith('app_pilot',expect.objectContaining({nodes:expect.arrayContaining([expect.objectContaining({type:'collection',layout:'history',dateFieldId:'r_date'})])}),'a'.repeat(64))
+})
+
 describe('v2 editor persistence', () => {
   it('confirms access after saving its dialog and opens publication without publishing automatically',async()=>{
     const app=appV2Fixture(),progress:BuilderLearningProgress={version:1,revision:'2026-11-04T00:00:00.000Z',list:'done',record:'done',save:'done',access:'pending',publish:'pending',paused:false,target:builderLearningTarget(app)}

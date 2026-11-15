@@ -1,16 +1,19 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import type { AppV2, AppV2Actor, AppV2Record } from '@tableapp/schema/app-v2'
 import { readBuilderV2RecordAction } from '@/app/builder-v2-data-actions'
 import type { BuilderV2Table } from '@/lib/builder-v2'
 import { builderV2CatalogCell, builderV2CatalogPrice, builderV2FormattedAmount } from '@/lib/builder-v2-catalog'
+import { builderV2ShopCatalogFields, builderV2ShopProductActive, builderV2ShopStockValue } from '@/lib/builder-v2-shop-stock'
 import { addShopBasketItem, changeShopBasketQty, readShopBasket, removeShopBasketItem, subscribeShopBasket, writeShopBasket, type ShopBasket } from '@/lib/shop-basket'
-import presentation from '@/components/runtime/app-presentation.module.css'
 import styles from '../prototype/prototype.module.css'
+import { ProtoIcon } from '../prototype/icons'
 import { builderV2MediaItems } from './media-values'
 import { BuilderV2Picture } from './media'
 import { usePublishedV2 } from './published-context'
+import shell from './layout-shell.module.css'
+import { ShopQtyStepper } from './shop-storefront'
 import ui from './view.module.css'
 
 function useShopBasket(appId: string) {
@@ -36,7 +39,19 @@ export function ShopAddToBasket({ app, productId, actor }: { app: AppV2; product
   </div>
 }
 
-export function ShopBasketPanel({ app, tables, actor, onCheckout }: { app: AppV2; tables: readonly BuilderV2Table[]; actor: AppV2Actor; onCheckout?: () => void }) {
+export function ShopBasketPanel({
+  app,
+  tables,
+  actor,
+  onCheckout,
+  checkout,
+}: {
+  app: AppV2
+  tables: readonly BuilderV2Table[]
+  actor: AppV2Actor
+  onCheckout?: () => void
+  checkout?: ReactNode
+}) {
   const shop = app.shop, published = usePublishedV2()
   const { basket, update } = useShopBasket(app.id)
   const [rows, setRows] = useState<Record<string, AppV2Record | null>>({})
@@ -54,55 +69,71 @@ export function ShopBasketPanel({ app, tables, actor, onCheckout }: { app: AppV2
   }, [app, ids, published, shop, basket.items])
   if (!shop) return null
   const goods = tables.find(table => table.id === shop.catalogTableId)
+  const fields = builderV2ShopCatalogFields(shop, goods)
   const priceField = goods?.fields.find(field => field.id === shop.priceFieldId)
-  let total = 0
   const loading = Boolean(ids) && basket.items.some(item => !(item.id in rows))
-  return <section className={`${presentation.panel} ${ui.shopBasket}`} aria-label="Корзина" aria-busy={loading || undefined}>
-    <h2 className={presentation.sectionTitle}>Корзина</h2>
-    {basket.items.length === 0 ? <p className={ui.hint}>Откройте карточку товара и добавьте его в корзину.</p> : <ul className={ui.shopLineList}>
-      {basket.items.map(item => {
-        const record = rows[item.id] ?? undefined
-        const name = record ? builderV2CatalogCell(record, shop.productTitleFieldId) || 'Товар' : 'Загружаем товар…'
-        const price = record ? Number(record.values[shop.priceFieldId]) : Number.NaN
-        if (Number.isFinite(price)) total += price * item.qty
-        const unit = record && priceField ? builderV2CatalogPrice(record, priceField) : ''
-        const lineTotal = Number.isFinite(price) ? builderV2FormattedAmount(price * item.qty, 'Сумма позиции') : unit
-        const image = shop.imageFieldId && record
-          ? builderV2MediaItems(record.values[shop.imageFieldId], published?.slug).find(entry => entry.image)
-          : undefined
-        return <li key={item.id} className={ui.shopLine}>
-          {image ? <span className={ui.shopLineThumb}><BuilderV2Picture item={image} /></span> : null}
-          <div className={ui.shopLineCopy}>
-            <strong>{name}</strong>
-            {unit && <small>{unit} / шт.</small>}
-            <div className={ui.shopQty}>
-              <div className={ui.shopStepper}>
-                <button type="button" className={ui.shopQtyButton} aria-label={`Уменьшить количество: ${name}`} disabled={item.qty <= 1} onClick={() => update(changeShopBasketQty(basket, item.id, item.qty - 1))}>−</button>
-                <input
-                  className={ui.shopQtyInput}
-                  aria-label={`Количество: ${name}`}
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  autoComplete="off"
-                  value={String(item.qty)}
-                  onChange={event => {
-                    const digits = event.target.value.replace(/\D/g, '')
-                    update(changeShopBasketQty(basket, item.id, digits ? Number(digits) : 1))
-                  }}
-                />
-                <button type="button" className={ui.shopQtyButton} aria-label={`Увеличить количество: ${name}`} disabled={item.qty >= 1000} onClick={() => update(changeShopBasketQty(basket, item.id, item.qty + 1))}>+</button>
+  const count = basket.items.length
+  const meta = count === 0 ? 'Пусто' : count === 1 ? '1 позиция' : count > 1 && count < 5 ? `${count} позиции` : `${count} позиций`
+  let total = 0
+  const lines = basket.items.map(item => {
+    const record = rows[item.id] ?? undefined
+    const name = record ? builderV2CatalogCell(record, shop.productTitleFieldId) || 'Товар' : 'Загружаем товар…'
+    const price = record ? Number(record.values[shop.priceFieldId]) : Number.NaN
+    if (Number.isFinite(price)) total += price * item.qty
+    const unit = Number.isFinite(price) ? builderV2FormattedAmount(price, 'Цена, ₽') : ''
+    const lineTotal = Number.isFinite(price) ? builderV2FormattedAmount(price * item.qty, 'Сумма позиции') : unit
+    const image = shop.imageFieldId && record
+      ? builderV2MediaItems(record.values[shop.imageFieldId], published?.slug).find(entry => entry.image)
+      : undefined
+    const stock = record ? builderV2ShopStockValue(record, fields.stockFieldId) : null
+    const active = record ? builderV2ShopProductActive(record, shop) : true
+    const max = !active ? 0 : stock == null ? 1000 : stock
+    return { item, name, unit, lineTotal, image, max }
+  })
+  return <div className={shell.shell} data-layout="list" data-commerce="basket">
+    <header className={shell.header}>
+      <div className={shell.headerCopy}>
+        <h2 className={shell.headerTitle}>Корзина</h2>
+        <p className={shell.headerMeta}>{meta}</p>
+      </div>
+    </header>
+    <div className={ui.commerceLayout}>
+      <section className={ui.shopBasket} data-shop-basket aria-label="Состав корзины" aria-busy={loading || undefined}>
+        {lines.length === 0 ? <p className={ui.hint}>Откройте каталог и добавьте товар в корзину.</p> : <ul className={ui.shopLineList}>
+          {lines.map(({ item, name, unit, lineTotal, image, max }) => (
+            <li key={item.id} className={ui.shopLine}>
+              <span className={ui.shopLineThumb}>{image ? <BuilderV2Picture item={image} /> : null}</span>
+              <div className={ui.shopLineCopy}>
+                <strong>{name}</strong>
+                {unit ? <small>{unit}</small> : null}
+                <div className={ui.shopQty}>
+                  <ShopQtyStepper
+                    name={name}
+                    qty={item.qty}
+                    max={max || 1}
+                    disabled={max < 1}
+                    onChange={next => update(changeShopBasketQty(basket, item.id, next, max))}
+                  />
+                  <button type="button" className={ui.shopRemove} aria-label={`Удалить: ${name}`} onClick={() => update(removeShopBasketItem(basket, item.id))}>
+                    <ProtoIcon name="trash" size={18} />
+                  </button>
+                </div>
               </div>
-              <button type="button" className={ui.shopRemove} onClick={() => update(removeShopBasketItem(basket, item.id))}>Удалить</button>
-            </div>
-          </div>
-          <span className={ui.shopLineAmount}>{lineTotal || ''}</span>
-        </li>
-      })}
-    </ul>}
-    {basket.items.length > 0 && <p className={ui.orderLinesTotal}><span>Итого</span><strong>{total.toLocaleString('ru-RU')} ₽</strong></p>}
-    <p className={ui.hint}>Цена подтверждается сервером при оформлении. Изменение каталога не меняет уже принятый заказ.</p>
-    {!actor.authenticated && published && <a className={styles.primary} href={`/a/${encodeURIComponent(published.slug)}?login=1`}>Войти и оформить</a>}
-    {actor.authenticated && basket.items.length > 0 && onCheckout && <button type="button" className={styles.secondary} onClick={onCheckout}>Перейти к оформлению</button>}
-  </section>
+              <span className={ui.shopLineAmount}>{lineTotal || ''}</span>
+            </li>
+          ))}
+        </ul>}
+        {!actor.authenticated && published && <a className={styles.primary} href={`/a/${encodeURIComponent(published.slug)}?login=1`}>Войти и оформить</a>}
+        {actor.authenticated && lines.length > 0 && onCheckout
+          ? <button type="button" className={`${styles.secondary} ${ui.shopCheckoutCta}`} onClick={onCheckout}>Перейти к оформлению</button>
+          : null}
+      </section>
+      <div className={ui.commerceCheckout}>
+        {lines.length > 0
+          ? <p className={`${ui.orderLinesTotal} ${ui.shopBasketTotal}`}><span>Итого</span><strong>{builderV2FormattedAmount(total, 'Итого')}</strong></p>
+          : null}
+        {checkout}
+      </div>
+    </div>
+  </div>
 }

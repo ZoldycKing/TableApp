@@ -1,0 +1,1390 @@
+/* Shared Glide-inspired page skeleton tokens. Padding/edges live here, not per-screen. */
+.shell {
+  --shell-max: min(100%, var(--app-content-width, 1480px));
+  --shell-pad-x: clamp(16px, 3cqw, 28px);
+  --shell-pad-y: 16px;
+  --shell-gap: 0;
+  --shell-row: 52px;
+  --shell-line: var(--v2-line, #dce2d6);
+  --shell-muted: var(--v2-muted, #687568);
+  --shell-ink: var(--v2-ink, #253c2d);
+  --shell-surface: var(--v2-surface, #fff);
+  --shell-bg: var(--v2-bg, #f8faf6);
+  display: grid;
+  gap: 14px;
+  width: 100%;
+  max-width: var(--shell-max);
+  margin-inline: auto;
+  min-width: 0;
+}
+
+.header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px 16px;
+  align-items: end;
+  min-width: 0;
+  /* Align H1/meta with the card/panel edge below (same as cart). */
+  padding-inline: 0;
+}
+
+.headerCopy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.headerTitle {
+  margin: 0;
+  color: var(--shell-ink);
+  font-size: clamp(1.25rem, 2.2cqw, 1.55rem);
+  font-weight: 750;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+}
+
+.headerMeta {
+  margin: 0;
+  color: var(--shell-muted);
+  font-size: 13px;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+}
+
+.headerActions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  align-items: center;
+  min-width: 0;
+}
+/* The phone preview is a narrow container inside a wide window, so the viewport query never stacks this row. */
+@container builder-app (max-width: 480px) {
+  .header { grid-template-columns: minmax(0, 1fr); align-items: start; }
+  .headerTitle { overflow-wrap: normal; }
+}
+
+.panel {
+  display: grid;
+  gap: 0;
+  min-width: 0;
+  background: var(--shell-surface);
+  border: 1px solid color-mix(in srgb, var(--shell-line) 88%, transparent);
+  border-radius: 14px;
+  overflow: clip;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--shell-ink) 4%, transparent);
+}
+
+.summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+  min-width: 0;
+  border-bottom: 1px solid var(--shell-line);
+}
+
+.metric {
+  display: grid;
+  gap: 4px;
+  align-content: start;
+  min-width: 0;
+  padding: 14px var(--shell-pad-x);
+  border-right: 1px solid var(--shell-line);
+  border-bottom: 1px solid var(--shell-line);
+}
+
+.metric:nth-child(2n) { border-right: 0; }
+.summary[data-count='3'] .metric:nth-child(3) { border-right: 0; }
+.summary .metric[data-wide] { grid-column: 1 / -1; }
+/* After a full-width metric, a lone leftover must not leave an empty half-cell. */
+.summary .metric[data-wide] + .metric:last-child { grid-column: 1 / -1; }
+/* Mobile CRM/shop: amount full-width, then two compact tiles — no empty half. */
+.summary[data-count='3'] .metric:first-child { grid-column: 1 / -1; }
+.summary[data-count='2'] { grid-template-columns: 1fr 1fr; }
+.summary[data-count='2'] .metric,
+.summary[data-count='2'] .metric[data-wide] { grid-column: auto; }
+.summary[data-count='2'] .metric:nth-child(2n) { border-right: 0; }
+@container builder-app (min-width: 641px) {
+  .summary[data-count='2'],
+  .summary[data-count='3'] { grid-template-columns: repeat(var(--shell-metrics, 3), minmax(0, 1fr)); }
+  .summary[data-count='3'] .metric:first-child { grid-column: auto; }
+  .summary .metric[data-wide],
+  .summary .metric[data-wide] + .metric:last-child { grid-column: auto; }
+  .summary[data-count='2'] .metric:nth-child(2n) { border-right: 0; }
+}
+.summary[data-count='4'] .metric:nth-child(3),
+.summary[data-count='4'] .metric:nth-child(4) { border-bottom: 0; }
+
+.metricValue {
+  margin: 0;
+  color: var(--shell-ink);
+  font-size: clamp(1.2rem, 2.4cqw, 1.55rem);
+  font-weight: 780;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.metricCaption {
+  margin: 0;
+  color: var(--shell-muted);
+  font-size: 12px;
+  line-height: 1.35;
+  font-weight: 650;
+  letter-spacing: 0;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+.metricNote {
+  margin: 0;
+  color: var(--shell-muted);
+  font-size: 12px;
+  line-height: 1.35;
+  font-weight: 550;
+}
+
+.metricPill {
+  display: inline-flex;
+  width: max-content;
+  max-width: 100%;
+  margin-top: 2px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--v2-accent, #456849) 12%, var(--shell-surface));
+  color: var(--v2-accent, #456849);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.metricPill[data-tone='rose'] {
+  background: color-mix(in srgb, #be123c 10%, var(--shell-surface));
+  color: light-dark(#be123c, #ffc5d5);
+}
+
+.metricPill[data-tone='amber'] {
+  background: color-mix(in srgb, #b45309 12%, var(--shell-surface));
+  color: light-dark(#b45309, #fbbf24);
+}
+
+.filters {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px var(--shell-pad-x);
+  border-bottom: 1px solid var(--shell-line);
+  background: color-mix(in srgb, var(--shell-bg) 55%, var(--shell-surface));
+}
+
+.filterTabs {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 28px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 28px), transparent 100%);
+  padding-inline-end: 12px;
+}
+
+.filterTabs::-webkit-scrollbar { display: none; }
+
+.filterTab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--shell-muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.filterTab[data-active] {
+  background: var(--shell-surface);
+  border-color: var(--shell-line);
+  color: var(--shell-ink);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--shell-ink) 5%, transparent);
+}
+
+.filterTab > strong {
+  font-variant-numeric: tabular-nums;
+  font-weight: 750;
+}
+
+.filterTools {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+.filterTools > .filterSearch {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+@media (max-width: 360px) {
+  .filterTools { flex-wrap: wrap; }
+}
+
+/* —— Catalog desktop sidebar (shop only) —— */
+.catalogLayout {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  align-items: start;
+}
+.catalogSidebar { display: none; }
+.catalogMain {
+  display: grid;
+  gap: 0;
+  min-width: 0;
+}
+.catalogResultBar {
+  display: none;
+}
+@media (min-width: 1024px) {
+  .catalogLayout {
+    grid-template-columns: 240px minmax(0, 1fr);
+    gap: 16px;
+  }
+  .catalogSidebar {
+    display: grid;
+    gap: 8px;
+    align-content: start;
+    position: sticky;
+    top: 12px;
+    /* Prefer fitting under nav+H1 without covering options; scroll whole card if needed. */
+    max-height: calc(100dvh - 160px);
+    overflow: auto;
+    padding: 10px;
+    border: 1px solid color-mix(in srgb, var(--shell-line) 88%, transparent);
+    border-radius: 14px;
+    background: var(--shell-surface);
+    box-shadow: 0 1px 0 color-mix(in srgb, var(--shell-ink) 4%, transparent);
+    scrollbar-width: thin;
+  }
+  .catalogSidebarSection { display: grid; gap: 2px; min-width: 0; }
+  .catalogSidebarSection > h3 {
+    margin: 0;
+    color: var(--shell-ink);
+    font-size: 12px;
+    font-weight: 750;
+  }
+  .catalogSidebarBody {
+    display: grid;
+    gap: 8px;
+    min-width: 0;
+  }
+  .catalogSidebar .filterSearch {
+    width: 100%;
+    min-height: 34px;
+  }
+  .catalogSidebar .filterNav { gap: 0; }
+  .catalogSidebar .filterNavItem {
+    min-height: 28px;
+    font-size: 13px;
+    padding-inline: 8px;
+  }
+  .catalogSidebarReset {
+    width: 100%;
+    min-height: 34px;
+    margin-top: 0;
+  }
+  .catalogMain > .filterBar[data-mobile-only] { display: none; }
+  .catalogResultBar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    justify-content: space-between;
+    min-width: 0;
+    padding: 10px var(--shell-pad-x);
+    border-bottom: 1px solid var(--shell-line);
+    background: color-mix(in srgb, var(--shell-bg) 55%, var(--shell-surface));
+  }
+  .catalogResultBar > .filterChips {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .catalogResultBar > .filterSortWrap { margin-left: auto; }
+}
+
+/* —— Shared Glide-style list filters —— */
+.filterBar {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px var(--shell-pad-x);
+  border-bottom: 1px solid var(--shell-line);
+  background: color-mix(in srgb, var(--shell-bg) 55%, var(--shell-surface));
+}
+.filterToolsRow {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+.filterToolsRow > .filterSearch {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.filterTrigger,
+.filterSortButton {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--shell-line);
+  border-radius: 10px;
+  background: var(--shell-surface);
+  color: var(--shell-ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.filterSortButton { padding-inline: 10px; }
+.filterSortLabel {
+  max-width: 7.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@media (max-width: 720px) {
+  .filterSortLabel { display: none; }
+  .filterSortButton { width: 40px; padding: 0; justify-content: center; }
+}
+.filterBadge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--v2-accent, #456849);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+.filterSortWrap { position: relative; flex: 0 0 auto; }
+.filterSortMenu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  display: grid;
+  gap: 2px;
+  min-width: 11rem;
+  padding: 6px;
+  border: 1px solid var(--shell-line);
+  border-radius: 12px;
+  background: var(--shell-surface);
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--shell-ink) 14%, transparent);
+}
+.filterSortMenu > button {
+  display: block;
+  width: 100%;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--shell-ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.filterSortMenu > button[data-active],
+.filterSortMenu > button:hover { background: var(--shell-bg); }
+.filterChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+}
+.filterChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-height: 30px;
+  padding: 0 8px 0 10px;
+  border: 1px solid var(--shell-line);
+  border-radius: 999px;
+  background: var(--shell-surface);
+  color: var(--shell-ink);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.filterChip > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.filterClearAll {
+  border: 0;
+  background: transparent;
+  color: var(--shell-muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+  padding: 4px 6px;
+}
+.filterClearAll:hover { color: var(--shell-ink); }
+.filterEmpty {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+  padding: 8px 0 4px;
+  color: var(--shell-muted);
+  font-size: 14px;
+}
+.filterTabs[data-desktop-tabs] {
+  display: none;
+}
+@media (min-width: 721px) {
+  .filterTabs[data-desktop-tabs] {
+    display: flex;
+  }
+}
+/* Native modal backdrop keeps page controls outside the filter dialog inert. */
+.filterPanel::backdrop {
+  background: color-mix(in srgb, #122018 46%, transparent);
+}
+.filterPanel {
+  --filter-line: var(--v2-line, #dce2d6);
+  --filter-muted: var(--v2-muted, #687568);
+  --filter-ink: var(--v2-ink, #253c2d);
+  --filter-surface: var(--v2-surface, #fff);
+  --filter-bg: var(--v2-bg, #f8faf6);
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  z-index: 81;
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  width: min(calc(100% - 32px), 28rem);
+  max-height: min(88dvh, 40rem);
+  transform: translate(-50%, -50%);
+  overflow: hidden;
+  border: 1px solid var(--filter-line);
+  border-radius: 16px;
+  background: var(--filter-surface);
+  color: var(--filter-ink);
+  box-shadow: 0 18px 40px color-mix(in srgb, #122018 18%, transparent);
+}
+.filterPanelHead {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 16px 18px 12px;
+  border-bottom: 1px solid var(--filter-line);
+  background: var(--filter-surface);
+}
+.filterPanelHead > h2 {
+  margin: 0;
+  color: var(--filter-ink);
+  font-size: 17px;
+  font-weight: 750;
+}
+.filterIconButton {
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--filter-muted);
+  cursor: pointer;
+}
+.filterIconButton:hover { background: var(--filter-bg); color: var(--filter-ink); }
+.filterPanelBody {
+  display: grid;
+  gap: 18px;
+  overflow: auto;
+  padding: 16px 18px;
+  min-height: 0;
+  background: var(--filter-surface);
+}
+.filterFieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.filterFieldset > legend {
+  margin: 0 0 8px;
+  color: var(--filter-ink, var(--shell-ink, #253c2d));
+  font-size: 13px;
+  font-weight: 750;
+}
+.filterOptions { display: grid; gap: 4px; }
+.filterRange { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.filterRange > label { display: grid; gap: 5px; color: var(--filter-muted, var(--shell-muted)); font-size: 12px; }
+.filterRange input { width: 100%; min-width: 0; min-height: 40px; box-sizing: border-box; border: 1px solid var(--filter-line, var(--shell-line)); border-radius: 8px; padding: 8px; background: var(--filter-surface, var(--shell-surface)); color: var(--filter-ink, var(--shell-ink)); font: inherit; font-size: 14px; }
+.filterRange input:focus-visible { outline: 2px solid var(--v2-accent, #456849); outline-offset: 2px; }
+.filterError { margin: 8px 0 0; font-size: 12px; color: var(--v2-danger, #b42318); }
+.catalogSidebar .filterFieldset > legend { margin-bottom: 5px; }
+.catalogSidebar .filterOption { padding-inline: 5px; font-size: 13px; font-weight: 500; min-height: 36px; }
+.filterOption {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: var(--filter-ink, var(--shell-ink, #253c2d));
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+}
+.filterOption > input {
+  position: absolute;
+  opacity: 0;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  cursor: pointer;
+}
+.filterMark {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border: 2px solid color-mix(in srgb, var(--filter-muted, var(--shell-muted, #687568)) 55%, var(--filter-line, #dce2d6));
+  border-radius: 999px;
+  background: var(--filter-surface, var(--shell-surface, #fff));
+  box-sizing: border-box;
+}
+.filterMark[data-appearance='checkbox'] { border-radius: 5px; }
+.filterMark[data-checked] {
+  border-color: var(--v2-accent, #456849);
+  background: var(--v2-accent, #456849);
+  box-shadow: inset 0 0 0 3px var(--filter-surface, #fff);
+}
+.filterMark[data-appearance='checkbox'][data-checked] {
+  box-shadow: none;
+  background: var(--v2-accent, #456849);
+}
+.filterMark[data-appearance='checkbox'][data-checked]::after {
+  content: '';
+  width: 12px;
+  height: 12px;
+  background: var(--v2-on-primary, #fff);
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='M3.5 8.2 6.4 11l6-6.5' stroke='%23000' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+.filterOption > span { min-width: 0; }
+.filterOption > strong {
+  color: var(--filter-muted, var(--shell-muted, #687568));
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+.filterOption[data-active] {
+  border-color: var(--filter-line, var(--shell-line, #dce2d6));
+  background: color-mix(in srgb, var(--filter-bg, var(--shell-bg, #f8faf6)) 70%, var(--filter-surface, #fff));
+}
+.filterOption:has(> input:focus-visible) {
+  outline: 2px solid color-mix(in srgb, var(--v2-accent, #456849) 45%, transparent);
+  outline-offset: 1px;
+}
+.filterNav { display: grid; gap: 2px; }
+.filterNavItem {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--shell-ink, #253c2d);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.filterNavItem > strong {
+  color: var(--shell-muted, #687568);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+.filterNavItem[data-active] {
+  background: color-mix(in srgb, var(--v2-accent, #456849) 12%, var(--shell-surface, #fff));
+  color: var(--v2-accent, #456849);
+}
+.filterNavItem[data-active] > strong { color: inherit; }
+.filterPanelFoot {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  padding: 12px 18px calc(14px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--filter-line);
+  background: var(--filter-surface);
+}
+.filterPanelFoot > button { min-height: 44px; width: 100%; }
+@media (max-width: 640px) {
+  .filterPanel {
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    max-width: none;
+    max-height: 90dvh;
+    transform: none;
+    border-radius: 16px 16px 0 0;
+  }
+}
+
+.filterSearch {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--shell-line);
+  border-radius: 10px;
+  background: var(--shell-surface);
+  color: var(--shell-muted);
+  overflow: hidden;
+}
+
+.filterSearch > input {
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--shell-ink);
+  font: inherit;
+  outline: none;
+}
+
+.filterSearch > input::placeholder { color: var(--shell-muted); }
+
+.filterSearch > select {
+  appearance: none;
+  -webkit-appearance: none;
+  min-width: 8.5rem;
+  width: auto;
+  max-width: 100%;
+  min-height: 38px;
+  padding: 0 1.5rem 0 2px;
+  border: 0;
+  background:
+    transparent
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23687568' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")
+    no-repeat right 2px center / 12px 12px;
+  color: var(--shell-ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.2;
+  outline: none;
+  cursor: pointer;
+}
+
+.filterSelects {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  justify-content: flex-start;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.filterSelects > .filterSearch {
+  display: flex;
+  flex: 0 0 170px;
+  width: 170px;
+  max-width: 170px;
+  padding-inline: 10px 8px;
+}
+
+.filterSelects > .filterSearch > select {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.body {
+  display: grid;
+  gap: 0;
+  min-width: 0;
+}
+
+/* Catalog / related grids need frame padding — table rows already pad themselves. */
+.body:has([data-shop-catalog]),
+.body:has([data-shop-basket]) {
+  padding: 16px var(--shell-pad-x) 20px;
+}
+
+.panelFooter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px var(--shell-pad-x);
+  border-top: 1px solid var(--shell-line);
+  background: color-mix(in srgb, var(--shell-bg) 55%, var(--shell-surface));
+  color: var(--shell-ink);
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.body :global(.plainList),
+.body :global(.groupedRecords) {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+}
+
+.body :global(.recordButton[data-compact]) {
+  min-height: var(--shell-row);
+  border-radius: 0;
+  border-left: 0;
+  border-right: 0;
+}
+
+/* ── Detail page: back above card, full content width ── */
+.detailPage {
+  --shell-max: min(100%, var(--app-content-width, 1480px));
+  --shell-pad-x: clamp(16px, 3cqw, 28px);
+  --shell-line: var(--v2-line, #dce2d6);
+  --shell-muted: var(--v2-muted, #687568);
+  --shell-ink: var(--v2-ink, #253c2d);
+  --shell-surface: var(--v2-surface, #fff);
+  --shell-bg: var(--v2-bg, #f8faf6);
+  display: grid;
+  gap: 12px;
+  width: 100%;
+  max-width: var(--shell-max);
+  margin-inline: 0;
+  min-width: 0;
+  align-content: start;
+}
+
+.detailBack {
+  justify-self: start;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--v2-accent, #456849);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.3;
+  cursor: pointer;
+}
+
+.detail {
+  display: grid;
+  gap: 0;
+  min-width: 0;
+  width: 100%;
+  background: var(--shell-surface);
+  border: 1px solid color-mix(in srgb, var(--shell-line) 88%, transparent);
+  border-radius: 14px;
+  overflow: clip;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--shell-ink) 4%, transparent);
+}
+
+/* Product: page grid of cards (hero / metrics / cols), not one shrink-wrapped plate. */
+.detail[data-layout='product'] {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: visible;
+  gap: 16px;
+}
+
+.detailHead {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px 16px;
+  align-items: start;
+  padding: 16px var(--shell-pad-x);
+  border-bottom: 1px solid var(--shell-line);
+}
+
+.detail[data-layout='product'] .detailHead {
+  grid-template-columns: minmax(0, 1fr);
+  padding: 18px var(--shell-pad-x);
+  border: 1px solid var(--shell-line);
+  border-radius: 14px;
+  background: var(--shell-surface);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--shell-ink) 4%, transparent);
+}
+
+.detailIdentity {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+}
+
+.detailIdentity[data-plain] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.detailIdentity[data-product] {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.detailCopy {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.detailTitleRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  align-items: start;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.detailTitleBlock {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+  min-width: 0;
+  flex: 1 1 12rem;
+}
+
+.detailTitleBlock :global(.heroStatus) {
+  flex: 0 0 auto;
+  width: max-content;
+  max-width: 100%;
+  margin: 0;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+.detailTitle {
+  margin: 0;
+  color: var(--shell-ink);
+  font-size: clamp(1.15rem, 2.2cqw, 1.4rem);
+  font-weight: 750;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  min-width: 0;
+}
+
+.detailChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  align-items: center;
+  min-width: 0;
+}
+
+.detailSubtitle {
+  margin: 0;
+  color: var(--shell-muted);
+  font-size: 13px;
+  line-height: 1.45;
+  max-width: 46rem;
+}
+
+.detailActions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.detailMetrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+  border-top: 1px solid var(--shell-line);
+  border-bottom: 1px solid var(--shell-line);
+}
+
+/* Same no-empty-cell rule as list summary bands on 390. */
+.detailMetrics .metric[data-wide] { grid-column: 1 / -1; }
+.detailMetrics[data-count='3'] .metric:first-child { grid-column: 1 / -1; }
+.detailMetrics[data-count='2'] { grid-template-columns: 1fr 1fr; }
+.detailMetrics[data-count='2'] .metric,
+.detailMetrics[data-count='2'] .metric[data-wide] { grid-column: auto; }
+
+.detailMetrics[data-tiles] {
+  border: 0;
+  gap: 12px;
+  background: transparent;
+}
+
+.detailMetrics[data-tiles] .metric,
+.metric[data-tile] {
+  border: 1px solid var(--shell-line);
+  border-radius: 14px;
+  background: var(--shell-surface);
+  padding: 16px;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--shell-ink) 4%, transparent);
+  gap: 6px;
+}
+
+.detailMetrics[data-tiles] .metric:nth-child(2n),
+.metric[data-tile]:nth-child(2n) { border-right: 1px solid var(--shell-line); }
+
+.detailMetrics .metricValue[data-tone='rose'] {
+  color: color-mix(in srgb, #b42318 82%, var(--shell-ink));
+}
+.detailMetrics .metricValue[data-tone='amber'] {
+  color: color-mix(in srgb, #b45309 82%, var(--shell-ink));
+}
+.detailMetrics .metricValue[data-tone='mint'] {
+  color: color-mix(in srgb, #047857 82%, var(--shell-ink));
+}
+
+.detailMetrics[data-tiles] .metricValue {
+  font-size: clamp(1.35rem, 2.8cqw, 1.75rem);
+}
+
+/* Body lives on the page grid (sibling of the header plate) — never nested in an outer frame. */
+.detailBody {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  width: 100%;
+}
+
+.detailCols {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  align-items: start;
+}
+
+.detailMainCol,
+.detailSideCol {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  align-content: start;
+}
+
+/* One frame per section card. Inner lists/tables lose their own chrome. */
+.detailSection,
+.detailMainCol > :global(section),
+.detailSideCol > :global(section) {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 16px var(--shell-pad-x);
+  border: 1px solid var(--shell-line);
+  border-radius: 14px;
+  background: var(--shell-surface);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--shell-ink) 4%, transparent);
+}
+
+.detailSectionTitle,
+.detailMainCol > :global(section) :global([class*='sectionTitle']),
+.detailSideCol > :global(section) :global([class*='sectionTitle']) {
+  margin: 0;
+  color: var(--shell-ink);
+  font-size: 15px;
+  font-weight: 750;
+}
+
+.detailSectionBody {
+  display: grid;
+  gap: 0;
+  min-width: 0;
+}
+
+/*
+ * Strip nested chrome *inside* a section card — the section itself keeps the one frame
+ * from `.detailSection` / `.detailMainCol > section`. Do not target the outer section.
+ */
+.detailSectionBody :global([class*='orderLinesPanel']),
+.detailSectionBody :global([class*='orderLines']),
+.detailSectionBody :global([class*='timelineCollection']),
+.detailSectionBody :global([class*='timelineList']),
+.detailSectionBody :global([class*='plainList']),
+.detailSectionBody :global([class*='groupedRecords']),
+.detailSectionBody :global([class*='purchaseHistory']),
+.detailSectionBody :global([class*='collection']:not([class*='collectionHeading'])),
+.detailSectionBody :global([class*='form']),
+.detailSectionBody :global(form),
+.detailMainCol > :global(section) > :global([class*='orderLines']),
+.detailMainCol > :global(section) > :global([class*='timeline']),
+.detailMainCol > :global(section) > :global([class*='plainList']),
+.detailMainCol > :global(section) > :global([class*='groupedRecords']),
+.detailMainCol > :global(section) > :global([class*='form']),
+.detailMainCol > :global(section) > :global(form),
+.detailSideCol > :global(section) > :global([class*='orderFactsGrid']),
+.detailSideCol > :global(section) > :global([class*='form']),
+.detailSideCol > :global(section) > :global(form),
+.detailSideCol > :global(section) :global([class*='form']),
+.detailSideCol > :global(section) :global(form) {
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  padding-inline: 0 !important;
+}
+
+/* Collection wrappers that are direct children become the one section frame. */
+.detailMainCol > :global([class*='timelineCollection']),
+.detailMainCol > :global([class*='collection']:not([class*='collectionHeading'])),
+.detailMainCol > :global([class*='orderLinesPanel']),
+.detailSideCol > :global([class*='orderActionPanel']) {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 16px var(--shell-pad-x);
+  border: 1px solid var(--shell-line);
+  border-radius: 14px;
+  background: var(--shell-surface);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--shell-ink) 4%, transparent);
+}
+
+.detailSectionBody :global([class*='collectionHeading']),
+.detailSectionBody :global([class*='formTitle']),
+.detailMainCol > :global(section) :global([class*='collectionHeading']),
+.detailSideCol > :global(section) :global([class*='collectionHeading']),
+.detailMainCol > :global([data-kind='collection']) :global([class*='collectionHeading']),
+.detailMainCol > :global([data-kind='collection']) :global([class*='heading']) {
+  display: none !important;
+}
+
+/* canvasBlock / collection wrappers that already sit in a framed section lose nested chrome */
+.detailMainCol > :global([data-kind='collection']) :global([class*='plainList']),
+.detailMainCol > :global([data-kind='collection']) :global([class*='timelineCollection']),
+.detailMainCol > :global([data-kind='collection']) :global([class*='panel']),
+.detailSectionBody :global([class*='plainList']),
+.detailSectionBody :global([class*='timelineCollection']),
+.detailSectionBody :global([class*='panel']),
+.detailSectionBody :global([class*='collection']) {
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  padding: 0 !important;
+}
+
+/* Key/value rows: one column, label left / value right — no word-by-word wrap.
+ * Collapse the contact-block → facts-block gap so phone isn't optically taller. */
+.detailBody :global([class*='orderFacts']:not([class*='orderFactsGrid'])) {
+  gap: 0 !important;
+}
+.detailBody :global([class*='orderFactsGrid']),
+.detailBody :global([class*='orderContactRow']) {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+  gap: 0 !important;
+}
+
+.detailBody :global([class*='orderFact']:not([class*='orderFacts'])) {
+  display: flex !important;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--shell-line);
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+/* Only the last fact in the whole panel drops the divider — keep one between
+ * contact-block phone and the address block that follows. */
+.detailBody :global([class*='orderFacts'] > :last-child [class*='orderFact']:last-of-type) {
+  border-bottom: 0;
+}
+
+/* Phone/email links must not inflate KV row height above siblings. */
+.detailBody :global([class*='orderFact'] a),
+.detailBody :global([class*='orderFact'] button),
+.detailBody :global([class*='orderFact'] [class*='contactLink']) {
+  min-height: 0 !important;
+  padding-block: 0 !important;
+  margin-block: 0 !important;
+  line-height: inherit;
+  align-items: baseline;
+}
+
+.detailBody :global([class*='orderFact'] > small) {
+  color: var(--shell-muted);
+  font-weight: 600;
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: 46%;
+  white-space: nowrap;
+}
+
+.detailBody :global([class*='orderFact'] > strong) {
+  text-align: right;
+  font-weight: 700;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+/* Notes / long text facts span full width under the label. */
+.detailBody :global([class*='orderFact'][data-kind='note']),
+.detailBody :global([class*='orderFact'][data-kind='reply']) {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.detailBody :global([class*='orderFact'][data-kind='note'] > strong),
+.detailBody :global([class*='orderFact'][data-kind='reply'] > strong) {
+  text-align: start;
+  font-weight: 560;
+  line-height: 1.45;
+}
+
+@media (min-width: 721px) {
+  .summary {
+    grid-template-columns: repeat(var(--shell-metrics, 4), minmax(0, 1fr));
+  }
+  .metric {
+    border-bottom: 0;
+  }
+  .metric:last-child { border-right: 0; }
+  .summary[data-count='3'] .metric:nth-child(3),
+  .summary[data-count='4'] .metric:nth-child(3),
+  .summary[data-count='4'] .metric:nth-child(4) {
+    border-right: 1px solid var(--shell-line);
+    border-bottom: 0;
+  }
+  .summary[data-count='3'] .metric:nth-child(3),
+  .summary[data-count='4'] .metric:nth-child(4) { border-right: 0; }
+  .filterTools {
+    flex-wrap: nowrap;
+  }
+  .filterSelects { justify-content: flex-end; }
+  .detailMetrics {
+    grid-template-columns: repeat(var(--shell-metrics, 4), minmax(0, 1fr));
+  }
+  .detailMetrics[data-count='3'] .metric:first-child,
+  .detailMetrics .metric[data-wide] { grid-column: auto; }
+  .detailMetrics[data-tiles] {
+    grid-template-columns: repeat(var(--shell-metrics, 4), minmax(0, 1fr));
+    gap: 16px;
+  }
+  .detailMetrics[data-tiles] .metric,
+  .metric[data-tile] {
+    border-right: 1px solid var(--shell-line);
+  }
+  .detailIdentity[data-product] {
+    grid-template-columns: 160px minmax(0, 1fr);
+    gap: 16px 20px;
+    align-items: start;
+  }
+  .detailIdentity[data-product] :global(.productThumb[data-size='card']) {
+    width: 160px;
+    height: 160px;
+    max-width: 160px;
+    max-height: 160px;
+  }
+  .detailCols {
+    grid-template-columns: minmax(0, 2fr) minmax(14rem, 1fr);
+    gap: 16px;
+  }
+  .detailActions[data-desktop-only] { display: inline-flex; }
+}
+
+@media (max-width: 720px) {
+  .header {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+  }
+  .headerActions {
+    justify-content: stretch;
+  }
+  .headerActions > :global(button),
+  .headerActions > :global(a),
+  .headerActions > :global(.form) {
+    flex: 1 1 auto;
+  }
+  /* Mobile list: search+sort share one row; two selects alone share 50/50. */
+  .filterTools {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 8px;
+    align-items: center;
+  }
+  .filterTools:not(:has(> .filterSearch)) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .filterSelects {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    flex: none;
+  }
+  .filterTools:has(> .filterSearch) > .filterSelects {
+    display: inline-flex;
+    width: auto;
+    flex: 0 0 auto;
+  }
+  .filterSelects > .filterSearch {
+    flex: none;
+    width: auto;
+    max-width: none;
+    min-width: 0;
+  }
+  .filterTools:has(> .filterSearch) > .filterSelects > .filterSearch {
+    flex: 0 0 148px;
+    width: 148px;
+    max-width: 148px;
+  }
+  .detailHead {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .detailActions {
+    justify-content: stretch;
+  }
+  .detailActions[data-desktop-only] { display: none; }
+  .detailIdentity[data-product] :global(.productThumb[data-size='card']) {
+    width: 100%;
+    max-width: none;
+    max-height: none;
+    aspect-ratio: 4 / 3;
+  }
+  .detailPage[data-sticky] {
+    /* Sticky bar (~65px) + bottom nav (~56px) + gap so list rows aren't covered. */
+    padding-bottom: calc(9.5rem + env(safe-area-inset-bottom, 0px));
+  }
+  .detail[data-layout='product'] .detailHead {
+    padding: 16px;
+  }
+  .detailMetrics[data-tiles] {
+    gap: 10px;
+  }
+  .detailMetrics[data-tiles] .metric,
+  .metric[data-tile] {
+    padding: 16px;
+  }
+  .stickyBar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    /* Sit above the app bottom nav (~56px) so Отменить / Обработать stay tappable. */
+    bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+    z-index: 6;
+    display: grid;
+    gap: 8px;
+    padding: 10px var(--shell-pad-x);
+    border-top: 1px solid var(--shell-line);
+    border-bottom: 1px solid var(--shell-line);
+    background: color-mix(in srgb, var(--shell-surface) 94%, transparent);
+    backdrop-filter: blur(10px);
+  }
+  .stickyBar :global(.orderActionDock),
+  .stickyBar :global([data-placement='mobile']),
+  .stickyBar :global([class*='purchaseCardActions']) {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: stretch;
+    gap: 8px;
+    width: 100%;
+    position: static;
+    padding: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+  }
+  /* Icon (✎) hugs; primary CTA fills the rest — one row, not a full-width pencil bar. */
+  .stickyBar :global([class*='purchaseCardActions']) > :global(button[class*='orderActionIcon']),
+  .stickyBar :global([class*='purchaseCardActions']) :global(button[class*='orderActionIcon']) {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    flex: none;
+  }
+  .stickyBar :global([class*='purchaseCardActions']) > :global(button.primary),
+  .stickyBar :global([class*='purchaseCardActions']) :global(button.primary) {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: auto;
+  }
+}
+
+.stickyBar { display: none; }
+@media (max-width: 720px) {
+  .stickyBar[data-open] { display: grid; }
+  /* Hide desktop header actions when sticky bar owns them. */
+  .detailPage[data-sticky] .detailActions { display: none; }
+}
+
+/* Dashboard summary uses the same tiles as detail pages, outside the list panel.
+   Container queries keep phone previews independent of the browser's width. */
+.summary[data-cards] { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; border: 0; }
+.summary[data-cards] .metric[data-tile] { grid-column: auto; border: 1px solid var(--shell-line); gap: 10px; }
+.summary[data-cards] .metric[data-wide] { grid-column: 1 / -1; }
+.summary[data-cards] .metricCaption { display: flex; align-items: center; gap: 8px; font-weight: 500; }
+.metricIcon { display: grid; place-items: center; flex: 0 0 28px; width: 28px; height: 28px; border-radius: 8px; background: var(--v2-soft); color: var(--v2-accent); }
+.summary[data-cards] .metricValue { font-size: clamp(1.5rem, 3cqw, 1.75rem); line-height: 1.15; }
+.summary[data-cards] .metricNote { font-weight: 400; }
+@container builder-app (min-width: 641px) {
+  .summary[data-cards] { grid-template-columns: repeat(var(--shell-metrics, 3), minmax(0, 1fr)); }
+  .summary[data-cards] .metric[data-wide] { grid-column: auto; }
+}
+@container builder-app (max-width: 340px) {
+  .summary[data-cards] { grid-template-columns: minmax(0, 1fr); }
+  .summary[data-cards] .metric[data-tile]:not([data-wide]) { grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; align-items: center; }
+  .summary[data-cards] .metric:not([data-wide]) .metricValue { grid-column: 2; grid-row: 1; }
+  .summary[data-cards] .metric:not([data-wide]) .metricNote { grid-column: 1 / -1; }
+}

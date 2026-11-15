@@ -13,23 +13,27 @@ import { ProtoIcon } from '../prototype/icons'
 import styles from '../prototype/prototype.module.css'
 import ui from './view.module.css'
 
-export function BuilderV2DataNode({app,node,live,scope,table,heading=true,allowWrites=false,searchPlaceholder,toolbarEnd,onPage,children}:{app:AppV2;node:AppV2Node;live:boolean;scope?:BuilderV2ReadScope;table?:BuilderV2Table;heading?:boolean;allowWrites?:boolean;searchPlaceholder?:string;toolbarEnd?:ReactNode;onPage?:(page:BuilderV2DataPage|undefined,pending:boolean)=>void;children:(page?:BuilderV2DataPage)=>ReactNode}){
+export function BuilderV2DataNode({app,node,live,scope,table,heading=true,allowWrites=false,searchPlaceholder,toolbarEnd,shell,searchValue,onSearchChange,onPage,children}:{app:AppV2;node:AppV2Node;live:boolean;scope?:BuilderV2ReadScope;table?:BuilderV2Table;heading?:boolean;allowWrites?:boolean;searchPlaceholder?:string;toolbarEnd?:ReactNode;shell?:boolean;searchValue?:string;onSearchChange?:(value:string)=>void;onPage?:(page:BuilderV2DataPage|undefined,pending:boolean)=>void;children:(page?:BuilderV2DataPage)=>ReactNode}){
   const region=useRef<HTMLDivElement>(null),published=usePublishedV2()
-  const [search,setSearch]=useState(''),[activeColumn,setActiveColumn]=useState(''),[boardNotice,setBoardNotice]=useState('')
+  const [localSearch,setLocalSearch]=useState(''),[activeColumn,setActiveColumn]=useState(''),[boardNotice,setBoardNotice]=useState('')
+  const searchControlled=typeof searchValue==='string'&&typeof onSearchChange==='function'
+  const search=searchControlled?searchValue!:localSearch
+  const setSearch=searchControlled?onSearchChange!:setLocalSearch
   const source='sourceId'in node?app.sources.find(source=>source.id===node.sourceId):undefined,calendar=node.type==='collection'&&node.layout==='calendar',board=node.type==='collection'&&node.layout==='kanban'
   const dateField=calendar?table?.fields.find(field=>field.id===node.dateFieldId):undefined,timeZone=dateField?.timeZone??APP_TIME_ZONE
   const today=builderCalendarToday(timeZone),[window,setWindow]=useState<BuilderCalendarWindow>({month:today.slice(0,7),day:today,undated:false})
   const query=calendar?{calendarMonth:window.undated?'undated':window.month,...(!window.undated?{calendarDay:window.day}:{})}:{}
   const needsRecord=Boolean(source?.screenTableId&&!scope?.recordId),data=useBuilderV2NodeData(app,node,live&&!needsRecord,source?.searchFieldIds.length?search:'',scope,query)
   useEffect(()=>{onPage?.(data.page,live&&data.loading&&!data.page)},[data.page,data.loading,live,onPage])
-  useEffect(()=>{setSearch('');setActiveColumn('');setBoardNotice('')},[source?.tableId])
+  useEffect(()=>{if(!searchControlled)setLocalSearch('');setActiveColumn('');setBoardNotice('')},[source?.tableId,searchControlled])
   useEffect(()=>{const day=builderCalendarToday(timeZone);setWindow({month:day.slice(0,7),day,undated:false})},[source?.tableId,dateField?.id,timeZone])
   const columns=data.page?.board?.columns,chosen=columns?.some(column=>column.key===activeColumn)?activeColumn:columns?.find(column=>column.total>0)?.key??columns?.[0]?.key
   const catalogEmpty=Boolean(data.page&&data.page.total===0&&!search.trim())
+  const showSearch=node.type==='collection'&&Boolean(source?.searchFieldIds.length)&&live&&!catalogEmpty&&!shell
   if(needsRecord)return <p className={ui.hint}>Откройте запись из списка, чтобы увидеть её содержимое.</p>
   if(!live&&!calendar&&!board)return children()
-  return <div ref={region} className={ui.liveData} data-builder-collection={node.type==='collection'?node.id:undefined} tabIndex={node.type==='collection'?-1:undefined} role={node.type==='collection'?'region':undefined} aria-label={node.type==='collection'?node.name:undefined}>
-    {node.type==='collection'&&Boolean(source?.searchFieldIds.length)&&live&&!catalogEmpty&&<div className={`${ui.dataControls} ${ui.searchControl}${toolbarEnd?' '+ui.listToolbar:''}`}>{toolbarEnd?<div className={ui.listSearch}><ProtoIcon name="search" size={16} /><input type="search" className={ui.search} aria-label={`Поиск: ${node.name}`} placeholder={searchPlaceholder ?? (node.layout === 'catalog' ? 'Поиск по каталогу' : 'Найти в списке')} maxLength={200} value={search} onChange={event=>setSearch(event.target.value)}/></div>:<><ProtoIcon name="search" size={16} /><input type="search" className={ui.search} aria-label={`Поиск: ${node.name}`} placeholder={searchPlaceholder ?? (node.layout === 'catalog' ? 'Поиск по каталогу' : 'Найти в списке')} maxLength={200} value={search} onChange={event=>setSearch(event.target.value)}/></>}{toolbarEnd}</div>}
+  return <div ref={region} className={ui.liveData} data-builder-collection={node.type==='collection'?node.id:undefined} data-shell={shell||undefined} tabIndex={node.type==='collection'?-1:undefined} role={node.type==='collection'?'region':undefined} aria-label={node.type==='collection'?node.name:undefined}>
+    {showSearch?<div className={`${ui.dataControls} ${ui.searchControl}${toolbarEnd?' '+ui.listToolbar:''}`}>{toolbarEnd?<div className={ui.listSearch}><ProtoIcon name="search" size={16} /><input type="search" className={ui.search} aria-label={`Поиск: ${node.name}`} placeholder={searchPlaceholder ?? (node.layout === 'catalog' ? 'Поиск по каталогу' : 'Найти в списке')} maxLength={200} value={search} onChange={event=>setSearch(event.target.value)}/></div>:<><ProtoIcon name="search" size={16} /><input type="search" className={ui.search} aria-label={`Поиск: ${node.name}`} placeholder={searchPlaceholder ?? (node.layout === 'catalog' ? 'Поиск по каталогу' : 'Найти в списке')} maxLength={200} value={search} onChange={event=>setSearch(event.target.value)}/></>}{toolbarEnd}</div>:null}
     {calendar&&heading&&<h3 className={ui.heading}>{node.name}</h3>}
     {calendar&&<CalendarNavigation value={window} onChange={setWindow} data={data.page?.calendar} timeZone={timeZone}/>}
     {board&&boardNotice&&<p role="status" className={ui.formSuccess}>{boardNotice}</p>}

@@ -16,6 +16,9 @@ export function formatInventoryAuthor(raw: string): string {
     admin: 'Иван Орлов',
     editor: 'Пётр Белов',
     manager: 'Анна Крылова',
+    worker: 'Пётр Белов',
+    irina: 'Ирина Петрова',
+    'irina.petrova': 'Ирина Петрова',
   }
   if (known[local]) return known[local]
   return local

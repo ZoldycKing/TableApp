@@ -170,7 +170,7 @@ export const sklad: TemplateDef = {
         { key: 'note', name: 'Комментарий', type: 'text', help: 'Номер накладной или пояснение сотрудника.' },
         { key: 'author', name: 'Кто записал', type: 'email', help: 'Почта вошедшего сотрудника ставится сервером.' },
       ],
-      views: [{ name: 'Все движения', type: 'grid' }],
+      views: [{ name: 'Вся история склада', type: 'grid' }],
       rows: [
         { key: 'mv1', values: { name: 'Приход · Фильтр воздушный FA-120', item: { rowKey: 's1' }, qty: 10, kind: 'Приход', warehouse: { rowKey: 'wh1' }, before: 0, after: 10, date: inDays(-14), note: 'Накладная ПН-104', author: 'ivan.orlov@example.invalid' } },
         { key: 'mv2', values: { name: 'Приход · Термостат KTS-011', item: { rowKey: 's2' }, qty: 12, kind: 'Приход', warehouse: { rowKey: 'wh1' }, before: 0, after: 12, date: inDays(-12), note: 'Поставка «КлиматСервис»', author: 'ivan.orlov@example.invalid' } },
@@ -207,14 +207,39 @@ export const sklad: TemplateDef = {
       primary: 'name',
       fields: [
         { key: 'name', name: 'Название', type: 'text', help: 'Как вы называете поставщика в заказах и в разговоре.' },
-        { key: 'contact', name: 'Контакт', type: 'text', help: 'Имя человека, с которым вы согласовываете поставку.' },
+        { key: 'contact', name: 'Контактное лицо', type: 'text', help: 'Имя человека, с которым вы согласовываете поставку.' },
         { key: 'phone', name: 'Телефон', type: 'phone', help: 'Телефон для звонка или сообщения по заказу.' },
-        { key: 'comment', name: 'Комментарий', type: 'text', help: 'Что обычно берёте у этого поставщика и на каких условиях.' },
+        { key: 'email', name: 'Почта', type: 'email', help: 'Куда отправлять заявку или счёт.' },
+        { key: 'city', name: 'Город', type: 'text', help: 'Город или регион склада поставщика.' },
+        { key: 'address', name: 'Адрес', type: 'text', help: 'Адрес склада или офиса, если нужен для самовывоза.' },
+        { key: 'terms', name: 'Срок поставки', type: 'text', help: 'Обычный срок или условия поставки.' },
+        { key: 'telegram', name: 'Telegram', type: 'text', help: 'Юзернейм или телефон в Telegram.' },
+        { key: 'whatsapp', name: 'WhatsApp', type: 'phone', help: 'Номер WhatsApp для переписки по заказам.' },
+        { key: 'max', name: 'MAX', type: 'text', help: 'Контакт в MAX, если переписываетесь там.' },
+        { key: 'otherMessengerLabel', name: 'Другой мессенджер', type: 'text', help: 'Название другого канала, если нужно.' },
+        { key: 'otherMessengerValue', name: 'Контакт другого мессенджера', type: 'text', help: 'Логин, ссылка или номер в этом канале.' },
+        { key: 'comment', name: 'Заметки', type: 'long_text', help: 'Что обычно берёте у этого поставщика и на каких условиях.' },
       ],
       views: [{ name: 'Все поставщики', type: 'grid' }],
       rows: [
-        { key: 'sup1', values: { name: 'КлиматСервис', contact: 'Анна Белова', phone: '+7 495 120-44-10', comment: 'Вентиляция и запчасти, счёт по запросу' } },
-        { key: 'sup2', values: { name: 'Упаковка Плюс', contact: 'Сергей Новиков', phone: '+7 812 300-19-40', comment: 'Гофротара, отгрузка со склада в Шушарах' } },
+        {
+          key: 'sup1',
+          values: {
+            name: 'КлиматСервис', contact: 'Анна Белова', phone: '+7 495 120-44-10', email: 'anna@klimatservice.ru',
+            city: 'Москва', address: 'ул. Складочная, 1с4', terms: '2–4 рабочих дня',
+            telegram: 'anna_klimat', whatsapp: '+7 495 120-44-10',
+            comment: 'Вентиляция и запчасти, счёт по запросу. Отсрочка 14 дней постоянным.',
+          },
+        },
+        {
+          key: 'sup2',
+          values: {
+            name: 'Упаковка Плюс', contact: 'Сергей Новиков', phone: '+7 812 300-19-40', email: 's.novikov@upakovkaplus.ru',
+            city: 'Санкт-Петербург', address: 'Шушары, Московское ш., 15', terms: 'Самовывоз со следующего дня',
+            max: 'sergey_upakovka', otherMessengerLabel: 'Viber', otherMessengerValue: '+7 812 300-19-40',
+            comment: 'Гофротара, отгрузка со склада в Шушарах. Минимальная партия 20 коробов.',
+          },
+        },
       ],
     },
     {
@@ -283,8 +308,8 @@ export const sklad: TemplateDef = {
           key: 'po1',
           values: {
             name: 'Заказ · КлиматСервис', number: 'ЗК-0001', supplier: { rowKey: 'sup1' }, warehouse: { rowKey: 'wh1' },
-            date: inDays(3), status: 'Черновик', total: 7120, comment: 'Ждём счёт', lines: { rowKeys: ['pl1'] }, count: 1,
-            createdAt: inDays(3), createdBy: 'maria.sokolova@example.invalid',
+            date: inDays(-2), status: 'Черновик', total: 7120, comment: 'Ждём счёт', lines: { rowKeys: ['pl1'] }, count: 1,
+            createdAt: inDays(-2), createdBy: 'maria.sokolova@example.invalid',
           },
         },
         {

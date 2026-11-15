@@ -6,9 +6,9 @@ import type { BuilderV2MediaItem } from './media-values'
 import { builderV2Initials, builderV2RecordTone, builderV2StatusTone } from './record-presentation'
 import ui from './view.module.css'
 
-export function BuilderV2RecordAvatar({ name, id, icon = 'apps', tone = true }: { name?: string; id: string; icon?: string; tone?: boolean }) {
+export function BuilderV2RecordAvatar({ name, id, icon = 'apps', tone = true, forceIcon = false }: { name?: string; id: string; icon?: string; tone?: boolean; forceIcon?: boolean }) {
   return <span className={`${presentation.avatar} ${ui.recordAvatar}`} data-tone={tone ? builderV2RecordTone(id) : undefined} aria-hidden="true">
-    {(name && builderV2Initials(name)) || <ProtoIcon name={icon} size={19} />}
+    {(name && !forceIcon && builderV2Initials(name)) || <ProtoIcon name={icon} size={19} />}
   </span>
 }
 

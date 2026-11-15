@@ -17,7 +17,7 @@ import {RowWriteError} from './row-mutations'
 import type {Transaction} from './db-transaction'
 import type {RuntimeSourceRow} from './runtime-project'
 
-export async function inspectPublishedV2Form(current:Awaited<ReturnType<typeof publishedV2Context>>,tx:Transaction,request:BuilderV2FormRequest){
+export async function inspectPublishedV2Form(current:Pick<Awaited<ReturnType<typeof publishedV2Context>>,'app'|'actor'|'revision'>,tx:Transaction,request:BuilderV2FormRequest){
   const {app,actor,revision}=current,screen=publishedV2Screen(app,actor,request.screenId),form=app.nodes.find(node=>node.id===request.formId)
   if(!actor.authenticated||form?.type!=='form')throw new RowWriteError('denied','Для сохранения формы нужно войти с разрешённой почтой')
   const action=builderV2SaveFormAction(app,form)

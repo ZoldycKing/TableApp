@@ -83,9 +83,18 @@ export function buildInventoryV2App(built: BuiltTemplate, meta: { id: string; wo
   const inventoryCountLinesTableId = built.tables.find(table => table.name === 'Позиции инвентаризации')?.id
   if (!inventoryCountsTableId || !inventoryCountLinesTableId) throw new Error('В складе нет таблиц инвентаризации')
   const supplierName = fieldByName(suppliersTableId, 'Название')
-  const supplierContact = fieldByName(suppliersTableId, 'Контакт')
+  const supplierContact = fieldByName(suppliersTableId, 'Контактное лицо')
   const supplierPhone = fieldByName(suppliersTableId, 'Телефон')
-  const supplierComment = fieldByName(suppliersTableId, 'Комментарий')
+  const supplierEmail = fieldByName(suppliersTableId, 'Почта')
+  const supplierCity = fieldByName(suppliersTableId, 'Город')
+  const supplierAddress = fieldByName(suppliersTableId, 'Адрес')
+  const supplierTerms = fieldByName(suppliersTableId, 'Срок поставки')
+  const supplierTelegram = fieldByName(suppliersTableId, 'Telegram')
+  const supplierWhatsapp = fieldByName(suppliersTableId, 'WhatsApp')
+  const supplierMax = fieldByName(suppliersTableId, 'MAX')
+  const supplierOtherMessengerLabel = fieldByName(suppliersTableId, 'Другой мессенджер')
+  const supplierOtherMessengerValue = fieldByName(suppliersTableId, 'Контакт другого мессенджера')
+  const supplierComment = fieldByName(suppliersTableId, 'Заметки')
   const purchaseName = fieldByName(purchaseOrdersTableId, 'Заказ')
   const purchaseNumber = fieldByName(purchaseOrdersTableId, 'Номер')
   const purchaseSupplier = fieldByName(purchaseOrdersTableId, 'Поставщик')
@@ -217,9 +226,18 @@ export function buildInventoryV2App(built: BuiltTemplate, meta: { id: string; wo
   ]
   const supplierFields = () => [
     input(supplierName, 'Название', true),
-    input(supplierContact, 'Контакт', false),
+    input(supplierContact, 'Контактное лицо', false),
     input(supplierPhone, 'Телефон', false),
-    input(supplierComment, 'Комментарий', false),
+    input(supplierEmail, 'Почта', false),
+    input(supplierCity, 'Город', false),
+    input(supplierAddress, 'Адрес', false),
+    input(supplierTerms, 'Срок поставки', false),
+    input(supplierTelegram, 'Telegram', false),
+    input(supplierWhatsapp, 'WhatsApp', false),
+    input(supplierMax, 'MAX', false),
+    input(supplierOtherMessengerLabel, 'Другой мессенджер', false),
+    input(supplierOtherMessengerValue, 'Контакт другого мессенджера', false),
+    input(supplierComment, 'Заметки', false),
   ]
   const createPurchaseInputs = purchaseFields()
   const editPurchaseInputs = purchaseFields()
@@ -236,7 +254,10 @@ export function buildInventoryV2App(built: BuiltTemplate, meta: { id: string; wo
   ]
   const reorderInputs = [input(reorderPayload, 'Товары к заказу', false)]
   const purchaseUserFields = [purchaseSupplier, purchaseWarehouse, purchaseDate, purchaseComment, purchasePayload]
-  const supplierUserFields = [supplierName, supplierContact, supplierPhone, supplierComment]
+  const supplierUserFields = [
+    supplierName, supplierContact, supplierPhone, supplierEmail, supplierCity, supplierAddress, supplierTerms,
+    supplierTelegram, supplierWhatsapp, supplierMax, supplierOtherMessengerLabel, supplierOtherMessengerValue, supplierComment,
+  ]
   const countCreateFields = [countWarehouse, countDate, countPayload]
   const countUpdateFields = [countDate, countPayload]
   const createPurchaseStep = newId('action')
@@ -318,7 +339,7 @@ export function buildInventoryV2App(built: BuiltTemplate, meta: { id: string; wo
     homeScreenId: itemsScreenId,
     screens: [
       { id: itemsScreenId, name: 'Товары', menuLabel: 'Товары', icon: 'box', navigation: true, audience: team, contextTableId: null, rootIds: [newItemButton, itemsNode], events: { enter: null } },
-      { id: movementsScreenId, name: 'Движения', menuLabel: 'Движения', icon: 'apps', navigation: true, audience: team, contextTableId: null, rootIds: [newOperationButton, movementsNode], events: { enter: null } },
+      { id: movementsScreenId, name: 'История склада', menuLabel: 'История склада', icon: 'apps', navigation: true, audience: team, contextTableId: null, rootIds: [newOperationButton, movementsNode], events: { enter: null } },
       { id: purchasesScreenId, name: 'Закупки', menuLabel: 'Закупки', icon: 'clipboard', navigation: true, audience: team, contextTableId: null, rootIds: [suppliersButton, reorderButton, newPurchaseButton, purchasesNode], events: { enter: null } },
       { id: countsScreenId, name: 'Инвентаризация', menuLabel: 'Учёт', icon: 'list', navigation: true, audience: team, contextTableId: null, rootIds: [newCountButton, countsNode], events: { enter: null } },
       // Deep-link screen; list toolbar opens the same form node in a centred dialog (not dual-rooted).
@@ -343,7 +364,7 @@ export function buildInventoryV2App(built: BuiltTemplate, meta: { id: string; wo
       { id: reorderButton, name: 'Что заказать', type: 'button', label: 'Что заказать', variant: 'secondary', visibleTo: team, visibleWhen: null, events: { press: openReorder } },
       { id: newOperationButton, name: 'Новая операция', type: 'button', label: 'Новая операция', variant: 'primary', visibleTo: team, visibleWhen: null, events: { press: openItemsForOperation } },
       { id: itemsNode, name: 'Товары', type: 'collection', visibleTo: null, visibleWhen: null, sourceId: itemsSource, layout: 'list', titleFieldId: itemName, subtitleFieldId: itemSku, ...(itemPhoto ? { cardImageFieldId: itemPhoto } : {}), cardDetailFieldId: itemStock, itemIds: [], events: { itemPress: openItem } },
-      { id: movementsNode, name: 'Движения', type: 'collection', visibleTo: null, visibleWhen: null, sourceId: movementsSource, layout: 'list', titleFieldId: movementItem, subtitleFieldId: movementType, cardDetailFieldId: movementQty, itemIds: [], events: { itemPress: null } },
+      { id: movementsNode, name: 'История склада', type: 'collection', visibleTo: null, visibleWhen: null, sourceId: movementsSource, layout: 'list', titleFieldId: movementItem, subtitleFieldId: movementType, cardDetailFieldId: movementQty, itemIds: [], events: { itemPress: null } },
       ...[...identityFieldIds, ...factFieldIds].map(fieldId => {
         const column = columns(itemsTableId).find(item => item.id === fieldId)!
         const label = fieldId === itemCost ? 'Себестоимость, ₽' : column.name

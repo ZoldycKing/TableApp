@@ -3,6 +3,7 @@ import { isComputed, type FieldType } from '../fields'
 import { appV2ChildIds, type AppV2, type AppV2Audience, type AppV2RowScope, type AppV2Step, type AppV2Target } from './schema'
 import type { AppV2Binding, AppV2Condition } from './values'
 import { appV2NavigationUrl } from './values'
+import { validateTeamCalendar } from './team-calendar-validate'
 
 export const appV2ListGroupFieldTypes: ReadonlySet<FieldType> = new Set(['single_select', 'text', 'checkbox', 'date', 'datetime'])
 
@@ -10,7 +11,7 @@ export const appV2ListGroupFieldTypes: ReadonlySet<FieldType> = new Set(['single
 export type AppV2Catalog = {
   workspaceId: string
   tables: ReadonlyMap<string, { workspaceId: string }>
-  fields: ReadonlyMap<string, { tableId: string; type: FieldType; relationTableId?: string }>
+  fields: ReadonlyMap<string, { tableId: string; type: FieldType; relationTableId?: string; choiceIds?: readonly string[] }>
   views: ReadonlyMap<string, { tableId: string }>
 }
 export type AppV2Issue = { code: string; path: string; message: string }
@@ -142,6 +143,16 @@ export function validateAppV2(app: AppV2, catalog: AppV2Catalog, options: { mode
     if (node.visibleTo) audience(node.visibleTo, `${ownPath}.visibleTo`)
     if (node.visibleWhen) condition(node.visibleWhen, context, `${ownPath}.visibleWhen`)
     if ('value' in node) binding(node.value, context, `${ownPath}.value`)
+    if (node.type === 'profile') {
+      binding(node.title, context, `${ownPath}.title`)
+      if (node.subtitle) binding(node.subtitle, context, `${ownPath}.subtitle`)
+      if (node.image) binding(node.image, context, `${ownPath}.image`)
+      node.contacts.forEach((contact, i) => binding(contact.value, context, `${ownPath}.contacts.${i}`))
+    }
+    if (node.type === 'team_calendar') {
+      if (insideCollection || context.formId || context.rowTableId) issue('team_calendar_placement', ownPath, 'Добавьте календарь команды на отдельный экран, вне формы и строк списка')
+      for (const problem of validateTeamCalendar(app, node, catalog, options.mode === 'publish')) issue(problem.code, problem.path, problem.message)
+    }
     if((node.type==='gallery'||node.type==='files')&&(node.value.kind==='row'||node.value.kind==='screen_row')){
       const selected=catalog.fields.get(node.value.fieldId)
       if(selected&&!['image','attachment','url','text','long_text'].includes(selected.type))issue('media_field_type',ownPath,'Выберите поле с фотографиями, файлами или ссылками')
@@ -188,6 +199,9 @@ export function validateAppV2(app: AppV2, catalog: AppV2Catalog, options: { mode
         if(node.kanbanMoveRoleIds)for(const id of node.kanbanMoveRoleIds)if(!roles.has(id))issue('missing_role',ownPath,'Выберите существующую роль для смены статуса')
         if(node.layout==='calendar'&&!node.dateFieldId)issue('missing_calendar_field',ownPath,'Выберите поле даты для календаря')
         if(node.layout==='timeline'&&!node.dateFieldId)issue('missing_timeline_field',ownPath,'Выберите поле даты для ленты')
+        if(node.layout==='history'&&!node.dateFieldId)issue('missing_history_field',ownPath,'Выберите дату события для истории')
+        if(node.statusFieldId){const found=field(node.statusFieldId,source.tableId,ownPath);if(found&&found.type!=='single_select')issue('history_status_type',ownPath,'Для статуса выберите поле с одним вариантом')}
+        if(node.historyNoteFieldId)field(node.historyNoteFieldId,source.tableId,ownPath)
         if(node.layout==='kanban'&&!node.groupFieldId)issue('missing_board_field',ownPath,'Выберите поле статуса для канбана')
         if (node.subtitleFieldId) field(node.subtitleFieldId, source.tableId, ownPath)
         if (node.cardImageFieldId) {
@@ -378,6 +392,29 @@ export function validateAppV2(app: AppV2, catalog: AppV2Catalog, options: { mode
       if (found && !['text', 'email', 'created_by', 'updated_by'].includes(found.type)) issue('owner_field_type', path, 'Для владельца записи нужно текстовое поле или почта')
     }
   }
+  if (app.booking) {
+    const booking = app.booking, path = 'booking'
+    for (const [key, values] of [["services", booking.service], ["masters", booking.master], ["schedule", booking.schedule], ["visits", booking.visit]] as const) {
+      table(booking.tables[key], path)
+      for (const fieldId of Object.values(values)) {
+        const column = catalog.fields.get(fieldId)
+        if (!column || column.tableId !== booking.tables[key]) issue('booking_field', path, 'Поле записи относится к другой таблице или удалено')
+      }
+    }
+    for (const screenId of [booking.catalogScreenId, booking.serviceScreenId, booking.mastersScreenId, booking.masterScreenId, booking.visitScreenId, booking.clientScreenId, booking.listScreenId, booking.formScreenId, booking.rescheduleScreenId, booking.setupScreenId]) if (!screenId || !screens.has(screenId)) issue('booking_screen', path, 'Экран онлайн-записи удалён')
+    for (const formId of [booking.createFormId, booking.rescheduleFormId, booking.statusFormId, ...(booking.ownerCreateFormId ? [booking.ownerCreateFormId] : [])]) if (nodes.get(formId)?.type !== 'form') issue('booking_form', path, 'Форма онлайн-записи удалена')
+    if (booking.periodScreenId && !screens.has(booking.periodScreenId)) issue('booking_screen', path, 'Экран рабочего времени удалён')
+    if (booking.clients) {
+      const clients = booking.clients
+      table(clients.tableId, path)
+      for (const id of [clients.name,clients.phone,clients.email,clients.note]) field(id, clients.tableId, path)
+      const relation = field(clients.linkFieldId, booking.tables.visits, path)
+      if (relation && (relation.type !== 'relation' || relation.relationTableId !== clients.tableId)) issue('booking_client_relation', path, 'Визит должен ссылаться на таблицу клиентов')
+      for (const id of [booking.customersScreenId,booking.customerScreenId]) if (!id || !screens.has(id)) issue('booking_screen', path, 'Экран клиентов удалён')
+      for (const id of [booking.customerCreateFormId,booking.customerEditFormId]) if (!id || nodes.get(id)?.type !== 'form') issue('booking_form', path, 'Форма клиента удалена')
+    }
+    for (const [fieldId, tableId] of [[booking.servicePhotoFieldId, booking.tables.services], [booking.serviceDescriptionFieldId, booking.tables.services], [booking.masterPhotoFieldId, booking.tables.masters], [booking.masterDescriptionFieldId, booking.tables.masters]]) if (fieldId && catalog.fields.get(fieldId)?.tableId !== tableId) issue('booking_field', path, 'Поле карточки относится к другой таблице')
+  }
   if (app.shop) {
     const shop = app.shop, path = 'shop'
     table(shop.catalogTableId, path); table(shop.ordersTableId, path); table(shop.itemsTableId, path)
@@ -388,6 +425,8 @@ export function validateAppV2(app: AppV2, catalog: AppV2Catalog, options: { mode
     product(shop.activeFieldId, shop.catalogTableId); product(shop.productTitleFieldId, shop.catalogTableId); product(shop.priceFieldId, shop.catalogTableId)
     if (shop.imageFieldId) { const image = product(shop.imageFieldId, shop.catalogTableId); if (image && !['image', 'url'].includes(image.type)) issue('shop_image', path, 'Фото каталога должно быть изображением или ссылкой') }
     if (shop.descriptionFieldId) product(shop.descriptionFieldId, shop.catalogTableId)
+    if (shop.stockFieldId) { const stock = product(shop.stockFieldId, shop.catalogTableId); if (stock && !['number', 'formula', 'rollup'].includes(stock.type)) issue('shop_stock', path, 'Остаток каталога должен быть числом') }
+    if (shop.categoryFieldId) product(shop.categoryFieldId, shop.catalogTableId)
     for (const fieldId of [shop.emailFieldId, shop.statusFieldId, shop.assignmentFieldId, shop.submissionFieldId, shop.createdFieldId, shop.cartFieldId, shop.positionsFieldId, shop.orderTitleFieldId, shop.addressFieldId]) product(fieldId, shop.ordersTableId)
     for (const fieldId of [shop.itemNameFieldId, shop.itemQtyFieldId, shop.itemPriceFieldId, shop.itemEmailFieldId, shop.itemAssignmentFieldId, shop.productFieldId]) product(fieldId, shop.itemsTableId)
     const productRelation = catalog.fields.get(shop.productFieldId)

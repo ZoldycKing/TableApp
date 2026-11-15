@@ -15,6 +15,7 @@ import { recordInventoryMovement } from './inventory-movement'
 import { cancelPurchaseOrder, createPurchaseOrder, orderPurchaseOrder, receivePurchaseOrder, updatePurchaseOrder } from './purchase-order'
 import { cancelInventoryCount, createInventoryCount, postInventoryCount, updateInventoryCount } from './inventory-count'
 import { createReorderOrders } from './inventory-reorder'
+import { builderV2BookingWriteError } from './builder-v2-booking-policy'
 
 export class BuilderV2WorkflowError extends Error {
   readonly trace: BuilderV2WorkflowTrace
@@ -187,6 +188,8 @@ export async function executeBuilderV2Workflow(options: { write: RowTransaction;
           const stored = row ? await workingBuilderV2Record(write.tx, row.tableId, row.id, true) : undefined, current = stored ? options.published?{id:stored.id,tableId:stored.tableId,values:stored.data as Record<string,AppV2Json>}:await record(stored) : undefined
           const permission = authorizeAppV2Write(app, actor, current ? { operation: 'update', row: current, values } : { operation: 'create', tableId: step.tableId, values })
           if (!permission.ok) throw new RowWriteError('denied', permission.error)
+          const bookingError = builderV2BookingWriteError(app, actor, step.tableId, values, stored?.data as Record<string, unknown> | undefined)
+          if (bookingError) throw new RowWriteError('invalid', bookingError)
           let id: string
           if (stored) { await updateRow(write, stored.tableId, stored.id, values, { id: userId, kind: options.published?'app_user':'member' }, { baseVersion: stored.version }); id = stored.id }
           else {id = (await createRow(write, step.tableId, { ...values, ...permission.ownerValues }, { id: userId, kind: options.published?'app_user':'member' },options.published?{origin:'runtime'}:undefined)).id;created.set(id,step.id)}

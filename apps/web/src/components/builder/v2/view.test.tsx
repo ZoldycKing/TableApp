@@ -118,13 +118,13 @@ describe('shared v2 layout renderer', () => {
     const props = { app, screenId: 'detail', tables, actor: fixtureActor }
     const view = render(<AppV2Renderer {...props} record={record} />)
     expect(screen.getByRole('heading', { level: 1, name: 'Настольная лампа' })).toBeTruthy()
-    expect(screen.getByText('1 290 ₽')).toBeTruthy()
+    expect(screen.getByText('1 290,00 ₽')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Открыть фото 1: Настольная лампа' })).toBeTruthy()
     expect(screen.getByText('Тёплый свет')).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Характеристики' })).toBeTruthy()
-    const limited = { ...record, values: { r_title: 'Настольная лампа' }, display: { r_amount: '1 290 ₽', r_description: 'Тёплый свет' } }
+    const limited = { ...record, values: { r_title: 'Настольная лампа' }, display: { r_amount: '1 290,00 ₽', r_description: 'Тёплый свет' } }
     view.rerender(<AppV2Renderer {...props} record={limited} />)
-    expect(screen.queryByText('1 290 ₽')).toBeNull()
+    expect(screen.queryByText('1 290,00 ₽')).toBeNull()
     expect(screen.queryByText('Тёплый свет')).toBeNull()
     expect(screen.queryByRole('button', { name: /Открыть фото/ })).toBeNull()
   })

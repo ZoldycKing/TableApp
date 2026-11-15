@@ -47,6 +47,13 @@ export function TeamCalendarSettings({
         <div className={ui.calendarSettings}>
           <label>Один сотрудник<input value={node.resourceLabel} maxLength={40} onChange={event => onChange({ ...node, resourceLabel: event.target.value })} /></label>
           <label>Вся команда<input value={node.resourcesLabel} maxLength={40} onChange={event => onChange({ ...node, resourcesLabel: event.target.value })} /></label>
+          <label>Вид по умолчанию
+            <select aria-label="Вид по умолчанию" value={node.defaultView ?? 'day'} onChange={event => onChange({ ...node, defaultView: event.target.value as 'list' | 'day' | 'week' })}>
+              <option value="list">Список</option>
+              <option value="day">День</option>
+              <option value="week">Неделя</option>
+            </select>
+          </label>
           <label><input type="checkbox" checked={node.showMetrics} onChange={event => onChange({ ...node, showMetrics: event.target.checked })} />Показывать показатели</label>
         </div>
       )}

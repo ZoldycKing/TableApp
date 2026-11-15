@@ -23,6 +23,7 @@ export function upgradeBookingTeamCalendar(app: AppV2): AppV2 {
     resourceLabel: 'Мастер',
     resourcesLabel: 'Мастера',
     showMetrics: true,
+    defaultView: 'day',
     data: {
       tableId: booking.tables.visits,
       viewId: null,

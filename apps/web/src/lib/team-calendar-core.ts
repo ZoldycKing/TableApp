@@ -86,3 +86,27 @@ export function calendarEventLanes(events: readonly TeamCalendarEvent[]) {
   flush()
   return result
 }
+
+/** Visible day window: working hours and appointments, plus an hour of context, snapped to the hour. */
+export function calendarGridBounds(
+  windows: readonly { start: number; end: number }[],
+  events: readonly { start: number; end: number }[],
+) {
+  const pad = 60
+  const starts = [8 * 60, ...windows.map(window => window.start - pad), ...events.map(event => event.start - pad)]
+  const ends = [20 * 60, ...windows.map(window => window.end + pad), ...events.map(event => event.end + pad)]
+  const start = Math.max(0, Math.floor(Math.min(...starts) / 60) * 60)
+  const end = Math.min(24 * 60, Math.ceil(Math.max(...ends) / 60) * 60)
+  const span = Math.max(60, end - start)
+  return { start, end, span }
+}
+
+/** Top and height as fractions of the visible window. A longer appointment is a taller block. */
+export function calendarBlockFrame(bounds: { start: number; end: number }, from: number, to: number) {
+  const span = Math.max(60, bounds.end - bounds.start)
+  const clipped = Math.min(Math.max(to, from), bounds.end)
+  return {
+    top: (from - bounds.start) / span,
+    height: Math.max(0, clipped - from) / span,
+  }
+}

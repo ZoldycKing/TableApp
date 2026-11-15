@@ -29,10 +29,10 @@ it('renders a calendar outside the salon adapter, opens records and preserves co
  const show=(editing:boolean)=><TeamCalendarDemoContext value={()=>({ok:true,data})}><BuilderV2TeamCalendar app={app} node={calendar} screenId={query.screenId} actor={actor} tables={tables} onNavigate={navigate} editing={editing}/></TeamCalendarDemoContext>
  const view=render(show(false));const event=await screen.findByRole('button',{name:/Открыть запись:/});fireEvent.click(event)
  expect(navigate).toHaveBeenCalledWith(calendar.actions.itemScreenId,'event')
- expect(screen.getByRole('button',{name:'Добавить запись'}).hasAttribute('disabled')).toBe(false)
+ expect(screen.getByRole('button',{name:'Записать'}).hasAttribute('disabled')).toBe(false)
  view.rerender(show(true));await screen.findByRole('button',{name:/Открыть запись:/})
- expect(screen.getByRole('button',{name:'Добавить запись'}).hasAttribute('disabled')).toBe(true)
- expect(screen.getByRole('button',{name:'Настроить рабочие часы'}).hasAttribute('disabled')).toBe(true)
+ expect(screen.getByRole('button',{name:'Записать'}).hasAttribute('disabled')).toBe(true)
+ expect(screen.getByRole('button',{name:'Настроить часы'}).hasAttribute('disabled')).toBe(true)
 })
 it('carries the selected time and employee into a generic create form without executing a write',async()=>{
  const navigate=vi.fn(),day=instantToWallClock(new Date(Date.now()+2*86400000),'Europe/Moscow')!.date

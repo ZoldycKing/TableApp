@@ -34,9 +34,10 @@ export function buildBookingV2App(built: BuiltTemplate, meta: { id: string; work
     createFormId: newId('component'), rescheduleFormId: newId('component'), statusFormId: newId('component'), cancelButtonId: newId('component'),
     servicePhotoFieldId: field('services', 'photo'), serviceDescriptionFieldId: field('services', 'description'),
     masterPhotoFieldId: field('masters', 'photo'), masterDescriptionFieldId: field('masters', 'description'),
+    masterRoleFieldId: field('masters', 'role'),
     periodScreenId: newId('screen'),
     ownerCreateFormId: newId('component'),
-    clients: { tableId: table('clients').id, ...group('clients', { name: 'name', phone: 'phone', email: 'email', note: 'note' }), linkFieldId: field('visits', 'profile') },
+    clients: { tableId: table('clients').id, ...group('clients', { name: 'name', phone: 'phone', email: 'email', note: 'note', photo: 'photo', telegram: 'telegram', whatsapp: 'whatsapp', max: 'max', otherMessengerLabel: 'otherMessengerLabel', otherMessengerValue: 'otherMessengerValue' }), linkFieldId: field('visits', 'profile') },
     customersScreenId: newId('screen'), customerScreenId: newId('screen'), customerCreateFormId: newId('component'), customerEditFormId: newId('component'),
   }
   const nodes: AppV2Node[] = [], sources: AppV2['sources'] = [], workflows: AppV2['workflows'] = [], screens: AppV2['screens'] = [], rules: AppV2['policy']['workflows'] = []
@@ -112,7 +113,13 @@ export function buildBookingV2App(built: BuiltTemplate, meta: { id: string; work
     { fieldId: booking.clients!.name, label: 'Имя клиента', required: true },
     { fieldId: booking.clients!.phone, label: 'Телефон', required: true },
     { fieldId: booking.clients!.email, label: 'Почта' },
-    { fieldId: booking.clients!.note, label: 'Заметки о клиенте' },
+    { fieldId: booking.clients!.photo!, label: 'Фото' },
+    { fieldId: booking.clients!.telegram!, label: 'Telegram' },
+    { fieldId: booking.clients!.whatsapp!, label: 'WhatsApp' },
+    { fieldId: booking.clients!.max!, label: 'MAX' },
+    { fieldId: booking.clients!.otherMessengerLabel!, label: 'Другой мессенджер' },
+    { fieldId: booking.clients!.otherMessengerValue!, label: 'Контакт другого мессенджера' },
+    { fieldId: booking.clients!.note, label: 'Предпочтения и заметки' },
   ]
   screen(booking.customersScreenId!, 'Клиенты', 'users', owner, null, [collection(booking.customersScreenId!, 'Клиенты', booking.clients!.tableId, booking.clients!.name, booking.customerScreenId!, owner), form(booking.customerCreateFormId!, 'Добавить клиента', booking.customersScreenId!, booking.clients!.tableId, 'create', clientFields, owner, null)])
   screen(booking.customerScreenId!, 'Клиент', 'user', owner, booking.clients!.tableId, [form(booking.customerEditFormId!, 'Изменить клиента', booking.customerScreenId!, booking.clients!.tableId, 'edit', clientFields, owner, booking.clients!.tableId)], false)

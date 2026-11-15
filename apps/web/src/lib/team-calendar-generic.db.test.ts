@@ -70,7 +70,7 @@ describe.skipIf(!process.env.DATABASE_URL)('generic team calendar without a salo
       screens: [{ id: home, name: 'Смены', icon: 'calendar', navigation: true, audience: { kind: 'roles', roleIds: ['owner', 'limited'] }, contextTableId: null, rootIds: [nodeId], events: { enter: null } }],
       nodes: [{
         id: nodeId, name: 'Смены', type: 'team_calendar', visibleTo: { kind: 'roles', roleIds: ['owner', 'limited'] }, visibleWhen: null,
-        resourceLabel: 'Сотрудник', resourcesLabel: 'Сотрудники', showMetrics: true,
+        resourceLabel: 'Сотрудник', resourcesLabel: 'Сотрудники', showMetrics: true, defaultView: 'day',
         data: {
           tableId: events, viewId: null, titleFieldId: title, subtitleFieldId: null, startFieldId: start, endFieldId: end, durationFieldId: null,
           resourceFieldId: who, statusFieldId: null, amountFieldId: null, statusValues: {},

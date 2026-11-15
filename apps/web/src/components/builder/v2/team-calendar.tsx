@@ -66,6 +66,7 @@ export function BuilderV2TeamCalendar({
       resourceLabel={node.resourceLabel}
       resourcesLabel={node.resourcesLabel}
       showMetrics={node.showMetrics}
+      defaultView={node.defaultView ?? 'day'}
       showWorkingHours={Boolean(config.hours)}
       showAmounts={Boolean(config.amountFieldId)}
       showNoShows={Boolean(config.statusValues.noShow)}

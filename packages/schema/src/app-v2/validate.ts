@@ -407,13 +407,13 @@ export function validateAppV2(app: AppV2, catalog: AppV2Catalog, options: { mode
     if (booking.clients) {
       const clients = booking.clients
       table(clients.tableId, path)
-      for (const id of [clients.name,clients.phone,clients.email,clients.note]) field(id, clients.tableId, path)
+      for (const id of [clients.name, clients.phone, clients.email, clients.note, clients.photo, clients.telegram, clients.whatsapp, clients.max, clients.otherMessengerLabel, clients.otherMessengerValue]) if (id) field(id, clients.tableId, path)
       const relation = field(clients.linkFieldId, booking.tables.visits, path)
       if (relation && (relation.type !== 'relation' || relation.relationTableId !== clients.tableId)) issue('booking_client_relation', path, 'Визит должен ссылаться на таблицу клиентов')
       for (const id of [booking.customersScreenId,booking.customerScreenId]) if (!id || !screens.has(id)) issue('booking_screen', path, 'Экран клиентов удалён')
       for (const id of [booking.customerCreateFormId,booking.customerEditFormId]) if (!id || nodes.get(id)?.type !== 'form') issue('booking_form', path, 'Форма клиента удалена')
     }
-    for (const [fieldId, tableId] of [[booking.servicePhotoFieldId, booking.tables.services], [booking.serviceDescriptionFieldId, booking.tables.services], [booking.masterPhotoFieldId, booking.tables.masters], [booking.masterDescriptionFieldId, booking.tables.masters]]) if (fieldId && catalog.fields.get(fieldId)?.tableId !== tableId) issue('booking_field', path, 'Поле карточки относится к другой таблице')
+    for (const [fieldId, tableId] of [[booking.servicePhotoFieldId, booking.tables.services], [booking.serviceDescriptionFieldId, booking.tables.services], [booking.masterPhotoFieldId, booking.tables.masters], [booking.masterDescriptionFieldId, booking.tables.masters], [booking.masterRoleFieldId, booking.tables.masters]]) if (fieldId && catalog.fields.get(fieldId)?.tableId !== tableId) issue('booking_field', path, 'Поле карточки относится к другой таблице')
   }
   if (app.shop) {
     const shop = app.shop, path = 'shop'

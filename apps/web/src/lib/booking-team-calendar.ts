@@ -14,6 +14,7 @@ export function bookingTeamCalendarNode(
     resourceLabel: 'Мастер',
     resourcesLabel: 'Мастера',
     showMetrics: true,
+    defaultView: 'day',
     data: {
       tableId: booking.tables.visits,
       viewId: null,

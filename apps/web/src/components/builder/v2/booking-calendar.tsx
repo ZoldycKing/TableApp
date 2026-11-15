@@ -8,6 +8,8 @@ import {
   calendarShift,
   calendarClock,
   calendarEventLanes,
+  calendarGridBounds,
+  calendarBlockFrame,
   type TeamCalendarSnapshot,
 } from '@/lib/team-calendar-core'
 import type { CalendarSlot } from '@/lib/team-calendar-prefill'
@@ -63,7 +65,7 @@ export function TeamCalendarView({
   app, screenId, timeZone, working = false, onOpenVisit, onOpenPeriod, onAdd, onCreate, onConfigure,
   editing = false, loader, loaderKey, title = 'Расписание', resourceLabel = 'Мастер', resourcesLabel = 'Мастера',
   showMetrics = true, showWorkingHours = true, showAmounts = true, showNoShows = true, showOmissions = false,
-  calendarKey, leadMinutes = 60, stepMinutes = 15, horizonDays = 60,
+  calendarKey, leadMinutes = 60, stepMinutes = 15, horizonDays = 60, defaultView = 'day',
 }: {
   app: AppV2
   screenId: string
@@ -89,17 +91,20 @@ export function TeamCalendarView({
   leadMinutes?: number
   stepMinutes?: number
   horizonDays?: number
+  defaultView?: 'list' | 'day' | 'week'
 }) {
   const journey = useBookingJourney()
   const saved = journey && journey.calendar?.key === calendarKey ? journey.calendar : null
   const [day, setDay] = useState(saved?.day ?? instantToWallClock(new Date(), timeZone)!.date)
-  const [week, setWeek] = useState(saved?.week ?? working)
+  const [view, setView] = useState<'list' | 'day' | 'week'>(saved?.view ?? (saved?.week ? 'week' : defaultView))
   const [resource, setResource] = useState(saved?.masterId ?? '')
+  const [focusId, setFocusId] = useState('')
   const [compact, setCompact] = useState(false)
+  const week = view === 'week'
   const root = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    journey?.setCalendar({ day, masterId: resource, week, ...(calendarKey ? { key: calendarKey } : {}) })
-  }, [day, resource, week, calendarKey])
+    journey?.setCalendar({ day, masterId: resource, week, view, ...(calendarKey ? { key: calendarKey } : {}) })
+  }, [day, resource, week, view, calendarKey])
   const { result, retry } = useCalendar(app, { screenId, day, week }, loader, loaderKey)
   useEffect(() => {
     const element = root.current
@@ -120,9 +125,14 @@ export function TeamCalendarView({
     setDay(next.toISOString().slice(0, 10))
   }
   const range = week ? calendarDays(day, true) : [day]
+  const periodEvents = visibleEvents.filter(event => event.status !== 'cancelled' && (week || event.day === day))
+  const periodCount = new Map(periodEvents.map(event => [event.id, event])).size
   const periodLabel = week
     ? `${dateLabel(range[0]!, { day: 'numeric', month: 'short' })} — ${dateLabel(range[6]!, { day: 'numeric', month: 'short', year: 'numeric' })}`
     : dateLabel(day, { weekday: 'long', day: 'numeric', month: 'long' })
+  const periodLine = `${periodLabel} · ${bookingCountLabel(periodCount)}`
+  const phonePeople = data?.resources.filter(item => !selected || item.id === selected) ?? []
+  const phoneId = phonePeople.some(item => item.id === focusId) ? focusId : (selected || phonePeople[0]?.id || '')
   const zoneLabel = new Intl.DateTimeFormat('ru-RU', { timeZone: zone, timeZoneName: 'shortOffset' })
     .formatToParts(new Date())
     .find(part => part.type === 'timeZoneName')
@@ -138,10 +148,10 @@ export function TeamCalendarView({
         meta={showWorkingHours ? 'Записи и рабочие часы команды' : 'Записи команды'}
         actions={(
           <div className={css.actions}>
-            {onConfigure && <button type="button" className={styles.secondary} disabled={editing} onClick={onConfigure}>Настроить рабочие часы</button>}
+            {onConfigure && <button type="button" className={styles.textButton} disabled={editing} onClick={onConfigure}>Настроить часы</button>}
             {onAdd && (
               <button type="button" className={styles.primary} disabled={editing} onClick={() => (onCreate ? create({ day, ...(selected ? { resourceId: selected } : {}) }) : onAdd())}>
-                <ProtoIcon name="plus" />Добавить запись
+                <ProtoIcon name="plus" />Записать
               </button>
             )}
           </div>
@@ -155,8 +165,9 @@ export function TeamCalendarView({
         search={(
           <div className={css.controls}>
             <div className={css.mode} role="group" aria-label="Период календаря">
-              <button type="button" aria-pressed={!week} onClick={() => setWeek(false)}>День</button>
-              <button type="button" aria-pressed={week} onClick={() => setWeek(true)}>Неделя</button>
+              <button type="button" aria-pressed={view === 'list'} onClick={() => setView('list')}>Список</button>
+              <button type="button" aria-pressed={view === 'day'} onClick={() => setView('day')}>День</button>
+              <button type="button" aria-pressed={view === 'week'} onClick={() => setView('week')}>Неделя</button>
             </div>
             <div className={css.dateControls}>
               <button type="button" aria-label={week ? 'Предыдущая неделя' : 'Предыдущий день'} onClick={() => shiftDate(-1)}><ProtoIcon name="back" size={17} /></button>
@@ -175,7 +186,7 @@ export function TeamCalendarView({
         )}
       >
         <div className={css.caption}>
-          <h2>{periodLabel}</h2>
+          <h2>{periodLine}</h2>
           <span>Часовой пояс · {zoneLabel}</span>
         </div>
         {week && (
@@ -196,25 +207,41 @@ export function TeamCalendarView({
             </div>
           ) : !data?.resources.length ? <p className={css.feedback}>В календаре пока нет доступных сотрудников.</p> : (
             <>
-              {compact
-                ? <BookingDayAgenda showHeading={week} showWorkingHours={showWorkingHours} resourcesLabel={resourcesLabel} data={data} day={day} resourceId={selected} working={Boolean(onOpenPeriod)} editing={editing} onOpenVisit={onOpenVisit} onOpenPeriod={onOpenPeriod} />
-                : week
-                  ? <BookingWeekOverview showWorkingHours={showWorkingHours} resourcesLabel={resourcesLabel} data={data} resourceId={selected} working={Boolean(onOpenPeriod)} editing={editing} onOpenVisit={onOpenVisit} onOpenPeriod={onOpenPeriod} onOpenDay={date => { setDay(date); setWeek(false) }} />
-                  : (
-                    <CalendarGrid
-                      showWorkingHours={showWorkingHours}
-                      data={data}
-                      day={day}
-                      resourceId={selected}
-                      editing={editing}
-                      onOpenVisit={onOpenVisit}
-                      onOpenPeriod={onOpenPeriod}
-                      onCreate={onCreate ? create : undefined}
-                      leadMinutes={leadMinutes}
-                      stepMinutes={stepMinutes}
-                      horizonDays={horizonDays}
-                    />
+              {view === 'list' ? (
+                <BookingDayAgenda showHeading={false} showWorkingHours={showWorkingHours} resourcesLabel={resourcesLabel} data={data} day={day} resourceId={selected} working={Boolean(onOpenPeriod)} editing={editing} onOpenVisit={onOpenVisit} onOpenPeriod={onOpenPeriod} />
+              ) : view === 'week' ? (
+                <BookingWeekOverview showWorkingHours={showWorkingHours} resourcesLabel={resourcesLabel} data={data} resourceId={selected} working={Boolean(onOpenPeriod)} editing={editing} onOpenVisit={onOpenVisit} onOpenPeriod={onOpenPeriod} onOpenDay={date => { setDay(date); setView('day') }} />
+              ) : (
+                <>
+                  {compact && phonePeople.length > 1 && (
+                    <div className={css.staffSwitch} role="tablist" aria-label={resourcesLabel}>
+                      {phonePeople.map(person => {
+                        const count = data.events.filter(event => event.resourceId === person.id && event.day === day && event.status !== 'cancelled').length
+                        return (
+                          <button type="button" role="tab" key={person.id} aria-selected={person.id === phoneId} onClick={() => setFocusId(person.id)}>
+                            <BookingAvatar small name={person.name} photo={person.photo} />
+                            <span>{person.name}</span>
+                            <b>{count}</b>
+                          </button>
+                        )
+                      })}
+                    </div>
                   )}
+                  <CalendarGrid
+                    showWorkingHours={showWorkingHours}
+                    data={data}
+                    day={day}
+                    resourceId={compact ? phoneId : selected}
+                    editing={editing}
+                    onOpenVisit={onOpenVisit}
+                    onOpenPeriod={onOpenPeriod}
+                    onCreate={onCreate ? create : undefined}
+                    leadMinutes={leadMinutes}
+                    stepMinutes={stepMinutes}
+                    horizonDays={horizonDays}
+                  />
+                </>
+              )}
               {!compact && !week && showWorkingHours && (
                 <div className={css.legend}>
                   <span><i data-kind="hours" />Рабочая смена</span>
@@ -271,27 +298,26 @@ function CalendarGrid({
   const shifts = columns.map(column => data.shifts.find(shift => shift.resourceId === column.resource.id && shift.day === column.day)!)
   const workdays = shifts.map(shift => calendarShift(shift?.windows ?? []))
   const windows = shifts.flatMap(shift => shift?.windows ?? [])
-  const start = Math.max(0, Math.floor(Math.min(8 * 60, ...windows.map(window => window.start - 60), ...active.map(event => event.start - 60)) / 60) * 60)
-  const end = Math.min(1440, Math.ceil(Math.max(20 * 60, ...windows.map(window => window.end + 60), ...active.map(event => event.end + 60)) / 60) * 60)
-  const span = Math.max(60, end - start)
+  const bounds = calendarGridBounds(windows, active)
+  const { start, end, span } = bounds
   const height = span / 60 * 56
   const ticks = Array.from({ length: span / 60 + 1 }, (_, index) => start + index * 60)
-  const position = (from: number, to: number): CSSProperties => ({
-    top: `${(from - start) / span * 100}%`,
-    height: `${(Math.min(to, end) - from) / span * 100}%`,
-  })
+  const position = (from: number, to: number): CSSProperties => {
+    const frame = calendarBlockFrame(bounds, from, to)
+    return { top: `${frame.top * 100}%`, height: `${frame.height * 100}%` }
+  }
   const earliest = instantToWallClock(new Date(Date.now() + leadMinutes * 60000), data.timeZone)!
   const latestDay = instantToWallClock(new Date(Date.now() + horizonDays * 86400000), data.timeZone)!.date
   return (
     <div className={css.calendarScroll} tabIndex={0} aria-label="Прокрутка календаря по сотрудникам">
-      <div className={css.calendar} data-no-hours={!showWorkingHours || undefined} style={{ '--calendar-columns': columns.length, '--calendar-height': `${height}px`, minWidth: 56 + columns.length * 220 } as CSSProperties} aria-label="Календарь рабочих часов и записей">
+      <div className={css.calendar} data-no-hours={!showWorkingHours || undefined} style={{ '--calendar-columns': columns.length, '--calendar-height': `${height}px` } as CSSProperties} aria-label="Календарь рабочих часов и записей">
         <div className={css.head}>
           <span className={css.axisHead}>Время</span>
           {columns.map((column, index) => (
             <div className={css.columnHead} key={`${column.resource.id}:${column.day}`}>
-              <BookingAvatar small name={column.resource.name} photo={column.resource.photo} />
+              <span className={css.headPhoto}><BookingAvatar small name={column.resource.name} photo={column.resource.photo} /></span>
               <strong>{column.resource.name}</strong>
-              <small>{bookingCountLabel(relevant(column.resource.id, column.day).length)}</small>
+              <b className={css.headCount}>{relevant(column.resource.id, column.day).length}</b>
               {showWorkingHours && (
                 <HoursEdit
                   className={css.shiftSummary}
@@ -354,9 +380,9 @@ function CalendarGrid({
                     aria-label={`Открыть запись: ${event.title}, ${event.subtitle}, ${calendarClock(event.start)}–${calendarClock(event.end)}`}
                     onClick={() => onOpenVisit(event.id)}
                   >
-                    <span className={css.visitTime}>{calendarClock(event.start)}–{calendarClock(event.end)}</span>
                     <strong>{event.subtitle || event.title}</strong>
                     {event.subtitle && <small>{event.title}</small>}
+                    <span className={css.visitTime}>{calendarClock(event.start)}–{calendarClock(event.end)}</span>
                   </button>
                 ))}
               </section>

@@ -3,7 +3,7 @@ import { createContext, useContext, useState, type ReactNode } from 'react'
 import type { AppV2Json } from '@tableapp/schema/app-v2'
 
 export type BookingIntent = { masterId?: string; day?: string; time?: string; clientId?: string; client?: string; phone?: string; email?: string }
-type CalendarState = { day?: string; masterId?: string; week?: boolean; key?: string }
+type CalendarState = { day?: string; masterId?: string; week?: boolean; view?: 'list' | 'day' | 'week'; key?: string }
 type CalendarForm = { screenId: string; tableId: string; values: Record<string,AppV2Json> }
 type Journey = { intent: BookingIntent | null; setIntent: (value: BookingIntent | null) => void; calendar: CalendarState | null; setCalendar: (value: CalendarState | null) => void; calendarForm: CalendarForm | null; setCalendarForm: (value: CalendarForm | null) => void }
 const Context = createContext<Journey | null>(null)

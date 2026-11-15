@@ -742,7 +742,14 @@ export const bookingConfigSchema = z.object({
   master: z.object({ name: z.string(), email: z.string(), services: z.string(), active: z.string() }),
   schedule: z.object({ name: z.string(), master: z.string(), weekday: z.string(), start: z.string(), end: z.string(), date: z.string(), closed: z.string() }),
   visit: z.object({ client: z.string(), phone: z.string(), email: z.string(), service: z.string(), master: z.string(), masterEmail: z.string(), price: z.string(), minutes: z.string(), start: z.string(), status: z.string(), note: z.string() }),
-  clients: z.object({ tableId: z.string(), name: z.string(), phone: z.string(), email: z.string(), note: z.string(), linkFieldId: z.string() }).optional(),
+  clients: z.object({
+    tableId: z.string(), name: z.string(), phone: z.string(), email: z.string(), note: z.string(), linkFieldId: z.string(),
+    photo: z.string().optional(),
+    telegram: z.string().optional(), whatsapp: z.string().optional(), max: z.string().optional(),
+    otherMessengerLabel: z.string().optional(), otherMessengerValue: z.string().optional(),
+  }).optional(),
+  /** Job title on the team card. Absent on salons saved before this field existed. */
+  masterRoleFieldId: z.string().optional(),
   statuses: z.object({ booked: z.string(), arrived: z.string(), noShow: z.string(), cancelled: z.string(), completed: z.string().optional() }),
   weekdays: z.array(z.string()).length(7),
   listScreenId: z.string().optional(),

@@ -22,6 +22,7 @@ export const appV2TeamCalendarShape = {
   resourceLabel: z.string().min(1).max(40).default('Сотрудник'),
   resourcesLabel: z.string().min(1).max(40).default('Сотрудники'),
   showMetrics: z.boolean().default(true),
+  defaultView: z.enum(['list', 'day', 'week']).default('day'),
   actions: z.strictObject({
     itemScreenId: id.nullable(), createScreenId: id.nullable(), configureScreenId: id.nullable(), periodScreenId: id.nullable(),
     manageRoleIds: z.array(id).max(100),

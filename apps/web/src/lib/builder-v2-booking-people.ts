@@ -4,9 +4,12 @@ import { oneRelation, type BookingData, type BookingRow } from './booking'
 import { bookingCalendarSnapshot, type BookingCalendarSnapshot } from './builder-v2-booking-calendar'
 
 export type BookingPersonVisit = { id: string; clientId: string; masterId: string; service: string; start: string; minutes: number; status: string; price: number | null; note: string }
-export type BookingClient = { id: string; name: string; phone: string; email: string; note?: string; persistent?: boolean }
+export type BookingClient = {
+  id: string; name: string; phone: string; email: string; note?: string; persistent?: boolean; photo?: AppV2Json
+  telegram?: string; whatsapp?: string; max?: string; otherMessengerLabel?: string; otherMessengerValue?: string
+}
 export type BookingTeamSnapshot = {
-  timeZone: string; day: string; masters: { id: string; name: string; description: string; photo?: AppV2Json; services: string[] }[]
+  timeZone: string; day: string; masters: { id: string; name: string; role: string; description: string; photo?: AppV2Json; services: string[] }[]
   clients: BookingClient[]; visits: BookingPersonVisit[]; shifts: BookingCalendarSnapshot['shifts']
 }
 export type BookingTeamResult = { ok: true; data: BookingTeamSnapshot } | { ok: false; error: string }
@@ -25,12 +28,24 @@ export function bookingTeamSnapshot(app: AppV2, actor: AppV2Actor, data: Booking
     const v = project(b.tables.masters, row), name = text(v[b.master.name])
     if (!name) return []
     const photo = b.masterPhotoFieldId ? v[b.masterPhotoFieldId] : undefined
-    return [{ id: row.id, name, description: b.masterDescriptionFieldId ? text(v[b.masterDescriptionFieldId]) : '', ...(photo ? { photo } : {}), services: (Array.isArray(v[b.master.services]) ? v[b.master.services] as string[] : []).map(id => serviceNames.get(id) ?? '').filter(Boolean) }]
+    const role = b.masterRoleFieldId ? text(v[b.masterRoleFieldId]) : ''
+    return [{ id: row.id, name, role, description: b.masterDescriptionFieldId ? text(v[b.masterDescriptionFieldId]) : '', ...(photo ? { photo } : {}), services: (Array.isArray(v[b.master.services]) ? v[b.master.services] as string[] : []).map(id => serviceNames.get(id) ?? '').filter(Boolean) }]
   })
   const clients: BookingClient[] = [], identities = new Map<string, string>(), visits: BookingPersonVisit[] = []
   if (b.clients) for (const row of data.clients ?? []) {
     const c = b.clients, v = project(c.tableId, row), name = text(v[c.name])
-    if (name) clients.push({ id: row.id, name, phone: text(v[c.phone]), email: text(v[c.email]), note: text(v[c.note]), persistent: true })
+    if (!name) continue
+    const photo = c.photo ? v[c.photo] : undefined
+    const extra = (id?: string) => id ? text(v[id]) : ''
+    clients.push({
+      id: row.id, name, phone: text(v[c.phone]), email: text(v[c.email]), note: text(v[c.note]), persistent: true,
+      ...(photo ? { photo } : {}),
+      ...(extra(c.telegram) ? { telegram: extra(c.telegram) } : {}),
+      ...(extra(c.whatsapp) ? { whatsapp: extra(c.whatsapp) } : {}),
+      ...(extra(c.max) ? { max: extra(c.max) } : {}),
+      ...(extra(c.otherMessengerLabel) ? { otherMessengerLabel: extra(c.otherMessengerLabel) } : {}),
+      ...(extra(c.otherMessengerValue) ? { otherMessengerValue: extra(c.otherMessengerValue) } : {}),
+    })
   }
   for (const row of [...data.visits].sort((a, c) => a.id.localeCompare(c.id))) {
     const v = project(b.tables.visits, row), name = text(v[b.visit.client]), start = dateInstant(v[b.visit.start], data.timeZone)

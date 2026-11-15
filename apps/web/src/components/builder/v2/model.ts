@@ -111,7 +111,7 @@ export function addNode(app: AppV2, screenId: string, type: AppV2Node['type'], t
   if (type === 'heading') node = { ...base, type, value: { kind: 'literal', value: 'Новый заголовок' }, size: 'm' }
   else if (type === 'team_calendar') {
     if (context.rowTableId || context.formId) throw new Error('Добавьте календарь команды на отдельный экран')
-    node = { ...base, type, name: 'Расписание', data: null, resourceLabel: 'Сотрудник', resourcesLabel: 'Сотрудники', showMetrics: true, actions: { itemScreenId: null, createScreenId: null, configureScreenId: null, periodScreenId: null, manageRoleIds: app.roles.some(role=>role.id==='owner')?['owner']:[] } }
+    node = { ...base, type, name: 'Расписание', data: null, resourceLabel: 'Сотрудник', resourcesLabel: 'Сотрудники', showMetrics: true, defaultView: 'day', actions: { itemScreenId: null, createScreenId: null, configureScreenId: null, periodScreenId: null, manageRoleIds: app.roles.some(role=>role.id==='owner')?['owner']:[] } }
   }
   else if (type === 'profile') {
     const own = tables.find(table => table.id === context.rowTableId), fields = own?.fields ?? []

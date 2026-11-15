@@ -101,6 +101,7 @@ export async function loadPublishedV2Page(slug:string,request:{screen?:string;ro
     const queue = selected ? parent?.queue : undefined
     if (queue) nodes.push({ ...queue, visibleTo: null, visibleWhen: null })
     const sourceIds=new Set(nodes.flatMap(node=>'sourceId'in node?[node.sourceId]:[])),tableIds=new Set(nodes.flatMap(node=>node.type==='form'?[node.tableId]:[]))
+    for (const node of nodes) if (node.type === 'team_calendar' && node.data) for (const id of [node.data.tableId,node.data.resources.tableId,...(node.data.hours?[node.data.hours.tableId]:[])]) tableIds.add(id)
     if(screen.contextTableId)tableIds.add(screen.contextTableId)
     const sources=app.sources.filter(source=>sourceIds.has(source.id)).map(source=>{tableIds.add(source.tableId);return {...source,filter:null,sorts:[],viewId:null}})
     const fields=new Map<string,Set<string>>()

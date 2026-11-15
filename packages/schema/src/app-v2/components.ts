@@ -3,6 +3,7 @@ import { appV2Schema, type AppV2Node } from './schema'
 
 /** One vocabulary for the editor and future app planners. This describes capabilities, not permissions. */
 export const appV2ComponentCatalog = {
+  team_calendar: ['Календарь команды', 'Записи и рабочие часы сотрудников в одном календаре', 'calendar'],
   profile: ['Профиль', 'Фото, имя, контакты и действия клиента или сотрудника', 'user'],
   business: ['Бизнес-операция', 'Склад, производство или запись по времени', 'action'],
   gallery: ['Галерея', 'Фотографии из записи или по ссылкам', 'image'],

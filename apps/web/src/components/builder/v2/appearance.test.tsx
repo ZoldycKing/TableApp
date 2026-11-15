@@ -21,8 +21,8 @@ it('consolidates an older salon menu without rewriting its saved screens or hidi
  expect(builderV2Menu(app).some(screen=>screen.id===hours.id)).toBe(false)
  expect(builderV2MenuLabel(calendar,app)).toBe('Расписание')
  expect(app).toEqual(snapshot)
- const node=app.nodes.find(node=>calendar.rootIds.includes(node.id)&&node.type==='collection')!
- if(node.type==='collection')node.layout='cards'
+ const node=app.nodes.find(node=>calendar.rootIds.includes(node.id)&&node.type==='team_calendar')!
+ app.nodes=app.nodes.map(item=>item.id===node.id?{id:item.id,name:'Другая коллекция',visibleTo:null,visibleWhen:null,type:'collection' as const,sourceId:app.sources[0]!.id,layout:'cards' as const,titleFieldId:app.booking!.service.name,subtitleFieldId:null,itemIds:[],events:{itemPress:null}}:item)
  expect(builderV2Menu(app).some(screen=>screen.id===hours.id)).toBe(true)
 })
 it('keeps record screens and hidden screens out of navigation and separates the menu label from the heading',()=>{

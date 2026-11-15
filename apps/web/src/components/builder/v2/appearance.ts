@@ -29,7 +29,7 @@ export function builderV2ThemeStyle(theme: AppV2['theme'], appearance?: AppV2['a
 }
 export function builderV2Menu(app:AppV2) {
   const calendar = app.booking && app.screens.find(screen => screen.id === app.booking!.listScreenId && screen.navigation)
-  const unified = calendar?.rootIds.some(id => app.nodes.some(node => node.id === id && node.type === 'collection' && node.layout === 'calendar'))
+  const unified = calendar?.rootIds.some(id => app.nodes.some(node => node.id === id && (node.type === 'team_calendar' || node.type === 'collection' && node.layout === 'calendar')))
   return app.screens.filter(screen=>screen.navigation&&!screen.contextTableId&&!(unified && screen.id === app.booking?.setupScreenId))
 }
 export function builderV2MenuLabel(screen:AppV2['screens'][number], app?: Pick<AppV2, 'inventory'|'booking'>) {

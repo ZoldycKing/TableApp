@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { appThemeSchema, bookingConfigSchema, SLUG_PATTERN } from '../app'
+import { appV2TeamCalendarShape } from './team-calendar'
 import { appV2BindingSchema, appV2ConditionSchema, appV2IdSchema as id, type AppV2Binding, type AppV2Condition } from './values'
 
 export const appV2AudienceSchema = z.discriminatedUnion('kind', [
@@ -83,6 +84,7 @@ export const appV2BusinessOperationSchema = z.enum([
 export type AppV2BusinessOperation = z.infer<typeof appV2BusinessOperationSchema>
 /** Normalized tree: ordered child identifiers keep the shape finite even for invalid input. */
 export const appV2NodeSchema = z.discriminatedUnion('type', [
+  z.strictObject({ ...base, type: z.literal('team_calendar'), ...appV2TeamCalendarShape }),
   z.strictObject({ ...base, type: z.literal('heading'), value: appV2BindingSchema, size: z.enum(['s', 'm', 'l']).default('m') }),
   z.strictObject({ ...base, type: z.literal('text'), value: appV2BindingSchema }),
   z.strictObject({ ...base, type: z.literal('image'), value: appV2BindingSchema, alt: z.string().max(200) }),

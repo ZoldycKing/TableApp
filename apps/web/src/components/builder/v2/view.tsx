@@ -568,6 +568,7 @@ import { NODE_KINDS } from './model'
 import { builderV2PreviewRecordParent, builderV2RecordParent, collectionCardScreen } from './collection-navigation'
 import { BuilderV2FormPreview, BuilderV2FormInput, type WorkingFormOptions } from './form-preview'
 import { BookingScreen } from './booking-screens'
+import { BuilderV2TeamCalendar } from './team-calendar'
 import { BuilderV2DataNode } from './data-node'
 import type { BuilderV2DataPage, BuilderV2DataRecord, BuilderV2OrderSummary } from '@/lib/builder-v2-data-types'
 import { builderV2OrderLineFields, builderV2StatusColumn } from '@/lib/builder-v2-order-summary'
@@ -877,6 +878,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
         const image = node.image ? builderV2MediaItems(raw(node.image, record), published?.slug).find(item => item.image) : undefined
         content = <BuilderV2Profile nodeId={node.id} title={text(node.title)} subtitle={text(node.subtitle)} image={image} contacts={node.contacts.map(contact => ({ ...contact, value: text(contact.value) }))}>{node.childIds.length ? render(node.childIds, record, formTableId, itemId, itemLabel) : undefined}</BuilderV2Profile>
       }
+      else if (node.type === 'team_calendar') content = <BuilderV2TeamCalendar app={props.app} node={node} screenId={props.screenId} recordId={props.record?.id} tables={props.tables} actor={props.actor} editing={Boolean(props.editing)} onNavigate={props.onNavigate}/>
       else if (node.type === 'text') content = <p className={styles.bodyText}>{resolve(node.value, record)}</p>
       else if (node.type === 'field') {
         const fieldId = 'fieldId' in node.value ? node.value.fieldId : undefined

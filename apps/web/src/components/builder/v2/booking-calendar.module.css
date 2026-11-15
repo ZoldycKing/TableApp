@@ -73,6 +73,7 @@
 .feedback p { margin: 0 0 12px; }
 .feedback[role=status] { min-height: 640px; }
 .mobileDays { display: none; }
+.calendar[data-no-hours] .column { background: var(--v2-surface); }
 .cancelled { display: grid; gap: 8px; padding: 16px 20px; border-top: 1px solid var(--v2-line); }
 .cancelled strong { font-size: 12px; color: var(--v2-muted); }
 .cancelled button { text-align: left; border: 0; padding: 6px 0; font: inherit; font-size: 12px; color: var(--v2-muted); background: transparent; cursor: pointer; }

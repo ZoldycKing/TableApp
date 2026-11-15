@@ -1,42 +1,17 @@
+import { calendarDays as bookingCalendarDays, type TeamCalendarSnapshot as BookingCalendarSnapshot } from './team-calendar-core'
+export { type TeamCalendarWindow as BookingCalendarWindow, type TeamCalendarEvent as BookingCalendarVisit, type TeamCalendarSnapshot as BookingCalendarSnapshot, calendarDays as bookingCalendarDays, calendarClock as bookingClock, calendarShift as bookingCalendarShift, calendarEventLanes as bookingVisitLanes } from './team-calendar-core'
 import { calendarDay, dateInstant, instantToWallClock } from '@tableapp/schema'
 import { canOpenAppV2Screen, projectAppV2Row, readableAppV2Fields, type AppV2, type AppV2Actor, type AppV2Json } from '@tableapp/schema/app-v2'
 import { oneRelation, type BookingData, type BookingRow } from './booking'
 
 export type BookingCalendarRequest = { screenId: string; day: string; week: boolean }
-export type BookingCalendarWindow = { id: string; start: number; end: number }
-export type BookingCalendarVisit = { id: string; masterId: string; day: string; start: number; end: number; service: string; client: string; status: string; price: number | null }
-export type BookingCalendarSnapshot = {
-  timeZone: string; days: string[]; masters: { id: string; name: string; photo?: AppV2Json }[]
-  shifts: { masterId: string; day: string; windows: BookingCalendarWindow[] | null; exception: boolean; closed: boolean }[]
-  visits: BookingCalendarVisit[]
-}
 export type BookingCalendarResult = { ok: true; data: BookingCalendarSnapshot } | { ok: false; error: string }
 export function canOpenBookingCalendar(app: AppV2, actor: AppV2Actor, screenId: string) {
   return Boolean(app.booking && actor.authenticated && actor.roleIds.some(role => ['owner', 'staff'].includes(role)) && [app.booking.listScreenId, app.booking.setupScreenId].includes(screenId) && canOpenAppV2Screen(app, actor, screenId))
 }
 
-export function bookingCalendarDays(day: string, week: boolean): string[] {
-  const start = new Date(`${day}T12:00:00Z`)
-  if (!week) return [day]
-  start.setUTCDate(start.getUTCDate() - (start.getUTCDay() + 6) % 7)
-  return Array.from({ length: 7 }, (_, index) => {
-    const date = new Date(start); date.setUTCDate(start.getUTCDate() + index); return date.toISOString().slice(0, 10)
-  })
-}
 export function validBookingCalendarRequest(input: BookingCalendarRequest) {
   return Boolean(input && typeof input === 'object' && typeof input.screenId === 'string' && /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/.test(input.screenId) && typeof input.day === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(input.day) && calendarDay(input.day) === input.day && typeof input.week === 'boolean')
-}
-export const bookingClock = (minutes: number) => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`
-/** One visible shift with breaks, even when storage uses several or overlapping periods. */
-export function bookingCalendarShift(periods: readonly BookingCalendarWindow[]) {
-  const merged: { start: number; end: number }[] = []
-  for (const period of [...periods].sort((a, b) => a.start - b.start)) {
-    const previous = merged.at(-1)
-    if (previous && period.start <= previous.end) previous.end = Math.max(previous.end, period.end)
-    else merged.push({ start: period.start, end: period.end })
-  }
-  if (!merged.length) return null
-  return { start: merged[0]!.start, end: merged.at(-1)!.end, breaks: merged.slice(1).map((period, index) => ({ start: merged[index]!.end, end: period.start })) }
 }
 function minutes(value: unknown) {
   if (typeof value !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) return null
@@ -89,20 +64,4 @@ export function bookingCalendarSnapshot(app: AppV2, actor: AppV2Actor, data: Boo
       price: typeof price === 'number' && Number.isFinite(price) ? price : null }]
   }).sort((a, b) => a.start - b.start || a.id.localeCompare(b.id))
   return { ok: true, data: { timeZone: data.timeZone, days, masters, shifts, visits } }
-}
-
-/** Overlapping appointments get separate lanes rather than covering one another. */
-export function bookingVisitLanes(visits: readonly BookingCalendarVisit[]) {
-  const result: { visit: BookingCalendarVisit; lane: number; lanes: number }[] = []
-  let group: typeof result = [], ends: number[] = [], groupEnd = -1
-  const flush = () => { for (const item of group) item.lanes = ends.length; result.push(...group); group = []; ends = []; groupEnd = -1 }
-  for (const visit of [...visits].sort((a, b) => a.start - b.start || b.end - a.end)) {
-    if (group.length && visit.start >= groupEnd) flush()
-    let lane = ends.findIndex(end => end <= visit.start)
-    if (lane < 0) lane = ends.length
-    ends[lane] = visit.end; groupEnd = Math.max(groupEnd, visit.end)
-    group.push({ visit, lane, lanes: 1 })
-  }
-  flush()
-  return result
 }

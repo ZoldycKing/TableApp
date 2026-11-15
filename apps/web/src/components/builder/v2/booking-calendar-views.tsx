@@ -1,13 +1,12 @@
 'use client'
-import type { BookingCalendarSnapshot, BookingCalendarVisit } from '@/lib/builder-v2-booking-calendar'
-import { bookingCalendarShift, bookingClock } from '@/lib/builder-v2-booking-calendar'
+import { calendarShift as bookingCalendarShift, calendarClock as bookingClock, type TeamCalendarSnapshot as BookingCalendarSnapshot, type TeamCalendarEvent as BookingCalendarVisit } from '@/lib/team-calendar-core'
 import css from './booking-calendar.module.css'
 
 export const bookingCalendarDateLabel = (day: string, options: Intl.DateTimeFormatOptions) => new Date(`${day}T12:00:00Z`).toLocaleDateString('ru-RU', { ...options, timeZone: 'UTC' })
 export const bookingCalendarStatusNames: Record<string, string> = { booked: 'Записан', arrived: 'Пришёл', completed: 'Завершено', noShow: 'Не пришёл', cancelled: 'Отменён' }
 export const bookingCountLabel = (count: number, forms: readonly [string,string,string] = ['запись','записи','записей']) => `${count} ${forms[count % 10 === 1 && count % 100 !== 11 ? 0 : count % 10 >= 2 && count % 10 <= 4 && !(count % 100 >= 12 && count % 100 <= 14) ? 1 : 2]}`
 export type BookingCalendarViewProps = {
-  data: BookingCalendarSnapshot; masterId: string; working: boolean; editing: boolean
+  data: BookingCalendarSnapshot; masterId: string; working: boolean; editing: boolean; showWorkingHours?: boolean; resourcesLabel?: string
   onOpenVisit: (id: string) => void; onOpenPeriod?: (id: string) => void
 }
 const initials = (name: string) => name.trim().split(/\s+/).slice(0, 2).map(word => word[0]).join('')
@@ -27,7 +26,7 @@ function VisitCard({ visit, master, editing, onOpenVisit, agenda = false }: {
     {agenda && <span className={css.cardMaster}><span className={css.miniAvatar} aria-hidden>{initials(master)}</span>{master}</span>}
     <strong>{visit.service}</strong>
     {visit.client && <small>{visit.client}</small>}
-    {bookingCalendarStatusNames[visit.status] && <span className={css.cardStatus}>{bookingCalendarStatusNames[visit.status]}</span>}
+    {(visit.statusLabel || bookingCalendarStatusNames[visit.status]) && <span className={css.cardStatus}>{visit.statusLabel || bookingCalendarStatusNames[visit.status]}</span>}
   </button>
 }
 
@@ -40,18 +39,18 @@ function ShiftInfo({ data, masterId, day }: { data: BookingCalendarSnapshot; mas
 }
 
 /** Every master and every appointment stays visible; the row grows with its busiest day. */
-export function BookingWeekOverview({ data, masterId, editing, onOpenVisit, onOpenPeriod, onOpenDay }: BookingCalendarViewProps & { onOpenDay: (day: string) => void }) {
+export function BookingWeekOverview({ data, masterId, editing, onOpenVisit, onOpenPeriod, onOpenDay, showWorkingHours = true, resourcesLabel = 'Мастера' }: BookingCalendarViewProps & { onOpenDay: (day: string) => void }) {
   const masters = data.masters.filter(master => !masterId || master.id === masterId)
   return <div className={css.weekOverview} data-calendar-week>
-    <table className={css.weekTable} aria-label="Неделя всех мастеров">
+    <table className={css.weekTable} aria-label={resourcesLabel === 'Мастера' ? 'Неделя всех мастеров' : `Неделя: ${resourcesLabel}`}>
       <colgroup><col className={css.masterColumn} />{data.days.map(day => <col key={day} />)}</colgroup>
-      <thead><tr><th scope="col" className={css.weekCorner}>Мастера</th>{data.days.map(day => <th scope="col" key={day}><button type="button" className={css.openDay} aria-label={`Открыть день: ${dayName(day)}`} onClick={() => onOpenDay(day)}><span>{bookingCalendarDateLabel(day, { weekday: 'short' })}</span><strong>{bookingCalendarDateLabel(day, { day: 'numeric', month: 'short' })}</strong></button></th>)}</tr></thead>
+      <thead><tr><th scope="col" className={css.weekCorner}>{resourcesLabel}</th>{data.days.map(day => <th scope="col" key={day}><button type="button" className={css.openDay} aria-label={`Открыть день: ${dayName(day)}`} onClick={() => onOpenDay(day)}><span>{bookingCalendarDateLabel(day, { weekday: 'short' })}</span><strong>{bookingCalendarDateLabel(day, { day: 'numeric', month: 'short' })}</strong></button></th>)}</tr></thead>
       <tbody>{masters.map(master => <tr key={master.id}>
         <th scope="row" className={css.weekMaster}><span className={css.avatar} aria-hidden>{initials(master.name)}</span><strong>{master.name}</strong></th>
         {data.days.map(day => {
           const visits = data.visits.filter(visit => visit.masterId === master.id && visit.day === day && visit.status !== 'cancelled')
           return <td key={day}><section className={css.weekCell} aria-label={`${master.name}, ${dayName(day)}`}>
-            <ShiftInfo data={data} masterId={master.id} day={day} />
+            {showWorkingHours && <ShiftInfo data={data} masterId={master.id} day={day} />}
             <BookingPeriodChoice periods={data.shifts.find(shift => shift.masterId === master.id && shift.day === day)?.windows ?? []} master={`${master.name}, ${dayName(day)}`} editing={editing} onOpenPeriod={onOpenPeriod}/>
             <div className={css.weekVisits}>{visits.map(visit => <VisitCard key={visit.id} visit={visit} master={master.name} editing={editing} onOpenVisit={onOpenVisit} />)}</div>
             {!visits.length && <span className={css.noVisits}>Нет записей</span>}
@@ -63,22 +62,22 @@ export function BookingWeekOverview({ data, masterId, editing, onOpenVisit, onOp
 }
 
 /** On small screens the chosen day's appointments form one chronological feed for the whole team. */
-export function BookingDayAgenda({ data, masterId, day, working, editing, onOpenVisit, onOpenPeriod }: BookingCalendarViewProps & { day: string }) {
+export function BookingDayAgenda({ data, masterId, day, working, editing, onOpenVisit, onOpenPeriod, showWorkingHours = true, resourcesLabel = 'Мастера' }: BookingCalendarViewProps & { day: string }) {
   const masters = data.masters.filter(master => !masterId || master.id === masterId)
   const ids = new Set(masters.map(master => master.id))
   const visits = data.visits.filter(visit => visit.day === day && ids.has(visit.masterId) && visit.status !== 'cancelled').sort((a, b) => a.start - b.start || a.masterId.localeCompare(b.masterId))
   return <div className={css.dayAgenda} data-calendar-agenda>
     <h3>{dayName(day)}</h3>
-    <div className={css.roster} aria-label="График мастеров на день">{masters.map(master => {
+    <div className={css.roster} aria-label={`${resourcesLabel}: выбранный день`}>{masters.map(master => {
       const periods = data.shifts.find(shift => shift.masterId === master.id && shift.day === day)?.windows ?? []
       return <div className={css.rosterRow} key={master.id}>
         <span className={css.avatar} aria-hidden>{initials(master.name)}</span><strong>{master.name}</strong>
-        <ShiftInfo data={data} masterId={master.id} day={day} />
+        {showWorkingHours && <ShiftInfo data={data} masterId={master.id} day={day} />}
         {working && <BookingPeriodChoice periods={periods} master={master.name} editing={editing} onOpenPeriod={onOpenPeriod}/>}
       </div>
     })}</div>
     <h4>Записи на день <span>{visits.length}</span></h4>
-    <div className={css.agendaVisits}>{visits.map(visit => <VisitCard key={visit.id} visit={visit} master={masters.find(master => master.id === visit.masterId)?.name ?? ''} editing={editing} onOpenVisit={onOpenVisit} agenda />)}</div>
+    <div className={css.agendaVisits}>{visits.map(visit => <VisitCard key={`${visit.id}:${visit.masterId}`} visit={visit} master={masters.find(master => master.id === visit.masterId)?.name ?? ''} editing={editing} onOpenVisit={onOpenVisit} agenda />)}</div>
     {!visits.length && <p className={css.agendaEmpty}>На этот день записей пока нет.</p>}
   </div>
 }

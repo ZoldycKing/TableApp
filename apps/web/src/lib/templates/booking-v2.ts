@@ -1,4 +1,5 @@
 import { newId, type BookingConfig } from '@tableapp/schema'
+import { bookingTeamCalendarNode } from '../booking-team-calendar'
 import type { AppV2, AppV2Audience, AppV2Binding, AppV2Grant, AppV2Node } from '@tableapp/schema/app-v2'
 import type { BuiltTemplate } from './build'
 import { salon } from './defs/salon'
@@ -141,6 +142,8 @@ export function buildBookingV2App(built: BuiltTemplate, meta: { id: string; work
   clientCard.rootIds.unshift(layoutId)
   const grant = (allowed: AppV2Audience, value: Omit<AppV2Grant, 'audience'>): AppV2Grant => ({ audience: allowed, ...value })
   const columns = (tableId: string) => built.fields.filter(item => item.tableId === tableId).map(item => item.id)
+  const calendarIndex = nodes.findIndex(node => node.type === 'collection' && screens.find(screen=>screen.id===booking.listScreenId)?.rootIds.includes(node.id))
+  if (calendarIndex >= 0) nodes[calendarIndex] = bookingTeamCalendarNode(booking,nodes[calendarIndex]!.id)
   return {
     formatVersion: 2, id: meta.id, workspaceId: meta.workspaceId, name: meta.name, slug: meta.slug, purpose: 'business', appearance: { navigation: 'tabs', icon: 'calendar', density: 'regular', corners: 'rounded' }, theme: { accent: 'green', scheme: 'light', logoKey: null, iconKey: null },
     roles: [{ id: 'owner', name: 'Администратор' }, { id: 'staff', name: 'Мастер' }, { id: 'client', name: 'Клиент' }],

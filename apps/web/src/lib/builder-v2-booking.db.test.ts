@@ -166,13 +166,19 @@ describe.skipIf(!process.env.DATABASE_URL)('native v2 booking transactions', () 
     identity.email = member.email
     const published = await readPublishedV2Data(app.slug, { screenId: config.catalogScreenId, nodeId: serviceNode.id, revision: liveRevision() })
     expect(published.rows.map(row => row.id)).toEqual(preview.rows.map(row => row.id))
-    const visits = app.nodes.find(node => node.type === 'collection' && app.screens.find(screen => screen.id === config.listScreenId)!.rootIds.includes(node.id))!
-    const agenda = await readBuilderV2NodeData(app, member, { screenId: config.listScreenId, nodeId: visits.id, calendarMonth: day.slice(0, 7), calendarDay: day })
-    expect(agenda.rows.length).toBeGreaterThan(0)
-    expect(agenda.rows[0]!.values).toHaveProperty(config.visit.master)
-    expect(agenda.rows[0]!.values).toHaveProperty(config.visit.status)
-    expect(agenda.rows[0]!.values).toHaveProperty(config.visit.price)
-    expect(agenda.rows[0]!.display[config.visit.service]).toBeTruthy()
+    const calendar = app.nodes.find(node => node.type === 'team_calendar')!
+    if (calendar.type !== 'team_calendar') throw Error('Calendar is missing')
+    const query = { screenId: config.listScreenId!, nodeId: calendar.id, day, week: false }
+    const { readTeamCalendar } = await import('./team-calendar-read')
+    const { builderV2MemberActor } = await import('./builder-v2-actor')
+    const agenda = await db.db.transaction(tx => readTeamCalendar(tx, app, builderV2MemberActor(app,member), calendar, query, false))
+    expect(agenda.visits.length).toBeGreaterThan(0)
+    expect(agenda.visits[0]!.masterId).toBeTruthy()
+    expect(agenda.visits[0]!.status).toBeTruthy()
+    expect(agenda.visits[0]!.price).not.toBeNull()
+    expect(agenda.visits[0]!.service).toBeTruthy()
+    const result = await (await import('@/app/team-calendar-actions')).readPublishedTeamCalendarAction(app.slug,{...query,revision:liveRevision()})
+    expect(result).toEqual({ok:true,data:agenda})
   })
   it('rejects a forged readonly status and protects a foreign visit when moving it', async () => {
     const request = await draft('other@example.com')

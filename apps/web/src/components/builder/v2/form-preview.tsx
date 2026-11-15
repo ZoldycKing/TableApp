@@ -1,5 +1,6 @@
 'use client'
 import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { useBookingJourney } from './booking-journey'
 import {BuilderV2AttachmentInput} from './attachment-input'
 import {attachmentSchema,type Attachment} from '@tableapp/schema'
 import { instantToWallClock } from '@tableapp/schema'
@@ -33,6 +34,7 @@ const editSaveNotice = (effects: BuilderV2WorkflowEffect[] = []) => effects.leng
 
 export function BuilderV2FormPreview({ app, form, screenId, recordId, enabled, editing, working, children }: { app: AppV2; form: BuilderV2Form; screenId: string; recordId?: string; enabled: boolean; editing: boolean; working?: WorkingFormOptions; children: ReactNode }) {
   const published=usePublishedV2()
+  const journey=useBookingJourney()
   const bookingDemo = useContext(BookingDemoAvailability)
   const actionPanel = useBuilderV2OrderActionPanel()
   const formTitle=form.mode==='edit'&&(!form.name||form.name==='Новая запись')?'Изменить запись':form.name||'Новая запись'
@@ -58,7 +60,10 @@ export function BuilderV2FormPreview({ app, form, screenId, recordId, enabled, e
         if (working?.revision && result.ok && 'state' in result && (!('revision' in result.state) || result.state.revision !== working.revision)) {
           setData({ key, values: {}, errors: {}, error: 'Настройки изменились. Обновите страницу формы.', loading: false, checking: false, success: false, stale: true }); return
         }
-        setData(result.ok && 'state' in result ? { key, state: result.state, values: result.state.values, errors: {}, error: '', loading: false, checking: false, success: false } : { key, values: {}, errors: {}, error: result.ok ? 'Не удалось загрузить форму' : result.error, loading: false, checking: false, success: false })
+        const prefill=journey?.calendarForm
+        const values=result.ok&&'state'in result?{...result.state.values}:{}
+        if(result.ok&&'state'in result&&form.mode==='create'&&prefill?.screenId===screenId&&prefill.tableId===form.tableId){for(const field of result.state.fields)if(!field.readOnly&&Object.hasOwn(prefill.values,field.fieldId))values[field.fieldId]=prefill.values[field.fieldId]!;journey?.setCalendarForm(null)}
+        setData(result.ok && 'state' in result ? { key, state: result.state, values, errors: {}, error: '', loading: false, checking: false, success: false } : { key, values: {}, errors: {}, error: result.ok ? 'Не удалось загрузить форму' : result.error, loading: false, checking: false, success: false })
       }
       catch { if (version === generation.current) setData({ key, values: {}, errors: {}, error: 'Не удалось загрузить форму. Повторите попытку.', loading: false, checking: false, success: false }) }
     }, 150)

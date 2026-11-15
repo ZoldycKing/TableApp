@@ -109,6 +109,10 @@ export function addNode(app: AppV2, screenId: string, type: AppV2Node['type'], t
   const table = tables.find(table => table.id === tableId), form = app.nodes.find(node => node.id === context.formId)
   let next = app, node: AppV2Node
   if (type === 'heading') node = { ...base, type, value: { kind: 'literal', value: 'Новый заголовок' }, size: 'm' }
+  else if (type === 'team_calendar') {
+    if (context.rowTableId || context.formId) throw new Error('Добавьте календарь команды на отдельный экран')
+    node = { ...base, type, name: 'Расписание', data: null, resourceLabel: 'Сотрудник', resourcesLabel: 'Сотрудники', showMetrics: true, actions: { itemScreenId: null, createScreenId: null, configureScreenId: null, periodScreenId: null, manageRoleIds: app.roles.some(role=>role.id==='owner')?['owner']:[] } }
+  }
   else if (type === 'profile') {
     const own = tables.find(table => table.id === context.rowTableId), fields = own?.fields ?? []
     const title = fields.find(field => /имя|название|name/i.test(field.name)) ?? fields.find(field => field.id === own?.primaryFieldId) ?? fields[0]

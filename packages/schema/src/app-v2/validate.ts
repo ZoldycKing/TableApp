@@ -3,6 +3,7 @@ import { isComputed, type FieldType } from '../fields'
 import { appV2ChildIds, type AppV2, type AppV2Audience, type AppV2RowScope, type AppV2Step, type AppV2Target } from './schema'
 import type { AppV2Binding, AppV2Condition } from './values'
 import { appV2NavigationUrl } from './values'
+import { validateTeamCalendar } from './team-calendar-validate'
 
 export const appV2ListGroupFieldTypes: ReadonlySet<FieldType> = new Set(['single_select', 'text', 'checkbox', 'date', 'datetime'])
 
@@ -147,6 +148,10 @@ export function validateAppV2(app: AppV2, catalog: AppV2Catalog, options: { mode
       if (node.subtitle) binding(node.subtitle, context, `${ownPath}.subtitle`)
       if (node.image) binding(node.image, context, `${ownPath}.image`)
       node.contacts.forEach((contact, i) => binding(contact.value, context, `${ownPath}.contacts.${i}`))
+    }
+    if (node.type === 'team_calendar') {
+      if (insideCollection || context.formId || context.rowTableId) issue('team_calendar_placement', ownPath, 'Добавьте календарь команды на отдельный экран, вне формы и строк списка')
+      for (const problem of validateTeamCalendar(app, node, catalog, options.mode === 'publish')) issue(problem.code, problem.path, problem.message)
     }
     if((node.type==='gallery'||node.type==='files')&&(node.value.kind==='row'||node.value.kind==='screen_row')){
       const selected=catalog.fields.get(node.value.fieldId)

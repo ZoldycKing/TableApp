@@ -2,7 +2,8 @@
 import { createContext, useContext, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { instantToWallClock } from '@tableapp/schema'
 import type { AppV2 } from '@tableapp/schema/app-v2'
-import { bookingCalendarDays, bookingCalendarShift, bookingClock, bookingVisitLanes, type BookingCalendarRequest, type BookingCalendarResult, type BookingCalendarSnapshot } from '@/lib/builder-v2-booking-calendar'
+import type { BookingCalendarRequest, BookingCalendarResult } from '@/lib/builder-v2-booking-calendar'
+import { calendarDays as bookingCalendarDays, calendarShift as bookingCalendarShift, calendarClock as bookingClock, calendarEventLanes as bookingVisitLanes, type TeamCalendarSnapshot as BookingCalendarSnapshot } from '@/lib/team-calendar-core'
 import { usePublishedV2 } from './published-context'
 import { ListScreenShell } from './layout-shell'
 import { ProtoIcon } from '../prototype/icons'
@@ -15,14 +16,16 @@ import { useBookingJourney, type BookingIntent } from './booking-journey'
 export const BookingCalendarDemoContext = createContext<((request: BookingCalendarRequest) => BookingCalendarResult) | null>(null)
 const money = (value: number) => `${value.toLocaleString('ru-RU')} ₽`
 
-function useCalendar(app: AppV2, request: BookingCalendarRequest) {
+type CalendarLoader = (request: BookingCalendarRequest) => Promise<BookingCalendarResult> | BookingCalendarResult
+function useCalendar(app: AppV2, request: BookingCalendarRequest, loader?: CalendarLoader, loaderKey?: string) {
   const demo = useContext(BookingCalendarDemoContext), published = usePublishedV2()
   const [retry, setRetry] = useState(0)
-  const key = JSON.stringify([app, request, published?.revision, published?.dataVersion, retry])
+  const key = JSON.stringify([loader && loaderKey ? loaderKey : app, request, published?.revision, published?.dataVersion, retry])
   const [state, setState] = useState<{ key: string; result: BookingCalendarResult }>()
   useEffect(() => {
     let cancelled = false
     const read = async () => {
+      if (loader) return loader(request)
       if (demo) return demo(request)
       const actions = await import('@/app/builder-v2-booking-actions')
       return published ? actions.readPublishedV2BookingCalendarAction(published.slug, { ...request, revision: published.revision }) : actions.readBuilderV2BookingCalendarAction(app.id, app, request)
@@ -33,16 +36,18 @@ function useCalendar(app: AppV2, request: BookingCalendarRequest) {
   return { result: state?.key === key ? state.result : undefined, retry: () => setRetry(value => value + 1) }
 }
 
-export function BookingCalendarScreen({ app, screenId, timeZone, working = false, onOpenVisit, onOpenPeriod, onAdd, onCreate, onConfigure, editing = false }: {
+export function TeamCalendarView({ app, screenId, timeZone, working = false, onOpenVisit, onOpenPeriod, onAdd, onCreate, onConfigure, editing = false, loader, loaderKey, title = 'Расписание', resourceLabel = 'Мастер', resourcesLabel = 'Мастера', showMetrics = true, showWorkingHours = true, showAmounts = true, showNoShows = true, calendarKey }: {
   app: AppV2; screenId: string; timeZone: string; working?: boolean; editing?: boolean
   onOpenVisit: (id: string) => void; onOpenPeriod?: (id: string) => void; onAdd?: () => void; onConfigure?: () => void; onCreate?: (intent: BookingIntent) => void
+  loader?: CalendarLoader; loaderKey?: string; title?: string; resourceLabel?: string; resourcesLabel?: string; showMetrics?: boolean; showWorkingHours?: boolean; showAmounts?: boolean; showNoShows?: boolean; calendarKey?: string
 }) {
   const today = instantToWallClock(new Date(), timeZone)!.date
   const journey = useBookingJourney()
-  const [day, setDay] = useState(journey?.calendar?.day ?? today), [week, setWeek] = useState(journey?.calendar?.week ?? working), [master, setMaster] = useState(journey?.calendar?.masterId ?? ''), [compact, setCompact] = useState(false)
+  const saved = journey?.calendar?.key === calendarKey ? journey?.calendar : null
+  const [day, setDay] = useState(saved?.day ?? today), [week, setWeek] = useState(saved?.week ?? working), [master, setMaster] = useState(saved?.masterId ?? ''), [compact, setCompact] = useState(false)
   const root = useRef<HTMLDivElement>(null)
-  useEffect(() => { journey?.setCalendar({ day, masterId: master, week }) }, [day, master, week])
-  const { result, retry } = useCalendar(app, { screenId, day, week })
+  useEffect(() => { journey?.setCalendar({ day, masterId: master, week, ...(calendarKey ? {key:calendarKey} : {}) }) }, [day, master, week, calendarKey])
+  const { result, retry } = useCalendar(app, { screenId, day, week }, loader, loaderKey)
   useEffect(() => {
     const element = root.current
     if (!element) return
@@ -54,37 +59,41 @@ export function BookingCalendarScreen({ app, screenId, timeZone, working = false
   const selectedMaster = data?.masters.some(item => item.id === master) ? master : ''
   const effectiveMaster = selectedMaster
   const visibleVisits = data?.visits.filter(visit => !effectiveMaster || visit.masterId === effectiveMaster) ?? []
+  const metricVisits = [...new Map(visibleVisits.map(visit=>[visit.id,visit])).values()]
   const shiftDate = (direction: number) => {
     const next = new Date(`${day}T12:00:00Z`); next.setUTCDate(next.getUTCDate() + direction * (week ? 7 : 1)); setDay(next.toISOString().slice(0, 10))
   }
   const range = week ? bookingCalendarDays(day, true) : [day]
   const periodLabel = week ? `${dateLabel(range[0]!, { day: 'numeric', month: 'short' })} — ${dateLabel(range[6]!, { day: 'numeric', month: 'short', year: 'numeric' })}` : dateLabel(day, { weekday: 'long', day: 'numeric', month: 'long' })
   return <div ref={root} className={css.root} data-booking-calendar data-working={working || undefined} data-compact={compact || undefined}>
-    <ListScreenShell title="Расписание" meta="Рабочие часы и записи мастеров" actions={<div className={css.actions}>{onConfigure && <button type="button" className={styles.secondary} onClick={onConfigure}>Настроить рабочие часы</button>}{onAdd && <button type="button" className={styles.primary} onClick={() => onCreate ? onCreate({ day, ...(effectiveMaster ? { masterId: effectiveMaster } : {}) }) : onAdd()}><ProtoIcon name="plus" />Добавить запись</button>}</div>}
-      metrics={data ? [
-        { key: 'visits', caption: week ? 'Записи за неделю' : 'Записи за день', value: visibleVisits.filter(visit => visit.status !== 'cancelled').length, icon: <ProtoIcon name="calendar" size={16} /> },
-        { key: 'noShow', caption: 'Неявки', value: visibleVisits.filter(visit => visit.status === 'noShow').length, icon: <ProtoIcon name="users" size={16} /> },
-        { key: 'amount', caption: 'Стоимость записей', value: money(visibleVisits.filter(visit => !['cancelled', 'noShow'].includes(visit.status)).reduce((sum, visit) => sum + (visit.price ?? 0), 0)), icon: <ProtoIcon name="chart" size={16} />, wide: true },
+    <ListScreenShell title={title} meta={showWorkingHours ? 'Записи и рабочие часы команды' : 'Записи команды'} actions={<div className={css.actions}>{onConfigure && <button type="button" className={styles.secondary} disabled={editing} onClick={onConfigure}>Настроить рабочие часы</button>}{onAdd && <button type="button" className={styles.primary} disabled={editing} onClick={() => onCreate ? onCreate({ day, ...(effectiveMaster ? { masterId: effectiveMaster } : {}) }) : onAdd()}><ProtoIcon name="plus" />Добавить запись</button>}</div>}
+      metrics={showMetrics && data ? [
+        { key: 'visits', caption: week ? 'Записи за неделю' : 'Записи за день', value: metricVisits.filter(visit => visit.status !== 'cancelled').length, icon: <ProtoIcon name="calendar" size={16} /> },
+        ...(showNoShows ? [{ key: 'noShow', caption: 'Неявки', value: metricVisits.filter(visit => visit.status === 'noShow').length, icon: <ProtoIcon name="users" size={16} /> }] : []),
+        ...(showAmounts ? [{ key: 'amount', caption: 'Стоимость записей', value: money(metricVisits.filter(visit => !['cancelled', 'noShow'].includes(visit.status)).reduce((sum, visit) => sum + (visit.price ?? 0), 0)), icon: <ProtoIcon name="chart" size={16} />, wide: true }] : []),
       ] : undefined} metricLayout="cards"
       search={<div className={css.controls}>
         <div className={css.mode} role="group" aria-label="Период календаря"><button type="button" aria-pressed={!week} onClick={() => setWeek(false)}>День</button><button type="button" aria-pressed={week} onClick={() => setWeek(true)}>Неделя</button></div>
         <div className={css.dateControls}><button type="button" aria-label={week ? 'Предыдущая неделя' : 'Предыдущий день'} onClick={() => shiftDate(-1)}><ProtoIcon name="back" size={17} /></button><label><span className="sr-only">Дата календаря</span><input type="date" aria-label="Дата календаря" value={day} onChange={event => { if (event.target.value) setDay(event.target.value) }} /></label><button type="button" aria-label={week ? 'Следующая неделя' : 'Следующий день'} onClick={() => shiftDate(1)}><ProtoIcon name="arrow" size={17} /></button></div>
         <button type="button" className={css.today} onClick={() => setDay(today)}>Сегодня</button>
-        <label className={css.master}><span className="sr-only">Мастер календаря</span><select aria-label="Мастер календаря" value={effectiveMaster} onChange={event => setMaster(event.target.value)}><option value="">Все мастера</option>{data?.masters.map(item => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label>
+        <label className={css.master}><span className="sr-only">{resourceLabel} календаря</span><select aria-label={`${resourceLabel} календаря`} value={effectiveMaster} onChange={event => setMaster(event.target.value)}><option value="">Все {resourcesLabel.toLocaleLowerCase('ru-RU')}</option>{data?.masters.map(item => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label>
       </div>}>
-      <div className={css.caption}><h2>{periodLabel}</h2><span>Время студии · {new Intl.DateTimeFormat('ru-RU', { timeZone: data?.timeZone ?? timeZone, timeZoneName: 'shortOffset' }).formatToParts(new Date()).find(part => part.type === 'timeZoneName')?.value.replace('GMT', 'UTC')}</span></div>
+      <div className={css.caption}><h2>{periodLabel}</h2><span>Часовой пояс · {new Intl.DateTimeFormat('ru-RU', { timeZone: data?.timeZone ?? timeZone, timeZoneName: 'shortOffset' }).formatToParts(new Date()).find(part => part.type === 'timeZoneName')?.value.replace('GMT', 'UTC')}</span></div>
       {week && <nav className={css.mobileDays} aria-label="День недели">{range.map(date => <button type="button" key={date} aria-pressed={date === day} onClick={() => setDay(date)}><span>{dateLabel(date, { weekday: 'short' })}</span><strong>{dateLabel(date, { day: 'numeric' })}</strong></button>)}</nav>}
-      {!result ? <p className={css.feedback} role="status">Загружаем календарь…</p> : !result.ok ? <div className={css.feedback} role="alert"><p>{result.error}</p><button type="button" className={styles.secondary} onClick={retry}>Повторить загрузку</button></div> : !data?.masters.length ? <p className={css.feedback}>Сначала добавьте мастера в разделе «Мастера».</p> : <>
-        {compact ? <BookingDayAgenda data={data} day={day} masterId={effectiveMaster} working={Boolean(onOpenPeriod)} editing={editing} onOpenVisit={onOpenVisit} onOpenPeriod={onOpenPeriod} /> : week ? <BookingWeekOverview data={data} masterId={effectiveMaster} working={Boolean(onOpenPeriod)} editing={editing} onOpenVisit={onOpenVisit} onOpenPeriod={onOpenPeriod} onOpenDay={date => { setDay(date); setWeek(false) }} /> : <CalendarGrid data={data} day={day} masterId={effectiveMaster} working={false} editing={editing} onOpenVisit={onOpenVisit} onOpenPeriod={onOpenPeriod} onCreate={onCreate} leadMinutes={app.booking?.leadMinutes ?? 60} stepMinutes={app.booking?.stepMinutes ?? 15} horizonDays={app.booking?.horizonDays ?? 60} />}
-        {!compact && !week && <div className={css.legend}><span><i data-kind="hours" />Рабочая смена</span><span><i data-kind="visit" />Запись клиента</span><span><i />Перерыв или не работает</span></div>}
+      {!result ? <p className={css.feedback} role="status">Загружаем календарь…</p> : !result.ok ? <div className={css.feedback} role="alert"><p>{result.error}</p><button type="button" className={styles.secondary} onClick={retry}>Повторить загрузку</button></div> : !data?.masters.length ? <p className={css.feedback}>В календаре пока нет доступных сотрудников.</p> : <>
+        {compact ? <BookingDayAgenda showWorkingHours={showWorkingHours} resourcesLabel={resourcesLabel} data={data} day={day} masterId={effectiveMaster} working={Boolean(onOpenPeriod)} editing={editing} onOpenVisit={onOpenVisit} onOpenPeriod={onOpenPeriod} /> : week ? <BookingWeekOverview showWorkingHours={showWorkingHours} resourcesLabel={resourcesLabel} data={data} masterId={effectiveMaster} working={Boolean(onOpenPeriod)} editing={editing} onOpenVisit={onOpenVisit} onOpenPeriod={onOpenPeriod} onOpenDay={date => { setDay(date); setWeek(false) }} /> : <CalendarGrid showWorkingHours={showWorkingHours} data={data} day={day} masterId={effectiveMaster} working={false} editing={editing} onOpenVisit={onOpenVisit} onOpenPeriod={onOpenPeriod} onCreate={onCreate} leadMinutes={app.booking?.leadMinutes ?? 60} stepMinutes={app.booking?.stepMinutes ?? 15} horizonDays={app.booking?.horizonDays ?? 60} />}
+        {!compact && !week && showWorkingHours && <div className={css.legend}><span><i data-kind="hours" />Рабочая смена</span><span><i data-kind="visit" />Запись клиента</span><span><i />Перерыв или не работает</span></div>}
         {visibleVisits.some(visit => visit.status === 'cancelled' && (!compact || visit.day === day)) && <div className={css.cancelled}><strong>Отменённые записи</strong>{visibleVisits.filter(visit => visit.status === 'cancelled' && (!compact || visit.day === day)).map(visit => <button key={visit.id} type="button" onClick={() => onOpenVisit(visit.id)}>{week && !compact ? `${dateLabel(visit.day, { day: 'numeric', month: 'short' })} · ` : ''}{bookingClock(visit.start)} · {data.masters.find(master => master.id === visit.masterId)?.name} · {visit.service}{visit.client ? ` · ${visit.client}` : ''}</button>)}</div>}
       </>}
     </ListScreenShell>
   </div>
 }
 
-function CalendarGrid({ data, day, masterId, working, editing, onOpenVisit, onOpenPeriod, onCreate, leadMinutes, stepMinutes, horizonDays }: {
-  data: BookingCalendarSnapshot; day: string; masterId: string; working: boolean; editing: boolean
+/** Older saved salon definitions use the same calendar surface. */
+export const BookingCalendarScreen = TeamCalendarView
+
+function CalendarGrid({ data, day, masterId, working, editing, showWorkingHours, onOpenVisit, onOpenPeriod, onCreate, leadMinutes, stepMinutes, horizonDays }: {
+  data: BookingCalendarSnapshot; day: string; masterId: string; working: boolean; editing: boolean; showWorkingHours: boolean
   onOpenVisit: (id: string) => void; onOpenPeriod?: (id: string) => void
   onCreate?: (intent: BookingIntent) => void; leadMinutes: number; stepMinutes: number; horizonDays: number
 }) {
@@ -103,8 +112,8 @@ function CalendarGrid({ data, day, masterId, working, editing, onOpenVisit, onOp
   const earliest = instantToWallClock(new Date(Date.now() + leadMinutes * 60000), data.timeZone)!
   const lastDay = new Date(Date.now() + horizonDays * 86400000)
   const latestDay = instantToWallClock(lastDay, data.timeZone)!.date
-  return <div className={css.calendarScroll} tabIndex={0} aria-label="Прокрутка календаря по мастерам"><div className={css.calendar} style={{ '--calendar-columns': columns.length, '--calendar-height': `${height}px`, minWidth: 56 + columns.length * 200 } as CSSProperties} aria-label="Календарь рабочих часов и записей">
-    <div className={css.head}><span className={css.axisHead}>Время</span>{columns.map((column, index) => <div className={css.columnHead} key={`${column.master.id}:${column.day}`}><BookingAvatar small name={column.master.name} photo={column.master.photo} /><strong>{column.master.name}</strong><small>{bookingCountLabel(relevant(column.master.id, column.day).length)}</small><span className={css.shiftSummary} data-working={Boolean(workdays[index]) || undefined}>{workdays[index] ? <><span>Работает</span><b>{bookingClock(workdays[index]!.start)}–{bookingClock(workdays[index]!.end)}</b></> : shifts[index]!.windows === null ? 'Часы недоступны' : 'Не работает'}</span><BookingPeriodChoice periods={shifts[index]!.windows ?? []} master={column.master.name} editing={editing} onOpenPeriod={onOpenPeriod}/></div>)}</div>
+  return <div className={css.calendarScroll} tabIndex={0} aria-label="Прокрутка календаря по мастерам"><div className={css.calendar} data-no-hours={!showWorkingHours || undefined} style={{ '--calendar-columns': columns.length, '--calendar-height': `${height}px`, minWidth: 56 + columns.length * 200 } as CSSProperties} aria-label="Календарь рабочих часов и записей">
+    <div className={css.head}><span className={css.axisHead}>Время</span>{columns.map((column, index) => <div className={css.columnHead} key={`${column.master.id}:${column.day}`}><BookingAvatar small name={column.master.name} photo={column.master.photo} /><strong>{column.master.name}</strong><small>{bookingCountLabel(relevant(column.master.id, column.day).length)}</small>{showWorkingHours && <span className={css.shiftSummary} data-working={Boolean(workdays[index]) || undefined}>{workdays[index] ? <><span>Работает</span><b>{bookingClock(workdays[index]!.start)}–{bookingClock(workdays[index]!.end)}</b></> : shifts[index]!.windows === null ? 'Часы недоступны' : 'Не работает'}</span>}<BookingPeriodChoice periods={shifts[index]!.windows ?? []} master={column.master.name} editing={editing} onOpenPeriod={onOpenPeriod}/></div>)}</div>
     <div className={css.timeline}><div className={css.axis}>{ticks.map(time => <span key={time} style={{ top: `${(time - start) / span * 100}%` }}>{bookingClock(time)}</span>)}</div>{columns.map((column, index) => {
       const shift = shifts[index]!, workday = workdays[index], visits = relevant(column.master.id, column.day), periods = shift.windows ?? []
       const freeStarts = new Set<number>(), hitStep = Math.max(30, stepMinutes)
@@ -118,7 +127,7 @@ function CalendarGrid({ data, day, masterId, working, editing, onOpenVisit, onOp
         })}
         {working && onOpenPeriod && periods.map((window, windowIndex) => <button type="button" className={css.hours} key={`${window.id}:${windowIndex}`} style={position(window.start, window.end)} aria-label={`Изменить рабочий период: ${column.master.name}, ${dateLabel(column.day, { day: 'numeric', month: 'long' })}, ${bookingClock(window.start)}–${bookingClock(window.end)}`} title={`Изменить часы ${bookingClock(window.start)}–${bookingClock(window.end)}`} disabled={editing} onClick={() => onOpenPeriod(window.id)}><span>Изменить часы</span></button>)}
         {workday?.breaks.map(pause => <span className={css.break} key={`break-${pause.start}`} style={position(pause.start, pause.end)}><strong>Перерыв</strong><span>{bookingClock(pause.start)}–{bookingClock(pause.end)}</span></span>)}
-        {!periods.length && <p className={css.dayOff}>{shift.windows === null ? 'Рабочие часы недоступны' : shift.closed ? 'Выходной' : 'Нет рабочих часов'}</p>}
+        {showWorkingHours && !periods.length && <p className={css.dayOff}>{shift.windows === null ? 'Рабочие часы недоступны' : shift.closed ? 'Выходной' : 'Нет рабочих часов'}</p>}
         {shift.exception && <span className={css.exception}>График на эту дату</span>}
         {bookingVisitLanes(visits).map(({ visit, lane, lanes }) => <button type="button" key={visit.id} className={css.visit} data-status={visit.status || undefined} data-short={visit.end - visit.start < 60 || undefined} data-tiny={visit.end - visit.start < 40 || undefined} disabled={editing} style={{ ...position(visit.start, visit.end), left: `calc(${lane / lanes * 100}% + 6px)`, width: `calc(${100 / lanes}% - 12px)` }} title={`${visit.client} · ${visit.service} · ${bookingClock(visit.start)}–${bookingClock(visit.end)} · ${statusNames[visit.status] ?? ''}`} aria-label={`Открыть запись: ${visit.service}, ${visit.client}, ${bookingClock(visit.start)}–${bookingClock(visit.end)}`} onClick={() => onOpenVisit(visit.id)}><strong>{visit.client || visit.service}</strong>{visit.client && <small>{visit.service}</small>}<span className={css.visitTime}>{bookingClock(visit.start)}–{bookingClock(visit.end)}</span></button>)}
       </section>

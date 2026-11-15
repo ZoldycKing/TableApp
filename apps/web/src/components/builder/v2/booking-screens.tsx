@@ -66,6 +66,7 @@ export function BookingScreen(props: Props) {
     {data.more && <button className={styles.secondary} type="button" disabled={data.loadingMore} onClick={() => void data.loadMore()}>{data.loadingMore ? 'Загружаем…' : 'Показать ещё'}</button>}
   </>
   // Forms stay in the same app viewport, including the phone preview in the editor.
+  if (agenda && screen.rootIds.some(id=>app.nodes.some(node=>node.id===id&&node.type==='team_calendar'))) return <div className={css.page}>{props.renderNodes(screen.rootIds)}</div>
   if (showForm && pageForm) return <div className={css.formPage}><button type="button" className={styles.textButton} onClick={() => setShowForm(false)}>← Назад</button>{screen.id === booking.setupScreenId ? <BookingScheduleForm app={app} screenId={screen.id} formId={pageForm.id} editing={Boolean(props.editing)} onSaved={() => setShowForm(false)} /> : <OrderActionPanelContext value={{ mode: 'reveal', close: () => setShowForm(false) }}>{props.renderNodes([pageForm.id])}</OrderActionPanelContext>}</div>
   if (screen.id === booking.setupScreenId && pageForm) return <div className={css.formPage}><button type="button" className={styles.textButton} onClick={() => back(booking.listScreenId!)}>← Расписание</button><BookingScheduleForm app={app} screenId={screen.id} formId={pageForm.id} editing={Boolean(props.editing)} onSaved={() => back(booking.listScreenId!)}/></div>
   const profile = screen.id === booking.customerScreenId ? builderV2ScreenNodes(app, screen.id).find(node => node.type === 'profile') : undefined

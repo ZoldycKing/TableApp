@@ -22,6 +22,8 @@ import { BookingCalendarDemoContext } from './booking-calendar'
 import { bookingCalendarSnapshot } from '@/lib/builder-v2-booking-calendar'
 import { bookingTeamSnapshot } from '@/lib/builder-v2-booking-people'
 import { BookingPeopleDemoContext } from './booking-people-data'
+import { TeamCalendarDemoContext } from './team-calendar'
+import { teamCalendarSnapshot } from '@/lib/team-calendar-model'
 import css from './booking.module.css'
 
 const DEMO_SCREENS = [
@@ -206,10 +208,11 @@ export function BookingDemo({ app, tables, initialRows, phone = false, initialVi
       }}
     />} note="Это пример салона «Тихая студия». Открывайте услуги и записи на учебных данных.">
     <BuilderV2Theme app={app}><PublishedV2Context value={transport}><BookingDemoAvailability value={input => bookingV2Availability(app, actor, data(), input)}><BookingScheduleDemoContext value={scheduleAdapter}><BookingCalendarDemoContext value={request => bookingCalendarSnapshot(app, actor, data(), request)}>
+      <TeamCalendarDemoContext value={(node,request)=>node.data?{ok:true,data:teamCalendarSnapshot(node.data,{events:store.current.filter(row=>row.tableId===node.data!.tableId).map(format),resources:store.current.filter(row=>row.tableId===node.data!.resources.tableId&&(role==='owner'||!node.data!.resources.ownerEmailFieldId||String(row.values[node.data!.resources.ownerEmailFieldId]??'').trim().toLowerCase()===actor.email)).map(format),hours:role==='owner'&&node.data.hours?store.current.filter(row=>row.tableId===node.data!.hours!.tableId).map(format):null},request,timeZone)}:{ok:false,error:'Выберите таблицы календаря.'}}>
       <BookingPeopleDemoContext value={id => bookingTeamSnapshot(app, actor, data(), id)}><div className={css.demoFrame} data-preview-screen={`${role}:${screenId}:${recordId ?? ''}`}><BuilderV2AppFrame key={role} app={visibleApp} screenId={screenId} title={visibleApp.screens.find(screen => screen.id === screenId)?.name ?? 'Запись'} onNavigate={id => navigate(id)}>
         {notice && <p role="status">{notice}</p>}<AppV2Renderer key={`${role}:${screenId}:${recordId ?? ''}`} live app={visibleApp} tables={tables} actor={actor} screenId={screenId} record={currentRecord ? format(currentRecord) : undefined} onNavigate={navigate} />
       </BuilderV2AppFrame></div></BookingPeopleDemoContext>
-    </BookingCalendarDemoContext></BookingScheduleDemoContext></BookingDemoAvailability></PublishedV2Context></BuilderV2Theme>
+      </TeamCalendarDemoContext></BookingCalendarDemoContext></BookingScheduleDemoContext></BookingDemoAvailability></PublishedV2Context></BuilderV2Theme>
     </TemplateDemoStage>
   </div>
 }

@@ -28,7 +28,7 @@ export function TeamCalendarSettings({
   }
   return (
     <section aria-label="Настройки календаря команды">
-      <div className={ui.inspectorTabs} role="group" aria-label="Настройки календаря">
+      <div className={`${ui.inspectorTabs} ${ui.calendarTabs}`} role="group" aria-label="Настройки календаря">
         {([['data', 'Данные'], ['hours', 'Часы'], ['view', 'Вид'], ['actions', 'Действия']] as const).map(([id, label]) => (
           <button key={id} type="button" aria-pressed={tab === id} onClick={() => setTab(id)}>{label}</button>
         ))}

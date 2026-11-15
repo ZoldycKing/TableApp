@@ -19,12 +19,13 @@ import css from './booking-calendar.module.css'
 import {
   BookingWeekOverview,
   BookingDayAgenda,
-  BookingPeriodChoice,
+  HoursEdit,
   bookingCalendarDateLabel as dateLabel,
   bookingCalendarStatusNames as statusNames,
   bookingCountLabel,
 } from './booking-calendar-views'
 import { BookingAvatar } from './booking-avatar'
+import { RuDateInput } from './ru-fields'
 import { useBookingJourney } from './booking-journey'
 
 export const BookingCalendarDemoContext = createContext<((request: BookingCalendarRequest) => BookingCalendarResult) | null>(null)
@@ -159,7 +160,7 @@ export function TeamCalendarView({
             </div>
             <div className={css.dateControls}>
               <button type="button" aria-label={week ? 'Предыдущая неделя' : 'Предыдущий день'} onClick={() => shiftDate(-1)}><ProtoIcon name="back" size={17} /></button>
-              <label><span className="sr-only">Дата календаря</span><input type="date" aria-label="Дата календаря" value={day} onChange={event => { if (event.target.value) setDay(event.target.value) }} /></label>
+              <label><span className="sr-only">Дата календаря</span><RuDateInput aria-label="Дата календаря" value={day} onValue={setDay} /></label>
               <button type="button" aria-label={week ? 'Следующая неделя' : 'Следующий день'} onClick={() => shiftDate(1)}><ProtoIcon name="arrow" size={17} /></button>
             </div>
             <button type="button" className={css.today} onClick={() => setDay(today)}>Сегодня</button>
@@ -292,13 +293,16 @@ function CalendarGrid({
               <strong>{column.resource.name}</strong>
               <small>{bookingCountLabel(relevant(column.resource.id, column.day).length)}</small>
               {showWorkingHours && (
-                <span className={css.shiftSummary} data-working={Boolean(workdays[index]) || undefined}>
-                  {workdays[index]
-                    ? <><span>Работает</span><b>{calendarClock(workdays[index]!.start)}–{calendarClock(workdays[index]!.end)}</b></>
-                    : shifts[index]?.windows === null ? 'Часы недоступны' : 'Не работает'}
-                </span>
+                <HoursEdit
+                  className={css.shiftSummary}
+                  periods={shifts[index]?.windows ?? []}
+                  unavailable={shifts[index]?.windows === null}
+                  closed={Boolean(shifts[index]?.closed)}
+                  person={column.resource.name}
+                  editing={editing}
+                  onOpenPeriod={onOpenPeriod}
+                />
               )}
-              <BookingPeriodChoice periods={shifts[index]?.windows ?? []} person={column.resource.name} editing={editing} onOpenPeriod={onOpenPeriod} />
             </div>
           ))}
         </div>
@@ -336,7 +340,6 @@ function CalendarGrid({
                     <span>{calendarClock(pause.start)}–{calendarClock(pause.end)}</span>
                   </span>
                 ))}
-                {showWorkingHours && !periods.length && <p className={css.dayOff}>{shift?.windows === null ? 'Рабочие часы недоступны' : shift?.closed ? 'Выходной' : 'Нет рабочих часов'}</p>}
                 {shift?.exception && <span className={css.exception}>График на эту дату</span>}
                 {calendarEventLanes(events).map(({ event, lane, lanes }) => (
                   <button

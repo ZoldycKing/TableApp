@@ -56,15 +56,22 @@
   color: var(--v2-muted, #687568);
 }
 .body {
+  display: flex;
+  flex-direction: column;
   min-height: 0;
-  overflow: auto;
-  padding: 4px 8px 16px;
+  overflow: hidden;
+  padding: 0;
 }
 .body :global(form) {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
   border: 0;
   background: transparent;
   box-shadow: none;
 }
+.body :global(h2) { display: none; }
 @container builder-app (max-width: 560px) {
   .panel {
     top: auto;

@@ -1166,8 +1166,10 @@
 .hint { color: var(--v2-muted, #687568); font-size: 12px; line-height: 1.6; }
 .dataSettings { display: grid; gap: 16px; padding-top: 24px; border-top: 1px solid var(--v2-line, #dce2d6); }
 .dataSettings h3 { font-size: 14px; font-weight: 600; }
-.inspectorTabs { display: flex; gap: 4px; padding: 4px; border-radius: 12px; background: var(--v2-page, #edf1e7); }
-.inspectorTabs button { flex: 1; min-height: 40px; border: 0; border-radius: 8px; background: transparent; color: var(--v2-muted, #687568); }
+.inspectorTabs { display: flex; gap: 6px; padding: 6px; border-radius: 14px; background: var(--v2-page, #edf1e7); }
+.inspectorTabs button { flex: 1; min-height: 40px; padding: 8px 10px; border: 0; border-radius: 10px; background: transparent; color: var(--v2-muted, #687568); }
+.calendarTabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 8px; }
+.calendarTabs button { min-height: 40px; padding: 8px 12px; }
 .inspectorTabs button:is([aria-selected="true"],[aria-pressed="true"]) { background: var(--v2-surface, #fff); color: var(--v2-ink, #253c2d); }
 .inspectorPanel { display: grid; gap: 24px; }
 .calendarSettings { display: grid; gap: 16px; min-width: 0; }
@@ -1218,7 +1220,7 @@
 .preview.standalonePreview > header { width: 100%; max-width: none; margin: 0; }
 .previewBody { min-width: 0; min-height: 0; }
 .preview.published { min-height: 0; padding: 0; background: var(--v2-bg); }
-.preview button:disabled { cursor: default; opacity: .5; }
+.preview button:disabled:not(:where([data-app-frame] *)) { cursor: default; opacity: .5; }
 .publishedIdentity { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; min-width: 0; }
 .publishedIdentity span { overflow-wrap: anywhere; color: var(--v2-muted, #687568); font-size: 12px; }
 .publishedLogin { max-width: 440px; margin: 48px auto; padding: 24px; border: 1px solid var(--v2-line, #dce2d6); border-radius: var(--v2-frame-radius, 16px); background: var(--v2-surface, #fff); }

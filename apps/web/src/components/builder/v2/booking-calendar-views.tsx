@@ -41,27 +41,44 @@ export type BookingCalendarViewProps = {
 
 const dayName = (day: string) => bookingCalendarDateLabel(day, { weekday: 'long', day: 'numeric', month: 'long' })
 
-export function BookingPeriodChoice({
-  periods, person, editing, onOpenPeriod,
+const breakKey = (periods: NonNullable<TeamCalendarSnapshot['shifts'][number]['windows']>) => {
+  const hours = calendarShift(periods)
+  return hours?.breaks.filter(pause => pause.end > pause.start).map(pause => `${pause.start}-${pause.end}`).join('|') ?? ''
+}
+
+/** One quiet hours line. Click opens the period; a repeated lunch break stays in the tooltip. */
+export function HoursEdit({
+  periods, unavailable = false, closed = false, person, editing, onOpenPeriod, usualBreak, className,
 }: {
   periods: NonNullable<TeamCalendarSnapshot['shifts'][number]['windows']>
+  unavailable?: boolean
+  closed?: boolean
   person: string
   editing: boolean
   onOpenPeriod?: (id: string) => void
+  usualBreak?: string
+  className?: string
 }) {
-  if (!onOpenPeriod || !periods.length) return null
+  const hours = calendarShift(periods)
+  if (!hours) {
+    const label = unavailable ? 'Часы недоступны' : closed ? 'Выходной' : 'Не работает'
+    return <span className={className ?? css.hoursQuiet}>{label}</span>
+  }
+  const range = `${calendarClock(hours.start)}–${calendarClock(hours.end)}`
+  const breaks = hours.breaks.filter(pause => pause.end > pause.start)
+  const key = breaks.map(pause => `${pause.start}-${pause.end}`).join('|')
+  const unusual = Boolean(key && usualBreak !== undefined && key !== usualBreak)
+  const breakText = breaks.map(pause => `${calendarClock(pause.start)}–${calendarClock(pause.end)}`).join(', ')
+  const hint = [range, breakText ? `перерыв ${breakText}` : '', onOpenPeriod ? 'Изменить часы' : ''].filter(Boolean).join(', ')
+  const text = unusual ? `${range} · перерыв ${breakText}` : range
+  if (!onOpenPeriod || !periods.length) return <span className={className ?? css.hoursQuiet} title={hint}>{text}</span>
   if (periods.length === 1) {
     const period = periods[0]!
-    return (
-      <button type="button" className={css.periodButton} disabled={editing} aria-label={`Изменить рабочий период: ${person}, ${calendarClock(period.start)}–${calendarClock(period.end)}`} onClick={() => onOpenPeriod(period.id)}>
-        <ProtoIcon name="edit" size={14} />
-        <span>Часы</span>
-      </button>
-    )
+    return <button type="button" className={className ?? css.hoursQuiet} title={hint} disabled={editing} aria-label={`Изменить часы: ${person}, ${calendarClock(period.start)}–${calendarClock(period.end)}`} onClick={() => onOpenPeriod(period.id)}>{text}</button>
   }
   return (
-    <details className={css.periodChoice}>
-      <summary>Изменить часы<span className="sr-only">: {person}</span></summary>
+    <details className={css.hoursMenu}>
+      <summary className={className ?? css.hoursQuiet} title={hint}>{text}</summary>
       <div>
         {periods.map(period => (
           <button type="button" key={period.id} disabled={editing} aria-label={`Изменить рабочий период: ${person}, ${calendarClock(period.start)}–${calendarClock(period.end)}`} onClick={() => onOpenPeriod(period.id)}>
@@ -71,6 +88,20 @@ export function BookingPeriodChoice({
       </div>
     </details>
   )
+}
+
+export function usualBreakKey(data: TeamCalendarSnapshot, resourceId: string) {
+  const keys = data.days.map(day => {
+    const shift = data.shifts.find(item => item.resourceId === resourceId && item.day === day)
+    if (!shift?.windows?.length || shift.closed) return null
+    return breakKey(shift.windows)
+  }).filter((key): key is string => key !== null)
+  const counts = new Map<string, number>()
+  for (const key of keys) counts.set(key, (counts.get(key) ?? 0) + 1)
+  let best = ''
+  let count = 0
+  for (const [key, times] of counts) if (times > count) { best = key; count = times }
+  return best
 }
 
 function VisitCard({
@@ -101,21 +132,10 @@ function VisitCard({
   )
 }
 
-function ShiftInfo({ data, resourceId, day }: { data: TeamCalendarSnapshot; resourceId: string; day: string }) {
+function ShiftInfo({ data, resourceId, day, editing, onOpenPeriod }: { data: TeamCalendarSnapshot; resourceId: string; day: string; editing: boolean; onOpenPeriod?: (id: string) => void }) {
   const shift = data.shifts.find(item => item.resourceId === resourceId && item.day === day)
-  const hours = calendarShift(shift?.windows ?? [])
-  if (!hours) {
-    const label = shift?.windows === null ? 'Часы недоступны' : shift?.closed ? 'Выходной' : 'Нет смены'
-    return <div className={css.shiftInfo}><span>{label}</span></div>
-  }
-  return (
-    <div className={css.shiftInfo} data-working="true">
-      <span><b>{calendarClock(hours.start)}–{calendarClock(hours.end)}</b></span>
-      {hours.breaks.filter(pause => pause.end > pause.start).map(pause => (
-        <small key={pause.start}>перерыв {calendarClock(pause.start)}–{calendarClock(pause.end)}</small>
-      ))}
-    </div>
-  )
+  const person = data.resources.find(item => item.id === resourceId)?.name ?? ''
+  return <HoursEdit periods={shift?.windows ?? []} unavailable={shift?.windows === null} closed={shift?.closed} person={`${person}, ${dayName(day)}`} editing={editing} onOpenPeriod={onOpenPeriod} usualBreak={usualBreakKey(data, resourceId)} />
 }
 
 function PersonMark() {
@@ -150,12 +170,10 @@ export function BookingWeekOverview({
               <th scope="row" className={css.weekMaster}><PersonMark /><strong>{person.name}</strong></th>
               {data.days.map(day => {
                 const events = data.events.filter(event => event.resourceId === person.id && event.day === day && event.status !== 'cancelled')
-                const periods = data.shifts.find(shift => shift.resourceId === person.id && shift.day === day)?.windows ?? []
                 return (
                   <td key={day}>
                     <section className={css.weekCell} aria-label={`${person.name}, ${dayName(day)}`}>
-                      {showWorkingHours && <ShiftInfo data={data} resourceId={person.id} day={day} />}
-                      <BookingPeriodChoice periods={periods} person={`${person.name}, ${dayName(day)}`} editing={editing} onOpenPeriod={onOpenPeriod} />
+                      {showWorkingHours && <ShiftInfo data={data} resourceId={person.id} day={day} editing={editing} onOpenPeriod={onOpenPeriod} />}
                       {events.length > 0 && (
                         <div className={css.weekVisits}>
                           {events.map(event => <VisitCard key={event.id} event={event} person={person.name} editing={editing} onOpenVisit={onOpenVisit} />)}
@@ -187,13 +205,11 @@ export function BookingDayAgenda({
       {showHeading && <h3>{dayName(day)}</h3>}
       <div className={css.roster} aria-label={`${resourcesLabel}: выбранный день`}>
         {resources.map(person => {
-          const periods = data.shifts.find(shift => shift.resourceId === person.id && shift.day === day)?.windows ?? []
           return (
             <div className={css.rosterRow} key={person.id}>
               <PersonMark />
               <strong>{person.name}</strong>
-              {showWorkingHours && <ShiftInfo data={data} resourceId={person.id} day={day} />}
-              {working && <BookingPeriodChoice periods={periods} person={person.name} editing={editing} onOpenPeriod={onOpenPeriod} />}
+              {showWorkingHours && <ShiftInfo data={data} resourceId={person.id} day={day} editing={editing} onOpenPeriod={working ? onOpenPeriod : undefined} />}
             </div>
           )
         })}

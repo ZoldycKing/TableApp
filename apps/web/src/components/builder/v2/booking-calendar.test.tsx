@@ -47,6 +47,7 @@ describe('one calendar for the whole team', () => {
     expect(screen.getByRole('button',{name:'Неделя'}).getAttribute('aria-pressed')).toBe('true')
     expect((screen.getByRole('combobox',{name:'Мастер календаря'})as HTMLSelectElement).value).toBe('master_zhenya')
     expect((screen.getByLabelText('Дата календаря')as HTMLInputElement).value).toBe(day)
+    expect(screen.getByText(day.split('-').reverse().join('.'))).toBeTruthy()
     fireEvent.click(screen.getByRole('button',{name:'Добавить запись'}))
     expect(create).toHaveBeenCalledWith({day,resourceId:'master_zhenya'})
   })
@@ -54,13 +55,14 @@ describe('one calendar for the whole team', () => {
     const{data}=fixture(),edit=vi.fn();resize(1200)
     const view=render(<BookingCalendarDemoContext value={()=>({ok:true,data})}><BookingCalendarScreen app={appV2Fixture()} screenId="home" timeZone="Europe/Moscow" onOpenVisit={vi.fn()} onOpenPeriod={edit}/></BookingCalendarDemoContext>)
     await screen.findByLabelText('Календарь рабочих часов и записей')
-    const summary=screen.getAllByText('Изменить часы',{selector:'summary',exact:false})[0]!,details=summary.parentElement!
+    const summary=screen.getAllByText('09:00–19:00')[0]!,details=summary.closest('details')!
     details.setAttribute('open','');fireEvent.click(within(details).getAllByRole('button')[0]!)
     expect(edit).toHaveBeenCalledWith('master_olya_morning')
     expect(details.closest('[aria-label="Календарь рабочих часов и записей"]')).toBeTruthy()
     view.rerender(<BookingCalendarDemoContext value={()=>({ok:true,data})}><BookingCalendarScreen app={appV2Fixture()} screenId="home" timeZone="Europe/Moscow" onOpenVisit={vi.fn()}/></BookingCalendarDemoContext>)
     expect(screen.queryByRole('button',{name:'Настроить рабочие часы'})).toBeNull()
-    expect(screen.queryByText('Изменить часы',{selector:'summary',exact:false})).toBeNull()
+    expect(screen.queryByRole('button',{name:/Изменить часы/})).toBeNull()
+    expect(screen.queryAllByText('09:00–19:00').some(item => item.closest('details'))).toBe(false)
   })
   it('defaults to all masters and opens the detailed day from the week header', async () => {
     const { data } = fixture()
@@ -111,9 +113,9 @@ describe('one calendar for the whole team', () => {
     expect(visits[0]!.textContent).toContain('09:00–10:00')
     expect(visits).toHaveLength(3)
     expect(within(agenda).queryByText('Услуга another_day')).toBeNull()
-    const summary = within(agenda).getAllByText('Изменить часы', { exact: false, selector: 'summary' })[0]!
+    const summary = within(agenda).getAllByText('09:00–19:00')[0]!
     fireEvent.click(summary)
-    const details = summary.parentElement!
+    const details = summary.closest('details')!
     details.setAttribute('open', '')
     fireEvent.click(within(details).getAllByRole('button', { name: /^Изменить рабочий период:/ })[0]!)
     expect(callbacks.onOpenPeriod).toHaveBeenCalledWith('master_olya_morning')

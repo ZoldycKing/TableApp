@@ -5,6 +5,7 @@ import type { AppV2 } from '@tableapp/schema/app-v2'
 import { BOOKING_WEEKDAYS, bookingSchedulePlan, type BookingScheduleAdapter, type BookingScheduleInput, type BookingScheduleRead, type BookingScheduleRequest } from '@/lib/builder-v2-booking-schedule'
 import { usePublishedV2 } from './published-context'
 import css from './booking.module.css'
+import { RuDateInput, RuTimeInput } from './ru-fields'
 import styles from '../prototype/prototype.module.css'
 
 export const BookingScheduleDemoContext = createContext<BookingScheduleAdapter | null>(null)
@@ -53,18 +54,22 @@ export function BookingScheduleForm({ app, screenId, formId, recordId, editing =
     finally { setPending(false) }
   }
   return <form className={css.scheduleForm} onSubmit={submit} aria-label={recordId ? 'Изменить рабочие часы' : 'Добавить рабочие часы'} aria-busy={pending || !read} noValidate>
+    <div className={css.scheduleScroll}>
     <div className={css.formIntro}><h2>{recordId ? 'Изменить рабочие часы' : 'Рабочие часы мастера'}</h2><p>{recordId ? 'Измените этот период. Другие периоды останутся без изменений.' : 'Выберите рабочие дни и задайте одинаковые часы для всех выбранных дней.'}</p></div>
     {!read ? <p role="status">Загружаем мастеров…</p> : !read.ok ? <div role="alert"><p>{read.error}</p><button type="button" className={styles.secondary} onClick={() => setRetry(value => value + 1)}>Попробовать ещё раз</button></div> : <>
       <fieldset className={css.scheduleFields} disabled={pending || editing || stale || uncertain}>
         <label className={css.scheduleLabel}>Мастер<select value={input.masterId} onChange={event => change({ masterId: event.target.value })}><option value="">Выберите мастера</option>{read.state.masters.map(master => <option key={master.id} value={master.id}>{master.name}</option>)}</select></label>
         {!read.state.masters.length && <p className={css.timeHint}>Сначала добавьте мастера в разделе «Мастера».</p>}
         <div className={css.switch} role="group" aria-label="Когда действует график"><button type="button" aria-pressed={input.mode === 'weekly'} onClick={() => change({ mode: 'weekly' })}>По дням недели</button><button type="button" aria-pressed={input.mode === 'date'} onClick={() => change({ mode: 'date' })}>На дату</button></div>
-        {input.mode === 'weekly' ? <fieldset className={css.weekdayField}><legend>Рабочие дни</legend><div className={css.weekdayChoices}>{BOOKING_WEEKDAYS.map(day => <label key={day.value} title={day.name}><input type="checkbox" aria-label={day.name} checked={input.weekdays.includes(day.value)} onChange={event => change({ weekdays: event.target.checked ? [...input.weekdays, day.value] : input.weekdays.filter(value => value !== day.value) })} /><span>{day.short}</span></label>)}</div></fieldset> : <label className={css.scheduleLabel}>Дата<input type="date" value={input.date} onChange={event => change({ date: event.target.value })} /><small>Эти часы заменят обычный график на выбранную дату.</small></label>}
+        {input.mode === 'weekly' ? <fieldset className={css.weekdayField}><legend>Рабочие дни</legend><div className={css.weekdayChoices}>{BOOKING_WEEKDAYS.map(day => <label key={day.value} title={day.name}><input type="checkbox" aria-label={day.name} checked={input.weekdays.includes(day.value)} onChange={event => change({ weekdays: event.target.checked ? [...input.weekdays, day.value] : input.weekdays.filter(value => value !== day.value) })} /><span>{day.short}</span></label>)}</div></fieldset> : <label className={css.scheduleLabel}>Дата<RuDateInput value={input.date} onValue={date => change({ date })} /><small>Эти часы заменят обычный график на выбранную дату.</small></label>}
         <label className={css.scheduleCheck}><input type="checkbox" checked={input.closed} onChange={event => change({ closed: event.target.checked })} />Выходной</label>
-        {!input.closed && <><div className={css.scheduleTimes}><label className={css.scheduleLabel}>Начало работы<input type="time" value={input.start} onChange={event => change({ start: event.target.value })} /></label><label className={css.scheduleLabel}>Окончание работы<input type="time" value={input.end} onChange={event => change({ end: event.target.value })} /></label></div>{!recordId && <><label className={css.scheduleCheck}><input type="checkbox" checked={withBreak} onChange={event => { setWithBreak(event.target.checked); change({ breakStart: event.target.checked ? '13:00' : '', breakEnd: event.target.checked ? '14:00' : '' }) }} />Добавить перерыв</label>{withBreak && <div className={css.scheduleTimes}><label className={css.scheduleLabel}>Начало перерыва<input type="time" value={input.breakStart} onChange={event => change({ breakStart: event.target.value })} /></label><label className={css.scheduleLabel}>Конец перерыва<input type="time" value={input.breakEnd} onChange={event => change({ breakEnd: event.target.value })} /></label></div>}</>}</>}
+        {!input.closed && <><div className={css.scheduleTimes}><label className={css.scheduleLabel}>Начало работы<RuTimeInput value={input.start} onValue={start => change({ start })} /></label><label className={css.scheduleLabel}>Окончание работы<RuTimeInput value={input.end} onValue={end => change({ end })} /></label></div>{!recordId && <><label className={css.scheduleCheck}><input type="checkbox" checked={withBreak} onChange={event => { setWithBreak(event.target.checked); change({ breakStart: event.target.checked ? '13:00' : '', breakEnd: event.target.checked ? '14:00' : '' }) }} />Добавить перерыв</label>{withBreak && <div className={css.scheduleTimes}><label className={css.scheduleLabel}>Начало перерыва<RuTimeInput value={input.breakStart} onValue={breakStart => change({ breakStart })} /></label><label className={css.scheduleLabel}>Конец перерыва<RuTimeInput value={input.breakEnd} onValue={breakEnd => change({ breakEnd })} /></label></div>}</>}</>}
       </fieldset>
+    </>}
+    </div>
+    {read?.ok && <div className={css.scheduleFooter}>
       {error && <p role="alert" className={css.error}>{error}</p>}{notice && <p role="status">{notice}</p>}
       {stale ? <button type="button" className={styles.secondary} onClick={() => setRetry(value => value + 1)}>Обновить рабочие часы</button> : <button type="submit" className={styles.primary} disabled={pending || editing}>{pending ? 'Сохраняем…' : uncertain ? 'Повторить сохранение' : 'Сохранить рабочие часы'}</button>}
-    </>}
+    </div>}
   </form>
 }

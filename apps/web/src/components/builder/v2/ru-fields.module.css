@@ -1,0 +1,27 @@
+.wrap { position: relative; display: block; width: 100%; min-width: 0; }
+.wrap > input { color: transparent !important; -webkit-text-fill-color: transparent !important; }
+.wrap > input::-webkit-datetime-edit,
+.wrap > input::-webkit-datetime-edit-fields-wrapper,
+.wrap > input::-webkit-datetime-edit-text,
+.wrap > input::-webkit-datetime-edit-month-field,
+.wrap > input::-webkit-datetime-edit-day-field,
+.wrap > input::-webkit-datetime-edit-year-field,
+.wrap > input::-webkit-datetime-edit-hour-field,
+.wrap > input::-webkit-datetime-edit-minute-field,
+.wrap > input::-webkit-datetime-edit-ampm-field { color: transparent !important; -webkit-text-fill-color: transparent !important; }
+.wrap > input::-webkit-calendar-picker-indicator { opacity: 1; }
+.readout {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: 30px;
+  display: flex;
+  align-items: center;
+  padding-inline-start: 12px;
+  pointer-events: none;
+  color: var(--v2-ink, #253c2d);
+  font-variant-numeric: tabular-nums;
+}
+.readout[data-empty] { color: var(--v2-muted, #687568); }

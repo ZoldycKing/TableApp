@@ -25,7 +25,7 @@
 .columnHead strong { font-size: 13px; font-weight: 700; overflow-wrap: break-word; }
 .columnHead small { font-size: 11px; color: var(--v2-muted); grid-column: 2; }
 .columnHead:has(.avatar) small { grid-column: 2; }
-.shiftSummary { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px 6px; margin-top: 7px; padding: 7px 8px; border-radius: 6px; font-size: 11px; line-height: 1.4; color: var(--v2-muted); background: var(--v2-page); }
+.shiftSummary { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center; gap: 3px 6px; margin-top: 7px; padding: 7px 8px; border-radius: 6px; font-size: 11px; line-height: 1.4; text-align: center; color: var(--v2-muted); background: var(--v2-page); }
 .shiftSummary[data-working] { color: #294f77; background: #edf3fa; }
 .shiftSummary b { font-size: 12px; font-weight: 750; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .avatar { display: grid; place-items: center; grid-row: span 2; width: 32px; height: 32px; border-radius: 10px; background: var(--v2-soft); color: var(--v2-accent); font-size: 13px; font-weight: 700; }
@@ -43,7 +43,13 @@
 .break { position: absolute; inset-inline: 7px; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; padding: 3px; border-block: 1px dashed #bdc7d3; color: #596575; background: #eef0f4; font-size: 11px; pointer-events: none; overflow: hidden; }
 .break strong { font-weight: 650; }
 .break > span { font-size: 10px; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.dayOff { position: relative; z-index: 2; margin: 35px 10px 0; font-size: 12px; line-height: 1.6; color: var(--v2-muted); text-align: center; }
+.hoursQuiet { display: inline; padding: 0; border: 0; background: transparent; color: var(--v2-muted); font: inherit; font-size: 11px; line-height: 1.4; font-variant-numeric: tabular-nums; white-space: nowrap; cursor: pointer; }
+button.hoursQuiet:hover { color: var(--v2-ink); }
+.hoursMenu { min-width: 0; }
+.hoursMenu > summary { cursor: pointer; list-style: none; }
+.hoursMenu > summary::-webkit-details-marker { display: none; }
+.hoursMenu > div { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.hoursMenu button { min-height: 32px; padding: 4px 8px; border: 1px solid var(--v2-line); border-radius: 8px; background: var(--v2-surface); color: var(--v2-ink); font: inherit; font-size: 11px; cursor: pointer; }
 .exception { position: absolute; bottom: 8px; left: 6px; right: 6px; text-align: center; color: var(--v2-muted); font-size: 10px; }
 .visit { position: absolute; z-index: 3; min-width: 0; display: flex; flex-direction: column; gap: 2px; padding: 5px 8px; border: 1px solid #c6d8ef; border-radius: 7px; background: #edf4ff; color: #214a79; font: inherit; text-align: left; cursor: pointer; overflow: hidden; }
 .visit:hover { border-color: #47749c; background: #e4efff; }
@@ -116,7 +122,7 @@
 .rosterRow + .rosterRow { border-top: 1px solid var(--v2-line); }
 .rosterRow > .avatar { grid-row: span 2; }
 .rosterRow > strong { font-size: 13px; line-height: 1.5; font-weight: 700; }
-.rosterRow > .shiftInfo { grid-column: 2; }
+.rosterRow > :is(.shiftInfo, .hoursQuiet, .hoursMenu) { grid-column: 2; }
 .periodChoice { grid-column: 2; font-size: 11px; }
 .weekCell > .periodChoice { grid-column: auto; }
 .periodChoice summary { display: inline-flex; align-items: center; width: fit-content; min-height: 28px; padding: 2px 4px; color: var(--v2-muted); cursor: pointer; list-style: none; }

@@ -3,6 +3,7 @@ import { appDefinitionInputError, appV2IdSchema } from '@tableapp/schema/app-v2'
 import { readAppDefinition, validateAppV2Definition } from '@tableapp/schema/app-definition'
 import { authorizeApp } from '@/lib/authorize'
 import { loadBuilderV2Catalog, loadBuilderV2Draft } from '@/lib/builder-v2'
+import { builderV2MemberActor } from '@/lib/builder-v2-actor'
 import { inspectBuilderV2Form } from '@/lib/builder-v2-form'
 import type { BuilderV2FormRequest, BuilderV2FormOptionsResult, BuilderV2FormResult } from '@/lib/builder-v2-form-types'
 import { RowWriteError } from '@/lib/row-mutations'
@@ -29,7 +30,7 @@ export async function inspectBuilderV2FormAction(appId: string, definition: unkn
   if (!stored || read.app.id !== stored.app.id || read.app.workspaceId !== auth.member.workspaceId || read.app.slug !== stored.app.slug) return { ok: false, error: 'Приложение недоступно этому пространству' }
   const { catalog } = await loadBuilderV2Catalog(auth.member.workspaceId), valid = validateAppV2Definition(read.app, catalog)
   if (!valid.ok) return { ok: false, error: valid.issues[0]!.message }
-  try { return await inspectBuilderV2Form(valid.app, auth.member, request) }
+  try { return await inspectBuilderV2Form(valid.app, auth.member, request, { actor: builderV2MemberActor(valid.app, auth.member) }) }
   catch (error) { return { ok: false, error: error instanceof RowWriteError ? error.message : 'Не удалось проверить форму. Повторите попытку.' } }
 }
 

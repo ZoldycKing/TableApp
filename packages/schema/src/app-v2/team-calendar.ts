@@ -2,8 +2,11 @@ import { z } from 'zod'
 import { appV2IdSchema as id } from './values'
 
 const source = { tableId: id, viewId: id.nullable().default(null) }
-export const appV2TeamCalendarRequestSchema = z.strictObject({ screenId: id, nodeId: id, day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value=>{const date=new Date(value+'T12:00:00Z');return Number.isFinite(date.getTime())&&date.toISOString().slice(0,10)===value&&Number(value.slice(0,4))>0}), week:z.boolean(),recordId:id.optional() })
+const calendarDay = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value=>{const date=new Date(value+'T12:00:00Z');return Number.isFinite(date.getTime())&&date.toISOString().slice(0,10)===value&&Number(value.slice(0,4))>0})
+export const appV2TeamCalendarRequestSchema = z.strictObject({ screenId: id, nodeId: id, day: calendarDay, week:z.boolean(),recordId:id.optional() })
 export const appV2PublishedTeamCalendarRequestSchema = appV2TeamCalendarRequestSchema.extend({revision:z.string().min(1).max(200)})
+export const appV2TeamCalendarMoveSchema = z.strictObject({ screenId: id, nodeId: id, eventId: id, resourceId: id, day: calendarDay, time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/) })
+export const appV2PublishedTeamCalendarMoveSchema = appV2TeamCalendarMoveSchema.extend({ revision: z.string().min(1).max(200) })
 export const appV2TeamCalendarDataSchema = z.strictObject({
   ...source, titleFieldId: id, subtitleFieldId: id.nullable().default(null),
   startFieldId: id, durationFieldId: id.nullable().default(null), endFieldId: id.nullable().default(null),
@@ -26,5 +29,7 @@ export const appV2TeamCalendarShape = {
   actions: z.strictObject({
     itemScreenId: id.nullable(), createScreenId: id.nullable(), configureScreenId: id.nullable(), periodScreenId: id.nullable(),
     manageRoleIds: z.array(id).max(100),
+    /** Desktop drag onto another time or employee. Authors can turn it off; older calendars stay movable. */
+    allowMove: z.boolean().default(true),
   }),
 }

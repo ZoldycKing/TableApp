@@ -101,6 +101,39 @@ export function calendarGridBounds(
   return { start, end, span }
 }
 
+const DAY_MINUTES = 24 * 60
+
+/** Why a drag cannot be saved. Null means the new place is allowed, including dropping it back where it was. */
+export function calendarMoveIssue(input: {
+  event: { id: string; start: number; end: number; status: string }
+  resourceId: string
+  day: string
+  start: number
+  step: number
+  windows: readonly { start: number; end: number }[] | null
+  others: readonly { id: string; resourceId: string; day: string; start: number; end: number; status: string }[]
+}): string | null {
+  if (input.event.status === 'cancelled') return 'Отменённую запись нельзя переносить.'
+  const duration = input.event.end - input.event.start
+  if (duration <= 0) return 'Не удалось определить длительность записи.'
+  const step = input.step > 0 ? input.step : 15
+  if (input.start % step !== 0) return 'Выберите время по шагу сетки.'
+  const end = input.start + duration
+  if (input.start < 0 || end > DAY_MINUTES) return 'Запись должна закончиться в тот же день.'
+  if (input.windows && !input.windows.some(window => input.start >= window.start && end <= window.end)) {
+    return 'Это время вне рабочих часов. Запись осталась на прежнем месте.'
+  }
+  const occupied = input.others.some(other =>
+    other.id !== input.event.id
+    && other.resourceId === input.resourceId
+    && other.day === input.day
+    && other.status !== 'cancelled'
+    && input.start < other.end
+    && end > other.start)
+  if (occupied) return 'Это время уже занято. Запись осталась на прежнем месте.'
+  return null
+}
+
 /** Top and height as fractions of the visible window. A longer appointment is a taller block. */
 export function calendarBlockFrame(bounds: { start: number; end: number }, from: number, to: number) {
   const span = Math.max(60, bounds.end - bounds.start)

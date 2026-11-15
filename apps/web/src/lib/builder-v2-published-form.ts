@@ -14,6 +14,7 @@ import {historyCursor,readHistoryCursor} from './history-cursor'
 import {withInitialValues} from './initial-values'
 import {formatCell} from './format'
 import {RowWriteError} from './row-mutations'
+import {ownerCalendarServiceField} from './team-calendar-prefill'
 import type {Transaction} from './db-transaction'
 import type {RuntimeSourceRow} from './runtime-project'
 
@@ -22,8 +23,10 @@ export async function inspectPublishedV2Form(current:Pick<Awaited<ReturnType<typ
   if(!actor.authenticated||form?.type!=='form')throw new RowWriteError('denied','Для сохранения формы нужно войти с разрешённой почтой')
   const action=builderV2SaveFormAction(app,form)
   if(!action||!canInvokeAppV2Workflow(app,actor,action.flow.id)||form.mode==='edit'&&screen.contextTableId!==form.tableId)throw new RowWriteError('denied','Сохранение формы недоступно')
-  if(Boolean(screen.contextTableId)!==Boolean(request.recordId))throw new RowWriteError('denied','Запись недоступна')
-  const meta=await loadBuilderV2ReadMetadata(tx,app.workspaceId,[form.tableId,...(screen.contextTableId?[screen.contextTableId]:[])]),selected=screen.contextTableId?await publishedV2Row(meta,app,actor,screen.contextTableId,request.recordId):undefined
+  const serviceField=ownerCalendarServiceField(app,form.id,request.recordId,actor.roleIds)
+  const writable=(input:{fieldId:string;readOnly?:boolean})=>!input.readOnly||input.fieldId===serviceField
+  if((Boolean(screen.contextTableId)!==Boolean(request.recordId))&&!serviceField)throw new RowWriteError('denied','Запись недоступна')
+  const meta=await loadBuilderV2ReadMetadata(tx,app.workspaceId,[form.tableId,...(screen.contextTableId?[screen.contextTableId]:[])]),selected=screen.contextTableId&&request.recordId?await publishedV2Row(meta,app,actor,screen.contextTableId,request.recordId):undefined
   publishedV2Node(app,actor,screen.id,form.id,selected?.record)
   const values=Object.fromEntries(Object.keys(action.step.values).map(id=>[id,null])),permission=authorizeAppV2Write(app,actor,form.mode==='edit'&&selected?{operation:'update',row:{...selected.record,values:selected.stored.data as Record<string,AppV2Json>},values}:{operation:'create',tableId:form.tableId,values})
   if(!permission.ok)throw new RowWriteError('denied',permission.error)
@@ -38,6 +41,7 @@ export async function inspectPublishedV2Form(current:Pick<Awaited<ReturnType<typ
   const blank=(value:unknown)=>value===null||value===undefined||typeof value==='string'&&!value.trim()||Array.isArray(value)&&value.length===0
   for(const input of inputs){
     const field=fields.find(field=>field.id===input.fieldId)!
+    if(input.fieldId===serviceField){initial[field.id]=[];continue}
     if(input.initialValue){
       const value=resolveAppV2Binding(input.initialValue,context)
       if(!value.ok)throw new RowWriteError('denied','Начальное значение поля недоступно')
@@ -65,7 +69,7 @@ export async function inspectPublishedV2Form(current:Pick<Awaited<ReturnType<typ
   const fingerprint=builderV2Revision([revision,actor,screen.id,form,inputs,fields,selected?.stored.version??null,request.recordId??null])
   if(request.mode==='options'){
     const input=inputs.find(input=>input.fieldId===request.fieldId),field=fields.find(field=>field.id===request.fieldId)
-    if(!input||input.readOnly||field?.type!=='relation')throw new RowWriteError('denied','Выбор записей недоступен')
+    if(!input||!writable(input)||field?.type!=='relation')throw new RowWriteError('denied','Выбор записей недоступен')
     const target=field.options.tableId,primary=meta.primaryByTable.get(target),search=request.search.trim().toLocaleLowerCase('ru-RU'),binding=builderV2Revision([fingerprint,field.id,search,await publishedV2DataRevision(meta,app,actor)]),cursor=readHistoryCursor(request.after,binding) as {lastId?:unknown}|null
     if(cursor&&typeof cursor.lastId!=='string')throw new RowWriteError('conflict','Обновите список')
     const options:{id:string;label:string}[]=[];let lastId=cursor?.lastId as string|undefined
@@ -73,7 +77,7 @@ export async function inspectPublishedV2Form(current:Pick<Awaited<ReturnType<typ
     return {ok:true as const,options:options.slice(0,30),next:options.length>30?historyCursor({lastId:options[29]!.id},binding):null}
   }
   if(request.mode==='check'&&request.fingerprint!==fingerprint)return {ok:false as const,stale:true,error:'Настройки формы или запись изменились. Обновите форму.'}
-  if(request.mode==='check'&&Object.keys(request.values).some(id=>!inputs.some(input=>input.fieldId===id&&!input.readOnly)))throw new RowWriteError('denied','Форма содержит недоступное поле')
+  if(request.mode==='check'&&Object.keys(request.values).some(id=>!inputs.some(input=>input.fieldId===id&&writable(input))))throw new RowWriteError('denied','Форма содержит недоступное поле')
   const parsed={...defaults,...(request.mode==='check'?request.values:{})},errors:Record<string,string>={},labels:Record<string,string>={}
   for(const input of inputs){const field=fields.find(field=>field.id===input.fieldId)!;try{const values=await builderV2WorkflowValues(meta,form.tableId,{[field.id]:parsed[field.id] as AppV2Json},{app,actor});parsed[field.id]=values[field.id];const value=values[field.id];if(request.mode==='check'&&input.required&&(value===null||typeof value==='string'&&!value.trim()||Array.isArray(value)&&!value.length||field.type==='checkbox'&&value!==true))errors[input.id]=`Заполните поле «${input.label||field.name}»`;if(field.type==='relation'){const ids=Array.isArray(value)?value as string[]:[],primary=meta.primaryByTable.get(field.options.tableId),names=[];for(const id of ids){const related=await publishedV2Row(meta,app,actor,field.options.tableId,id);names.push(primary?related.record.display[primary]??'Запись':'Запись')}labels[field.id]=names.join(', ')}else labels[field.id]=formatCell(field,value)}catch(error){errors[input.id]=error instanceof RowWriteError?error.message:'Проверьте значение поля'}}
   if(Object.keys(errors).length)return {ok:false as const,error:'Проверьте отмеченные поля',errors}
@@ -87,6 +91,6 @@ export async function inspectPublishedV2Form(current:Pick<Awaited<ReturnType<typ
     else if(stockField){const formatted=formatCell(stockField,stock);if(formatted&&/^-?\d+/.test(formatted))labels[app.inventory.itemStockFieldId]=formatted.match(/-?\d+/)![0]!}
     if(unitField){const formatted=formatCell(unitField,unitValue).trim();if(formatted)labels[app.inventory.itemUnitFieldId]=formatted}
   }
-  const state:BuilderV2FormState&{revision:string}={values:builderV2Json(parsed) as Record<string,AppV2Json>,labels,fingerprint,revision,fields:inputs.map(input=>{const field=fields.find(field=>field.id===input.fieldId)!;return {nodeId:input.id,fieldId:field.id,label:input.label||field.name,type:field.type,required:input.required,readOnly:Boolean(input.readOnly),supported:true,...('choices'in field.options?{choices:field.options.choices}:{}),...(field.type==='relation'?{allowMultiple:field.options.allowMultiple}:{}), ...(field.type==='image'||field.type==='attachment'?{maxCount:field.options.maxCount}:{}),...(field.type==='date'||field.type==='datetime'?{timeZone:fieldTimeZone(field)}:{})}})}
+  const state:BuilderV2FormState&{revision:string}={values:builderV2Json(parsed) as Record<string,AppV2Json>,labels,fingerprint,revision,fields:inputs.map(input=>{const field=fields.find(field=>field.id===input.fieldId)!;return {nodeId:input.id,fieldId:field.id,label:input.label||field.name,type:field.type,required:input.required,readOnly:!writable(input),supported:true,...('choices'in field.options?{choices:field.options.choices}:{}),...(field.type==='relation'?{allowMultiple:field.options.allowMultiple}:{}), ...(field.type==='image'||field.type==='attachment'?{maxCount:field.options.maxCount}:{}),...(field.type==='date'||field.type==='datetime'?{timeZone:fieldTimeZone(field)}:{})}})}
   return {ok:true as const,state}
 }

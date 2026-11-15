@@ -49,7 +49,7 @@ describe('one calendar for the whole team', () => {
     expect((screen.getByLabelText('Дата календаря')as HTMLInputElement).value).toBe(day)
     expect(screen.getByText(day.split('-').reverse().join('.'))).toBeTruthy()
     fireEvent.click(screen.getByRole('button',{name:'Записать'}))
-    expect(create).toHaveBeenCalledWith({day,resourceId:'master_zhenya'})
+    expect(create).toHaveBeenCalledWith({day,resourceId:'master_zhenya',resourceName:'Женя'})
   })
   it('keeps period editing out of the visit hit areas and out of a staff calendar',async()=>{
     const{data}=fixture(),edit=vi.fn();resize(1200)
@@ -104,9 +104,52 @@ describe('one calendar for the whole team', () => {
     render(<BookingCalendarDemoContext value={() => ({ ok: true, data })}><BookingCalendarScreen app={app} screenId={app.homeScreenId!} timeZone="Europe/Moscow" onOpenVisit={vi.fn()} onCreate={onCreate} /></BookingCalendarDemoContext>)
     const free = await screen.findByRole('button', { name: `Добавить запись: Оля, ${day}, 09:00` })
     fireEvent.click(free)
-    expect(onCreate).toHaveBeenCalledWith({ resourceId: 'master_olya', day, time: '09:00' })
+    expect(onCreate).toHaveBeenCalledWith({ resourceId: 'master_olya', resourceName: 'Оля', day, time: '09:00' })
     expect(screen.queryByRole('button', { name: `Добавить запись: Оля, ${day}, 13:00` })).toBeNull()
     expect(screen.queryByRole('button', { name: `Добавить запись: Оля, ${day}, 10:00` })).toBeNull()
+  })
+  it('returns a dragged appointment to its column when the new time is taken', async () => {
+    const { data, day } = fixture(), onMove = vi.fn()
+    resize(1200)
+    const rect = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+      if (this instanceof HTMLElement && this.dataset.calendarColumn !== undefined) {
+        const index = this.dataset.resourceId === 'master_olya' ? 0 : this.dataset.resourceId === 'master_zhenya' ? 1 : 2
+        return new DOMRect(index * 220, 80, 220, 672)
+      }
+      if (this instanceof HTMLButtonElement && this.getAttribute('aria-label')?.includes('Услуга middle')) return new DOMRect(10, 192, 200, 56)
+      return new DOMRect(0, 0, 0, 0)
+    })
+    render(<BookingCalendarDemoContext value={() => ({ ok: true, data })}><BookingCalendarScreen app={appV2Fixture()} screenId="home" timeZone="Europe/Moscow" onOpenVisit={vi.fn()} onMove={onMove} /></BookingCalendarDemoContext>)
+    const visit = await screen.findByRole('button', { name: /Услуга middle/ })
+    fireEvent.pointerDown(visit, { button: 0, pointerId: 1, clientX: 100, clientY: 192 })
+    fireEvent.pointerMove(visit, { pointerId: 1, clientX: 330, clientY: 136 })
+    fireEvent.pointerUp(visit, { pointerId: 1, clientX: 330, clientY: 136 })
+    expect((await screen.findByRole('alert')).textContent).toContain('Это время уже занято. Запись осталась на прежнем месте.')
+    expect(onMove).not.toHaveBeenCalled()
+    expect(visit.closest('[data-resource-id]')?.getAttribute('data-resource-id')).toBe('master_olya')
+    expect(document.querySelector('[data-ghost]')).toBeNull()
+    rect.mockRestore()
+  })
+  it('shows the server conflict and leaves the appointment in place', async () => {
+    const { data, day } = fixture(), onMove = vi.fn(async () => ({ ok: false as const, error: 'Это время уже занято. Запись осталась на прежнем месте.' }))
+    resize(1200)
+    const rect = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+      if (this instanceof HTMLElement && this.dataset.calendarColumn !== undefined) {
+        const index = this.dataset.resourceId === 'master_olya' ? 0 : 1
+        return new DOMRect(index * 220, 80, 220, 672)
+      }
+      if (this instanceof HTMLButtonElement && this.getAttribute('aria-label')?.includes('Услуга middle')) return new DOMRect(10, 192, 200, 56)
+      return new DOMRect(0, 0, 0, 0)
+    })
+    render(<BookingCalendarDemoContext value={() => ({ ok: true, data })}><BookingCalendarScreen app={appV2Fixture()} screenId="home" timeZone="Europe/Moscow" onOpenVisit={vi.fn()} onMove={onMove} /></BookingCalendarDemoContext>)
+    const visit = await screen.findByRole('button', { name: /Услуга middle/ })
+    fireEvent.pointerDown(visit, { button: 0, pointerId: 1, clientX: 100, clientY: 192 })
+    fireEvent.pointerMove(visit, { pointerId: 1, clientX: 100, clientY: 136 })
+    fireEvent.pointerUp(visit, { pointerId: 1, clientX: 100, clientY: 136 })
+    expect((await screen.findByRole('alert')).textContent).toContain('Запись осталась на прежнем месте.')
+    expect(onMove).toHaveBeenCalledWith('middle', { resourceId: 'master_olya', day, time: '09:00' })
+    expect(visit.closest('[data-resource-id]')?.getAttribute('data-resource-id')).toBe('master_olya')
+    rect.mockRestore()
   })
   it('shows one employee on a phone and the whole day as a list', async () => {
     const { data } = fixture(), callbacks = show(data, 300)

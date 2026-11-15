@@ -61,6 +61,7 @@ export function upgradeBookingTeamCalendar(app: AppV2): AppV2 {
       configureScreenId: booking.setupScreenId,
       periodScreenId: booking.periodScreenId ?? null,
       manageRoleIds: app.roles.some(role => role.id === 'owner') ? ['owner'] : roles,
+      allowMove: true,
     },
   }
   return { ...app, nodes: app.nodes.map(node => node.id === current.id ? replacement : node) }

@@ -80,7 +80,7 @@ describe.skipIf(!process.env.DATABASE_URL)('generic team calendar without a salo
             dateFieldId: date, startFieldId: from, endFieldId: to, closedFieldId: closed,
           },
         },
-        actions: { itemScreenId: null, createScreenId: null, configureScreenId: null, periodScreenId: null, manageRoleIds: ['owner'] },
+        actions: { itemScreenId: null, createScreenId: null, configureScreenId: null, periodScreenId: null, manageRoleIds: ['owner'], allowMove: true },
       }],
       policy: {
         workflows: [],

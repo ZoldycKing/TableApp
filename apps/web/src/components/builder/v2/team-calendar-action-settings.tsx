@@ -2,6 +2,7 @@
 import type { AppV2, AppV2Node } from '@tableapp/schema/app-v2'
 import ui from './view.module.css'
 import { CalendarSettingsStack } from './team-calendar-setting-controls'
+import { SettingSwitch } from './setting-switch'
 
 type Node = Extract<AppV2Node, { type: 'team_calendar' }>
 
@@ -37,6 +38,11 @@ export function CalendarActionSettings({
           </select>
         </label>
       ))}
+      <SettingSwitch
+        label="Перенос записи мышью"
+        checked={node.actions.allowMove !== false}
+        onChange={allowMove => onChange({ ...node, actions: { ...node.actions, allowMove } })}
+      />
       <fieldset>
         <legend>Кто может добавлять записи и менять часы</legend>
         {app.roles.map(role => (
@@ -58,7 +64,7 @@ export function CalendarActionSettings({
           </label>
         ))}
       </fieldset>
-      <p className={ui.hint}>Календарь открывает выбранные экраны. Формы сохраняют данные по своим действиям и правам доступа.</p>
+      <p className={ui.hint}>Календарь открывает выбранные экраны. Формы сохраняют данные по своим действиям и правам доступа. Перенос на компьютере можно выключить: тогда запись двигается только через форму.</p>
     </CalendarSettingsStack>
   )
 }

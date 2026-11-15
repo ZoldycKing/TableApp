@@ -17,6 +17,7 @@ import type { BuilderBusinessLink } from './builder-v2-business-types'
 import { builderV2ScreenNodes } from './builder-v2-data-types'
 import { builderV2StatusColumn } from './builder-v2-order-summary'
 import { builderV2StatusForm } from './builder-v2-status-form'
+import { calendarCreateTarget } from './team-calendar-prefill'
 import { isBuilderV2OrderTable } from '@/components/builder/v2/record-presentation'
 
 /** Only the current visible page is serialized; access lists, policies and action bodies stay server-side. */
@@ -100,6 +101,20 @@ export async function loadPublishedV2Page(slug:string,request:{screen?:string;ro
     })
     const queue = selected ? parent?.queue : undefined
     if (queue) nodes.push({ ...queue, visibleTo: null, visibleWhen: null })
+    for (const node of [...nodes]) {
+      if (node.type !== 'team_calendar' || !actor.roleIds.some(id => node.actions.manageRoleIds.includes(id))) continue
+      const target = calendarCreateTarget(app, node)
+      if (!target) continue
+      const pending = [target.formId]
+      while (pending.length) {
+        const id = pending.pop()!
+        if (nodes.some(item => item.id === id)) continue
+        const found = app.nodes.find(item => item.id === id)
+        if (!found) continue
+        nodes.push(found)
+        pending.push(...appV2ChildIds(found))
+      }
+    }
     const sourceIds=new Set(nodes.flatMap(node=>'sourceId'in node?[node.sourceId]:[])),tableIds=new Set(nodes.flatMap(node=>node.type==='form'?[node.tableId]:[]))
     for (const node of nodes) if (node.type === 'team_calendar' && node.data) {
       const granted = (tableId: string) => new Set(app.policy.tables.find(rule => rule.tableId === tableId)?.grants.flatMap(grant => grant.read && matchesAppV2Audience(grant.audience, actor) ? grant.read.fieldIds : []) ?? [])

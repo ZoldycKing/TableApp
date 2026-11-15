@@ -248,7 +248,9 @@ function InventoryDateInput({ id, disabled, errorId, required, label, value, onC
 export function BuilderV2FormInput({ node, table }: { node: BuilderV2Input; table?: BuilderV2Table }) {
   const context = useContext(Context), published=usePublishedV2(), unique = useId(), field = context?.state?.fields.find(field => field.nodeId === node.id), column = table?.fields.find(field => field.id === node.fieldId)
   const booking = context?.app.booking
-  if (booking && [booking.createFormId, booking.ownerCreateFormId, booking.rescheduleFormId].includes(context!.scope.formId) && [booking.visit.service, booking.visit.master, booking.visit.start, booking.visit.status].includes(node.fieldId)) return null
+  const calendarService = Boolean(booking && context?.scope.formId === booking.ownerCreateFormId && !context.scope.recordId && node.fieldId === booking.visit.service && field?.readOnly === false)
+  if (booking && [booking.createFormId, booking.ownerCreateFormId, booking.rescheduleFormId].includes(context!.scope.formId) && [booking.visit.master, booking.visit.start, booking.visit.status].includes(node.fieldId)) return null
+  if (booking && [booking.createFormId, booking.ownerCreateFormId, booking.rescheduleFormId].includes(context!.scope.formId) && node.fieldId === booking.visit.service && !calendarService) return null
   if (booking?.clients && context!.scope.formId === booking.ownerCreateFormId && (node.fieldId === booking.clients.linkFieldId || Array.isArray(context!.values[booking.clients.linkFieldId]) && (context!.values[booking.clients.linkFieldId] as unknown[]).length > 0 && [booking.visit.client,booking.visit.phone,booking.visit.email].includes(node.fieldId))) return null
   if (context?.app.shop && (node.fieldId === context.app.shop.cartFieldId || node.fieldId === context.app.shop.submissionFieldId)) return null
   if (context?.app.inventory?.purchasePayloadFieldId && node.fieldId === context.app.inventory.purchasePayloadFieldId) return null
@@ -263,7 +265,7 @@ export function BuilderV2FormInput({ node, table }: { node: BuilderV2Input; tabl
           : node.fieldId === inventory.purchaseCommentFieldId ? 'comment'
             : null
     : null
-  const type = field?.type ?? column?.type ?? 'text', value = context?.values[node.fieldId] ?? null, error = context?.errors[node.id], errorId = error ? `${unique}-error` : undefined, disabled = !context || context.disabled || Boolean(node.readOnly), label = node.label || column?.name || 'Поле'
+  const type = field?.type ?? column?.type ?? 'text', value = context?.values[node.fieldId] ?? null, error = context?.errors[node.id], errorId = error ? `${unique}-error` : undefined, disabled = !context || context.disabled || (Boolean(node.readOnly) && !calendarService), label = node.label || column?.name || 'Поле'
   const common = { id: unique, disabled, 'aria-describedby': errorId, 'aria-invalid': Boolean(error), 'aria-required': node.required, 'aria-label': label }
   const change = (value: AppV2Json) => context?.change(node.fieldId, value)
   const stockHint = (() => {

@@ -52,6 +52,7 @@ export function bookingTeamCalendarNode(
       configureScreenId: booking.setupScreenId,
       periodScreenId: booking.periodScreenId ?? null,
       manageRoleIds: ['owner'],
+      allowMove: true,
     },
   }
 }

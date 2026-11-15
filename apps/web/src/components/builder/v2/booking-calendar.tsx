@@ -10,6 +10,7 @@ import {
   calendarEventLanes,
   calendarGridBounds,
   calendarBlockFrame,
+  calendarMoveIssue,
   type TeamCalendarSnapshot,
 } from '@/lib/team-calendar-core'
 import type { CalendarSlot } from '@/lib/team-calendar-prefill'
@@ -62,8 +63,9 @@ function useCalendar(app: AppV2, request: BookingCalendarRequest, loader?: Calen
   return { result: state?.key === key ? state.result : undefined, retry: () => setRetry(value => value + 1) }
 }
 
+export type CalendarMoveResult = { ok: true; unchanged?: boolean } | { ok: false; error: string }
 export function TeamCalendarView({
-  app, screenId, timeZone, working = false, onOpenVisit, onOpenPeriod, onAdd, onCreate, onConfigure,
+  app, screenId, timeZone, working = false, onOpenVisit, onOpenPeriod, onAdd, onCreate, onConfigure, onMove,
   editing = false, loader, loaderKey, title = 'Расписание', resourceLabel = 'Мастер', resourcesLabel = 'Мастера',
   showMetrics = true, showWorkingHours = true, showAmounts = true, showNoShows = true, showOmissions = false,
   calendarKey, leadMinutes = 60, stepMinutes = 15, horizonDays = 60, defaultView = 'day',
@@ -78,6 +80,7 @@ export function TeamCalendarView({
   onAdd?: () => void
   onConfigure?: () => void
   onCreate?: (intent: CalendarSlot) => void
+  onMove?: (eventId: string, slot: { resourceId: string; day: string; time: string }) => Promise<CalendarMoveResult>
   loader?: CalendarLoader
   loaderKey?: string
   title?: string
@@ -100,6 +103,8 @@ export function TeamCalendarView({
   const [view, setView] = useState<'list' | 'day' | 'week'>(saved?.view ?? (saved?.week ? 'week' : defaultView))
   const [resource, setResource] = useState(saved?.masterId ?? '')
   const [focusId, setFocusId] = useState('')
+  const [moveNotice, setMoveNotice] = useState<{ text: string; error: boolean } | null>(null)
+  const swipe = useRef<{ x: number; y: number } | null>(null)
   const frameDevice = useContext(AppFrameDeviceContext)
   const [narrow, setNarrow] = useState(false)
   const week = view === 'week'
@@ -142,8 +147,18 @@ export function TeamCalendarView({
     ?.value.replace('GMT', 'UTC')
   const create = (slot: CalendarSlot) => {
     if (editing) return
-    onCreate?.(slot)
+    const resourceName = slot.resourceName ?? data?.resources.find(item => item.id === slot.resourceId)?.name
+    onCreate?.({ ...slot, ...(resourceName ? { resourceName } : {}) })
   }
+  const moveMaster = (direction: number) => {
+    const index = phonePeople.findIndex(person => person.id === phoneId)
+    const next = phonePeople[index + direction]
+    if (next) setFocusId(next.id)
+  }
+  useEffect(() => {
+    const selectedTab = root.current?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')
+    selectedTab?.scrollIntoView?.({ inline: 'nearest', block: 'nearest' })
+  }, [phoneId, compact])
   return (
     <div ref={root} className={css.root} data-booking-calendar data-working={working || undefined} data-compact={compact || undefined}>
       <ListScreenShell
@@ -215,7 +230,22 @@ export function TeamCalendarView({
               ) : view === 'week' ? (
                 <BookingWeekOverview showWorkingHours={showWorkingHours} resourcesLabel={resourcesLabel} data={data} resourceId={selected} working={Boolean(onOpenPeriod)} editing={editing} onOpenVisit={onOpenVisit} onOpenPeriod={onOpenPeriod} onOpenDay={date => { setDay(date); setView('day') }} />
               ) : (
-                <>
+                <div
+                  className={css.dayBoard}
+                  onPointerDown={event => {
+                    if (!compact || event.pointerType === 'mouse' || (event.target instanceof Element && event.target.closest('button'))) return
+                    swipe.current = { x: event.clientX, y: event.clientY }
+                  }}
+                  onPointerUp={event => {
+                    const start = swipe.current
+                    swipe.current = null
+                    if (!start || !compact) return
+                    const dx = event.clientX - start.x, dy = event.clientY - start.y
+                    if (Math.abs(dx) < 48 || Math.abs(dx) < Math.abs(dy)) return
+                    moveMaster(dx < 0 ? 1 : -1)
+                  }}
+                >
+                  {moveNotice && <p className={css.moveNotice} role={moveNotice.error ? 'alert' : 'status'}>{moveNotice.text}</p>}
                   {compact && phonePeople.length > 1 && (
                     <div className={css.staffSwitch} role="tablist" aria-label={resourcesLabel}>
                       {phonePeople.map(person => {
@@ -236,14 +266,17 @@ export function TeamCalendarView({
                     day={day}
                     resourceId={compact ? phoneId : selected}
                     editing={editing}
+                    canMove={Boolean(onMove) && !compact && !editing}
                     onOpenVisit={onOpenVisit}
                     onOpenPeriod={onOpenPeriod}
                     onCreate={onCreate ? create : undefined}
+                    onMove={onMove}
+                    onNotice={(text, error) => setMoveNotice({ text, error })}
                     leadMinutes={leadMinutes}
                     stepMinutes={stepMinutes}
                     horizonDays={horizonDays}
                   />
-                </>
+                </div>
               )}
               {!compact && !week && showWorkingHours && (
                 <div className={css.legend}>
@@ -280,16 +313,19 @@ export function TeamCalendarView({
 export const BookingCalendarScreen = TeamCalendarView
 
 function CalendarGrid({
-  data, day, resourceId, editing, showWorkingHours, onOpenVisit, onOpenPeriod, onCreate, leadMinutes, stepMinutes, horizonDays,
+  data, day, resourceId, editing, showWorkingHours, canMove = false, onOpenVisit, onOpenPeriod, onCreate, onMove, onNotice, leadMinutes, stepMinutes, horizonDays,
 }: {
   data: TeamCalendarSnapshot
   day: string
   resourceId: string
   editing: boolean
   showWorkingHours: boolean
+  canMove?: boolean
   onOpenVisit: (id: string) => void
   onOpenPeriod?: (id: string) => void
   onCreate?: (intent: CalendarSlot) => void
+  onMove?: (eventId: string, slot: { resourceId: string; day: string; time: string }) => Promise<CalendarMoveResult>
+  onNotice?: (text: string, error: boolean) => void
   leadMinutes: number
   stepMinutes: number
   horizonDays: number
@@ -311,6 +347,49 @@ function CalendarGrid({
   }
   const earliest = instantToWallClock(new Date(Date.now() + leadMinutes * 60000), data.timeZone)!
   const latestDay = instantToWallClock(new Date(Date.now() + horizonDays * 86400000), data.timeZone)!.date
+  const gridRef = useRef<HTMLDivElement>(null)
+  const dragRef = useRef<{ id: string; x: number; y: number; offset: number; moved: boolean } | null>(null)
+  const suppressClick = useRef(false)
+  const [ghost, setGhost] = useState<{ id: string; resourceId: string; day: string; start: number } | null>(null)
+  const [moving, setMoving] = useState(false)
+  const locate = (clientX: number, clientY: number, offset: number) => {
+    const columns = gridRef.current?.querySelectorAll<HTMLElement>('[data-calendar-column]') ?? []
+    for (const column of columns) {
+      const rect = column.getBoundingClientRect()
+      if (rect.width <= 0 || clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) continue
+      const gridStart = Number(column.dataset.gridStart)
+      const spanMinutes = Number(column.dataset.gridSpan)
+      const raw = gridStart + ((clientY - offset - rect.top) / rect.height) * spanMinutes
+      const step = stepMinutes > 0 ? stepMinutes : 15
+      return { resourceId: column.dataset.resourceId ?? '', day: column.dataset.day ?? day, start: Math.round(raw / step) * step }
+    }
+    return null
+  }
+  const finishMove = async (clientX: number, clientY: number) => {
+    const drag = dragRef.current
+    dragRef.current = null
+    if (!drag?.moved || !onMove) { setGhost(null); return }
+    suppressClick.current = true
+    const target = locate(clientX, clientY, drag.offset)
+    const event = data.events.find(item => item.id === drag.id && item.day === day)
+    if (!target || !event) { setGhost(null); return }
+    const shift = data.shifts.find(item => item.resourceId === target.resourceId && item.day === target.day)
+    const windows = showWorkingHours ? (shift?.windows ?? []) : null
+    const issue = showWorkingHours && shift?.windows === null
+      ? 'Не удалось проверить рабочие часы. Запись осталась на прежнем месте.'
+      : calendarMoveIssue({ event, resourceId: target.resourceId, day: target.day, start: target.start, step: stepMinutes, windows, others: data.events })
+    if (issue) { setGhost(null); onNotice?.(issue, true); return }
+    setMoving(true)
+    try {
+      const result = await onMove(event.id, { resourceId: target.resourceId, day: target.day, time: calendarClock(target.start) })
+      setGhost(null)
+      if (!result.ok) onNotice?.(result.error, true)
+      else onNotice?.(result.unchanged ? 'Запись уже стоит на этом времени.' : 'Запись перенесена.', false)
+    } catch {
+      setGhost(null)
+      onNotice?.('Не удалось перенести запись. Она осталась на прежнем месте.', true)
+    } finally { setMoving(false) }
+  }
   return (
     <div className={css.calendarScroll} tabIndex={0} aria-label="Прокрутка календаря по сотрудникам">
       <div className={css.calendar} data-no-hours={!showWorkingHours || undefined} style={{ '--calendar-columns': columns.length, '--calendar-height': `${height}px` } as CSSProperties} aria-label="Календарь рабочих часов и записей">
@@ -335,7 +414,7 @@ function CalendarGrid({
             </div>
           ))}
         </div>
-        <div className={css.timeline}>
+        <div className={css.timeline} ref={gridRef}>
           <div className={css.axis}>{ticks.map(time => <span key={time} style={{ top: `${(time - start) / span * 100}%` }}>{calendarClock(time)}</span>)}</div>
           {columns.map((column, index) => {
             const shift = shifts[index]
@@ -345,7 +424,7 @@ function CalendarGrid({
             const freeStarts = new Set<number>()
             const hitStep = Math.max(30, stepMinutes)
             return (
-              <section className={css.column} key={`${column.resource.id}:${column.day}`} aria-label={`${column.resource.name}, ${dateLabel(column.day, { day: 'numeric', month: 'long' })}`}>
+              <section className={css.column} key={`${column.resource.id}:${column.day}`} data-calendar-column="" data-resource-id={column.resource.id} data-day={column.day} data-grid-start={start} data-grid-span={span} aria-label={`${column.resource.name}, ${dateLabel(column.day, { day: 'numeric', month: 'long' })}`}>
                 {ticks.slice(0, -1).map(time => <span aria-hidden className={css.line} key={time} style={{ top: `${(time - start) / span * 100}%` }} />)}
                 {workday && <div className={css.shiftOutline} data-calendar-shift aria-hidden style={position(workday.start, workday.end)} />}
                 {onCreate && day >= earliest.date && day <= latestDay && periods.flatMap(window => {
@@ -377,17 +456,51 @@ function CalendarGrid({
                     className={css.visit}
                     data-status={event.status || undefined}
                     data-short={event.end - event.start <= 60 || undefined}
-                    disabled={editing}
+                    data-move={canMove || undefined}
+                    data-dragging={ghost?.id === event.id || undefined}
+                    disabled={editing || moving}
                     style={{ ...position(event.start, event.end), left: `calc(${lane / lanes * 100}% + 6px)`, width: `calc(${100 / lanes}% - 12px)` }}
-                    title={`${event.subtitle || event.title} · ${calendarClock(event.start)}–${calendarClock(event.end)} · ${statusNames[event.status] ?? ''}`}
+                    title={canMove ? 'Перетащите, чтобы изменить время или мастера' : `${event.subtitle || event.title} · ${calendarClock(event.start)}–${calendarClock(event.end)} · ${statusNames[event.status] ?? ''}`}
                     aria-label={`Открыть запись: ${event.title}, ${event.subtitle}, ${calendarClock(event.start)}–${calendarClock(event.end)}`}
-                    onClick={() => onOpenVisit(event.id)}
+                    onPointerDown={pointer => {
+                      if (!canMove || pointer.button !== 0 || moving) return
+                      const rect = pointer.currentTarget.getBoundingClientRect()
+                      dragRef.current = { id: event.id, x: pointer.clientX, y: pointer.clientY, offset: pointer.clientY - rect.top, moved: false }
+                      const move = (next: PointerEvent) => {
+                        const drag = dragRef.current
+                        if (!drag || drag.id !== event.id) return
+                        if (!drag.moved && Math.hypot(next.clientX - drag.x, next.clientY - drag.y) < 6) return
+                        drag.moved = true
+                        const target = locate(next.clientX, next.clientY, drag.offset)
+                        if (target) setGhost({ id: event.id, ...target })
+                      }
+                      const up = (next: PointerEvent) => {
+                        window.removeEventListener('pointermove', move)
+                        window.removeEventListener('pointerup', up)
+                        window.removeEventListener('pointercancel', up)
+                        if (dragRef.current?.id === event.id) void finishMove(next.clientX, next.clientY)
+                      }
+                      window.addEventListener('pointermove', move)
+                      window.addEventListener('pointerup', up)
+                      window.addEventListener('pointercancel', up)
+                    }}
+                    onClick={() => { if (suppressClick.current) { suppressClick.current = false; return } onOpenVisit(event.id) }}
                   >
                     <strong>{event.subtitle || event.title}</strong>
                     {event.subtitle && <small>{event.title}</small>}
                     <span className={css.visitTime}>{calendarClock(event.start)}–{calendarClock(event.end)}</span>
                   </button>
                 ))}
+                {ghost && ghost.resourceId === column.resource.id && ghost.day === column.day && (() => {
+                  const source = data.events.find(item => item.id === ghost.id)
+                  if (!source) return null
+                  return (
+                    <div className={css.visit} data-status={source.status || undefined} data-ghost="" aria-hidden style={{ ...position(ghost.start, ghost.start + source.end - source.start), left: 6, right: 6 }}>
+                      <strong>{source.subtitle || source.title}</strong>
+                      <span className={css.visitTime}>{calendarClock(ghost.start)}–{calendarClock(ghost.start + source.end - source.start)}</span>
+                    </div>
+                  )
+                })()}
               </section>
             )
           })}

@@ -17,12 +17,13 @@ export function BookingTimeFields({ app, editing }: { app: AppV2; editing: boole
   const journey = useBookingJourney(), seed = context?.scope.screenId === config.formScreenId ? journey?.intent : null
   const demoAvailability = useContext(BookingDemoAvailability)
   const [day, setDay] = useState(seed?.day ?? ''), [master, setMaster] = useState(seed?.masterId ?? ''), [retry, setRetry] = useState(0), [seedNotice, setSeedNotice] = useState('')
-  const appliedTime = useRef(false), appliedClient = useRef(false)
+  const appliedTime = useRef(false), appliedClient = useRef(false), seededFor = useRef<string | null>(null)
   const [result, setResult] = useState<BookingAvailabilityResult>(), [loading, setLoading] = useState(false)
   const selected = oneRelation(context?.values[config.visit.master])
   const chosen = context?.values[config.visit.start]
   const latest = useRef(context); latest.current = context
-  const recordId = context?.scope.recordId
+  const pickedService = oneRelation(context?.values[config.visit.service])
+  const recordId = context?.scope.recordId ?? (context?.scope.formId === config.ownerCreateFormId ? pickedService ?? undefined : undefined)
   const screenId = context?.scope.screenId
   const reschedule = screenId === config.rescheduleScreenId
   const timeZone = result?.ok ? result.timeZone : context?.state?.fields.find(field => field.fieldId === config.visit.start)?.timeZone ?? 'Europe/Moscow'
@@ -47,8 +48,8 @@ export function BookingTimeFields({ app, editing }: { app: AppV2; editing: boole
       .then(next => {
         if (cancelled) return
         setResult(next)
-        if (seed?.time && !appliedTime.current && next.ok) {
-          appliedTime.current = true
+        if (seed?.time && !appliedTime.current && seededFor.current !== (recordId ?? null) && next.ok) {
+          seededFor.current = recordId ?? null
           const slot = next.slots.find(slot => slot.time === seed.time && slot.masterId === seed.masterId && selectedDay === seed.day)
           if (slot) { latest.current?.change(config.visit.master, [slot.masterId]); latest.current?.change(config.visit.start, slot.start) }
           else setSeedNotice('Выбранное время занято или не подходит для этой услуги. Выберите другое свободное время или мастера.')

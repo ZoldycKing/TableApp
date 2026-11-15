@@ -1393,6 +1393,14 @@ button.recordButton:hover strong { color: var(--v2-accent, #456849); }
 
 .inlineCheck { display: flex !important; align-items: center; gap: 8px; font-size: 14px; line-height: 20px; }
 .inlineCheck input[type="checkbox"] { width: 20px; min-height: 20px; accent-color: var(--v2-accent, #456849); }
+.switch { position: relative; display: flex !important; flex-direction: row; align-items: center; justify-content: space-between; gap: 16px; min-height: 44px; cursor: pointer; font-size: 14px; line-height: 20px; }
+.switch span { min-width: 0; overflow-wrap: break-word; }
+.switch input { position: absolute; right: 0; width: 44px; height: 26px; margin: 0; opacity: 0; cursor: pointer; }
+.switch i { position: relative; flex: none; width: 44px; height: 26px; border-radius: 999px; background: var(--v2-line, #d5ddd0); }
+.switch i::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px color-mix(in srgb, #122018 24%, transparent); transition: transform 0.15s ease; }
+.switch input:checked + i { background: var(--v2-accent, #456849); }
+.switch input:checked + i::after { transform: translateX(18px); }
+.switch input:focus-visible + i { outline: 2px solid var(--v2-accent, #456849); outline-offset: 2px; }
 .workflowEditor, .workflowValue, .workflowStep, .workflowMapping { display: grid; gap: 16px; min-width: 0; }
 .workflowEditor label { display: grid; gap: 8px; min-width: 0; font-size: 14px; }
 .workflowEditor input, .workflowEditor select { width: 100%; min-width: 0; min-height: 44px; padding: 8px 12px; border: 1px solid var(--v2-line, #dce2d6); border-radius: 8px; background: var(--v2-surface, #fff); color: var(--v2-ink, #253c2d); font: inherit; }

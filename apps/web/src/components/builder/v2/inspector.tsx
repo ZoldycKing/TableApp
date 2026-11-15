@@ -15,6 +15,7 @@ import { builderCatalogImageField, builderV2CardLayout, builderV2CatalogCollecti
 import { ProtoIcon } from '../prototype/icons'
 import styles from '../prototype/prototype.module.css'
 import ui from './view.module.css'
+import { SettingSwitch } from './setting-switch'
 import { BuilderV2InputSettings } from './form-settings'
 import { BuilderV2FormActionSettings } from './form-action-settings'
 import { BuilderV2DeleteActionSettings } from './delete-action-settings'
@@ -63,7 +64,7 @@ export function BuilderV2Inspector({ app, screenId, selected, tables, businessAp
     <label>Тип экрана<select value={screen.contextTableId ?? ''} onChange={event => onScreen({ contextTableId: event.target.value || null, catalog: undefined, recordTitleFieldId: undefined, ...(event.target.value ? { navigation: false } : {}) })}><option value="">Обычный экран</option>{tables.map(table => <option value={table.id} key={table.id}>Карточка: {table.name}</option>)}</select></label>
     {screen.contextTableId && !screen.catalog && <label>Заголовок карточки<select value={screen.recordTitleFieldId ?? ''} onChange={event => onScreen({ recordTitleFieldId: event.target.value || undefined })}><option value="">Главная колонка таблицы</option>{tables.find(table => table.id === screen.contextTableId)?.fields.map(field => <option value={field.id} key={field.id}>{field.name}</option>)}</select></label>}
     {screen.contextTableId && <CatalogScreenSettings screen={screen} table={tables.find(table => table.id === screen.contextTableId)} onScreen={onScreen} />}
-    {screen.contextTableId ? <p className={ui.hint}>Карточка открывается для выбранной записи из списка.</p> : <label className={styles.checkbox}><input type="checkbox" checked={screen.navigation} onChange={event => onScreen({ navigation: event.target.checked })} />Показывать в меню</label>}
+    {screen.contextTableId ? <p className={ui.hint}>Карточка открывается для выбранной записи из списка.</p> : <SettingSwitch label="Показывать в меню" checked={screen.navigation} onChange={navigation => onScreen({ navigation })} />}
     <button type="button" className={styles.secondary} disabled={app.homeScreenId === screen.id || Boolean(screen.contextTableId)} onClick={onHome}><ProtoIcon name="home" />{app.homeScreenId === screen.id ? 'Стартовый экран' : 'Сделать стартовым'}</button>
     {onEnterConfigure&&onEnterWorkflow&&onOpenEnter&&<BuilderV2EnterSettings app={app} screenId={screenId} tables={tables} onConfigure={onEnterConfigure} onWorkflow={onEnterWorkflow} onOpen={onOpenEnter} canOpen={Boolean(canOpenEnter)}/>}
     <div className={ui.screenActions}><button type="button" className={styles.iconButton} aria-label="Экран выше" onClick={() => onMoveScreen(-1)} disabled={app.screens[0]?.id === screen.id}><ProtoIcon name="up" /></button><button type="button" className={styles.iconButton} aria-label="Экран ниже" onClick={() => onMoveScreen(1)} disabled={app.screens.at(-1)?.id === screen.id}><ProtoIcon name="down" /></button><button type="button" className={styles.iconButton} aria-label="Удалить экран" onClick={onDeleteScreen} disabled={app.screens.length < 2}><ProtoIcon name="trash" /></button></div>

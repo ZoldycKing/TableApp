@@ -11,6 +11,7 @@ import {
   calendarGridBounds,
   calendarBlockFrame,
   calendarMoveIssue,
+  calendarPeriodAmount,
   type TeamCalendarSnapshot,
 } from '@/lib/team-calendar-core'
 import type { CalendarSlot } from '@/lib/team-calendar-prefill'
@@ -126,7 +127,6 @@ export function TeamCalendarView({
   const today = instantToWallClock(new Date(), zone)!.date
   const selected = data?.resources.some(item => item.id === resource) ? resource : ''
   const visibleEvents = data?.events.filter(event => !selected || event.resourceId === selected) ?? []
-  const metricEvents = [...new Map(visibleEvents.map(event => [event.id, event])).values()]
   const shiftDate = (direction: number) => {
     const next = new Date(`${day}T12:00:00Z`)
     next.setUTCDate(next.getUTCDate() + direction * (week ? 7 : 1))
@@ -134,7 +134,8 @@ export function TeamCalendarView({
   }
   const range = week ? calendarDays(day, true) : [day]
   const periodEvents = visibleEvents.filter(event => event.status !== 'cancelled' && (week || event.day === day))
-  const periodCount = new Map(periodEvents.map(event => [event.id, event])).size
+  const metricEvents = [...new Map(periodEvents.map(event => [event.id, event])).values()]
+  const periodCount = metricEvents.length
   const periodLabel = week
     ? `${dateLabel(range[0]!, { day: 'numeric', month: 'short' })} — ${dateLabel(range[6]!, { day: 'numeric', month: 'short', year: 'numeric' })}`
     : dateLabel(day, { weekday: 'long', day: 'numeric', month: 'long' })
@@ -177,7 +178,7 @@ export function TeamCalendarView({
         metrics={showMetrics && data ? [
           { key: 'visits', caption: week ? 'Записи за неделю' : 'Записи за день', value: metricEvents.filter(event => event.status !== 'cancelled').length, icon: <ProtoIcon name="calendar" size={16} /> },
           ...(showNoShows ? [{ key: 'noShow', caption: 'Неявки', value: metricEvents.filter(event => event.status === 'noShow').length, icon: <ProtoIcon name="users" size={16} /> }] : []),
-          ...(showAmounts ? [{ key: 'amount', caption: 'Стоимость записей', value: money(metricEvents.filter(event => !['cancelled', 'noShow'].includes(event.status)).reduce((sum, event) => sum + (event.amount ?? 0), 0)), icon: <ProtoIcon name="chart" size={16} />, wide: true }] : []),
+          ...(showAmounts ? [{ key: 'amount', caption: 'Стоимость записей', value: money(calendarPeriodAmount(metricEvents, range)), icon: <ProtoIcon name="chart" size={16} />, wide: true }] : []),
         ] : undefined}
         metricLayout="cards"
         search={(

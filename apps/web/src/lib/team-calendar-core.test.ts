@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { calendarBlockFrame, calendarEventLanes, calendarGridBounds, calendarMoveIssue, type TeamCalendarEvent } from './team-calendar-core'
+import { calendarBlockFrame, calendarEventLanes, calendarGridBounds, calendarMoveIssue, calendarPeriodAmount, type TeamCalendarEvent } from './team-calendar-core'
 
 const event = (id: string, start: number, end: number): TeamCalendarEvent => ({
   id, resourceId: 'person', day: '2026-11-15', start, end, title: id, subtitle: '', status: 'booked', amount: null,
@@ -54,6 +54,21 @@ describe('moving an appointment', () => {
       event: visit, resourceId: 'olya', day: '2026-11-15', start: 12 * 60 + 30, step: 15, windows, others: [],
     })).toBe('Это время вне рабочих часов. Запись осталась на прежнем месте.')
   })
+  it('sums the chosen day only and can total the same on two different days', () => {
+    const events = [
+      { id: 'maria-am', day: '2026-11-15', status: 'booked', amount: 2500 },
+      { id: 'anna', day: '2026-11-15', status: 'booked', amount: 1800 },
+      { id: 'maria-pm', day: '2026-11-15', status: 'booked', amount: 2500 },
+      { id: 'boris', day: '2026-11-15', status: 'noShow', amount: 1500 },
+      { id: 'alexey', day: '2026-11-15', status: 'booked', amount: 1500 },
+      { id: 'sveta', day: '2026-11-16', status: 'booked', amount: 2800 },
+      { id: 'irina', day: '2026-11-16', status: 'booked', amount: 5500 },
+    ]
+    expect(calendarPeriodAmount(events, ['2026-11-15'])).toBe(8300)
+    expect(calendarPeriodAmount(events, ['2026-11-16'])).toBe(8300)
+    expect(calendarPeriodAmount(events.filter(event => event.id === 'anna'), ['2026-11-15'])).toBe(1800)
+  })
+
   it('allows a free slot on the grid step and ignores a cancelled neighbour', () => {
     expect(calendarMoveIssue({
       event: visit, resourceId: 'zhenya', day: '2026-11-15', start: 9 * 60, step: 15, windows,

@@ -14,6 +14,7 @@ import {historyCursor,readHistoryCursor} from './history-cursor'
 import {withInitialValues} from './initial-values'
 import {formatCell} from './format'
 import {RowWriteError} from './row-mutations'
+import {serviceOfferDetail} from './booking'
 import {ownerCalendarServiceField} from './team-calendar-prefill'
 import type {Transaction} from './db-transaction'
 import type {RuntimeSourceRow} from './runtime-project'
@@ -72,8 +73,9 @@ export async function inspectPublishedV2Form(current:Pick<Awaited<ReturnType<typ
     if(!input||!writable(input)||field?.type!=='relation')throw new RowWriteError('denied','Выбор записей недоступен')
     const target=field.options.tableId,primary=meta.primaryByTable.get(target),search=request.search.trim().toLocaleLowerCase('ru-RU'),binding=builderV2Revision([fingerprint,field.id,search,await publishedV2DataRevision(meta,app,actor)]),cursor=readHistoryCursor(request.after,binding) as {lastId?:unknown}|null
     if(cursor&&typeof cursor.lastId!=='string')throw new RowWriteError('conflict','Обновите список')
-    const options:{id:string;label:string}[]=[];let lastId=cursor?.lastId as string|undefined
-    while(options.length<31){const batch=await tx.select().from(rows).where(and(eq(rows.tableId,target),isNull(rows.deletedAt),publishedV2ReadSql(app,actor,target),lastId?gt(rows.id,lastId):undefined)).orderBy(asc(rows.id)).limit(100);if(!batch.length)break;for(const row of await derivePublishedV2Rows(meta,app,actor,batch as RuntimeSourceRow[])){lastId=row.id;const label=primary?row.display[primary]??'Запись':'Запись';if(!search||label.toLocaleLowerCase('ru-RU').includes(search))options.push({id:row.id,label:label||'Без названия'});if(options.length===31)break}if(batch.length<100)break;lastId=options.length<31?batch.at(-1)!.id:lastId}
+    const options:{id:string;label:string;detail?:string}[]=[];let lastId=cursor?.lastId as string|undefined
+    const service=app.booking&&request.fieldId===app.booking.visit.service?app.booking.service:null
+    while(options.length<31){const batch=await tx.select().from(rows).where(and(eq(rows.tableId,target),isNull(rows.deletedAt),publishedV2ReadSql(app,actor,target),lastId?gt(rows.id,lastId):undefined)).orderBy(asc(rows.id)).limit(100);if(!batch.length)break;for(const row of await derivePublishedV2Rows(meta,app,actor,batch as RuntimeSourceRow[])){lastId=row.id;const label=primary?row.display[primary]??'Запись':'Запись';const detail=service?serviceOfferDetail(row.data[service.minutes],row.data[service.price]):undefined;if(!search||label.toLocaleLowerCase('ru-RU').includes(search))options.push({id:row.id,label:label||'Без названия',...(detail?{detail}:{})});if(options.length===31)break}if(batch.length<100)break;lastId=options.length<31?batch.at(-1)!.id:lastId}
     return {ok:true as const,options:options.slice(0,30),next:options.length>30?historyCursor({lastId:options[29]!.id},binding):null}
   }
   if(request.mode==='check'&&request.fingerprint!==fingerprint)return {ok:false as const,stale:true,error:'Настройки формы или запись изменились. Обновите форму.'}

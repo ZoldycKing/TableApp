@@ -161,10 +161,10 @@ function RelationInput({ context, field, id, errorId }: { context: FormContext; 
   const warehouseField = Boolean(inventory && (field.fieldId === inventory.movementWarehouseFieldId || field.fieldId === inventory.movementWarehouseToFieldId || field.fieldId === inventory.itemWarehouseFieldId || purchaseWarehouse || countWarehouse))
   const purchaseRelation = purchaseSupplier || purchaseWarehouse || countWarehouse
   const simpleSelect = warehouseField || purchaseRelation
-  const [search, setSearch] = useState(''), [options, setOptions] = useState<{ key: string; values: { id: string; label: string }[]; next: string | null; loading: boolean; error: string }>({ key: '', values: [], next: null, loading: true, error: '' }), [refresh, setRefresh] = useState(0), generation = useRef(0)
+  const [search, setSearch] = useState(''), [open, setOpen] = useState(false), [active, setActive] = useState(0), [options, setOptions] = useState<{ key: string; values: { id: string; label: string; detail?: string }[]; next: string | null; loading: boolean; error: string }>({ key: '', values: [], next: null, loading: true, error: '' }), [refresh, setRefresh] = useState(0), generation = useRef(0)
   const key = JSON.stringify([context.scope, field.fieldId, simpleSelect ? '' : search]), current = useRef({ context, key }); current.current = { context, key }
-  const known = useRef<{ key: string; labels: Map<string, string> }>({ key: '', labels: new Map() }), scopeKey = JSON.stringify([context.app.id, context.scope, field.fieldId])
-  if (known.current.key !== scopeKey) known.current = { key: scopeKey, labels: new Map() }
+  const known = useRef<{ key: string; labels: Map<string, string>; details: Map<string, string> }>({ key: '', labels: new Map(), details: new Map() }), scopeKey = JSON.stringify([context.app.id, context.scope, field.fieldId])
+  if (known.current.key !== scopeKey) known.current = { key: scopeKey, labels: new Map(), details: new Map() }
   const selected = Array.isArray(context.values[field.fieldId]) ? context.values[field.fieldId] as string[] : []
   useEffect(() => {
     const version = ++generation.current
@@ -174,18 +174,36 @@ function RelationInput({ context, field, id, errorId }: { context: FormContext; 
     return () => { clearTimeout(timer); generation.current++ }
   }, [key, context.disabled, field.readOnly, refresh, simpleSelect, search])
   const visible = options.key === key ? options : { key, values: [], next: null, loading: true, error: '' }
-  visible.values.forEach(option => known.current.labels.set(option.id, option.label))
+  visible.values.forEach(option => { known.current.labels.set(option.id, option.label); if (option.detail) known.current.details.set(option.id, option.detail) })
   useEffect(() => {
     if (!warehouseField || context.disabled || field.readOnly || field.allowMultiple || selected.length || visible.loading || visible.error) return
     if (visible.values.length === 1) context.change(field.fieldId, [visible.values[0]!.id])
   }, [warehouseField, context, field.fieldId, field.allowMultiple, field.readOnly, selected.length, visible.loading, visible.error, visible.values])
   const more = async () => { if (!visible.next || visible.loading || context.disabled) return; const version = ++generation.current; setOptions({ ...visible, loading: true }); try { const result = await context.inspect({ ...context.scope, mode: 'options', fieldId: field.fieldId, search: simpleSelect ? '' : search, after: visible.next }); if (version !== generation.current || current.current.key !== key) return; setOptions(result.ok && 'options' in result ? { key, values: [...visible.values, ...result.options.filter(item => !visible.values.some(old => old.id === item.id))], next: result.next, loading: false, error: '' } : { ...visible, loading: false, error: result.ok ? 'Нет списка' : result.error }) } catch { if (version === generation.current) setOptions({ ...visible, loading: false, error: 'Не удалось загрузить список' }) } }
   const serviceField = context.app.booking?.visit.service === field.fieldId
-  const emptyLabel = purchaseSupplier ? 'Выберите поставщика' : warehouseField || purchaseWarehouse ? 'Выберите склад' : serviceField ? 'Выберите услугу' : 'Выберите запись'
+  const emptyLabel = purchaseSupplier ? 'Выберите поставщика' : warehouseField || purchaseWarehouse ? 'Выберите склад' : 'Выберите запись'
   const selectedFallback = purchaseSupplier ? 'Выбранный поставщик' : warehouseField || purchaseWarehouse ? 'Выбранный склад' : 'Выбранная запись'
   const loadingLabel = purchaseSupplier ? 'Загружаем поставщиков…' : warehouseField || purchaseWarehouse ? 'Загружаем склады…' : 'Загружаем записи…'
+  if (serviceField && !field.allowMultiple) {
+    const pickedId = selected[0]
+    const picked = pickedId ? { id: pickedId, label: known.current.labels.get(pickedId) || (Array.isArray(context.state?.values[field.fieldId]) && (context.state.values[field.fieldId] as string[]).includes(pickedId) ? context.state?.labels[field.fieldId] : '') || 'Выбранная услуга', detail: known.current.details.get(pickedId) } : undefined
+    const choose = (optionId: string) => { context.change(field.fieldId, [optionId]); setSearch(''); setOpen(false) }
+    const listId = `${id}-list`
+    return <div className={ui.serviceCombo}>
+      <input id={id} role="combobox" aria-expanded={open} aria-controls={listId} aria-autocomplete="list" aria-describedby={errorId} aria-invalid={Boolean(errorId)} aria-required={field.required} disabled={context.disabled} placeholder="Найти услугу" value={open ? search : picked?.label ?? ''} onFocus={() => { setOpen(true); setSearch(''); setActive(0) }} onBlur={() => setOpen(false)} onChange={event => { setSearch(event.target.value); setOpen(true); setActive(0); if (!event.target.value) context.change(field.fieldId, []) }} onKeyDown={event => {
+        if (event.key === 'ArrowDown') { event.preventDefault(); setOpen(true); setActive(index => Math.min(index + 1, Math.max(visible.values.length - 1, 0))) }
+        else if (event.key === 'ArrowUp') { event.preventDefault(); setActive(index => Math.max(index - 1, 0)) }
+        else if (event.key === 'Enter' && open && visible.values[active]) { event.preventDefault(); choose(visible.values[active]!.id) }
+        else if (event.key === 'Escape') setOpen(false)
+      }} />
+      {picked && !open && picked.detail ? <p className={ui.serviceDetail}>{picked.detail}</p> : null}
+      {open && <ul id={listId} role="listbox" aria-label="Услуги">
+        {visible.loading ? <li className={ui.hint}>Ищем услуги…</li> : visible.values.length ? visible.values.map((option, index) => <li key={option.id} role="option" aria-selected={option.id === pickedId} data-active={index === active || undefined}><button type="button" onMouseDown={event => event.preventDefault()} onClick={() => choose(option.id)}><strong>{option.label}</strong>{option.detail ? <span>{option.detail}</span> : null}</button></li>) : <li className={ui.hint}>Нет такой услуги</li>}
+      </ul>}
+    </div>
+  }
   return <div className={ui.relationInput} data-warehouse={warehouseField || undefined} data-purchase-relation={purchaseRelation || undefined}>
-    {!simpleSelect && <input type="search" disabled={context.disabled} value={search} placeholder={serviceField ? 'Найти услугу' : 'Найти запись'} aria-label={`Найти: ${field.label}`} onChange={event => setSearch(event.target.value)} />}
+    {!simpleSelect && <input type="search" disabled={context.disabled} value={search} placeholder="Найти запись" aria-label={`Найти: ${field.label}`} onChange={event => setSearch(event.target.value)} />}
     <select id={id} aria-describedby={errorId} aria-invalid={Boolean(errorId)} multiple={field.allowMultiple} disabled={context.disabled} value={field.allowMultiple ? selected : selected[0] ?? ''} onChange={event => context.change(field.fieldId, field.allowMultiple ? Array.from(event.target.selectedOptions).map(option => option.value).filter(Boolean) : event.target.value ? [event.target.value] : [])}>
       {!field.allowMultiple && <option value="">{emptyLabel}</option>}
       {selected.filter(id => !visible.values.some(item => item.id === id)).map(id => <option key={id} value={id}>{known.current.labels.get(id) || (Array.isArray(context.state?.values[field.fieldId]) && (context.state.values[field.fieldId] as string[]).includes(id) ? context.state?.labels[field.fieldId] : '') || selectedFallback}</option>)}

@@ -1383,6 +1383,14 @@ button.recordButton:hover strong { color: var(--v2-accent, #456849); }
 .autoValue { display: grid; gap: 4px; padding: 12px; border: 1px solid var(--v2-line, #dce2d6); border-radius: 8px; background: var(--v2-bg, #f2f6ed); overflow-wrap: anywhere; }
 .autoValue small { color: var(--v2-muted, #687568); font-size: 12px; }
 .relationInput { display: grid; gap: 8px; min-width: 0; }
+.serviceCombo { position: relative; display: grid; gap: 6px; min-width: 0; }
+.serviceCombo input { width: 100%; min-height: 44px; }
+.serviceCombo ul { display: grid; gap: 2px; max-height: 240px; margin: 0; padding: 4px; overflow: auto; list-style: none; border: 1px solid var(--v2-line, #dce2d6); border-radius: 12px; background: var(--v2-surface, #fff); }
+.serviceCombo li button { display: flex; width: 100%; align-items: baseline; justify-content: space-between; gap: 12px; min-height: 44px; padding: 8px 10px; border: 0; border-radius: 8px; background: transparent; color: var(--v2-ink, #253c2d); font: inherit; text-align: left; cursor: pointer; }
+.serviceCombo li button span { flex: none; color: var(--v2-muted, #687568); font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.serviceCombo li[data-active] button,
+.serviceCombo li[aria-selected='true'] button { background: var(--v2-soft, #edf2e8); }
+.serviceDetail { margin: 0; color: var(--v2-muted, #687568); font-size: 13px; line-height: 1.4; }
 .input label { font-size: 14px; line-height: 20px; }
 .input select, .input textarea { max-width: 100%; font: inherit; color: var(--v2-ink, #253c2d); }
 .input select[multiple] { min-height: 120px; }

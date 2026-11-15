@@ -12,6 +12,7 @@ import { builderV2Revision } from './builder-v2-revision'
 import { builderV2Json, deriveBuilderV2Rows, loadBuilderV2ReadMetadata } from './builder-v2-row-data'
 import { formatCell } from './format'
 import { withInitialValues } from './initial-values'
+import { serviceOfferDetail } from './booking'
 import { RowWriteError } from './row-mutations'
 import type { RuntimeSourceRow } from './runtime-project'
 import type { Member } from './session'
@@ -92,7 +93,12 @@ export async function inspectBuilderV2Form(app: AppV2, member: Member, request: 
       if (!primary || isComputed(primary.type) || !['text', 'long_text', 'email', 'phone', 'url', 'number'].includes(primary.type)) error('Для поиска связанных записей выберите обычное главное поле таблицы')
       const search = request.search.replace(/[\\%_]/g, '\\$&')
       const records = await tx.select({ id: rows.id, data: rows.data }).from(rows).where(and(eq(rows.tableId, target), isNull(rows.deletedAt), request.after ? gt(rows.id, request.after) : undefined, search ? ilike(sql`${rows.data}->>${primary!.id}`, `%${search}%`) : undefined)).orderBy(asc(rows.id)).limit(31)
-      return { ok: true, options: records.slice(0, 30).map(row => ({ id: row.id, label: formatCell(primary!, (row.data as Record<string, unknown>)[primary!.id]) || 'Без названия' })), next: records.length > 30 ? records[29]!.id : null }
+      const service = app.booking && request.fieldId === app.booking.visit.service ? app.booking.service : null
+      return { ok: true, options: records.slice(0, 30).map(row => {
+        const data = row.data as Record<string, unknown>
+        const detail = service ? serviceOfferDetail(data[service.minutes], data[service.price]) : undefined
+        return { id: row.id, label: formatCell(primary!, data[primary!.id]) || 'Без названия', ...(detail ? { detail } : {}) }
+      }), next: records.length > 30 ? records[29]!.id : null }
     }
     if (request.mode === 'check' && request.fingerprint !== fingerprint) return { ok: false, stale: true, error: 'Настройки формы или открытая запись изменились. Обновите форму.' }
     if (request.mode === 'check' && Object.keys(request.values).some(id => !inputs.some(input => input.fieldId === id && writable(input)))) error('Форма содержит недоступное поле')

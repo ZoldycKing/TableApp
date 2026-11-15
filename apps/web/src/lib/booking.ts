@@ -7,6 +7,13 @@ export function oneRelation(value: unknown): string | null {
   return Array.isArray(value) && value.length === 1 && typeof value[0] === 'string' ? value[0] : null
 }
 const positive = (value: unknown) => typeof value === 'number' && Number.isFinite(value) && value > 0
+/** Duration and price for a service option, in the salon’s usual wording. */
+export function serviceOfferDetail(minutes: unknown, price: unknown): string | undefined {
+  const parts: string[] = []
+  if (typeof minutes === 'number' && Number.isFinite(minutes)) parts.push(`${minutes} мин`)
+  if (typeof price === 'number' && Number.isFinite(price)) parts.push(`${price.toLocaleString('ru-RU')} ₽`)
+  return parts.length ? parts.join(' · ') : undefined
+}
 export function bookingService(config: BookingConfig, data: BookingData, id: string) {
   return data.services.find(row => row.id === id && row.data[config.service.active] === true &&
     positive(row.data[config.service.minutes]) && Number(row.data[config.service.minutes]) <= 1440 &&

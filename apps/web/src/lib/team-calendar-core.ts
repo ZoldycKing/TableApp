@@ -103,6 +103,19 @@ export function calendarGridBounds(
 
 const DAY_MINUTES = 24 * 60
 
+/** Money for the visits on screen: the chosen day or week, without cancellations and no-shows. */
+export function calendarPeriodAmount(events: readonly { id: string; day: string; status: string; amount: number | null }[], days: readonly string[]): number {
+  const allowed = new Set(days)
+  const seen = new Set<string>()
+  let sum = 0
+  for (const event of events) {
+    if (seen.has(event.id) || !allowed.has(event.day) || event.status === 'cancelled' || event.status === 'noShow') continue
+    seen.add(event.id)
+    sum += event.amount ?? 0
+  }
+  return sum
+}
+
 /** Why a drag cannot be saved. Null means the new place is allowed, including dropping it back where it was. */
 export function calendarMoveIssue(input: {
   event: { id: string; start: number; end: number; status: string }

@@ -172,4 +172,20 @@ describe('one calendar for the whole team', () => {
     fireEvent.click(within(details).getAllByRole('button', { name: /^Изменить рабочий период:/ })[0]!)
     expect(callbacks.onOpenPeriod).toHaveBeenCalledWith('master_olya_morning')
   })
+  it('sums the chosen day and master, leaving out another day and a no-show', async () => {
+    const { data, day, visit } = fixture()
+    const other = data.days.find(date => date !== day)!
+    data.events = [
+      { ...visit('today', 'master_olya', 600, day), amount: 2500 },
+      { ...visit('missed', 'master_zhenya', 660, day, 'noShow'), amount: 9000 },
+      { ...visit('later', 'master_olya', 600, other), amount: 7000 },
+    ]
+    resize(1200)
+    render(<BookingCalendarDemoContext value={() => ({ ok: true, data })}><BookingCalendarScreen app={appV2Fixture()} screenId="home" timeZone="Europe/Moscow" onOpenVisit={vi.fn()} /></BookingCalendarDemoContext>)
+    const amount = (value: string) => (_: string, node: Element | null) => node?.tagName === 'P' && (node.textContent ?? '').replace(/[\s\u00a0\u202f]/g, '') === value
+    expect(await screen.findByText(amount('2500₽'))).toBeTruthy()
+    fireEvent.change(screen.getByRole('combobox', { name: 'Мастер календаря' }), { target: { value: 'master_zhenya' } })
+    expect(screen.getByText(amount('0₽'))).toBeTruthy()
+    expect(screen.queryByText(amount('2500₽'))).toBeNull()
+  })
 })

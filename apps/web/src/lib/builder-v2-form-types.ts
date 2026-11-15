@@ -9,7 +9,7 @@ export type BuilderV2FormState = { values: Record<string, AppV2Json>; labels: Re
 export type BuilderV2FormResult = { ok: true; state: BuilderV2FormState } | { ok: false; error: string; errors?: Record<string, string>; stale?: boolean }
 export type BuilderV2FormScope = { formId: string; screenId: string; recordId?: string }
 export type BuilderV2FormRequest = BuilderV2FormScope & ({ mode: 'initial' } | { mode: 'check'; values: Record<string, AppV2Json>; fingerprint: string } | { mode: 'options'; fieldId: string; search: string; after?: string })
-export type BuilderV2FormOptionsResult = { ok: true; options: { id: string; label: string }[]; next: string | null } | { ok: false; error: string }
+export type BuilderV2FormOptionsResult = { ok: true; options: { id: string; label: string; detail?: string }[]; next: string | null } | { ok: false; error: string }
 
 export function builderV2FormInputs(app: AppV2, form: BuilderV2Form): BuilderV2Input[] {
   const nodes = new Map(app.nodes.map(node => [node.id, node])), inputs: BuilderV2Input[] = [], seen = new Set<string>()

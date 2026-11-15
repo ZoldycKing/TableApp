@@ -61,7 +61,17 @@
 .timeFields fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
 .timeFields legend { margin-bottom: 12px; font-size: 14px; font-weight: 650; }
 .timeHint { margin: 0 0 12px; }
-.slots { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 10px; max-height: 260px; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-width: thin; padding: 4px; }
+.slots { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 10px; max-height: none; overflow: visible; padding: 4px 0 0; }
+.ownerStack { display: flex; flex-direction: column; gap: 16px; }
+.ownerStack > .picker { display: contents; }
+.ownerFields { display: contents; }
+.ownerStack [data-booking-place='client'] { order: 1; }
+.ownerStack [data-booking-place='service'] { order: 2; }
+.ownerStack [data-booking-place='time'] { order: 3; }
+.ownerStack [data-booking-place='note'] { order: 4; }
+.slotLine { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; padding: 10px 12px; border: 1px solid var(--v2-line); border-radius: 12px; background: var(--v2-page); }
+.slotLine strong { min-width: 0; font-size: 15px; font-weight: 700; line-height: 1.4; overflow-wrap: break-word; }
+.slotLine button { flex: none; min-height: 36px; padding: 4px 8px; border: 0; background: transparent; color: var(--v2-accent); font: inherit; font-weight: 700; cursor: pointer; }
 .slots button { display: grid; gap: 5px; justify-items: center; padding: 12px 8px; border-radius: 10px; border: 1px solid var(--v2-line); background: var(--v2-surface); color: var(--v2-ink); min-height: 64px; cursor: pointer; }
 .slots button strong { font-size: 16px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .slots button span { font-size: 11px; }

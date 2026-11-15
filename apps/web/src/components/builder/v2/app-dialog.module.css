@@ -20,9 +20,9 @@
   left: 50%;
   display: flex;
   flex-direction: column;
-  width: min(32rem, calc(100% - 24px));
-  min-height: min(34rem, 78%);
-  max-height: min(86%, 42rem);
+  width: min(40rem, calc(100% - 32px));
+  min-height: 0;
+  max-height: min(92dvh, 52rem);
   transform: translate(-50%, -50%);
   overflow: hidden;
   border: 1px solid var(--v2-line, #dce2d6);
@@ -64,38 +64,31 @@
   overflow: hidden;
   padding: 0;
 }
-.banner {
-  flex: none;
-  margin: 0;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--v2-line, #dce2d6);
-  color: var(--v2-ink, #253c2d);
-  font-size: 14px;
-  font-weight: 700;
-  line-height: 1.4;
-  overflow-wrap: break-word;
-}
 .body :global(form) {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
   border: 0;
   background: transparent;
   box-shadow: none;
-  padding: 16px 16px 0;
+  padding: 0;
 }
-.body :global(form) > h2,
-.body :global(form) > h3 { display: none; }
+.body :global(form) > [data-form-body] {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px 16px 24px;
+}
+.body :global(form) :is(h2, h3) { display: none; }
 .body :global(form) > button[type="submit"] {
-  position: sticky;
-  bottom: 0;
+  position: static;
+  flex: none;
   z-index: 1;
-  margin: 12px -16px 0;
+  margin: 0;
   border-radius: 0;
   padding: 14px 16px calc(14px + env(safe-area-inset-bottom, 0px));
-  box-shadow: 0 -12px 16px var(--v2-surface, #fff);
 }
 @container builder-app (max-width: 560px) {
   .panel {
@@ -103,7 +96,7 @@
     bottom: 0;
     left: 0;
     width: 100%;
-    min-height: min(32rem, 72%);
+    min-height: 0;
     max-height: 92%;
     transform: none;
     border-radius: 16px 16px 0 0;

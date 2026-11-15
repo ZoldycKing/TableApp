@@ -54,7 +54,7 @@ export function BuilderV2TeamCalendar({
     if (editing) return
     const target = calendarCreateTarget(app, node)
     const salon = salonSlotIntent(app, config, slot)
-    if (salon) journey?.setIntent(salon)
+    if (salon) journey?.setIntent({ ...salon, ...(slot.resourceName ? { masterName: slot.resourceName } : {}) })
     if (target) {
       journey?.setCalendarForm({ screenId: target.screenId, ...calendarFormValues(config, slot, timeZone) })
       setDraft({ slot, ...target })

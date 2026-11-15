@@ -76,7 +76,12 @@ button.hoursQuiet:hover { color: var(--v2-ink); }
 .dayBoard { min-width: 0; }
 .moveNotice { margin: 0 12px 8px; padding: 10px 12px; border-radius: 10px; background: var(--v2-soft); color: var(--v2-ink); font-size: 14px; line-height: 1.4; overflow-wrap: break-word; }
 .moveNotice[role=alert] { background: #fff0ee; color: #8b342f; }
-.staffSwitch { display: flex; gap: 8px; margin: 0 12px 4px; padding: 2px 2px 14px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: thin; scrollbar-gutter: stable; }
+.staffSwitch { display: flex; gap: 8px; margin: 0 12px 8px; padding: 2px 2px 4px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; }
+.staffSwitch::-webkit-scrollbar { display: none; height: 0; }
+.root[data-compact] .columnHead { display: none; }
+.root[data-compact] .axisHead,
+.root[data-compact] .axis,
+.root[data-compact] .head { background: var(--v2-surface, #fff); }
 .staffSwitch button { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 8px; max-width: 100%; min-height: 48px; padding: 6px 14px 6px 6px; border: 1px solid var(--v2-line); border-radius: 999px; background: var(--v2-surface); color: var(--v2-ink); font: inherit; cursor: pointer; scroll-snap-align: start; }
 .staffSwitch button[aria-selected=true] { border-color: var(--v2-accent); background: var(--v2-soft); box-shadow: inset 0 0 0 1px var(--v2-accent); }
 .staffSwitch button > span { min-width: 0; overflow: visible; white-space: normal; overflow-wrap: break-word; font-size: 14px; font-weight: 700; line-height: 1.25; text-align: left; }

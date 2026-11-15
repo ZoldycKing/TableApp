@@ -64,7 +64,7 @@ export function buildBookingV2App(built: BuiltTemplate, meta: { id: string; work
       { id: newId('action'), type: 'notify', message: { kind: 'literal', value: mode === 'create' && tableId === booking.tables.visits ? 'Вы записаны. Дата и время сохранены в разделе «Мои записи».' : 'Изменения сохранены.' } },
       ...(tableId === booking.tables.visits ? [{ id: newId('action'), type: 'open_screen' as const, screenId: booking.visitScreenId, record: mode === 'create' ? { kind: 'result' as const, stepId: saveId } : { kind: 'current' as const } }] : []),
     ], allowed)
-    nodes.push({ id, name, type: 'form', tableId, mode, childIds: inputs.map(item => item.id), events: { submit: save }, submitLabel: mode === 'create' && tableId === booking.tables.visits ? 'Подтвердить запись' : 'Сохранить', visibleTo: allowed, visibleWhen: null })
+    nodes.push({ id, name, type: 'form', tableId, mode, childIds: inputs.map(item => item.id), events: { submit: save }, submitLabel: id === booking.ownerCreateFormId ? 'Сохранить запись' : mode === 'create' && tableId === booking.tables.visits ? 'Подтвердить запись' : 'Сохранить', visibleTo: allowed, visibleWhen: null })
     return id
   }
   const visit = booking.visit, service = booking.service
@@ -88,7 +88,8 @@ export function buildBookingV2App(built: BuiltTemplate, meta: { id: string; work
     { fieldId: visit.service, label: 'Услуга', required: true, readOnly: true, initialValue: { kind: 'record_ids', tableId: booking.tables.services, record: { kind: 'row' } } },
     { fieldId: visit.master, label: 'Мастер', required: true }, { fieldId: visit.start, label: 'Дата и время', required: true },
     { fieldId: booking.clients!.linkFieldId, label: 'Клиент' },
-    { fieldId: visit.client, label: 'Имя клиента', required: true }, { fieldId: visit.phone, label: 'Телефон клиента', required: true }, { fieldId: visit.email, label: 'Почта клиента для личного кабинета' },
+    { fieldId: visit.client, label: 'Имя клиента', required: true }, { fieldId: visit.phone, label: 'Телефон клиента', required: true },     { fieldId: visit.email, label: 'Почта клиента для личного кабинета' },
+    { fieldId: visit.note, label: 'Заметка' },
     { fieldId: visit.status, label: 'Статус', readOnly: true, initialValue: { kind: 'literal', value: booking.statuses.booked } },
   ], owner, booking.tables.services))
   screen(booking.rescheduleScreenId, 'Перенести запись', 'calendar', clients, booking.tables.visits, [form(booking.rescheduleFormId, 'Выберите новое время', booking.rescheduleScreenId, booking.tables.visits, 'edit', [

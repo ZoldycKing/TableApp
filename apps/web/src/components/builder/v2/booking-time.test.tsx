@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { useEffect } from 'react'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { buildTemplate } from '@/lib/templates/build'
 import { salon } from '@/lib/templates/defs/salon'
@@ -35,7 +35,12 @@ describe('calendar and client context in a new booking', () => {
     expect(change).toHaveBeenCalledWith(b.visit.client,'Ирина')
     expect(change).toHaveBeenCalledWith(b.visit.phone,'+79160000000')
     expect(change).toHaveBeenCalledWith(b.visit.email,'irina@example.com')
+    expect(screen.getByText('Оля · 20 ноября · 09:00')).toBeTruthy()
+    expect(screen.queryByText('Когда вам удобно?')).toBeNull()
+    expect(screen.queryByLabelText('Дата записи')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Изменить' }))
     expect((screen.getByLabelText('Дата записи') as HTMLInputElement).value).toBe('2026-11-20')
+    expect((screen.getByLabelText('Мастер') as HTMLSelectElement).value).toBe('master_olya')
   })
   it('does not silently select a different slot after the chosen time becomes unavailable', async () => {
     const { b, change } = seedFixture(false)

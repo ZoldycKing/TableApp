@@ -1,27 +1,9 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { storeAttachment } from '../file-upload'
+import { salonPortraitFile } from './salon-portrait-names'
 
-/** Original studio portraits shipped with the salon starter. Icon stays when a row has no file. */
-const portraits: Record<string, string> = {
-  'Оля': 'salon-olya.jpg',
-  'Женя': 'salon-zhenya.jpg',
-  'Наташа': 'salon-natasha.jpg',
-  'Кира': 'salon-kira.jpg',
-  'Марина': 'salon-marina.jpg',
-  'Павел': 'salon-pavel.jpg',
-  'Ирина П.': 'salon-irina.jpg',
-  'Мария К.': 'salon-maria.jpg',
-  'Алексей Г.': 'salon-alexey.jpg',
-  'Светлана М.': 'salon-svetlana.jpg',
-  'Борис С.': 'salon-boris.jpg',
-  'Анна В.': 'salon-anna.jpg',
-  'Ольга Д.': 'salon-olga.jpg',
-}
-
-export function salonPortraitFile(name: unknown) {
-  return typeof name === 'string' ? portraits[name] ?? null : null
-}
+export { salonPortraitFile } from './salon-portrait-names'
 
 export async function stageSalonPortrait(workspaceId: string, userId: string, personName: unknown) {
   const name = salonPortraitFile(personName)

@@ -8,7 +8,7 @@ import type { BuilderV2FormRequest, BuilderV2FormResult, BuilderV2FormOptionsRes
 import { builderV2FormInputs } from '@/lib/builder-v2-form-types'
 import type { BuilderV2SubmitRequest } from '@/lib/builder-v2-submit-types'
 import { bookingV2Availability } from '@/lib/builder-v2-booking-availability'
-import { slotError, oneRelation, type BookingData } from '@/lib/booking'
+import { serviceOfferDetail, slotError, oneRelation, type BookingData } from '@/lib/booking'
 import { builderV2BookingWriteError } from '@/lib/builder-v2-booking-policy'
 import { BuilderV2AppFrame, BuilderV2Theme } from './app-frame'
 import { PublishedV2Context, type PublishedV2Transport } from './published-context'
@@ -22,7 +22,9 @@ import { BookingCalendarDemoContext } from './booking-calendar'
 import { bookingCalendarSnapshot } from '@/lib/builder-v2-booking-calendar'
 import { bookingTeamSnapshot } from '@/lib/builder-v2-booking-people'
 import { BookingPeopleDemoContext } from './booking-people-data'
-import { TeamCalendarDemoContext } from './team-calendar'
+import { TeamCalendarDemoContext, TeamCalendarDemoMoveContext } from './team-calendar'
+import { applyDemoCalendarMove } from '@/lib/team-calendar-demo-move'
+import { ownerCalendarServiceField } from '@/lib/team-calendar-prefill'
 import { teamCalendarSnapshot } from '@/lib/team-calendar-model'
 import css from './booking.module.css'
 
@@ -79,17 +81,23 @@ export function BookingDemo({ app, tables, initialRows, phone = false, initialVi
     if (form?.type !== 'form') return { ok: false, error: 'Форма недоступна.' }
     const record = store.current.find(row => row.id === request.recordId)
     const fields = builderV2FormInputs(app, form)
+    const serviceField = ownerCalendarServiceField(app, form.id, request.recordId, actor.roleIds)
+    const writable = (input: { fieldId: string; readOnly?: boolean }) => !input.readOnly || input.fieldId === serviceField
     if (request.mode === 'options') {
       const input = fields.find(input => input.fieldId === request.fieldId)
       const field = tables.find(table => table.id === form.tableId)?.fields.find(field => field.id === input?.fieldId)
-      if (!field?.relationTableId) return { ok: false, error: 'Поле недоступно.' }
+      if (!input || !writable(input) || !field?.relationTableId) return { ok: false, error: 'Поле недоступно.' }
       const primary = tables.find(table => table.id === field.relationTableId)?.primaryFieldId
-      return { ok: true, next: null, options: store.current.filter(row => row.tableId === field.relationTableId && Object.keys(projectAppV2Row(app, actor, row)).length).map(row => ({ id: row.id, label: String(primary ? row.values[primary] ?? '' : '') })).filter(option => option.label.toLocaleLowerCase('ru-RU').includes(request.search.toLocaleLowerCase('ru-RU'))) }
+      return { ok: true, next: null, options: store.current.filter(row => row.tableId === field.relationTableId && Object.keys(projectAppV2Row(app, actor, row)).length).map(row => {
+        const label = String(primary ? row.values[primary] ?? '' : '')
+        const detail = booking.visit.service === input.fieldId ? serviceOfferDetail(row.values[booking.service.minutes], row.values[booking.service.price]) : undefined
+        return { id: row.id, label, ...(detail ? { detail } : {}) }
+      }).filter(option => option.label.toLocaleLowerCase('ru-RU').includes(request.search.toLocaleLowerCase('ru-RU'))) }
     }
     const values: Record<string, AppV2Json> = {}, labels: Record<string, string> = {}
     for (const input of fields) {
       const result = input.initialValue ? resolveAppV2Binding(input.initialValue, { actor, row: record, screenRow: record }) : null
-      values[input.fieldId] = input.readOnly && result?.ok ? result.value : request.mode === 'check' && !input.readOnly ? request.values[input.fieldId] ?? null : form.mode === 'edit' ? record?.values[input.fieldId] ?? null : result?.ok ? result.value : null
+      values[input.fieldId] = !writable(input) && result?.ok ? result.value : request.mode === 'check' && writable(input) ? request.values[input.fieldId] ?? null : form.mode === 'edit' ? record?.values[input.fieldId] ?? null : result?.ok ? result.value : null
       const row = record ? format(record) : null
       labels[input.fieldId] = row?.display[input.fieldId] ?? ''
     }
@@ -98,7 +106,7 @@ export function BookingDemo({ app, tables, initialRows, phone = false, initialVi
     if (Object.keys(errors).length) return { ok: false, error: 'Заполните отмеченные поля.', errors }
     const state: BuilderV2FormState & { revision: string } = { values, labels, revision: 'demo', fingerprint: `demo-${version}`, fields: fields.map(input => {
       const field = tables.find(table => table.id === form.tableId)!.fields.find(field => field.id === input.fieldId)!
-      return { nodeId: input.id, fieldId: input.fieldId, type: field.type, label: input.label, required: input.required, readOnly: Boolean(input.readOnly), supported: true, choices: field.choices, timeZone: field.timeZone, allowMultiple: field.id === booking.master.services }
+      return { nodeId: input.id, fieldId: input.fieldId, type: field.type, label: input.label, required: input.required, readOnly: Boolean(input.readOnly) && input.fieldId !== serviceField, supported: true, choices: field.choices, timeZone: field.timeZone, allowMultiple: field.id === booking.master.services }
     }) }
     return { ok: true, state }
   }
@@ -200,6 +208,14 @@ export function BookingDemo({ app, tables, initialRows, phone = false, initialVi
     },
     inspectDelete: async () => ({ ok: false, error: 'Удаление недоступно в примере.' }), submitDelete: async () => ({ ok: false, error: 'Удаление недоступно в примере.' }),
   }
+  const moveVisit = (eventId: string, slot: { resourceId: string; day: string; time: string }) => {
+    const node = app.nodes.find((item): item is Extract<AppV2['nodes'][number], { type: 'team_calendar' }> => item.type === 'team_calendar' && item.data?.tableId === booking.tables.visits)
+    if (!node?.data) return Promise.resolve({ ok: false as const, error: 'Календарь недоступен.' })
+    const result = applyDemoCalendarMove({ app, actor, node, rows: store.current, format, eventId, ...slot, timeZone, screenId: booking.listScreenId ?? screenId })
+    if (!result.ok) return Promise.resolve(result)
+    if (!result.unchanged) { store.current = result.rows; setRows(result.rows); setVersion(value => value + 1) }
+    return Promise.resolve({ ok: true as const, unchanged: result.unchanged })
+  }
   const currentRecord = rows.find(row => row.id === recordId)
   return <div className={css.demo}>
     <TemplateDemoStage phone={mobile} controls={<TemplateDemoControls screens={DEMO_SCREENS} selected={selectedView}
@@ -208,11 +224,11 @@ export function BookingDemo({ app, tables, initialRows, phone = false, initialVi
       }}
     />} note="Это пример салона «Тихая студия». Открывайте услуги и записи на учебных данных.">
     <BuilderV2Theme app={app}><PublishedV2Context value={transport}><BookingDemoAvailability value={input => bookingV2Availability(app, actor, data(), input)}><BookingScheduleDemoContext value={scheduleAdapter}><BookingCalendarDemoContext value={request => bookingCalendarSnapshot(app, actor, data(), request)}>
-      <TeamCalendarDemoContext value={(node,request)=>node.data?{ok:true,data:teamCalendarSnapshot(node.data,{events:store.current.filter(row=>row.tableId===node.data!.tableId).map(format),resources:store.current.filter(row=>row.tableId===node.data!.resources.tableId&&(role==='owner'||!node.data!.resources.ownerEmailFieldId||String(row.values[node.data!.resources.ownerEmailFieldId]??'').trim().toLowerCase()===actor.email)).map(format),hours:role==='owner'&&node.data.hours?store.current.filter(row=>row.tableId===node.data!.hours!.tableId).map(format):null},request,timeZone)}:{ok:false,error:'Выберите таблицы календаря.'}}>
+      <TeamCalendarDemoContext value={(node,request)=>node.data?{ok:true,data:teamCalendarSnapshot(node.data,{events:store.current.filter(row=>row.tableId===node.data!.tableId).map(format),resources:store.current.filter(row=>row.tableId===node.data!.resources.tableId&&(role==='owner'||!node.data!.resources.ownerEmailFieldId||String(row.values[node.data!.resources.ownerEmailFieldId]??'').trim().toLowerCase()===actor.email)).map(format),hours:role==='owner'&&node.data.hours?store.current.filter(row=>row.tableId===node.data!.hours!.tableId).map(format):null},request,timeZone)}:{ok:false,error:'Выберите таблицы календаря.'}}><TeamCalendarDemoMoveContext value={moveVisit}>
       <BookingPeopleDemoContext value={id => bookingTeamSnapshot(app, actor, data(), id)}><div className={css.demoFrame} data-preview-screen={`${role}:${screenId}:${recordId ?? ''}`}><BuilderV2AppFrame key={role} app={visibleApp} screenId={screenId} title={visibleApp.screens.find(screen => screen.id === screenId)?.name ?? 'Запись'} onNavigate={id => navigate(id)}>
         {notice && <p role="status">{notice}</p>}<AppV2Renderer key={`${role}:${screenId}:${recordId ?? ''}`} live app={visibleApp} tables={tables} actor={actor} screenId={screenId} record={currentRecord ? format(currentRecord) : undefined} onNavigate={navigate} />
       </BuilderV2AppFrame></div></BookingPeopleDemoContext>
-      </TeamCalendarDemoContext></BookingCalendarDemoContext></BookingScheduleDemoContext></BookingDemoAvailability></PublishedV2Context></BuilderV2Theme>
+      </TeamCalendarDemoMoveContext></TeamCalendarDemoContext></BookingCalendarDemoContext></BookingScheduleDemoContext></BookingDemoAvailability></PublishedV2Context></BuilderV2Theme>
     </TemplateDemoStage>
   </div>
 }

@@ -5,12 +5,13 @@ import { canOpenAppV2Screen, type AppV2, type AppV2Actor, type AppV2Node } from 
 import type { BuilderV2Table } from '@/lib/builder-v2'
 import { bookingCalendarLimits, calendarCreateTarget, calendarFormValues, salonSlotIntent, type CalendarSlot } from '@/lib/team-calendar-prefill'
 import type { TeamCalendarRequest, TeamCalendarResult } from '@/lib/team-calendar-model'
-import { TeamCalendarView } from './booking-calendar'
+import { TeamCalendarView, type CalendarMoveResult } from './booking-calendar'
 import { CalendarCreateDialog } from './calendar-create-dialog'
 import { usePublishedV2 } from './published-context'
 import { useBookingJourney } from './booking-journey'
 
 export const TeamCalendarDemoContext = createContext<((node: Extract<AppV2Node, { type: 'team_calendar' }>, request: TeamCalendarRequest) => TeamCalendarResult) | null>(null)
+export const TeamCalendarDemoMoveContext = createContext<((eventId: string, slot: { resourceId: string; day: string; time: string }) => Promise<CalendarMoveResult>) | null>(null)
 
 export function BuilderV2TeamCalendar({
   app, node, screenId, tables, actor, editing = false, onNavigate,
@@ -26,6 +27,7 @@ export function BuilderV2TeamCalendar({
 }) {
   const published = usePublishedV2()
   const demo = useContext(TeamCalendarDemoContext)
+  const demoMove = useContext(TeamCalendarDemoMoveContext)
   const journey = useBookingJourney()
   const [draft, setDraft] = useState<{ slot: CalendarSlot; screenId: string; formId: string } | null>(null)
   const config = node.data
@@ -64,7 +66,11 @@ export function BuilderV2TeamCalendar({
     navigate(node.actions.createScreenId)
   }
   const moveVisit = async (eventId: string, slot: { resourceId: string; day: string; time: string }) => {
+    // The gallery preview sets a published transport for local forms, but its slug is not a real app.
+    if (demoMove) return demoMove(eventId, slot)
+    if (published?.revision === 'demo') return { ok: false, error: 'В примере перенос сохраняется только на этой странице.' }
     const actions = await import('@/app/team-calendar-actions')
+    // A draft in the builder writes through the draft definition. Only a published app uses the published snapshot.
     return published
       ? actions.movePublishedTeamCalendarAction(published.slug, { screenId, nodeId: node.id, eventId, ...slot, revision: published.revision })
       : actions.moveBuilderTeamCalendarAction(app.id, app, { screenId, nodeId: node.id, eventId, ...slot })

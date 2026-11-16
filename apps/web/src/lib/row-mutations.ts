@@ -195,7 +195,7 @@ export async function updateRow(context: RowTransaction, tableId: string, rowId:
   if (error) throw new RowWriteError('invalid', error)
   changed = await canonicalAttachments(fields, changed, context.tx)
   const booking = await prepareBookingWrite(context.tx, context.workspaceId, tableId,
-    await initialValues(context, fields, { ...before, ...changed }), before, rowId)
+    await initialValues(context, fields, { ...before, ...changed }), before, rowId, { context, actor })
   if (booking.error) throw new RowWriteError('invalid', booking.error)
   const customerData = await prepareCustomerWrite(context, tableId, booking.data, before, actor, rowId)
   await prepareProductionStockWrite(context, tableId, rowId, customerData, before)

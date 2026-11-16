@@ -200,7 +200,7 @@ export function BookingDemo({ app, tables, initialRows, phone = false, initialVi
     submitButton: async request => {
       const row = store.current.find(row => row.id === request.recordId)
       if (!row) return { ok: false, error: 'Запись не найдена.' }
-      const error = builderV2BookingWriteError(app, actor, row.tableId, { [booking.visit.status]: booking.statuses.cancelled }, row.values as Record<string, unknown>)
+      const error = builderV2BookingWriteError(app, actor, row.tableId, { [booking.visit.status]: booking.statuses.cancelled }, row.values as Record<string, unknown>, Date.now(), timeZone)
       if (error) return { ok: false, error }
       const next = store.current.map(item => item.id === row.id ? { ...item, values: { ...item.values, [booking.visit.status]: booking.statuses.cancelled } } : item)
       store.current = next; setRows(next); setVersion(value => value + 1)

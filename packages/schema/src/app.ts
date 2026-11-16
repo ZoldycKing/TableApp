@@ -757,6 +757,14 @@ export const bookingConfigSchema = z.object({
   stepMinutes: z.number().int().min(5).max(120).default(15),
   horizonDays: z.number().int().min(1).max(365).default(60),
   leadMinutes: z.number().int().min(0).max(1440).default(60),
+  /** Author-facing step. Missing on salons saved before the rules screen; stepMinutes remains the fallback. */
+  slotStepMinutes: z.union([z.literal(5), z.literal(10), z.literal(15), z.literal(20), z.literal(30), z.literal(60)]).optional(),
+  /** Minutes before a slot when a client may no longer book it. Falls back to leadMinutes. */
+  minLeadMinutes: z.number().int().min(0).max(10080).optional(),
+  /** Quiet time after an appointment. Zero keeps the previous edge-to-edge occupancy. */
+  bufferMinutes: z.number().int().min(0).max(240).default(0),
+  /** Client cancel and reschedule close this many hours before the start. Zero means until the start. */
+  cancelDeadlineHours: z.number().int().min(0).max(720).default(0),
 })
 export type BookingConfig = z.infer<typeof bookingConfigSchema>
 

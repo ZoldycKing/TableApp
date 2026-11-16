@@ -1,5 +1,6 @@
 import { calendarDay, dateInstant } from '@tableapp/schema'
 import type { AppV2, AppV2Actor } from '@tableapp/schema/app-v2'
+import { bookingClientChangeError } from './booking-rules'
 
 /** Additional lifecycle rules; normal row/field grants are still checked by the workflow engine. */
 export function builderV2BookingWriteError(app: AppV2, actor: AppV2Actor, tableId: string, values: Record<string, unknown>, before?: Record<string, unknown>, now = Date.now(), timeZone = 'Europe/Moscow'): string | null {
@@ -34,6 +35,13 @@ export function builderV2BookingWriteError(app: AppV2, actor: AppV2Actor, tableI
   }
   const start = dateInstant(before[visit.start], timeZone)
   if (client) {
+    const changingTime = (values[visit.start] !== undefined && values[visit.start] !== before[visit.start])
+      || (values[visit.master] !== undefined && JSON.stringify(values[visit.master] ?? null) !== JSON.stringify(before[visit.master] ?? null))
+    const cancelling = values[visit.status] === config.statuses.cancelled
+    if ((changingTime || cancelling) && start !== null && start > now) {
+      const closed = bookingClientChangeError(config, before[visit.start], now, timeZone)
+      if (closed) return closed
+    }
     if (before[visit.status] !== config.statuses.booked || start === null || start <= now) return 'Изменить или отменить можно только предстоящую запись.'
     if (values[visit.status] !== undefined && values[visit.status] !== config.statuses.cancelled) return 'Клиент может только отменить запись или выбрать другое время.'
     if (values[visit.status] === config.statuses.cancelled && Object.keys(values).some(id => id !== visit.status)) return 'Отмена не должна менять время записи.'

@@ -1,10 +1,11 @@
-import { apps, fields, rows, tables, db } from '@tableapp/db'
+import { apps, appUsers, fields, rows, tables, db } from '@tableapp/db'
 import { bookingConfigSchema, calendarDay, dateInstant, fieldTimeZone, type BookingConfig, type Field } from '@tableapp/schema'
 import type { RowActor, RowTransaction } from './row-mutations'
 import type { Origin } from './limits'
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm'
 import type { Transaction } from './db-transaction'
 import { bookingService, oneRelation, slotError, type BookingData } from './booking'
+import { bookingClientChangeError, bookingRules } from './booking-rules'
 import { canCompleteBooking } from './booking-lifecycle'
 
 export async function loadBookingData(config: BookingConfig, workspaceId: string, query: Transaction | typeof db = db): Promise<BookingData | null> {
@@ -29,6 +30,20 @@ export async function loadBookingData(config: BookingConfig, workspaceId: string
   return { services: of(config.tables.services), masters: of(config.tables.masters), schedule: of(config.tables.schedule).map(row => ({ ...row,
     data: { ...row.data, [config.schedule.date]: calendarDay(row.data[config.schedule.date], fieldTimeZone(scheduleDate as unknown as Field)) } })),
     visits: of(config.tables.visits), ...(config.clients ? { clients: of(config.clients.tableId) } : {}), timeZone: fieldTimeZone(start as unknown as Field) }
+}
+
+/** A published client, not the owner or a staff member working in the same app. */
+async function publishedClientOnly(tx: Transaction, actor: RowActor | undefined) {
+  if (!actor || actor.kind !== 'app_user' || !actor.id) return false
+  const [user] = await tx.select({ appId: appUsers.appId, email: appUsers.email }).from(appUsers).where(eq(appUsers.id, actor.id)).limit(1)
+  if (!user) return false
+  const [record] = await tx.select({ published: apps.published, draft: apps.draft }).from(apps).where(eq(apps.id, user.appId)).limit(1)
+  const auth = ((record?.published ?? record?.draft) as { authentication?: { mode?: string; defaultRoleId?: string | null; members?: { email: string; roleIds: string[] }[] } } | null)?.authentication
+  if (!auth) return false
+  const email = user.email.trim().toLowerCase()
+  const member = auth.members?.find(item => item.email.trim().toLowerCase() === email)
+  const roleIds = member?.roleIds ?? (auth.mode === 'verified_email' && auth.defaultRoleId ? [auth.defaultRoleId] : [])
+  return roleIds.includes('client') && !roleIds.some(id => id === 'owner' || id === 'staff')
 }
 
 /** Used by the shared mutation engine, including workspace, imports and sync. */
@@ -83,6 +98,12 @@ export async function prepareBookingWrite(tx: Transaction, workspaceId: string, 
   if (timeChanged && result[visit.status] !== config.statuses.cancelled &&
     (typeof result[visit.phone] !== 'string' || !/^[+\d\s()-]+$/.test(String(result[visit.phone])) || String(result[visit.phone]).replace(/\D/g, '').length < 7 || String(result[visit.phone]).replace(/\D/g, '').length > 15)) {
     return { data: clean, error: 'Укажите корректный номер телефона для связи.' }
+  }
+  const cancelling = Boolean(before && result[visit.status] === config.statuses.cancelled && before[visit.status] !== config.statuses.cancelled)
+  const rescheduling = Boolean(before && (result[visit.start] !== before[visit.start] || JSON.stringify(result[visit.master] ?? null) !== JSON.stringify(before[visit.master] ?? null)))
+  if ((cancelling || rescheduling) && bookingRules(config).cancelDeadlineHours > 0 && await publishedClientOnly(tx, mutation?.actor)) {
+    const closed = bookingClientChangeError(config, before![visit.start], Date.now(), data.timeZone)
+    if (closed) return { data: clean, error: closed }
   }
   const error = timeChanged && result[visit.status] !== config.statuses.cancelled ? slotError(config, data, {
     serviceId, masterId, start: result[visit.start], minutes: Number(result[visit.minutes]), excludeId: rowId,

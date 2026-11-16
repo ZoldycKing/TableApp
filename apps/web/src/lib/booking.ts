@@ -1,4 +1,5 @@
 import { calendarDay, dateInstant, instantToWallClock, type BookingConfig } from '@tableapp/schema'
+import { bookingOccupancy, bookingRangesOverlap, bookingRules } from './booking-rules'
 
 export type BookingRow = { id: string; data: Record<string, unknown> }
 export type BookingData = { services: BookingRow[]; masters: BookingRow[]; schedule: BookingRow[]; visits: BookingRow[]; clients?: BookingRow[]; timeZone: string }
@@ -50,25 +51,27 @@ export function slotError(config: BookingConfig, data: BookingData, input: {
   const service = bookingService(config, data, input.serviceId)
   if (!service) return 'Услуга сейчас недоступна для записи.'
   if (!eligibleMasters(config, data, input.serviceId).some(row => row.id === input.masterId)) return 'Выбранный мастер не оказывает эту услугу.'
+  const rules = bookingRules(config)
   const start = dateInstant(input.start, data.timeZone), now = (input.now ?? new Date()).getTime()
   const minutes = input.minutes ?? Number(service.data[config.service.minutes])
   if (start === null || !positive(minutes) || minutes > 1440) return 'Выберите корректное время и длительность.'
-  if (start < now + config.leadMinutes * 60_000 || start > now + config.horizonDays * 86400_000) return 'Выберите время в доступном периоде записи.'
+  if (start < now + rules.leadMinutes * 60_000 || start > now + rules.horizonDays * 86400_000) return 'Выберите время в доступном периоде записи.'
   const wall = instantToWallClock(new Date(start), data.timeZone)!
   const clock = timeMinutes(wall.time)!
   const end = start + minutes * 60_000
   const endWall = instantToWallClock(new Date(end), data.timeZone)!
   const endClock = timeMinutes(endWall.time)! + (end % 60_000) / 60_000
-  if (start % 60_000 !== 0 || clock % config.stepMinutes !== 0) return 'Выберите время из свободных интервалов.'
+  if (start % 60_000 !== 0 || clock % rules.stepMinutes !== 0) return 'Выберите время из свободных интервалов.'
   if (!workingWindows(config, data, input.masterId, wall.date).some(window => clock >= window.start && endClock <= window.end && endClock > clock)) return 'Услуга не помещается в рабочее время мастера.'
   if (endWall.date !== wall.date) return 'Запись должна закончиться в тот же день.'
+  const requested = bookingOccupancy(start, minutes, rules.bufferMinutes)
   for (const row of data.visits) {
     if (row.id === input.excludeId || oneRelation(row.data[config.visit.master]) !== input.masterId || !blocks(config, row)) continue
     const occupied = dateInstant(row.data[config.visit.start], data.timeZone), duration = row.data[config.visit.minutes]
     // Incomplete legacy records fail closed for their whole day.
     if (occupied === null || !positive(duration)) {
       if (occupied === null || instantToWallClock(new Date(occupied), data.timeZone)?.date === wall.date) return 'В расписании мастера есть незавершённая запись. Свяжитесь с салоном.'
-    } else if (start < occupied + Number(duration) * 60_000 && end > occupied) return 'Это время уже занято. Выберите другой свободный интервал.'
+    } else if (bookingRangesOverlap(requested, bookingOccupancy(occupied, Number(duration), rules.bufferMinutes))) return 'Это время уже занято. Выберите другой свободный интервал.'
   }
   return null
 }
@@ -77,10 +80,11 @@ export function freeBookingSlots(config: BookingConfig, data: BookingData, input
   serviceId: string; day: string; masterId?: string; minutes?: number; excludeId?: string; now?: Date
 }): BookingSlot[] {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.day) || calendarDay(input.day) !== input.day || !bookingService(config, data, input.serviceId)) return []
+  const step = bookingRules(config).stepMinutes
   const slots: BookingSlot[] = []
   for (const master of eligibleMasters(config, data, input.serviceId)) {
     if (input.masterId && input.masterId !== master.id) continue
-    for (let clock = 0; clock < 1440; clock += config.stepMinutes) {
+    for (let clock = 0; clock < 1440; clock += step) {
       const time = `${String(Math.floor(clock / 60)).padStart(2, '0')}:${String(clock % 60).padStart(2, '0')}`
       const start = dateInstant(`${input.day}T${time}`, data.timeZone)
       if (start === null || instantToWallClock(new Date(start), data.timeZone)?.time !== time) continue

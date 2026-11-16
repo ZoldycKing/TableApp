@@ -87,6 +87,7 @@
   .visitColumns { grid-template-columns: minmax(0, 2fr) minmax(230px, 1fr); }
 }
 .actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.deadline { margin: 0; max-width: 36rem; color: var(--v2-muted); font-size: 14px; line-height: 1.45; }
 .bodyCopy { margin: 0; font-size: 15px; line-height: 1.7; white-space: pre-wrap; }
 .demo { --v2-page: #edf1f7; --v2-surface: #fff; --v2-ink: #111827; --v2-muted: #526075; }
 .demo .slots { max-height: none; overflow: visible; }

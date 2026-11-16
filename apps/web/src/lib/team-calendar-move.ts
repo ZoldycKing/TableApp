@@ -2,6 +2,7 @@ import { rows } from '@tableapp/db'
 import { dateInstant } from '@tableapp/schema'
 import { authorizeAppV2Write, type AppV2, type AppV2Actor, type AppV2Json, type AppV2Node } from '@tableapp/schema/app-v2'
 import { and, eq, isNull } from 'drizzle-orm'
+import { bookingRules } from './booking-rules'
 import { calendarMoveIssue } from './team-calendar-core'
 import { readTeamCalendar } from './team-calendar-read'
 import { RowWriteError, updateRow, type RowTransaction } from './row-mutations'
@@ -42,9 +43,10 @@ export async function moveTeamCalendarEvent(
     resourceId: input.resourceId,
     day: input.day,
     start,
-    step: app.booking?.stepMinutes ?? 15,
+    step: app.booking ? bookingRules(app.booking).stepMinutes : 15,
     windows,
     others: snapshot.events,
+    buffer: app.booking ? bookingRules(app.booking).bufferMinutes : 0,
   })
   if (issue) throw new RowWriteError('invalid', issue)
   const instant = dateInstant(`${input.day}T${input.time}`, snapshot.timeZone)

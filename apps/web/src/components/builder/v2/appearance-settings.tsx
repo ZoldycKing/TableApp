@@ -9,6 +9,76 @@ import shell from './app-frame.module.css'
 import {BUILDER_V2_COLORS,BUILDER_V2_ICONS} from './appearance'
 import { BuilderV2AppMark } from './app-frame'
 import { SHOP_LOW_STOCK_THRESHOLD } from '@/lib/builder-v2-shop-stock'
+import { BOOKING_SLOT_STEPS, bookingRules, type BookingSlotStep } from '@/lib/booking-rules'
+
+function BookingRulesSettings({ app, onChange }: { app: AppV2; onChange: (app: AppV2) => void }) {
+  const booking = app.booking
+  if (!booking) return null
+  const rules = bookingRules(booking)
+  const [lead, setLead] = useState(String(rules.leadMinutes))
+  const [horizon, setHorizon] = useState(String(rules.horizonDays))
+  const [buffer, setBuffer] = useState(String(rules.bufferMinutes))
+  const [deadline, setDeadline] = useState(String(rules.cancelDeadlineHours))
+  useEffect(() => {
+    setLead(String(rules.leadMinutes))
+    setHorizon(String(rules.horizonDays))
+    setBuffer(String(rules.bufferMinutes))
+    setDeadline(String(rules.cancelDeadlineHours))
+  }, [rules.leadMinutes, rules.horizonDays, rules.bufferMinutes, rules.cancelDeadlineHours])
+  const save = (patch: Partial<NonNullable<AppV2['booking']>>) => {
+    if (!app.booking) return
+    const next = { ...app.booking, ...patch }
+    if (patch.slotStepMinutes) next.stepMinutes = patch.slotStepMinutes
+    if (patch.minLeadMinutes !== undefined) next.leadMinutes = patch.minLeadMinutes
+    onChange({ ...app, booking: next })
+  }
+  const number = (raw: string, min: number, max: number) => {
+    if (!/^\d+$/.test(raw)) return null
+    const value = Number(raw)
+    return value >= min && value <= max ? value : null
+  }
+  return <fieldset className={shell.logoField} aria-label="Правила записи">
+    <legend>Правила записи</legend>
+    <label>Шаг слотов
+      <select aria-label="Шаг слотов" value={rules.stepMinutes} onChange={event => save({ slotStepMinutes: Number(event.target.value) as BookingSlotStep })}>
+        {BOOKING_SLOT_STEPS.map(step => <option key={step} value={step}>{step} мин</option>)}
+      </select>
+    </label>
+    <p className={ui.hint}>Свободное время предлагается с этим интервалом.</p>
+    <label>Не раньше чем за, минут
+      <input aria-label="Не раньше чем за" type="number" min="0" max="10080" step="1" value={lead} onChange={event => {
+        setLead(event.target.value)
+        const value = number(event.target.value, 0, 10080)
+        if (value !== null) save({ minLeadMinutes: value })
+      }} />
+    </label>
+    <p className={ui.hint}>Клиент не увидит время ближе этого срока.</p>
+    <label>Не дальше чем на, дней
+      <input aria-label="Не дальше чем на" type="number" min="1" max="365" step="1" value={horizon} onChange={event => {
+        setHorizon(event.target.value)
+        const value = number(event.target.value, 1, 365)
+        if (value !== null) save({ horizonDays: value })
+      }} />
+    </label>
+    <p className={ui.hint}>Дальше этого срока записаться нельзя.</p>
+    <label>Буфер после приёма, минут
+      <input aria-label="Буфер после приёма" type="number" min="0" max="240" step="1" value={buffer} onChange={event => {
+        setBuffer(event.target.value)
+        const value = number(event.target.value, 0, 240)
+        if (value !== null) save({ bufferMinutes: value })
+      }} />
+    </label>
+    <p className={ui.hint}>Следующая запись к этому мастеру начнётся не раньше конца буфера. В сетке видна длительность услуги.</p>
+    <label>Отмена не позднее чем за, часов
+      <input aria-label="Отмена не позднее чем за" type="number" min="0" max="720" step="1" value={deadline} onChange={event => {
+        setDeadline(event.target.value)
+        const value = number(event.target.value, 0, 720)
+        if (value !== null) save({ cancelDeadlineHours: value })
+      }} />
+    </label>
+    <p className={ui.hint}>0 — клиент может отменить до начала визита. Администратор в сетке дня не ограничен.</p>
+  </fieldset>
+}
 
 function ShopStockSettings({ app, onChange }: { app: AppV2; onChange: (app: AppV2) => void }) {
   const threshold = app.shop?.lowStockThreshold ?? SHOP_LOW_STOCK_THRESHOLD
@@ -105,6 +175,7 @@ export function BuilderV2AppearanceSettings({ app, onChange, onScreens, onUpload
     <label>Скругление<select value={appearance.corners ?? 'rounded'} onChange={event => setAppearance({ corners: event.target.value === 'subtle' ? 'subtle' : 'rounded' })}><option value="rounded">Обычное</option><option value="subtle">Минимальное</option></select></label>
     <p className={ui.hint}>На телефоне меню находится снизу. Изменения видны здесь сразу, а пользователям — после публикации.</p>
     {app.shop && <ShopStockSettings app={app} onChange={onChange} />}
+    {app.booking && <BookingRulesSettings app={app} onChange={onChange} />}
     <button type="button" className={styles.secondary} onClick={onScreens}>Настроить разделы<ProtoIcon name="arrow"/></button>
   </div>
 }

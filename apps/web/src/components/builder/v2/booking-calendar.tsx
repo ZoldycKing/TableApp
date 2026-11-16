@@ -69,7 +69,7 @@ export function TeamCalendarView({
   app, screenId, timeZone, working = false, onOpenVisit, onOpenPeriod, onAdd, onCreate, onConfigure, onMove,
   editing = false, loader, loaderKey, title = 'Расписание', resourceLabel = 'Мастер', resourcesLabel = 'Мастера',
   showMetrics = true, showWorkingHours = true, showAmounts = true, showNoShows = true, showOmissions = false,
-  calendarKey, leadMinutes = 60, stepMinutes = 15, horizonDays = 60, defaultView = 'day',
+  calendarKey, leadMinutes = 60, stepMinutes = 15, horizonDays = 60, bufferMinutes = 0, defaultView = 'day',
 }: {
   app: AppV2
   screenId: string
@@ -96,6 +96,7 @@ export function TeamCalendarView({
   leadMinutes?: number
   stepMinutes?: number
   horizonDays?: number
+  bufferMinutes?: number
   defaultView?: 'list' | 'day' | 'week'
 }) {
   const journey = useBookingJourney()
@@ -276,6 +277,7 @@ export function TeamCalendarView({
                     leadMinutes={leadMinutes}
                     stepMinutes={stepMinutes}
                     horizonDays={horizonDays}
+                    bufferMinutes={bufferMinutes}
                   />
                 </div>
               )}
@@ -283,6 +285,7 @@ export function TeamCalendarView({
                 <div className={css.legend}>
                   <span><i data-kind="hours" />Рабочая смена</span>
                   <span><i data-kind="visit" />Запись</span>
+                  {bufferMinutes > 0 && <span><i data-kind="buffer" />Пауза после записи</span>}
                   <span><i />Перерыв или не работает</span>
                 </div>
               )}
@@ -314,7 +317,7 @@ export function TeamCalendarView({
 export const BookingCalendarScreen = TeamCalendarView
 
 function CalendarGrid({
-  data, day, resourceId, editing, showWorkingHours, canMove = false, onOpenVisit, onOpenPeriod, onCreate, onMove, onNotice, leadMinutes, stepMinutes, horizonDays,
+  data, day, resourceId, editing, showWorkingHours, canMove = false, onOpenVisit, onOpenPeriod, onCreate, onMove, onNotice, leadMinutes, stepMinutes, horizonDays, bufferMinutes = 0,
 }: {
   data: TeamCalendarSnapshot
   day: string
@@ -330,6 +333,7 @@ function CalendarGrid({
   leadMinutes: number
   stepMinutes: number
   horizonDays: number
+  bufferMinutes?: number
 }) {
   const resources = data.resources.filter(item => !resourceId || item.id === resourceId)
   const columns = resources.map(item => ({ day, resource: item }))
@@ -378,7 +382,7 @@ function CalendarGrid({
     const windows = showWorkingHours ? (shift?.windows ?? []) : null
     const issue = showWorkingHours && shift?.windows === null
       ? 'Не удалось проверить рабочие часы. Запись осталась на прежнем месте.'
-      : calendarMoveIssue({ event, resourceId: target.resourceId, day: target.day, start: target.start, step: stepMinutes, windows, others: data.events })
+      : calendarMoveIssue({ event, resourceId: target.resourceId, day: target.day, start: target.start, step: stepMinutes, windows, others: data.events, buffer: bufferMinutes })
     if (issue) { setGhost(null); onNotice?.(issue, true); return }
     setMoving(true)
     try {
@@ -451,6 +455,10 @@ function CalendarGrid({
                 ))}
                 {shift?.exception && <span className={css.exception}>График на эту дату</span>}
                 {calendarEventLanes(events).map(({ event, lane, lanes }) => (
+                  <span key={event.id} className={css.visitLane}>
+                  {bufferMinutes > 0 && event.status !== 'cancelled' && event.end + bufferMinutes > event.end && (
+                    <span className={css.buffer} aria-hidden="true" style={{ ...position(event.end, Math.min(event.end + bufferMinutes, 24 * 60)), left: `calc(${lane / lanes * 100}% + 6px)`, width: `calc(${100 / lanes}% - 12px)` }} />
+                  )}
                   <button
                     type="button"
                     key={event.id}
@@ -491,6 +499,7 @@ function CalendarGrid({
                     {event.subtitle && <small>{event.title}</small>}
                     <span className={css.visitTime}>{calendarClock(event.start)}–{calendarClock(event.end)}</span>
                   </button>
+                  </span>
                 ))}
                 {ghost && ghost.resourceId === column.resource.id && ghost.day === column.day && (() => {
                   const source = data.events.find(item => item.id === ghost.id)

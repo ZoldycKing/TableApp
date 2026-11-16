@@ -31,6 +31,7 @@ export function buildBookingV2App(built: BuiltTemplate, meta: { id: string; work
     visit: group('visits', { client: 'client', phone: 'phone', email: 'email', service: 'service', master: 'master', masterEmail: 'masterEmail', price: 'price', minutes: 'minutes', start: 'when', status: 'status', note: 'note' }),
     statuses: Object.fromEntries(Object.entries({ booked: 'Записан', arrived: 'Пришёл', noShow: 'Не пришёл', cancelled: 'Отменил', completed: 'Завершено' }).map(([key, name]) => [key, choices('visits', 'status').find(item => item.name === name)!.id])) as BookingConfig['statuses'],
     weekdays: choices('schedule', 'weekday').map(item => item.id), stepMinutes: 15, leadMinutes: 60, horizonDays: 60,
+    slotStepMinutes: 15, minLeadMinutes: 60, bufferMinutes: 0, cancelDeadlineHours: 0,
     createFormId: newId('component'), rescheduleFormId: newId('component'), statusFormId: newId('component'), cancelButtonId: newId('component'),
     servicePhotoFieldId: field('services', 'photo'), serviceDescriptionFieldId: field('services', 'description'),
     masterPhotoFieldId: field('masters', 'photo'), masterDescriptionFieldId: field('masters', 'description'),

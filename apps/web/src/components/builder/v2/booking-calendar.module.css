@@ -54,6 +54,7 @@ button.hoursQuiet:hover { color: var(--v2-ink); }
 .hoursMenu > div { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
 .hoursMenu button { min-height: 32px; padding: 4px 8px; border: 1px solid var(--v2-line); border-radius: 8px; background: var(--v2-surface); color: var(--v2-ink); font: inherit; font-size: 11px; cursor: pointer; }
 .exception { position: absolute; bottom: 8px; left: 6px; right: 6px; text-align: center; color: var(--v2-muted); font-size: 10px; }
+.buffer { position: absolute; z-index: 3; border-radius: 7px; pointer-events: none; background: repeating-linear-gradient(-45deg, transparent, transparent 4px, color-mix(in srgb, var(--v2-ink) 14%, transparent) 4px, color-mix(in srgb, var(--v2-ink) 14%, transparent) 5px); }
 .visit { position: absolute; z-index: 5; min-width: 0; min-height: 28px; display: flex; flex-direction: column; gap: 2px; padding: 4px 8px 4px 10px; border: 1px solid #c6d8ef; border-left: 4px solid #2f6fed; border-radius: 7px; background: #edf4ff; color: #214a79; font: inherit; text-align: left; cursor: pointer; overflow: visible; }
 .visit:hover { border-color: #47749c; background: #e4efff; }
 .visit strong { font-size: 12px; line-height: 1.25; font-weight: 700; overflow: visible; overflow-wrap: break-word; white-space: normal; }
@@ -94,6 +95,7 @@ button.hoursQuiet:hover { color: var(--v2-ink); }
 .legend i { width: 10px; height: 10px; border-radius: 3px; background: #eef0f4; border: 1px solid #bdc7d3; }
 .legend i[data-kind=hours] { background: #fff; border-color: #a8bdd5; }
 .legend i[data-kind=visit] { background: #e0ecff; border-color: #c6d8ef; }
+.legend i[data-kind=buffer] { background: repeating-linear-gradient(-45deg, transparent, transparent 2px, #9aa6b4 2px, #9aa6b4 3px); border-color: #c5ced8; }
 .feedback { padding: 24px 20px; margin: 0; line-height: 1.6; color: var(--v2-muted); }
 .feedback p { margin: 0 0 12px; }
 .feedback[role=status] { min-height: 640px; }

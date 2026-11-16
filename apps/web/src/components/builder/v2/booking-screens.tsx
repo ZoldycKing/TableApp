@@ -4,6 +4,7 @@ import { dateInstant, instantToWallClock } from '@tableapp/schema'
 import type { AppV2Record } from '@tableapp/schema/app-v2'
 import { builderV2CatalogCell, builderV2CatalogPrice } from '@/lib/builder-v2-catalog'
 import { bookingVisitSection } from '@/lib/booking-lifecycle'
+import { bookingClientChangeError } from '@/lib/booking-rules'
 import type { AppV2RendererProps } from './view'
 import { usePublishedV2 } from './published-context'
 import { ListScreenShell, DetailCardShell, DetailSection, ShellSearchField } from './layout-shell'
@@ -125,8 +126,11 @@ export function BookingScreen(props: Props) {
     const date = dateInstant(start, timeZone)
     const upcoming = record.values[booking.visit.status] === booking.statuses.booked && date !== null && date > Date.now()
     const client = !props.actor.roleIds.includes('owner') && !props.actor.roleIds.includes('staff')
+    const closed = client && upcoming ? bookingClientChangeError(booking, start, Date.now(), timeZone) : null
     const title = label(record, booking.visit.service)
-    const actions = <div className={css.actions}>{upcoming && !props.actor.roleIds.includes('staff') && <button type="button" className={styles.secondary} onClick={() => navigate(booking.rescheduleScreenId, record.id)}>Перенести</button>}{upcoming && props.renderNodes([booking.cancelButtonId])}</div>
+    const actions = closed
+      ? <p className={css.deadline} role="status">{closed}</p>
+      : <div className={css.actions}>{upcoming && !props.actor.roleIds.includes('staff') && <button type="button" className={styles.secondary} onClick={() => navigate(booking.rescheduleScreenId, record.id)}>Перенести</button>}{upcoming && props.renderNodes([booking.cancelButtonId])}</div>
     const returnId = client ? booking.clientScreenId : booking.listScreenId!
     return <div className={css.page}><DetailCardShell title={title} badge={<Status row={record} booking={booking} />} subtitle={date === null ? '' : new Date(date).toLocaleString('ru-RU', { dateStyle: 'long', timeStyle: 'short', timeZone })} back={{ label: client ? 'Мои записи' : 'Расписание', onClick: () => back(returnId) }} actions={actions} metrics={[{ key: 'price', caption: 'Стоимость визита', value: money(record.values[booking.visit.price]) }, { key: 'duration', caption: 'Продолжительность', value: `${label(record, booking.visit.minutes)} мин` }]}>
       <div className={css.visitColumns}><div className={shell.detailMainCol}><DetailSection title="Ваш визит"><Facts items={[{ name: 'Услуга', value: title }, { name: 'Мастер', value: label(record, booking.visit.master) }]} /></DetailSection>

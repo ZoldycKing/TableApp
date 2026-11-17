@@ -36,6 +36,11 @@ const open = async (page: Page, view: string) => {
     return Boolean(screen && screen.getAttribute('data-projects-screen') !== 'loading')
   }, { timeout: 30000 })
   await page.waitForTimeout(500)
+  if (view === 'task-comments') {
+    const comments = page.locator('[data-task-comments]')
+    await comments.scrollIntoViewIfNeeded()
+    await page.waitForTimeout(300)
+  }
 }
 
 const browser = await chromium.launch({ headless: true })
@@ -50,6 +55,9 @@ const desktop = [
   ['task', 'projects-desktop-task.png'],
   ['filters', 'projects-desktop-filters.png'],
   ['edit', 'projects-desktop-edit.png'],
+  ['projects', 'projects-desktop-projects.png'],
+  ['people', 'projects-desktop-people.png'],
+  ['clients', 'projects-desktop-clients.png'],
 ] as const
 
 const phone = [
@@ -57,7 +65,10 @@ const phone = [
   ['board', 'projects-phone-board.png'],
   ['project', 'projects-phone-project.png'],
   ['task', 'projects-phone-task.png'],
+  ['task-comments', 'projects-phone-task-comments.png'],
   ['edit', 'projects-phone-modal.png'],
+  ['filters', 'projects-phone-filters.png'],
+  ['projects', 'projects-phone-projects.png'],
 ] as const
 
 {

@@ -48,8 +48,11 @@ const goalFor = (app: AppV2, rows: AppV2Record[], view: string) => {
     const tab: ProjectsTab = view === 'project-team' ? 'team' : view === 'project-files' ? 'files' : view === 'project-feed' ? 'feed' : 'tasks'
     return { role: 'owner' as const, screenId: kit.projectScreenId, recordId: project?.id, open: null, tab }
   }
-  if (view === 'task' || view === 'edit' || view === 'comment') return { role: 'owner' as const, screenId: kit.taskScreenId, recordId: task('Макет главной страницы')?.id, open: (view === 'task' ? null : view) as ProjectsOpen, tab: 'tasks' as const }
+  if (view === 'task' || view === 'task-comments' || view === 'edit' || view === 'comment') return { role: 'owner' as const, screenId: kit.taskScreenId, recordId: task('Макет главной страницы')?.id, open: (view === 'task' || view === 'task-comments' ? null : view) as ProjectsOpen, tab: 'tasks' as const }
   if (view === 'filters') return { role: 'owner' as const, screenId: kit.boardScreenId, recordId: undefined, open: 'filters' as const, tab: 'tasks' as const }
+  if (view === 'projects') return { role: 'owner' as const, screenId: kit.projectsScreenId, recordId: undefined, open: null, tab: 'tasks' as const }
+  if (view === 'people') return { role: 'owner' as const, screenId: kit.peopleScreenId, recordId: undefined, open: null, tab: 'tasks' as const }
+  if (view === 'clients') return { role: 'owner' as const, screenId: kit.clientsScreenId, recordId: undefined, open: null, tab: 'tasks' as const }
   if (view === 'create') return { role: 'owner' as const, screenId: kit.boardScreenId, recordId: undefined, open: 'create' as const, tab: 'tasks' as const }
   return { role: 'owner' as const, screenId: kit.boardScreenId, recordId: undefined, open: null, tab: 'tasks' as const }
 }

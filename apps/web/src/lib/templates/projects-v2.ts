@@ -231,9 +231,9 @@ export function buildProjectsV2App(built: BuiltTemplate, meta: { id: string; wor
     screens: [
       screen(ids.mineScreenId, 'Мои задачи', 'Задачи', 'clipboard', both, null, [mineTasks, minePeople, mineProjects], true),
       screen(ids.boardScreenId, 'Доска', undefined, 'table', both, null, [boardTasks, boardPeople, boardProjects, ids.createTaskFormId], true),
-      screen(ids.projectsScreenId, 'Проекты', undefined, 'folder', owner, null, [allProjects, allClients, allPeople, ids.createProjectFormId], true),
-      screen(ids.peopleScreenId, 'Команда', undefined, 'users', owner, null, [collection('Карточки сотрудников', people.id, person.name, null, owner, person.name)], true),
-      screen(ids.clientsScreenId, 'Клиенты', undefined, 'building', owner, null, [collection('Карточки клиентов', clients.id, client.name, null, owner, client.name)], true),
+      screen(ids.projectsScreenId, 'Проекты', undefined, 'folder', both, null, [allProjects, allClients, allPeople, ids.createProjectFormId], true),
+      screen(ids.peopleScreenId, 'Команда', undefined, 'users', both, null, [collection('Карточки сотрудников', people.id, person.name, null, both, person.name)], true),
+      screen(ids.clientsScreenId, 'Клиенты', undefined, 'building', both, null, [collection('Карточки клиентов', clients.id, client.name, null, both, client.name)], true),
       screen(ids.projectScreenId, 'Проект', undefined, 'folder', both, projects.id, [...projectFacts, projectTasks, projectEvents, projectPeople, projectClients, ids.editProjectFormId], false),
       screen(ids.taskScreenId, 'Задача', undefined, 'clipboard', both, tasks.id, [...taskFacts, taskComments, taskPeople, taskProjects, ids.editTaskFormId, ids.commentFormId], false),
     ],

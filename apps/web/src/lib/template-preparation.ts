@@ -37,7 +37,7 @@ export async function templatePreparation(workspaceId: string, appId: string, co
       : booking
         ? [...Object.values(booking.tables), ...(booking.clients?.tableId ? [booking.clients.tableId] : [])]
         : dispatch
-          ? [dispatch.jobsTableId, dispatch.clientsTableId, dispatch.mastersTableId, dispatch.notesTableId]
+          ? dispatchTableIds(dispatch, allRelations)
           : legacyIds
   if (!ids?.length) return null
   const own = await connection.select({ id: tables.id }).from(tables).where(and(eq(tables.workspaceId, workspaceId), inArray(tables.id, ids)))
@@ -51,4 +51,14 @@ export async function templatePreparation(workspaceId: string, appId: string, co
     .from(rows).where(and(inArray(rows.tableId, ownSources.map(table => table.id)), isNull(rows.deletedAt)))
   const removable = removableSamples(ids, records, relations)
   return { removable, samples: removable.length }
+}
+
+/** Jobs, clients, masters, notes, and tables those rows point at (the client-facing service catalog). */
+function dispatchTableIds(
+  dispatch: { jobsTableId: string; clientsTableId: string; mastersTableId: string; notesTableId: string },
+  relations: readonly SampleRelation[],
+) {
+  const bound = [dispatch.jobsTableId, dispatch.clientsTableId, dispatch.mastersTableId, dispatch.notesTableId]
+  const linked = relations.filter(field => bound.includes(field.tableId)).map(field => field.targetTableId)
+  return [...new Set([...bound, ...linked])]
 }

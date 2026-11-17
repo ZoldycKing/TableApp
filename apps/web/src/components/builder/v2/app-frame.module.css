@@ -77,7 +77,6 @@
 .container[data-phone="true"] .frame { border-radius: var(--radius-panel); overflow: clip; }
 .island { position: absolute; inset: 7px auto auto 50%; width: 68px; height: 12px; border-radius: var(--radius-badge); transform: translateX(-50%); background: #080b10; }
 .frame { position: relative; max-width: none; background: var(--v2-bg); color: var(--v2-ink); font-size: 14px; line-height: 20px; border-color: var(--v2-line); border-radius: var(--v2-frame-radius, 16px); min-height: min(640px,calc(100dvh - 48px)); display: grid; grid-template-areas: "header" "body" "nav"; grid-template-columns: minmax(0,1fr); grid-template-rows: auto var(--v2-content-track, 1fr) auto; }
-.frame[data-navigation='none'] { grid-template-areas: "header" "body"; grid-template-rows: auto minmax(0, 1fr); }
 .container[data-contained="true"] .frame { --v2-content-track: minmax(0, 1fr); height: 100%; min-height: 0; max-width: none; box-shadow: var(--shadow-soft); }
 .container[data-fullscreen="true"] .frame { border: 0; border-radius: 0; box-shadow: none; }
 .container .header { grid-area: header; justify-content: start; min-height: 64px; padding: 12px 0; }

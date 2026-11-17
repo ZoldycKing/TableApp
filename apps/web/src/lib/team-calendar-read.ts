@@ -12,6 +12,7 @@ import { RowWriteError } from './row-mutations'
 import type { BuilderV2DataRecord } from './builder-v2-data-types'
 import { TEAM_CALENDAR_ROW_LIMIT, teamCalendarSnapshot, type TeamCalendarRequest } from './team-calendar-model'
 import { calendarDays, shiftIsoDay } from './team-calendar-core'
+import { keepCalendarResource } from './dispatch-logic'
 
 type Source = { tableId: string; viewId: string | null }
 type CalendarNode = Extract<AppV2Node, { type: 'team_calendar' }>
@@ -125,17 +126,22 @@ export async function readTeamCalendar(
       .map(item => item.record)
   }
 
+  const activeField = app.dispatch && data.resources.tableId === app.dispatch.mastersTableId ? app.dispatch.master.active : null
   const resourceFields = [
     data.resources.titleFieldId,
     ...(data.resources.photoFieldId ? [data.resources.photoFieldId] : []),
     ...(ownEmail ? [ownEmail] : []),
+    ...(activeField ? [activeField] : []),
   ]
-  const resources = await read(
+  const loadedResources = await read(
     data.resources,
     resourceFields,
     undefined,
     ownEmail && actor.email ? emailEquals(ownEmail, actor.email) : undefined,
   )
+  const resources = activeField
+    ? loadedResources.filter(row => keepCalendarResource(row.values[activeField], app.dispatch!.activeChoiceId, Object.hasOwn(row.values, activeField)))
+    : loadedResources
   const eventFields = [
     data.titleFieldId, data.subtitleFieldId, data.startFieldId, data.durationFieldId,
     data.endFieldId, data.resourceFieldId, data.statusFieldId, data.amountFieldId,

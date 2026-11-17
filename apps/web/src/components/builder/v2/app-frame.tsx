@@ -51,7 +51,9 @@ export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,childre
   const centered = app.appearance?.presentation === 'centered'
   const navigation = centered ? 'bottom' : app.appearance?.navigation ?? 'bottom'
   // Mockup: one desktop top row (logo + pills + user). Detail back lives in page content.
-  const shellTopNav = Boolean(screens.length) && (navigation === 'tabs' || navigation === 'bottom')
+  const showNav = screens.length > 1
+  const shellTopNav = showNav && (navigation === 'tabs' || navigation === 'bottom')
+  const showBrand = shellTopNav || !showNav
   // Compact mobile brand bar always; desktop chrome header only for catalog/profile/legacy titles.
   const showChromeHeader = !shellTopNav || catalogDetail || profile || Boolean(title && !back) || true
   const mobileBrandOnly = shellTopNav && !(catalogDetail || profile || (title && !back))
@@ -121,11 +123,11 @@ export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,childre
   return <BookingJourneyProvider key={app.id}><div className={`${css.stage} ${centered && !phone ? css.centeredStage : ''}`} data-frame-stage data-fullscreen={fullScreen || undefined}>
     <div className={css.container} data-app-frame="" data-phone={phone} data-contained={contained || undefined} data-fullscreen={fullScreen || undefined}>
     {phone && <span className={css.island} aria-hidden="true" />}
-    <section className={`${styles.surface} ${css.frame}`} data-navigation={screens.length ? navigation : 'bottom'} data-shell-topnav={shellTopNav || undefined}>
+    <section className={`${styles.surface} ${css.frame}`} data-navigation={navigation} data-shell-topnav={shellTopNav || undefined}>
     {showChromeHeader ? <header className={`${styles.appHeader} ${css.header}`} data-brand-only={mobileBrandOnly || undefined}>
       <div className={`${css.chromeBar} ${presentation.contentWidth}`}>
         {back && !shellTopNav ? <button type="button" className={presentation.iconControl} onClick={back} aria-label="Назад" title="Назад"><ProtoIcon name="back" /></button> : <span className={css.headerMark}>{mark}</span>}
-        {shellTopNav ? <span className={css.railBrand}><span>{appName}</span></span> : null}
+        {showBrand ? <span className={css.railBrand}><span>{appName}</span></span> : null}
         {profile && <BuilderV2RecordAvatar name={title} id={scrollKey || screenId} icon="users" />}
         {!mobileBrandOnly && catalogDetail ? <span className={css.catalogIdentity}>{sectionScreen?.name ?? appName}</span>
           : !mobileBrandOnly && title ? <div>
@@ -135,7 +137,7 @@ export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,childre
       </div>
     </header> : null}
     <div ref={body} className={css.body} role={contained ? 'region' : undefined} aria-label={contained ? 'Содержимое экрана' : undefined} tabIndex={contained ? 0 : undefined}><AppFrameDeviceContext.Provider value={deviceMode}><div ref={contents} className={`${styles.appContent} ${css.content} ${presentation.contentWidth}`}>{notice}{children}</div></AppFrameDeviceContext.Provider></div>
-    {screens.length>0&&<nav className={css.navigation} aria-label="Разделы приложения">
+    {showNav&&<nav className={css.navigation} aria-label="Разделы приложения">
       <div className={navigation === 'sidebar' ? css.navStack : `${css.chromeBar} ${presentation.contentWidth}`}>
         <div className={css.railIdentity}>{mark}<strong>{appName}</strong></div>
         <div className={css.navItems} ref={navItems}>{screens.map((screen,index)=><div key={screen.id} data-nav-item="" hidden={index>=limit}>{navButton(screen)}</div>)}<div className={css.more} data-nav-more="" ref={root} hidden={!overflow}><button type="button" ref={trigger} aria-expanded={more} aria-controls={menuId} aria-current={activeExtra?'true':undefined} onClick={()=>setMore(!more)}><ProtoIcon name="more"/><span>Ещё</span></button>{more&&<div className={css.morePanel} id={menuId} role="region" aria-label="Другие разделы"><strong>Разделы</strong>{rest.map(screen=>navButton(screen,true))}</div>}</div></div>

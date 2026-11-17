@@ -100,7 +100,7 @@ export function withCustomerScenario(original: TemplateDef): TemplateDef {
     case 'zayavki':
       scenario = { ...common, table: template.appTable, title: 'Мои заявки', submitLabel: 'Отправить заявку', intro: 'Опишите работы и адрес. Диспетчер назначит мастера и согласует дату; результат появится в вашем кабинете.',
         formFields: ['selectedService', 'requestName', 'requestPhone', 'what', 'requestAddress', 'requestNote'], customerFields: ['status', 'date', 'price', 'requestAddress', 'requestNote', 'clientSummary'], workerFields: ['status', 'photo', 'comment', 'clientSummary'], workerReadFields: ['comment', 'photo', 'clientName', 'phone', 'address'], workerName: 'Мастер', managerName: 'Диспетчер',
-        status: 'status', initial: 'Новая', terminal: ['Готово', 'Отменена'], cancel: 'Отменена', cancellable: ['Новая'], assignment: 'masterEmail', catalog: catalog('Услуги и выезды') }
+        status: 'status', initial: 'Новая', terminal: ['Выполнено', 'Отменена'], cancel: 'Отменена', cancellable: ['Новая'], assignment: 'masterEmail', catalog: catalog('Услуги и выезды') }
       main.fields.push({ key: 'requestAddress', name: 'Адрес клиента', type: 'text' },
         { key: 'requestNote', name: 'Пожелания клиента', type: 'long_text', help: 'Инструкции и пожелания при оформлении. Видны клиенту и назначенному мастеру; внутренние заметки о работах храните в «Комментарий».' })
       break
@@ -140,10 +140,13 @@ export function withCustomerScenario(original: TemplateDef): TemplateDef {
   }
   // Demonstrate one fictional customer's active and historical records; others stay isolated.
   main.rows = main.rows.map((row, index) => ({ ...row, values: { ...row.values,
-    ...(template.id === 'crm' ? {} : { [scenario.email]: index < 2 ? 'irina@example.com' : `other${index}@example.invalid`, requestName: index < 2 ? 'Ирина' : 'Другой клиент', requestPhone: '+7 900 000-00-00' }),
+    ...(template.id === 'crm' ? {} : template.id === 'zayavki'
+      ? { [scenario.email]: row.key === 'z1' || row.key === 'z8' ? 'irina@example.com' : `other${index}@example.invalid`, requestName: row.key === 'z1' || row.key === 'z8' ? 'Ирина' : 'Другой клиент', requestPhone: '+7 900 000-00-00' }
+      : { [scenario.email]: index < 2 ? 'irina@example.com' : `other${index}@example.invalid`, requestName: index < 2 ? 'Ирина' : 'Другой клиент', requestPhone: '+7 900 000-00-00' }),
     requestDate: inDays(-index * 3),
-    ...(index === 1 && template.id !== 'crm' ? { [scenario.status]: scenario.terminal[0]! } : {}),
-    ...(scenario.assignment ? { [scenario.assignment]: 'worker@example.invalid' } : {}),
+    // Field service keeps the authored schedule, priorities and technician emails.
+    ...(index === 1 && template.id !== 'crm' && template.id !== 'zayavki' ? { [scenario.status]: scenario.terminal[0]! } : {}),
+    ...(scenario.assignment && template.id !== 'zayavki' ? { [scenario.assignment]: 'worker@example.invalid' } : {}),
   } }))
   if (!main.rows.length) main.rows = [
     { key: 'request-active', values: { title: 'Заявка Ирины', [scenario.email]: 'irina@example.com', requestName: 'Ирина', requestPhone: '+7 900 000-00-00', [scenario.status]: scenario.initial, ...(template.id === 'nedvizhimost' ? { object: { rowKey: 'n2' }, preferred: 'Завтра после 18:00' } : {}), clientSummary: 'Заявка получена. Ответственный свяжется с вами.', ...(scenario.assignment ? { [scenario.assignment]: 'worker@example.invalid' } : {}) } },

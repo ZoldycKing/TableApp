@@ -15,6 +15,21 @@
 .dateControls > button { padding-inline: 10px; }
 .dateControls label { min-width: 0; }
 .master { flex: 0 1 220px; width: max-content; max-width: min(220px, 100%); min-width: 0; margin-left: auto; }
+.picker { position: relative; min-width: 0; }
+.pickerButton { display: inline-flex; align-items: center; gap: 8px; width: 100%; min-height: 42px; padding: 8px 12px; border: 1px solid var(--v2-line); border-radius: 9px; background: var(--v2-surface); color: var(--v2-ink); font: inherit; font-size: 13px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.pickerButton > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dateControls .pickerButton { width: auto; }
+.pickerPanel, .menuList { position: absolute; z-index: 12; top: calc(100% + 6px); left: 0; min-width: 100%; margin: 0; padding: 8px; border: 1px solid var(--v2-line); border-radius: 12px; background: var(--v2-surface); box-shadow: 0 10px 28px color-mix(in srgb, #122018 16%, transparent); }
+.pickerPanel { width: 248px; }
+.pickerHead { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.pickerHead strong { font-size: 13px; font-weight: 700; text-transform: capitalize; }
+.pickerHead button, .pickerDays button { min-height: 32px; padding: 4px; border: 0; border-radius: 8px; background: transparent; color: var(--v2-ink); font: inherit; }
+.pickerWeek, .pickerDays { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; }
+.pickerWeek span { text-align: center; color: var(--v2-muted); font-size: 11px; }
+.pickerDays button[aria-pressed='true'] { background: var(--v2-soft); color: var(--v2-accent); font-weight: 750; }
+.menuList { list-style: none; width: max-content; max-width: 240px; max-height: 240px; overflow: auto; }
+.menuList button { display: block; width: 100%; min-height: 36px; padding: 6px 8px; border: 0; border-radius: 8px; background: transparent; color: var(--v2-ink); font: inherit; font-size: 13px; text-align: left; }
+.menuList [aria-selected='true'] > button { background: var(--v2-soft); }
 .caption { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 8px; padding: 18px 20px; }
 .caption h2 { margin: 0; font-size: 16px; font-weight: 700; }
 .caption h2::first-letter { text-transform: uppercase; }

@@ -26,12 +26,12 @@ describe('solution demo roles', () => {
     expect(salon).toContain('перенести или отменить')
   })
   it('shows actual assigned work and strips financial fields from the master preview', () => {
-    const { example, email } = employeeExample('zayavki'), config = example.app.customer!
+    const { example, email, name } = employeeExample('zayavki'), config = example.app.customer!
     const preview = templateAppPreview(example, 'staff', email).runtime
     const visible = preview.tables[config.tableId]!.rows
     expect(visible.length).toBeGreaterThan(0)
     expect(visible.length).toBeLessThan(example.rows.filter(row => row.tableId === config.tableId).length)
-    expect(visible.every(row => row.data[example.field('zayavki', 'master').id] === undefined || row.data[example.field('zayavki', 'master').id] === 'Сергей')).toBe(true)
+    expect(visible.every(row => row.data[example.field('zayavki', 'master').id] === undefined || row.data[example.field('zayavki', 'master').id] === name)).toBe(true)
     const price = example.field('zayavki', 'price').id
     expect(visible.every(row => !(price in row.data))).toBe(true)
     expect(templateAppPreview(example, 'staff', 'unassigned@example.invalid').runtime.tables[config.tableId]?.rows ?? []).toHaveLength(0)

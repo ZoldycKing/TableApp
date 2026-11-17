@@ -52,7 +52,7 @@ describe.skipIf(!process.env.DATABASE_URL)('first launch of every starter in Pos
     return { ...result, app: read.app }
   }
   // Native starters are tested separately; keep these legacy first-launch checks intact.
-  it.each(['service', 'zayavki', 'nedvizhimost', 'dostavka', 'proizvodstvo'])('%s starts empty without losing its roles, screens or configuration', async id => {
+  it.each(['service', 'nedvizhimost', 'dostavka', 'proizvodstvo'])('%s starts empty without losing its roles, screens or configuration', async id => {
     const installed = await install(id)
     const legacy = appSchema.parse(installed.app)
     expect(legacy.allowlist).toContainEqual({ email, roleId: id === 'proizvodstvo' ? 'director' : 'manager', company: '' })
@@ -69,6 +69,23 @@ describe.skipIf(!process.env.DATABASE_URL)('first launch of every starter in Pos
     expect(appSchema.parse(after!.draft)).toEqual(installed.app)
     expect(after!.published).toBeNull()
     expect(await actions.clearTemplateSamplesAction(installed.appId)).toEqual({ ok: true })
+  })
+  it('installs native field service with technician photos and clears only untouched samples', async () => {
+    const installed = await install('zayavki')
+    expect(installed.app.formatVersion).toBe(2)
+    const read = readAppDefinition(installed.app)
+    if (!read.ok || read.formatVersion !== 2 || !read.app.dispatch) throw new Error('Native field service was not installed')
+    expect(read.app.authentication.members).toContainEqual({ email, roleIds: ['owner'], company: '' })
+    expect(read.app.roles.map(role => role.name)).toEqual(['Диспетчер', 'Мастер'])
+    const masters = await database.db.select().from(database.rows).where(eq(database.rows.tableId, read.app.dispatch.mastersTableId))
+    expect(masters).toHaveLength(4)
+    expect(masters.every(row => Array.isArray((row.data as Record<string, unknown>)[read.app.dispatch!.master.photo]))).toBe(true)
+    expect((await prepare.templatePreparation(workspaceId, installed.appId))!.samples).toBeGreaterThan(0)
+    expect(await actions.clearTemplateSamplesAction(installed.appId)).toEqual({ ok: true })
+    expect(await database.db.select().from(database.rows).where(and(inArray(database.rows.tableId, installed.tableIds), isNull(database.rows.deletedAt)))).toHaveLength(0)
+    const [record] = await database.db.select().from(database.apps).where(eq(database.apps.id, installed.appId))
+    expect(record!.draft).toEqual(installed.app)
+    expect(record!.published).toBeNull()
   })
   it('installs native booking with service photos and clears only untouched samples', async () => {
     const installed = await install('salon')

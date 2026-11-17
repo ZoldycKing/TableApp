@@ -72,9 +72,10 @@
 .container { container: builder-app / inline-size; position: relative; min-width: 0; width: 100%; margin-inline: auto; }
 .container[data-contained="true"] { height: 100%; }
 .container[data-fullscreen="true"] { height: 100dvh; }
-.container[data-phone="true"] { position: relative; max-width: 390px; height: min(100%, 760px); padding: 26px 6px 6px; border-radius: 34px; background: #171c28; box-shadow: var(--shadow-app-lg); margin-block: auto; }
+.container[data-phone="true"] { position: relative; max-width: 390px; height: min(100dvh, 760px); padding: 26px 6px 6px; border-radius: 34px; background: #171c28; box-shadow: var(--shadow-app-lg); margin-block: auto; }
 .stage:has(> .container[data-phone="true"]) { display: flex; }
-.container[data-phone="true"] .frame { border-radius: var(--radius-panel); overflow: clip; }
+.container[data-phone="true"] .frame { height: 100%; min-height: 0; border-radius: var(--radius-panel); overflow: clip; }
+.container[data-phone="true"] .body { min-height: 0; overflow-y: auto; }
 .island { position: absolute; inset: 7px auto auto 50%; width: 68px; height: 12px; border-radius: var(--radius-badge); transform: translateX(-50%); background: #080b10; }
 .frame { position: relative; max-width: none; background: var(--v2-bg); color: var(--v2-ink); font-size: 14px; line-height: 20px; border-color: var(--v2-line); border-radius: var(--v2-frame-radius, 16px); min-height: min(640px,calc(100dvh - 48px)); display: grid; grid-template-areas: "header" "body" "nav"; grid-template-columns: minmax(0,1fr); grid-template-rows: auto var(--v2-content-track, 1fr) auto; }
 .container[data-contained="true"] .frame { --v2-content-track: minmax(0, 1fr); height: 100%; min-height: 0; max-width: none; box-shadow: var(--shadow-soft); }
@@ -103,6 +104,7 @@
 .railIdentity { display: none; min-width: 0; overflow: hidden; }
 .railIdentity strong { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .railBrand { display: none; min-width: 0; overflow: hidden; line-height: 1.25; }
+.frame:not([data-shell-topnav]) .header .railBrand { display: block; min-width: 0; flex: 1 1 auto; font-weight: 750; font-size: 15px; letter-spacing: -0.01em; line-height: 1.25; }
 .railBrand > span { display: block; width: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .catalogIdentity { color: var(--v2-ink); font-weight: 650; overflow-wrap: anywhere; }
 .headerAction { margin-left: auto; flex-shrink: 0; display: inline-flex; align-items: center; gap: 8px; align-self: center; }

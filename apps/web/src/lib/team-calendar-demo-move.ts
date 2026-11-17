@@ -78,6 +78,16 @@ export function applyDemoCalendarMove(input: {
     [data.resourceFieldId]: [input.resourceId],
     [data.startFieldId]: new Date(instant).toISOString(),
   }
+  const dispatch = input.app.dispatch
+  if (dispatch && data.resourceFieldId === dispatch.job.technician) {
+    const technician = input.rows.find(item => item.id === input.resourceId && item.tableId === dispatch.mastersTableId)
+    if (!technician || technician.values[dispatch.master.active] !== dispatch.activeChoiceId) return { ok: false, error: 'Этот мастер неактивен и не назначается на выезды.' }
+    const email = String(technician.values[dispatch.master.email] ?? '').trim().toLowerCase()
+    if (!email) return { ok: false, error: 'У мастера не указана почта для доступа к заявке.' }
+    patch[dispatch.job.master] = String(technician.values[dispatch.master.name] ?? '')
+    patch[dispatch.job.masterEmail] = email
+    patch[dispatch.job.date] = patch[data.startFieldId]!
+  }
   if (data.endFieldId) {
     const previousStart = dateInstant(row.values[data.startFieldId], input.timeZone)
     const previousEnd = dateInstant(row.values[data.endFieldId], input.timeZone)

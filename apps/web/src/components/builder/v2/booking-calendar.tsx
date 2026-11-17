@@ -64,12 +64,86 @@ function useCalendar(app: AppV2, request: BookingCalendarRequest, loader?: Calen
   return { result: state?.key === key ? state.result : undefined, retry: () => setRetry(value => value + 1) }
 }
 
+function useDismiss(open: boolean, root: { current: HTMLElement | null }, close: () => void) {
+  useEffect(() => {
+    if (!open) return
+    const outside = (event: PointerEvent) => { if (event.target instanceof Node && !root.current?.contains(event.target)) close() }
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') close() }
+    document.addEventListener('pointerdown', outside)
+    document.addEventListener('keydown', escape)
+    return () => { document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape) }
+  }, [open, root, close])
+}
+
+function DateMenu({ value, onValue, label }: { value: string; onValue: (value: string) => void; label: string }) {
+  const [open, setOpen] = useState(false)
+  const root = useRef<HTMLDivElement>(null)
+  const close = () => setOpen(false)
+  useDismiss(open, root, close)
+  const [yearText, monthText] = value.split('-')
+  const year = Number(yearText) || new Date().getFullYear()
+  const month = Number(monthText) || 1
+  const [cursor, setCursor] = useState({ year, month })
+  useEffect(() => { setCursor({ year, month }) }, [year, month])
+  const first = new Date(cursor.year, cursor.month - 1, 1)
+  const pad = (first.getDay() + 6) % 7
+  const count = new Date(cursor.year, cursor.month, 0).getDate()
+  const title = new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric' }).format(first)
+  const shift = (amount: number) => {
+    const next = new Date(cursor.year, cursor.month - 1 + amount, 1)
+    setCursor({ year: next.getFullYear(), month: next.getMonth() + 1 })
+  }
+  const pick = (day: number) => {
+    onValue(`${cursor.year}-${String(cursor.month).padStart(2, '0')}-${String(day).padStart(2, '0')}`)
+    setOpen(false)
+  }
+  return <div className={css.picker} ref={root}>
+    <button type="button" className={css.pickerButton} aria-label={label} aria-expanded={open} aria-haspopup="dialog" onClick={() => setOpen(current => !current)}>
+      <ProtoIcon name="calendar" size={16} /><span>{ruDateText(value) || 'дд.мм.гггг'}</span>
+    </button>
+    {open ? <div className={css.pickerPanel} role="dialog" aria-label={label}>
+      <div className={css.pickerHead}>
+        <button type="button" aria-label="Предыдущий месяц" onClick={() => shift(-1)}><ProtoIcon name="back" size={16} /></button>
+        <strong>{title}</strong>
+        <button type="button" aria-label="Следующий месяц" onClick={() => shift(1)}><ProtoIcon name="arrow" size={16} /></button>
+      </div>
+      <div className={css.pickerWeek}>{['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'].map(name => <span key={name}>{name}</span>)}</div>
+      <div className={css.pickerDays}>
+        {Array.from({ length: pad }, (_, index) => <span key={`pad-${index}`} />)}
+        {Array.from({ length: count }, (_, index) => {
+          const day = index + 1
+          const iso = `${cursor.year}-${String(cursor.month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+          return <button type="button" key={day} aria-pressed={iso === value} onClick={() => pick(day)}>{day}</button>
+        })}
+      </div>
+    </div> : null}
+  </div>
+}
+
+function ResourceMenu({ label, allLabel, value, options, onChange }: { label: string; allLabel: string; value: string; options: { id: string; name: string }[]; onChange: (id: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const root = useRef<HTMLDivElement>(null)
+  const close = () => setOpen(false)
+  useDismiss(open, root, close)
+  const current = options.find(item => item.id === value)?.name ?? allLabel
+  return <div className={`${css.picker} ${css.master}`} ref={root}>
+    <button type="button" className={css.pickerButton} aria-label={label} aria-expanded={open} aria-haspopup="listbox" onClick={() => setOpen(currentOpen => !currentOpen)}>
+      <span>{current}</span><ProtoIcon name="down" size={14} />
+    </button>
+    {open ? <ul className={css.menuList} role="listbox" aria-label={label}>
+      <li role="option" aria-selected={!value}><button type="button" onClick={() => { onChange(''); setOpen(false) }}>{allLabel}</button></li>
+      {options.map(item => <li key={item.id} role="option" aria-selected={item.id === value}><button type="button" onClick={() => { onChange(item.id); setOpen(false) }}>{item.name}</button></li>)}
+    </ul> : null}
+  </div>
+}
+
 export type CalendarMoveResult = { ok: true; unchanged?: boolean } | { ok: false; error: string }
 export function TeamCalendarView({
   app, screenId, timeZone, working = false, onOpenVisit, onOpenPeriod, onAdd, onCreate, onConfigure, onMove,
   editing = false, loader, loaderKey, title = 'Расписание', resourceLabel = 'Мастер', resourcesLabel = 'Мастера',
   showMetrics = true, showWorkingHours = true, showAmounts = true, showNoShows = true, showOmissions = false,
-  calendarKey, leadMinutes = 60, stepMinutes = 15, horizonDays = 60, bufferMinutes = 0, defaultView = 'day',
+  calendarKey, leadMinutes = 60, stepMinutes = 15, horizonDays = 60, bufferMinutes = 0, defaultView = 'day', hourPixels = 56,
+  plainControls = false,
 }: {
   app: AppV2
   screenId: string
@@ -98,6 +172,10 @@ export function TeamCalendarView({
   horizonDays?: number
   bufferMinutes?: number
   defaultView?: 'list' | 'day' | 'week'
+  /** Pixels per hour on the day grid. Salon stays at 56. */
+  hourPixels?: number
+  /** Styled date and resource menus instead of the native date input and select. */
+  plainControls?: boolean
 }) {
   const journey = useBookingJourney()
   const saved = journey && journey.calendar?.key === calendarKey ? journey.calendar : null
@@ -191,17 +269,21 @@ export function TeamCalendarView({
             </div>
             <div className={css.dateControls}>
               <button type="button" aria-label={week ? 'Предыдущая неделя' : 'Предыдущий день'} onClick={() => shiftDate(-1)}><ProtoIcon name="back" size={17} /></button>
-              <label><span className="sr-only">Дата календаря</span><RuDateInput aria-label="Дата календаря" value={day} onValue={setDay} /></label>
+              {plainControls
+                ? <DateMenu label="Дата календаря" value={day} onValue={setDay} />
+                : <label><span className="sr-only">Дата календаря</span><RuDateInput aria-label="Дата календаря" value={day} onValue={setDay} /></label>}
               <button type="button" aria-label={week ? 'Следующая неделя' : 'Следующий день'} onClick={() => shiftDate(1)}><ProtoIcon name="arrow" size={17} /></button>
             </div>
             <button type="button" className={css.today} onClick={() => setDay(today)}>Сегодня</button>
-            <label className={css.master}>
-              <span className="sr-only">{resourceLabel} календаря</span>
-              <select aria-label={`${resourceLabel} календаря`} value={selected} onChange={event => setResource(event.target.value)}>
-                <option value="">Все {resourcesLabel.toLocaleLowerCase('ru-RU')}</option>
-                {data?.resources.map(item => <option value={item.id} key={item.id}>{item.name}</option>)}
-              </select>
-            </label>
+            {plainControls
+              ? <ResourceMenu label={`${resourceLabel} календаря`} allLabel={`Все ${resourcesLabel.toLocaleLowerCase('ru-RU')}`} value={selected} options={data?.resources.map(item => ({ id: item.id, name: item.name })) ?? []} onChange={setResource} />
+              : <label className={css.master}>
+                <span className="sr-only">{resourceLabel} календаря</span>
+                <select aria-label={`${resourceLabel} календаря`} value={selected} onChange={event => setResource(event.target.value)}>
+                  <option value="">Все {resourcesLabel.toLocaleLowerCase('ru-RU')}</option>
+                  {data?.resources.map(item => <option value={item.id} key={item.id}>{item.name}</option>)}
+                </select>
+              </label>}
           </div>
         )}
       >
@@ -278,6 +360,7 @@ export function TeamCalendarView({
                     stepMinutes={stepMinutes}
                     horizonDays={horizonDays}
                     bufferMinutes={bufferMinutes}
+                    hourPixels={hourPixels}
                   />
                 </div>
               )}
@@ -317,7 +400,7 @@ export function TeamCalendarView({
 export const BookingCalendarScreen = TeamCalendarView
 
 function CalendarGrid({
-  data, day, resourceId, editing, showWorkingHours, canMove = false, onOpenVisit, onOpenPeriod, onCreate, onMove, onNotice, leadMinutes, stepMinutes, horizonDays, bufferMinutes = 0,
+  data, day, resourceId, editing, showWorkingHours, canMove = false, onOpenVisit, onOpenPeriod, onCreate, onMove, onNotice, leadMinutes, stepMinutes, horizonDays, bufferMinutes = 0, hourPixels = 56,
 }: {
   data: TeamCalendarSnapshot
   day: string
@@ -334,6 +417,7 @@ function CalendarGrid({
   stepMinutes: number
   horizonDays: number
   bufferMinutes?: number
+  hourPixels?: number
 }) {
   const resources = data.resources.filter(item => !resourceId || item.id === resourceId)
   const columns = resources.map(item => ({ day, resource: item }))
@@ -344,7 +428,7 @@ function CalendarGrid({
   const windows = shifts.flatMap(shift => shift?.windows ?? [])
   const bounds = calendarGridBounds(windows, active)
   const { start, end, span } = bounds
-  const height = span / 60 * 56
+  const height = span / 60 * (hourPixels ?? 56)
   const ticks = Array.from({ length: span / 60 + 1 }, (_, index) => start + index * 60)
   const position = (from: number, to: number): CSSProperties => {
     const frame = calendarBlockFrame(bounds, from, to)

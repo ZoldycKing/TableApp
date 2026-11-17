@@ -18,6 +18,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1136.0",
     "@fontsource-variable/manrope": "^5.3.0",
+    "@pdf-lib/fontkit": "^1.1.1",
     "@phosphor-icons/react": "^2.1.10",
     "@tableapp/db": "workspace:*",
     "@tableapp/formula": "workspace:*",
@@ -27,6 +28,7 @@
     "gsap": "3.13.0",
     "next": "^16.3.5",
     "nodemailer": "^10.0.11",
+    "pdf-lib": "^1.17.1",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
   },

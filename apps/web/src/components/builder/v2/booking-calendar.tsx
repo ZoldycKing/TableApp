@@ -143,7 +143,7 @@ export function TeamCalendarView({
   editing = false, loader, loaderKey, title = 'Расписание', resourceLabel = 'Мастер', resourcesLabel = 'Мастера',
   showMetrics = true, showWorkingHours = true, showAmounts = true, showNoShows = true, showOmissions = false,
   calendarKey, leadMinutes = 60, stepMinutes = 15, horizonDays = 60, bufferMinutes = 0, defaultView = 'day', hourPixels = 56,
-  plainControls = false,
+  plainControls = false, visitForms, compactWeek = false, onAssignDrop, dropPreview = null, meta,
 }: {
   app: AppV2
   screenId: string
@@ -176,6 +176,15 @@ export function TeamCalendarView({
   hourPixels?: number
   /** Styled date and resource menus instead of the native date input and select. */
   plainControls?: boolean
+  /** Nouns for the period counter. Salon keeps «запись». */
+  visitForms?: readonly [string, string, string]
+  /** Compact chips and day counts for the field-service week. */
+  compactWeek?: boolean
+  /** Drop an unassigned job onto a technician and time. */
+  onAssignDrop?: (slot: { jobId: string; resourceId: string; day: string; time: string }) => void
+  /** Paint a drop target without a live drag, for the day-board preview. */
+  dropPreview?: { resourceId: string; day: string; time: string; label: string } | null
+  meta?: string
 }) {
   const journey = useBookingJourney()
   const saved = journey && journey.calendar?.key === calendarKey ? journey.calendar : null
@@ -218,7 +227,7 @@ export function TeamCalendarView({
   const periodLabel = week
     ? `${ruDateText(range[0]!)} — ${ruDateText(range[6]!)}`
     : dateLabel(day, { weekday: 'long', day: 'numeric', month: 'long' })
-  const periodLine = `${periodLabel} · ${bookingCountLabel(periodCount)}`
+  const periodLine = `${periodLabel} · ${bookingCountLabel(periodCount, visitForms)}`
   const phonePeople = data?.resources.filter(item => !selected || item.id === selected) ?? []
   const phoneId = phonePeople.some(item => item.id === focusId) ? focusId : (selected || phonePeople[0]?.id || '')
   const zoneLabel = new Intl.DateTimeFormat('ru-RU', { timeZone: zone, timeZoneName: 'shortOffset' })
@@ -243,7 +252,7 @@ export function TeamCalendarView({
     <div ref={root} className={css.root} data-booking-calendar data-working={working || undefined} data-compact={compact || undefined}>
       <ListScreenShell
         title={title}
-        meta={showWorkingHours ? 'Записи и рабочие часы команды' : 'Записи команды'}
+        meta={meta ?? (showWorkingHours ? 'Записи и рабочие часы команды' : 'Записи команды')}
         actions={(
           <div className={css.actions}>
             {onConfigure && <button type="button" className={styles.textButton} disabled={editing} onClick={onConfigure}>Настроить часы</button>}
@@ -312,7 +321,7 @@ export function TeamCalendarView({
               {view === 'list' ? (
                 <BookingDayAgenda showHeading={false} showWorkingHours={showWorkingHours} resourcesLabel={resourcesLabel} data={data} day={day} resourceId={selected} working={Boolean(onOpenPeriod)} editing={editing} onOpenVisit={onOpenVisit} onOpenPeriod={onOpenPeriod} />
               ) : view === 'week' ? (
-                <BookingWeekOverview showWorkingHours={showWorkingHours} resourcesLabel={resourcesLabel} data={data} resourceId={selected} working={Boolean(onOpenPeriod)} editing={editing} onOpenVisit={onOpenVisit} onOpenPeriod={onOpenPeriod} onOpenDay={date => { setDay(date); setView('day') }} />
+                <BookingWeekOverview showWorkingHours={showWorkingHours} resourcesLabel={resourcesLabel} data={data} resourceId={selected} working={Boolean(onOpenPeriod)} editing={editing} onOpenVisit={onOpenVisit} onOpenPeriod={onOpenPeriod} onOpenDay={date => { setDay(date); setView('day') }} onMove={onMove} onAssignDrop={onAssignDrop} compactChips={compactWeek} />
               ) : (
                 <div
                   className={css.dayBoard}
@@ -361,6 +370,8 @@ export function TeamCalendarView({
                     horizonDays={horizonDays}
                     bufferMinutes={bufferMinutes}
                     hourPixels={hourPixels}
+                    onAssignDrop={onAssignDrop}
+                    dropPreview={dropPreview}
                   />
                 </div>
               )}
@@ -401,6 +412,7 @@ export const BookingCalendarScreen = TeamCalendarView
 
 function CalendarGrid({
   data, day, resourceId, editing, showWorkingHours, canMove = false, onOpenVisit, onOpenPeriod, onCreate, onMove, onNotice, leadMinutes, stepMinutes, horizonDays, bufferMinutes = 0, hourPixels = 56,
+  onAssignDrop, dropPreview = null,
 }: {
   data: TeamCalendarSnapshot
   day: string
@@ -418,6 +430,8 @@ function CalendarGrid({
   horizonDays: number
   bufferMinutes?: number
   hourPixels?: number
+  onAssignDrop?: (slot: { jobId: string; resourceId: string; day: string; time: string }) => void
+  dropPreview?: { resourceId: string; day: string; time: string; label: string } | null
 }) {
   const resources = data.resources.filter(item => !resourceId || item.id === resourceId)
   const columns = resources.map(item => ({ day, resource: item }))
@@ -513,7 +527,33 @@ function CalendarGrid({
             const freeStarts = new Set<number>()
             const hitStep = Math.max(30, stepMinutes)
             return (
-              <section className={css.column} key={`${column.resource.id}:${column.day}`} data-calendar-column="" data-resource-id={column.resource.id} data-day={column.day} data-grid-start={start} data-grid-span={span} aria-label={`${column.resource.name}, ${dateLabel(column.day, { day: 'numeric', month: 'long' })}`}>
+              <section
+                className={css.column}
+                key={`${column.resource.id}:${column.day}`}
+                data-calendar-column=""
+                data-resource-id={column.resource.id}
+                data-day={column.day}
+                data-grid-start={start}
+                data-grid-span={span}
+                data-drop={dropPreview && dropPreview.resourceId === column.resource.id && dropPreview.day === column.day ? 'true' : undefined}
+                aria-label={`${column.resource.name}, ${dateLabel(column.day, { day: 'numeric', month: 'long' })}`}
+                onDragOver={drag => {
+                  if (!onAssignDrop || ![...drag.dataTransfer.types].includes('text/plain')) return
+                  drag.preventDefault()
+                  drag.currentTarget.dataset.drop = 'true'
+                }}
+                onDragLeave={drag => { if (!dropPreview) delete drag.currentTarget.dataset.drop }}
+                onDrop={drag => {
+                  if (!dropPreview) delete drag.currentTarget.dataset.drop
+                  const text = drag.dataTransfer.getData('text/plain')
+                  const assign = /^dispatch-job\|(.+)$/.exec(text)
+                  if (!assign || !onAssignDrop) return
+                  drag.preventDefault()
+                  const target = locate(drag.clientX, drag.clientY, 16)
+                  if (!target) return
+                  onAssignDrop({ jobId: assign[1]!, resourceId: target.resourceId, day: target.day, time: calendarClock(target.start) })
+                }}
+              >
                 {ticks.slice(0, -1).map(time => <span aria-hidden className={css.line} key={time} style={{ top: `${(time - start) / span * 100}%` }} />)}
                 {workday && <div className={css.shiftOutline} data-calendar-shift aria-hidden style={position(workday.start, workday.end)} />}
                 {onCreate && day >= earliest.date && day <= latestDay && periods.flatMap(window => {
@@ -585,6 +625,11 @@ function CalendarGrid({
                   </button>
                   </span>
                 ))}
+                {dropPreview && dropPreview.resourceId === column.resource.id && dropPreview.day === column.day && (() => {
+                  const minutes = Number(dropPreview.time.slice(0, 2)) * 60 + Number(dropPreview.time.slice(3, 5))
+                  if (!Number.isFinite(minutes)) return null
+                  return <div className={css.visit} data-ghost="" style={position(minutes, minutes + 60)}><strong>{dropPreview.label}</strong><span className={css.visitTime}>{dropPreview.time}</span></div>
+                })()}
                 {ghost && ghost.resourceId === column.resource.id && ghost.day === column.day && (() => {
                   const source = data.events.find(item => item.id === ghost.id)
                   if (!source) return null

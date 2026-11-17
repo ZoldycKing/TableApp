@@ -28,6 +28,7 @@ export const bookingCountLabel = (count: number, forms: readonly [string, string
   return `${count} ${form}`
 }
 
+export type CalendarAssignDrop = { jobId: string; resourceId: string; day: string; time: string }
 export type BookingCalendarViewProps = {
   data: TeamCalendarSnapshot
   resourceId: string
@@ -37,6 +38,9 @@ export type BookingCalendarViewProps = {
   resourcesLabel?: string
   onOpenVisit: (id: string) => void
   onOpenPeriod?: (id: string) => void
+  onMove?: (eventId: string, slot: { resourceId: string; day: string; time: string }) => Promise<{ ok: boolean }>
+  onAssignDrop?: (slot: CalendarAssignDrop) => void
+  compactChips?: boolean
 }
 
 const dayName = (day: string) => bookingCalendarDateLabel(day, { weekday: 'long', day: 'numeric', month: 'long' })
@@ -105,13 +109,15 @@ export function usualBreakKey(data: TeamCalendarSnapshot, resourceId: string) {
 }
 
 function VisitCard({
-  event, person, editing, onOpenVisit, agenda = false,
+  event, person, editing, onOpenVisit, agenda = false, draggable = false, compact = false,
 }: {
   event: TeamCalendarEvent
   person: string
   editing: boolean
   onOpenVisit: (id: string) => void
   agenda?: boolean
+  draggable?: boolean
+  compact?: boolean
 }) {
   const status = event.statusLabel || bookingCalendarStatusNames[event.status]
   return (
@@ -119,8 +125,15 @@ function VisitCard({
       type="button"
       className={agenda ? css.agendaVisit : css.weekVisit}
       data-status={event.status || undefined}
+      data-compact={compact || undefined}
+      draggable={draggable || undefined}
       disabled={editing}
       aria-label={`Открыть запись: ${event.title}, ${person}, ${event.subtitle}, ${calendarClock(event.start)}–${calendarClock(event.end)}`}
+      onDragStart={drag => {
+        if (!draggable) return
+        drag.dataTransfer.setData('text/plain', `dispatch-move|${event.id}|${calendarClock(event.start)}`)
+        drag.dataTransfer.effectAllowed = 'move'
+      }}
       onClick={() => onOpenVisit(event.id)}
     >
       <span className={css.cardTime}>{calendarClock(event.start)}–{calendarClock(event.end)}</span>
@@ -145,6 +158,7 @@ function PersonMark() {
 /** Every person and every appointment stays visible; the row grows with its busiest day. */
 export function BookingWeekOverview({
   data, resourceId, editing, onOpenVisit, onOpenPeriod, onOpenDay, showWorkingHours = true, resourcesLabel = 'Сотрудники',
+  onMove, onAssignDrop, compactChips = false,
 }: BookingCalendarViewProps & { onOpenDay: (day: string) => void }) {
   const resources = data.resources.filter(item => !resourceId || item.id === resourceId)
   return (
@@ -159,6 +173,7 @@ export function BookingWeekOverview({
                 <button type="button" className={css.openDay} aria-label={`Открыть день: ${dayName(day)}`} onClick={() => onOpenDay(day)}>
                   <span>{bookingCalendarDateLabel(day, { weekday: 'short' })}</span>
                   <strong>{bookingCalendarDateLabel(day, { day: 'numeric', month: 'short' })}</strong>
+                  {compactChips ? <b>{data.events.filter(event => event.day === day && event.status !== 'cancelled' && (!resourceId || event.resourceId === resourceId)).length}</b> : null}
                 </button>
               </th>
             ))}
@@ -172,11 +187,29 @@ export function BookingWeekOverview({
                 const events = data.events.filter(event => event.resourceId === person.id && event.day === day && event.status !== 'cancelled')
                 return (
                   <td key={day}>
-                    <section className={css.weekCell} aria-label={`${person.name}, ${dayName(day)}`}>
+                    <section
+                      className={css.weekCell}
+                      aria-label={`${person.name}, ${dayName(day)}`}
+                      onDragOver={drag => {
+                        if (!onMove && !onAssignDrop) return
+                        if (![...drag.dataTransfer.types].includes('text/plain')) return
+                        drag.preventDefault()
+                        drag.currentTarget.dataset.drop = 'true'
+                      }}
+                      onDragLeave={drag => { delete drag.currentTarget.dataset.drop }}
+                      onDrop={drag => {
+                        delete drag.currentTarget.dataset.drop
+                        const text = drag.dataTransfer.getData('text/plain')
+                        const move = /^dispatch-move\|([^|]+)\|(\d{2}:\d{2})$/.exec(text)
+                        const assign = /^dispatch-job\|(.+)$/.exec(text)
+                        if (move && onMove) void onMove(move[1]!, { resourceId: person.id, day, time: move[2]! })
+                        if (assign && onAssignDrop) onAssignDrop({ jobId: assign[1]!, resourceId: person.id, day, time: '10:00' })
+                      }}
+                    >
                       {showWorkingHours && <ShiftInfo data={data} resourceId={person.id} day={day} editing={editing} onOpenPeriod={onOpenPeriod} />}
                       {events.length > 0 && (
                         <div className={css.weekVisits}>
-                          {events.map(event => <VisitCard key={event.id} event={event} person={person.name} editing={editing} onOpenVisit={onOpenVisit} />)}
+                          {events.map(event => <VisitCard key={event.id} event={event} person={person.name} editing={editing} onOpenVisit={onOpenVisit} draggable={Boolean(onMove) && !editing} compact={compactChips} />)}
                         </div>
                       )}
                     </section>

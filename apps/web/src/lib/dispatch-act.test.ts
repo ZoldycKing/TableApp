@@ -35,6 +35,10 @@ describe('work act pdf', () => {
       total: '4 200 ₽',
       photos: [{ bytes: png, mime: 'image/png' }],
       signature: { bytes: png, mime: 'image/png' },
+      signerName: 'Иванова Мария Петровна',
+      signerPosition: 'администратор',
+      signedAt: '17.11.2026 в 14:32',
+      noClaims: true,
     }, font)
     expect(Buffer.from(pdf.subarray(0, 5)).toString()).toBe('%PDF-')
     const doc = await PDFDocument.load(pdf)
@@ -43,5 +47,29 @@ describe('work act pdf', () => {
     expect(text).toContain('<0410>')
     expect(text).toContain('<0437>')
     expect(text).toContain('ToUnicode')
+  })
+
+  it('keeps refusal text without a signature image', async () => {
+    const pdf = await buildWorkActPdf({
+      client: 'Аптека «Здоровье»',
+      address: 'Москва, ул. Пятницкая, 18',
+      technician: 'Игорь Белов',
+      date: '17.11.2026',
+      actualTime: '38 мин',
+      checklist: [],
+      notes: 'Работы выполнены.',
+      works: [],
+      materials: [],
+      total: '0 ₽',
+      photos: [],
+      signature: null,
+      signerName: 'Иванова Мария Петровна',
+      signerPosition: 'администратор',
+      signedAt: '17.11.2026 в 14:32',
+      signatureRefused: true,
+      refusalReason: 'Уполномоченный сотрудник уже ушёл, подписать некому.',
+    }, font)
+    expect(Buffer.from(pdf.subarray(0, 5)).toString()).toBe('%PDF-')
+    expect(pdfText(pdf)).toContain('ToUnicode')
   })
 })

@@ -2,6 +2,7 @@ import { authorizeAppV2Write, type AppV2, type AppV2Actor, type AppV2Json, type 
 import { parseChecklist, recurrenceOccurrences, serializeChecklist, seriesEditIds, type RepeatRule } from './dispatch-stage2'
 
 export type DispatchApp = NonNullable<AppV2['dispatch']>
+export type CompletionMedia = { url: string; name: string; mime: string }
 
 /** Fields a technician or dispatcher may change while a visit is in progress. */
 export function progressValues(job: DispatchApp['job'], input: {
@@ -12,7 +13,7 @@ export function progressValues(job: DispatchApp['job'], input: {
   checklist?: string | null
 }): Record<string, AppV2Json> {
   const values: Record<string, AppV2Json> = {}
-  const put = (key: string | undefined, value: string | number | null | undefined) => {
+  const put = (key: string | undefined, value: string | number | boolean | null | undefined) => {
     if (!key || value == null || value === undefined) return
     values[key] = value
   }
@@ -21,6 +22,44 @@ export function progressValues(job: DispatchApp['job'], input: {
   put(job.doneAt, input.doneAt)
   put(job.actualMinutes, input.actualMinutes)
   put(job.checklist, input.checklist)
+  return values
+}
+
+/** Acceptance fields written when a job is closed with a signature or a refusal. */
+export function completionValues(job: DispatchApp['job'], input: {
+  report: string
+  photos: CompletionMedia[]
+  signature: CompletionMedia[]
+  status: string
+  signerName: string
+  signerPosition?: string
+  signedAt: string
+  noClaims: boolean
+  claims?: string
+  refused: boolean
+  refusalReason?: string
+  doneAt?: string | null
+  actualMinutes?: number | null
+}): Record<string, AppV2Json> {
+  const values: Record<string, AppV2Json> = {
+    [job.report]: input.report,
+    [job.photo]: input.photos,
+    [job.signature]: input.signature,
+    [job.status]: input.status,
+  }
+  const put = (key: string | undefined, value: string | number | boolean | null | undefined) => {
+    if (!key || value === undefined || value === null) return
+    values[key] = value
+  }
+  put(job.signerName, input.signerName)
+  put(job.signerPosition, input.signerPosition ?? '')
+  put(job.signedAt, input.signedAt)
+  put(job.noClaims, input.noClaims)
+  put(job.claims, input.noClaims ? '' : (input.claims ?? ''))
+  put(job.signatureRefused, input.refused)
+  put(job.refusalReason, input.refused ? (input.refusalReason ?? '') : '')
+  put(job.doneAt, input.doneAt)
+  put(job.actualMinutes, input.actualMinutes)
   return values
 }
 

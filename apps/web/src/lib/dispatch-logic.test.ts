@@ -71,18 +71,37 @@ describe('assignment, inactive technicians and the completion report', () => {
       report: '  Заменили насос и проверили давление. ',
       photos: [{ url: 'data:image/jpeg;base64,aaa', name: 'насос.jpg' }],
       signature, doneStatus: 'done', statusField: 'status', reportField: 'report', photoField: 'photo', signatureField: 'signature',
+      acceptance: { signerName: ' Иванова Мария Петровна ', signerPosition: 'администратор', signedAt: '2026-11-17T11:32:00.000Z', noClaims: true, refused: false },
+      signerNameField: 'signerName', signerPositionField: 'signerPosition', signedAtField: 'signedAt',
+      noClaimsField: 'noClaims', claimsField: 'claims', signatureRefusedField: 'refused', refusalReasonField: 'refusalReason',
     })
     expect(saved.ok).toBe(true)
     if (!saved.ok) return
     const stored = { id: 'job', ...saved.patch }
-    expect(readCompletion(stored, { report: 'report', photo: 'photo', signature: 'signature', status: 'status' })).toEqual({
+    expect(readCompletion(stored, { report: 'report', photo: 'photo', signature: 'signature', status: 'status', signerName: 'signerName', signerPosition: 'signerPosition', signedAt: 'signedAt', noClaims: 'noClaims', claims: 'claims', signatureRefused: 'refused', refusalReason: 'refusalReason' })).toEqual({
       status: 'done',
       report: 'Заменили насос и проверили давление.',
       photos: [{ url: 'data:image/jpeg;base64,aaa', name: 'насос.jpg', mime: 'image/jpeg' }],
       signature: [{ url: signature, name: 'Подпись клиента.png', mime: 'image/png' }],
+      signerName: 'Иванова Мария Петровна',
+      signerPosition: 'администратор',
+      signedAt: '2026-11-17T11:32:00.000Z',
+      noClaims: true,
+      claims: '',
+      signatureRefused: false,
+      refusalReason: '',
     })
     expect(completionPatch({ report: '   ', photos: [], signature, doneStatus: 'done', statusField: 'status', reportField: 'report', photoField: 'photo', signatureField: 'signature' }).ok).toBe(false)
     expect(completionPatch({ report: 'Сделано', photos: [], signature: '  ', doneStatus: 'done', statusField: 'status', reportField: 'report', photoField: 'photo', signatureField: 'signature' }).ok).toBe(false)
+    expect(completionPatch({
+      report: 'Сделано', photos: [], signature: null, doneStatus: 'done', statusField: 'status', reportField: 'report', photoField: 'photo', signatureField: 'signature',
+      acceptance: { signerName: 'Иванова', signedAt: '2026-11-17T11:32:00.000Z', noClaims: true, refused: true, refusalReason: '  Ушёл  ' },
+      signerNameField: 'signerName', signedAtField: 'signedAt', noClaimsField: 'noClaims', signatureRefusedField: 'refused', refusalReasonField: 'refusalReason',
+    })).toMatchObject({ ok: true, patch: { signature: [], refused: true, refusalReason: 'Ушёл' } })
+    expect(completionPatch({
+      report: 'Сделано', photos: [], signature: null, doneStatus: 'done', statusField: 'status', reportField: 'report', photoField: 'photo', signatureField: 'signature',
+      acceptance: { signerName: 'Иванова', signedAt: '2026-11-17T11:32:00.000Z', noClaims: false, claims: '', refused: false },
+    }).ok).toBe(false)
     expect(noteDraft({ text: '  Позвонить за 20 минут ', author: 'Диспетчер', authorEmail: 'dispatcher@example.invalid', at: '2026-11-17T08:00:00.000Z', jobId: 'job', masterEmail: 'sergey@example.invalid' }).ok).toBe(true)
   })
 })

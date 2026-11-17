@@ -6,7 +6,7 @@ import type { Attachment } from '@tableapp/schema'
 import type { BuilderV2Table } from '@/lib/builder-v2'
 import {
   DISPATCH_TIME_ZONE, activeTechnicians, assignmentPatch, completionPatch, isOverdue, isUnassigned,
-  keepCalendarResource, matchesCounter, noteDraft, priorityRank, reassignedNotes, sortJobs, technicianGroup, technicianIdOf,
+  keepCalendarResource, matchesCounter, noteDraft, priorityRank, reassignedNotes, signedAtLabel, sortJobs, technicianGroup, technicianIdOf,
   type DispatchCounter, type DispatchJobFacts,
 } from '@/lib/dispatch-logic'
 import {
@@ -42,7 +42,7 @@ export type DispatchBundle = {
   setRows?: (rows: AppV2Record[]) => void
   boardView?: 'day' | 'week' | 'list'
   dropPreview?: boolean
-  open?: 'complete' | 'repeat' | null
+  open?: 'complete' | 'complete-claims' | 'complete-refuse' | 'repeat' | null
 }
 export const DispatchRowsContext = createContext<DispatchBundle | null>(null)
 
@@ -172,6 +172,45 @@ function jobFacts(props: ScreenProps, row: AppV2Record): DispatchJobFacts {
 const clientLabel = (props: ScreenProps, row: AppV2Record) => textOf(row.values[props.dispatch.job.clientName]) || relatedName(props.rows, props.tables, row.values[props.dispatch.job.client])
 const addressOf = (props: ScreenProps, row: AppV2Record) => textOf(props.dispatch.job.site ? row.values[props.dispatch.job.site] : '') || textOf(row.values[props.dispatch.job.address])
 const phoneOf = (props: ScreenProps, row: AppV2Record) => textOf(row.values[props.dispatch.job.phone])
+const clientContactOf = (props: ScreenProps, row: AppV2Record) => {
+  const contactField = props.dispatch.client.contact
+  if (!contactField) return ''
+  const raw = row.values[props.dispatch.job.client]
+  const ids = Array.isArray(raw) ? raw.filter((item): item is string => typeof item === 'string') : []
+  for (const id of ids) {
+    const client = props.rows.find(item => item.id === id)
+    const name = client ? textOf(client.values[contactField]) : ''
+    if (name) return name
+  }
+  return ''
+}
+const acceptanceSummary = (props: ScreenProps, row: AppV2Record) => {
+  const job = props.dispatch.job
+  const signerName = textOf(read(row, job.signerName))
+  const signerPosition = textOf(read(row, job.signerPosition))
+  const signedAt = signedAtLabel(read(row, job.signedAt))
+  const refused = Boolean(read(row, job.signatureRefused))
+  const noClaims = read(row, job.noClaims)
+  const claims = textOf(read(row, job.claims))
+  const refusalReason = textOf(read(row, job.refusalReason))
+  if (!signerName && !refused && !signedAt) return null
+  const accepted = signerName
+    ? (signerPosition ? `Работу принял: ${signerName}, ${signerPosition}` : `Работу принял: ${signerName}`)
+    : null
+  const claimsText = refused
+    ? `Клиент отказался от подписи: ${refusalReason || 'причина не указана'}`
+    : noClaims === false
+      ? `Претензии: ${claims || 'не указаны'}`
+      : 'Работы выполнены в полном объёме, претензий нет'
+  const master = textOf(row.values[job.master])
+  return {
+    accepted,
+    signedAt: signedAt ? `Подписано ${signedAt}` : null,
+    claimsText,
+    executor: master ? `Исполнитель: Мастер ${master}` : null,
+    refused,
+  }
+}
 const useNow = (active: boolean) => {
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
@@ -464,7 +503,7 @@ function JobCard(props: ScreenProps) {
   const row = props.rows.find(item => item.id === props.record?.id) ?? props.record
   const [note, setNote] = useState('')
   const [error, setError] = useState('')
-  const [complete, setComplete] = useState(demo?.open === 'complete')
+  const [complete, setComplete] = useState(demo?.open === 'complete' || demo?.open === 'complete-claims' || demo?.open === 'complete-refuse')
   const [repeat, setRepeat] = useState(demo?.open === 'repeat')
   const [fixOpen, setFixOpen] = useState(false)
   const [minutesDraft, setMinutesDraft] = useState('')
@@ -568,13 +607,23 @@ function JobCard(props: ScreenProps) {
             </div>
           </DetailSection> : null}
           <DetailSection title="Отчёт о выполнении">
-            {report || signature ? <div className={css.report}>
+            {report || signature || acceptanceSummary(props, row) ? <div className={css.report}>
               {report ? <p>{report}</p> : <p className={css.empty}>Описание работы ещё не сохранено.</p>}
               {photos.length ? <div className={css.photos}>{photos.map((photo, index) => {
                 const url = mediaUrl([photo])
                 return url ? <img key={index} src={url} alt="Фото с выезда" /> : null
               })}</div> : null}
-              {signature ? <img className={css.signImage} src={signature} alt="Подпись клиента" /> : null}
+              {(() => {
+                const acceptance = acceptanceSummary(props, row)
+                if (!acceptance) return signature ? <img className={css.signImage} src={signature} alt="Подпись клиента" /> : null
+                return <div className={css.acceptance} data-acceptance>
+                  {acceptance.accepted ? <p>{acceptance.accepted}</p> : null}
+                  {!acceptance.refused && signature ? <img className={css.signImage} src={signature} alt="Подпись клиента" /> : null}
+                  {acceptance.signedAt ? <p>{acceptance.signedAt}</p> : null}
+                  <p>{acceptance.claimsText}</p>
+                  {acceptance.executor ? <p>{acceptance.executor}</p> : null}
+                </div>
+              })()}
             </div> : <p className={css.empty}>Отчёт появится, когда мастер закроет заявку.</p>}
           </DetailSection>
         </aside>
@@ -612,11 +661,20 @@ async function downloadAct(props: ScreenProps, row: AppV2Record, checklist: Chec
   const font = new Uint8Array(await (await fetch('/template-media/dispatch/NotoSans-Regular.ttf')).arrayBuffer())
   const stored = row.values[props.dispatch.job.photo]
   const photos = (await Promise.all((Array.isArray(stored) ? stored : []).map(item => imageFrom(mediaUrl([item]))))).filter((item): item is ActImage => item !== null)
+  const job = props.dispatch.job
+  const refused = Boolean(read(row, job.signatureRefused))
   const pdf = await buildWorkActPdf({
-    client: clientLabel(props, row), address: addressOf(props, row), technician: textOf(row.values[props.dispatch.job.master]),
-    date: whenLabel(row.values[props.dispatch.job.when]).split(',')[0] ?? '', number: row.id.replace(/[^a-z0-9]/gi, '').slice(-4).toUpperCase(), company: 'Сервис «Мастерская»', actualTime: minutes == null ? '' : formatDuration(minutes),
-    checklist, notes: textOf(row.values[props.dispatch.job.report]), works, materials, total, photos,
-    signature: await imageFrom(mediaUrl(row.values[props.dispatch.job.signature])),
+    client: clientLabel(props, row), address: addressOf(props, row), technician: textOf(row.values[job.master]),
+    date: whenLabel(row.values[job.when]).split(',')[0] ?? '', number: row.id.replace(/[^a-z0-9]/gi, '').slice(-4).toUpperCase(), company: 'Сервис «Мастерская»', actualTime: minutes == null ? '' : formatDuration(minutes),
+    checklist, notes: textOf(row.values[job.report]), works, materials, total, photos,
+    signature: refused ? null : await imageFrom(mediaUrl(row.values[job.signature])),
+    signerName: textOf(read(row, job.signerName)),
+    signerPosition: textOf(read(row, job.signerPosition)),
+    signedAt: signedAtLabel(read(row, job.signedAt) || read(row, job.doneAt)),
+    noClaims: read(row, job.noClaims) !== false,
+    claims: textOf(read(row, job.claims)),
+    signatureRefused: refused,
+    refusalReason: textOf(read(row, job.refusalReason)),
   }, font)
   const link = document.createElement('a')
   const bytes = new Uint8Array(pdf.byteLength)
@@ -636,29 +694,52 @@ function dataUrlToFile(dataUrl: string, name: string) {
 
 function CompleteDialog(props: ScreenProps & { row: AppV2Record; checklist: ChecklistItem[]; onClose: () => void }) {
   const formId = useId()
+  const demo = useContext(DispatchRowsContext)
   const published = usePublishedV2()
-  const [report, setReport] = useState(textOf(props.row.values[props.dispatch.job.report]))
-  const [signature, setSignature] = useState<string | null>(mediaUrl(props.row.values[props.dispatch.job.signature]))
+  const job = props.dispatch.job
+  const prefills = clientContactOf(props, props.row)
+  const demoOpen = demo?.open === 'complete' || demo?.open === 'complete-claims' || demo?.open === 'complete-refuse'
+  const alreadySigned = Boolean(textOf(read(props.row, job.signerName)) || mediaUrl(props.row.values[job.signature]))
+  const [report, setReport] = useState(textOf(props.row.values[job.report]) || (demoOpen ? 'Заменили насос, проверили давление в контуре.' : ''))
+  const [signature, setSignature] = useState<string | null>(mediaUrl(props.row.values[job.signature]))
   const [photos, setPhotos] = useState<{ url: string; name: string }[]>([])
   const [files, setFiles] = useState<File[]>([])
+  const [signerName, setSignerName] = useState(textOf(read(props.row, job.signerName)) || prefills)
+  const [signerPosition, setSignerPosition] = useState(textOf(read(props.row, job.signerPosition)) || (demoOpen ? 'директор' : ''))
+  const [noClaims, setNoClaims] = useState(() => {
+    if (demo?.open === 'complete-claims') return false
+    if (alreadySigned && typeof read(props.row, job.noClaims) === 'boolean') return Boolean(read(props.row, job.noClaims))
+    return true
+  })
+  const [claims, setClaims] = useState(demo?.open === 'complete-claims' ? 'На корпусе остались царапины от старых креплений.' : textOf(read(props.row, job.claims)))
+  const [refused, setRefused] = useState(demo?.open === 'complete-refuse')
+  const [refusalReason, setRefusalReason] = useState(demo?.open === 'complete-refuse' ? 'Уполномоченный сотрудник уже ушёл, подписать некому.' : textOf(read(props.row, job.refusalReason)))
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const warning = completionChecklistWarning(props.checklist)
+  const acceptance = {
+    signerName, signerPosition, signedAt: new Date().toISOString(),
+    noClaims, claims, refused, refusalReason,
+  }
   const save = async () => {
-    const stopped = stopVisit(textOf(read(props.row, props.dispatch.job.onSiteAt)), Date.now())
-    const kept = read(props.row, props.dispatch.job.actualMinutes)
+    const stopped = stopVisit(textOf(read(props.row, job.onSiteAt)), Date.now())
+    const kept = read(props.row, job.actualMinutes)
     const storedMinutes = typeof kept === 'number' ? kept : null
     const timer = { ...stopped, actualMinutes: storedMinutes ?? stopped.actualMinutes }
+    const signedAt = timer.doneAt || new Date().toISOString()
     const result = completionPatch({
-      report, photos, signature, doneStatus: props.dispatch.statuses.done,
-      statusField: props.dispatch.job.status, reportField: props.dispatch.job.report,
-      photoField: props.dispatch.job.photo, signatureField: props.dispatch.job.signature,
+      report, photos, signature: refused ? null : signature, doneStatus: props.dispatch.statuses.done,
+      statusField: job.status, reportField: job.report, photoField: job.photo, signatureField: job.signature,
+      acceptance: { ...acceptance, signedAt },
+      signerNameField: job.signerName, signerPositionField: job.signerPosition, signedAtField: job.signedAt,
+      noClaimsField: job.noClaims, claimsField: job.claims,
+      signatureRefusedField: job.signatureRefused, refusalReasonField: job.refusalReason,
     })
     if (!result.ok) { setError(result.error); return }
     if (props.replace) {
       const extra: Record<string, unknown> = {}
-      if (props.dispatch.job.doneAt) extra[props.dispatch.job.doneAt] = timer.doneAt
-      if (props.dispatch.job.actualMinutes) extra[props.dispatch.job.actualMinutes] = timer.actualMinutes
+      if (job.doneAt) extra[job.doneAt] = timer.doneAt
+      if (job.actualMinutes) extra[job.actualMinutes] = timer.actualMinutes
       props.replace(props.rows.map(row => row.id === props.row.id ? { ...row, values: { ...row.values, ...result.patch, ...extra } } : row) as AppV2Record[])
       props.onClose()
       return
@@ -683,23 +764,36 @@ function CompleteDialog(props: ScreenProps & { row: AppV2Record; checklist: Chec
         if (!response.ok || !payload.ok || !payload.attachment) throw new Error(payload.error || 'Не удалось загрузить файл')
         return payload.attachment
       }
-      const storedPhotos = await Promise.all(files.map(file => upload(props.dispatch.job.photo, file)))
-      const signatureFile = signature?.startsWith('data:') ? dataUrlToFile(signature, 'Подпись клиента.png') : null
-      const storedSignature = signatureFile ? [await upload(props.dispatch.job.signature, signatureFile)] : []
+      const storedPhotos = await Promise.all(files.map(file => upload(job.photo, file)))
+      const signatureFile = !refused && signature?.startsWith('data:') ? dataUrlToFile(signature, 'Подпись клиента.png') : null
+      const storedSignature = signatureFile ? [await upload(job.signature, signatureFile)] : []
+      const values: Record<string, AppV2Json> = {
+        [job.report]: report.trim(),
+        [job.photo]: storedPhotos,
+        [job.signature]: storedSignature,
+        [job.status]: props.dispatch.statuses.done,
+      }
+      if (job.signerName) values[job.signerName] = signerName.trim()
+      if (job.signerPosition) values[job.signerPosition] = signerPosition.trim()
+      if (job.signedAt) values[job.signedAt] = signedAt
+      if (job.noClaims) values[job.noClaims] = noClaims
+      if (job.claims) values[job.claims] = noClaims ? '' : claims.trim()
+      if (job.signatureRefused) values[job.signatureRefused] = refused
+      if (job.refusalReason) values[job.refusalReason] = refused ? refusalReason.trim() : ''
       const saved = await published.submitForm({
         formId: props.dispatch.completeFormId, screenId: props.screenId, recordId: props.row.id,
         requestId: `submit_${crypto.randomUUID().replaceAll('-', '')}`, revision: state.revision, fingerprint: state.fingerprint,
-        values: { [props.dispatch.job.report]: report, [props.dispatch.job.photo]: storedPhotos, [props.dispatch.job.signature]: storedSignature },
+        values,
       })
       if (!saved.ok) { setError('error' in saved ? String(saved.error) : 'Не удалось сохранить отчёт.'); return }
-      if (props.dispatch.progressFormId && props.dispatch.job.doneAt && props.dispatch.job.actualMinutes) {
+      if (props.dispatch.progressFormId && job.doneAt && job.actualMinutes) {
         const progress = await published.inspectForm({ mode: 'initial', formId: props.dispatch.progressFormId, screenId: props.screenId, recordId: props.row.id })
         if (progress.ok && 'state' in progress && 'revision' in progress.state && typeof progress.state.revision === 'string') {
           const progressRevision = progress.state.revision
           await published.submitForm({
             formId: props.dispatch.progressFormId, screenId: props.screenId, recordId: props.row.id,
             requestId: `submit_${crypto.randomUUID().replaceAll('-', '')}`, revision: progressRevision, fingerprint: progress.state.fingerprint,
-            values: { [props.dispatch.job.doneAt]: timer.doneAt, [props.dispatch.job.actualMinutes]: timer.actualMinutes },
+            values: { [job.doneAt]: timer.doneAt, [job.actualMinutes]: timer.actualMinutes },
           })
         }
       }
@@ -709,10 +803,19 @@ function CompleteDialog(props: ScreenProps & { row: AppV2Record; checklist: Chec
       setError(cause instanceof Error ? cause.message : 'Не удалось сохранить отчёт.')
     } finally { setBusy(false) }
   }
-  return <AppDialog title="Отчёт о выполнении" placement="center" onClose={props.onClose} footer={<button type="submit" form={formId} className={buttons.primary} disabled={busy}>Завершить заявку</button>}>
-    <form id={formId} className={css.form} onSubmit={event => { event.preventDefault(); void save() }}>
+  const footer = <div className={css.footerRow}>
+    {!refused ? <button type="button" className={buttons.secondary} disabled={busy} onClick={() => { setRefused(true); setError('') }}>Клиент отказался от подписи</button> : <button type="button" className={buttons.secondary} disabled={busy} onClick={() => { setRefused(false); setRefusalReason(''); setError('') }}>Нужна подпись</button>}
+    <button type="submit" form={formId} className={buttons.primary} disabled={busy}>{refused ? 'Завершить без подписи' : 'Завершить заявку'}</button>
+  </div>
+  return <AppDialog title={refused ? 'Отказ от подписи' : 'Отчёт о выполнении'} placement="center" onClose={props.onClose} footer={footer}>
+    <form id={formId} className={css.form} data-complete-form onSubmit={event => { event.preventDefault(); void save() }}>
       {warning ? <p className={css.warn} role="status">{warning}</p> : null}
-      <label>Что сделано<textarea value={report} onChange={event => setReport(event.target.value)} required /></label>
+      <label>Что сделано<textarea value={report} onChange={event => setReport(event.target.value)} required rows={3} /></label>
+      <label>ФИО принявшего<input value={signerName} onChange={event => setSignerName(event.target.value)} required aria-required="true" /></label>
+      <label>Должность<input value={signerPosition} onChange={event => setSignerPosition(event.target.value)} placeholder="Необязательно" /></label>
+      <div data-no-claims><CheckControl checked={noClaims} label="Работы выполнены в полном объёме, претензий нет" onToggle={() => setNoClaims(value => !value)} /></div>
+      {!noClaims ? <label data-claims>Претензии<textarea value={claims} onChange={event => setClaims(event.target.value)} required aria-required="true" rows={3} /></label> : null}
+      {refused ? <label data-refusal>Причина отказа<textarea value={refusalReason} onChange={event => setRefusalReason(event.target.value)} required aria-required="true" rows={3} /></label> : <SignaturePad onChange={setSignature} />}
       <label className={css.filePick}>Фото с выезда<input className={css.fileInput} type="file" accept="image/jpeg,image/png,image/webp" multiple aria-label="Добавить фото" onChange={event => {
         const chosen = [...event.target.files ?? []]
         setFiles(chosen)
@@ -722,7 +825,6 @@ function CompleteDialog(props: ScreenProps & { row: AppV2Record; checklist: Chec
           reader.readAsDataURL(file)
         }))).then(setPhotos)
       }} /><span><CameraIcon size={22} aria-hidden="true" />{photos.length ? `Выбрано фото: ${photos.length}` : 'Добавить фото'}</span></label>
-      <SignaturePad onChange={setSignature} />
       {error ? <p className={css.error} role="alert">{error}</p> : null}
     </form>
   </AppDialog>
@@ -813,6 +915,7 @@ function ClientList(props: ScreenProps) {
     <ListScreenShell title="Клиенты" meta="Телефон и адрес подставляются в заявку">
       <ul className={css.list}>{clients.map(row => <li key={row.id}><button type="button" className={css.job} onClick={() => props.onNavigate?.(props.dispatch.clientScreenId, row.id)}>
         <strong>{textOf(row.values[props.dispatch.client.name])}</strong>
+        <span className={css.meta}>{textOf(props.dispatch.client.contact ? row.values[props.dispatch.client.contact] : '') || 'Контакт не указан'}</span>
         <span className={css.meta}>{textOf(row.values[props.dispatch.client.address])}</span>
         <span className={css.meta}>{textOf(row.values[props.dispatch.client.phone])}</span>
       </button></li>)}</ul>
@@ -832,6 +935,7 @@ function ClientCard(props: ScreenProps) {
     <DetailCardShell title={textOf(row.values[props.dispatch.client.name])} subtitle={address} back={{ label: 'Клиенты', onClick: () => props.onNavigate?.(props.dispatch.clientsScreenId) }} actions={<button type="button" className={buttons.primary} onClick={() => setOpen(true)}>Новая заявка</button>}>
       <DetailSection title="Контакты">
         <dl className={css.facts}>
+          <div><dt>Контактное лицо</dt><dd>{textOf(props.dispatch.client.contact ? row.values[props.dispatch.client.contact] : '') || 'Не указано'}</dd></div>
           <div><dt>Телефон</dt><dd>{phoneLink ? <a className={css.tap} href={phoneLink}><ProtoIcon name="call" size={16} /><span>{phone}</span></a> : 'Не указан'}</dd></div>
           <div><dt>Адрес</dt><dd>{address ? <a className={css.tap} href={`https://yandex.ru/maps/?text=${encodeURIComponent(address)}`} target="_blank" rel="noreferrer"><ProtoIcon name="mapPin" size={16} /><span>{address}</span></a> : 'Не указан'}</dd></div>
           <div><dt>Заметки</dt><dd>{textOf(row.values[props.dispatch.client.note]) || 'Нет заметок'}</dd></div>

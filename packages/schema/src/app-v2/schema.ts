@@ -211,8 +211,12 @@ export const appV2Schema = z.strictObject({
       onSiteAt: id.optional(), doneAt: id.optional(), actualMinutes: id.optional(),
       seriesId: id.optional(), repeat: id.optional(), repeatUntil: id.optional(), repeatCount: id.optional(),
       works: id.optional(), materials: id.optional(),
+      /** Acceptance / signature details. Absent on older installs. */
+      signerName: id.optional(), signerPosition: id.optional(), signedAt: id.optional(),
+      noClaims: id.optional(), claims: id.optional(),
+      signatureRefused: id.optional(), refusalReason: id.optional(),
     }),
-    client: z.strictObject({ name: id, phone: id, address: id, note: id }),
+    client: z.strictObject({ name: id, phone: id, address: id, note: id, contact: id.optional() }),
     master: z.strictObject({ name: id, email: id, phone: id, photo: id, active: id }),
     note: z.strictObject({ text: id, job: id, at: id, author: id, authorEmail: id, masterEmail: id }),
     statuses: z.strictObject({ fresh: id, assigned: id, enRoute: id, onSite: id, done: id, cancelled: id }),

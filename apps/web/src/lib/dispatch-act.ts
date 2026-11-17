@@ -20,6 +20,15 @@ export type WorkActInput = {
   total: string
   photos: readonly ActImage[]
   signature: ActImage | null
+  /** Who accepted the work. Falls back to the client name when empty. */
+  signerName?: string
+  signerPosition?: string
+  /** «17.11.2026 в 14:32» */
+  signedAt?: string
+  noClaims?: boolean
+  claims?: string
+  signatureRefused?: boolean
+  refusalReason?: string
 }
 
 const ink = rgb(0.145, 0.235, 0.176)
@@ -44,6 +53,18 @@ function wrap(font: PDFFont, text: string, size: number, width: number): string[
   return lines
 }
 
+function acceptedByLine(input: WorkActInput): string {
+  const name = input.signerName?.trim() || input.client.trim() || 'Клиент'
+  const position = input.signerPosition?.trim()
+  return position ? `Работу принял: ${name}, ${position}` : `Работу принял: ${name}`
+}
+
+function claimsLine(input: WorkActInput): string {
+  if (input.signatureRefused) return `Клиент отказался от подписи: ${input.refusalReason?.trim() || 'причина не указана'}`
+  if (input.noClaims === false) return `Претензии: ${input.claims?.trim() || 'не указаны'}`
+  return 'Работы выполнены в полном объёме, претензий нет'
+}
+
 /** «Акт выполненных работ» as a one-page PDF. Cyrillic is drawn with the embedded font. */
 export async function buildWorkActPdf(input: WorkActInput, fontBytes: Uint8Array): Promise<Uint8Array> {
   const doc = await PDFDocument.create()
@@ -59,6 +80,13 @@ export async function buildWorkActPdf(input: WorkActInput, fontBytes: Uint8Array
   }
   const rule = (top: number) => {
     page.drawLine({ start: { x: margin, y: top }, end: { x: margin + width, y: top }, thickness: 0.6, color: line })
+  }
+  const paragraph = (value: string, size = 10, color = ink) => {
+    const rows = wrap(font, value, size, width)
+    for (const row of rows.length ? rows : ['—']) {
+      text(row, margin, y, size, color)
+      y -= size + 4
+    }
   }
 
   text('Акт выполненных работ', margin, y, 18)
@@ -133,7 +161,7 @@ export async function buildWorkActPdf(input: WorkActInput, fontBytes: Uint8Array
     y -= 14
   }
 
-  if (input.photos.length && y > 150) {
+  if (input.photos.length && y > 180) {
     const drawn: { image: Awaited<ReturnType<PDFDocument['embedPng']>>; }[] = []
     for (const photo of input.photos.slice(0, 4)) {
       try {
@@ -155,18 +183,22 @@ export async function buildWorkActPdf(input: WorkActInput, fontBytes: Uint8Array
     }
   }
 
-  if (y > 110) {
-    section('Подпись клиента')
-    text(input.client || 'Клиент', margin, y, 10)
-    y -= 14
-    if (input.signature) {
+  if (y > 130) {
+    section('Приёмка работ')
+    paragraph(acceptedByLine(input), 10)
+    if (!input.signatureRefused && input.signature) {
       try {
         const image = input.signature.mime === 'image/png' ? await doc.embedPng(input.signature.bytes) : await doc.embedJpg(input.signature.bytes)
         page.drawImage(image, { x: margin, y: y - 48, width: 180, height: 48 })
+        y -= 56
       } catch {
-        text('Подпись сохранена отдельным файлом', margin, y, 10, muted)
+        paragraph('Подпись сохранена отдельным файлом', 10, muted)
       }
-    } else text('Подпись не приложена', margin, y, 10, muted)
+    }
+    if (input.signedAt?.trim()) paragraph(`Подписано ${input.signedAt.trim()}`, 10)
+    paragraph(claimsLine(input), 10)
+    const technician = input.technician.trim()
+    paragraph(technician ? `Исполнитель: Мастер ${technician}` : 'Исполнитель: не назначен', 10)
   }
 
   return doc.save()

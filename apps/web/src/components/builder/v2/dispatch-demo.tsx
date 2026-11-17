@@ -56,7 +56,7 @@ export function DispatchDemo({ phone = false, view = 'overview', bare = false }:
   const [rows, setRows] = useState<AppV2Record[]>([])
   const [boardView, setBoardView] = useState<'day' | 'week' | 'list' | undefined>()
   const [dropPreview, setDropPreview] = useState(false)
-  const [open, setOpen] = useState<'complete' | 'repeat' | null>(null)
+  const [open, setOpen] = useState<'complete' | 'complete-claims' | 'complete-refuse' | 'repeat' | null>(null)
   const [mobile, setMobile] = useState(phone)
   useEffect(() => { setModel(dispatchTemplateDemoModel()) }, [])
   useEffect(() => {
@@ -68,6 +68,8 @@ export function DispatchDemo({ phone = false, view = 'overview', bare = false }:
     const goal = view === 'technician' ? { role: 'staff' as const, screenId: dispatch.technicianScreenId, recordId: undefined, selected: 'technician', boardView: undefined, dropPreview: false, open: null }
       : view === 'tech-job' || view === 'checklist' ? { role: 'staff' as const, screenId: dispatch.jobScreenId, recordId: jobByName('Замена циркуляционного насоса')?.id, selected: 'technician', boardView: undefined, dropPreview: false, open: null }
       : view === 'complete' ? { role: 'staff' as const, screenId: dispatch.jobScreenId, recordId: jobByName('Замена циркуляционного насоса')?.id, selected: 'technician', boardView: undefined, dropPreview: false, open: 'complete' as const }
+      : view === 'complete-claims' ? { role: 'staff' as const, screenId: dispatch.jobScreenId, recordId: jobByName('Замена циркуляционного насоса')?.id, selected: 'technician', boardView: undefined, dropPreview: false, open: 'complete-claims' as const }
+      : view === 'complete-refuse' ? { role: 'staff' as const, screenId: dispatch.jobScreenId, recordId: jobByName('Замена циркуляционного насоса')?.id, selected: 'technician', boardView: undefined, dropPreview: false, open: 'complete-refuse' as const }
       : view === 'recurring' ? { role: 'owner' as const, screenId: dispatch.jobScreenId, recordId: series?.id, selected: 'job', boardView: undefined, dropPreview: false, open: 'repeat' as const }
       : view === 'job' ? { role: 'owner' as const, screenId: dispatch.jobScreenId, recordId: jobByName('Замена ламп в витрине')?.id, selected: 'job', boardView: undefined, dropPreview: false, open: null }
       : view === 'client' ? { role: 'owner' as const, screenId: dispatch.clientScreenId, recordId: model.rows.find(row => row.values[dispatch.client.name] === 'Кафе «Огонёк»')?.id, selected: 'client', boardView: undefined, dropPreview: false, open: null }

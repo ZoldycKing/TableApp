@@ -31,3 +31,8 @@ Desktop.ini
 # Local browser checks and screenshots
 /.playwright-cli/
 /output/playwright/
+
+# local agent/tooling artifacts
+.tmp/
+.taste-skill/
+output/

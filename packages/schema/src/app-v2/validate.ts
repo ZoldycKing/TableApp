@@ -439,6 +439,30 @@ export function validateAppV2(app: AppV2, catalog: AppV2Catalog, options: { mode
     const calendar = nodes.get(dispatch.calendarNodeId)
     if (calendar?.type !== 'team_calendar') issue('dispatch_calendar', path, 'Доска дня должна быть календарём команды')
   }
+  if (app.projects) {
+    const projects = app.projects, path = 'projects'
+    table(projects.projectsTableId, path); table(projects.tasksTableId, path); table(projects.peopleTableId, path)
+    table(projects.clientsTableId, path); table(projects.commentsTableId, path); table(projects.eventsTableId, path)
+    const group = (tableId: string, values: Record<string, string | undefined>) => {
+      for (const fieldId of Object.values(values)) if (fieldId) field(fieldId, tableId, path)
+    }
+    group(projects.projectsTableId, projects.project)
+    group(projects.tasksTableId, projects.task)
+    group(projects.peopleTableId, projects.person)
+    group(projects.clientsTableId, projects.client)
+    group(projects.commentsTableId, projects.comment)
+    group(projects.eventsTableId, projects.event)
+    const client = field(projects.project.client, projects.projectsTableId, path)
+    if (client && client.relationTableId && client.relationTableId !== projects.clientsTableId) issue('projects_client', path, 'Проект должен ссылаться на клиентов')
+    const owner = field(projects.project.owner, projects.projectsTableId, path)
+    if (owner && owner.relationTableId && owner.relationTableId !== projects.peopleTableId) issue('projects_owner', path, 'Ответственный должен ссылаться на сотрудников')
+    const taskProject = field(projects.task.project, projects.tasksTableId, path)
+    if (taskProject && taskProject.relationTableId && taskProject.relationTableId !== projects.projectsTableId) issue('projects_task', path, 'Задача должна ссылаться на проект')
+    const assignee = field(projects.task.assignee, projects.tasksTableId, path)
+    if (assignee && assignee.relationTableId && assignee.relationTableId !== projects.peopleTableId) issue('projects_assignee', path, 'Исполнитель должен ссылаться на сотрудников')
+    for (const screenId of [projects.mineScreenId, projects.boardScreenId, projects.projectsScreenId, projects.projectScreenId, projects.taskScreenId, projects.peopleScreenId, projects.clientsScreenId]) if (!screens.has(screenId)) issue('projects_screen', path, 'Экран проектов удалён')
+    for (const formId of [projects.createTaskFormId, projects.editTaskFormId, projects.createProjectFormId, projects.editProjectFormId, projects.commentFormId]) if (nodes.get(formId)?.type !== 'form') issue('projects_form', path, 'Форма проектов удалена')
+  }
   if (app.shop) {
     const shop = app.shop, path = 'shop'
     table(shop.catalogTableId, path); table(shop.ordersTableId, path); table(shop.itemsTableId, path)

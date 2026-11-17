@@ -172,6 +172,28 @@ export const appV2Schema = z.strictObject({
     initialStage: z.string().min(1).max(80),
     terminalStages: z.array(z.string().min(1).max(80)).max(20).optional(),
   }).optional(),
+  /** Projects and tasks starter. Absent outside that install. */
+  projects: z.strictObject({
+    projectsTableId: id, tasksTableId: id, peopleTableId: id, clientsTableId: id, commentsTableId: id, eventsTableId: id,
+    mineScreenId: id, boardScreenId: id, projectsScreenId: id, projectScreenId: id, taskScreenId: id, peopleScreenId: id, clientsScreenId: id,
+    createTaskFormId: id, editTaskFormId: id, createProjectFormId: id, editProjectFormId: id, commentFormId: id,
+    project: z.strictObject({
+      title: id, client: id, owner: id, start: id, due: id, budget: id, status: id, progress: id,
+    }),
+    task: z.strictObject({
+      title: id, project: id, assignee: id, assigneeEmail: id, due: id, priority: id, status: id,
+      description: id, checklist: id, files: id, sort: id,
+    }),
+    person: z.strictObject({ name: id, email: id, phone: id, photo: id, role: id, active: id }),
+    client: z.strictObject({ name: id, phone: id, email: id, note: id }),
+    comment: z.strictObject({ text: id, task: id, project: id, at: id, author: id, authorEmail: id, assigneeEmail: id }),
+    event: z.strictObject({ text: id, project: id, task: id, at: id, kind: id, author: id, authorEmail: id, assigneeEmail: id }),
+    statuses: z.strictObject({ todo: id, doing: id, review: id, done: id }),
+    priorities: z.strictObject({ low: id, medium: id, high: id, urgent: id }),
+    projectStatuses: z.strictObject({ draft: id, active: id, paused: id, done: id, cancelled: id }),
+    eventKinds: z.strictObject({ created: id, status: id, comment: id }),
+    activeChoiceId: id,
+  }).optional(),
   /** Field-service starter: dispatcher board, technician jobs, notes and completion. Absent outside that install. */
   dispatch: z.strictObject({
     jobsTableId: id, clientsTableId: id, mastersTableId: id, notesTableId: id,

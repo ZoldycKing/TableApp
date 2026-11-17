@@ -62,11 +62,11 @@ function CheckControl({ checked, label, onToggle }: { checked: boolean; label: s
   return <button type="button" role="checkbox" aria-checked={checked} className={css.check} onClick={onToggle}><span data-on={checked || undefined}>{checked ? <ProtoIcon name="check" size={12} /> : null}</span><span>{label}</span></button>
 }
 
-function nextStep(status: string) {
-  if (status === 'К работе') return { label: 'Взять в работу', name: 'В работе' }
-  if (status === 'В работе') return { label: 'На проверку', name: 'На проверке' }
-  if (status === 'На проверке') return { label: 'Готово', name: 'Готово' }
-  return null
+function statusChipLabel(status: string) {
+  if (status === 'К работе') return '→ В работу'
+  if (status === 'В работе') return '→ Проверку'
+  if (status === 'На проверке') return '→ Готово'
+  return '⋯'
 }
 
 function openTasksLabel(count: number) {
@@ -77,8 +77,8 @@ function openTasksLabel(count: number) {
   return `${count} открытых задач`
 }
 
-function Segmented({ label, value, options, onChange }: { label: string; value: string; options: { id: string; name: string }[]; onChange: (id: string) => void }) {
-  return <fieldset className={css.field}><legend>{label}</legend><div className={css.segment} role="radiogroup" aria-label={label} style={{ gridTemplateColumns: `repeat(${Math.max(options.length, 1)}, minmax(0, 1fr))` }}>{options.map(option => <button key={option.id || option.name} type="button" aria-pressed={option.id === value} onClick={() => onChange(option.id)}>{option.name}</button>)}</div></fieldset>
+function Segmented({ label, value, options, onChange, plain }: { label: string; value: string; options: { id: string; name: string }[]; onChange: (id: string) => void; plain?: boolean }) {
+  return <fieldset className={css.field} data-plain={plain || undefined}><legend className={plain ? css.srOnly : undefined}>{label}</legend><div className={css.segment} role="radiogroup" aria-label={label} style={{ gridTemplateColumns: `repeat(${Math.max(options.length, 1)}, minmax(0, 1fr))` }}>{options.map(option => <button key={option.id || option.name} type="button" aria-pressed={option.id === value} onClick={() => onChange(option.id)}>{option.name}</button>)}</div></fieldset>
 }
 
 function ChoiceRow({ label, value, options, onChange }: { label: string; value: string; options: { id: string; name: string }[]; onChange: (id: string) => void }) {
@@ -241,9 +241,12 @@ function TaskCardView(props: ScreenProps & { row: AppV2Record; onOpen: () => voi
         <span className={css.personLine}>{person ? <BookingAvatar name={person.name} photo={person.photo} small /> : <ProtoIcon name="user" size={16} />}<span>{person?.name || 'Не назначено'}</span></span>
         <span className={css.due} data-overdue={overdue || undefined}>{due || 'Без срока'}</span>
       </span>
-      <span className={css.cardFoot}><Badge name={facts.priority} />{subtasks ? <span className={css.subtasks}>{subtasks}</span> : null}</span>
     </button>
-    <button type="button" className={css.statusLink} onClick={props.onStatus}>Статус</button>
+    <div className={css.cardFoot}>
+      <Badge name={facts.priority} />
+      {subtasks ? <span className={css.subtasks}>{subtasks}</span> : null}
+      {props.onStatus ? <button type="button" className={css.statusChip} onClick={props.onStatus}>{statusChipLabel(facts.status)}</button> : null}
+    </div>
   </article>
 }
 
@@ -442,7 +445,6 @@ function TaskCard(props: ScreenProps) {
   const files = fileItems(row.values[props.kit.task.files])
   const toggle = (index: number) => { void saveTaskPatch(props, row, { checklist: serializeChecklist(toggleChecklistItem(checklist, index)) }, setError) }
   const setStatus = (name: string) => { void saveTaskPatch(props, row, { statusId: choiceId(props.tables, props.kit.tasksTableId, props.kit.task.status, name) }, setError) }
-  const next = nextStep(facts.status)
   const toggleChild = (child: AppV2Record) => {
     const status = taskFacts(props, child).status
     void saveTaskPatch(props, child, { statusId: choiceId(props.tables, props.kit.tasksTableId, props.kit.task.status, isDone(status) ? 'К работе' : 'Готово') }, setError)
@@ -463,14 +465,19 @@ function TaskCard(props: ScreenProps) {
     <DetailCardShell
       title={textOf(row.values[props.kit.task.title])}
       subtitle={projectTitle(props, facts.projectId) || 'Без проекта'}
-      chips={<div className={css.headerChips}><span className={css.cardFoot}><Badge name={facts.priority} />{overdue ? <Badge name="Просрочено" /> : null}</span><Segmented label="Статус" value={String(row.values[props.kit.task.status] ?? '')} options={TASK_STATUSES.map(name => ({ id: choiceId(props.tables, props.kit.tasksTableId, props.kit.task.status, name), name }))} onChange={id => { const name = TASK_STATUSES.find(item => choiceId(props.tables, props.kit.tasksTableId, props.kit.task.status, item) === id); if (name) setStatus(name) }} /></div>}
+      chips={<div className={css.headerChips}>
+        <div className={css.taskHeadRow}>
+          <span className={css.cardFoot}><Badge name={facts.priority} />{overdue ? <Badge name="Просрочено" /> : null}</span>
+          <div className={css.headerActions}><button type="button" className={buttons.secondary} onClick={() => setEdit(true)}>Изменить</button><button type="button" className={buttons.secondary} onClick={() => setComment(true)}>Комментарий</button></div>
+        </div>
+        <Segmented plain label="Статус" value={String(row.values[props.kit.task.status] ?? '')} options={TASK_STATUSES.map(name => ({ id: choiceId(props.tables, props.kit.tasksTableId, props.kit.task.status, name), name }))} onChange={id => { const name = TASK_STATUSES.find(item => choiceId(props.tables, props.kit.tasksTableId, props.kit.task.status, item) === id); if (name) setStatus(name) }} />
+      </div>}
       back={facts.parentId ? { label: taskTitle(props, facts.parentId) || 'Задача', onClick: () => props.onNavigate?.(props.kit.taskScreenId, facts.parentId) } : { label: 'Доска', onClick: () => props.onNavigate?.(props.kit.boardScreenId) }}
-      actions={<div className={css.headerActions} data-projects-actions="">{next ? <button type="button" className={buttons.primary} onClick={() => setStatus(next.name)}>{next.label}</button> : null}<button type="button" className={buttons.secondary} onClick={() => setEdit(true)}>Изменить</button><button type="button" className={buttons.secondary} onClick={() => setComment(true)}>Комментарий</button></div>}
       metrics={[
-        { key: 'project', caption: 'Проект', value: <button type="button" className={css.linkButton} onClick={() => props.onNavigate?.(props.kit.projectScreenId, facts.projectId)}>{projectTitle(props, facts.projectId) || 'Не указан'}</button> },
-        { key: 'who', caption: 'Исполнитель', value: <span className={css.personLine}>{person ? <BookingAvatar name={person.name} photo={person.photo} small /> : null}<span>{person?.name || 'Не назначен'}</span></span> },
-        { key: 'due', caption: 'Срок', value: <span className={css.due} data-overdue={overdue || undefined}>{formatDay(facts.due) || 'Не указан'}</span>, tone: overdue ? 'rose' : undefined },
-        { key: 'sub', caption: 'Подзадачи', value: progress.total ? `${progress.done} из ${progress.total}` : 'Нет' },
+        { key: 'project', caption: 'Проект', value: <button type="button" className={css.metricText} onClick={() => props.onNavigate?.(props.kit.projectScreenId, facts.projectId)}>{projectTitle(props, facts.projectId) || 'Не указан'}</button> },
+        { key: 'who', caption: 'Исполнитель', value: <span className={css.metricPerson}>{person ? <BookingAvatar name={person.name} photo={person.photo} small /> : null}<span>{person?.name || 'Не назначен'}</span></span> },
+        { key: 'due', caption: 'Срок', value: <span className={css.metricText} data-overdue={overdue || undefined}>{formatDay(facts.due) || 'Не указан'}</span>, tone: overdue ? 'rose' : undefined },
+        { key: 'sub', caption: 'Подзадачи', value: <span className={css.metricText}>{progress.total ? `${progress.done} из ${progress.total}` : 'Нет'}</span> },
       ]}
     >
       <div className={css.pad}>
@@ -563,6 +570,20 @@ function PeoplePick({ label, value, people: list, onChange, allowEmpty }: { labe
   </div></fieldset>
 }
 
+function PeopleMenu({ label, value, people: list, onChange }: { label: string; value: string; people: { id: string; name: string; photo?: AppV2Json }[]; onChange: (id: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const selected = list.find(person => person.id === value)
+  const shown = list.filter(person => person.name.toLocaleLowerCase('ru-RU').includes(query.trim().toLocaleLowerCase('ru-RU')))
+  return <div className={css.field}><span>{label}</span><div className={css.picker}>
+    <button type="button" className={css.pickerButton} aria-expanded={open} aria-haspopup="listbox" onClick={() => setOpen(current => !current)}>
+      <span className={css.pickerPerson}>{selected ? <><BookingAvatar name={selected.name} photo={selected.photo} small /><span>{selected.name}</span></> : 'Выберите исполнителя'}</span>
+      <ProtoIcon name="down" size={16} />
+    </button>
+    {open ? <div className={css.pickerPanel}><input type="text" aria-label="Найти сотрудника" placeholder="Найти сотрудника" value={query} onChange={event => setQuery(event.target.value)} /><ul role="listbox">{shown.map(person => <li key={person.id}><button type="button" role="option" aria-selected={person.id === value} onClick={() => { onChange(person.id); setOpen(false); setQuery('') }}><span className={css.pickerPerson}><BookingAvatar name={person.name} photo={person.photo} small /><span>{person.name}</span></span></button></li>)}{shown.length ? null : <li className={css.empty}>Никого не найдено</li>}</ul></div> : null}
+  </div></div>
+}
+
 function ProjectPick({ value, options, onChange }: { value: string; options: { id: string; name: string }[]; onChange: (id: string) => void }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -607,7 +628,7 @@ function TaskEditor(props: ScreenProps & { mode: 'create' | 'edit'; row?: AppV2R
       <div className={css.field}><span>Срок</span><DateMenu label="Срок задачи" value={due} onValue={setDue} /></div>
       <Segmented label="Приоритет" value={priority} options={PRIORITIES.map(name => ({ id: choiceId(props.tables, props.kit.tasksTableId, props.kit.task.priority, name), name }))} onChange={setPriority} />
       {props.mode === 'edit' ? <Segmented label="Статус" value={status} options={TASK_STATUSES.map(name => ({ id: choiceId(props.tables, props.kit.tasksTableId, props.kit.task.status, name), name }))} onChange={setStatus} /> : null}
-      <PeoplePick label="Исполнитель" value={assigneeId} people={activePeople} onChange={setAssigneeId} />
+      <PeopleMenu label="Исполнитель" value={assigneeId} people={activePeople} onChange={setAssigneeId} />
       <ProjectPick value={projectId} options={props.of(props.kit.projectsTableId).map(item => ({ id: item.id, name: textOf(item.values[props.kit.project.title]) }))} onChange={setProjectId} />
       <label>Описание<textarea value={description} onChange={event => setDescription(event.target.value)} /></label>
       <div className={css.field}><span>Чек-лист</span><ul className={css.checkList}>{items.map((item, index) => <li key={`${item.label}-${index}`}><CheckControl checked={item.done} label={item.label} onToggle={() => setItems(toggleChecklistItem(items, index))} /></li>)}</ul>

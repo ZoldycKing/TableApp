@@ -24,11 +24,14 @@
 .cardTitle { font-size: 14px; line-height: 1.35; font-weight: 750; overflow-wrap: anywhere; }
 .projectName { color: var(--v2-muted, #526075); font-size: 13px; line-height: 1.35; overflow-wrap: anywhere; }
 .cardMeta, .cardFoot, .personLine { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
-.personLine { justify-content: flex-start; }
-.personLine span, .fileName { min-width: 0; overflow-wrap: anywhere; }
-.due { flex: none; color: var(--v2-muted, #526075); font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cardMeta { align-items: center; }
+.personLine { justify-content: flex-start; align-items: center; min-height: 20px; }
+.personLine span, .fileName { min-width: 0; overflow-wrap: anywhere; line-height: 20px; }
+.due { flex: none; display: inline-flex; align-items: center; min-height: 20px; color: var(--v2-muted, #526075); font-size: 13px; line-height: 20px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .due[data-overdue] { color: #9f1239; font-weight: 750; }
-.subtasks { flex: none; color: var(--v2-muted, #526075); font-size: 12px; font-weight: 650; white-space: nowrap; }
+.subtasks { flex: none; margin-left: auto; color: var(--v2-muted, #526075); font-size: 12px; font-weight: 650; white-space: nowrap; }
+.cardFoot { flex-wrap: wrap; justify-content: flex-start; gap: 8px; }
+.statusChip { flex: none; margin-left: auto; min-height: 28px; padding: 2px 8px; border: 1px solid var(--v2-line, #dce3ed); border-radius: 999px; background: var(--v2-surface, #fff); color: inherit; font: inherit; font-size: 12px; font-weight: 650; white-space: nowrap; }
 .groups { display: grid; gap: 16px; }
 .group { display: grid; gap: 8px; min-width: 0; }
 .group h2 { display: flex; align-items: baseline; gap: 8px; margin: 0; font-size: 15px; line-height: 1.3; }
@@ -72,7 +75,10 @@
 .form :global(legend), .form > span { font-size: 12px; }
 .form label, .field { display: grid; gap: 6px; min-width: 0; font-size: 13px; font-weight: 650; }
 .form input[type='text'], .form input[type='number'], .form textarea { width: 100%; min-width: 0; min-height: 42px; border: 1px solid var(--v2-line, #dce3ed); border-radius: 12px; padding: 8px 12px; font: inherit; font-weight: 450; color: inherit; background: var(--v2-surface, #fff); }
-.form textarea { min-height: 88px; resize: vertical; }
+.form textarea { min-height: 88px; resize: none; }
+.root textarea { resize: none; }
+.field[data-plain] { gap: 0; font-weight: 450; }
+.srOnly { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .choiceRow { display: flex; gap: 6px; min-width: 0; overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; padding-bottom: 2px; }
 .form .choiceRow { flex-wrap: wrap; overflow: visible; }
 .form .choiceRow button { white-space: normal; max-width: 100%; }
@@ -90,6 +96,8 @@
 .picker { display: grid; gap: 6px; min-width: 0; }
 .pickerButton { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-height: 42px; padding: 8px 12px; border: 1px solid var(--v2-line, #dce3ed); border-radius: 12px; background: var(--v2-surface, #fff); color: inherit; font: inherit; font-weight: 650; text-align: left; }
 .pickerButton span { min-width: 0; overflow-wrap: anywhere; }
+.pickerPerson { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.pickerPerson span { min-width: 0; overflow-wrap: anywhere; }
 .pickerPanel { display: grid; gap: 8px; min-width: 0; padding: 8px; border: 1px solid var(--v2-line, #dce3ed); border-radius: 12px; background: var(--v2-surface, #fff); }
 .pickerPanel input { width: 100%; min-width: 0; min-height: 36px; padding: 6px 10px; border: 1px solid var(--v2-line, #dce3ed); border-radius: 10px; font: inherit; color: inherit; background: #fff; }
 .pickerPanel ul { display: grid; gap: 2px; max-height: 180px; margin: 0; padding: 0; overflow: auto; list-style: none; }
@@ -98,7 +106,9 @@
 .phoneStatuses { display: none; }
 .headerActions { display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; }
 .headerChips { display: grid; gap: 8px; width: 100%; min-width: 0; }
-.subtaskAdd input { min-height: 40px; }
+.taskHeadRow { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
+.taskHeadRow .cardFoot { flex: 1 1 auto; justify-content: flex-start; }
+.taskHeadRow .headerActions { flex: none; }
 .metricProgress { display: grid; gap: 6px; font-size: 13px; font-weight: 650; color: var(--v2-muted, #526075); }
 .footerRow { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; }
 .projectRow { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 12px; }
@@ -119,14 +129,41 @@
 .stage { display: grid; gap: 8px; min-width: 0; padding: 12px; border: 1px solid var(--v2-line, #dce3ed); border-radius: 14px; background: var(--v2-surface, #fff); }
 .stage header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .stage h3, .stage p { margin: 0; }
-.stage h3 { font-size: 16px; }
+.stage h3 { font-size: 17px; font-weight: 700; line-height: 1.3; }
 .subtaskAdd { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-width: 0; }
-.subtaskAdd input { flex: 1 1 auto; min-width: 0; }
+.subtaskAdd input { flex: 1 1 auto; min-width: 0; min-height: 40px; padding: 8px 12px; border: 1px solid var(--v2-line, #dce3ed); border-radius: 12px; background: var(--v2-surface, #fff); color: inherit; font: inherit; font-weight: 450; }
 .subtaskAdd button, .fileButton { flex: none; margin-left: auto; white-space: nowrap; }
+.metricText, .metricPerson { display: inline-flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; margin: 0; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; font-size: inherit; font-weight: inherit; line-height: inherit; text-align: left; }
+.metricText[data-overdue] { color: #9f1239; }
+.root[data-projects-screen='task'] :global([class*='metricValue']) {
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.35;
+  text-align: left;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+@container builder-app (min-width: 800px) {
+  .root[data-projects-screen='task'] :global([class*='metricValue']) {
+    font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .root[data-projects-screen='task'] :global([class*='metricValue']) .metricText,
+  .root[data-projects-screen='task'] :global([class*='metricValue']) .metricPerson {
+    max-width: 100%;
+    white-space: nowrap;
+  }
+  .root[data-projects-screen='task'] :global([class*='metricValue']) .metricPerson > span:last-child,
+  .root[data-projects-screen='task'] :global([class*='metricValue']) .metricText {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
 .fileInput { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); border: 0; }
 .empty { margin: 0; color: var(--v2-muted, #526075); }
 .error { margin: 0; color: #9f1239; }
-.statusLink { display: none; justify-self: start; min-height: 32px; padding: 4px 10px; border: 1px solid var(--v2-line, #dce3ed); border-radius: 999px; background: var(--v2-surface, #fff); color: inherit; font: inherit; font-size: 12px; font-weight: 650; white-space: nowrap; }
 @container builder-app (min-width: 800px) {
   .facts { grid-template-columns: 1fr 1fr; }
 }
@@ -148,15 +185,20 @@
   .facts div { grid-template-columns: minmax(0, 1fr); gap: 2px; }
   .toolbar h1 { font-size: 18px; }
   .segment button { font-size: 11px; letter-spacing: -0.02em; padding-inline: 2px; }
-  .root :global([class*='detailHead']) { grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
-  .root :global([class*='detailHead']:has([data-projects-actions])) { grid-template-columns: minmax(0, 1fr); }
-  .root :global([class*='detailActions']) { width: auto; justify-content: flex-end; align-self: start; }
-  .root :global([class*='detailActions']:has([data-projects-actions])) { width: 100%; }
-  .root :global([class*='detailActions']) :global(button),
-  .headerActions :global(button) { width: auto; flex: none; min-height: 36px; padding: 6px 10px; }
-  .statusLink { display: inline-flex; }
-  .root :global([class*='metric']) { min-width: 0; }
-  .root :global([class*='metricValue']) { min-width: 0; font-size: 15px; line-height: 1.3; overflow-wrap: anywhere; white-space: normal; }
-  .root :global([class*='metricValue']) .linkButton { white-space: normal; overflow-wrap: anywhere; }
-  .personLine { min-width: 0; align-items: flex-start; }
+  .headerActions :global(button) { width: auto; flex: none; min-height: 34px; padding: 5px 10px; font-size: 13px; }
+  .taskHeadRow { align-items: flex-start; }
+  .taskHeadRow .headerActions { justify-content: flex-end; flex-wrap: wrap; }
+  .root[data-projects-screen='task'] :global([class*='metricValue']) {
+    font-size: 14px !important;
+    font-weight: 650 !important;
+    line-height: 1.35;
+    text-align: left;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
+  }
+  .root :global([class*='metric']) { min-width: 0; text-align: left; }
+  .metricText, .metricPerson { white-space: normal; overflow-wrap: anywhere; }
+  .personLine { min-width: 0; align-items: center; }
+  .segment button { font-size: 11px; padding-inline: 2px; }
 }

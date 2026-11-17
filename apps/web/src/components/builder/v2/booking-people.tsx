@@ -11,6 +11,8 @@ import { bookingCalendarStatusNames, bookingCountLabel } from './booking-calenda
 import { useBookingJourney } from './booking-journey'
 import { useBookingPeople } from './booking-people-data'
 import css from './booking-people.module.css'
+import scroll from './scroll-overflow.module.css'
+import { useScrollOverflow } from './scroll-overflow'
 import styles from '../prototype/prototype.module.css'
 import { RecordHistoryItem } from './record-blocks'
 import { ruNumericDate } from './ru-fields'
@@ -43,6 +45,7 @@ function ClientProfileView({
 }) {
   const [profileTab, setProfileTab] = useState('history')
   const tabsRef = useRef<HTMLDivElement>(null)
+  useScrollOverflow(tabsRef, [profileTab])
   useEffect(() => {
     const root = tabsRef.current
     const current = root?.querySelector<HTMLElement>('[aria-pressed="true"]')
@@ -82,7 +85,7 @@ function ClientProfileView({
     {next && <button type="button" className={css.nextVisit} onClick={() => onOpenVisit(next.id)}><ProtoIcon name="calendar" /><span><strong>Следующая запись: {when(next.start, data.timeZone, true)}, {masterName(next.masterId)}</strong><small>{next.service}</small></span><ProtoIcon name="arrow" size={16} /></button>}
     <div className={css.clientColumns}>
       <section className={css.clientMain}>
-        <div className={css.profileTabs} ref={tabsRef} role="group" aria-label="Раздел карточки клиента">
+        <div className={`${css.profileTabs} ${scroll.row}`} ref={tabsRef} role="group" aria-label="Раздел карточки клиента">
           <button type="button" aria-pressed={profileTab === 'history'} aria-label="История визитов" onClick={() => setProfileTab('history')}><span className={css.tabFull}>История визитов</span><span className={css.tabShort}>История</span></button>
           <button type="button" aria-pressed={profileTab === 'notes'} aria-label="Предпочтения и заметки" onClick={() => setProfileTab('notes')}><span className={css.tabFull}>Предпочтения и заметки</span><span className={css.tabShort}>Заметки</span></button>
         </div>

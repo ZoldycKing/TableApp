@@ -5,6 +5,8 @@ import type { AppV2 } from '@tableapp/schema/app-v2'
 import { BOOKING_WEEKDAYS, bookingSchedulePlan, type BookingScheduleAdapter, type BookingScheduleInput, type BookingScheduleRead, type BookingScheduleRequest } from '@/lib/builder-v2-booking-schedule'
 import { usePublishedV2 } from './published-context'
 import css from './booking.module.css'
+import scroll from './scroll-overflow.module.css'
+import { useScrollOverflow } from './scroll-overflow'
 import { RuDateInput, RuTimeInput } from './ru-fields'
 import styles from '../prototype/prototype.module.css'
 
@@ -16,6 +18,8 @@ export function BookingScheduleForm({ app, screenId, formId, recordId, editing =
   const [input, setInput] = useState<BookingScheduleInput>({ masterId: '', mode: 'weekly', weekdays: [1, 2, 3, 4, 5], date: '', start: '09:00', end: '18:00', closed: false, breakStart: '', breakEnd: '' })
   const [withBreak, setWithBreak] = useState(false)
   const attempt = useRef<BookingScheduleRequest | null>(null)
+  const modeRow = useRef<HTMLDivElement>(null)
+  useScrollOverflow(modeRow, [input.mode])
   const key = JSON.stringify([app.id, screenId, formId, recordId, published?.revision, retry])
   useEffect(() => {
     let cancelled = false
@@ -60,7 +64,7 @@ export function BookingScheduleForm({ app, screenId, formId, recordId, editing =
       <fieldset className={css.scheduleFields} disabled={pending || editing || stale || uncertain}>
         <label className={css.scheduleLabel}>Мастер<select value={input.masterId} onChange={event => change({ masterId: event.target.value })}><option value="">Выберите мастера</option>{read.state.masters.map(master => <option key={master.id} value={master.id}>{master.name}</option>)}</select></label>
         {!read.state.masters.length && <p className={css.timeHint}>Сначала добавьте мастера в разделе «Мастера».</p>}
-        <div className={css.switch} role="group" aria-label="Когда действует график"><button type="button" aria-pressed={input.mode === 'weekly'} onClick={() => change({ mode: 'weekly' })}>По дням недели</button><button type="button" aria-pressed={input.mode === 'date'} onClick={() => change({ mode: 'date' })}>На дату</button></div>
+        <div ref={modeRow} className={`${css.switch} ${scroll.row}`} role="group" aria-label="Когда действует график"><button type="button" aria-pressed={input.mode === 'weekly'} onClick={() => change({ mode: 'weekly' })}>По дням недели</button><button type="button" aria-pressed={input.mode === 'date'} onClick={() => change({ mode: 'date' })}>На дату</button></div>
         {input.mode === 'weekly' ? <fieldset className={css.weekdayField}><legend>Рабочие дни</legend><div className={css.weekdayChoices}>{BOOKING_WEEKDAYS.map(day => <label key={day.value} title={day.name}><input type="checkbox" aria-label={day.name} checked={input.weekdays.includes(day.value)} onChange={event => change({ weekdays: event.target.checked ? [...input.weekdays, day.value] : input.weekdays.filter(value => value !== day.value) })} /><span>{day.short}</span></label>)}</div></fieldset> : <label className={css.scheduleLabel}>Дата<RuDateInput value={input.date} onValue={date => change({ date })} /><small>Эти часы заменят обычный график на выбранную дату.</small></label>}
         <label className={css.scheduleCheck}><input type="checkbox" checked={input.closed} onChange={event => change({ closed: event.target.checked })} />Выходной</label>
         {!input.closed && <><div className={css.scheduleTimes}><label className={css.scheduleLabel}>Начало работы<RuTimeInput value={input.start} onValue={start => change({ start })} /></label><label className={css.scheduleLabel}>Окончание работы<RuTimeInput value={input.end} onValue={end => change({ end })} /></label></div>{!recordId && <><label className={css.scheduleCheck}><input type="checkbox" checked={withBreak} onChange={event => { setWithBreak(event.target.checked); change({ breakStart: event.target.checked ? '13:00' : '', breakEnd: event.target.checked ? '14:00' : '' }) }} />Добавить перерыв</label>{withBreak && <div className={css.scheduleTimes}><label className={css.scheduleLabel}>Начало перерыва<RuTimeInput value={input.breakStart} onValue={breakStart => change({ breakStart })} /></label><label className={css.scheduleLabel}>Конец перерыва<RuTimeInput value={input.breakEnd} onValue={breakEnd => change({ breakEnd })} /></label></div>}</>}</>}

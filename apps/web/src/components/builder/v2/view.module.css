@@ -1138,7 +1138,9 @@
   .learningCopy :is(strong, .learningProgress) { padding-inline-end: 40px; }
 }
 .status { display: flex; align-items: center; gap: 12px; }
-.saving { font-size: 12px; color: var(--v2-muted, #687568); min-width: 0; white-space: nowrap; }
+.saving { position: relative; font-size: 12px; color: var(--v2-muted, #687568); min-width: 0; white-space: nowrap; }
+.saving svg { display: none; }
+@keyframes saveSpin { to { transform: rotate(360deg); } }
 .canvasToolbar { flex-shrink: 0; background: var(--v2-bg); }
 @media (min-width: 1100px) {
   .editorWorkspace[data-editing="true"] { grid-template-columns: clamp(248px, 19.45vw, 280px) minmax(0, 1fr) clamp(304px, 22.25vw, 320px); }
@@ -1442,7 +1444,15 @@ button.recordButton:hover strong { color: var(--v2-accent, #456849); }
 @media (max-width: 640px) {
   .headerActions.headerActions { flex-wrap: nowrap; width: auto; justify-content: flex-end; }
   .headerActions > :last-child { margin-left: 0; }
-  .headerActions .saving { order: 0; flex: none; flex-basis: auto; text-align: start; font-size: 11px; line-height: 14px; }
+  .headerActions .saving { order: 0; display: inline-flex; align-items: center; justify-content: center; flex: none; flex-basis: auto; width: 32px; height: 32px; text-align: center; font-size: 11px; line-height: 14px; }
+  .headerActions .saving[data-state="view"] { width: auto; }
+  .headerActions .saving:not([data-state="view"]) .saveLabel { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  .headerActions .saving:not([data-state="view"]) svg { display: block; }
+  .headerActions .saving[data-state="error"] { color: var(--v2-danger, #9a403b); }
+  .headerActions .saving[data-state="saving"] svg { animation: saveSpin .8s linear infinite; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .headerActions .saving[data-state="saving"] svg { animation: none; }
 }
 
 .runActor { min-width: 0; overflow-wrap: anywhere; color: var(--v2-accent, #456849); font-size: 14px; }

@@ -118,13 +118,14 @@
 .parentLine { color: var(--v2-muted, #526075); font-size: 12px; line-height: 1.3; }
 .subtaskList { display: grid; gap: 8px; margin: 0 0 10px; padding: 0; list-style: none; }
 .subtaskCard {
-  display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: stretch; gap: 8px; min-width: 0;
+  display: grid; grid-template-columns: 28px minmax(0, 1fr); align-items: start; gap: 8px; min-width: 0;
   padding: 8px 10px; border: 1px solid var(--v2-line, #dce3ed); border-radius: 12px; background: var(--v2-surface, #fff);
 }
 .subtaskCard[data-overdue] { box-shadow: inset 3px 0 0 #9f1239; }
 .subtaskCard:hover { background: var(--v2-soft, #f3f6fb); border-color: #c9d3e0; }
 .subtaskCheck {
-  display: inline-grid; place-items: center; align-self: center; width: 28px; height: 28px; padding: 0; border: 0;
+  display: inline-grid; place-items: center; align-self: start; justify-self: start;
+  width: 28px; height: 22px; margin: 0; padding: 0; border: 0;
   border-radius: 8px; background: transparent; color: inherit;
 }
 .subtaskCheck > span {
@@ -143,14 +144,16 @@
 .crumb { display: inline; color: var(--v2-muted, #526075); font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; }
 .crumbLink { display: inline; margin: 0; padding: 0; border: 0; background: transparent; color: var(--v2-accent, #315f91); font: inherit; font-weight: 650; cursor: pointer; }
 .parentTile {
-  display: grid; gap: 4px; min-width: 0; padding: 10px 12px; border: 1px solid var(--v2-line, #dce3ed);
-  border-radius: 12px; background: var(--v2-page, #f5f7fb);
+  display: grid; gap: 2px; width: 100%; min-width: 0; margin: 0; padding: 8px 10px;
+  border: 1px solid var(--v2-line, #dce3ed); border-radius: 12px; background: var(--v2-surface, #fff);
+  color: inherit; font: inherit; text-align: left; cursor: pointer;
 }
-.parentTileLabel { color: var(--v2-muted, #526075); font-size: 12px; font-weight: 650; }
-.parentTileLink {
-  display: inline-flex; align-items: center; gap: 6px; min-width: 0; margin: 0; padding: 0; border: 0;
-  background: transparent; color: var(--v2-ink, #111827); font: inherit; font-size: 14px; font-weight: 750;
-  text-align: left; cursor: pointer; overflow-wrap: anywhere;
+.parentTile:hover { background: var(--v2-soft, #f3f6fb); border-color: #c9d3e0; }
+.parentTileLabel { color: var(--v2-muted, #526075); font-size: 11px; font-weight: 650; }
+.parentTileMain { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.parentTileTitle {
+  flex: 1 1 auto; min-width: 0; color: var(--v2-ink, #111827); font-size: 14px; font-weight: 700;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .mention { padding: 0 3px; border-radius: 4px; background: var(--v2-soft, #e7eef6); color: inherit; }
 .mentionList { display: grid; gap: 2px; margin: 0; padding: 4px; list-style: none; border: 1px solid var(--v2-line, #dce3ed); border-radius: 12px; background: var(--v2-surface, #fff); }
@@ -165,28 +168,35 @@
 .subtaskAdd button, .fileButton { flex: none; margin-left: auto; white-space: nowrap; }
 .metricText, .metricPerson { display: inline-flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; margin: 0; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; font-size: inherit; font-weight: inherit; line-height: inherit; text-align: left; }
 .metricText[data-overdue] { color: #9f1239; }
-.root[data-projects-screen='task'] :global([class*='metricValue']) {
-  font-size: 15px;
-  font-weight: 650;
+.root[data-projects-screen='task'] :global([class*='metricValue']),
+.root[data-projects-screen='subtask'] :global([class*='metricValue']) {
+  font-size: 14px !important;
+  font-weight: 650 !important;
   line-height: 1.35;
+  letter-spacing: 0;
   text-align: left;
   overflow-wrap: anywhere;
   white-space: normal;
 }
 @container builder-app (min-width: 800px) {
-  .root[data-projects-screen='task'] :global([class*='metricValue']) {
-    font-size: 14px;
+  .root[data-projects-screen='task'] :global([class*='metricValue']),
+  .root[data-projects-screen='subtask'] :global([class*='metricValue']) {
+    font-size: 13px !important;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
   .root[data-projects-screen='task'] :global([class*='metricValue']) .metricText,
-  .root[data-projects-screen='task'] :global([class*='metricValue']) .metricPerson {
+  .root[data-projects-screen='task'] :global([class*='metricValue']) .metricPerson,
+  .root[data-projects-screen='subtask'] :global([class*='metricValue']) .metricText,
+  .root[data-projects-screen='subtask'] :global([class*='metricValue']) .metricPerson {
     max-width: 100%;
     white-space: nowrap;
   }
   .root[data-projects-screen='task'] :global([class*='metricValue']) .metricPerson > span:last-child,
-  .root[data-projects-screen='task'] :global([class*='metricValue']) .metricText {
+  .root[data-projects-screen='task'] :global([class*='metricValue']) .metricText,
+  .root[data-projects-screen='subtask'] :global([class*='metricValue']) .metricPerson > span:last-child,
+  .root[data-projects-screen='subtask'] :global([class*='metricValue']) .metricText {
     overflow: hidden;
     text-overflow: ellipsis;
   }
@@ -212,7 +222,10 @@
   .rowDue { grid-column: 2; grid-row: 1; }
   .rowPriority { grid-column: 1; justify-self: start; }
   .rowSub { grid-column: 2; justify-self: end; }
-  .subtaskOpen { grid-template-columns: minmax(0, 1fr); row-gap: 8px; }
+  .subtaskCard { grid-template-columns: 22px minmax(0, 1fr); gap: 6px; padding: 8px; }
+  .subtaskCheck { width: 22px; height: 22px; margin-top: 2px; }
+  .subtaskCheck > span { width: 16px; height: 16px; }
+  .subtaskOpen { grid-template-columns: minmax(0, 1fr); row-gap: 6px; }
   .subtaskAside { justify-content: flex-start; }
   .facts div { grid-template-columns: minmax(0, 1fr); gap: 2px; }
   .toolbar h1 { font-size: 18px; }
@@ -220,7 +233,8 @@
   .headerActions :global(button) { width: auto; flex: none; min-height: 34px; padding: 5px 10px; font-size: 13px; }
   .taskHeadRow { align-items: flex-start; }
   .taskHeadRow .headerActions { justify-content: flex-end; flex-wrap: wrap; }
-  .root[data-projects-screen='task'] :global([class*='metricValue']) {
+  .root[data-projects-screen='task'] :global([class*='metricValue']),
+  .root[data-projects-screen='subtask'] :global([class*='metricValue']) {
     font-size: 14px !important;
     font-weight: 650 !important;
     line-height: 1.35;

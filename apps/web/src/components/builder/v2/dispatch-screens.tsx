@@ -194,21 +194,16 @@ const acceptanceSummary = (props: ScreenProps, row: AppV2Record) => {
   const claims = textOf(read(row, job.claims))
   const refusalReason = textOf(read(row, job.refusalReason))
   if (!signerName && !refused && !signedAt) return null
-  const accepted = signerName
-    ? (signerPosition ? `Работу принял: ${signerName}, ${signerPosition}` : `Работу принял: ${signerName}`)
-    : null
-  const claimsText = refused
-    ? `Клиент отказался от подписи: ${refusalReason || 'причина не указана'}`
-    : noClaims === false
-      ? `Претензии: ${claims || 'не указаны'}`
-      : 'Работы выполнены в полном объёме, претензий нет'
   const master = textOf(row.values[job.master])
   return {
-    accepted,
-    signedAt: signedAt ? `Подписано ${signedAt}` : null,
-    claimsText,
-    executor: master ? `Исполнитель: Мастер ${master}` : null,
+    signerName,
+    signerPosition,
+    signedAt,
     refused,
+    refusalReason,
+    noClaims: noClaims !== false,
+    claims,
+    executor: master || null,
   }
 }
 const useNow = (active: boolean) => {
@@ -616,13 +611,21 @@ function JobCard(props: ScreenProps) {
               {(() => {
                 const acceptance = acceptanceSummary(props, row)
                 if (!acceptance) return signature ? <img className={css.signImage} src={signature} alt="Подпись клиента" /> : null
-                return <div className={css.acceptance} data-acceptance>
-                  {acceptance.accepted ? <p>{acceptance.accepted}</p> : null}
-                  {!acceptance.refused && signature ? <img className={css.signImage} src={signature} alt="Подпись клиента" /> : null}
-                  {acceptance.signedAt ? <p>{acceptance.signedAt}</p> : null}
-                  <p>{acceptance.claimsText}</p>
-                  {acceptance.executor ? <p>{acceptance.executor}</p> : null}
-                </div>
+                const acceptedValue = acceptance.signerName
+                  ? (acceptance.signerPosition ? `${acceptance.signerName}, ${acceptance.signerPosition}` : acceptance.signerName)
+                  : '—'
+                return <dl className={`${css.facts} ${css.acceptance}`} data-acceptance>
+                  <div><dt>Работу принял</dt><dd>{acceptedValue}</dd></div>
+                  {acceptance.refused ? <>
+                    <div><dt>Подпись</dt><dd>{acceptance.signedAt ? `Отказ от подписи зафиксирован ${acceptance.signedAt}` : 'Отказ от подписи'}</dd></div>
+                    <div><dt>Причина</dt><dd>{acceptance.refusalReason || 'не указана'}</dd></div>
+                  </> : <>
+                    {signature ? <div><dt>Подпись</dt><dd><img className={css.signImage} src={signature} alt="Подпись клиента" /></dd></div> : null}
+                    {acceptance.signedAt ? <div><dt>Дата подписи</dt><dd>{acceptance.signedAt}</dd></div> : null}
+                    <div><dt>Замечания</dt><dd>{acceptance.noClaims ? <span className={css.badge} data-tone="green">Претензий нет</span> : (acceptance.claims || 'не указаны')}</dd></div>
+                  </>}
+                  {acceptance.executor ? <div><dt>Исполнитель</dt><dd>{acceptance.executor}</dd></div> : null}
+                </dl>
               })()}
             </div> : <p className={css.empty}>Отчёт появится, когда мастер закроет заявку.</p>}
           </DetailSection>
@@ -813,8 +816,8 @@ function CompleteDialog(props: ScreenProps & { row: AppV2Record; checklist: Chec
       <label>Что сделано<textarea value={report} onChange={event => setReport(event.target.value)} required rows={3} /></label>
       <label>ФИО принявшего<input value={signerName} onChange={event => setSignerName(event.target.value)} required aria-required="true" /></label>
       <label>Должность<input value={signerPosition} onChange={event => setSignerPosition(event.target.value)} placeholder="Необязательно" /></label>
-      <div data-no-claims><CheckControl checked={noClaims} label="Работы выполнены в полном объёме, претензий нет" onToggle={() => setNoClaims(value => !value)} /></div>
-      {!noClaims ? <label data-claims>Претензии<textarea value={claims} onChange={event => setClaims(event.target.value)} required aria-required="true" rows={3} /></label> : null}
+      {!refused ? <div data-no-claims><CheckControl checked={noClaims} label="Работы выполнены в полном объёме, претензий нет" onToggle={() => setNoClaims(value => !value)} /></div> : null}
+      {!refused && !noClaims ? <label data-claims>Претензии<textarea value={claims} onChange={event => setClaims(event.target.value)} required aria-required="true" rows={3} /></label> : null}
       {refused ? <label data-refusal>Причина отказа<textarea value={refusalReason} onChange={event => setRefusalReason(event.target.value)} required aria-required="true" rows={3} /></label> : <SignaturePad onChange={setSignature} />}
       <label className={css.filePick}>Фото с выезда<input className={css.fileInput} type="file" accept="image/jpeg,image/png,image/webp" multiple aria-label="Добавить фото" onChange={event => {
         const chosen = [...event.target.files ?? []]

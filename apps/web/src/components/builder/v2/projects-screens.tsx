@@ -467,7 +467,6 @@ function TaskCard(props: ScreenProps) {
   return <div className={css.root} data-projects-screen={facts.parentId ? 'subtask' : 'task'}>
     <DetailCardShell
       title={taskName}
-      subtitle={facts.parentId ? undefined : projectName}
       chips={<div className={css.headerChips}>
         {facts.parentId ? <nav className={css.crumb} data-task-crumb aria-label="Путь задачи">
           <button type="button" className={css.crumbLink} onClick={() => props.onNavigate?.(props.kit.projectScreenId, facts.projectId)}>{projectName}</button>
@@ -481,19 +480,25 @@ function TaskCard(props: ScreenProps) {
           <div className={css.headerActions}><button type="button" className={buttons.secondary} onClick={() => setEdit(true)}>Изменить</button><button type="button" className={buttons.secondary} onClick={() => setComment(true)}>Комментарий</button></div>
         </div>
         <Segmented plain label="Статус" value={String(row.values[props.kit.task.status] ?? '')} options={TASK_STATUSES.map(name => ({ id: choiceId(props.tables, props.kit.tasksTableId, props.kit.task.status, name), name }))} onChange={id => { const name = TASK_STATUSES.find(item => choiceId(props.tables, props.kit.tasksTableId, props.kit.task.status, item) === id); if (name) setStatus(name) }} />
-        {facts.parentId ? <div className={css.parentTile} data-parent-tile>
-          <span className={css.parentTileLabel}>Родительская задача</span>
-          <button type="button" className={css.parentTileLink} onClick={() => props.onNavigate?.(props.kit.taskScreenId, facts.parentId)}>{parentName || 'Открыть задачу'}<ProtoIcon name="arrow" size={16} /></button>
-        </div> : null}
+        {facts.parentId ? (() => {
+          const parentRow = props.of(props.kit.tasksTableId).find(item => item.id === facts.parentId)
+          const parentStatus = parentRow ? taskFacts(props, parentRow).status : ''
+          return <button type="button" className={css.parentTile} data-parent-tile onClick={() => props.onNavigate?.(props.kit.taskScreenId, facts.parentId)}>
+            <span className={css.parentTileLabel}>Родительская задача</span>
+            <span className={css.parentTileMain}>
+              <span className={css.parentTileTitle}>{parentName || 'Открыть задачу'}</span>
+              {parentStatus ? <Badge name={parentStatus} /> : null}
+              <ProtoIcon name="arrow" size={16} />
+            </span>
+          </button>
+        })() : null}
       </div>}
       back={facts.parentId ? { label: parentName || 'Задача', onClick: () => props.onNavigate?.(props.kit.taskScreenId, facts.parentId) } : { label: 'Доска', onClick: () => props.onNavigate?.(props.kit.boardScreenId) }}
       metrics={[
         { key: 'project', caption: 'Проект', value: <button type="button" className={css.metricText} onClick={() => props.onNavigate?.(props.kit.projectScreenId, facts.projectId)}>{projectName}</button> },
         { key: 'who', caption: 'Исполнитель', value: <span className={css.metricPerson}>{person ? <BookingAvatar name={person.name} photo={person.photo} small /> : null}<span>{person?.name || 'Не назначен'}</span></span> },
         { key: 'due', caption: 'Срок', value: <span className={css.metricText} data-overdue={overdue || undefined}>{formatDay(facts.due) || 'Не указан'}</span>, tone: overdue ? 'rose' : undefined },
-        facts.parentId
-          ? { key: 'parent', caption: 'Родитель', value: <button type="button" className={css.metricText} onClick={() => props.onNavigate?.(props.kit.taskScreenId, facts.parentId)}>{parentName || 'Не указана'}</button> }
-          : { key: 'sub', caption: 'Подзадачи', value: <span className={css.metricText}>{progress.total ? `${progress.done} из ${progress.total}` : 'Нет'}</span> },
+        ...(facts.parentId ? [] : [{ key: 'sub', caption: 'Подзадачи', value: <span className={css.metricText}>{progress.total ? `${progress.done} из ${progress.total}` : 'Нет'}</span> }]),
       ]}
     >
       <div className={css.pad}>
@@ -628,7 +633,7 @@ function TaskEditor(props: ScreenProps & { mode: 'create' | 'edit'; row?: AppV2R
   const formId = useId()
   const row = props.row
   const facts = row ? taskFacts(props, row) : null
-  const isSubtask = Boolean(facts?.parentId)
+  const startedAsSubtask = Boolean(facts?.parentId)
   const [title, setTitle] = useState(row ? textOf(row.values[props.kit.task.title]) : '')
   const [projectId, setProjectId] = useState(facts?.projectId ?? props.of(props.kit.projectsTableId)[0]?.id ?? '')
   const [parentId, setParentId] = useState(facts?.parentId ?? '')
@@ -643,25 +648,29 @@ function TaskEditor(props: ScreenProps & { mode: 'create' | 'edit'; row?: AppV2R
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const activePeople = people(props).filter(person => person.active || person.id === assigneeId)
-  const parentOptions = props.of(props.kit.tasksTableId)
-    .map(item => ({ row: item, facts: taskFacts(props, item) }))
-    .filter(item => item.facts.projectId === projectId && !item.facts.parentId && item.row.id !== row?.id)
-    .map(item => ({ id: item.row.id, name: textOf(item.row.values[props.kit.task.title]) }))
+  const childIds = new Set(props.of(props.kit.tasksTableId).filter(item => taskFacts(props, item).parentId === row?.id).map(item => item.id))
+  const parentOptions = [
+    { id: '', name: 'Без родительской задачи' },
+    ...props.of(props.kit.tasksTableId)
+      .map(item => ({ row: item, facts: taskFacts(props, item) }))
+      .filter(item => item.facts.projectId === projectId && !item.facts.parentId && item.row.id !== row?.id && !childIds.has(item.row.id))
+      .map(item => ({ id: item.row.id, name: textOf(item.row.values[props.kit.task.title]) })),
+  ]
   const setProject = (next: string) => {
     setProjectId(next)
-    if (!isSubtask) return
-    const allowed = props.of(props.kit.tasksTableId)
+    if (!startedAsSubtask || !parentId) return
+    const nextAllowed = props.of(props.kit.tasksTableId)
       .map(item => ({ id: item.id, facts: taskFacts(props, item) }))
-      .filter(item => item.facts.projectId === next && !item.facts.parentId && item.id !== row?.id)
-    if (!allowed.some(item => item.id === parentId)) setParentId(allowed[0]?.id ?? '')
+      .filter(item => item.facts.projectId === next && !item.facts.parentId && item.id !== row?.id && !childIds.has(item.id))
+      .map(item => item.id)
+    if (!nextAllowed.includes(parentId)) setParentId('')
   }
   const save = async () => {
     if (!title.trim()) { setError('Напишите, что нужно сделать.'); return }
     const assignee = people(props).find(person => person.id === assigneeId)
     if (!assignee) { setError('Выберите исполнителя.'); return }
-    if (isSubtask && !parentId) { setError('Выберите родительскую задачу.'); return }
     setBusy(true)
-    const body = { title: title.trim(), projectId, assigneeId, assigneeEmail: assignee.email, due: due || null, priorityId: priority, statusId: status, description, checklist: serializeChecklist(items), ...(isSubtask ? { parentId } : {}) }
+    const body = { title: title.trim(), projectId, assigneeId, assigneeEmail: assignee.email, due: due || null, priorityId: priority, statusId: status, description, checklist: serializeChecklist(items), ...(startedAsSubtask || parentId ? { parentId } : {}) }
     if (props.mode === 'create') await saveCreateTask(props, body, setError, props.onClose)
     else if (row) await saveTaskPatch(props, row, { ...body, files }, setError, props.onClose)
     setBusy(false)
@@ -674,7 +683,7 @@ function TaskEditor(props: ScreenProps & { mode: 'create' | 'edit'; row?: AppV2R
       {props.mode === 'edit' ? <Segmented label="Статус" value={status} options={TASK_STATUSES.map(name => ({ id: choiceId(props.tables, props.kit.tasksTableId, props.kit.task.status, name), name }))} onChange={setStatus} /> : null}
       <PeopleMenu label="Исполнитель" value={assigneeId} people={activePeople} onChange={setAssigneeId} />
       <ProjectPick value={projectId} options={props.of(props.kit.projectsTableId).map(item => ({ id: item.id, name: textOf(item.values[props.kit.project.title]) }))} onChange={setProject} />
-      {isSubtask ? <SearchPick label="Родительская задача" value={parentId} options={parentOptions} onChange={setParentId} placeholder="Выберите задачу" searchLabel="Найти задачу" /> : null}
+      {startedAsSubtask ? <SearchPick label="Родительская задача" value={parentId} options={parentOptions} onChange={setParentId} placeholder="Выберите задачу" searchLabel="Найти задачу" /> : null}
       <label>Описание<textarea value={description} onChange={event => setDescription(event.target.value)} /></label>
       <div className={css.field}><span>Чек-лист</span><ul className={css.checkList}>{items.map((item, index) => <li key={`${item.label}-${index}`}><CheckControl checked={item.done} label={item.label} onToggle={() => setItems(toggleChecklistItem(items, index))} /></li>)}</ul>
         <div className={css.subtaskAdd}><input type="text" aria-label="Новый пункт" value={draft} placeholder="Пункт без срока" onChange={event => setDraft(event.target.value)} /><button type="button" className={buttons.secondary} onClick={() => { const label = draft.trim(); if (!label) return; setItems([...items, { label, done: false }]); setDraft('') }}>Добавить</button></div>
@@ -839,7 +848,8 @@ async function saveTaskPatch(props: ScreenProps, row: AppV2Record, input: { titl
     }
     files = [...kept, ...uploaded]
   }
-  const result = await savePublishedProjectsAction(published.slug, { kind: 'task', revision: published.revision, screenId: props.screenId, recordId: row.id, title: input.title ?? textOf(row.values[props.kit.task.title]), projectId: input.projectId ?? facts.projectId, parentId: input.parentId ?? facts.parentId ?? undefined, assigneeId: input.assigneeId ?? facts.assigneeId, assigneeEmail: input.assigneeEmail ?? facts.assigneeEmail, due: input.due === undefined ? civilInput(facts.due) || null : input.due, priorityId: input.priorityId ?? String(row.values[props.kit.task.priority] ?? ''), statusId: input.statusId ?? String(row.values[props.kit.task.status] ?? ''), description: input.description ?? textOf(row.values[props.kit.task.description]), checklist: input.checklist ?? textOf(row.values[props.kit.task.checklist]), ...(input.files ? { files } : {}) })
+  const nextParentId = input.parentId !== undefined ? input.parentId : (facts.parentId || undefined)
+  const result = await savePublishedProjectsAction(published.slug, { kind: 'task', revision: published.revision, screenId: props.screenId, recordId: row.id, title: input.title ?? textOf(row.values[props.kit.task.title]), projectId: input.projectId ?? facts.projectId, parentId: nextParentId, assigneeId: input.assigneeId ?? facts.assigneeId, assigneeEmail: input.assigneeEmail ?? facts.assigneeEmail, due: input.due === undefined ? civilInput(facts.due) || null : input.due, priorityId: input.priorityId ?? String(row.values[props.kit.task.priority] ?? ''), statusId: input.statusId ?? String(row.values[props.kit.task.status] ?? ''), description: input.description ?? textOf(row.values[props.kit.task.description]), checklist: input.checklist ?? textOf(row.values[props.kit.task.checklist]), ...(input.files ? { files } : {}) })
   if (!result.ok) { setError(result.error); return }
   published.refresh(result.message)
   onDone?.()

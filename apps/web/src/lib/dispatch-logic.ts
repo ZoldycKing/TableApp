@@ -187,8 +187,8 @@ export function completionPatch(input: {
   if (acceptance) {
     const signerName = acceptance.signerName.trim()
     if (!signerName) return { ok: false, error: 'Укажите ФИО принявшего.' }
-    if (!acceptance.noClaims && !acceptance.claims?.trim()) return { ok: false, error: 'Опишите претензии клиента.' }
     if (acceptance.refused && !acceptance.refusalReason?.trim()) return { ok: false, error: 'Укажите причину отказа от подписи.' }
+    if (!acceptance.refused && !acceptance.noClaims && !acceptance.claims?.trim()) return { ok: false, error: 'Опишите претензии клиента.' }
     if (!acceptance.refused) {
       const signature = input.signature?.trim() ?? ''
       if (!signature) return { ok: false, error: 'Нужна подпись клиента.' }

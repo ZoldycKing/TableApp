@@ -36,13 +36,16 @@ const openDispatch = async (page: Page, view: string, phone: boolean) => {
     return Boolean(root && root.getAttribute('data-dispatch-screen') !== 'loading')
   }, { timeout: 30000 })
   if (view.startsWith('complete')) {
-    await page.waitForSelector('[role="dialog"]', { timeout: 15000 })
+    const dialog = page.locator('[role="dialog"]')
+    await dialog.waitFor({ state: 'visible', timeout: 15000 })
     const target = view === 'complete-refuse'
       ? '[data-refusal]'
-      : '[data-testid="signature-pad"]'
-    const node = page.locator(target)
-    await node.waitFor({ state: 'visible', timeout: 15000 })
-    await node.scrollIntoViewIfNeeded()
+      : view === 'complete-claims'
+        ? '[data-claims]'
+        : '[data-testid="signature-pad"]'
+    await dialog.locator(target).waitFor({ state: 'visible', timeout: 15000 })
+    // Keep footer buttons in the viewport — scroll only inside the dialog body.
+    await dialog.locator('button[type="submit"], button:has-text("Завершить")').first().waitFor({ state: 'visible' })
     await page.waitForTimeout(200)
   }
   if (view === 'job') {
@@ -57,10 +60,16 @@ const openDispatch = async (page: Page, view: string, phone: boolean) => {
 const openAct = async (page: Page, refuse: boolean) => {
   await page.goto(`${base}/dispatch-shot/act-preview${refuse ? '?refuse=1' : ''}`, { waitUntil: 'networkidle' })
   await page.waitForSelector('[data-act-preview]', { timeout: 15000 })
-  const acceptance = page.locator('[data-act-acceptance]')
-  await acceptance.waitFor({ state: 'visible', timeout: 15000 })
-  await acceptance.scrollIntoViewIfNeeded()
   await page.waitForTimeout(400)
+}
+
+const saveAct = async (page: Page, name: string) => {
+  await hide(page)
+  await page.mouse.move(2, 2)
+  await page.waitForTimeout(250)
+  const path = resolve(outDir, name)
+  await page.screenshot({ path, fullPage: true })
+  console.log('saved', name)
 }
 
 const browser = await chromium.launch({ headless: true })
@@ -78,9 +87,9 @@ const browser = await chromium.launch({ headless: true })
   await openDispatch(page, 'job', false)
   await save(page, 'desktop-completed-job.png')
   await openAct(page, false)
-  await save(page, 'pdf-act-normal.png')
+  await saveAct(page, 'pdf-act-normal.png')
   await openAct(page, true)
-  await save(page, 'pdf-act-refusal.png')
+  await saveAct(page, 'pdf-act-refusal.png')
   await context.close()
 }
 

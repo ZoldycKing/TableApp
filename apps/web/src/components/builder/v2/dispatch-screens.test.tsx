@@ -9,7 +9,8 @@ import { DispatchDemo } from './dispatch-demo'
 describe('field service screens', () => {
   it('filters the dispatcher list from the overdue, today and unassigned counters', async () => {
     render(<DispatchDemo view="overview" bare />)
-    const unassigned = await waitFor(() => screen.getByRole('button', { name: /Не назначено/ }))
+    const summary = await waitFor(() => screen.getByRole('group', { name: 'Сводка заявок' }))
+    const unassigned = within(summary).getByRole('button', { name: /Не назначено/ })
     expect(unassigned.textContent).toContain('3')
     fireEvent.click(unassigned)
     expect(screen.getByRole('button', { name: /Протечка в подвале/ })).toBeTruthy()

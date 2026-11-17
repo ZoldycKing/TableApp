@@ -69,7 +69,7 @@ export function TeamCalendarView({
   app, screenId, timeZone, working = false, onOpenVisit, onOpenPeriod, onAdd, onCreate, onConfigure, onMove,
   editing = false, loader, loaderKey, title = 'Расписание', resourceLabel = 'Мастер', resourcesLabel = 'Мастера',
   showMetrics = true, showWorkingHours = true, showAmounts = true, showNoShows = true, showOmissions = false,
-  calendarKey, leadMinutes = 60, stepMinutes = 15, horizonDays = 60, bufferMinutes = 0, defaultView = 'day',
+  calendarKey, leadMinutes = 60, stepMinutes = 15, horizonDays = 60, bufferMinutes = 0, defaultView = 'day', hourPixels = 56,
 }: {
   app: AppV2
   screenId: string
@@ -98,6 +98,8 @@ export function TeamCalendarView({
   horizonDays?: number
   bufferMinutes?: number
   defaultView?: 'list' | 'day' | 'week'
+  /** Pixels per hour on the day grid. Salon stays at 56. */
+  hourPixels?: number
 }) {
   const journey = useBookingJourney()
   const saved = journey && journey.calendar?.key === calendarKey ? journey.calendar : null
@@ -278,6 +280,7 @@ export function TeamCalendarView({
                     stepMinutes={stepMinutes}
                     horizonDays={horizonDays}
                     bufferMinutes={bufferMinutes}
+                    hourPixels={hourPixels}
                   />
                 </div>
               )}
@@ -317,7 +320,7 @@ export function TeamCalendarView({
 export const BookingCalendarScreen = TeamCalendarView
 
 function CalendarGrid({
-  data, day, resourceId, editing, showWorkingHours, canMove = false, onOpenVisit, onOpenPeriod, onCreate, onMove, onNotice, leadMinutes, stepMinutes, horizonDays, bufferMinutes = 0,
+  data, day, resourceId, editing, showWorkingHours, canMove = false, onOpenVisit, onOpenPeriod, onCreate, onMove, onNotice, leadMinutes, stepMinutes, horizonDays, bufferMinutes = 0, hourPixels = 56,
 }: {
   data: TeamCalendarSnapshot
   day: string
@@ -334,6 +337,7 @@ function CalendarGrid({
   stepMinutes: number
   horizonDays: number
   bufferMinutes?: number
+  hourPixels?: number
 }) {
   const resources = data.resources.filter(item => !resourceId || item.id === resourceId)
   const columns = resources.map(item => ({ day, resource: item }))
@@ -344,7 +348,7 @@ function CalendarGrid({
   const windows = shifts.flatMap(shift => shift?.windows ?? [])
   const bounds = calendarGridBounds(windows, active)
   const { start, end, span } = bounds
-  const height = span / 60 * 56
+  const height = span / 60 * (hourPixels ?? 56)
   const ticks = Array.from({ length: span / 60 + 1 }, (_, index) => start + index * 60)
   const position = (from: number, to: number): CSSProperties => {
     const frame = calendarBlockFrame(bounds, from, to)

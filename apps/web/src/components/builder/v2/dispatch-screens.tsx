@@ -18,6 +18,7 @@ import { DetailCardShell, DetailSection, ListScreenShell, ShellSearchField } fro
 import { BookingAvatar } from './booking-avatar'
 import { RuDateInput, RuTimeInput, ruNumericDate } from './ru-fields'
 import { SignaturePad } from './signature-pad'
+import { CameraIcon } from '@phosphor-icons/react'
 import { ProtoIcon } from '../prototype/icons'
 import buttons from '../prototype/prototype.module.css'
 import type { AppV2RendererProps } from './view'
@@ -81,10 +82,15 @@ function collectionOn(app: AppV2, screenId: string, tableId: string) {
   return null
 }
 
-function Badge({ name, overdue = false }: { name: string; overdue?: boolean }) {
-  if (!name && !overdue) return null
+function Badge({ name }: { name: string }) {
+  if (!name) return null
+  return <span className={css.badge} data-tone={toneOf(name)}>{name}</span>
+}
+
+function JobBadges({ priority, status, overdue }: { priority: string; status: string; overdue: boolean }) {
   return <span className={css.badges}>
-    {name ? <span className={css.badge} data-tone={toneOf(name)}>{name}</span> : null}
+    <Badge name={priority} />
+    <Badge name={status} />
     {overdue ? <span className={css.badge} data-tone="red">Просрочено</span> : null}
   </span>
 }
@@ -145,14 +151,19 @@ const clientLabel = (props: ScreenProps, row: AppV2Record) => textOf(row.values[
 const addressOf = (props: ScreenProps, row: AppV2Record) => textOf(row.values[props.dispatch.job.address])
 const phoneOf = (props: ScreenProps, row: AppV2Record) => textOf(row.values[props.dispatch.job.phone])
 
-function JobButton(props: ScreenProps & { row: AppV2Record }) {
+function JobButton(props: ScreenProps & { row: AppV2Record; showAssignee?: boolean }) {
   const facts = jobFacts(props, props.row)
   const overdue = isOverdue(facts, props.now)
+  const person = technicians(props).find(item => item.id === facts.technicianId)
+  const address = addressOf(props, props.row)
   return <li><button type="button" className={css.job} onClick={() => props.onNavigate?.(props.dispatch.jobScreenId, props.row.id)}>
-    <strong>{textOf(props.row.values[props.dispatch.job.what])}</strong>
-    <span className={css.meta}><span>{clientLabel(props, props.row) || 'Клиент не указан'}</span><span>{whenLabel(facts.when)}</span></span>
-    {addressOf(props, props.row) ? <span className={css.meta}>{addressOf(props, props.row)}</span> : null}
-    <Badge name={facts.priority} /><Badge name={facts.status} overdue={overdue} />
+    <strong className={css.jobTitle}>{textOf(props.row.values[props.dispatch.job.what])}</strong>
+    <span className={css.jobLine} data-who>{`${clientLabel(props, props.row) || 'Клиент не указан'} · ${whenLabel(facts.when)}`}</span>
+    <span className={css.jobLine} data-address>{address || 'Адрес не указан'}</span>
+    <span className={css.jobFoot}>
+      {props.showAssignee ? <span className={css.assignee}>{person ? <><BookingAvatar name={person.name} photo={person.photo} small /><span>{person.name}</span></> : <><ProtoIcon name="user" size={16} /><span>Не назначено</span></>}</span> : null}
+      <JobBadges priority={facts.priority} status={facts.status} overdue={overdue} />
+    </span>
   </button></li>
 }
 
@@ -190,7 +201,7 @@ function Overview(props: ScreenProps) {
         <button type="button" className={css.sort} aria-pressed={sort === 'when'} onClick={() => setSort('when')}>По времени</button>
         <button type="button" className={css.sort} aria-pressed={sort === 'priority'} onClick={() => setSort('priority')}>По приоритету</button>
       </div>
-      {shown.length ? <ul className={css.list}>{shown.map(item => <JobButton key={item.row.id} {...props} row={item.row} />)}</ul> : <p className={css.empty}>{search || counter || priority ? 'Таких заявок нет. Снимите фильтр или измените поиск.' : 'Заявок пока нет.'}</p>}
+      {shown.length ? <ul className={css.list}>{shown.map(item => <JobButton key={item.row.id} {...props} row={item.row} showAssignee />)}</ul> : <p className={css.empty}>{search || counter || priority ? 'Таких заявок нет. Снимите фильтр или измените поиск.' : 'Заявок пока нет.'}</p>}
       </div>
     </ListScreenShell>
   </div>
@@ -257,19 +268,19 @@ function Board(props: ScreenProps) {
       {calendar?.type === 'team_calendar' ? <TeamCalendarView
         app={props.app} screenId={props.screenId} timeZone={DISPATCH_TIME_ZONE} title="Доска дня"
         resourceLabel="Мастер" resourcesLabel="Мастера" showMetrics={false} showWorkingHours={false} showAmounts={false} showNoShows={false}
-        defaultView="day" loader={loader} loaderKey={jobs.map(row => `${row.id}:${textOf(row.values[props.dispatch.job.when])}:${textOf(row.values[props.dispatch.job.technician])}`).join('|')}
+        defaultView="day" hourPixels={48} loader={loader} loaderKey={jobs.map(row => `${row.id}:${textOf(row.values[props.dispatch.job.when])}:${textOf(row.values[props.dispatch.job.technician])}`).join('|')}
         onOpenVisit={id => props.onNavigate?.(props.dispatch.jobScreenId, id)}
         onMove={props.replace ? move : undefined}
         onCreate={slot => setAssign({ jobId: unassigned[0]?.id ?? null, technicianId: slot.resourceId ?? '', day: slot.day ?? '', time: slot.time ?? '10:00' })}
       /> : <p className={css.empty}>Доска дня не настроена.</p>}
       <aside className={css.panel} aria-label="Не назначено">
-        <h2>Не назначено</h2>
+        <h2>Не назначено <span>· {unassigned.length}</span></h2>
         <p className={css.meta}>{unassigned.length ? 'Выберите мастера и время. Неактивные мастера скрыты.' : 'Все открытые заявки уже назначены.'}</p>
         {unassigned.map(row => <div key={row.id} className={css.panelCard}>
           <strong>{textOf(row.values[props.dispatch.job.what])}</strong>
           <span className={css.meta}>{clientLabel(props, row)} · {whenLabel(jobFacts(props, row).when)}</span>
-          <Badge name={jobFacts(props, row).priority} overdue={isOverdue(jobFacts(props, row), props.now)} />
-          <button type="button" className={buttons.primary} onClick={() => {
+          <JobBadges priority={jobFacts(props, row).priority} status={jobFacts(props, row).status} overdue={isOverdue(jobFacts(props, row), props.now)} />
+          <button type="button" className={`${buttons.secondary} ${css.assign}`} onClick={() => {
             const wall = instantToWallClock(new Date(dateInstant(jobFacts(props, row).when, DISPATCH_TIME_ZONE) ?? props.now), DISPATCH_TIME_ZONE)
             setAssign({ jobId: row.id, technicianId: active[0]?.id ?? '', day: wall?.date ?? '', time: wall?.time ?? '10:00' })
           }}>Назначить</button>
@@ -332,12 +343,37 @@ function TechnicianList(props: ScreenProps) {
         {GROUPS.map(group => {
           const items = jobs.filter(row => technicianGroup(jobFacts(props, row), props.now) === group.id)
             .sort((a, b) => priorityRank(jobFacts(props, a).priority) - priorityRank(jobFacts(props, b).priority))
-          return <section key={group.id} className={css.group}><h2>{group.label}</h2>
+          return <section key={group.id} className={css.group}><h2>{group.label} <span>· {items.length}</span></h2>
             {items.length ? <ul className={css.list}>{items.map(row => <JobButton key={row.id} {...props} row={row} />)}</ul> : <p className={css.empty}>В этой группе пусто.</p>}
           </section>
         })}
       </div>
     </ListScreenShell>
+  </div>
+}
+
+const STEP_RANK: Record<string, number> = { Новая: 0, Назначена: 0, Выехал: 1, 'На месте': 2, Выполнено: 3, Готово: 3 }
+
+function StatusActions({ facts, dispatcher, onEnRoute, onSite, onDone, onReopen }: {
+  facts: DispatchJobFacts
+  dispatcher: boolean
+  onEnRoute: () => void
+  onSite: () => void
+  onDone: () => void
+  onReopen: () => void
+}) {
+  if (facts.status === 'Отменена') return null
+  if (facts.status === 'Выполнено' || facts.status === 'Готово') {
+    return dispatcher ? <button type="button" className={buttons.textButton} onClick={onReopen}>Вернуть в работу</button> : null
+  }
+  const current = STEP_RANK[facts.status] ?? 0
+  const steps = [
+    { label: 'Выехал', state: current > 0 ? 'done' : 'next', onClick: onEnRoute },
+    { label: 'На месте', state: current > 1 ? 'done' : current === 1 ? 'next' : 'later', onClick: onSite },
+    { label: 'Выполнено', state: current === 2 ? 'next' : 'later', onClick: onDone },
+  ] as const
+  return <div className={css.status}>
+    {steps.map(step => <button key={step.label} type="button" className={step.state === 'next' ? buttons.primary : buttons.secondary} data-state={step.state} disabled={step.state === 'done'} onClick={step.onClick}>{step.label}</button>)}
   </div>
 }
 
@@ -372,22 +408,18 @@ function JobCard(props: ScreenProps) {
     <DetailCardShell
       title={textOf(row.values[props.dispatch.job.what])}
       subtitle={whenLabel(facts.when)}
-      badge={<Badge name={facts.priority} overdue={isOverdue(facts, props.now)} />}
+      badge={<JobBadges priority={facts.priority} status="" overdue={isOverdue(facts, props.now)} />}
       chips={<Badge name={facts.status} />}
       back={{ label: props.actor.roleIds.includes('staff') && !props.actor.roleIds.includes('owner') ? 'Мои выезды' : 'Заявки', onClick: () => props.onNavigate?.(props.actor.roleIds.includes('staff') && !props.actor.roleIds.includes('owner') ? props.dispatch.technicianScreenId : props.dispatch.overviewScreenId) }}
-      actions={<div className={css.status}>
-        <button type="button" className={buttons.secondary} aria-pressed={facts.status === 'Выехал'} onClick={() => setStatus(props.dispatch.statuses.enRoute)}>Выехал</button>
-        <button type="button" className={buttons.secondary} aria-pressed={facts.status === 'На месте'} onClick={() => setStatus(props.dispatch.statuses.onSite)}>На месте</button>
-        <button type="button" className={buttons.primary} aria-pressed={facts.status === 'Выполнено'} onClick={() => setComplete(true)}>Выполнено</button>
-      </div>}
+      actions={<StatusActions facts={facts} dispatcher={props.actor.roleIds.includes('owner')} onEnRoute={() => setStatus(props.dispatch.statuses.enRoute)} onSite={() => setStatus(props.dispatch.statuses.onSite)} onDone={() => setComplete(true)} onReopen={() => setStatus(props.dispatch.statuses.assigned)} />}
     >
       <div className={css.columns}>
-        <div>
+        <div className={css.sections}>
           <DetailSection title="Выезд">
             <dl className={css.facts}>
               <div><dt>Клиент</dt><dd>{clientLabel(props, row) || 'Не указан'}</dd></div>
-              <div><dt>Адрес</dt><dd>{address ? <a href={`https://yandex.ru/maps/?text=${encodeURIComponent(address)}`} target="_blank" rel="noreferrer">{address}</a> : 'Не указан'}</dd></div>
-              <div><dt>Телефон</dt><dd>{phoneLink ? <a href={phoneLink}>{phone}</a> : phone || 'Не указан'}</dd></div>
+              <div><dt>Адрес</dt><dd>{address ? <a className={css.tap} href={`https://yandex.ru/maps/?text=${encodeURIComponent(address)}`} target="_blank" rel="noreferrer"><ProtoIcon name="mapPin" size={16} /><span>{address}</span></a> : 'Не указан'}</dd></div>
+              <div><dt>Телефон</dt><dd>{phoneLink ? <a className={css.tap} href={phoneLink}><ProtoIcon name="call" size={16} /><span>{phone}</span></a> : phone || 'Не указан'}</dd></div>
               <div><dt>Мастер</dt><dd>{textOf(row.values[props.dispatch.job.master]) || 'Не назначен'}</dd></div>
             </dl>
           </DetailSection>
@@ -443,14 +475,14 @@ function CompleteDialog(props: ScreenProps & { row: AppV2Record; onClose: () => 
   return <AppDialog title="Отчёт о выполнении" placement="center" onClose={props.onClose}>
     <form className={css.form} onSubmit={event => { event.preventDefault(); save() }}>
       <label>Что сделано<textarea value={report} onChange={event => setReport(event.target.value)} required /></label>
-      <label className={css.filePick}>Фото с выезда<input className={css.fileInput} type="file" accept="image/*" multiple onChange={event => {
+      <label className={css.filePick}>Фото с выезда<input className={css.fileInput} type="file" accept="image/*" multiple aria-label="Добавить фото" onChange={event => {
         const files = [...event.target.files ?? []]
         void Promise.all(files.map(file => new Promise<{ url: string; name: string }>(resolve => {
           const reader = new FileReader()
           reader.onload = () => resolve({ url: String(reader.result ?? ''), name: file.name })
           reader.readAsDataURL(file)
         }))).then(setPhotos)
-      }} /><span>{photos.length ? `Выбрано фото: ${photos.length}` : 'Добавить фото'}</span></label>
+      }} /><span><CameraIcon size={22} aria-hidden="true" />{photos.length ? `Выбрано фото: ${photos.length}` : 'Добавить фото'}</span></label>
       <SignaturePad onChange={setSignature} />
       {error ? <p className={css.error} role="alert">{error}</p> : null}
       <button type="submit" className={buttons.primary}>Завершить заявку</button>
@@ -486,7 +518,7 @@ function ClientCard(props: ScreenProps) {
         </dl>
       </DetailSection>
       <DetailSection title="Заявки">
-        {jobs.length ? <ul className={css.list}>{jobs.map(item => <JobButton key={item.id} {...props} row={item} />)}</ul> : <p className={css.empty}>Заявок этого клиента ещё нет.</p>}
+        {jobs.length ? <ul className={css.list}>{jobs.map(item => <JobButton key={item.id} {...props} row={item} showAssignee />)}</ul> : <p className={css.empty}>Заявок этого клиента ещё нет.</p>}
       </DetailSection>
     </DetailCardShell>
     {open ? <CreateJobDialog {...props} client={row} onClose={() => setOpen(false)} /> : null}

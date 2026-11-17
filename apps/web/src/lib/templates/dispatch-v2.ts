@@ -47,6 +47,13 @@ export function buildDispatchV2App(built: BuiltTemplate, meta: { id: string; wor
     comment: column('Заявки', 'Комментарий').id,
     report: column('Заявки', 'Что сделано').id,
     signature: column('Заявки', 'Подпись клиента').id,
+    signerName: column('Заявки', 'ФИО принявшего').id,
+    signerPosition: column('Заявки', 'Должность принявшего').id,
+    signedAt: column('Заявки', 'Подписано в').id,
+    noClaims: column('Заявки', 'Без претензий').id,
+    claims: column('Заявки', 'Претензии').id,
+    signatureRefused: column('Заявки', 'Отказ от подписи').id,
+    refusalReason: column('Заявки', 'Причина отказа').id,
     site: column('Заявки', 'Адрес выезда').id,
     type: column('Заявки', 'Тип работы').id,
     checklist: column('Заявки', 'Чек-лист заявки').id,
@@ -69,6 +76,7 @@ export function buildDispatchV2App(built: BuiltTemplate, meta: { id: string; wor
     phone: column('Клиенты', 'Телефон').id,
     address: column('Клиенты', 'Адрес').id,
     note: column('Клиенты', 'Заметки').id,
+    contact: column('Клиенты', 'Контактное лицо').id,
   }
   const master = {
     name: column('Мастера', 'Мастер').id,
@@ -213,7 +221,19 @@ export function buildDispatchV2App(built: BuiltTemplate, meta: { id: string; wor
       })) },
     ], owner) },
   })
-  const completeInputs = [input(job.report, 'Что сделано', true), input(job.photo, 'Фото с выезда', false), input(job.signature, 'Подпись клиента', true), input(job.status, 'Статус', true, { kind: 'literal', value: statuses.done }, true)]
+  const completeInputs = [
+    input(job.report, 'Что сделано', true),
+    input(job.photo, 'Фото с выезда', false),
+    input(job.signature, 'Подпись клиента', false),
+    input(job.signerName!, 'ФИО принявшего', true),
+    input(job.signerPosition!, 'Должность принявшего', false),
+    input(job.signedAt!, 'Подписано в', false),
+    input(job.noClaims!, 'Без претензий', false),
+    input(job.claims!, 'Претензии', false),
+    input(job.signatureRefused!, 'Отказ от подписи', false),
+    input(job.refusalReason!, 'Причина отказа', false),
+    input(job.status, 'Статус', true, { kind: 'literal', value: statuses.done }, true),
+  ]
   nodes.push({
     id: ids.completeFormId, name: 'Отчёт о выполнении', type: 'form', tableId: jobs.id, mode: 'edit', childIds: completeInputs,
     submitLabel: 'Завершить заявку', visibleTo: both, visibleWhen: null,
@@ -236,6 +256,8 @@ export function buildDispatchV2App(built: BuiltTemplate, meta: { id: string; wor
     ['Статус', job.status], ['Приоритет', job.priority], ['Начало', job.when], ['Мастер', job.master],
     ['Карточка мастера', job.technician], ['Почта мастера', job.masterEmail], ['Длительность', job.minutes],
     ['Что сделано', job.report], ['Подпись', job.signature], ['Фото', job.photo], ['Комментарий', job.comment],
+    ['ФИО принявшего', job.signerName], ['Должность принявшего', job.signerPosition], ['Подписано в', job.signedAt],
+    ['Без претензий', job.noClaims], ['Претензии', job.claims], ['Отказ от подписи', job.signatureRefused], ['Причина отказа', job.refusalReason],
     ['Чек-лист', job.checklist], ['На месте с', job.onSiteAt], ['Завершено в', job.doneAt], ['Факт', job.actualMinutes],
     ['Серия', job.seriesId], ['Повторять', job.repeat], ['Адрес выезда', job.site], ['Работы', job.works], ['Материалы', job.materials],
   ].map(([name, id]) => ({ name: name!, id: id! })))
@@ -254,7 +276,7 @@ export function buildDispatchV2App(built: BuiltTemplate, meta: { id: string; wor
   const boardJobs = collection('Заявки на доске', jobs.id, job.what, openJob, owner, { subtitleFieldId: job.address, statusFieldId: job.status, dateFieldId: job.when, cardDetailFieldId: job.priority, itemIds: jobFacts() })
   const technicianJobs = collection('Мои выезды', jobs.id, job.what, openJob, staff, { subtitleFieldId: job.address, statusFieldId: job.status, dateFieldId: job.when, cardDetailFieldId: job.priority, itemIds: jobFacts() })
   const clientJobs = collection('Заявки клиента', jobs.id, job.what, openJob, owner, { subtitleFieldId: job.status, statusFieldId: job.status, dateFieldId: job.when, itemIds: jobFacts() }, { op: 'includes', left: { kind: 'row', fieldId: job.client }, right: { kind: 'screen_row_id' } }, clients.id)
-  const clientsList = collection('Клиенты', clients.id, client.name, ids.clientScreenId, owner, { subtitleFieldId: client.address, cardDetailFieldId: client.phone })
+  const clientsList = collection('Клиенты', clients.id, client.name, ids.clientScreenId, owner, { subtitleFieldId: client.address, cardDetailFieldId: client.phone, itemIds: facts([{ id: client.contact!, name: 'Контактное лицо' }, { id: client.phone, name: 'Телефон' }, { id: client.address, name: 'Адрес' }]) })
   const mastersList = collection('Мастера', masters.id, master.name, null, owner, { subtitleFieldId: master.phone, statusFieldId: master.active, cardImageFieldId: master.photo, itemIds: facts([{ id: master.email, name: 'Почта' }, { id: master.active, name: 'Статус' }, { id: master.photo, name: 'Фото' }]) })
   const boardMasters = collection('Мастера доски', masters.id, master.name, null, owner, { cardImageFieldId: master.photo, statusFieldId: master.active, itemIds: facts([{ id: master.email, name: 'Почта' }, { id: master.photo, name: 'Фото' }, { id: master.active, name: 'Статус' }]) })
   const jobMasters = collection('Мастера заявки', masters.id, master.name, null, both, { cardImageFieldId: master.photo, itemIds: facts([{ id: master.email, name: 'Почта' }, { id: master.photo, name: 'Фото' }]) })
@@ -278,12 +300,15 @@ export function buildDispatchV2App(built: BuiltTemplate, meta: { id: string; wor
     { id: job.address, name: 'Адрес' }, { id: job.status, name: 'Статус' }, { id: job.priority, name: 'Приоритет' },
     { id: job.when, name: 'Начало выезда' }, { id: job.master, name: 'Мастер' }, { id: job.report, name: 'Что сделано' },
     { id: job.signature, name: 'Подпись клиента' }, { id: job.photo, name: 'Фото с выезда' }, { id: job.comment, name: 'Комментарий' },
+    { id: job.signerName!, name: 'ФИО принявшего' }, { id: job.signerPosition!, name: 'Должность принявшего' }, { id: job.signedAt!, name: 'Подписано в' },
+    { id: job.noClaims!, name: 'Без претензий' }, { id: job.claims!, name: 'Претензии' },
+    { id: job.signatureRefused!, name: 'Отказ от подписи' }, { id: job.refusalReason!, name: 'Причина отказа' },
     { id: job.price, name: 'Стоимость' }, { id: job.paid, name: 'Оплачено' },
     { id: job.checklist, name: 'Чек-лист' }, { id: job.onSiteAt, name: 'На месте с' }, { id: job.doneAt, name: 'Завершено в' },
     { id: job.actualMinutes, name: 'Факт, мин' }, { id: job.works, name: 'Работы' }, { id: job.materials, name: 'Материалы' },
     { id: job.seriesId, name: 'Серия' }, { id: job.site, name: 'Адрес выезда' },
   ])
-  const clientFields = facts([{ id: client.name, name: 'Клиент' }, { id: client.phone, name: 'Телефон' }, { id: client.address, name: 'Адрес' }, { id: client.note, name: 'Заметки' }])
+  const clientFields = facts([{ id: client.name, name: 'Клиент' }, { id: client.contact!, name: 'Контактное лицо' }, { id: client.phone, name: 'Телефон' }, { id: client.address, name: 'Адрес' }, { id: client.note, name: 'Заметки' }])
   const screen = (id: string, name: string, icon: string, audience: AppV2Audience, contextTableId: string | null, rootIds: string[], navigation: boolean) =>
     ({ id, name, icon, audience, contextTableId, rootIds, navigation, events: { enter: null } })
   const columnsOf = (tableId: string) => built.fields.filter(item => item.tableId === tableId).map(item => item.id)
@@ -291,8 +316,8 @@ export function buildDispatchV2App(built: BuiltTemplate, meta: { id: string; wor
   const grant = (audience: AppV2Audience, value: Omit<AppV2Grant, 'audience'>): AppV2Grant => ({ audience, ...value })
   const owned = (fieldId: string) => ({ kind: 'owned' as const, fieldId, property: 'email' as const })
   const all = { kind: 'all' as const }
-  const staffJobRead = [job.what, job.clientName, job.phone, job.address, job.site, job.status, job.priority, job.master, job.technician, job.date, job.when, job.minutes, job.photo, job.comment, job.report, job.signature, job.checklist, job.onSiteAt, job.doneAt, job.actualMinutes, job.seriesId, job.type]
-  const staffJobUpdate = [job.status, job.photo, job.comment, job.report, job.signature, job.checklist, job.onSiteAt, job.doneAt, job.actualMinutes]
+  const staffJobRead = [job.what, job.clientName, job.phone, job.address, job.site, job.status, job.priority, job.master, job.technician, job.date, job.when, job.minutes, job.photo, job.comment, job.report, job.signature, job.signerName, job.signerPosition, job.signedAt, job.noClaims, job.claims, job.signatureRefused, job.refusalReason, job.checklist, job.onSiteAt, job.doneAt, job.actualMinutes, job.seriesId, job.type]
+  const staffJobUpdate = [job.status, job.photo, job.comment, job.report, job.signature, job.signerName, job.signerPosition, job.signedAt, job.noClaims, job.claims, job.signatureRefused, job.refusalReason, job.checklist, job.onSiteAt, job.doneAt, job.actualMinutes]
   return {
     formatVersion: 2, id: meta.id, workspaceId: meta.workspaceId, name: meta.name, slug: meta.slug, purpose: 'business',
     appearance: { navigation: 'tabs', icon: 'clipboard', density: 'regular', corners: 'rounded' },

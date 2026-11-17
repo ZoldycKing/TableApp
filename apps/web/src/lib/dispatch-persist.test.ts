@@ -4,7 +4,7 @@ import type { AppV2Actor, AppV2Json, AppV2Record } from '@tableapp/schema/app-v2
 import { buildTemplate } from './templates/build'
 import { findTemplate } from './templates/catalog'
 import { buildDispatchV2App } from './templates/dispatch-v2'
-import { guardDispatchCreate, guardDispatchUpdate, progressValues, seriesMutations } from './dispatch-persist'
+import { completionValues, guardDispatchCreate, guardDispatchUpdate, progressValues, seriesMutations } from './dispatch-persist'
 
 const actor = (roleIds: string[], email: string): AppV2Actor => ({ authenticated: true, roleIds, id: 'usr', email, company: '', name: 'Сергей' })
 
@@ -53,6 +53,37 @@ describe('published field-service writes', () => {
     })
     expect(one.creates).toEqual([])
     expect(one.updates.map(item => item.id)).toEqual(['seed'])
+  })
+
+  it('lets the assigned technician store acceptance fields from the completion form', () => {
+    const { app, dispatch } = installed()
+    const row: AppV2Record = { id: 'job', tableId: dispatch.jobsTableId, values: { [dispatch.job.masterEmail]: 'sergey@example.invalid', [dispatch.job.what]: 'Насос' } }
+    const master = actor(['staff'], 'sergey@example.invalid')
+    const values = completionValues(dispatch.job, {
+      report: 'Заменили лампы',
+      photos: [],
+      signature: [{ url: 'data:image/png;base64,aa', name: 'Подпись клиента.png', mime: 'image/png' }],
+      status: dispatch.statuses.done,
+      signerName: 'Иванова Мария Петровна',
+      signerPosition: 'администратор',
+      signedAt: '2026-11-17T11:32:00.000Z',
+      noClaims: true,
+      refused: false,
+      doneAt: '2026-11-17T11:32:00.000Z',
+      actualMinutes: 38,
+    })
+    expect(values[dispatch.job.signerName!]).toBe('Иванова Мария Петровна')
+    expect(values[dispatch.job.noClaims!]).toBe(true)
+    expect(values[dispatch.job.signatureRefused!]).toBe(false)
+    expect(guardDispatchUpdate(app, master, row, values).ok).toBe(true)
+    const refusal = completionValues(dispatch.job, {
+      report: 'Заменили лампы', photos: [], signature: [], status: dispatch.statuses.done,
+      signerName: 'Иванова Мария Петровна', signedAt: '2026-11-17T11:32:00.000Z', noClaims: true,
+      refused: true, refusalReason: 'Подписать некому',
+    })
+    expect(refusal[dispatch.job.signatureRefused!]).toBe(true)
+    expect(refusal[dispatch.job.refusalReason!]).toBe('Подписать некому')
+    expect(guardDispatchUpdate(app, master, row, refusal).ok).toBe(true)
   })
 
   it('writes only values the job columns accept, including an empty end date', () => {

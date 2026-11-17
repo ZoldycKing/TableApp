@@ -153,6 +153,16 @@ export function reassignedNotes<T extends { jobId: string; masterEmail: string }
 
 export type CompletionPhoto = { url: string; name: string }
 
+export type CompletionAcceptance = {
+  signerName: string
+  signerPosition?: string
+  signedAt: string
+  noClaims: boolean
+  claims?: string
+  refused: boolean
+  refusalReason?: string
+}
+
 export function completionPatch(input: {
   report: string
   photos: readonly CompletionPhoto[]
@@ -162,29 +172,80 @@ export function completionPatch(input: {
   reportField: string
   photoField: string
   signatureField: string
+  acceptance?: CompletionAcceptance
+  signerNameField?: string
+  signerPositionField?: string
+  signedAtField?: string
+  noClaimsField?: string
+  claimsField?: string
+  signatureRefusedField?: string
+  refusalReasonField?: string
 }): { ok: true; patch: Record<string, unknown> } | { ok: false; error: string } {
   const report = input.report.trim()
   if (!report) return { ok: false, error: 'Опишите, что сделано.' }
-  const signature = input.signature?.trim() ?? ''
-  if (!signature) return { ok: false, error: 'Нужна подпись клиента.' }
-  return {
-    ok: true,
-    patch: {
-      [input.statusField]: input.doneStatus,
-      [input.reportField]: report,
-      [input.photoField]: input.photos.map(photo => ({ url: photo.url, name: photo.name, mime: 'image/jpeg' })),
-      [input.signatureField]: [{ url: signature, name: 'Подпись клиента.png', mime: 'image/png' }],
-    },
+  const acceptance = input.acceptance
+  if (acceptance) {
+    const signerName = acceptance.signerName.trim()
+    if (!signerName) return { ok: false, error: 'Укажите ФИО принявшего.' }
+    if (acceptance.refused && !acceptance.refusalReason?.trim()) return { ok: false, error: 'Укажите причину отказа от подписи.' }
+    if (!acceptance.refused && !acceptance.noClaims && !acceptance.claims?.trim()) return { ok: false, error: 'Опишите претензии клиента.' }
+    if (!acceptance.refused) {
+      const signature = input.signature?.trim() ?? ''
+      if (!signature) return { ok: false, error: 'Нужна подпись клиента.' }
+    }
+  } else {
+    const signature = input.signature?.trim() ?? ''
+    if (!signature) return { ok: false, error: 'Нужна подпись клиента.' }
   }
+  const signature = input.signature?.trim() ?? ''
+  const patch: Record<string, unknown> = {
+    [input.statusField]: input.doneStatus,
+    [input.reportField]: report,
+    [input.photoField]: input.photos.map(photo => ({ url: photo.url, name: photo.name, mime: 'image/jpeg' })),
+    [input.signatureField]: signature && !(acceptance?.refused) ? [{ url: signature, name: 'Подпись клиента.png', mime: 'image/png' }] : [],
+  }
+  if (acceptance) {
+    if (input.signerNameField) patch[input.signerNameField] = acceptance.signerName.trim()
+    if (input.signerPositionField) patch[input.signerPositionField] = acceptance.signerPosition?.trim() || ''
+    if (input.signedAtField) patch[input.signedAtField] = acceptance.signedAt
+    if (input.noClaimsField) patch[input.noClaimsField] = acceptance.noClaims
+    if (input.claimsField) patch[input.claimsField] = acceptance.noClaims ? '' : (acceptance.claims?.trim() || '')
+    if (input.signatureRefusedField) patch[input.signatureRefusedField] = acceptance.refused
+    if (input.refusalReasonField) patch[input.refusalReasonField] = acceptance.refused ? (acceptance.refusalReason?.trim() || '') : ''
+  }
+  return { ok: true, patch }
 }
 
-export function readCompletion(values: Record<string, unknown>, fields: { report: string; photo: string; signature: string; status: string }) {
+export function readCompletion(values: Record<string, unknown>, fields: {
+  report: string; photo: string; signature: string; status: string
+  signerName?: string; signerPosition?: string; signedAt?: string
+  noClaims?: string; claims?: string; signatureRefused?: string; refusalReason?: string
+}) {
   return {
     status: values[fields.status] ?? null,
     report: typeof values[fields.report] === 'string' ? values[fields.report] : '',
     photos: values[fields.photo] ?? [],
     signature: values[fields.signature] ?? [],
+    signerName: fields.signerName ? String(values[fields.signerName] ?? '') : '',
+    signerPosition: fields.signerPosition ? String(values[fields.signerPosition] ?? '') : '',
+    signedAt: fields.signedAt ? String(values[fields.signedAt] ?? '') : '',
+    noClaims: fields.noClaims ? Boolean(values[fields.noClaims]) : true,
+    claims: fields.claims ? String(values[fields.claims] ?? '') : '',
+    signatureRefused: fields.signatureRefused ? Boolean(values[fields.signatureRefused]) : false,
+    refusalReason: fields.refusalReason ? String(values[fields.refusalReason] ?? '') : '',
   }
+}
+
+/** «17.11.2026 в 14:32» for the act and the completed card. */
+export function signedAtLabel(value: unknown, timeZone = DISPATCH_TIME_ZONE): string {
+  const instant = dateInstant(value, timeZone)
+  if (instant === null) return ''
+  const date = new Date(instant)
+  const wall = instantToWallClock(date, timeZone)
+  if (!wall) return ''
+  const [year, month, day] = wall.date.split('-')
+  const [hour, minute] = wall.time.split(':')
+  return `${day}.${month}.${year} в ${hour}:${minute}`
 }
 
 export function noteDraft(input: { text: string; author: string; authorEmail: string; at: string; jobId: string; masterEmail: string }) {

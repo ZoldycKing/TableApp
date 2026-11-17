@@ -4,12 +4,12 @@ import { newId } from '@tableapp/schema'
 import type { AppV2Json, AppV2Record } from '@tableapp/schema/app-v2'
 import { and, eq, isNull } from 'drizzle-orm'
 import { publishedV2Context, publishedV2Definition, publishedV2Screen } from '@/lib/builder-v2-published'
-import { eventText, progressPercent, type EventKind } from '@/lib/projects-logic'
+import { canParent, eventText, progressPercent, type EventKind } from '@/lib/projects-logic'
 import { commentWrite, eventWrite, guardProjectsCreate, guardProjectsUpdate, moveUpdates, projectWrite, taskWrite } from '@/lib/projects-persist'
 import { RowWriteError, createRow, mutationFields, updateRow, writeRows } from '@/lib/row-mutations'
 
 type MoveRequest = { kind: 'move'; revision: string; screenId: string; recordId: string; statusId: string; orderedIds: string[] }
-type TaskRequest = { kind: 'task'; revision: string; screenId: string; recordId: string; title: string; projectId: string; assigneeId: string; assigneeEmail: string; due: string | null; priorityId: string; statusId: string; description: string; checklist: string; files?: unknown }
+type TaskRequest = { kind: 'task'; revision: string; screenId: string; recordId: string; title: string; projectId: string; parentId?: string; assigneeId: string; assigneeEmail: string; due: string | null; priorityId: string; statusId: string; description: string; checklist: string; files?: unknown }
 type CommentRequest = { kind: 'comment'; revision: string; screenId: string; recordId: string; text: string; mentionIds: string[] }
 type SubtaskRequest = { kind: 'create-subtask'; revision: string; screenId: string; recordId: string; title: string; assigneeId: string; assigneeEmail: string; due: string | null; priorityId: string }
 type ProjectRequest = { kind: 'project'; revision: string; screenId: string; recordId: string; title: string; clientId: string; ownerId: string; start: string | null; due: string | null; budget: number | null; statusId: string }
@@ -30,8 +30,8 @@ function readRequest(input: unknown): Request | null {
   if (value.kind === 'move' && typeof value.statusId === 'string' && idList(value.orderedIds) && recordId) {
     return { kind: 'move', revision, screenId, recordId, statusId: value.statusId, orderedIds: value.orderedIds as string[] }
   }
-  if (value.kind === 'task' && recordId && text(value.title, 200) && typeof value.projectId === 'string' && typeof value.assigneeId === 'string' && typeof value.assigneeEmail === 'string' && typeof value.priorityId === 'string' && typeof value.statusId === 'string' && typeof value.description === 'string' && value.description.length <= 4000 && typeof value.checklist === 'string' && value.checklist.length <= 8000 && maybe(value.due) !== undefined) {
-    return { kind: 'task', revision, screenId, recordId, title: text(value.title, 200)!, projectId: value.projectId, assigneeId: value.assigneeId, assigneeEmail: value.assigneeEmail.trim().toLowerCase(), due: maybe(value.due) ?? null, priorityId: value.priorityId, statusId: value.statusId, description: value.description, checklist: value.checklist, files: value.files }
+  if (value.kind === 'task' && recordId && text(value.title, 200) && typeof value.projectId === 'string' && typeof value.assigneeId === 'string' && typeof value.assigneeEmail === 'string' && typeof value.priorityId === 'string' && typeof value.statusId === 'string' && typeof value.description === 'string' && value.description.length <= 4000 && typeof value.checklist === 'string' && value.checklist.length <= 8000 && maybe(value.due) !== undefined && (value.parentId == null || typeof value.parentId === 'string')) {
+    return { kind: 'task', revision, screenId, recordId, title: text(value.title, 200)!, projectId: value.projectId, parentId: typeof value.parentId === 'string' ? value.parentId : undefined, assigneeId: value.assigneeId, assigneeEmail: value.assigneeEmail.trim().toLowerCase(), due: maybe(value.due) ?? null, priorityId: value.priorityId, statusId: value.statusId, description: value.description, checklist: value.checklist, files: value.files }
   }
   const mentionIds = value.mentionIds == null ? [] : idList(value.mentionIds)
   if (value.kind === 'comment' && recordId && text(value.text, 2000) && mentionIds) return { kind: 'comment', revision, screenId, recordId, text: text(value.text, 2000)!, mentionIds }
@@ -177,6 +177,18 @@ export async function savePublishedProjectsAction(slug: string, input: unknown):
           await writeProgress(currentProject, taskRows.map(item => ({ id: item.id, data: item.data })), { id: row.id, projectId: currentProject, status: nextStatus })
         }
         return { ok: true as const, message: 'Задача сохранена.' }
+      }
+      if (parsed.parentId) {
+        const relationId = (data: Record<string, unknown>, fieldId: string) => {
+          const value = data[fieldId]
+          return Array.isArray(value) ? String(value[0] ?? '') : ''
+        }
+        const parents = taskRows.map(item => ({ id: item.id, parentId: relationId(item.data as Record<string, unknown>, kit.task.parent) }))
+        const parentRow = taskRows.find(item => item.id === parsed.parentId)
+        const parentProject = parentRow ? relationId(parentRow.data as Record<string, unknown>, kit.task.project) : ''
+        if (!canParent(parsed.parentId, parents) || parentProject !== parsed.projectId || parsed.parentId === row.id) {
+          throw new RowWriteError('invalid', 'Родительская задача должна быть задачей того же проекта без своего родителя.')
+        }
       }
       const values = taskWrite(kit.task, { ...parsed, files: Array.isArray(parsed.files) ? parsed.files as AppV2Json : undefined })
       if (!leader) delete values[kit.task.assigneeEmail]

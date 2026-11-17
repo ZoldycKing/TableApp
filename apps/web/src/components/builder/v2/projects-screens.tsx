@@ -461,38 +461,68 @@ function TaskCard(props: ScreenProps) {
     void saveSubtask(props, row, title, setError)
     setSubtask('')
   }
-  return <div className={css.root} data-projects-screen="task">
+  const projectName = projectTitle(props, facts.projectId) || 'Без проекта'
+  const parentName = facts.parentId ? taskTitle(props, facts.parentId) : ''
+  const taskName = textOf(row.values[props.kit.task.title])
+  return <div className={css.root} data-projects-screen={facts.parentId ? 'subtask' : 'task'}>
     <DetailCardShell
-      title={textOf(row.values[props.kit.task.title])}
-      subtitle={projectTitle(props, facts.projectId) || 'Без проекта'}
+      title={taskName}
       chips={<div className={css.headerChips}>
+        {facts.parentId ? <nav className={css.crumb} data-task-crumb aria-label="Путь задачи">
+          <button type="button" className={css.crumbLink} onClick={() => props.onNavigate?.(props.kit.projectScreenId, facts.projectId)}>{projectName}</button>
+          <span aria-hidden="true"> › </span>
+          <button type="button" className={css.crumbLink} onClick={() => props.onNavigate?.(props.kit.taskScreenId, facts.parentId)}>{parentName || 'Задача'}</button>
+          <span aria-hidden="true"> › </span>
+          <span>{taskName || 'Подзадача'}</span>
+        </nav> : null}
         <div className={css.taskHeadRow}>
           <span className={css.cardFoot}><Badge name={facts.priority} />{overdue ? <Badge name="Просрочено" /> : null}</span>
           <div className={css.headerActions}><button type="button" className={buttons.secondary} onClick={() => setEdit(true)}>Изменить</button><button type="button" className={buttons.secondary} onClick={() => setComment(true)}>Комментарий</button></div>
         </div>
         <Segmented plain label="Статус" value={String(row.values[props.kit.task.status] ?? '')} options={TASK_STATUSES.map(name => ({ id: choiceId(props.tables, props.kit.tasksTableId, props.kit.task.status, name), name }))} onChange={id => { const name = TASK_STATUSES.find(item => choiceId(props.tables, props.kit.tasksTableId, props.kit.task.status, item) === id); if (name) setStatus(name) }} />
+        {facts.parentId ? (() => {
+          const parentRow = props.of(props.kit.tasksTableId).find(item => item.id === facts.parentId)
+          const parentStatus = parentRow ? taskFacts(props, parentRow).status : ''
+          return <button type="button" className={css.parentTile} data-parent-tile onClick={() => props.onNavigate?.(props.kit.taskScreenId, facts.parentId)}>
+            <span className={css.parentTileLabel}>Родительская задача</span>
+            <span className={css.parentTileMain}>
+              <span className={css.parentTileTitle}>{parentName || 'Открыть задачу'}</span>
+              {parentStatus ? <Badge name={parentStatus} /> : null}
+              <ProtoIcon name="arrow" size={16} />
+            </span>
+          </button>
+        })() : null}
       </div>}
-      back={facts.parentId ? { label: taskTitle(props, facts.parentId) || 'Задача', onClick: () => props.onNavigate?.(props.kit.taskScreenId, facts.parentId) } : { label: 'Доска', onClick: () => props.onNavigate?.(props.kit.boardScreenId) }}
+      back={facts.parentId ? { label: parentName || 'Задача', onClick: () => props.onNavigate?.(props.kit.taskScreenId, facts.parentId) } : { label: 'Доска', onClick: () => props.onNavigate?.(props.kit.boardScreenId) }}
       metrics={[
-        { key: 'project', caption: 'Проект', value: <button type="button" className={css.metricText} onClick={() => props.onNavigate?.(props.kit.projectScreenId, facts.projectId)}>{projectTitle(props, facts.projectId) || 'Не указан'}</button> },
+        { key: 'project', caption: 'Проект', value: <button type="button" className={css.metricText} onClick={() => props.onNavigate?.(props.kit.projectScreenId, facts.projectId)}>{projectName}</button> },
         { key: 'who', caption: 'Исполнитель', value: <span className={css.metricPerson}>{person ? <BookingAvatar name={person.name} photo={person.photo} small /> : null}<span>{person?.name || 'Не назначен'}</span></span> },
         { key: 'due', caption: 'Срок', value: <span className={css.metricText} data-overdue={overdue || undefined}>{formatDay(facts.due) || 'Не указан'}</span>, tone: overdue ? 'rose' : undefined },
-        { key: 'sub', caption: 'Подзадачи', value: <span className={css.metricText}>{progress.total ? `${progress.done} из ${progress.total}` : 'Нет'}</span> },
+        ...(facts.parentId ? [] : [{ key: 'sub', caption: 'Подзадачи', value: <span className={css.metricText}>{progress.total ? `${progress.done} из ${progress.total}` : 'Нет'}</span> }]),
       ]}
     >
       <div className={css.pad}>
         {textOf(row.values[props.kit.task.description]) ? <DetailSection title="Описание"><p>{textOf(row.values[props.kit.task.description])}</p></DetailSection> : null}
         {facts.parentId ? null : <DetailSection title="Подзадачи">
-          {children.length ? <ul className={css.subtaskList}>{children.map(child => {
+          {children.length ? <ul className={css.subtaskList} data-subtask-list>{children.map(child => {
             const childFacts = taskFacts(props, child)
             const who = personById(props, childFacts.assigneeId)
             const late = isOverdue(childFacts, props.now)
             const done = isDone(childFacts.status)
             const title = textOf(child.values[props.kit.task.title])
-            return <li key={child.id} className={css.subtaskRow}>
-              <button type="button" role="checkbox" aria-checked={done} aria-label={title} className={css.check} onClick={() => toggleChild(child)}><span data-on={done || undefined}>{done ? <ProtoIcon name="check" size={12} /> : null}</span></button>
-              <button type="button" className={css.subtaskTitle} onClick={() => props.onNavigate?.(props.kit.taskScreenId, child.id)}>{title}</button>
-              <button type="button" className={css.subtaskMeta} onClick={() => props.onNavigate?.(props.kit.taskScreenId, child.id)}>{who ? <BookingAvatar name={who.name} photo={who.photo} small /> : null}<span className={css.due} data-overdue={late || undefined}>{formatDay(childFacts.due) || 'Без срока'}</span></button>
+            return <li key={child.id} className={css.subtaskCard} data-overdue={late || undefined}>
+              <button type="button" role="checkbox" aria-checked={done} aria-label={`Закрыть: ${title}`} className={css.subtaskCheck} onClick={() => toggleChild(child)}><span data-on={done || undefined}>{done ? <ProtoIcon name="check" size={12} /> : null}</span></button>
+              <button type="button" className={css.subtaskOpen} onClick={() => props.onNavigate?.(props.kit.taskScreenId, child.id)}>
+                <span className={css.subtaskMain}>
+                  <span className={css.cardTitle}>{title}</span>
+                  <span className={css.subtaskBadges}><Badge name={childFacts.status} /><Badge name={childFacts.priority} /></span>
+                </span>
+                <span className={css.subtaskAside}>
+                  {who ? <BookingAvatar name={who.name} photo={who.photo} small /> : <span className={css.subtaskAvatar}><ProtoIcon name="user" size={16} /></span>}
+                  <span className={css.due} data-overdue={late || undefined}>{formatDay(childFacts.due) || 'Без срока'}</span>
+                  <ProtoIcon name="arrow" size={16} />
+                </span>
+              </button>
             </li>
           })}</ul> : null}
           <form className={css.subtaskAdd} onSubmit={event => { event.preventDefault(); addSubtask() }}>
@@ -585,13 +615,17 @@ function PeopleMenu({ label, value, people: list, onChange }: { label: string; v
 }
 
 function ProjectPick({ value, options, onChange }: { value: string; options: { id: string; name: string }[]; onChange: (id: string) => void }) {
+  return <SearchPick label="Проект" value={value} options={options} onChange={onChange} placeholder="Выберите проект" searchLabel="Найти проект" />
+}
+
+function SearchPick({ label, value, options, onChange, placeholder, searchLabel }: { label: string; value: string; options: { id: string; name: string }[]; onChange: (id: string) => void; placeholder: string; searchLabel: string }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const selected = options.find(option => option.id === value)
   const shown = options.filter(option => option.name.toLocaleLowerCase('ru-RU').includes(query.trim().toLocaleLowerCase('ru-RU')))
-  return <div className={css.field}><span>Проект</span><div className={css.picker}>
-    <button type="button" className={css.pickerButton} aria-expanded={open} aria-haspopup="listbox" onClick={() => setOpen(current => !current)}><span>{selected?.name || 'Выберите проект'}</span><ProtoIcon name="down" size={16} /></button>
-    {open ? <div className={css.pickerPanel}><input type="text" aria-label="Найти проект" placeholder="Найти проект" value={query} onChange={event => setQuery(event.target.value)} /><ul role="listbox">{shown.map(option => <li key={option.id}><button type="button" role="option" aria-selected={option.id === value} onClick={() => { onChange(option.id); setOpen(false); setQuery('') }}>{option.name}</button></li>)}{shown.length ? null : <li className={css.empty}>Ничего не найдено</li>}</ul></div> : null}
+  return <div className={css.field}><span>{label}</span><div className={css.picker}>
+    <button type="button" className={css.pickerButton} aria-expanded={open} aria-haspopup="listbox" onClick={() => setOpen(current => !current)}><span>{selected?.name || placeholder}</span><ProtoIcon name="down" size={16} /></button>
+    {open ? <div className={css.pickerPanel}><input type="text" aria-label={searchLabel} placeholder={searchLabel} value={query} onChange={event => setQuery(event.target.value)} /><ul role="listbox">{shown.map(option => <li key={option.id}><button type="button" role="option" aria-selected={option.id === value} onClick={() => { onChange(option.id); setOpen(false); setQuery('') }}>{option.name}</button></li>)}{shown.length ? null : <li className={css.empty}>Ничего не найдено</li>}</ul></div> : null}
   </div></div>
 }
 
@@ -599,8 +633,10 @@ function TaskEditor(props: ScreenProps & { mode: 'create' | 'edit'; row?: AppV2R
   const formId = useId()
   const row = props.row
   const facts = row ? taskFacts(props, row) : null
+  const startedAsSubtask = Boolean(facts?.parentId)
   const [title, setTitle] = useState(row ? textOf(row.values[props.kit.task.title]) : '')
   const [projectId, setProjectId] = useState(facts?.projectId ?? props.of(props.kit.projectsTableId)[0]?.id ?? '')
+  const [parentId, setParentId] = useState(facts?.parentId ?? '')
   const [assigneeId, setAssigneeId] = useState(facts?.assigneeId ?? people(props).find(person => person.active)?.id ?? '')
   const [due, setDue] = useState(facts ? formatDay(facts.due).split('.').reverse().join('-') : '')
   const [priority, setPriority] = useState(facts ? choiceId(props.tables, props.kit.tasksTableId, props.kit.task.priority, facts.priority) : choiceId(props.tables, props.kit.tasksTableId, props.kit.task.priority, 'Средний'))
@@ -612,12 +648,29 @@ function TaskEditor(props: ScreenProps & { mode: 'create' | 'edit'; row?: AppV2R
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const activePeople = people(props).filter(person => person.active || person.id === assigneeId)
+  const childIds = new Set(props.of(props.kit.tasksTableId).filter(item => taskFacts(props, item).parentId === row?.id).map(item => item.id))
+  const parentOptions = [
+    { id: '', name: 'Без родительской задачи' },
+    ...props.of(props.kit.tasksTableId)
+      .map(item => ({ row: item, facts: taskFacts(props, item) }))
+      .filter(item => item.facts.projectId === projectId && !item.facts.parentId && item.row.id !== row?.id && !childIds.has(item.row.id))
+      .map(item => ({ id: item.row.id, name: textOf(item.row.values[props.kit.task.title]) })),
+  ]
+  const setProject = (next: string) => {
+    setProjectId(next)
+    if (!startedAsSubtask || !parentId) return
+    const nextAllowed = props.of(props.kit.tasksTableId)
+      .map(item => ({ id: item.id, facts: taskFacts(props, item) }))
+      .filter(item => item.facts.projectId === next && !item.facts.parentId && item.id !== row?.id && !childIds.has(item.id))
+      .map(item => item.id)
+    if (!nextAllowed.includes(parentId)) setParentId('')
+  }
   const save = async () => {
     if (!title.trim()) { setError('Напишите, что нужно сделать.'); return }
     const assignee = people(props).find(person => person.id === assigneeId)
     if (!assignee) { setError('Выберите исполнителя.'); return }
     setBusy(true)
-    const body = { title: title.trim(), projectId, assigneeId, assigneeEmail: assignee.email, due: due || null, priorityId: priority, statusId: status, description, checklist: serializeChecklist(items) }
+    const body = { title: title.trim(), projectId, assigneeId, assigneeEmail: assignee.email, due: due || null, priorityId: priority, statusId: status, description, checklist: serializeChecklist(items), ...(startedAsSubtask || parentId ? { parentId } : {}) }
     if (props.mode === 'create') await saveCreateTask(props, body, setError, props.onClose)
     else if (row) await saveTaskPatch(props, row, { ...body, files }, setError, props.onClose)
     setBusy(false)
@@ -629,7 +682,8 @@ function TaskEditor(props: ScreenProps & { mode: 'create' | 'edit'; row?: AppV2R
       <Segmented label="Приоритет" value={priority} options={PRIORITIES.map(name => ({ id: choiceId(props.tables, props.kit.tasksTableId, props.kit.task.priority, name), name }))} onChange={setPriority} />
       {props.mode === 'edit' ? <Segmented label="Статус" value={status} options={TASK_STATUSES.map(name => ({ id: choiceId(props.tables, props.kit.tasksTableId, props.kit.task.status, name), name }))} onChange={setStatus} /> : null}
       <PeopleMenu label="Исполнитель" value={assigneeId} people={activePeople} onChange={setAssigneeId} />
-      <ProjectPick value={projectId} options={props.of(props.kit.projectsTableId).map(item => ({ id: item.id, name: textOf(item.values[props.kit.project.title]) }))} onChange={setProjectId} />
+      <ProjectPick value={projectId} options={props.of(props.kit.projectsTableId).map(item => ({ id: item.id, name: textOf(item.values[props.kit.project.title]) }))} onChange={setProject} />
+      {startedAsSubtask ? <SearchPick label="Родительская задача" value={parentId} options={parentOptions} onChange={setParentId} placeholder="Выберите задачу" searchLabel="Найти задачу" /> : null}
       <label>Описание<textarea value={description} onChange={event => setDescription(event.target.value)} /></label>
       <div className={css.field}><span>Чек-лист</span><ul className={css.checkList}>{items.map((item, index) => <li key={`${item.label}-${index}`}><CheckControl checked={item.done} label={item.label} onToggle={() => setItems(toggleChecklistItem(items, index))} /></li>)}</ul>
         <div className={css.subtaskAdd}><input type="text" aria-label="Новый пункт" value={draft} placeholder="Пункт без срока" onChange={event => setDraft(event.target.value)} /><button type="button" className={buttons.secondary} onClick={() => { const label = draft.trim(); if (!label) return; setItems([...items, { label, done: false }]); setDraft('') }}>Добавить</button></div>
@@ -762,7 +816,7 @@ function localEvent(props: ScreenProps, task: AppV2Record, kind: 'created' | 'st
   return { id: `event_${crypto.randomUUID().replaceAll('-', '')}`, tableId: props.kit.eventsTableId, values: eventWrite(props.kit.event, { text, projectId: facts.projectId, taskId: task.id, at: new Date().toISOString(), kind, kindId, author: props.actor.name?.trim() || 'Сотрудник', authorEmail: props.actor.email ?? '', assigneeEmail: facts.assigneeEmail }) }
 }
 
-async function saveTaskPatch(props: ScreenProps, row: AppV2Record, input: { title?: string; projectId?: string; assigneeId?: string; assigneeEmail?: string; due?: string | null; priorityId?: string; statusId?: string; description?: string; checklist?: string; files?: File[] }, setError: (value: string) => void, onDone?: () => void) {
+async function saveTaskPatch(props: ScreenProps, row: AppV2Record, input: { title?: string; projectId?: string; parentId?: string; assigneeId?: string; assigneeEmail?: string; due?: string | null; priorityId?: string; statusId?: string; description?: string; checklist?: string; files?: File[] }, setError: (value: string) => void, onDone?: () => void) {
   const facts = taskFacts(props, row)
   const storedFiles = row.values[props.kit.task.files]
   const kept: AppV2Json[] = Array.isArray(storedFiles) ? storedFiles : []
@@ -794,7 +848,8 @@ async function saveTaskPatch(props: ScreenProps, row: AppV2Record, input: { titl
     }
     files = [...kept, ...uploaded]
   }
-  const result = await savePublishedProjectsAction(published.slug, { kind: 'task', revision: published.revision, screenId: props.screenId, recordId: row.id, title: input.title ?? textOf(row.values[props.kit.task.title]), projectId: input.projectId ?? facts.projectId, assigneeId: input.assigneeId ?? facts.assigneeId, assigneeEmail: input.assigneeEmail ?? facts.assigneeEmail, due: input.due === undefined ? civilInput(facts.due) || null : input.due, priorityId: input.priorityId ?? String(row.values[props.kit.task.priority] ?? ''), statusId: input.statusId ?? String(row.values[props.kit.task.status] ?? ''), description: input.description ?? textOf(row.values[props.kit.task.description]), checklist: input.checklist ?? textOf(row.values[props.kit.task.checklist]), ...(input.files ? { files } : {}) })
+  const nextParentId = input.parentId !== undefined ? input.parentId : (facts.parentId || undefined)
+  const result = await savePublishedProjectsAction(published.slug, { kind: 'task', revision: published.revision, screenId: props.screenId, recordId: row.id, title: input.title ?? textOf(row.values[props.kit.task.title]), projectId: input.projectId ?? facts.projectId, parentId: nextParentId, assigneeId: input.assigneeId ?? facts.assigneeId, assigneeEmail: input.assigneeEmail ?? facts.assigneeEmail, due: input.due === undefined ? civilInput(facts.due) || null : input.due, priorityId: input.priorityId ?? String(row.values[props.kit.task.priority] ?? ''), statusId: input.statusId ?? String(row.values[props.kit.task.status] ?? ''), description: input.description ?? textOf(row.values[props.kit.task.description]), checklist: input.checklist ?? textOf(row.values[props.kit.task.checklist]), ...(input.files ? { files } : {}) })
   if (!result.ok) { setError(result.error); return }
   published.refresh(result.message)
   onDone?.()

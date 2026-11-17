@@ -81,7 +81,7 @@ export function taskWrite(task: ProjectsApp['task'], input: {
   put(task.checklist, input.checklist)
   put(task.files, input.files)
   put(task.sort, input.sort)
-  put(task.parent, input.parentId ? [input.parentId] : undefined)
+  put(task.parent, input.parentId === '' ? [] : input.parentId ? [input.parentId] : undefined)
   put(task.stage, input.stageId === null ? [] : input.stageId ? [input.stageId] : undefined)
   return values
 }

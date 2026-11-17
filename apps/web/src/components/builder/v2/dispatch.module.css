@@ -106,6 +106,9 @@
 }
 .composer textarea, .form textarea { min-height: 88px; resize: vertical; }
 .form { display: grid; gap: 12px; }
+.form[data-complete-form] { gap: 10px; }
+.form[data-complete-form] textarea { min-height: 56px; }
+.form[data-complete-form] label { font-size: 12px; }
 .form label { display: grid; gap: 6px; font-size: 13px; font-weight: 650; }
 .form select, .form input:not([type='file']) {
   width: 100%; min-width: 0; min-height: 42px; border: 1px solid var(--v2-line, #dce2d6); border-radius: 12px;
@@ -123,18 +126,24 @@
 .fileInput { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); border: 0; }
 .filePick span {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
-  width: 100%; min-height: 92px; padding: 12px; border: 1.5px dashed var(--v2-line, #b7c0b4); border-radius: 12px;
+  width: 100%; min-height: 72px; padding: 10px; border: 1.5px dashed var(--v2-line, #b7c0b4); border-radius: 12px;
   background: var(--v2-bg, #f6f8f4); color: var(--v2-ink, #253c2d); font-weight: 650; cursor: pointer;
 }
+.form[data-complete-form] .filePick span { min-height: 56px; flex-direction: row; gap: 8px; }
 .signature { display: grid; gap: 6px; }
 .signatureHead { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; font-weight: 650; }
-.signaturePad { width: 100%; height: 148px; touch-action: none; border: 1px dashed var(--v2-line, #dce2d6); border-radius: 12px; background: #fff; }
+.signaturePad { width: 100%; height: 120px; touch-action: none; border: 1px dashed var(--v2-line, #dce2d6); border-radius: 12px; background: #fff; }
+.form[data-complete-form] .signaturePad { height: 88px; }
 .signImage { width: min(100%, 320px); height: auto; background: #fff; border: 1px solid var(--v2-line, #dce2d6); border-radius: 12px; }
 .photos { display: flex; flex-wrap: wrap; gap: 8px; }
 .photos img { width: 88px; height: 88px; object-fit: cover; border-radius: 10px; }
 .linkButton { border: 0; padding: 0; background: transparent; color: var(--v2-accent, #315f91); font: inherit; font-weight: 650; }
 .empty { margin: 0; color: var(--v2-muted, #687568); }
 .report { display: grid; gap: 8px; }
+.acceptance { margin-top: 4px; }
+.acceptance .signImage { width: min(100%, 220px); }
+.footerRow { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; }
+.footerRow button { min-width: 0; white-space: normal; line-height: 1.25; }
 .error { margin: 0; color: #9f1239; }
 @container builder-app (min-width: 720px) {
   .counters { grid-template-columns: repeat(4, minmax(0, 1fr)); }
@@ -167,4 +176,5 @@
   .signaturePad { height: 112px; }
   .filePick span { min-height: 76px; }
   .form textarea { min-height: 72px; }
+  .footerRow { grid-template-columns: 1fr; }
 }

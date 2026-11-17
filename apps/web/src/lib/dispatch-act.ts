@@ -20,6 +20,15 @@ export type WorkActInput = {
   total: string
   photos: readonly ActImage[]
   signature: ActImage | null
+  /** Who accepted the work. Falls back to the client name when empty. */
+  signerName?: string
+  signerPosition?: string
+  /** «17.11.2026 в 14:32» */
+  signedAt?: string
+  noClaims?: boolean
+  claims?: string
+  signatureRefused?: boolean
+  refusalReason?: string
 }
 
 const ink = rgb(0.145, 0.235, 0.176)
@@ -44,6 +53,16 @@ function wrap(font: PDFFont, text: string, size: number, width: number): string[
   return lines
 }
 
+function remarksLine(input: WorkActInput): string {
+  if (input.noClaims === false) return input.claims?.trim() || 'не указаны'
+  return 'Претензий нет'
+}
+
+function refusalStamp(input: WorkActInput): string {
+  const when = input.signedAt?.trim() || '—'
+  return `Отказ от подписи зафиксирован ${when}`
+}
+
 /** «Акт выполненных работ» as a one-page PDF. Cyrillic is drawn with the embedded font. */
 export async function buildWorkActPdf(input: WorkActInput, fontBytes: Uint8Array): Promise<Uint8Array> {
   const doc = await PDFDocument.create()
@@ -60,7 +79,6 @@ export async function buildWorkActPdf(input: WorkActInput, fontBytes: Uint8Array
   const rule = (top: number) => {
     page.drawLine({ start: { x: margin, y: top }, end: { x: margin + width, y: top }, thickness: 0.6, color: line })
   }
-
   text('Акт выполненных работ', margin, y, 18)
   y -= 22
   text([input.company || 'Сервисный выезд', input.number ? `Акт № ${input.number}` : '', input.date].filter(Boolean).join(' · '), margin, y, 11, muted)
@@ -133,7 +151,7 @@ export async function buildWorkActPdf(input: WorkActInput, fontBytes: Uint8Array
     y -= 14
   }
 
-  if (input.photos.length && y > 150) {
+  if (input.photos.length && y > 180) {
     const drawn: { image: Awaited<ReturnType<PDFDocument['embedPng']>>; }[] = []
     for (const photo of input.photos.slice(0, 4)) {
       try {
@@ -155,18 +173,42 @@ export async function buildWorkActPdf(input: WorkActInput, fontBytes: Uint8Array
     }
   }
 
-  if (y > 110) {
-    section('Подпись клиента')
-    text(input.client || 'Клиент', margin, y, 10)
-    y -= 14
-    if (input.signature) {
+  if (y > 160) {
+    section('Приёмка работ')
+    const signer = input.signerName?.trim() || input.client.trim() || 'Клиент'
+    const position = input.signerPosition?.trim()
+    const technician = input.technician.trim()
+    const acceptanceFacts: [string, string][] = [
+      ['Работу принял', position ? `${signer}, ${position}` : signer],
+    ]
+    if (input.signatureRefused) {
+      acceptanceFacts.push(['Статус', refusalStamp(input)])
+      acceptanceFacts.push(['Причина', input.refusalReason?.trim() || 'не указана'])
+    } else {
+      if (input.signedAt?.trim()) acceptanceFacts.push(['Дата подписи', input.signedAt.trim()])
+      acceptanceFacts.push(['Замечания', remarksLine(input)])
+    }
+    acceptanceFacts.push(['Исполнитель', technician || 'не назначен'])
+    for (const [label, value] of acceptanceFacts) {
+      text(label, margin, y, 9, muted)
+      const lines = wrap(font, value, 11, width - 150)
+      const shown = lines.length ? lines : ['—']
+      shown.forEach((row, index) => text(row, margin + 150, y - index * 14, 11))
+      y -= Math.max(18, shown.length * 14 + 4)
+    }
+    y -= 12
+    text('Исполнитель ________________', margin, y, 10)
+    text(`/ ${technician || 'не назначен'}`, margin + 210, y, 10)
+    y -= 28
+    const customer = input.signerName?.trim() || input.client.trim() || 'Заказчик'
+    if (!input.signatureRefused && input.signature) {
       try {
         const image = input.signature.mime === 'image/png' ? await doc.embedPng(input.signature.bytes) : await doc.embedJpg(input.signature.bytes)
-        page.drawImage(image, { x: margin, y: y - 48, width: 180, height: 48 })
-      } catch {
-        text('Подпись сохранена отдельным файлом', margin, y, 10, muted)
-      }
-    } else text('Подпись не приложена', margin, y, 10, muted)
+        page.drawImage(image, { x: margin + 78, y: y - 26, width: 118, height: 30 })
+      } catch { /* blank signature line remains */ }
+    }
+    text('Заказчик ________________', margin, y, 10)
+    text(`/ ${customer}`, margin + 210, y, 10)
   }
 
   return doc.save()

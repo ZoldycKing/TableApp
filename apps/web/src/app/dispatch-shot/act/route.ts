@@ -5,8 +5,9 @@ import { buildWorkActPdf } from '@/lib/dispatch-act'
 export const dynamic = 'force-dynamic'
 
 /** First page of the Moscow demo act, for the screenshot. Not part of the published app. */
-export async function GET() {
+export async function GET(request: Request) {
   if (process.env.NODE_ENV === 'production') notFound()
+  const refused = new URL(request.url).searchParams.get('refuse') === '1'
   const font = readFileSync(new URL('../../../../public/template-media/dispatch/NotoSans-Regular.ttf', import.meta.url))
   const photo = readFileSync(new URL('../../../../public/template-media/dispatch/act-photo.jpg', import.meta.url))
   const signature = readFileSync(new URL('../../../../public/template-media/dispatch/act-signature.png', import.meta.url))
@@ -29,7 +30,14 @@ export async function GET() {
     materials: [{ name: 'Лампа LED 10 Вт, 6 шт.', amount: 400 }],
     total: '4 200 ₽',
     photos: [{ bytes: photo, mime: 'image/jpeg' }],
-    signature: { bytes: signature, mime: 'image/png' },
+    signature: refused ? null : { bytes: signature, mime: 'image/png' },
+    signerName: 'Иванова Мария Петровна',
+    signerPosition: 'администратор',
+    signedAt: '17.11.2026 в 14:32',
+    noClaims: !refused,
+    claims: refused ? '' : undefined,
+    signatureRefused: refused,
+    refusalReason: refused ? 'Уполномоченный сотрудник уже ушёл, подписать некому.' : undefined,
   }, font)
   return new Response(Buffer.from(pdf), { headers: { 'Content-Type': 'application/pdf', 'Cache-Control': 'no-store' } })
 }

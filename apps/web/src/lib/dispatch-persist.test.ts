@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseCellValue, type Field } from '@tableapp/schema'
-import type { AppV2Actor, AppV2Record } from '@tableapp/schema/app-v2'
+import type { AppV2Actor, AppV2Json, AppV2Record } from '@tableapp/schema/app-v2'
 import { buildTemplate } from './templates/build'
 import { findTemplate } from './templates/catalog'
 import { buildDispatchV2App } from './templates/dispatch-v2'
@@ -64,7 +64,7 @@ describe('published field-service writes', () => {
     const repeatChoiceId = repeatField?.type === 'single_select' ? repeatField.options.choices.find(choice => choice.name === 'Еженедельно')!.id : ''
     const stored = built.rows.find(row => row.tableId === dispatch.jobsTableId && row.data[dispatch.job.masterEmail!] === 'sergey@example.invalid')!
     const plan = seriesMutations({
-      dispatch, seed: { id: stored.id, tableId: stored.tableId, values: stored.data },
+      dispatch, seed: { id: stored.id, tableId: stored.tableId, values: stored.data as Record<string, AppV2Json> },
       rule: 'weekly', until: null, count: 4, repeatChoiceId, seriesId: 'series-pump', scope: 'series',
       siblings: [{ id: stored.id, seriesId: '', when: stored.data[dispatch.job.when!], status: 'На месте' }],
     })

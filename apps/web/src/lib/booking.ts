@@ -4,6 +4,45 @@ import { bookingOccupancy, bookingRangesOverlap, bookingRules } from './booking-
 export type BookingRow = { id: string; data: Record<string, unknown> }
 export type BookingData = { services: BookingRow[]; masters: BookingRow[]; schedule: BookingRow[]; visits: BookingRow[]; clients?: BookingRow[]; timeZone: string }
 export type BookingSlot = { start: string; time: string; masterId: string; masterName: string }
+export type BookingSlotPeriod = 'morning' | 'day' | 'evening'
+export const BOOKING_SLOT_PERIODS: { id: BookingSlotPeriod; title: string }[] = [
+  { id: 'morning', title: 'Утро' },
+  { id: 'day', title: 'День' },
+  { id: 'evening', title: 'Вечер' },
+]
+/** Minutes from midnight for `ЧЧ:ММ`, or null when the clock text is not a slot label. */
+export function bookingTimeMinutes(time: string): number | null {
+  const match = /^(\d{2}):(\d{2})$/.exec(time)
+  if (!match) return null
+  return Number(match[1]) * 60 + Number(match[2])
+}
+/** Утро is before 12:00, День is 12:00–16:59, Вечер starts at 17:00. */
+export function bookingSlotPeriod(time: string): BookingSlotPeriod | null {
+  const minutes = bookingTimeMinutes(time)
+  if (minutes === null || minutes >= 24 * 60) return null
+  if (minutes < 12 * 60) return 'morning'
+  if (minutes < 17 * 60) return 'day'
+  return 'evening'
+}
+/** One chip per start. Keeps the first slot in the incoming order and drops later masters. */
+export function dedupeBookingSlots(slots: readonly BookingSlot[]): BookingSlot[] {
+  const seen = new Set<string>()
+  const unique: BookingSlot[] = []
+  for (const slot of slots) {
+    if (seen.has(slot.start)) continue
+    seen.add(slot.start)
+    unique.push(slot)
+  }
+  return unique
+}
+/** Visible groups for the picker. A chosen master keeps only that master's times; empty groups are omitted. */
+export function groupBookingSlots(slots: readonly BookingSlot[], masterId = ''): { id: BookingSlotPeriod; title: string; slots: BookingSlot[] }[] {
+  const source = masterId ? slots.filter(slot => slot.masterId === masterId) : dedupeBookingSlots(slots)
+  return BOOKING_SLOT_PERIODS.map(period => ({
+    ...period,
+    slots: source.filter(slot => bookingSlotPeriod(slot.time) === period.id),
+  })).filter(group => group.slots.length > 0)
+}
 export function oneRelation(value: unknown): string | null {
   return Array.isArray(value) && value.length === 1 && typeof value[0] === 'string' ? value[0] : null
 }
@@ -94,4 +133,39 @@ export function freeBookingSlots(config: BookingConfig, data: BookingData, input
     }
   }
   return slots.sort((a, b) => a.start.localeCompare(b.start) || a.masterName.localeCompare(b.masterName))
+}
+function dayLoad(config: BookingConfig, data: BookingData, masterId: string, day: string, excludeId?: string) {
+  let count = 0
+  for (const row of data.visits) {
+    if (row.id === excludeId || oneRelation(row.data[config.visit.master]) !== masterId || !blocks(config, row)) continue
+    const start = dateInstant(row.data[config.visit.start], data.timeZone)
+    if (start === null || instantToWallClock(new Date(start), data.timeZone)?.date !== day) continue
+    count += 1
+  }
+  return count
+}
+/**
+ * Master for «Любой свободный»: the free master with the fewest visits that day,
+ * then Russian name order, then id. The caller still validates the chosen slot.
+ */
+export function assignFreeMaster(config: BookingConfig, data: BookingData, input: {
+  serviceId: string; start: unknown; minutes?: number; excludeId?: string; now?: Date
+}): { ok: true; masterId: string } | { ok: false; error: string } {
+  if (!bookingService(config, data, input.serviceId)) return { ok: false, error: 'Услуга сейчас недоступна для записи.' }
+  const masters = eligibleMasters(config, data, input.serviceId)
+  if (!masters.length) return { ok: false, error: 'Выбранный мастер не оказывает эту услугу.' }
+  const day = (typeof input.start === 'string' || input.start instanceof Date) ? instantToWallClock(input.start, data.timeZone)?.date : undefined
+  const ranked = [...masters].sort((a, b) => {
+    const byLoad = (day ? dayLoad(config, data, a.id, day, input.excludeId) : 0) - (day ? dayLoad(config, data, b.id, day, input.excludeId) : 0)
+    if (byLoad) return byLoad
+    const byName = String(a.data[config.master.name] ?? '').localeCompare(String(b.data[config.master.name] ?? ''), 'ru')
+    return byName || a.id.localeCompare(b.id)
+  })
+  let failure: string | null = null
+  for (const master of ranked) {
+    const error = slotError(config, data, { ...input, masterId: master.id })
+    if (!error) return { ok: true, masterId: master.id }
+    failure ??= error
+  }
+  return { ok: false, error: failure ?? 'Выберите время из свободных интервалов.' }
 }

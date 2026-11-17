@@ -8,7 +8,7 @@ import type { BuilderV2FormRequest, BuilderV2FormResult, BuilderV2FormOptionsRes
 import { builderV2FormInputs } from '@/lib/builder-v2-form-types'
 import type { BuilderV2SubmitRequest } from '@/lib/builder-v2-submit-types'
 import { bookingV2Availability } from '@/lib/builder-v2-booking-availability'
-import { serviceOfferDetail, slotError, oneRelation, type BookingData } from '@/lib/booking'
+import { assignFreeMaster, serviceOfferDetail, slotError, oneRelation, type BookingData } from '@/lib/booking'
 import { builderV2BookingWriteError } from '@/lib/builder-v2-booking-policy'
 import { BuilderV2AppFrame, BuilderV2Theme } from './app-frame'
 import { PublishedV2Context, type PublishedV2Transport } from './published-context'
@@ -102,7 +102,8 @@ export function BookingDemo({ app, tables, initialRows, phone = false, initialVi
       labels[input.fieldId] = row?.display[input.fieldId] ?? ''
     }
     const errors: Record<string, string> = {}
-    if (request.mode === 'check') for (const input of fields) if (input.required && (values[input.fieldId] === null || values[input.fieldId] === '' || Array.isArray(values[input.fieldId]) && !(values[input.fieldId] as unknown[]).length)) errors[input.id] = `Заполните поле «${input.label}»`
+    const bookingAssignsMaster = (fieldId: string) => fieldId === booking.visit.master && [booking.createFormId, booking.ownerCreateFormId, booking.rescheduleFormId].includes(form.id)
+    if (request.mode === 'check') for (const input of fields) if (input.required && !bookingAssignsMaster(input.fieldId) && (values[input.fieldId] === null || values[input.fieldId] === '' || Array.isArray(values[input.fieldId]) && !(values[input.fieldId] as unknown[]).length)) errors[input.id] = `Заполните поле «${input.label}»`
     if (Object.keys(errors).length) return { ok: false, error: 'Заполните отмеченные поля.', errors }
     const state: BuilderV2FormState & { revision: string } = { values, labels, revision: 'demo', fingerprint: `demo-${version}`, fields: fields.map(input => {
       const field = tables.find(table => table.id === form.tableId)!.fields.find(field => field.id === input.fieldId)!
@@ -121,8 +122,15 @@ export function BookingDemo({ app, tables, initialRows, phone = false, initialVi
     const values = { ...before?.values, ...checked.state.values }
     const newClients: AppV2Record[] = []
     if (form.tableId === booking.tables.visits) {
-      const serviceId = oneRelation(values[booking.visit.service]), masterId = oneRelation(values[booking.visit.master])
+      const serviceId = oneRelation(values[booking.visit.service])
+      let masterId = oneRelation(values[booking.visit.master])
       if (values[booking.visit.status] !== booking.statuses.cancelled && (form.id === booking.createFormId || form.id === booking.ownerCreateFormId || form.id === booking.rescheduleFormId)) {
+        if (serviceId && !masterId) {
+          const assigned = assignFreeMaster(booking, data(), { serviceId, start: values[booking.visit.start], excludeId: before?.id, minutes: before ? Number(before.values[booking.visit.minutes]) : undefined })
+          if (!assigned.ok) return { ok: false as const, error: assigned.error }
+          masterId = assigned.masterId
+          values[booking.visit.master] = [masterId]
+        }
         const error = serviceId && masterId ? slotError(booking, data(), { serviceId, masterId, start: values[booking.visit.start], excludeId: before?.id, minutes: before ? Number(before.values[booking.visit.minutes]) : undefined }) : 'Выберите свободное время.'
         if (error) return { ok: false as const, error }
       }

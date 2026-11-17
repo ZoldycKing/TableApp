@@ -56,6 +56,33 @@ describe('calendar and client context in a new booking', () => {
     render(<BookingDemoAvailability value={() => ({ ok: true, timeZone: 'Europe/Moscow', service: { id: 's', name: 'Стрижка', price: 1, minutes: 60 }, masters: [], slots: [] })}><BookingTimeFields app={app} editing={false} /></BookingDemoAvailability>)
     expect(screen.getByText('Выберите услугу, чтобы увидеть свободное время.')).toBeTruthy()
   })
+  it('lists each start once for any master and only that master afterwards', async () => {
+    const built = buildTemplate({ template: salon, workspaceId: 'wsp_slots' })
+    const app = buildBookingV2App(built, { id: 'app_slots', workspaceId: 'wsp_slots', name: 'Студия', slug: 'slots', email: 'owner@example.com' })
+    const booking = app.booking!
+    const change = vi.fn()
+    mocked.context = { app, scope: { formId: booking.ownerCreateFormId!, screenId: booking.formScreenId, recordId: 'service_haircut' }, values: {}, errors: {}, disabled: false, key: 'slots', onPending: vi.fn(), change, inspect: vi.fn(), state: { values: {}, labels: {}, fingerprint: 'slots', fields: [] } }
+    const slots = [
+      { masterId: 'master_natasha', masterName: 'Наташа', time: '11:00', start: '2026-11-20T08:00:00.000Z' },
+      { masterId: 'master_olya', masterName: 'Оля', time: '11:00', start: '2026-11-20T08:00:00.000Z' },
+      { masterId: 'master_natasha', masterName: 'Наташа', time: '09:30', start: '2026-11-20T06:30:00.000Z' },
+      { masterId: 'master_olya', masterName: 'Оля', time: '18:00', start: '2026-11-20T15:00:00.000Z' },
+    ]
+    render(<BookingDemoAvailability value={() => ({ ok: true, timeZone: 'Europe/Moscow', service: { id: 'service_haircut', name: 'Стрижка', price: 2500, minutes: 60 }, masters: [{ id: 'master_olya', name: 'Оля' }, { id: 'master_natasha', name: 'Наташа' }], slots })}><BookingTimeFields app={app} editing={false} /></BookingDemoAvailability>)
+    expect(await screen.findByRole('heading', { name: 'Утро' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Вечер' })).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: 'День' })).toBeNull()
+    expect(screen.getAllByRole('button', { name: '11:00' })).toHaveLength(1)
+    expect(screen.queryByRole('button', { name: /Оля|Наташа/ })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '11:00' }))
+    expect(change).toHaveBeenCalledWith(booking.visit.master, [])
+    expect(change).toHaveBeenCalledWith(booking.visit.start, '2026-11-20T08:00:00.000Z')
+    fireEvent.change(screen.getByLabelText('Мастер'), { target: { value: 'master_olya' } })
+    expect(await screen.findByRole('button', { name: '18:00' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '11:00' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '09:30' })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Оля|Наташа/ })).toBeNull()
+  })
   it('never copies owner contacts into the customer form', async () => {
     const { b, change } = seedFixture(true,false)
     await waitFor(() => expect(change).toHaveBeenCalledWith(b.visit.start,'2026-11-20T06:00:00Z'))

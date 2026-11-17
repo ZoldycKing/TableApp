@@ -108,7 +108,8 @@ export async function inspectBuilderV2Form(app: AppV2, member: Member, request: 
       if (!BUILDER_V2_FORM_TYPES.includes(field.type)) { if (request.mode === 'check') errors[input.id] = 'Этот тип поля пока не поддерживается формой'; continue }
       try { values[field.id] = parseCellValue(field, value); await validateBuilderV2Attachments(field,values[field.id],tx) } catch { errors[input.id] = `Проверьте поле «${label}»`; continue }
       const parsed = values[field.id]
-      if (request.mode === 'check' && input.required && (blank(parsed) || field.type === 'checkbox' && parsed !== true)) errors[input.id] = field.type === 'checkbox' ? 'Установите отметку' : `Заполните поле «${label}»`
+      const bookingAssignsMaster = Boolean(app.booking && input.fieldId === app.booking.visit.master && [app.booking.createFormId, app.booking.ownerCreateFormId, app.booking.rescheduleFormId].includes(form.id))
+      if (request.mode === 'check' && input.required && !bookingAssignsMaster && (blank(parsed) || field.type === 'checkbox' && parsed !== true)) errors[input.id] = field.type === 'checkbox' ? 'Установите отметку' : `Заполните поле «${label}»`
       if ((field.type === 'single_select' || field.type === 'multi_select') && !blank(parsed)) {
         const ids = Array.isArray(parsed) ? parsed : [parsed]
         if (ids.some(id => !field.options.choices.some(choice => choice.id === id))) errors[input.id] = 'Выберите значение из списка'

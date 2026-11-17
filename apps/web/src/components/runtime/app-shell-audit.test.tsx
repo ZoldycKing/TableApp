@@ -374,7 +374,7 @@ describe('browser audit runtime integration regressions', () => {
     mocks.update.mockResolvedValueOnce({ ok: false, error: 'Запись изменена другим сотрудником. Обновите данные.' }).mockResolvedValue({ ok: true })
     window.history.replaceState(null, '', `/a/review?e=${config.rescheduleScreenId}&r=${row.id}`)
     let ui = render(<AppShell runtime={runtime} viewer={viewer} browserHistory />)
-    fireEvent.click(await ui.findByRole('button', { name: '12:00 Оля' }))
+    fireEvent.click(await ui.findByRole('button', { name: '12:00' }))
     const key = `tableapp:form-drafts:${runtime.app.workspaceId}:${runtime.app.id}:${viewer!.id}`
     const draftId = `${config.rescheduleScreenId}:${row.id}`
     expect(JSON.parse(sessionStorage.getItem(key)!).drafts[draftId].booking.baseVersion).toBe(1)
@@ -384,7 +384,7 @@ describe('browser audit runtime integration regressions', () => {
     const latest = updated.tables[config.tables.visits]!.rows.find(item => item.id === row.id)!
     latest.version = 2; latest.data[config.visit.start] = latestSlot.start
     ui = render(<AppShell runtime={updated} viewer={viewer} browserHistory />)
-    await waitFor(() => expect(ui.getByRole('button', { name: '12:00 Оля' }).getAttribute('aria-pressed')).toBe('true'))
+    await waitFor(() => expect(ui.getByRole('button', { name: '12:00' }).getAttribute('aria-pressed')).toBe('true'))
     expect(ui.getByRole('button', { name: 'Загрузить актуальные данные' })).toBeTruthy()
     fireEvent.submit(ui.getByRole('button', { name: 'Сохранить новое время' }).closest('form')!)
     await ui.findByText('Запись изменена другим сотрудником. Обновите данные.')
@@ -395,7 +395,7 @@ describe('browser audit runtime integration regressions', () => {
     fireEvent.click(ui.getByRole('button', { name: 'Загрузить актуальные данные' }))
     await waitFor(() => expect(JSON.parse(sessionStorage.getItem(key)!).drafts[draftId].booking.baseVersion).toBe(2))
     await waitFor(() => expect(ui.getByLabelText('Дата')).toHaveProperty('value', '2099-10-11'))
-    fireEvent.click(await ui.findByRole('button', { name: '13:00 Оля' }))
+    fireEvent.click(await ui.findByRole('button', { name: '13:00' }))
     expect(JSON.parse(sessionStorage.getItem(key)!).drafts[draftId].booking.baseVersion).toBe(2)
     expect(ui.queryByRole('button', { name: 'Загрузить актуальные данные' })).toBeNull()
     fireEvent.submit(ui.getByRole('button', { name: 'Сохранить новое время' }).closest('form')!)

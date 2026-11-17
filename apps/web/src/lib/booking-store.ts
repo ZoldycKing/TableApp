@@ -4,7 +4,7 @@ import type { RowActor, RowTransaction } from './row-mutations'
 import type { Origin } from './limits'
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm'
 import type { Transaction } from './db-transaction'
-import { bookingService, oneRelation, slotError, type BookingData } from './booking'
+import { assignFreeMaster, bookingService, oneRelation, slotError, type BookingData } from './booking'
 import { bookingClientChangeError, bookingRules } from './booking-rules'
 import { canCompleteBooking } from './booking-lifecycle'
 
@@ -80,11 +80,9 @@ export async function prepareBookingWrite(tx: Transaction, workspaceId: string, 
       return { data: clean, error: 'Завершить можно только начавшееся посещение со статусом «Записан» или «Пришёл».' }
     }
   }
-  const serviceId = oneRelation(result[visit.service]), masterId = oneRelation(result[visit.master])
-  if (!serviceId || !masterId || typeof result[visit.client] !== 'string' || !String(result[visit.client]).trim()) return { data: clean, error: 'Укажите имя клиента, услугу и мастера.' }
-  const master = data.masters.find(row => row.id === masterId)
-  if (!master) return { data: clean, error: 'Мастер не найден.' }
-  result[visit.masterEmail] = String(master.data[config.master.email] ?? '').trim().toLowerCase()
+  const serviceId = oneRelation(result[visit.service])
+  let masterId = oneRelation(result[visit.master])
+  if (!serviceId || typeof result[visit.client] !== 'string' || !String(result[visit.client]).trim()) return { data: clean, error: 'Укажите имя клиента, услугу и мастера.' }
   const changedService = !before || oneRelation(before[visit.service]) !== serviceId
   if (changedService) {
     const service = bookingService(config, data, serviceId)
@@ -95,6 +93,16 @@ export async function prepareBookingWrite(tx: Transaction, workspaceId: string, 
   const timeChanged = !before || changedService || oneRelation(before[visit.master]) !== masterId ||
     before[visit.start] !== result[visit.start] || before[visit.minutes] !== result[visit.minutes] ||
     before[visit.status] === config.statuses.cancelled && result[visit.status] !== config.statuses.cancelled
+  if (!masterId && timeChanged && result[visit.status] !== config.statuses.cancelled) {
+    const assigned = assignFreeMaster(config, data, { serviceId, start: result[visit.start], minutes: Number(result[visit.minutes]), excludeId: rowId })
+    if (!assigned.ok) return { data: clean, error: assigned.error }
+    masterId = assigned.masterId
+    result[visit.master] = [masterId]
+  }
+  if (!masterId) return { data: clean, error: 'Укажите имя клиента, услугу и мастера.' }
+  const master = data.masters.find(row => row.id === masterId)
+  if (!master) return { data: clean, error: 'Мастер не найден.' }
+  result[visit.masterEmail] = String(master.data[config.master.email] ?? '').trim().toLowerCase()
   if (timeChanged && result[visit.status] !== config.statuses.cancelled &&
     (typeof result[visit.phone] !== 'string' || !/^[+\d\s()-]+$/.test(String(result[visit.phone])) || String(result[visit.phone]).replace(/\D/g, '').length < 7 || String(result[visit.phone]).replace(/\D/g, '').length > 15)) {
     return { data: clean, error: 'Укажите корректный номер телефона для связи.' }

@@ -11,6 +11,7 @@ import css from './booking.module.css'
 import styles from '../prototype/prototype.module.css'
 import { useBookingJourney } from './booking-journey'
 import { BookingClientPicker } from './booking-client-picker'
+import { BookingSlotList } from './booking-slots'
 import { RuDateInput, ruDateText } from './ru-fields'
 export const BookingDemoAvailability = createContext<((request: BookingAvailabilityRequest) => BookingAvailabilityResult) | null>(null)
 
@@ -89,7 +90,7 @@ export function BookingTimeFields({ app, editing }: { app: AppV2; editing: boole
     <fieldset className={css.slotField} disabled={context?.disabled || loading || editing}><legend>Свободное время</legend>
       {owner && !recordId && !result ? <p role="status" className={css.empty}>Выберите услугу, чтобы увидеть свободное время.</p> : loading ? <p role="status">Проверяем расписание…</p> : result?.ok ? <>
         <p className={css.timeHint}>Местное время студии · {new Intl.DateTimeFormat('ru-RU', { timeZone, timeZoneName: 'shortOffset' }).formatToParts(new Date()).find(part => part.type === 'timeZoneName')?.value.replace('GMT', 'UTC')}</p>
-        {result.slots.length ? <div className={css.slots}>{result.slots.map(slot => <button key={`${slot.start}:${slot.masterId}`} type="button" aria-pressed={selected === slot.masterId && chosen === slot.start} onClick={() => { change(config.visit.master, [slot.masterId]); change(config.visit.start, slot.start); if (owner) { setEditingSlot(false); setSeedNotice('') } }}><strong>{slot.time}</strong><span>{slot.masterName}</span></button>)}</div> : <p role="status" className={css.empty}>На эту дату нет свободного времени. Выберите другую дату или мастера.</p>}
+        <BookingSlotList slots={result.slots} masterId={master} selectedStart={typeof chosen === 'string' ? chosen : null} selectedMasterId={master ? selected : null} onSelect={slot => { change(config.visit.master, master ? [slot.masterId] : []); change(config.visit.start, slot.start); if (owner) { setEditingSlot(false); setSeedNotice('') } }} />
       </> : editing ? <p className={css.timeHint}>Клиент выберет здесь свободное время из расписания мастера.</p> : result && !result.ok ? <div role="alert"><p>{result.error}</p><button type="button" className={styles.secondary} onClick={() => setRetry(value => value + 1)}>Проверить ещё раз</button></div> : null}
     </fieldset>
     {context?.state?.fields.filter(field => [config.visit.master, config.visit.start].includes(field.fieldId) && context.errors[field.nodeId]).map(field => <p key={field.nodeId} role="alert" className={css.error}>{context.errors[field.nodeId]}</p>)}

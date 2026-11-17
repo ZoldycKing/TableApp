@@ -154,6 +154,25 @@ describe.skipIf(!process.env.DATABASE_URL)('native v2 booking transactions', () 
     expect(available.ok && available.slots.some(slot => slot.start === request.values[config.visit.start])).toBe(false)
     if (available.ok) expect(JSON.stringify(available)).not.toContain('irina@example.com')
   })
+  it('assigns a free master on submit when the client picked only a time', async () => {
+    identity.email = 'any-master@example.com'
+    const available = await availability.readPublishedV2BookingAction(app.slug, { screenId: scope.screenId, recordId: service.id, day, revision: liveRevision() })
+    expect(available.ok, JSON.stringify(available)).toBe(true)
+    if (!available.ok) return
+    const shared = available.slots.find(slot => available.slots.some(other => other.start === slot.start && other.masterId !== slot.masterId))
+    expect(shared, available.slots.map(slot => `${slot.time} ${slot.masterName}`).join(', ')).toBeTruthy()
+    const initial = await write.inspectPublishedV2FormRequest(app.slug, { ...scope, revision: liveRevision(), mode: 'initial' })
+    if (!initial.ok || !('state' in initial) || !initial.state) throw new Error(JSON.stringify(initial))
+    const request = { ...scope, revision: liveRevision(), fingerprint: initial.state.fingerprint, requestId: newId('action'), values: { [config.visit.client]: 'Любой', [config.visit.phone]: '+7 916 555-11-22', [config.visit.master]: [], [config.visit.start]: shared!.start } }
+    const result = await write.submitPublishedV2(app.slug, 'form', request)
+    expect(result.ok, JSON.stringify(result)).toBe(true)
+    const stored = (await db.db.select().from(db.rows).where(eq(db.rows.tableId, config.tables.visits))).filter(row => rowData(row)[config.visit.start] === shared!.start && rowData(row)[config.visit.email] === 'any-master@example.com')
+    expect(stored).toHaveLength(1)
+    const masterId = (rowData(stored[0]!)[config.visit.master] as string[])[0]!
+    expect(available.slots.some(slot => slot.start === shared!.start && slot.masterId === masterId)).toBe(true)
+    const again = await availability.readPublishedV2BookingAction(app.slug, { screenId: scope.screenId, recordId: service.id, day, revision: liveRevision(), masterId })
+    expect(again.ok && again.slots.some(slot => slot.start === shared!.start)).toBe(false)
+  })
   it('provides the same service and visit fields to author preview and published screens', async () => {
     const { readBuilderV2NodeData } = await import('./builder-v2-data')
     const { readPublishedV2Data } = await import('./builder-v2-published-data')

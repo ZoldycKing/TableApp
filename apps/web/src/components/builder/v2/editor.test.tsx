@@ -192,6 +192,22 @@ describe('v2 editor persistence', () => {
 })
 
 
+it('keeps publish and history in the phone overflow menu without removing the desktop actions', () => {
+  mount()
+  expect(screen.getByRole('button', { name: 'Доступ' })).toBeTruthy()
+  expect(screen.getByRole('button', { name: 'Опубликовать' })).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Ещё действия' }))
+  const menu = screen.getByRole('menu')
+  expect(within(menu).getByRole('menuitem', { name: 'Доступ' })).toBeTruthy()
+  expect(within(menu).getByRole('menuitem', { name: 'Опубликовать' })).toBeTruthy()
+  expect(within(menu).getByRole('menuitem', { name: 'История' })).toBeTruthy()
+  expect(within(menu).getByRole('menuitem', { name: 'Отменить' }).matches(':disabled')).toBe(true)
+  expect(within(menu).getByRole('menuitem', { name: 'Повторить' }).matches(':disabled')).toBe(true)
+  fireEvent.click(within(menu).getByRole('menuitem', { name: 'Доступ' }))
+  expect(screen.getByRole('dialog', { name: 'Доступ к приложению' })).toBeTruthy()
+  expect(screen.queryByRole('menu')).toBeNull()
+})
+
 it('saves theme and menu changes as an undoable draft without applying the theme to the editor chrome',async()=>{
   vi.mocked(saveBuilderV2DraftAction).mockResolvedValue({ok:true,revision:'a'.repeat(64)})
   mount();fireEvent.click(screen.getAllByRole('button',{name:'Оформление'})[0]!)

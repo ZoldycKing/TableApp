@@ -660,21 +660,21 @@
   white-space: nowrap;
   cursor: pointer;
 }
-/* Narrow app chrome: two even rows for the five movement-type chips. */
+/* Narrow app chrome: one scroll row so operation names stay whole. */
 @container builder-app (max-width: 640px) {
   .typeFilter {
-    display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
   }
+  .typeFilter::-webkit-scrollbar { display: none; height: 0; }
   .typeFilter button {
-    grid-column: span 2;
-    min-width: 0;
-    justify-self: stretch;
-    padding: 6px 10px;
-  }
-  .typeFilter button:nth-child(4):nth-last-child(2),
-  .typeFilter button:nth-child(5):last-child {
-    grid-column: span 3;
+    flex: 0 0 auto;
+    min-width: max-content;
+    white-space: nowrap;
   }
 }
 .typeFilter button[aria-pressed="true"] { border-color: var(--v2-accent, #456849); background: var(--v2-soft, #e8eee1); color: var(--v2-accent, #456849); }
@@ -1138,7 +1138,9 @@
   .learningCopy :is(strong, .learningProgress) { padding-inline-end: 40px; }
 }
 .status { display: flex; align-items: center; gap: 12px; }
-.saving { font-size: 12px; color: var(--v2-muted, #687568); min-width: 0; }
+.saving { position: relative; font-size: 12px; color: var(--v2-muted, #687568); min-width: 0; white-space: nowrap; }
+.saving svg { display: none; }
+@keyframes saveSpin { to { transform: rotate(360deg); } }
 .canvasToolbar { flex-shrink: 0; background: var(--v2-bg); }
 @media (min-width: 1100px) {
   .editorWorkspace[data-editing="true"] { grid-template-columns: clamp(248px, 19.45vw, 280px) minmax(0, 1fr) clamp(304px, 22.25vw, 320px); }
@@ -1231,7 +1233,11 @@
 .screenPreviewButton { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; color: var(--v2-accent, #456849); text-decoration: underline; text-underline-offset: 4px; }
 .dropTarget { outline: 2px solid var(--v2-accent, #8eaa81); outline-offset: 2px; border-radius: 8px; }
 @media (max-width: 1099px) { .editNav { display: none; } }
-@media (max-width: 640px) { .mobilePanelTabs.mobilePanelTabs { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 4px; } .mobilePanelTabs button { min-width: 0; min-height: 44px; padding: 8px 4px; white-space: normal; } }
+@media (max-width: 640px) {
+  .mobilePanelTabs.mobilePanelTabs { display: flex; flex-wrap: nowrap; gap: 4px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; -webkit-overflow-scrolling: touch; scroll-padding-inline: 8px; }
+  .mobilePanelTabs.mobilePanelTabs::-webkit-scrollbar { display: none; height: 0; }
+  .mobilePanelTabs.mobilePanelTabs button { flex: 0 0 auto; min-width: max-content; min-height: 40px; padding: 8px 10px; white-space: nowrap; }
+}
 @container (max-width: 540px) { .columns { grid-template-columns: minmax(0,1fr); } .group { padding: 16px; } }
 @container builder-cards (max-width: 299px) { .cards { grid-template-columns: minmax(0,1fr); } }
 @container builder-cards (min-width: 700px) { .cards { grid-template-columns: repeat(3,minmax(0,1fr)); } }
@@ -1435,6 +1441,19 @@ button.recordButton:hover strong { color: var(--v2-accent, #456849); }
 @media (max-width: 540px) { .workflowStep > header { align-items: start; flex-direction: column; } .workflowStep { padding: 12px; } .workflowBranches > section { padding-left: 8px; } }
 
 @media (max-width: 700px) { .headerActions { flex-wrap: wrap; justify-content: flex-start; } .headerActions > button { margin-left: 0; } .headerActions > :last-child { margin-left: auto; } .headerActions .saving { order: 1; flex-basis: 100%; text-align: left; } }
+@media (max-width: 640px) {
+  .headerActions.headerActions { flex-wrap: nowrap; width: auto; justify-content: flex-end; }
+  .headerActions > :last-child { margin-left: 0; }
+  .headerActions .saving { order: 0; display: inline-flex; align-items: center; justify-content: center; flex: none; flex-basis: auto; width: 32px; height: 32px; text-align: center; font-size: 11px; line-height: 14px; }
+  .headerActions .saving[data-state="view"] { width: auto; }
+  .headerActions .saving:not([data-state="view"]) .saveLabel { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  .headerActions .saving:not([data-state="view"]) svg { display: block; }
+  .headerActions .saving[data-state="error"] { color: var(--v2-danger, #9a403b); }
+  .headerActions .saving[data-state="saving"] svg { animation: saveSpin .8s linear infinite; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .headerActions .saving[data-state="saving"] svg { animation: none; }
+}
 
 .runActor { min-width: 0; overflow-wrap: anywhere; color: var(--v2-accent, #456849); font-size: 14px; }
 
@@ -1448,8 +1467,12 @@ button.recordButton:hover strong { color: var(--v2-accent, #456849); }
 .calendarMonth { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .calendarMonth strong { text-transform: capitalize; font-size: 16px; font-weight: 600; overflow-wrap: anywhere; }
 .calendarMonth button { flex-shrink: 0; font-size: 24px; }
-.calendarModes { display: flex; flex-wrap: wrap; gap: 4px; }
-.calendarModes button { min-height: 44px; padding: 8px 12px; border: 0; border-radius: 8px; background: transparent; color: var(--v2-muted, #687568); font: inherit; cursor: pointer; }
+.calendarModes { display: flex; flex-wrap: wrap; gap: 4px; max-width: 100%; min-width: 0; }
+.calendarModes button { flex: 0 0 auto; min-height: 44px; padding: 8px 12px; border: 0; border-radius: 8px; background: transparent; color: var(--v2-muted, #687568); font: inherit; white-space: nowrap; cursor: pointer; }
+@container builder-app (max-width: 640px) {
+  .calendarModes { flex-wrap: nowrap; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .calendarModes::-webkit-scrollbar { display: none; height: 0; }
+}
 .calendarModes button[aria-pressed="true"] { background: var(--v2-soft, #e6eddf); color: var(--v2-ink, #253c2d); }
 .calendarGrid { display: grid; grid-template-columns: repeat(7,minmax(0,1fr)); gap: 4px; padding: 12px; border: 1px solid var(--v2-line, #dce2d6); border-radius: 12px; background: var(--v2-surface, #fff); }
 .weekdays { display: grid; grid-template-columns: repeat(7,minmax(0,1fr)); grid-column: 1 / -1; text-align: center; color: var(--v2-muted, #687568); font-size: 12px; padding: 4px 0 8px; }

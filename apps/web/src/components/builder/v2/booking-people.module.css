@@ -23,9 +23,15 @@
 .nextVisit > span { flex: 1; display: grid; gap: 6px; }
 .nextVisit strong { font-size: 14px; line-height: 1.5; }
 .nextVisit small { font-size: 12px; line-height: 1.5; }
-.profileTabs { display: flex; gap: 4px; width: fit-content; padding: 4px; border-radius: 10px; background: var(--v2-page); }
-.profileTabs button { border: 0; border-radius: 7px; padding: 10px 12px; min-height: 42px; color: var(--v2-muted); background: transparent; font: inherit; font-size: 13px; cursor: pointer; }
+.profileTabs { display: flex; gap: 4px; width: fit-content; max-width: 100%; min-width: 0; padding: 4px; border-radius: 10px; background: var(--v2-page); overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.profileTabs::-webkit-scrollbar { display: none; height: 0; }
+.profileTabs button { flex: 0 0 auto; border: 0; border-radius: 7px; padding: 10px 12px; min-height: 42px; color: var(--v2-muted); background: transparent; font: inherit; font-size: 13px; white-space: nowrap; cursor: pointer; }
 .profileTabs button[aria-pressed=true] { color: var(--v2-ink); background: var(--v2-surface); }
+.tabShort { display: none; }
+@container builder-app (max-width: 640px) {
+  .tabFull { display: none; }
+  .tabShort { display: inline; }
+}
 .visits, .notes { display: grid; gap: 10px; }
 .notes article, .serviceSection { padding: 20px; background: var(--v2-surface); border: 1px solid var(--v2-line); border-radius: 12px; }
 .notes small { color: var(--v2-muted); font-size: 12px; }

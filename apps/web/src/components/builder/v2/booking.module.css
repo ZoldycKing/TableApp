@@ -218,8 +218,9 @@
   .agendaPage > [data-layout='list'] > header > :last-child { justify-self: start; }
   .scheduleForm { padding: 16px; gap: 20px; }
   .scheduleForm h2 { font-size: 22px; }
-  .scheduleForm .switch { flex-wrap: wrap; }
-  .scheduleForm .switch button { flex: 1; min-width: 0; }
+  .scheduleForm .switch, .agendaSwitch { flex-wrap: nowrap; max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
+  .scheduleForm .switch::-webkit-scrollbar, .agendaSwitch::-webkit-scrollbar { display: none; height: 0; }
+  .scheduleForm .switch button, .agendaSwitch button { flex: 0 0 auto; min-width: max-content; white-space: nowrap; }
   .scheduleTimes { gap: 12px; }
 }
 .configuredProfile { display: grid; gap: 20px; width: 100%; max-width: 1100px; margin-inline: auto; min-width: 0; }

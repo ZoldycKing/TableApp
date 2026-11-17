@@ -15,8 +15,10 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSPrope
 import { PurchaseDialogTotalContext } from './purchase-dialog-total'
 
 function InventoryTypeFilter({ choices, value, onChange }: { choices: readonly { id: string; name: string }[]; value: string; onChange: (id: string) => void }) {
+  const row = useRef<HTMLDivElement>(null)
+  useScrollOverflow(row, [choices.length])
   if (!choices.length) return null
-  return <div className={ui.typeFilter} role="group" aria-label="Фильтр по виду операции">
+  return <div ref={row} className={`${ui.typeFilter} ${scroll.row}`} role="group" aria-label="Фильтр по виду операции">
     <button type="button" aria-pressed={!value} onClick={() => onChange('')}>Все</button>
     {choices.map(choice => <button key={choice.id} type="button" aria-pressed={value === choice.id} onClick={() => onChange(choice.id)}>{choice.name}</button>)}
   </div>
@@ -564,6 +566,8 @@ import type { BuilderV2Table } from '@/lib/builder-v2'
 import { ProtoIcon } from '../prototype/icons'
 import styles from '../prototype/prototype.module.css'
 import ui from './view.module.css'
+import scroll from './scroll-overflow.module.css'
+import { useScrollOverflow } from './scroll-overflow'
 import { NODE_KINDS } from './model'
 import { builderV2PreviewRecordParent, builderV2RecordParent, collectionCardScreen } from './collection-navigation'
 import { BuilderV2FormPreview, BuilderV2FormInput, type WorkingFormOptions } from './form-preview'

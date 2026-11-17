@@ -65,6 +65,8 @@ export function taskWrite(task: ProjectsApp['task'], input: {
   checklist?: string
   files?: AppV2Json
   sort?: number
+  parentId?: string
+  stageId?: string | null
 }): Record<string, AppV2Json> {
   const values: Record<string, AppV2Json> = {}
   const put = (key: string, value: AppV2Json | undefined) => { if (value !== undefined) values[key] = value }
@@ -79,6 +81,8 @@ export function taskWrite(task: ProjectsApp['task'], input: {
   put(task.checklist, input.checklist)
   put(task.files, input.files)
   put(task.sort, input.sort)
+  put(task.parent, input.parentId ? [input.parentId] : undefined)
+  put(task.stage, input.stageId === null ? [] : input.stageId ? [input.stageId] : undefined)
   return values
 }
 
@@ -90,6 +94,7 @@ export function commentWrite(comment: ProjectsApp['comment'], input: {
   author: string
   authorEmail: string
   assigneeEmail: string
+  mentionIds?: string[]
 }): Record<string, AppV2Json> {
   return {
     [comment.text]: input.text,
@@ -99,6 +104,7 @@ export function commentWrite(comment: ProjectsApp['comment'], input: {
     [comment.author]: input.author,
     [comment.authorEmail]: input.authorEmail,
     [comment.assigneeEmail]: input.assigneeEmail,
+    ...(input.mentionIds ? { [comment.mentions]: input.mentionIds } : {}),
   }
 }
 

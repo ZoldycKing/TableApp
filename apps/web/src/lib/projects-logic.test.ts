@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { eventText, formatDay, isOverdue, matchesDue, progressPercent, reorderColumn, sortsFor, taskBucket } from './projects-logic'
+import { canParent, eventText, formatDay, insertMention, isOverdue, matchesDue, mentionQuery, mentionedNames, progressPercent, reorderColumn, sortsFor, subtaskProgress, taskBucket } from './projects-logic'
 
 const now = Date.parse('2026-11-17T07:00:00.000Z')
 const task = (due: string, status = 'В работе') => ({ status, due })
@@ -28,6 +28,16 @@ describe('project task groups', () => {
     expect(progressPercent([])).toBe(0)
     expect(formatDay('2026-11-12')).toBe('12.11.2026')
     expect(eventText('status', 'Макет', 'К работе', 'В работе')).toBe('Статус задачи «Макет»: К работе → В работе')
+  })
+
+  it('finds a mention being typed and refuses a nested subtask', () => {
+    expect(mentionQuery('Макет @Иг', 9)).toEqual({ start: 6, query: 'Иг' })
+    expect(mentionQuery('готово', 6)).toBeNull()
+    expect(insertMention('Макет @Иг', 6, 9, 'Игорь Белов')).toBe('Макет @Игорь Белов ')
+    expect(mentionedNames('смотри @Игорь Белов', ['Игорь Белов', 'Анна Волкова'])).toEqual(['Игорь Белов'])
+    expect(canParent('parent', [{ id: 'parent', parentId: '' }, { id: 'child', parentId: 'parent' }])).toBe(true)
+    expect(canParent('child', [{ id: 'parent', parentId: '' }, { id: 'child', parentId: 'parent' }])).toBe(false)
+    expect(subtaskProgress(['Готово', 'В работе', 'К работе'])).toEqual({ done: 1, total: 3 })
   })
 
   it('reorders a card inside a column and across columns', () => {

@@ -24,10 +24,14 @@ describe('published project writes', () => {
     const project: AppV2Record = { id: 'project', tableId: kit.projectsTableId, values: { [kit.project.title]: 'Сайт' } }
     expect(guardProjectsUpdate(app, anna, project, { [kit.project.budget]: 1 }).ok).toBe(false)
     expect(guardProjectsUpdate(app, anna, project, { [kit.project.progress]: progressValue(['Готово', 'К работе']) }).ok).toBe(true)
-    const comment = commentWrite(kit.comment, { text: 'Три колонки', taskId: row.id, projectId: 'project', at: '2026-11-17T08:00:00.000Z', author: 'Анна', authorEmail: 'anna@example.invalid', assigneeEmail: 'anna@example.invalid' })
-    delete comment[kit.comment.assigneeEmail]
-    const decision = guardProjectsCreate(app, anna, kit.commentsTableId, comment)
-    expect(decision.ok && decision.ownerValues[kit.comment.assigneeEmail]).toBe('anna@example.invalid')
+    const comment = commentWrite(kit.comment, { text: '@Игорь Белов, три колонки', taskId: row.id, projectId: 'project', at: '2026-11-17T08:00:00.000Z', author: 'Анна', authorEmail: 'anna@example.invalid', assigneeEmail: 'anna@example.invalid', mentionIds: ['igor'] })
+    expect(comment[kit.comment.mentions]).toEqual(['igor'])
+    expect(guardProjectsCreate(app, anna, kit.commentsTableId, comment).ok).toBe(true)
+    const subtask = taskWrite(kit.task, { title: 'Подвал', projectId: 'project', parentId: row.id, assigneeId: 'anna', assigneeEmail: 'anna@example.invalid', statusId: kit.statuses.todo, priorityId: kit.priorities.medium, checklist: '[]', sort: 1000 })
+    expect(subtask[kit.task.parent]).toEqual([row.id])
+    delete subtask[kit.task.assigneeEmail]
+    const created = guardProjectsCreate(app, anna, kit.tasksTableId, subtask)
+    expect(created.ok && created.ownerValues[kit.task.assigneeEmail]).toBe('anna@example.invalid')
   })
 
   it('rewrites the column order for the lead and only the moved card for the assignee', () => {

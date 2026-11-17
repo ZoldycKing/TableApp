@@ -60,4 +60,29 @@ describe.skipIf(!process.env.DATABASE_URL)('published project rows', () => {
     identity.email = 'igor@example.invalid'
     expect((await action.savePublishedProjectsAction(app.slug, { kind: 'move', revision: revision(), screenId: kit.taskScreenId, recordId: task.id, statusId: kit.statuses.done, orderedIds: [task.id] })).ok).toBe(false)
   })
+
+  it('persists a one-level subtask and a comment mention', async () => {
+    identity.email = 'owner@example.invalid'
+    const igor = built.rows.find(row => row.tableId === kit.peopleTableId && row.data[kit.person.email] === 'igor@example.invalid')!
+    const created = await action.savePublishedProjectsAction(app.slug, {
+      kind: 'create-subtask', revision: revision(), screenId: kit.taskScreenId, recordId: task.id,
+      title: 'Проверка подвала', assigneeId: igor.id, assigneeEmail: 'igor@example.invalid', due: '2026-11-19', priorityId: kit.priorities.medium,
+    })
+    expect(created, JSON.stringify(created)).toEqual({ ok: true, message: 'Подзадача создана.' })
+    const stored = await db.db.select().from(db.rows).where(eq(db.rows.tableId, kit.tasksTableId))
+    const child = stored.find(row => (row.data as Record<string, AppV2Json>)[kit.task.title] === 'Проверка подвала')
+    expect(child && (child.data as Record<string, AppV2Json>)[kit.task.parent]).toEqual([task.id])
+    const nested = await action.savePublishedProjectsAction(app.slug, {
+      kind: 'create-subtask', revision: revision(), screenId: kit.taskScreenId, recordId: child!.id,
+      title: 'Ещё глубже', assigneeId: igor.id, assigneeEmail: 'igor@example.invalid', due: null, priorityId: kit.priorities.low,
+    })
+    expect(nested.ok).toBe(false)
+    const mention = await action.savePublishedProjectsAction(app.slug, {
+      kind: 'comment', revision: revision(), screenId: kit.taskScreenId, recordId: task.id, text: '@Игорь Белов, глянь шапку', mentionIds: [igor.id],
+    })
+    expect(mention, JSON.stringify(mention)).toEqual({ ok: true, message: 'Комментарий добавлен.' })
+    const notes = await db.db.select().from(db.rows).where(eq(db.rows.tableId, kit.commentsTableId))
+    const note = notes.find(row => (row.data as Record<string, AppV2Json>)[kit.comment.text] === '@Игорь Белов, глянь шапку')
+    expect(note && (note.data as Record<string, AppV2Json>)[kit.comment.mentions]).toEqual([igor.id])
+  })
 })

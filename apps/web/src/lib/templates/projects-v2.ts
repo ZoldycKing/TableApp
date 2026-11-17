@@ -26,7 +26,7 @@ export function buildProjectsV2App(built: BuiltTemplate, meta: { id: string; wor
     if (!match) throw new Error(`В поле «${fieldName}» нет варианта «${name}»`)
     return match.id
   }
-  const projects = table('Проекты'), tasks = table('Задачи'), people = table('Сотрудники'), clients = table('Клиенты'), comments = table('Комментарии'), events = table('Лента')
+  const projects = table('Проекты'), tasks = table('Задачи'), people = table('Сотрудники'), clients = table('Клиенты'), comments = table('Комментарии'), events = table('Лента'), stages = table('Этапы')
   const project = {
     title: column('Проекты', 'Название').id,
     client: column('Проекты', 'Клиент').id,
@@ -46,9 +46,19 @@ export function buildProjectsV2App(built: BuiltTemplate, meta: { id: string; wor
     priority: column('Задачи', 'Приоритет').id,
     status: column('Задачи', 'Статус').id,
     description: column('Задачи', 'Описание').id,
-    checklist: column('Задачи', 'Подзадачи').id,
+    checklist: column('Задачи', 'Чек-лист').id,
     files: column('Задачи', 'Файлы').id,
     sort: column('Задачи', 'Порядок').id,
+    parent: column('Задачи', 'Родительская задача').id,
+    stage: column('Задачи', 'Этап').id,
+  }
+  const stage = {
+    title: column('Этапы', 'Название').id,
+    project: column('Этапы', 'Проект').id,
+    start: column('Этапы', 'Начало').id,
+    end: column('Этапы', 'Окончание').id,
+    goal: column('Этапы', 'Цель').id,
+    status: column('Этапы', 'Статус').id,
   }
   const person = {
     name: column('Сотрудники', 'Сотрудник').id,
@@ -72,6 +82,7 @@ export function buildProjectsV2App(built: BuiltTemplate, meta: { id: string; wor
     author: column('Комментарии', 'Автор').id,
     authorEmail: column('Комментарии', 'Почта автора').id,
     assigneeEmail: column('Комментарии', 'Почта исполнителя').id,
+    mentions: column('Комментарии', 'Упоминания').id,
   }
   const event = {
     text: column('Лента', 'Событие').id,
@@ -101,6 +112,11 @@ export function buildProjectsV2App(built: BuiltTemplate, meta: { id: string; wor
     paused: choice('Проекты', 'Статус', 'На паузе'),
     done: choice('Проекты', 'Статус', 'Сдан'),
     cancelled: choice('Проекты', 'Статус', 'Отменён'),
+  }
+  const stageStatuses = {
+    planned: choice('Этапы', 'Статус', 'Запланирован'),
+    current: choice('Этапы', 'Статус', 'Текущий'),
+    done: choice('Этапы', 'Статус', 'Завершён'),
   }
   const eventKinds = {
     created: choice('Лента', 'Вид', 'Задача создана'),
@@ -154,7 +170,7 @@ export function buildProjectsV2App(built: BuiltTemplate, meta: { id: string; wor
   formOf(ids.editTaskFormId, 'Задача', tasks.id, 'edit', [
     input(task.title, 'Задача', true), input(task.project, 'Проект'), input(task.assignee, 'Исполнитель'),
     input(task.due, 'Срок'), input(task.priority, 'Приоритет'), input(task.status, 'Статус'),
-    input(task.description, 'Описание'), input(task.checklist, 'Подзадачи'), input(task.files, 'Файлы'),
+    input(task.description, 'Описание'), input(task.checklist, 'Чек-лист'), input(task.files, 'Файлы'),
   ], 'Сохранить', both, tasks.id, tasks.id)
   formOf(ids.createProjectFormId, 'Новый проект', projects.id, 'create', [
     input(project.title, 'Название', true), input(project.client, 'Клиент'), input(project.owner, 'Ответственный'),
@@ -180,8 +196,8 @@ export function buildProjectsV2App(built: BuiltTemplate, meta: { id: string; wor
   const taskFacts = facts([
     { id: task.title, name: 'Задача' }, { id: task.project, name: 'Проект' }, { id: task.assignee, name: 'Исполнитель' },
     { id: task.assigneeEmail, name: 'Почта исполнителя' }, { id: task.due, name: 'Срок' }, { id: task.priority, name: 'Приоритет' },
-    { id: task.status, name: 'Статус' }, { id: task.description, name: 'Описание' }, { id: task.checklist, name: 'Подзадачи' },
-    { id: task.files, name: 'Файлы' }, { id: task.sort, name: 'Порядок' },
+    { id: task.status, name: 'Статус' }, { id: task.description, name: 'Описание' }, { id: task.checklist, name: 'Чек-лист' },
+      { id: task.files, name: 'Файлы' }, { id: task.sort, name: 'Порядок' }, { id: task.parent, name: 'Родитель' }, { id: task.stage, name: 'Этап' },
   ])
   const projectFacts = facts([
     { id: project.title, name: 'Название' }, { id: project.client, name: 'Клиент' }, { id: project.owner, name: 'Ответственный' },
@@ -191,6 +207,9 @@ export function buildProjectsV2App(built: BuiltTemplate, meta: { id: string; wor
   const byTask = { op: 'includes' as const, left: { kind: 'row' as const, fieldId: comment.task }, right: { kind: 'screen_row_id' as const } }
   const tasksByProject = { op: 'includes' as const, left: { kind: 'row' as const, fieldId: task.project }, right: { kind: 'screen_row_id' as const } }
   const eventsByProject = { op: 'includes' as const, left: { kind: 'row' as const, fieldId: event.project }, right: { kind: 'screen_row_id' as const } }
+  const mineComments = collection('Комментарии для упоминаний', comments.id, comment.text, null, both, comment.at)
+  const boardStages = collection('Этапы доски', stages.id, stage.title, null, both, stage.title)
+  const projectStages = collection('Этапы проекта', stages.id, stage.title, null, both, stage.start, { op: 'includes', left: { kind: 'row', fieldId: stage.project }, right: { kind: 'screen_row_id' } }, projects.id)
   const mineTasks = collection('Мои задачи', tasks.id, task.title, ids.taskScreenId, both, task.sort)
   const minePeople = collection('Сотрудники списка', people.id, person.name, null, both, person.name)
   const mineProjects = collection('Проекты списка', projects.id, project.title, ids.projectScreenId, both, project.due)
@@ -203,6 +222,7 @@ export function buildProjectsV2App(built: BuiltTemplate, meta: { id: string; wor
   const allProjects = collection('Проекты', projects.id, project.title, ids.projectScreenId, owner, project.due)
   const allPeople = collection('Сотрудники', people.id, person.name, null, owner, person.name)
   const allClients = collection('Клиенты', clients.id, client.name, null, owner, client.name)
+  const taskFamily = collection('Задачи карточки', tasks.id, task.title, null, both, task.sort)
   const taskComments = collection('Комментарии задачи', comments.id, comment.text, null, both, comment.at, byTask, tasks.id)
   const taskPeople = collection('Сотрудники задачи', people.id, person.name, null, both, person.name)
   const taskProjects = collection('Проекты задачи', projects.id, project.title, ids.projectScreenId, both, project.due)
@@ -214,7 +234,7 @@ export function buildProjectsV2App(built: BuiltTemplate, meta: { id: string; wor
   const grant = (audience: AppV2Audience, value: Omit<AppV2Grant, 'audience'>): AppV2Grant => ({ audience, ...value })
   const owned = (fieldId: string) => ({ kind: 'owned' as const, fieldId, property: 'email' as const })
   const all = { kind: 'all' as const }
-  const staffTaskUpdate = [task.title, task.project, task.assignee, task.assigneeEmail, task.due, task.priority, task.status, task.description, task.checklist, task.files, task.sort]
+  const staffTaskUpdate = [task.title, task.project, task.assignee, task.assigneeEmail, task.due, task.priority, task.status, task.description, task.checklist, task.files, task.sort, task.stage]
   return {
     formatVersion: 2, id: meta.id, workspaceId: meta.workspaceId, name: meta.name, slug: meta.slug, purpose: 'business',
     appearance: { navigation: 'tabs', icon: 'clipboard', density: 'regular', corners: 'rounded' },
@@ -225,17 +245,18 @@ export function buildProjectsV2App(built: BuiltTemplate, meta: { id: string; wor
     projects: {
       projectsTableId: projects.id, tasksTableId: tasks.id, peopleTableId: people.id, clientsTableId: clients.id,
       commentsTableId: comments.id, eventsTableId: events.id,
-      ...ids, project, task, person, client, comment, event, statuses, priorities, projectStatuses, eventKinds,
+      ...ids, project, task, stage, person, client, comment, event, statuses, priorities, projectStatuses, eventKinds, stageStatuses,
+      stagesTableId: stages.id,
       activeChoiceId: choice('Сотрудники', 'Статус', 'Активен'),
     },
     screens: [
-      screen(ids.mineScreenId, 'Мои задачи', 'Задачи', 'clipboard', both, null, [mineTasks, minePeople, mineProjects], true),
-      screen(ids.boardScreenId, 'Доска', undefined, 'table', both, null, [boardTasks, boardPeople, boardProjects, ids.createTaskFormId], true),
+      screen(ids.mineScreenId, 'Мои задачи', 'Задачи', 'clipboard', both, null, [mineTasks, minePeople, mineProjects, mineComments], true),
+      screen(ids.boardScreenId, 'Доска', undefined, 'table', both, null, [boardTasks, boardPeople, boardProjects, boardStages, ids.createTaskFormId], true),
       screen(ids.projectsScreenId, 'Проекты', undefined, 'folder', both, null, [allProjects, allClients, allPeople, ids.createProjectFormId], true),
       screen(ids.peopleScreenId, 'Команда', undefined, 'users', both, null, [collection('Карточки сотрудников', people.id, person.name, null, both, person.name)], true),
       screen(ids.clientsScreenId, 'Клиенты', undefined, 'building', both, null, [collection('Карточки клиентов', clients.id, client.name, null, both, client.name)], true),
-      screen(ids.projectScreenId, 'Проект', undefined, 'folder', both, projects.id, [...projectFacts, projectTasks, projectEvents, projectPeople, projectClients, ids.editProjectFormId], false),
-      screen(ids.taskScreenId, 'Задача', undefined, 'clipboard', both, tasks.id, [...taskFacts, taskComments, taskPeople, taskProjects, ids.editTaskFormId, ids.commentFormId], false),
+      screen(ids.projectScreenId, 'Проект', undefined, 'folder', both, projects.id, [...projectFacts, projectTasks, projectStages, projectEvents, projectPeople, projectClients, ids.editProjectFormId], false),
+      screen(ids.taskScreenId, 'Задача', undefined, 'clipboard', both, tasks.id, [...taskFacts, taskFamily, taskComments, taskPeople, taskProjects, ids.editTaskFormId, ids.commentFormId], false),
     ],
     nodes, sources, workflows,
     policy: {
@@ -243,7 +264,7 @@ export function buildProjectsV2App(built: BuiltTemplate, meta: { id: string; wor
       tables: [
         { tableId: tasks.id, grants: [
           grant(owner, { read: { fieldIds: columnsOf(tasks.id), rows: all }, create: { fieldIds: editable(tasks.id) }, update: { fieldIds: editable(tasks.id), rows: all } }),
-          grant(staff, { read: { fieldIds: columnsOf(tasks.id), rows: owned(task.assigneeEmail) }, update: { fieldIds: staffTaskUpdate, rows: owned(task.assigneeEmail) } }),
+          grant(staff, { read: { fieldIds: columnsOf(tasks.id), rows: all }, update: { fieldIds: staffTaskUpdate, rows: owned(task.assigneeEmail) }, create: { fieldIds: editable(tasks.id).filter(id => id !== task.assigneeEmail), owner: { fieldId: task.assigneeEmail, property: 'email' } } }),
         ] },
         { tableId: projects.id, grants: [
           grant(owner, { read: { fieldIds: columnsOf(projects.id), rows: all }, create: { fieldIds: editable(projects.id) }, update: { fieldIds: editable(projects.id), rows: all } }),
@@ -257,9 +278,13 @@ export function buildProjectsV2App(built: BuiltTemplate, meta: { id: string; wor
           grant(owner, { read: { fieldIds: columnsOf(clients.id), rows: all }, create: { fieldIds: editable(clients.id) }, update: { fieldIds: editable(clients.id), rows: all } }),
           grant(staff, { read: { fieldIds: columnsOf(clients.id), rows: all } }),
         ] },
+        { tableId: stages.id, grants: [
+          grant(owner, { read: { fieldIds: columnsOf(stages.id), rows: all }, create: { fieldIds: editable(stages.id) }, update: { fieldIds: editable(stages.id), rows: all } }),
+          grant(staff, { read: { fieldIds: columnsOf(stages.id), rows: all } }),
+        ] },
         { tableId: comments.id, grants: [
           grant(owner, { read: { fieldIds: columnsOf(comments.id), rows: all }, create: { fieldIds: editable(comments.id) } }),
-          grant(staff, { read: { fieldIds: columnsOf(comments.id), rows: owned(comment.assigneeEmail) }, create: { fieldIds: [comment.text, comment.task, comment.project, comment.at, comment.author, comment.authorEmail], owner: { fieldId: comment.assigneeEmail, property: 'email' } } }),
+          grant(staff, { read: { fieldIds: columnsOf(comments.id), rows: all }, create: { fieldIds: [comment.text, comment.task, comment.project, comment.at, comment.author, comment.authorEmail, comment.assigneeEmail, comment.mentions] } }),
         ] },
         { tableId: events.id, grants: [
           grant(owner, { read: { fieldIds: columnsOf(events.id), rows: all }, create: { fieldIds: editable(events.id) } }),

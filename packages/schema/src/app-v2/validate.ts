@@ -442,7 +442,7 @@ export function validateAppV2(app: AppV2, catalog: AppV2Catalog, options: { mode
   if (app.projects) {
     const projects = app.projects, path = 'projects'
     table(projects.projectsTableId, path); table(projects.tasksTableId, path); table(projects.peopleTableId, path)
-    table(projects.clientsTableId, path); table(projects.commentsTableId, path); table(projects.eventsTableId, path)
+    table(projects.clientsTableId, path); table(projects.commentsTableId, path); table(projects.eventsTableId, path); table(projects.stagesTableId, path)
     const group = (tableId: string, values: Record<string, string | undefined>) => {
       for (const fieldId of Object.values(values)) if (fieldId) field(fieldId, tableId, path)
     }
@@ -452,6 +452,7 @@ export function validateAppV2(app: AppV2, catalog: AppV2Catalog, options: { mode
     group(projects.clientsTableId, projects.client)
     group(projects.commentsTableId, projects.comment)
     group(projects.eventsTableId, projects.event)
+    group(projects.stagesTableId, projects.stage)
     const client = field(projects.project.client, projects.projectsTableId, path)
     if (client && client.relationTableId && client.relationTableId !== projects.clientsTableId) issue('projects_client', path, 'Проект должен ссылаться на клиентов')
     const owner = field(projects.project.owner, projects.projectsTableId, path)
@@ -460,6 +461,14 @@ export function validateAppV2(app: AppV2, catalog: AppV2Catalog, options: { mode
     if (taskProject && taskProject.relationTableId && taskProject.relationTableId !== projects.projectsTableId) issue('projects_task', path, 'Задача должна ссылаться на проект')
     const assignee = field(projects.task.assignee, projects.tasksTableId, path)
     if (assignee && assignee.relationTableId && assignee.relationTableId !== projects.peopleTableId) issue('projects_assignee', path, 'Исполнитель должен ссылаться на сотрудников')
+    const parent = field(projects.task.parent, projects.tasksTableId, path)
+    if (parent && parent.relationTableId && parent.relationTableId !== projects.tasksTableId) issue('projects_parent', path, 'Подзадача должна ссылаться на задачу')
+    const stageLink = field(projects.task.stage, projects.tasksTableId, path)
+    if (stageLink && stageLink.relationTableId && stageLink.relationTableId !== projects.stagesTableId) issue('projects_stage', path, 'Этап задачи должен ссылаться на этапы')
+    const stageProject = field(projects.stage.project, projects.stagesTableId, path)
+    if (stageProject && stageProject.relationTableId && stageProject.relationTableId !== projects.projectsTableId) issue('projects_stage_project', path, 'Этап должен ссылаться на проект')
+    const mentions = field(projects.comment.mentions, projects.commentsTableId, path)
+    if (mentions && mentions.relationTableId && mentions.relationTableId !== projects.peopleTableId) issue('projects_mentions', path, 'Упоминание должно ссылаться на сотрудников')
     for (const screenId of [projects.mineScreenId, projects.boardScreenId, projects.projectsScreenId, projects.projectScreenId, projects.taskScreenId, projects.peopleScreenId, projects.clientsScreenId]) if (!screens.has(screenId)) issue('projects_screen', path, 'Экран проектов удалён')
     for (const formId of [projects.createTaskFormId, projects.editTaskFormId, projects.createProjectFormId, projects.editProjectFormId, projects.commentFormId]) if (nodes.get(formId)?.type !== 'form') issue('projects_form', path, 'Форма проектов удалена')
   }

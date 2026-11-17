@@ -100,9 +100,24 @@
 .choiceRow::-webkit-scrollbar { display: none; }
 .choiceRow button { flex: none; display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 10px; border-radius: 999px; border: 1px solid var(--v2-line, #dce3ed); background: var(--v2-surface, #fff); color: inherit; font: inherit; font-size: 13px; font-weight: 650; white-space: nowrap; }
 .choiceRow button[aria-pressed='true'] { background: var(--v2-soft, #e7eef6); border-color: var(--v2-accent, #456849); }
-.subtaskAdd { display: flex; gap: 8px; align-items: center; min-width: 0; }
+.parentLine { color: var(--v2-muted, #526075); font-size: 12px; line-height: 1.3; }
+.subtaskList { display: grid; gap: 6px; margin: 0 0 10px; padding: 0; list-style: none; }
+.subtaskRow { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; min-width: 0; }
+.subtaskRow .check { width: auto; }
+.subtaskTitle, .subtaskMeta { min-width: 0; min-height: 36px; padding: 4px 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; }
+.subtaskTitle { overflow-wrap: break-word; }
+.subtaskMeta { display: inline-flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.mention { padding: 0 3px; border-radius: 4px; background: var(--v2-soft, #e7eef6); color: inherit; }
+.mentionList { display: grid; gap: 2px; margin: 0; padding: 4px; list-style: none; border: 1px solid var(--v2-line, #dce3ed); border-radius: 12px; background: var(--v2-surface, #fff); }
+.mentionList button { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 40px; padding: 6px 8px; border: 0; border-radius: 8px; background: transparent; color: inherit; font: inherit; text-align: left; }
+.stages { display: grid; gap: 14px; }
+.stage { display: grid; gap: 8px; min-width: 0; padding: 12px; border: 1px solid var(--v2-line, #dce3ed); border-radius: 14px; background: var(--v2-surface, #fff); }
+.stage header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.stage h3, .stage p { margin: 0; }
+.stage h3 { font-size: 16px; }
+.subtaskAdd { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-width: 0; }
 .subtaskAdd input { flex: 1 1 auto; min-width: 0; }
-.subtaskAdd button, .fileButton { flex: none; white-space: nowrap; }
+.subtaskAdd button, .fileButton { flex: none; margin-left: auto; white-space: nowrap; }
 .fileInput { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); border: 0; }
 .empty { margin: 0; color: var(--v2-muted, #526075); }
 .error { margin: 0; color: #9f1239; }

@@ -174,7 +174,7 @@ export const appV2Schema = z.strictObject({
   }).optional(),
   /** Projects and tasks starter. Absent outside that install. */
   projects: z.strictObject({
-    projectsTableId: id, tasksTableId: id, peopleTableId: id, clientsTableId: id, commentsTableId: id, eventsTableId: id,
+    projectsTableId: id, tasksTableId: id, peopleTableId: id, clientsTableId: id, commentsTableId: id, eventsTableId: id, stagesTableId: id,
     mineScreenId: id, boardScreenId: id, projectsScreenId: id, projectScreenId: id, taskScreenId: id, peopleScreenId: id, clientsScreenId: id,
     createTaskFormId: id, editTaskFormId: id, createProjectFormId: id, editProjectFormId: id, commentFormId: id,
     project: z.strictObject({
@@ -182,16 +182,18 @@ export const appV2Schema = z.strictObject({
     }),
     task: z.strictObject({
       title: id, project: id, assignee: id, assigneeEmail: id, due: id, priority: id, status: id,
-      description: id, checklist: id, files: id, sort: id,
+      description: id, checklist: id, files: id, sort: id, parent: id, stage: id,
     }),
+    stage: z.strictObject({ title: id, project: id, start: id, end: id, goal: id, status: id }),
     person: z.strictObject({ name: id, email: id, phone: id, photo: id, role: id, active: id }),
     client: z.strictObject({ name: id, phone: id, email: id, note: id }),
-    comment: z.strictObject({ text: id, task: id, project: id, at: id, author: id, authorEmail: id, assigneeEmail: id }),
+    comment: z.strictObject({ text: id, task: id, project: id, at: id, author: id, authorEmail: id, assigneeEmail: id, mentions: id }),
     event: z.strictObject({ text: id, project: id, task: id, at: id, kind: id, author: id, authorEmail: id, assigneeEmail: id }),
     statuses: z.strictObject({ todo: id, doing: id, review: id, done: id }),
     priorities: z.strictObject({ low: id, medium: id, high: id, urgent: id }),
     projectStatuses: z.strictObject({ draft: id, active: id, paused: id, done: id, cancelled: id }),
     eventKinds: z.strictObject({ created: id, status: id, comment: id }),
+    stageStatuses: z.strictObject({ planned: id, current: id, done: id }),
     activeChoiceId: id,
   }).optional(),
   /** Field-service starter: dispatcher board, technician jobs, notes and completion. Absent outside that install. */

@@ -24,6 +24,8 @@ export type TaskFacts = {
   assigneeId: string
   assigneeEmail: string
   projectId: string
+  parentId: string
+  stageId: string
   sort: number
 }
 
@@ -119,4 +121,29 @@ export function priorityRank(priority: string) {
   const order = ['Срочный', 'Высокий', 'Средний', 'Низкий']
   const index = order.indexOf(priority)
   return index < 0 ? order.length : index
+}
+
+export function subtaskProgress(statuses: readonly string[]) {
+  return { done: statuses.filter(isDone).length, total: statuses.length }
+}
+
+/** Text after @ at the caret, if the user is typing a mention. */
+export function mentionQuery(text: string, caret: number) {
+  const upto = text.slice(0, Math.max(0, Math.min(caret, text.length)))
+  const match = /(?:^|[\s(])@([^\s@]*)$/.exec(upto)
+  if (!match || match[1] == null) return null
+  return { start: upto.length - match[1].length - 1, query: match[1] }
+}
+
+export function insertMention(text: string, start: number, caret: number, name: string) {
+  return `${text.slice(0, start)}@${name} ${text.slice(caret)}`
+}
+
+export function mentionedNames(text: string, names: readonly string[]) {
+  return names.filter(name => name && text.includes(`@${name}`))
+}
+
+export function canParent(parentId: string, tasks: readonly { id: string; parentId: string }[]) {
+  const parent = tasks.find(task => task.id === parentId)
+  return Boolean(parent && !parent.parentId)
 }

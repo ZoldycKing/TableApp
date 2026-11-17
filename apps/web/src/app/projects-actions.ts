@@ -10,11 +10,12 @@ import { RowWriteError, createRow, mutationFields, updateRow, writeRows } from '
 
 type MoveRequest = { kind: 'move'; revision: string; screenId: string; recordId: string; statusId: string; orderedIds: string[] }
 type TaskRequest = { kind: 'task'; revision: string; screenId: string; recordId: string; title: string; projectId: string; assigneeId: string; assigneeEmail: string; due: string | null; priorityId: string; statusId: string; description: string; checklist: string; files?: unknown }
-type CommentRequest = { kind: 'comment'; revision: string; screenId: string; recordId: string; text: string }
+type CommentRequest = { kind: 'comment'; revision: string; screenId: string; recordId: string; text: string; mentionIds: string[] }
+type SubtaskRequest = { kind: 'create-subtask'; revision: string; screenId: string; recordId: string; title: string; assigneeId: string; assigneeEmail: string; due: string | null; priorityId: string }
 type ProjectRequest = { kind: 'project'; revision: string; screenId: string; recordId: string; title: string; clientId: string; ownerId: string; start: string | null; due: string | null; budget: number | null; statusId: string }
 type CreateTaskRequest = { kind: 'create-task'; revision: string; screenId: string; title: string; projectId: string; assigneeId: string; assigneeEmail: string; due: string | null; priorityId: string; description: string }
 type CreateProjectRequest = { kind: 'create-project'; revision: string; screenId: string; title: string; clientId: string; ownerId: string; start: string | null; due: string | null; budget: number | null; statusId: string }
-type Request = MoveRequest | TaskRequest | CommentRequest | ProjectRequest | CreateTaskRequest | CreateProjectRequest
+type Request = MoveRequest | TaskRequest | CommentRequest | ProjectRequest | CreateTaskRequest | CreateProjectRequest | SubtaskRequest
 
 const text = (value: unknown, max: number) => typeof value === 'string' && value.trim().length > 0 && value.trim().length <= max ? value.trim() : null
 const maybe = (value: unknown) => value == null || value === '' ? null : typeof value === 'string' && value.length <= 40 ? value : undefined
@@ -32,7 +33,11 @@ function readRequest(input: unknown): Request | null {
   if (value.kind === 'task' && recordId && text(value.title, 200) && typeof value.projectId === 'string' && typeof value.assigneeId === 'string' && typeof value.assigneeEmail === 'string' && typeof value.priorityId === 'string' && typeof value.statusId === 'string' && typeof value.description === 'string' && value.description.length <= 4000 && typeof value.checklist === 'string' && value.checklist.length <= 8000 && maybe(value.due) !== undefined) {
     return { kind: 'task', revision, screenId, recordId, title: text(value.title, 200)!, projectId: value.projectId, assigneeId: value.assigneeId, assigneeEmail: value.assigneeEmail.trim().toLowerCase(), due: maybe(value.due) ?? null, priorityId: value.priorityId, statusId: value.statusId, description: value.description, checklist: value.checklist, files: value.files }
   }
-  if (value.kind === 'comment' && recordId && text(value.text, 2000)) return { kind: 'comment', revision, screenId, recordId, text: text(value.text, 2000)! }
+  const mentionIds = value.mentionIds == null ? [] : idList(value.mentionIds)
+  if (value.kind === 'comment' && recordId && text(value.text, 2000) && mentionIds) return { kind: 'comment', revision, screenId, recordId, text: text(value.text, 2000)!, mentionIds }
+  if (value.kind === 'create-subtask' && recordId && text(value.title, 200) && typeof value.assigneeId === 'string' && typeof value.assigneeEmail === 'string' && typeof value.priorityId === 'string' && maybe(value.due) !== undefined) {
+    return { kind: 'create-subtask', revision, screenId, recordId, title: text(value.title, 200)!, assigneeId: value.assigneeId, assigneeEmail: value.assigneeEmail.trim().toLowerCase(), due: maybe(value.due) ?? null, priorityId: value.priorityId }
+  }
   if (value.kind === 'project' && recordId && text(value.title, 200) && typeof value.clientId === 'string' && typeof value.ownerId === 'string' && typeof value.statusId === 'string' && maybe(value.start) !== undefined && maybe(value.due) !== undefined && (value.budget == null || typeof value.budget === 'number')) {
     return { kind: 'project', revision, screenId, recordId, title: text(value.title, 200)!, clientId: value.clientId, ownerId: value.ownerId, start: maybe(value.start) ?? null, due: maybe(value.due) ?? null, budget: typeof value.budget === 'number' ? value.budget : null, statusId: value.statusId }
   }
@@ -125,14 +130,25 @@ export async function savePublishedProjectsAction(slug: string, input: unknown):
       const currentTitle = String(row.values[kit.task.title] ?? '')
       const currentAssignee = String(row.values[kit.task.assigneeEmail] ?? '')
       if (parsed.kind === 'comment') {
-        const values = commentWrite(kit.comment, { text: parsed.text, taskId: row.id, projectId: currentProject, at: stamp, author, authorEmail: actor.email, assigneeEmail: currentAssignee })
-        const payload = { ...values }
-        if (!leader) delete payload[kit.comment.assigneeEmail]
-        const decision = guardProjectsCreate(app, actor, kit.commentsTableId, payload)
+        const values = commentWrite(kit.comment, { text: parsed.text, taskId: row.id, projectId: currentProject, at: stamp, author, authorEmail: actor.email, assigneeEmail: currentAssignee, mentionIds: parsed.mentionIds })
+        const decision = guardProjectsCreate(app, actor, kit.commentsTableId, values)
         if (!decision.ok) throw new RowWriteError('denied', decision.error)
-        await createRow(context, kit.commentsTableId, { ...payload, ...decision.ownerValues }, actorRef, { origin: 'manual' })
+        await createRow(context, kit.commentsTableId, { ...values, ...decision.ownerValues }, actorRef, { origin: 'manual' })
         await writeEvent('comment', currentProject, row.id, currentTitle, currentAssignee)
         return { ok: true as const, message: 'Комментарий добавлен.' }
+      }
+      if (parsed.kind === 'create-subtask') {
+        if (firstId(row.values[kit.task.parent])) throw new RowWriteError('invalid', 'Подзадача не делится дальше.')
+        const values = taskWrite(kit.task, { title: parsed.title, projectId: currentProject, parentId: row.id, assigneeId: parsed.assigneeId, assigneeEmail: parsed.assigneeEmail, due: parsed.due, priorityId: parsed.priorityId, statusId: kit.statuses.todo, checklist: '[]', description: '', sort: 1000 })
+        const payload = { ...values }
+        if (!leader) delete payload[kit.task.assigneeEmail]
+        const decision = guardProjectsCreate(app, actor, kit.tasksTableId, payload)
+        if (!decision.ok) throw new RowWriteError('denied', decision.error)
+        const created = await createRow(context, kit.tasksTableId, { ...payload, ...decision.ownerValues }, actorRef, { origin: 'manual' })
+        await writeEvent('created', currentProject, created.id, parsed.title, parsed.assigneeEmail)
+        const taskRows = await loadTasks()
+        await writeProgress(currentProject, taskRows.map(item => ({ id: item.id, data: item.data as Record<string, unknown> })))
+        return { ok: true as const, message: 'Подзадача создана.' }
       }
       const taskRows = (await loadTasks()).map(item => ({ id: item.id, data: item.data as Record<string, unknown>, statusName: statusName((item.data as Record<string, unknown>)[kit.task.status]), sort: Number((item.data as Record<string, unknown>)[kit.task.sort] ?? 0) || 0 }))
       if (parsed.kind === 'move') {

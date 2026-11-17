@@ -3,11 +3,11 @@ import { createContext, useContext, useId, useState, type DragEvent } from 'reac
 import type { AppV2, AppV2Json, AppV2Node, AppV2Record } from '@tableapp/schema/app-v2'
 import type { BuilderV2Table } from '@/lib/builder-v2'
 import {
-  BUCKETS, PRIORITIES, TASK_STATUSES, eventText, formatDay, formatRub, isDone, isOverdue, matchesDue, progressPercent, reorderColumn, taskBucket,
+  BUCKETS, PRIORITIES, TASK_STATUSES, eventText, formatDay, formatRub, insertMention, isDone, isOverdue, matchesDue, mentionQuery, mentionedNames, progressPercent, reorderColumn, subtaskProgress, taskBucket,
   type DueFilter, type TaskFacts,
 } from '@/lib/projects-logic'
 import { commentWrite, eventWrite, moveUpdates, projectWrite, taskWrite } from '@/lib/projects-persist'
-import { checklistProgress, parseChecklist, serializeChecklist, toggleChecklistItem, type ChecklistItem } from '@/lib/dispatch-stage2'
+import { parseChecklist, serializeChecklist, toggleChecklistItem, type ChecklistItem } from '@/lib/dispatch-stage2'
 import { savePublishedProjectsAction } from '@/app/projects-actions'
 import { usePublishedV2 } from './published-context'
 import { useBuilderV2NodeData } from './use-data'
@@ -20,8 +20,8 @@ import buttons from '../prototype/prototype.module.css'
 import type { AppV2RendererProps } from './view'
 import css from './projects.module.css'
 
-export type ProjectsTab = 'tasks' | 'team' | 'files' | 'feed'
-export type ProjectsOpen = 'filters' | 'edit' | 'create' | 'comment' | null
+export type ProjectsTab = 'stages' | 'tasks' | 'team' | 'files' | 'feed'
+export type ProjectsOpen = 'filters' | 'edit' | 'create' | 'comment' | 'mention' | null
 export type ProjectsBundle = { rows: AppV2Record[]; setRows?: (rows: AppV2Record[]) => void; open?: ProjectsOpen; tab?: ProjectsTab }
 export const ProjectsRowsContext = createContext<ProjectsBundle | null>(null)
 
@@ -100,14 +100,16 @@ export function ProjectsScreen(props: AppV2RendererProps) {
   const clientsNode = node(kit?.clientsTableId ?? '')
   const commentsNode = node(kit?.commentsTableId ?? '')
   const eventsNode = node(kit?.eventsTableId ?? '')
+  const stagesNode = node(kit?.stagesTableId ?? '')
   const tasksPage = useBuilderV2NodeData(props.app, tasksNode ?? PLACEHOLDER, live && Boolean(tasksNode), '', scope)
   const projectsPage = useBuilderV2NodeData(props.app, projectsNode ?? PLACEHOLDER, live && Boolean(projectsNode), '', scope)
   const peoplePage = useBuilderV2NodeData(props.app, peopleNode ?? PLACEHOLDER, live && Boolean(peopleNode), '', scope)
   const clientsPage = useBuilderV2NodeData(props.app, clientsNode ?? PLACEHOLDER, live && Boolean(clientsNode), '', scope)
   const commentsPage = useBuilderV2NodeData(props.app, commentsNode ?? PLACEHOLDER, live && Boolean(commentsNode), '', scope)
   const eventsPage = useBuilderV2NodeData(props.app, eventsNode ?? PLACEHOLDER, live && Boolean(eventsNode), '', scope)
+  const stagesPage = useBuilderV2NodeData(props.app, stagesNode ?? PLACEHOLDER, live && Boolean(stagesNode), '', scope)
   if (!kit || !props.app.screens.some(screen => screen.id === screenId && [kit.mineScreenId, kit.boardScreenId, kit.projectsScreenId, kit.projectScreenId, kit.taskScreenId, kit.peopleScreenId, kit.clientsScreenId].includes(screen.id))) return null
-  const rows = demo?.rows ?? [tasksPage, projectsPage, peoplePage, clientsPage, commentsPage, eventsPage].flatMap(page => page.page?.rows ?? [])
+  const rows = demo?.rows ?? [tasksPage, projectsPage, peoplePage, clientsPage, commentsPage, eventsPage, stagesPage].flatMap(page => page.page?.rows ?? [])
   const of = (tableId: string) => rows.filter(row => row.tableId === tableId)
   const shared = { ...props, kit, rows, of, replace: demo?.setRows, now: Date.now(), leader: props.actor.roleIds.includes('owner') }
   if (screenId === kit.mineScreenId) return <Mine {...shared} />
@@ -139,6 +141,8 @@ function taskFacts(props: ScreenProps, row: AppV2Record): TaskFacts {
     assigneeId: firstId(row.values[task.assignee]),
     assigneeEmail: textOf(row.values[task.assigneeEmail]).trim().toLowerCase(),
     projectId: firstId(row.values[task.project]),
+    parentId: firstId(row.values[task.parent]),
+    stageId: firstId(row.values[task.stage]),
     sort: Number(row.values[task.sort] ?? 0) || 0,
   }
 }
@@ -158,6 +162,45 @@ const personById = (props: ScreenProps, id: string) => people(props).find(item =
 const personByEmail = (props: ScreenProps, email: string) => people(props).find(item => item.email === email.trim().toLowerCase())
 const projectTitle = (props: ScreenProps, id: string) => primaryOf(props.rows, props.tables, id)
 const clientTitle = (props: ScreenProps, id: string) => primaryOf(props.rows, props.tables, id)
+const taskTitle = (props: ScreenProps, id: string) => {
+  const row = props.rows.find(item => item.id === id)
+  return row ? textOf(row.values[props.kit.task.title]) : ''
+}
+
+function stagesOf(props: ScreenProps) {
+  return props.of(props.kit.stagesTableId).map(row => ({
+    id: row.id,
+    title: textOf(row.values[props.kit.stage.title]),
+    projectId: firstId(row.values[props.kit.stage.project]),
+    start: row.values[props.kit.stage.start],
+    end: row.values[props.kit.stage.end],
+    goal: textOf(row.values[props.kit.stage.goal]),
+    status: choiceName(props.tables, props.kit.stagesTableId, props.kit.stage.status, row.values[props.kit.stage.status]),
+  })).sort((a, b) => String(a.start ?? '').localeCompare(String(b.start ?? '')))
+}
+
+function childProgress(props: ScreenProps, parentId: string) {
+  const statuses = props.of(props.kit.tasksTableId).map(row => taskFacts(props, row)).filter(item => item.parentId === parentId).map(item => item.status)
+  return subtaskProgress(statuses)
+}
+
+function mentionedIds(props: ScreenProps, email: string) {
+  const person = personByEmail(props, email)
+  if (!person) return new Set<string>()
+  const ids = new Set<string>()
+  for (const row of props.of(props.kit.commentsTableId)) {
+    const mentions = row.values[props.kit.comment.mentions]
+    if (Array.isArray(mentions) && mentions.includes(person.id)) ids.add(firstId(row.values[props.kit.comment.task]))
+  }
+  return ids
+}
+
+function CommentText({ text, names }: { text: string; names: string[] }) {
+  const tokens = names.filter(Boolean).sort((a, b) => b.length - a.length)
+  if (!tokens.length) return <>{text}</>
+  const pattern = tokens.map(name => `@${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).join('|')
+  return <>{text.split(new RegExp(`(${pattern})`, 'g')).map((part, index) => tokens.some(name => part === `@${name}`) ? <mark key={index} className={css.mention}>{part}</mark> : <span key={index}>{part}</span>)}</>
+}
 
 function visibleTasks(props: ScreenProps) {
   const email = props.actor.email?.trim().toLowerCase() ?? ''
@@ -171,15 +214,17 @@ function TaskCardView(props: ScreenProps & { row: AppV2Record; onOpen: () => voi
   const facts = taskFacts(props, props.row)
   const overdue = isOverdue(facts, props.now)
   const person = personById(props, facts.assigneeId)
-  const progress = checklistProgress(parseChecklist(props.row.values[props.kit.task.checklist]))
+  const progress = childProgress(props, props.row.id)
   const due = formatDay(facts.due)
   const variant = props.variant ?? 'board'
   const subtasks = progress.total ? `${progress.done} из ${progress.total}` : ''
+  const parent = facts.parentId ? taskTitle(props, facts.parentId) : ''
   if (variant !== 'board') {
     return <article className={css.rowCard} data-overdue={overdue || undefined}>
       <button type="button" className={css.rowOpen} onClick={props.onOpen}>
         <span className={css.rowMain}>
           <span className={css.cardTitle}>{textOf(props.row.values[props.kit.task.title])}</span>
+          {parent ? <span className={css.parentLine}>→ {parent}</span> : null}
           {variant === 'mine' ? <span className={css.projectName}>{projectTitle(props, facts.projectId) || 'Без проекта'}</span> : null}
         </span>
         <span className={css.rowPriority}><Badge name={facts.priority} /></span>
@@ -206,15 +251,20 @@ function Mine(props: ScreenProps) {
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS)
   const [open, setOpen] = useState(false)
   const email = (props.actor.email ?? '').trim().toLowerCase()
-  const tasks = visibleTasks(props).filter(item => item.facts.assigneeEmail === email).filter(item => passFilters(props, item, filters))
+  const tasks = props.of(props.kit.tasksTableId).map(row => ({ row, facts: taskFacts(props, row) })).filter(item => item.facts.assigneeEmail === email).filter(item => passFilters(props, item, filters)).sort((a, b) => a.facts.sort - b.facts.sort)
+  const mentions = props.of(props.kit.tasksTableId).map(row => ({ row, facts: taskFacts(props, row) })).filter(item => item.facts.assigneeEmail !== email && mentionedIds(props, email).has(item.row.id) && !isDone(item.facts.status)).filter(item => passFilters(props, item, filters))
+  const any = tasks.some(item => taskBucket(item.facts, props.now)) || mentions.length
   return <div className={css.root} data-projects-screen="mine">
     <div className={css.toolbar}><h1>Мои задачи</h1><span className={css.grow} /><div className={css.actions}><button type="button" className={buttons.secondary} onClick={() => setOpen(true)}>Фильтры</button></div></div>
     <div className={css.pad}><div className={css.groups}>
-      {tasks.length ? BUCKETS.map(bucket => {
-        const items = tasks.filter(item => taskBucket(item.facts, props.now) === bucket.id)
-        if (!items.length) return null
-        return <section key={bucket.id} className={css.group}><h2>{bucket.label} <span>{items.length}</span></h2><ul className={css.list}>{items.map(item => <li key={item.row.id}><TaskCardView {...props} variant="mine" row={item.row} onOpen={() => props.onNavigate?.(props.kit.taskScreenId, item.row.id)} /></li>)}</ul></section>
-      }) : <p className={css.empty}>На вашу почту задач нет. На доске видны задачи, которые вам назначены.</p>}
+      {any ? <>
+        {BUCKETS.map(bucket => {
+          const items = tasks.filter(item => taskBucket(item.facts, props.now) === bucket.id)
+          if (!items.length) return null
+          return <section key={bucket.id} className={css.group}><h2>{bucket.label} <span>{items.length}</span></h2><ul className={css.list}>{items.map(item => <li key={item.row.id}><TaskCardView {...props} variant="mine" row={item.row} onOpen={() => props.onNavigate?.(props.kit.taskScreenId, item.row.id)} /></li>)}</ul></section>
+        })}
+        {mentions.length ? <section className={css.group} data-projects-group="mentions"><h2>Упоминания <span>{mentions.length}</span></h2><ul className={css.list}>{mentions.map(item => <li key={item.row.id}><TaskCardView {...props} variant="mine" row={item.row} onOpen={() => props.onNavigate?.(props.kit.taskScreenId, item.row.id)} /></li>)}</ul></section> : null}
+      </> : <p className={css.empty}>На вашу почту задач нет. На доске видны задачи, которые вам назначены.</p>}
     </div></div>
     {open ? <FiltersDialog {...props} value={filters} onChange={setFilters} onClose={() => setOpen(false)} hideAssignee /> : null}
   </div>
@@ -228,7 +278,7 @@ function Board(props: ScreenProps) {
   const [statusFor, setStatusFor] = useState<string | null>(null)
   const [over, setOver] = useState('')
   const [phoneStatus, setPhoneStatus] = useState<string>(TASK_STATUSES[0])
-  const tasks = visibleTasks(props).filter(item => passFilters(props, item, filters))
+  const tasks = visibleTasks(props).filter(item => !item.facts.parentId).filter(item => passFilters(props, item, filters))
   const statuses = TASK_STATUSES.map(name => ({ name, id: choiceId(props.tables, props.kit.tasksTableId, props.kit.task.status, name) }))
   const drop = (statusId: string, beforeId: string | null, event: DragEvent) => {
     event.preventDefault()
@@ -260,7 +310,7 @@ function Board(props: ScreenProps) {
         </section>
       })}
     </div></div>
-    {openFilters ? <FiltersDialog {...props} value={filters} onChange={setFilters} onClose={() => setOpenFilters(false)} /> : null}
+    {openFilters ? <FiltersDialog {...props} value={filters} onChange={setFilters} onClose={() => setOpenFilters(false)} showStage /> : null}
     {create ? <TaskEditor {...props} mode="create" onClose={() => setCreate(false)} /> : null}
     {statusFor ? <StatusDialog {...props} rowId={statusFor} onClose={() => setStatusFor(null)} /> : null}
   </div>
@@ -300,12 +350,14 @@ function projectProgress(props: ScreenProps, projectId: string) {
 function ProjectCard(props: ScreenProps) {
   const demo = useContext(ProjectsRowsContext)
   const row = props.rows.find(item => item.id === props.record?.id) ?? props.record
-  const [tab, setTab] = useState<ProjectsTab>(demo?.tab ?? 'tasks')
+  const [tab, setTab] = useState<ProjectsTab>(demo?.tab ?? 'stages')
   const [edit, setEdit] = useState(false)
   if (!row) return <p className={css.empty}>Проект не найден.</p>
   const status = choiceName(props.tables, props.kit.projectsTableId, props.kit.project.status, row.values[props.kit.project.status])
   const progress = projectProgress(props, row.id)
   const tasks = visibleTasks(props).filter(item => item.facts.projectId === row.id)
+  const topTasks = tasks.filter(item => !item.facts.parentId)
+  const projectStages = stagesOf(props).filter(item => item.projectId === row.id)
   const clientId = firstId(row.values[props.kit.project.client])
   const owner = personById(props, firstId(row.values[props.kit.project.owner]))
   const team = new Map<string, ReturnType<typeof personById>>()
@@ -336,9 +388,26 @@ function ProjectCard(props: ScreenProps) {
     >
       <div className={css.pad}>
         <div className={css.tabs} role="tablist" aria-label="Разделы проекта">
-          {([['tasks', 'Задачи'], ['team', 'Команда'], ['files', 'Файлы'], ['feed', 'Лента']] as const).map(([id, label]) => <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)}>{label}</button>)}
+          {([['stages', 'Этапы'], ['tasks', 'Задачи'], ['team', 'Команда'], ['files', 'Файлы'], ['feed', 'Лента']] as const).map(([id, label]) => <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)}>{label}</button>)}
         </div>
-        {tab === 'tasks' ? <ul className={css.list}>{tasks.length ? tasks.map(item => <li key={item.row.id}><TaskCardView {...props} variant="project" row={item.row} onOpen={() => props.onNavigate?.(props.kit.taskScreenId, item.row.id)} /></li>) : <li className={css.empty}>В проекте пока нет задач.</li>}</ul> : null}
+        {tab === 'stages' ? <div className={css.stages}>{projectStages.map(stage => {
+          const items = topTasks.filter(item => item.facts.stageId === stage.id)
+          const done = items.filter(item => isDone(item.facts.status)).length
+          const percent = items.length ? Math.round(done / items.length * 100) : 0
+          const dates = [formatDay(stage.start), formatDay(stage.end)].filter(Boolean).join(' — ')
+          return <section key={stage.id} className={css.stage}>
+            <header><h3>{stage.title}</h3><Badge name={stage.status} /></header>
+            <p className={css.quiet}>{dates || 'Даты не указаны'}</p>
+            {stage.goal ? <p>{stage.goal}</p> : null}
+            <div className={css.metricProgress}><span className={css.bar} role="progressbar" aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100} aria-label={`Прогресс этапа ${stage.title}`}><span style={{ width: `${percent}%` }} /></span>{done} из {items.length}</div>
+            <ul className={css.list}>{items.length ? items.map(item => <li key={item.row.id}><TaskCardView {...props} variant="project" row={item.row} onOpen={() => props.onNavigate?.(props.kit.taskScreenId, item.row.id)} /></li>) : <li className={css.empty}>В этапе пока нет задач.</li>}</ul>
+          </section>
+        })}{(() => {
+          const loose = topTasks.filter(item => !item.facts.stageId)
+          if (!loose.length) return null
+          return <section className={css.stage}><header><h3>Без этапа</h3></header><ul className={css.list}>{loose.map(item => <li key={item.row.id}><TaskCardView {...props} variant="project" row={item.row} onOpen={() => props.onNavigate?.(props.kit.taskScreenId, item.row.id)} /></li>)}</ul></section>
+        })()}</div> : null}
+        {tab === 'tasks' ? <ul className={css.list}>{topTasks.length ? topTasks.map(item => <li key={item.row.id}><TaskCardView {...props} variant="project" row={item.row} onOpen={() => props.onNavigate?.(props.kit.taskScreenId, item.row.id)} /></li>) : <li className={css.empty}>В проекте пока нет задач.</li>}</ul> : null}
         {tab === 'team' ? <div className={css.team}>{[...team.values()].map(person => person ? <div key={person.id} className={css.personLine}><BookingAvatar name={person.name} photo={person.photo} small /><span><strong>{person.name}</strong><br /><span className={css.quiet}>{person.id === owner?.id ? `Ответственный · ${person.role}` : person.role}<br />{openTasksLabel(tasks.filter(item => item.facts.assigneeId === person.id && !isDone(item.facts.status)).length)}</span></span></div> : null)}</div> : null}
         {tab === 'files' ? <ul className={css.files}>{files.length ? files.map(file => <li key={file.id}><ProtoIcon name="file" size={18} /><div><strong className={css.fileName}>{file.name}</strong><div className={css.quiet}>{file.task} · {fileSize(file.size)}</div></div></li>) : <li className={css.empty}>Файлов по проекту пока нет.</li>}</ul> : null}
         {tab === 'feed' ? <ul className={css.feed}>{feed.length ? feed.map(item => {
@@ -356,25 +425,38 @@ function TaskCard(props: ScreenProps) {
   const demo = useContext(ProjectsRowsContext)
   const row = props.rows.find(item => item.id === props.record?.id) ?? props.record
   const [edit, setEdit] = useState(demo?.open === 'edit')
-  const [comment, setComment] = useState(demo?.open === 'comment')
+  const [comment, setComment] = useState(demo?.open === 'comment' || demo?.open === 'mention')
   const [error, setError] = useState('')
   const [subtask, setSubtask] = useState('')
+  const [point, setPoint] = useState('')
   if (!row) return <p className={css.empty}>Задача не найдена.</p>
   const facts = taskFacts(props, row)
   const overdue = isOverdue(facts, props.now)
   const person = personById(props, facts.assigneeId)
   const checklist = parseChecklist(row.values[props.kit.task.checklist])
-  const progress = checklistProgress(checklist)
+  const children = props.of(props.kit.tasksTableId).filter(item => taskFacts(props, item).parentId === row.id).sort((a, b) => taskFacts(props, a).sort - taskFacts(props, b).sort)
+  const progress = subtaskProgress(children.map(item => taskFacts(props, item).status))
+  const names = people(props).map(item => item.name)
   const comments = props.of(props.kit.commentsTableId).filter(item => firstId(item.values[props.kit.comment.task]) === row.id)
     .sort((a, b) => String(a.values[props.kit.comment.at] ?? '').localeCompare(String(b.values[props.kit.comment.at] ?? '')))
   const files = fileItems(row.values[props.kit.task.files])
   const toggle = (index: number) => { void saveTaskPatch(props, row, { checklist: serializeChecklist(toggleChecklistItem(checklist, index)) }, setError) }
   const setStatus = (name: string) => { void saveTaskPatch(props, row, { statusId: choiceId(props.tables, props.kit.tasksTableId, props.kit.task.status, name) }, setError) }
   const next = nextStep(facts.status)
-  const addSubtask = () => {
-    const label = subtask.trim()
+  const toggleChild = (child: AppV2Record) => {
+    const status = taskFacts(props, child).status
+    void saveTaskPatch(props, child, { statusId: choiceId(props.tables, props.kit.tasksTableId, props.kit.task.status, isDone(status) ? 'К работе' : 'Готово') }, setError)
+  }
+  const addPoint = () => {
+    const label = point.trim()
     if (!label) return
     void saveTaskPatch(props, row, { checklist: serializeChecklist([...checklist, { label, done: false }]) }, setError)
+    setPoint('')
+  }
+  const addSubtask = () => {
+    const title = subtask.trim()
+    if (!title) return
+    void saveSubtask(props, row, title, setError)
     setSubtask('')
   }
   return <div className={css.root} data-projects-screen="task">
@@ -382,7 +464,7 @@ function TaskCard(props: ScreenProps) {
       title={textOf(row.values[props.kit.task.title])}
       subtitle={projectTitle(props, facts.projectId) || 'Без проекта'}
       chips={<div className={css.headerChips}><span className={css.cardFoot}><Badge name={facts.priority} />{overdue ? <Badge name="Просрочено" /> : null}</span><Segmented label="Статус" value={String(row.values[props.kit.task.status] ?? '')} options={TASK_STATUSES.map(name => ({ id: choiceId(props.tables, props.kit.tasksTableId, props.kit.task.status, name), name }))} onChange={id => { const name = TASK_STATUSES.find(item => choiceId(props.tables, props.kit.tasksTableId, props.kit.task.status, item) === id); if (name) setStatus(name) }} /></div>}
-      back={{ label: 'Доска', onClick: () => props.onNavigate?.(props.kit.boardScreenId) }}
+      back={facts.parentId ? { label: taskTitle(props, facts.parentId) || 'Задача', onClick: () => props.onNavigate?.(props.kit.taskScreenId, facts.parentId) } : { label: 'Доска', onClick: () => props.onNavigate?.(props.kit.boardScreenId) }}
       actions={<div className={css.headerActions} data-projects-actions="">{next ? <button type="button" className={buttons.primary} onClick={() => setStatus(next.name)}>{next.label}</button> : null}<button type="button" className={buttons.secondary} onClick={() => setEdit(true)}>Изменить</button><button type="button" className={buttons.secondary} onClick={() => setComment(true)}>Комментарий</button></div>}
       metrics={[
         { key: 'project', caption: 'Проект', value: <button type="button" className={css.linkButton} onClick={() => props.onNavigate?.(props.kit.projectScreenId, facts.projectId)}>{projectTitle(props, facts.projectId) || 'Не указан'}</button> },
@@ -393,18 +475,36 @@ function TaskCard(props: ScreenProps) {
     >
       <div className={css.pad}>
         {textOf(row.values[props.kit.task.description]) ? <DetailSection title="Описание"><p>{textOf(row.values[props.kit.task.description])}</p></DetailSection> : null}
-        <DetailSection title="Подзадачи">
-          {checklist.length ? <ul className={css.checkList}>{checklist.map((item, index) => <li key={`${item.label}-${index}`}><CheckControl checked={item.done} label={item.label} onToggle={() => toggle(index)} /></li>)}</ul> : <p className={css.empty}>Подзадач пока нет.</p>}
+        {facts.parentId ? null : <DetailSection title="Подзадачи">
+          {children.length ? <ul className={css.subtaskList}>{children.map(child => {
+            const childFacts = taskFacts(props, child)
+            const who = personById(props, childFacts.assigneeId)
+            const late = isOverdue(childFacts, props.now)
+            const done = isDone(childFacts.status)
+            const title = textOf(child.values[props.kit.task.title])
+            return <li key={child.id} className={css.subtaskRow}>
+              <button type="button" role="checkbox" aria-checked={done} aria-label={title} className={css.check} onClick={() => toggleChild(child)}><span data-on={done || undefined}>{done ? <ProtoIcon name="check" size={12} /> : null}</span></button>
+              <button type="button" className={css.subtaskTitle} onClick={() => props.onNavigate?.(props.kit.taskScreenId, child.id)}>{title}</button>
+              <button type="button" className={css.subtaskMeta} onClick={() => props.onNavigate?.(props.kit.taskScreenId, child.id)}>{who ? <BookingAvatar name={who.name} photo={who.photo} small /> : null}<span className={css.due} data-overdue={late || undefined}>{formatDay(childFacts.due) || 'Без срока'}</span></button>
+            </li>
+          })}</ul> : null}
           <form className={css.subtaskAdd} onSubmit={event => { event.preventDefault(); addSubtask() }}>
             <input type="text" aria-label="Новая подзадача" placeholder="Подзадача" value={subtask} onChange={event => setSubtask(event.target.value)} />
             <button type="submit" className={buttons.secondary}>Добавить подзадачу</button>
+          </form>
+        </DetailSection>}
+        <DetailSection title="Чек-лист">
+          {checklist.length ? <ul className={css.checkList}>{checklist.map((item, index) => <li key={`${item.label}-${index}`}><CheckControl checked={item.done} label={item.label} onToggle={() => toggle(index)} /></li>)}</ul> : null}
+          <form className={css.subtaskAdd} onSubmit={event => { event.preventDefault(); addPoint() }}>
+            <input type="text" aria-label="Новый пункт" placeholder="Пункт без срока" value={point} onChange={event => setPoint(event.target.value)} />
+            <button type="submit" className={buttons.secondary}>Добавить пункт</button>
           </form>
         </DetailSection>
         <div data-task-comments><DetailSection title="Комментарии">
           {comments.length ? <ul className={css.notes}>{comments.map(item => {
             const author = textOf(item.values[props.kit.comment.author])
             const who = personByEmail(props, textOf(item.values[props.kit.comment.authorEmail]))
-            return <li key={item.id} className={css.note}><BookingAvatar name={author || 'Автор'} photo={who?.photo} small /><div><strong>{author || 'Сотрудник'}</strong> <time dateTime={textOf(item.values[props.kit.comment.at])}>{formatDay(item.values[props.kit.comment.at])}</time><p>{textOf(item.values[props.kit.comment.text])}</p></div></li>
+            return <li key={item.id} className={css.note}><BookingAvatar name={author || 'Автор'} photo={who?.photo} small /><div><strong>{author || 'Сотрудник'}</strong> <time dateTime={textOf(item.values[props.kit.comment.at])}>{formatDay(item.values[props.kit.comment.at])}</time><p><CommentText text={textOf(item.values[props.kit.comment.text])} names={names} /></p></div></li>
           })}</ul> : <p className={css.empty}>Комментариев пока нет.</p>}
         </DetailSection></div>
         <DetailSection title="Файлы">
@@ -418,23 +518,29 @@ function TaskCard(props: ScreenProps) {
   </div>
 }
 
-type Filters = { assignee: string; project: string; due: DueFilter; priority: string }
-const EMPTY_FILTERS: Filters = { assignee: '', project: '', due: '', priority: '' }
+type Filters = { assignee: string; project: string; due: DueFilter; priority: string; stage: string }
+const EMPTY_FILTERS: Filters = { assignee: '', project: '', due: '', priority: '', stage: '' }
 function passFilters(props: ScreenProps, item: { facts: TaskFacts }, filters: Filters) {
   if (filters.assignee && item.facts.assigneeId !== filters.assignee) return false
   if (filters.project && item.facts.projectId !== filters.project) return false
   if (filters.priority && item.facts.priority !== filters.priority) return false
+  if (filters.stage === 'current') {
+    const stage = stagesOf(props).find(entry => entry.id === item.facts.stageId)
+    if (stage?.status !== 'Текущий') return false
+  } else if (filters.stage && item.facts.stageId !== filters.stage) return false
   return matchesDue(item.facts, filters.due, props.now)
 }
 
-function FiltersDialog(props: ScreenProps & { value: Filters; onChange: (value: Filters) => void; onClose: () => void; hideAssignee?: boolean }) {
+function FiltersDialog(props: ScreenProps & { value: Filters; onChange: (value: Filters) => void; onClose: () => void; hideAssignee?: boolean; showStage?: boolean }) {
   const [draft, setDraft] = useState(props.value)
   const assignees = people(props).filter(person => person.active).map(person => ({ id: person.id, name: person.name }))
   const projects = props.of(props.kit.projectsTableId).map(row => ({ id: row.id, name: textOf(row.values[props.kit.project.title]) }))
+  const stages = stagesOf(props).filter(stage => !draft.project || stage.projectId === draft.project)
   return <AppDialog title="Фильтры" placement="center" onClose={props.onClose} footer={<div className={css.footerRow}><button type="button" className={buttons.secondary} onClick={() => setDraft(EMPTY_FILTERS)}>Сбросить</button><button type="button" className={buttons.primary} onClick={() => { props.onChange(draft); props.onClose() }}>Показать</button></div>}>
     <div className={css.form}>
       {props.hideAssignee ? null : <ChoiceRow label="Исполнитель" value={draft.assignee} options={[{ id: '', name: 'Все' }, ...assignees]} onChange={assignee => setDraft({ ...draft, assignee })} />}
-      <ChoiceRow label="Проект" value={draft.project} options={[{ id: '', name: 'Все' }, ...projects]} onChange={project => setDraft({ ...draft, project })} />
+      <ChoiceRow label="Проект" value={draft.project} options={[{ id: '', name: 'Все' }, ...projects]} onChange={project => setDraft({ ...draft, project, stage: '' })} />
+      {props.showStage ? <ChoiceRow label="Этап" value={draft.stage} options={[{ id: '', name: 'Все' }, { id: 'current', name: 'Текущий этап' }, ...stages.map(stage => ({ id: stage.id, name: stage.title }))]} onChange={stage => setDraft({ ...draft, stage })} /> : null}
       <ChoiceRow label="Срок" value={draft.due} options={[{ id: '', name: 'Любой' }, { id: 'today', name: 'Сегодня' }, { id: 'overdue', name: 'Просрочено' }, { id: 'week', name: 'На неделе' }, { id: 'later', name: 'Позже' }]} onChange={due => setDraft({ ...draft, due: due as DueFilter })} />
       <Segmented label="Приоритет" value={draft.priority} options={[{ id: '', name: 'Любой' }, ...PRIORITIES.map(name => ({ id: name, name }))]} onChange={priority => setDraft({ ...draft, priority })} />
     </div>
@@ -501,8 +607,8 @@ function TaskEditor(props: ScreenProps & { mode: 'create' | 'edit'; row?: AppV2R
       <PeoplePick label="Исполнитель" value={assigneeId} people={activePeople} onChange={setAssigneeId} />
       <ProjectPick value={projectId} options={props.of(props.kit.projectsTableId).map(item => ({ id: item.id, name: textOf(item.values[props.kit.project.title]) }))} onChange={setProjectId} />
       <label>Описание<textarea value={description} onChange={event => setDescription(event.target.value)} /></label>
-      <div className={css.field}><span>Подзадачи</span><ul className={css.checkList}>{items.map((item, index) => <li key={`${item.label}-${index}`}><CheckControl checked={item.done} label={item.label} onToggle={() => setItems(toggleChecklistItem(items, index))} /></li>)}</ul>
-        <div className={css.subtaskAdd}><input type="text" aria-label="Новая подзадача" value={draft} placeholder="Новая подзадача" onChange={event => setDraft(event.target.value)} /><button type="button" className={buttons.secondary} onClick={() => { const label = draft.trim(); if (!label) return; setItems([...items, { label, done: false }]); setDraft('') }}>Добавить</button></div>
+      <div className={css.field}><span>Чек-лист</span><ul className={css.checkList}>{items.map((item, index) => <li key={`${item.label}-${index}`}><CheckControl checked={item.done} label={item.label} onToggle={() => setItems(toggleChecklistItem(items, index))} /></li>)}</ul>
+        <div className={css.subtaskAdd}><input type="text" aria-label="Новый пункт" value={draft} placeholder="Пункт без срока" onChange={event => setDraft(event.target.value)} /><button type="button" className={buttons.secondary} onClick={() => { const label = draft.trim(); if (!label) return; setItems([...items, { label, done: false }]); setDraft('') }}>Добавить</button></div>
       </div>
       {props.mode === 'edit' ? <div className={css.field}><span>Файлы</span><label className={css.fileButton}><input className={css.fileInput} type="file" multiple onChange={event => setFiles([...files, ...Array.from(event.target.files ?? [])])} /><span className={buttons.secondary}>Прикрепить файл</span></label>{files.map(file => <span key={file.name} className={css.quiet}>{file.name}</span>)}</div> : null}
       {error ? <p className={css.error} role="alert">{error}</p> : null}
@@ -542,12 +648,26 @@ function ProjectEditor(props: ScreenProps & { row?: AppV2Record; onClose: () => 
 }
 
 function CommentDialog(props: ScreenProps & { row: AppV2Record; onClose: () => void }) {
+  const demo = useContext(ProjectsRowsContext)
   const formId = useId()
-  const [text, setText] = useState('')
+  const initial = demo?.open === 'mention' ? '@' : ''
+  const [text, setText] = useState(initial)
+  const [caret, setCaret] = useState(initial.length)
   const [error, setError] = useState('')
+  const query = mentionQuery(text, caret)
+  const list = people(props).filter(person => person.active)
+  const matches = query ? list.filter(person => person.name.toLocaleLowerCase('ru-RU').includes(query.query.trim().toLocaleLowerCase('ru-RU'))) : []
+  const remember = (target: HTMLTextAreaElement) => setCaret(target.selectionStart ?? target.value.length)
+  const pick = (name: string) => {
+    if (!query) return
+    const next = insertMention(text, query.start, caret, name)
+    setText(next)
+    setCaret(query.start + name.length + 2)
+  }
   return <AppDialog title="Комментарий" placement="center" onClose={props.onClose} footer={<button type="submit" form={formId} className={buttons.primary}>Добавить</button>}>
     <form id={formId} className={css.form} onSubmit={event => { event.preventDefault(); void saveComment(props, props.row, text, setError, props.onClose) }}>
-      <label>Текст<textarea value={text} onChange={event => setText(event.target.value)} /></label>
+      <label>Текст<textarea value={text} onChange={event => { setText(event.target.value); remember(event.target) }} onSelect={event => remember(event.currentTarget)} onKeyUp={event => remember(event.currentTarget)} /></label>
+      {query ? <ul className={css.mentionList} role="listbox" aria-label="Кого упомянуть">{matches.map(person => <li key={person.id}><button type="button" onClick={() => pick(person.name)}><BookingAvatar name={person.name} photo={person.photo} small /><span>{person.name}</span></button></li>)}{matches.length ? null : <li className={css.empty}>Такого сотрудника нет</li>}</ul> : null}
       {error ? <p className={css.error} role="alert">{error}</p> : null}
     </form>
   </AppDialog>
@@ -683,11 +803,32 @@ async function saveComment(props: ScreenProps, row: AppV2Record, text: string, s
   const clean = text.trim()
   if (!clean) { setError('Напишите комментарий.'); return }
   const facts = taskFacts(props, row)
+  const mentionIds = mentionedNames(clean, people(props).map(person => person.name)).flatMap(name => {
+    const person = people(props).find(item => item.name === name)
+    return person ? [person.id] : []
+  })
   if (props.replace) {
-    const values = commentWrite(props.kit.comment, { text: clean, taskId: row.id, projectId: facts.projectId, at: new Date().toISOString(), author: props.actor.name?.trim() || 'Сотрудник', authorEmail: props.actor.email ?? '', assigneeEmail: facts.assigneeEmail })
+    const values = commentWrite(props.kit.comment, { text: clean, taskId: row.id, projectId: facts.projectId, at: new Date().toISOString(), author: props.actor.name?.trim() || 'Сотрудник', authorEmail: props.actor.email ?? '', assigneeEmail: facts.assigneeEmail, mentionIds })
     props.replace([...props.rows, { id: `comment_${crypto.randomUUID().replaceAll('-', '')}`, tableId: props.kit.commentsTableId, values }, localEvent(props, row, 'comment', eventText('comment', textOf(row.values[props.kit.task.title])))])
     onDone()
     return
   }
-  await remote(props, { kind: 'comment', recordId: row.id, text: clean }, setError, onDone)
+  await remote(props, { kind: 'comment', recordId: row.id, text: clean, mentionIds }, setError, onDone)
+}
+
+async function saveSubtask(props: ScreenProps, parent: AppV2Record, title: string, setError: (value: string) => void) {
+  const facts = taskFacts(props, parent)
+  if (facts.parentId) { setError('Подзадача не делится дальше.'); return }
+  const assignee = props.leader ? personById(props, facts.assigneeId) : personByEmail(props, props.actor.email ?? '')
+  if (!assignee) { setError('Не удалось назначить исполнителя.'); return }
+  const priorityId = choiceId(props.tables, props.kit.tasksTableId, props.kit.task.priority, 'Средний')
+  const input = { title, projectId: facts.projectId, assigneeId: assignee.id, assigneeEmail: assignee.email, due: null as string | null, priorityId }
+  if (props.replace) {
+    const id = `task_${crypto.randomUUID().replaceAll('-', '')}`
+    const values = taskWrite(props.kit.task, { ...input, parentId: parent.id, statusId: props.kit.statuses.todo, checklist: '[]', description: '', sort: 1000 })
+    const created: AppV2Record = { id, tableId: props.kit.tasksTableId, values }
+    props.replace([...props.rows, created, localEvent(props, created, 'created', eventText('created', title))])
+    return
+  }
+  await remote(props, { kind: 'create-subtask', recordId: parent.id, ...input }, setError)
 }

@@ -449,7 +449,7 @@ function StatusActions({ facts, dispatcher, onEnRoute, onSite, onDone, onReopen 
     { label: 'На месте', state: current > 1 ? 'done' : current === 1 ? 'next' : 'later', onClick: onSite },
     { label: 'Выполнено', state: current === 2 ? 'next' : 'later', onClick: onDone },
   ] as const
-  return <div className={css.status}>
+  return <div className={css.status} data-dispatch-status>
     {steps.map(step => <button key={step.label} type="button" className={step.state === 'next' ? buttons.primary : buttons.secondary} data-state={step.state} disabled={step.state === 'done'} onClick={step.onClick}>{step.state === 'done' ? <ProtoIcon name="check" size={16} /> : null}{step.label}</button>)}
   </div>
 }
@@ -799,7 +799,7 @@ function RepeatDialog(props: ScreenProps & { row: AppV2Record; onClose: () => vo
     <form id={formId} className={css.form} onSubmit={event => { event.preventDefault(); void save() }}>
       <Choices label="Как часто" value={rule} options={REPEAT_OPTIONS.map(item => ({ id: item.rule, name: item.name }))} onChange={value => setRule(value as RepeatRule)} />
       <Choices label="Ограничение" value={limit} options={[{ id: 'date', name: 'До даты' }, { id: 'count', name: 'Количество раз' }]} onChange={value => setLimit(value as 'date' | 'count')} />
-      {limit === 'date' ? <label>Повторять до<DateMenu value={until} onValue={setUntil} label="Повторять до" /></label> : <div className={css.choices}><span>Сколько ещё выездов</span><div className={css.stepper}><button type="button" aria-label="Меньше" onClick={() => setAmount(value => Math.max(1, value - 1))}>−</button><strong>{amount}</strong><button type="button" aria-label="Больше" onClick={() => setAmount(value => Math.min(24, value + 1))}>+</button></div></div>}
+      {limit === 'date' ? <label>Повторять до<DateMenu value={until} onValue={setUntil} label="Повторять до" /></label> : <label>Сколько ещё выездов<div className={css.stepper}><button type="button" aria-label="Меньше" onClick={() => setAmount(value => Math.max(1, value - 1))}>−</button><strong>{amount}</strong><button type="button" aria-label="Больше" onClick={() => setAmount(value => Math.min(24, value + 1))}>+</button></div></label>}
       <SeriesPreview start={textOf(props.row.values[props.dispatch.job.when])} rule={rule} until={limit === 'date' ? until : null} count={limit === 'count' ? amount + 1 : null} />
       {series ? <Choices label="Что изменить" value={scope} options={[{ id: 'one', name: 'Только эту заявку' }, { id: 'series', name: 'Всю серию' }]} onChange={value => setScope(value as 'one' | 'series')} /> : null}
       {error ? <p className={css.error} role="alert">{error}</p> : null}

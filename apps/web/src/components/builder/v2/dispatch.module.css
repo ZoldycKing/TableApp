@@ -161,8 +161,9 @@
   .job:not([data-table]) .jobFoot { flex-direction: column; align-items: flex-start; }
   .cardBadges .badge { padding: 2px 6px; font-size: 11px; }
   .assignee > span, .jobTitle { overflow: visible; text-overflow: unset; white-space: normal; }
-  .status { width: 100%; }
-  .status button { font-size: 12px; padding-inline: 4px; }
+  .headerActions { width: 100%; }
+  .status { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; flex: 1 1 100%; }
+  .status button { width: 100%; font-size: 12px; padding-inline: 4px; gap: 4px; }
   .signaturePad { height: 112px; }
   .filePick span { min-height: 76px; }
   .form textarea { min-height: 72px; }

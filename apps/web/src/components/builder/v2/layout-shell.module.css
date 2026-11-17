@@ -64,6 +64,10 @@
   .header { grid-template-columns: minmax(0, 1fr); align-items: start; }
   .headerTitle { overflow-wrap: normal; }
 }
+@container builder-app (max-width: 719px) {
+  .detailHead:has([data-dispatch-status]) { grid-template-columns: minmax(0, 1fr); }
+  .detailActions:has([data-dispatch-status]) { display: flex; width: 100%; }
+}
 
 .panel {
   display: grid;
@@ -1292,6 +1296,8 @@
   .detailActions {
     justify-content: stretch;
   }
+  .detailHead:has([data-dispatch-status]) { grid-template-columns: minmax(0, 1fr); }
+  .detailActions:has([data-dispatch-status]) { display: flex; width: 100%; }
   .detailActions[data-desktop-only] { display: none; }
   .detailIdentity[data-product] :global(.productThumb[data-size='card']) {
     width: 100%;

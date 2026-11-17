@@ -6,6 +6,7 @@ import { bookingAvailabilityAction } from '@/app/booking-actions'
 import { eligibleMasters, freeBookingSlots, oneRelation, type BookingData, type BookingSlot } from '@/lib/booking'
 import type { RuntimeApp } from '@/lib/app-runtime'
 import type { TableRow } from '@/lib/table-store'
+import { BookingSlotList } from '@/components/builder/v2/booking-slots'
 import { RuDateInput } from '@/components/builder/v2/ru-fields'
 import { accentTones } from './ui'
 
@@ -73,7 +74,7 @@ export function BookingForm({ runtime, row, demo, demoData, pending, initialValu
   return <form className="mx-auto max-w-xl space-y-5 rounded-2xl border border-sand-200 bg-white p-5 shadow-soft" onSubmit={event => {
     event.preventDefault()
     if (!chosen || loading || pending) return
-    onSubmit({ [visit.service]: [serviceId], [visit.master]: [chosen.masterId], [visit.start]: chosen.start,
+    onSubmit({ [visit.service]: [serviceId], [visit.master]: masterId ? [chosen.masterId] : [], [visit.start]: chosen.start,
       ...(row ? {} : { [visit.client]: name.trim(), [visit.phone]: phone.trim(), ...(administrator && customerEmail.trim() ? { [visit.email]: customerEmail.trim().toLowerCase() } : {}) }) })
   }}>
     <p className="text-sm leading-relaxed text-ink-muted">{row ? 'Выберите новое свободное время. Если его успеют занять, ваша текущая запись сохранится.' : 'Выберите услугу и свободное время. Оплата при записи не требуется.'}</p>
@@ -89,11 +90,7 @@ export function BookingForm({ runtime, row, demo, demoData, pending, initialValu
     </div>
     <fieldset disabled={loading || pending}><legend className="mb-2 text-sm font-medium">Свободное время</legend>
       <p className="mb-3 text-xs text-ink-muted">Время салона: {timeZone}. Показываем интервалы, в которые помещается вся услуга.</p>
-      {loading ? <p role="status" className="text-sm text-ink-muted">Проверяем расписание…</p> : !serviceId ? <p className="text-sm text-ink-muted">Сначала выберите услугу.</p> : !slots.length && !error ? <p role="status" className="text-sm text-ink-muted">На эту дату свободного времени нет. Выберите другой день или мастера.</p> : null}
-      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">{slots.map(slot => <button key={`${slot.start}:${slot.masterId}`} type="button" aria-label={`${slot.time} ${slot.masterName}`} aria-pressed={chosen?.start === slot.start && chosen.masterId === slot.masterId}
-        onClick={() => setChosen(slot)} className={`rounded-xl border px-2 py-2.5 text-sm ${chosen?.start === slot.start && chosen.masterId === slot.masterId ? `${accent.solid} border-transparent text-white` : 'border-sand-200 hover:bg-sand-50'}`}>
-        <span className="block font-semibold">{slot.time}</span><span className="block truncate text-xs">{slot.masterName}</span>
-      </button>)}</div>
+      {loading ? <p role="status" className="text-sm text-ink-muted">Проверяем расписание…</p> : !serviceId ? <p className="text-sm text-ink-muted">Сначала выберите услугу.</p> : !error ? <BookingSlotList slots={slots} masterId={masterId} selectedStart={chosen?.start ?? null} selectedMasterId={masterId ? chosen?.masterId ?? null : null} onSelect={setChosen} /> : null}
     </fieldset>
     {!row ? <div className="grid gap-4 sm:grid-cols-2">
       <label className="space-y-1.5 text-sm font-medium">Ваше имя<input aria-label="Ваше имя" required maxLength={120} value={name} onChange={event => setName(event.target.value)} className={inputClass} autoComplete="name" disabled={pending} /></label>

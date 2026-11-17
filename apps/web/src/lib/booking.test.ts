@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { asRole, ANONYMOUS, visibleScreensFor } from './app-roles'
 import { checkAppReferences } from './app-references'
 import { templateExample } from './templates/presentation'
-import { freeBookingSlots, workingWindows, slotError, type BookingData } from './booking'
+import { assignFreeMaster, dedupeBookingSlots, freeBookingSlots, groupBookingSlots, workingWindows, slotError, type BookingData, type BookingSlot } from './booking'
 import { projectRuntime } from './runtime-project'
 
 describe('complete salon preset and availability', () => {
@@ -53,5 +53,35 @@ describe('complete salon preset and availability', () => {
     expect(slotError(config, data, { serviceId, masterId, start: '2026-10-09T05:30:00Z', now })).toContain('периоде')
     expect(freeBookingSlots(config, data, { serviceId, day: '2027-10-10', masterId, now })).toEqual([])
     expect(freeBookingSlots(config, data, { serviceId, day: '2026-02-30', masterId, now })).toEqual([])
+  })
+  it('shows each start once and hides empty parts of the day', () => {
+    const start = `${day}T08:00:00.000Z`
+    const slots: BookingSlot[] = [
+      { start, time: '11:00', masterId: 'm_nat', masterName: 'Наташа' },
+      { start, time: '11:00', masterId: 'm_olya', masterName: 'Оля' },
+      { start: `${day}T06:00:00.000Z`, time: '09:00', masterId: 'm_olya', masterName: 'Оля' },
+      { start: `${day}T15:00:00.000Z`, time: '18:00', masterId: 'm_nat', masterName: 'Наташа' },
+    ]
+    expect(dedupeBookingSlots(slots).map(slot => slot.time)).toEqual(['11:00', '09:00', '18:00'])
+    expect(groupBookingSlots(slots).map(group => [group.title, group.slots.map(slot => slot.time)])).toEqual([['Утро', ['11:00', '09:00']], ['Вечер', ['18:00']]])
+    expect(groupBookingSlots(slots, 'm_olya').map(group => group.slots.map(slot => `${slot.time} ${slot.masterName}`))).toEqual([['11:00 Оля', '09:00 Оля']])
+    expect(groupBookingSlots([{ start: `${day}T09:00:00.000Z`, time: '12:00', masterId: 'm', masterName: 'Оля' }, { start: `${day}T14:00:00.000Z`, time: '17:00', masterId: 'm', masterName: 'Оля' }]).map(group => group.title)).toEqual(['День', 'Вечер'])
+  })
+  it('assigns the least busy free master, then name order, and still rejects a taken time', () => {
+    const haircut = data.services.find(row => row.data[config.service.name] === 'Женская стрижка')!
+    const olya = data.masters.find(row => row.data[config.master.name] === 'Оля')!
+    const natasha = data.masters.find(row => row.data[config.master.name] === 'Наташа')!
+    const start = `${day}T08:00:00.000Z`
+    expect(assignFreeMaster(config, data, { serviceId: haircut.id, start, now })).toEqual({ ok: true, masterId: natasha.id })
+    const busy = structuredClone(data)
+    busy.visits.push(
+      { id: 'natasha-1', data: { [config.visit.master]: [natasha.id], [config.visit.start]: `${day}T06:00:00.000Z`, [config.visit.minutes]: 60, [config.visit.status]: config.statuses.booked } },
+      { id: 'natasha-2', data: { [config.visit.master]: [natasha.id], [config.visit.start]: `${day}T12:00:00.000Z`, [config.visit.minutes]: 60, [config.visit.status]: config.statuses.booked } },
+    )
+    expect(assignFreeMaster(config, busy, { serviceId: haircut.id, start, now })).toEqual({ ok: true, masterId: olya.id })
+    busy.visits.push({ id: 'olya-slot', data: { [config.visit.master]: [olya.id], [config.visit.start]: start, [config.visit.minutes]: 60, [config.visit.status]: config.statuses.booked } })
+    expect(assignFreeMaster(config, busy, { serviceId: haircut.id, start, now })).toEqual({ ok: true, masterId: natasha.id })
+    busy.visits.push({ id: 'natasha-slot', data: { [config.visit.master]: [natasha.id], [config.visit.start]: start, [config.visit.minutes]: 60, [config.visit.status]: config.statuses.booked } })
+    expect(assignFreeMaster(config, busy, { serviceId: haircut.id, start, now }).ok).toBe(false)
   })
 })

@@ -128,6 +128,7 @@
 .pageTools { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--line); }
 .pageTools button { color: var(--v2-danger, #9a403b); }
 .canvasBlocks { display: grid; gap: 24px; min-width: 0; }
+.canvasBlocks > .canvasBlock:not(:has(*)) { display: none; }
 .canvasBlock { position: relative; min-width: 0; border-radius: 12px; overflow-wrap: anywhere; }
 .canvasBlock[data-editing="true"] { outline: 1px solid transparent; outline-offset: 4px; }
 .canvasBlock[data-editing="true"]:hover { outline-color: var(--v2-accent, #a8bea0); }

@@ -68,7 +68,7 @@
 .team button, .projectRow { display: flex; align-items: center; gap: 10px; width: 100%; min-width: 0; padding: 8px 0; border: 0; border-top: 1px solid var(--v2-line, #dce3ed); background: transparent; color: inherit; font: inherit; text-align: left; }
 .team button:first-child, .projectRow:first-child { border-top: 0; }
 .team button span, .projectRow span { min-width: 0; overflow-wrap: anywhere; }
-.form { display: grid; gap: 12px; }
+.form { display: grid; gap: 10px; }
 .form :global(legend), .form > span { font-size: 12px; }
 .form label, .field { display: grid; gap: 6px; min-width: 0; font-size: 13px; font-weight: 650; }
 .form input[type='text'], .form input[type='number'], .form textarea { width: 100%; min-width: 0; min-height: 42px; border: 1px solid var(--v2-line, #dce3ed); border-radius: 12px; padding: 8px 12px; font: inherit; font-weight: 450; color: inherit; background: var(--v2-surface, #fff); }
@@ -80,8 +80,12 @@
 .segment button { min-width: 0; min-height: 36px; padding: 6px 4px; border: 0; border-right: 1px solid var(--v2-line, #dce3ed); background: transparent; color: inherit; font: inherit; font-size: 12px; font-weight: 650; line-height: 1.2; white-space: nowrap; }
 .segment button:last-child { border-right: 0; }
 .segment button[aria-pressed='true'] { background: var(--v2-soft, #e7eef6); color: var(--v2-ink, #111827); }
-.peoplePick { display: flex; flex-wrap: wrap; gap: 8px; }
-.personPick { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 4px 12px 4px 4px; border: 1px solid var(--v2-line, #dce3ed); border-radius: 999px; background: var(--v2-surface, #fff); color: inherit; font: inherit; font-size: 13px; font-weight: 650; white-space: nowrap; }
+.peoplePick { display: flex; flex-wrap: nowrap; gap: 8px; min-width: 0; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+.peoplePick::-webkit-scrollbar { display: none; }
+@container builder-app (min-width: 720px) {
+  .peoplePick { flex-wrap: wrap; overflow: visible; }
+}
+.personPick { display: inline-flex; flex: none; align-items: center; gap: 8px; min-height: 40px; padding: 4px 12px 4px 4px; border: 1px solid var(--v2-line, #dce3ed); border-radius: 999px; background: var(--v2-surface, #fff); color: inherit; font: inherit; font-size: 13px; font-weight: 650; white-space: nowrap; }
 .personPick[aria-pressed='true'] { border-color: var(--v2-accent, #456849); background: var(--v2-soft, #e7eef6); }
 .picker { display: grid; gap: 6px; min-width: 0; }
 .pickerButton { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-height: 42px; padding: 8px 12px; border: 1px solid var(--v2-line, #dce3ed); border-radius: 12px; background: var(--v2-surface, #fff); color: inherit; font: inherit; font-weight: 650; text-align: left; }

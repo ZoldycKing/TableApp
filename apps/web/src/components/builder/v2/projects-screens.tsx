@@ -533,13 +533,13 @@ function passFilters(props: ScreenProps, item: { facts: TaskFacts }, filters: Fi
 
 function FiltersDialog(props: ScreenProps & { value: Filters; onChange: (value: Filters) => void; onClose: () => void; hideAssignee?: boolean; showStage?: boolean }) {
   const [draft, setDraft] = useState(props.value)
-  const assignees = people(props).filter(person => person.active).map(person => ({ id: person.id, name: person.name }))
+  const assignees = people(props).filter(person => person.active)
   const projects = props.of(props.kit.projectsTableId).map(row => ({ id: row.id, name: textOf(row.values[props.kit.project.title]) }))
   const stages = stagesOf(props).filter(stage => !draft.project || stage.projectId === draft.project)
   return <AppDialog title="Фильтры" placement="center" onClose={props.onClose} footer={<div className={css.footerRow}><button type="button" className={buttons.secondary} onClick={() => setDraft(EMPTY_FILTERS)}>Сбросить</button><button type="button" className={buttons.primary} onClick={() => { props.onChange(draft); props.onClose() }}>Показать</button></div>}>
     <div className={css.form}>
-      {props.hideAssignee ? null : <ChoiceRow label="Исполнитель" value={draft.assignee} options={[{ id: '', name: 'Все' }, ...assignees]} onChange={assignee => setDraft({ ...draft, assignee })} />}
-      <ChoiceRow label="Проект" value={draft.project} options={[{ id: '', name: 'Все' }, ...projects]} onChange={project => setDraft({ ...draft, project, stage: '' })} />
+      {props.hideAssignee ? null : <PeoplePick label="Исполнитель" value={draft.assignee} people={assignees} onChange={assignee => setDraft({ ...draft, assignee: draft.assignee === assignee ? '' : assignee })} allowEmpty />}
+      <ProjectPick value={draft.project} options={[{ id: '', name: 'Все проекты' }, ...projects]} onChange={project => setDraft({ ...draft, project, stage: '' })} />
       {props.showStage ? <ChoiceRow label="Этап" value={draft.stage} options={[{ id: '', name: 'Все' }, { id: 'current', name: 'Текущий этап' }, ...stages.map(stage => ({ id: stage.id, name: stage.title }))]} onChange={stage => setDraft({ ...draft, stage })} /> : null}
       <ChoiceRow label="Срок" value={draft.due} options={[{ id: '', name: 'Любой' }, { id: 'today', name: 'Сегодня' }, { id: 'overdue', name: 'Просрочено' }, { id: 'week', name: 'На неделе' }, { id: 'later', name: 'Позже' }]} onChange={due => setDraft({ ...draft, due: due as DueFilter })} />
       <Segmented label="Приоритет" value={draft.priority} options={[{ id: '', name: 'Любой' }, ...PRIORITIES.map(name => ({ id: name, name }))]} onChange={priority => setDraft({ ...draft, priority })} />
@@ -556,8 +556,11 @@ function StatusDialog(props: ScreenProps & { rowId: string; onClose: () => void 
   </AppDialog>
 }
 
-function PeoplePick({ label, value, people: list, onChange }: { label: string; value: string; people: { id: string; name: string; photo?: AppV2Json }[]; onChange: (id: string) => void }) {
-  return <fieldset className={css.field}><legend>{label}</legend><div className={css.peoplePick} role="radiogroup" aria-label={label}>{list.map(person => <button key={person.id} type="button" className={css.personPick} aria-pressed={person.id === value} onClick={() => onChange(person.id)}><BookingAvatar name={person.name} photo={person.photo} small /><span>{person.name}</span></button>)}</div></fieldset>
+function PeoplePick({ label, value, people: list, onChange, allowEmpty }: { label: string; value: string; people: { id: string; name: string; photo?: AppV2Json }[]; onChange: (id: string) => void; allowEmpty?: boolean }) {
+  return <fieldset className={css.field}><legend>{label}</legend><div className={css.peoplePick} role="radiogroup" aria-label={label}>
+    {allowEmpty ? <button type="button" className={css.personPick} aria-pressed={!value} onClick={() => onChange('')}>Все</button> : null}
+    {list.map(person => <button key={person.id} type="button" className={css.personPick} aria-pressed={person.id === value} onClick={() => onChange(person.id)}><BookingAvatar name={person.name} photo={person.photo} small /><span>{person.name}</span></button>)}
+  </div></fieldset>
 }
 
 function ProjectPick({ value, options, onChange }: { value: string; options: { id: string; name: string }[]; onChange: (id: string) => void }) {

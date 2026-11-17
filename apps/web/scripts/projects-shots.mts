@@ -41,11 +41,6 @@ const open = async (page: Page, view: string) => {
     await comments.scrollIntoViewIfNeeded()
     await page.waitForTimeout(300)
   }
-  if (view === 'filters') {
-    const priority = page.getByText('Приоритет', { exact: true })
-    await priority.scrollIntoViewIfNeeded()
-    await page.waitForTimeout(200)
-  }
 }
 
 const browser = await chromium.launch({ headless: true })

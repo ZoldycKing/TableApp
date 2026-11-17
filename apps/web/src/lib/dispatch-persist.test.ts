@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { parseCellValue, type Field } from '@tableapp/schema'
 import type { AppV2Actor, AppV2Record } from '@tableapp/schema/app-v2'
 import { buildTemplate } from './templates/build'
 import { findTemplate } from './templates/catalog'
@@ -52,5 +53,28 @@ describe('published field-service writes', () => {
     })
     expect(one.creates).toEqual([])
     expect(one.updates.map(item => item.id)).toEqual(['seed'])
+  })
+
+  it('writes only values the job columns accept, including an empty end date', () => {
+    const built = buildTemplate({ template: findTemplate('zayavki')!, workspaceId: 'wsp_persist' })
+    const app = buildDispatchV2App(built, { id: 'app_persist', workspaceId: 'wsp_persist', name: 'Заявки', slug: 'zayavki', email: 'owner@example.invalid' })
+    const dispatch = app.dispatch!
+    const fields = built.fields.filter(field => field.tableId === dispatch.jobsTableId) as Field[]
+    const repeatField = fields.find(field => field.id === dispatch.job.repeat)
+    const repeatChoiceId = repeatField?.type === 'single_select' ? repeatField.options.choices.find(choice => choice.name === 'Еженедельно')!.id : ''
+    const stored = built.rows.find(row => row.tableId === dispatch.jobsTableId && row.data[dispatch.job.masterEmail!] === 'sergey@example.invalid')!
+    const plan = seriesMutations({
+      dispatch, seed: { id: stored.id, tableId: stored.tableId, values: stored.data },
+      rule: 'weekly', until: null, count: 4, repeatChoiceId, seriesId: 'series-pump', scope: 'series',
+      siblings: [{ id: stored.id, seriesId: '', when: stored.data[dispatch.job.when!], status: 'На месте' }],
+    })
+    const repeatUntil = dispatch.job.repeatUntil!
+    expect(plan.updates[0]?.values[repeatUntil]).toBeNull()
+    const accept = (values: Record<string, unknown>) => {
+      for (const [id, value] of Object.entries(values)) parseCellValue(fields.find(field => field.id === id)!, value)
+    }
+    expect(() => plan.updates.forEach(update => accept(update.values))).not.toThrow()
+    expect(() => plan.creates.forEach(accept)).not.toThrow()
+    expect(plan.creates).toHaveLength(3)
   })
 })

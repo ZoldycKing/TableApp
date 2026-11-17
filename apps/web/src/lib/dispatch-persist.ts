@@ -46,22 +46,19 @@ export function seriesMutations(input: {
   const job = input.dispatch.job
   const dates = recurrenceOccurrences({ start: String(input.seed.values[job.when] ?? ''), rule: input.rule, until: input.until, count: input.count })
   const patch: Record<string, AppV2Json> = { [job.repeat!]: input.repeatChoiceId, [job.seriesId!]: input.seriesId }
-  if (job.repeatUntil) patch[job.repeatUntil] = input.until ?? ''
+  if (job.repeatUntil) patch[job.repeatUntil] = input.until
   if (job.repeatCount && input.count != null) patch[job.repeatCount] = input.count
   const existingSeries = String(input.seed.values[job.seriesId!] ?? '')
   const targets = existingSeries ? seriesEditIds(input.siblings, input.seed.id, input.scope) : [input.seed.id]
   const updates = targets.map(id => ({ id, values: patch }))
   if (existingSeries || input.scope === 'one') return { updates, creates: [] }
   const checklist = job.checklist ? serializeChecklist(parseChecklist(input.seed.values[job.checklist]).map(item => ({ ...item, done: false }))) : ''
+  const copyKeys = [job.what, job.client, job.site, job.type, job.priority, job.master, job.masterEmail, job.technician, job.minutes, job.price, job.paid, job.comment, job.works, job.materials]
   const creates = dates.slice(1).map(when => {
-    const values: Record<string, AppV2Json> = { ...input.seed.values, ...patch, [job.when]: when, [job.date]: when, [job.status]: input.dispatch.statuses.assigned }
+    const values: Record<string, AppV2Json> = { ...patch, [job.when]: when, [job.date]: when, [job.status]: input.dispatch.statuses.assigned }
+    for (const key of copyKeys) if (key && input.seed.values[key] !== undefined) values[key] = input.seed.values[key]
     if (job.checklist) values[job.checklist] = checklist
     if (job.report) values[job.report] = ''
-    if (job.onSiteAt) delete values[job.onSiteAt]
-    if (job.doneAt) delete values[job.doneAt]
-    if (job.actualMinutes) delete values[job.actualMinutes]
-    if (job.signature) delete values[job.signature]
-    if (job.photo) values[job.photo] = []
     return values
   })
   return { updates, creates }

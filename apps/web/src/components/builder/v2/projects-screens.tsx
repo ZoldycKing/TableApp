@@ -344,7 +344,7 @@ function ClientList(props: ScreenProps) {
 }
 
 function projectProgress(props: ScreenProps, projectId: string) {
-  return progressPercent(props.of(props.kit.tasksTableId).map(taskFacts.bind(null, props)).filter(item => item.projectId === projectId).map(item => item.status))
+  return progressPercent(props.of(props.kit.tasksTableId).map(taskFacts.bind(null, props)).filter(item => item.projectId === projectId && !item.parentId).map(item => item.status))
 }
 
 function ProjectCard(props: ScreenProps) {
@@ -371,7 +371,7 @@ function ProjectCard(props: ScreenProps) {
     .sort((a, b) => String(b.values[props.kit.event.at] ?? '').localeCompare(String(a.values[props.kit.event.at] ?? '')))
   const due = formatDay(row.values[props.kit.project.due])
   const overdue = status !== 'Сдан' && status !== 'Отменён' && isOverdue({ status: 'К работе', due: row.values[props.kit.project.due] }, props.now)
-  const closed = tasks.filter(item => isDone(item.facts.status)).length
+  const closed = topTasks.filter(item => isDone(item.facts.status)).length
   return <div className={css.root} data-projects-screen="project" data-projects-tab={tab}>
     <DetailCardShell
       title={textOf(row.values[props.kit.project.title])}
@@ -383,7 +383,7 @@ function ProjectCard(props: ScreenProps) {
         { key: 'start', caption: 'Начало', value: formatDay(row.values[props.kit.project.start]) || '—' },
         { key: 'due', caption: 'Срок', value: due || '—', tone: overdue ? 'rose' : undefined },
         { key: 'budget', caption: 'Бюджет', value: typeof row.values[props.kit.project.budget] === 'number' ? formatRub(Number(row.values[props.kit.project.budget])) : '—' },
-        { key: 'progress', caption: 'Прогресс', value: `${progress}%`, note: <span className={css.metricProgress}><span className={css.bar} role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100} aria-label="Прогресс проекта"><span style={{ width: `${progress}%` }} /></span>{closed} из {tasks.length} задач</span> },
+        { key: 'progress', caption: 'Прогресс', value: `${progress}%`, note: <span className={css.metricProgress}><span className={css.bar} role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100} aria-label="Прогресс проекта"><span style={{ width: `${progress}%` }} /></span>{closed} из {topTasks.length} задач</span> },
       ]}
     >
       <div className={css.pad}>
@@ -720,7 +720,7 @@ async function saveMove(props: ScreenProps, recordId: string, statusId: string, 
     if (previous && previous !== statusName && row) next = next.concat(localEvent(props, row, 'status', eventText('status', textOf(row.values[props.kit.task.title]), previous, statusName)))
     if (row && previous !== statusName) {
       const projectId = taskFacts(props, row).projectId
-      const progress = progressPercent(next.filter(item => item.tableId === props.kit.tasksTableId && firstId(item.values[props.kit.task.project]) === projectId).map(item => choiceName(props.tables, props.kit.tasksTableId, props.kit.task.status, item.values[props.kit.task.status])))
+      const progress = progressPercent(next.filter(item => item.tableId === props.kit.tasksTableId && firstId(item.values[props.kit.task.project]) === projectId && !firstId(item.values[props.kit.task.parent])).map(item => choiceName(props.tables, props.kit.tasksTableId, props.kit.task.status, item.values[props.kit.task.status])))
       next = next.map(item => item.id === projectId ? { ...item, values: { ...item.values, [props.kit.project.progress]: progress } } : item)
     }
     props.replace(next)

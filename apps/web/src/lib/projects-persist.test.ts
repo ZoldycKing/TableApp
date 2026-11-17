@@ -21,6 +21,10 @@ describe('published project writes', () => {
     const values = taskWrite(kit.task, { statusId: kit.statuses.review, checklist: '[{"label":"Тарифы","done":true}]' })
     expect(guardProjectsUpdate(app, anna, row, values).ok).toBe(true)
     expect(guardProjectsUpdate(app, actor(['staff'], 'igor@example.invalid'), row, values).ok).toBe(false)
+    const withOwner = taskWrite(kit.task, { title: 'Макет', projectId: 'project', assigneeId: 'anna', assigneeEmail: 'anna@example.invalid', statusId: kit.statuses.review, priorityId: kit.priorities.high, description: '', checklist: '[]' })
+    expect(guardProjectsUpdate(app, anna, row, withOwner).ok).toBe(false)
+    delete withOwner[kit.task.assigneeEmail]
+    expect(guardProjectsUpdate(app, anna, row, withOwner).ok).toBe(true)
     const project: AppV2Record = { id: 'project', tableId: kit.projectsTableId, values: { [kit.project.title]: 'Сайт' } }
     expect(guardProjectsUpdate(app, anna, project, { [kit.project.budget]: 1 }).ok).toBe(false)
     expect(guardProjectsUpdate(app, anna, project, { [kit.project.progress]: progressValue(['Готово', 'К работе']) }).ok).toBe(true)

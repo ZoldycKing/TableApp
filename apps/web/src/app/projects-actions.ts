@@ -84,6 +84,7 @@ export async function savePublishedProjectsAction(slug: string, input: unknown):
       }
       const writeProgress = async (projectId: string, taskRows: { id: string; data: Record<string, unknown> }[], override?: { id: string; projectId: string; status: string }) => {
         const statuses = taskRows.flatMap(row => {
+          if (firstId(row.data[kit.task.parent])) return []
           const project = row.id === override?.id ? override.projectId : firstId(row.data[kit.task.project])
           if (project !== projectId) return []
           return [row.id === override?.id ? override.status : statusName(row.data[kit.task.status])]
@@ -178,6 +179,7 @@ export async function savePublishedProjectsAction(slug: string, input: unknown):
         return { ok: true as const, message: 'Задача сохранена.' }
       }
       const values = taskWrite(kit.task, { ...parsed, files: Array.isArray(parsed.files) ? parsed.files as AppV2Json : undefined })
+      if (!leader) delete values[kit.task.assigneeEmail]
       const decision = guardProjectsUpdate(app, actor, row, values)
       if (!decision.ok) throw new RowWriteError('denied', decision.error)
       await updateRow(context, kit.tasksTableId, row.id, values, actorRef)

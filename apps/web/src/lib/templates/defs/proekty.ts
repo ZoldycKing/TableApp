@@ -117,7 +117,7 @@ export const proekty: TemplateDef = {
         { name: 'Доска проектов', type: 'kanban', stackBy: 'status' },
       ],
       rows: [
-        { key: 'site', values: { title: 'Сайт «Северный ветер»', client: { rowKey: 'veter' }, owner: { rowKey: 'marina' }, start: inDays(-28), due: inDays(18), budget: 860000, status: 'В работе', progress: 27 } },
+        { key: 'site', values: { title: 'Сайт «Северный ветер»', client: { rowKey: 'veter' }, owner: { rowKey: 'marina' }, start: inDays(-28), due: inDays(18), budget: 860000, status: 'В работе', progress: 25 } },
         { key: 'sign', values: { title: 'Вывеска кафе «Огонёк»', client: { rowKey: 'kafe' }, owner: { rowKey: 'alexey' }, start: inDays(-12), due: inDays(4), budget: 145000, status: 'В работе', progress: 25 } },
         { key: 'cabinet', values: { title: 'Кабинет жильца', client: { rowKey: 'sad' }, owner: { rowKey: 'marina' }, start: inDays(-40), due: inDays(25), budget: 420000, status: 'На паузе', progress: 0 } },
         { key: 'window', values: { title: 'Витрина аптеки', client: { rowKey: 'apteka' }, owner: { rowKey: 'anna' }, start: inDays(-36), due: inDays(-4), budget: 98000, status: 'Сдан', progress: 100 } },

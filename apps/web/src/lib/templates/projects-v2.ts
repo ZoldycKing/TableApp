@@ -234,7 +234,7 @@ export function buildProjectsV2App(built: BuiltTemplate, meta: { id: string; wor
   const grant = (audience: AppV2Audience, value: Omit<AppV2Grant, 'audience'>): AppV2Grant => ({ audience, ...value })
   const owned = (fieldId: string) => ({ kind: 'owned' as const, fieldId, property: 'email' as const })
   const all = { kind: 'all' as const }
-  const staffTaskUpdate = [task.title, task.project, task.assignee, task.assigneeEmail, task.due, task.priority, task.status, task.description, task.checklist, task.files, task.sort, task.stage]
+  const staffTaskUpdate = [task.title, task.project, task.assignee, task.due, task.priority, task.status, task.description, task.checklist, task.files, task.sort, task.stage]
   return {
     formatVersion: 2, id: meta.id, workspaceId: meta.workspaceId, name: meta.name, slug: meta.slug, purpose: 'business',
     appearance: { navigation: 'tabs', icon: 'clipboard', density: 'regular', corners: 'rounded' },

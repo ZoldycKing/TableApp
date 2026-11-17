@@ -32,7 +32,8 @@ describe('projects template', () => {
     for (const project of projects) {
       const statuses = tasks.filter(row => {
         const link = row.data[kit.task.project]
-        return Array.isArray(link) && link[0] === project.id
+        const parent = row.data[kit.task.parent]
+        return Array.isArray(link) && link[0] === project.id && !(Array.isArray(parent) && parent[0])
       }).map(row => {
         const field = built.fields.find(item => item.id === kit.task.status)
         const id = row.data[kit.task.status]

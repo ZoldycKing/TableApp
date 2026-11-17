@@ -182,6 +182,11 @@ export const appV2Schema = z.strictObject({
       what: id, client: id, clientName: id, phone: id, address: id, status: id, priority: id,
       master: id, masterEmail: id, technician: id, date: id, when: id, minutes: id,
       price: id, paid: id, photo: id, comment: id, report: id, signature: id,
+      /** Stage 2. Absent on installs created before checklists, time and recurrence. */
+      site: id.optional(), type: id.optional(), checklist: id.optional(),
+      onSiteAt: id.optional(), doneAt: id.optional(), actualMinutes: id.optional(),
+      seriesId: id.optional(), repeat: id.optional(), repeatUntil: id.optional(), repeatCount: id.optional(),
+      works: id.optional(), materials: id.optional(),
     }),
     client: z.strictObject({ name: id, phone: id, address: id, note: id }),
     master: z.strictObject({ name: id, email: id, phone: id, photo: id, active: id }),
@@ -189,6 +194,11 @@ export const appV2Schema = z.strictObject({
     statuses: z.strictObject({ fresh: id, assigned: id, enRoute: id, onSite: id, done: id, cancelled: id }),
     priorities: z.strictObject({ low: id, normal: id, high: id, urgent: id }),
     activeChoiceId: id, inactiveChoiceId: id,
+    /** Job-type checklist templates. Absent before stage 2. */
+    typesTableId: id.optional(),
+    progressFormId: id.optional(),
+    billingFormId: id.optional(),
+    repeatFormId: id.optional(),
   }).optional(),
   /** Internal warehouse starter (stock from movements). Absent outside that install. */
   inventory: z.strictObject({

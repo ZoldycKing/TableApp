@@ -418,8 +418,8 @@ export function validateAppV2(app: AppV2, catalog: AppV2Catalog, options: { mode
   if (app.dispatch) {
     const dispatch = app.dispatch, path = 'dispatch'
     table(dispatch.jobsTableId, path); table(dispatch.clientsTableId, path); table(dispatch.mastersTableId, path); table(dispatch.notesTableId, path)
-    const group = (tableId: string, values: Record<string, string>) => {
-      for (const fieldId of Object.values(values)) field(fieldId, tableId, path)
+    const group = (tableId: string, values: Record<string, string | undefined>) => {
+      for (const fieldId of Object.values(values)) if (fieldId) field(fieldId, tableId, path)
     }
     group(dispatch.jobsTableId, dispatch.job)
     group(dispatch.clientsTableId, dispatch.client)
@@ -430,7 +430,12 @@ export function validateAppV2(app: AppV2, catalog: AppV2Catalog, options: { mode
     const client = field(dispatch.job.client, dispatch.jobsTableId, path)
     if (client && client.relationTableId && client.relationTableId !== dispatch.clientsTableId) issue('dispatch_client', path, 'Заявка должна ссылаться на таблицу клиентов')
     for (const screenId of [dispatch.overviewScreenId, dispatch.boardScreenId, dispatch.jobScreenId, dispatch.clientsScreenId, dispatch.clientScreenId, dispatch.technicianScreenId, dispatch.mastersScreenId]) if (!screens.has(screenId)) issue('dispatch_screen', path, 'Экран заявок удалён')
-    for (const formId of [dispatch.createJobFormId, dispatch.assignFormId, dispatch.noteFormId, dispatch.completeFormId]) if (nodes.get(formId)?.type !== 'form') issue('dispatch_form', path, 'Форма заявок удалена')
+    for (const formId of [dispatch.createJobFormId, dispatch.assignFormId, dispatch.noteFormId, dispatch.completeFormId, dispatch.progressFormId, dispatch.billingFormId, dispatch.repeatFormId]) if (formId && nodes.get(formId)?.type !== 'form') issue('dispatch_form', path, 'Форма заявок удалена')
+    if (dispatch.typesTableId) {
+      table(dispatch.typesTableId, path)
+      const relation = dispatch.job.type ? catalog.fields.get(dispatch.job.type) : undefined
+      if (relation && relation.relationTableId && relation.relationTableId !== dispatch.typesTableId) issue('dispatch_type', path, 'Тип работы должен ссылаться на справочник типов')
+    }
     const calendar = nodes.get(dispatch.calendarNodeId)
     if (calendar?.type !== 'team_calendar') issue('dispatch_calendar', path, 'Доска дня должна быть календарём команды')
   }

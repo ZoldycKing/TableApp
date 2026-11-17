@@ -49,13 +49,13 @@ export function applyDemoCalendarMove(input: {
     events: input.rows.filter(row => row.tableId === data.tableId).map(input.format),
     resources: input.rows.filter(row => row.tableId === data.resources.tableId).map(input.format),
     hours: data.hours ? input.rows.filter(row => row.tableId === data.hours!.tableId).map(input.format) : null,
-  }, { screenId: input.screenId, nodeId: input.node.id, day: input.day, week: false }, input.timeZone)
-  const event = snapshot.events.find(item => item.id === input.eventId && item.day === input.day)
+  }, { screenId: input.screenId, nodeId: input.node.id, day: input.day, week: true }, input.timeZone)
+  const event = snapshot.events.find(item => item.id === input.eventId)
   if (!event) return { ok: false, error: 'Запись не найдена в расписании этого дня.' }
   if (!snapshot.resources.some(item => item.id === input.resourceId)) return { ok: false, error: 'Этот сотрудник недоступен в календаре.' }
   const start = teamCalendarMinutes(input.time)
   if (start === null) return { ok: false, error: 'Выберите корректное время.' }
-  if (event.resourceId === input.resourceId && event.start === start) return { ok: true, unchanged: true, rows: [...input.rows] }
+  if (event.resourceId === input.resourceId && event.day === input.day && event.start === start) return { ok: true, unchanged: true, rows: [...input.rows] }
   const shift = snapshot.shifts.find(item => item.resourceId === input.resourceId && item.day === input.day)
   const windows = data.hours ? (shift?.windows ?? []) : null
   if (data.hours && shift?.windows === null) return { ok: false, error: 'Не удалось проверить рабочие часы. Запись осталась на прежнем месте.' }

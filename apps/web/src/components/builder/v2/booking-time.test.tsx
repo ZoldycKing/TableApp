@@ -35,11 +35,12 @@ describe('calendar and client context in a new booking', () => {
     expect(change).toHaveBeenCalledWith(b.visit.client,'Ирина')
     expect(change).toHaveBeenCalledWith(b.visit.phone,'+79160000000')
     expect(change).toHaveBeenCalledWith(b.visit.email,'irina@example.com')
-    expect(screen.getByText('Оля · 20 ноября · 09:00')).toBeTruthy()
+    expect(screen.getByText('Оля · 20.11.2026 · 09:00')).toBeTruthy()
     expect(screen.queryByText('Когда вам удобно?')).toBeNull()
     expect(screen.queryByLabelText('Дата записи')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Изменить' }))
     expect((screen.getByLabelText('Дата записи') as HTMLInputElement).value).toBe('2026-11-20')
+    expect(screen.getByText('20.11.2026')).toBeTruthy()
     expect((screen.getByLabelText('Мастер') as HTMLSelectElement).value).toBe('master_olya')
   })
   it('does not silently select a different slot after the chosen time becomes unavailable', async () => {

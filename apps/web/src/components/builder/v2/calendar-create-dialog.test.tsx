@@ -55,7 +55,7 @@ describe('new appointment from an empty slot', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Новая запись' })
     expect(dialog.textContent).toContain('Оля')
     expect(dialog.textContent).toContain('09:00')
-    expect(dialog.textContent).toContain('15 ноября')
+    expect(dialog.textContent).toContain('15.11.2026')
     expect(dialog.querySelector('button[type="submit"]')).toBeTruthy()
   })
 })

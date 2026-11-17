@@ -30,7 +30,7 @@ import {
   bookingCountLabel,
 } from './booking-calendar-views'
 import { BookingAvatar } from './booking-avatar'
-import { RuDateInput } from './ru-fields'
+import { RuDateInput, ruDateText } from './ru-fields'
 import { useBookingJourney } from './booking-journey'
 
 export const BookingCalendarDemoContext = createContext<((request: BookingCalendarRequest) => BookingCalendarResult) | null>(null)
@@ -138,7 +138,7 @@ export function TeamCalendarView({
   const metricEvents = [...new Map(periodEvents.map(event => [event.id, event])).values()]
   const periodCount = metricEvents.length
   const periodLabel = week
-    ? `${dateLabel(range[0]!, { day: 'numeric', month: 'short' })} — ${dateLabel(range[6]!, { day: 'numeric', month: 'short', year: 'numeric' })}`
+    ? `${ruDateText(range[0]!)} — ${ruDateText(range[6]!)}`
     : dateLabel(day, { weekday: 'long', day: 'numeric', month: 'long' })
   const periodLine = `${periodLabel} · ${bookingCountLabel(periodCount)}`
   const phonePeople = data?.resources.filter(item => !selected || item.id === selected) ?? []
@@ -299,7 +299,7 @@ export function TeamCalendarView({
                   <strong>Отменённые записи</strong>
                   {visibleEvents.filter(event => event.status === 'cancelled' && (!compact || event.day === day)).map(event => (
                     <button key={`${event.id}:${event.resourceId}`} type="button" onClick={() => onOpenVisit(event.id)}>
-                      {week && !compact ? `${dateLabel(event.day, { day: 'numeric', month: 'short' })} · ` : ''}
+                      {week && !compact ? `${ruDateText(event.day)} · ` : ''}
                       {calendarClock(event.start)} · {data.resources.find(item => item.id === event.resourceId)?.name} · {event.title}
                       {event.subtitle ? ` · ${event.subtitle}` : ''}
                     </button>

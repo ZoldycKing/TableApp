@@ -134,7 +134,7 @@ export function BuilderV2FormPreview({ app, form, screenId, recordId, enabled, e
   const saveLabel = ownerForm ? 'Сохранить запись' : form.submitLabel || 'Сохранить'
   return <Context.Provider value={{ app, scope, inspect, state: visible.state, values: visible.values, errors: visible.errors, disabled, key:key+':'+refresh,upload,onPending, change: (id, value) => { if (disabled) return; generation.current++; setData(old=>old.key===key?{...old,values:{...old.values,[id]:value},errors:{},error:'',success:false}:old) } }}><form ref={formRef} className={`${styles.formBlock} ${ui.form} ${checkout ? ui.commerceForm : ''} ${inventoryDialogForm || reorderForm ? ui.purchaseForm : ''}`} data-commerce={checkout ? 'checkout' : undefined} data-purchase={purchaseForm || undefined} data-count={countForm || undefined} data-reorder={reorderForm || undefined} noValidate onSubmit={event => { event.preventDefault(); void check() }} aria-label={formTitle} aria-busy={!editing && enabled && (visible.loading || visible.checking || pendingCount>0)}>
     <div data-form-body>
-    <h3 className={ui.formTitle} id={checkout ? 'shop-checkout' : undefined}>{checkout ? 'Оформление заказа' : formTitle}</h3>
+    {bookingForm ? null : <h3 className={ui.formTitle} id={checkout ? 'shop-checkout' : undefined}>{checkout ? 'Оформление заказа' : formTitle}</h3>}
     <div className={ownerForm ? bookingCss.ownerStack : undefined}>
     {bookingForm && <div className={bookingCss.picker}><BookingTimeFields app={app} editing={editing} /></div>}
     {checkout ? <p className={ui.shopCheckoutNote}>После оформления мы свяжемся, чтобы подтвердить заказ. Оплата при получении.</p> : null}

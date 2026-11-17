@@ -37,8 +37,8 @@ function BookingRulesSettings({ app, onChange }: { app: AppV2; onChange: (app: A
     const value = Number(raw)
     return value >= min && value <= max ? value : null
   }
-  return <fieldset className={shell.logoField} aria-label="Правила записи">
-    <legend>Правила записи</legend>
+  return <fieldset className={shell.rulesField} aria-label="Правила записи">
+    <h3>Правила записи</h3>
     <label>Шаг слотов
       <select aria-label="Шаг слотов" value={rules.stepMinutes} onChange={event => save({ slotStepMinutes: Number(event.target.value) as BookingSlotStep })}>
         {BOOKING_SLOT_STEPS.map(step => <option key={step} value={step}>{step} мин</option>)}

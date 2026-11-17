@@ -13,6 +13,7 @@ import { useBookingPeople } from './booking-people-data'
 import css from './booking-people.module.css'
 import styles from '../prototype/prototype.module.css'
 import { RecordHistoryItem } from './record-blocks'
+import { ruNumericDate } from './ru-fields'
 import { builderV2MessengerLinks } from '@/lib/builder-v2-messengers'
 import { clientVisitSummary, masterMonthSummary } from '@/lib/salon-people-summary'
 import { BuilderV2OrderFacts } from './order-detail'
@@ -24,9 +25,9 @@ const when = (start: string, timeZone: string, date = false) => {
   const value = new Date(start)
   const time = value.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', timeZone })
   if (!date) return time
-  return `${value.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', timeZone })}, ${time}`
+  return `${ruNumericDate(value, timeZone)}, ${time}`
 }
-const dayLabel = (start: string, timeZone: string) => new Date(start).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', timeZone })
+const dayLabel = (start: string, timeZone: string) => ruNumericDate(new Date(start), timeZone)
 const future = (visit: BookingPersonVisit) => visit.status === 'booked' && Date.parse(visit.start) > Date.now()
 
 function ClientProfileView({

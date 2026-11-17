@@ -11,6 +11,7 @@ import css from './booking.module.css'
 import styles from '../prototype/prototype.module.css'
 import { useBookingJourney } from './booking-journey'
 import { BookingClientPicker } from './booking-client-picker'
+import { RuDateInput, ruDateText } from './ru-fields'
 export const BookingDemoAvailability = createContext<((request: BookingAvailabilityRequest) => BookingAvailabilityResult) | null>(null)
 
 export function BookingTimeFields({ app, editing }: { app: AppV2; editing: boolean }) {
@@ -75,14 +76,14 @@ export function BookingTimeFields({ app, editing }: { app: AppV2; editing: boole
   const lineDay = wall?.date || seed?.day || ''
   const lineTime = wall?.time || seed?.time || ''
   const lineMaster = (result?.ok ? result.masters.find(item => item.id === (selected || master))?.name : undefined) || seed?.masterName || ''
-  const lineDate = lineDay ? new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', timeZone: 'UTC' }).format(new Date(`${lineDay}T12:00:00Z`)) : ''
+  const lineDate = lineDay ? ruDateText(lineDay) : ''
   const compact = fromSlot && !editingSlot && !seedNotice && Boolean(lineDate && lineTime)
   const knownMaster = master && !(result?.ok && result.masters.some(item => item.id === master))
   const editorFields = <>
     {!owner && <div className={css.formIntro}><strong>{reschedule ? 'Выберите другое время' : 'Когда вам удобно?'}</strong><p>{reschedule ? 'Текущая запись останется за вами, пока новое время не сохранится.' : 'Свободные часы учитывают длительность услуги и перерывы мастера.'}</p></div>}
     <div className={css.timeControls}>
       <label>Мастер<select aria-label="Мастер" value={master} disabled={context?.disabled || editing || loading} onChange={event => { appliedTime.current = true; setSeedNotice(''); setDay(selectedDay); setMaster(event.target.value); resetChoice() }}><option value="">Любой свободный</option>{knownMaster && <option value={master}>{lineMaster || 'Выбранный мастер'}</option>}{result?.ok && result.masters.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-      <label>Дата<input aria-label="Дата записи" type="date" min={today} max={new Date(new Date(`${today}T12:00:00Z`).getTime() + bookingRules(config).horizonDays * 86400000).toISOString().slice(0, 10)} value={selectedDay} disabled={context?.disabled || editing} onChange={event => { if (event.target.value) { appliedTime.current = true; setSeedNotice(''); setDay(event.target.value); resetChoice() } }} /></label>
+      <label>Дата<RuDateInput aria-label="Дата записи" min={today} max={new Date(new Date(`${today}T12:00:00Z`).getTime() + bookingRules(config).horizonDays * 86400000).toISOString().slice(0, 10)} value={selectedDay} disabled={context?.disabled || editing} onValue={value => { appliedTime.current = true; setSeedNotice(''); setDay(value); resetChoice() }} /></label>
     </div>
     {seedNotice && <p role="status" className={css.timeHint}>{seedNotice}</p>}
     <fieldset disabled={context?.disabled || loading || editing}><legend>Свободное время</legend>

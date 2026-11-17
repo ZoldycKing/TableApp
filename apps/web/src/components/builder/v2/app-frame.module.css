@@ -158,6 +158,10 @@
 .colorField legend { margin-bottom: 12px; }
 .logoField { display: grid; gap: 8px; }
 .logoField legend { margin-bottom: 4px; }
+/* A grid fieldset drops its legend into the collapsed border, so the booking-rules title is a normal heading. */
+.rulesField { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; border: 0; min-width: 0; }
+.rulesField > h3 { margin: 0; font-size: 14px; font-weight: 650; line-height: 1.4; }
+.rulesField > p { margin: 0; }
 .logoHint { display: flex; align-items: center; gap: 8px; }
 .logoField p { margin: 0; }
 .logoActions { display: flex; flex-wrap: wrap; gap: 8px; }

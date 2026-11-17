@@ -6,6 +6,7 @@ import { bookingAvailabilityAction } from '@/app/booking-actions'
 import { eligibleMasters, freeBookingSlots, oneRelation, type BookingData, type BookingSlot } from '@/lib/booking'
 import type { RuntimeApp } from '@/lib/app-runtime'
 import type { TableRow } from '@/lib/table-store'
+import { RuDateInput } from '@/components/builder/v2/ru-fields'
 import { accentTones } from './ui'
 
 export type BookingFormDraft = {
@@ -84,7 +85,7 @@ export function BookingForm({ runtime, row, demo, demoData, pending, initialValu
       <label className="space-y-1.5 text-sm font-medium">Мастер<select aria-label="Мастер" value={masterId} disabled={!serviceId || pending} className={inputClass} onChange={event => setMasterId(event.target.value)}>
         <option value="">Любой свободный мастер</option>{masters.map(master => <option key={master.id} value={master.id}>{master.name}</option>)}
       </select></label>
-      <label className="space-y-1.5 text-sm font-medium">Дата<input aria-label="Дата" type="date" required value={day} min={instantToWallClock(new Date(), timeZone)!.date} className={inputClass} onChange={event => setDay(event.target.value)} disabled={pending} /></label>
+      <label className="space-y-1.5 text-sm font-medium">Дата<RuDateInput aria-label="Дата" required value={day} min={instantToWallClock(new Date(), timeZone)!.date} className={inputClass} onValue={setDay} disabled={pending} /></label>
     </div>
     <fieldset disabled={loading || pending}><legend className="mb-2 text-sm font-medium">Свободное время</legend>
       <p className="mb-3 text-xs text-ink-muted">Время салона: {timeZone}. Показываем интервалы, в которые помещается вся услуга.</p>

@@ -1,5 +1,5 @@
 .wrap { position: relative; display: block; width: 100%; min-width: 0; }
-.wrap > input { color: transparent !important; -webkit-text-fill-color: transparent !important; }
+.wrap > input { width: 100%; color: transparent !important; -webkit-text-fill-color: transparent !important; }
 .wrap > input::-webkit-datetime-edit,
 .wrap > input::-webkit-datetime-edit-fields-wrapper,
 .wrap > input::-webkit-datetime-edit-text,

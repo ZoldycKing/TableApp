@@ -126,7 +126,7 @@
 .subtaskCheck {
   display: inline-grid; place-items: center; align-self: start; justify-self: start;
   width: 28px; height: 22px; margin: 0; padding: 0; border: 0;
-  border-radius: 8px; background: transparent; color: inherit;
+  border-radius: 8px; background: transparent; color: inherit; cursor: pointer;
 }
 .subtaskCheck > span {
   display: inline-grid; place-items: center; width: 18px; height: 18px; border: 1.5px solid var(--v2-line, #b7c0b4);
@@ -138,8 +138,21 @@
   padding: 2px 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer;
 }
 .subtaskMain { display: grid; gap: 6px; min-width: 0; }
+.subtaskTitle {
+  color: var(--v2-accent, #456849); font-size: 14px; line-height: 1.35; font-weight: 650;
+  overflow-wrap: anywhere; text-decoration: none; text-underline-offset: 2px;
+}
+.subtaskTitle[data-done] { color: color-mix(in srgb, var(--v2-accent, #456849) 58%, var(--v2-muted, #8a94a3)); }
+.subtaskCard:hover .subtaskTitle,
+.subtaskOpen:focus-visible .subtaskTitle { text-decoration: underline; }
 .subtaskBadges { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
 .subtaskAside { display: inline-flex; align-items: center; justify-content: flex-end; gap: 8px; flex: none; min-width: 0; color: var(--v2-muted, #526075); }
+.subtaskComments {
+  display: inline-flex; align-items: center; gap: 4px; flex: none; min-height: 20px;
+  color: var(--v2-muted, #526075); font-size: 12px; font-weight: 650; line-height: 1;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.subtaskComments svg { display: block; flex: none; }
 .subtaskAvatar { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--v2-page, #eef2f6); color: var(--v2-muted, #526075); }
 .crumb { display: inline; color: var(--v2-muted, #526075); font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; }
 .crumbLink { display: inline; margin: 0; padding: 0; border: 0; background: transparent; color: var(--v2-accent, #315f91); font: inherit; font-weight: 650; cursor: pointer; }

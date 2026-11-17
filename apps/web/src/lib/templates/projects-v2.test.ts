@@ -42,5 +42,17 @@ describe('projects template', () => {
       })
       expect(project.data[kit.project.progress], String(project.data[kit.project.title])).toBe(progressPercent(statuses))
     }
+    const byTitle = (title: string) => tasks.find(row => row.data[kit.task.title] === title)
+    const tariffs = byTitle('Блок тарифов')
+    const footer = byTitle('Подвал макета')
+    expect(tariffs).toBeTruthy()
+    expect(footer).toBeTruthy()
+    const comments = built.rows.filter(row => row.tableId === kit.commentsTableId)
+    const linked = (taskId: string) => comments.filter(row => {
+      const link = row.data[kit.comment.task]
+      return Array.isArray(link) && link[0] === taskId
+    })
+    expect(linked(tariffs!.id)).toHaveLength(2)
+    expect(linked(footer!.id)).toHaveLength(1)
   })
 })

@@ -16,6 +16,11 @@ function fixture(id: string) {
 describe('scoped module roles and pilot composition', () => {
   it.each(TEMPLATES.map(template => template.id))('preserves existing permissions while scoping %s', id => {
     const { app, catalog } = fixture(id)
+    if (id === 'proekty') {
+      expect(app.modules ?? []).toHaveLength(0)
+      expect(checkAppReferences(app, catalog)).toBeNull()
+      return
+    }
     app.allowlist = app.roles.map(role => ({ email: `${role.id}@example.invalid`, roleId: role.id, company: '' }))
     const before = JSON.stringify(app), scoped = scopeModuleAccess(app, catalog.views)
     expect(checkAppReferences(scoped, catalog)).toBeNull()

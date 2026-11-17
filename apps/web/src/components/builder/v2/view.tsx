@@ -1,5 +1,6 @@
 'use client'
 import { DispatchScreen } from './dispatch-screens'
+import { ProjectsScreen } from './projects-screens'
 import {BuilderV2Gallery,BuilderV2Files,BuilderV2Picture} from './media'
 import {builderV2MediaItems} from './media-values'
 import Link from 'next/link'
@@ -1903,6 +1904,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
     </div>
   }
   if (props.app.dispatch && screen && [props.app.dispatch.overviewScreenId, props.app.dispatch.boardScreenId, props.app.dispatch.jobScreenId, props.app.dispatch.clientsScreenId, props.app.dispatch.clientScreenId, props.app.dispatch.technicianScreenId, props.app.dispatch.mastersScreenId].includes(screen.id)) return <DispatchScreen key={screen.id} {...props} />
+  if (props.app.projects && screen && [props.app.projects.mineScreenId, props.app.projects.boardScreenId, props.app.projects.projectsScreenId, props.app.projects.projectScreenId, props.app.projects.taskScreenId, props.app.projects.peopleScreenId, props.app.projects.clientsScreenId].includes(screen.id)) return <ProjectsScreen key={screen.id} {...props} />
   if (props.app.booking && screen && [props.app.booking.catalogScreenId, props.app.booking.serviceScreenId, props.app.booking.mastersScreenId, props.app.booking.masterScreenId, props.app.booking.visitScreenId, props.app.booking.clientScreenId, props.app.booking.listScreenId, props.app.booking.formScreenId, props.app.booking.rescheduleScreenId, props.app.booking.setupScreenId, props.app.booking.periodScreenId, props.app.booking.customersScreenId, props.app.booking.customerScreenId].includes(screen.id)) return <BookingScreen key={screen.id} {...props} renderNodes={ids => render(ids)} />
   if (!props.editing && shop && screen?.id === shop.catalogScreenId) {
     const catalogNode = rootIds.map(id => nodes.get(id)).find((node): node is Extract<AppV2Node, { type: 'collection' }> => node?.type === 'collection' && node.layout === 'catalog')

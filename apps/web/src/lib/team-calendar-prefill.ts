@@ -1,4 +1,5 @@
 import { dateInstant } from '@tableapp/schema'
+import { bookingRules } from './booking-rules'
 import type { AppV2, AppV2Node, AppV2TeamCalendarData } from '@tableapp/schema/app-v2'
 import type { BookingIntent } from '@/components/builder/v2/booking-journey'
 import { builderV2ScreenNodes } from './builder-v2-data-types'
@@ -47,9 +48,11 @@ export function ownerCalendarServiceField(app: AppV2, formId: string, recordId: 
 }
 
 export function bookingCalendarLimits(app: AppV2) {
+  const rules = app.booking ? bookingRules(app.booking) : { leadMinutes: 60, stepMinutes: 15 as const, horizonDays: 60, bufferMinutes: 0 }
   return {
-    leadMinutes: app.booking?.leadMinutes ?? 60,
-    stepMinutes: app.booking?.stepMinutes ?? 15,
-    horizonDays: app.booking?.horizonDays ?? 60,
+    leadMinutes: rules.leadMinutes,
+    stepMinutes: rules.stepMinutes,
+    horizonDays: rules.horizonDays,
+    bufferMinutes: rules.bufferMinutes,
   }
 }

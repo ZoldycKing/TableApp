@@ -21,6 +21,7 @@ export function asSalon(app: App, built: BuiltTemplate): App {
       (built.fields.find(item => item.id === field('visits', 'status'))!.options.choices as { id: string; name: string }[]).find(choice => choice.name === title)!.id])) as BookingConfig['statuses'],
     weekdays: (built.fields.find(item => item.id === field('schedule', 'weekday'))!.options.choices as { id: string }[]).map(choice => choice.id),
     listScreenId: list.id, formScreenId: formId, rescheduleScreenId: rescheduleId, setupScreenId: setupId, stepMinutes: 15, leadMinutes: 60, horizonDays: 60,
+    slotStepMinutes: 15, minLeadMinutes: 60, bufferMinutes: 0, cancelDeadlineHours: 0,
   }
   const formFields = (ids: string[], required = true): Component[] => ids.map((fieldId, index) => ({ id: newId('component'), position: positionSequence(ids.length)[index]!,
     type: 'form_field', fieldId, roles: null, visibleWhen: null, label: null, required, placeholder: null }))

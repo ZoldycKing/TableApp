@@ -125,6 +125,8 @@ export function calendarMoveIssue(input: {
   step: number
   windows: readonly { start: number; end: number }[] | null
   others: readonly { id: string; resourceId: string; day: string; start: number; end: number; status: string }[]
+  /** Quiet minutes after each appointment. The painted block stays the real duration. */
+  buffer?: number
 }): string | null {
   if (input.event.status === 'cancelled') return 'Отменённую запись нельзя переносить.'
   const duration = input.event.end - input.event.start
@@ -136,13 +138,14 @@ export function calendarMoveIssue(input: {
   if (input.windows && !input.windows.some(window => input.start >= window.start && end <= window.end)) {
     return 'Это время вне рабочих часов. Запись осталась на прежнем месте.'
   }
+  const buffer = Math.max(0, input.buffer ?? 0)
   const occupied = input.others.some(other =>
     other.id !== input.event.id
     && other.resourceId === input.resourceId
     && other.day === input.day
     && other.status !== 'cancelled'
-    && input.start < other.end
-    && end > other.start)
+    && input.start < other.end + buffer
+    && end + buffer > other.start)
   if (occupied) return 'Это время уже занято. Запись осталась на прежнем месте.'
   return null
 }

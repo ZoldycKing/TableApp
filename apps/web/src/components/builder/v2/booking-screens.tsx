@@ -4,6 +4,7 @@ import { dateInstant, instantToWallClock } from '@tableapp/schema'
 import type { AppV2Record } from '@tableapp/schema/app-v2'
 import { builderV2CatalogCell, builderV2CatalogPrice } from '@/lib/builder-v2-catalog'
 import { bookingVisitSection } from '@/lib/booking-lifecycle'
+import { bookingClientChangeError } from '@/lib/booking-rules'
 import type { AppV2RendererProps } from './view'
 import { usePublishedV2 } from './published-context'
 import { ListScreenShell, DetailCardShell, DetailSection, ShellSearchField } from './layout-shell'
@@ -23,6 +24,7 @@ import { AppDialog } from './app-dialog'
 import { BookingCalendarScreen } from './booking-calendar'
 import { BookingPeopleScreen, BookingClientProfile } from './booking-people'
 import { useBookingJourney } from './booking-journey'
+import { ruDateText, ruNumericDate } from './ru-fields'
 const BookingLogin = lazy(async () => ({ default: (await import('@/components/runtime/app-login')).AppLogin }))
 
 type Props = AppV2RendererProps & { renderNodes: (ids: readonly string[]) => ReactNode }
@@ -125,10 +127,14 @@ export function BookingScreen(props: Props) {
     const date = dateInstant(start, timeZone)
     const upcoming = record.values[booking.visit.status] === booking.statuses.booked && date !== null && date > Date.now()
     const client = !props.actor.roleIds.includes('owner') && !props.actor.roleIds.includes('staff')
+    const closed = client && upcoming ? bookingClientChangeError(booking, start, Date.now(), timeZone) : null
     const title = label(record, booking.visit.service)
-    const actions = <div className={css.actions}>{upcoming && !props.actor.roleIds.includes('staff') && <button type="button" className={styles.secondary} onClick={() => navigate(booking.rescheduleScreenId, record.id)}>Перенести</button>}{upcoming && props.renderNodes([booking.cancelButtonId])}</div>
+    const actions = closed
+      ? <p className={css.deadline} role="status">{closed}</p>
+      : <div className={css.actions}>{upcoming && !props.actor.roleIds.includes('staff') && <button type="button" className={styles.secondary} onClick={() => navigate(booking.rescheduleScreenId, record.id)}>Перенести</button>}{upcoming && props.renderNodes([booking.cancelButtonId])}</div>
     const returnId = client ? booking.clientScreenId : booking.listScreenId!
-    return <div className={css.page}><DetailCardShell title={title} badge={<Status row={record} booking={booking} />} subtitle={date === null ? '' : new Date(date).toLocaleString('ru-RU', { dateStyle: 'long', timeStyle: 'short', timeZone })} back={{ label: client ? 'Мои записи' : 'Расписание', onClick: () => back(returnId) }} actions={actions} metrics={[{ key: 'price', caption: 'Стоимость визита', value: money(record.values[booking.visit.price]) }, { key: 'duration', caption: 'Продолжительность', value: `${label(record, booking.visit.minutes)} мин` }]}>
+    const visitWhen = date === null ? '' : `${ruNumericDate(new Date(date), timeZone)}, ${new Date(date).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', timeZone })}`
+    return <div className={css.page}><DetailCardShell title={title} badge={<Status row={record} booking={booking} />} subtitle={visitWhen} back={{ label: client ? 'Мои записи' : 'Расписание', onClick: () => back(returnId) }} actions={actions} metrics={[{ key: 'price', caption: 'Стоимость визита', value: money(record.values[booking.visit.price]) }, { key: 'duration', caption: 'Продолжительность', value: `${label(record, booking.visit.minutes)} мин` }]}>
       <div className={css.visitColumns}><div className={shell.detailMainCol}><DetailSection title="Ваш визит"><Facts items={[{ name: 'Услуга', value: title }, { name: 'Мастер', value: label(record, booking.visit.master) }]} /></DetailSection>
         {!client && props.renderNodes([booking.statusFormId])}
       </div><aside className={shell.detailSideCol}><DetailSection title={client ? 'Контактные данные' : 'О клиенте'}><Facts items={[{ name: 'Клиент', value: label(record, booking.visit.client) }, { name: 'Телефон', value: <a href={`tel:${String(record.values[booking.visit.phone] ?? '').replace(/[^+\d]/g, '')}`}>{label(record, booking.visit.phone)}</a> }]} />{owner && !props.editing && <button type="button" className={styles.textButton} onClick={() => setShowClient(true)}>Профиль и история клиента<ProtoIcon name="arrow" size={16} /></button>}</DetailSection></aside></div>
@@ -144,7 +150,7 @@ export function BookingScreen(props: Props) {
     return <div className={css.page}><ListScreenShell title={screen.name} meta="Предстоящие визиты и история" actions={<button type="button" className={styles.primary} onClick={() => navigate(booking.catalogScreenId)}>Выбрать услугу<ProtoIcon name="plus" /></button>} tabs={[{ id: 'upcoming', label: 'Предстоящие' }, { id: 'history', label: 'История' }]} activeTab={section} onTabChange={setSection}>
       <div className={css.visits + ' ' + css.listBody}>{rows.map(row => {
         const time = instantToWallClock(String(row.values[booking.visit.start]), timeZone)
-        return <button type="button" className={css.visit} key={row.id} onClick={() => navigate(booking.visitScreenId, row.id)}><span className={css.visitTime}>{time?.time}<small>{time ? new Date(time.date + 'T12:00:00Z').toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', timeZone: 'UTC' }) : ''}</small></span><span className={css.visitCopy}><strong>{label(row, booking.visit.service)}</strong><span>{label(row, booking.visit.master)}</span></span><span className={css.visitAside}><strong>{money(row.values[booking.visit.price])}</strong><Status row={row} booking={booking} /></span></button>
+        return <button type="button" className={css.visit} key={row.id} onClick={() => navigate(booking.visitScreenId, row.id)}><span className={css.visitTime}>{time?.time}<small>{time ? ruDateText(time.date) : ''}</small></span><span className={css.visitCopy}><strong>{label(row, booking.visit.service)}</strong><span>{label(row, booking.visit.master)}</span></span><span className={css.visitAside}><strong>{money(row.values[booking.visit.price])}</strong><Status row={row} booking={booking} /></span></button>
       })}{!data.loading && !data.error && !rows.length && <p className={css.empty}>{section === 'upcoming' ? 'Предстоящих записей пока нет. Выберите услугу и удобное время.' : 'Здесь будут ваши прошедшие и отменённые визиты.'}</p>}</div>{feedback}
     </ListScreenShell>{props.renderNodes(additional)}</div>
   }

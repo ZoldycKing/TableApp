@@ -298,4 +298,64 @@ describe.skipIf(!process.env.DATABASE_URL)('native v2 booking transactions', () 
     expect(calendarDay(values[config.schedule.date])).toBe('2026-11-16')
     expect(values).toMatchObject({ [config.schedule.closed]: false, [config.schedule.start]: '10:00', [config.schedule.end]: '12:00' })
   })
+  it('refuses a visit inside the buffer and a client cancellation inside the deadline', async () => {
+    const saved = app.booking!
+    app.booking = { ...saved, bufferMinutes: 30, cancelDeadlineHours: 240, slotStepMinutes: 15, stepMinutes: 15, minLeadMinutes: 60, leadMinutes: 60 }
+    await db.db.update(db.apps).set({ draft: app, published: app }).where(eq(db.apps.id, app.id))
+    try {
+      const soon = instantToWallClock(new Date(Date.now() + 4 * 86400000), 'Europe/Moscow')!.date
+      const haircut = built.rows.find(row => row.tableId === config.tables.services && row.data[config.service.minutes] === 60)!
+      const shortScope = { ...scope, recordId: haircut.id }
+      identity.email = 'buffer@example.com'
+      const open = await availability.readPublishedV2BookingAction(app.slug, { screenId: shortScope.screenId, recordId: haircut.id, day: soon, revision: liveRevision() })
+      if (!open.ok) throw new Error(JSON.stringify(open))
+      const first = open.slots.find(slot => open.slots.some(other => other.masterId === slot.masterId && other.time === slot.time.replace(/^(\d{2}):(\d{2})$/, (_, hour: string, minute: string) => {
+        const total = Number(hour) * 60 + Number(minute) + 60
+        return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
+      })))
+      if (!first) throw new Error(`Нет пары слотов: ${open.slots.map(slot => slot.time).join(', ')}`)
+      const blockedTime = first.time.replace(/^(\d{2}):(\d{2})$/, (_, hour: string, minute: string) => {
+        const total = Number(hour) * 60 + Number(minute) + 60
+        return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
+      })
+      const blocked = open.slots.find(slot => slot.masterId === first.masterId && slot.time === blockedTime)!
+      const book = async (email: string, slot: { start: string; masterId: string }) => {
+        identity.email = email
+        const initial = await write.inspectPublishedV2FormRequest(app.slug, { ...shortScope, revision: liveRevision(), mode: 'initial' })
+        if (!initial.ok || !('state' in initial) || !initial.state) throw new Error(JSON.stringify(initial))
+        return write.submitPublishedV2(app.slug, 'form', { ...shortScope, revision: liveRevision(), fingerprint: initial.state.fingerprint, requestId: newId('action'), values: { [config.visit.client]: email.split('@')[0]!, [config.visit.phone]: '+7 916 555-11-22', [config.visit.master]: [slot.masterId], [config.visit.start]: slot.start } })
+      }
+      const created = await book('buffer@example.com', first)
+      expect(created.ok, JSON.stringify(created)).toBe(true)
+      const stored = (await db.db.select().from(db.rows).where(eq(db.rows.tableId, config.tables.visits))).find(row => rowData(row)[config.visit.email] === 'buffer@example.com')!
+      let message = ''
+      try {
+        const result = await book('clash@example.com', blocked)
+        if (!result.ok) message = result.error
+      } catch (error) { message = error instanceof Error ? error.message : String(error) }
+      expect(message).toContain('занято')
+      identity.email = 'buffer@example.com'
+      const button = { screenId: config.visitScreenId, nodeId: config.cancelButtonId, recordId: stored.id, revision: liveRevision() }
+      const inspection = await write.inspectPublishedV2Button(app.slug, button)
+      let cancelled = ''
+      try {
+        const result = await write.submitPublishedV2(app.slug, 'button', { ...button, fingerprint: inspection.state.fingerprint, requestId: newId('action') })
+        if (!result.ok) cancelled = result.error
+      } catch (error) { cancelled = error instanceof Error ? error.message : String(error) }
+      expect(cancelled).toContain('не позднее чем за 240 ч')
+      expect(rowData((await db.db.select().from(db.rows).where(eq(db.rows.id, stored.id)))[0]!)[config.visit.status]).toBe(config.statuses.booked)
+      const later = await availability.readPublishedV2BookingAction(app.slug, { screenId: shortScope.screenId, recordId: haircut.id, day: soon, revision: liveRevision() })
+      identity.email = 'owner@example.com'
+      if (!later.ok) throw new Error(JSON.stringify(later))
+      const target = later.slots.find(slot => slot.masterId === first.masterId)!
+      const moved = await (await import('@/app/team-calendar-actions')).movePublishedTeamCalendarAction(app.slug, {
+        screenId: config.listScreenId!, nodeId: app.nodes.find(node => node.type === 'team_calendar')!.id,
+        eventId: stored.id, resourceId: first.masterId, day: soon, time: target.time, revision: liveRevision(),
+      })
+      expect(moved.ok, JSON.stringify(moved)).toBe(true)
+    } finally {
+      app.booking = saved
+      await db.db.update(db.apps).set({ draft: app, published: app }).where(eq(db.apps.id, app.id))
+    }
+  })
 })

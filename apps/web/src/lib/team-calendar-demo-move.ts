@@ -2,6 +2,7 @@ import { dateInstant } from '@tableapp/schema'
 import { authorizeAppV2Write, type AppV2, type AppV2Actor, type AppV2Json, type AppV2Node, type AppV2Record } from '@tableapp/schema/app-v2'
 import type { BuilderV2DataRecord } from './builder-v2-data-types'
 import { oneRelation, slotError, type BookingData } from './booking'
+import { bookingRules } from './booking-rules'
 import { calendarMoveIssue } from './team-calendar-core'
 import { teamCalendarMinutes, teamCalendarSnapshot } from './team-calendar-model'
 
@@ -63,9 +64,10 @@ export function applyDemoCalendarMove(input: {
     resourceId: input.resourceId,
     day: input.day,
     start,
-    step: input.app.booking?.stepMinutes ?? 15,
+    step: input.app.booking ? bookingRules(input.app.booking).stepMinutes : 15,
     windows,
     others: snapshot.events,
+    buffer: input.app.booking ? bookingRules(input.app.booking).bufferMinutes : 0,
   })
   if (issue) return { ok: false, error: issue }
   const instant = dateInstant(`${input.day}T${input.time}`, input.timeZone)

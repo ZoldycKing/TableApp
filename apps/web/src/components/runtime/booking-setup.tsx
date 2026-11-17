@@ -4,6 +4,7 @@ import { fieldTimeZone } from '@tableapp/schema'
 import { useState } from 'react'
 import { setBookingDayOffAction, setupBookingMasterAction, type BookingSetupInput } from '@/app/booking-actions'
 import type { RuntimeApp } from '@/lib/app-runtime'
+import { RuDateInput } from '@/components/builder/v2/ru-fields'
 import { accentTones } from './ui'
 
 const weekdays = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб']
@@ -44,7 +45,7 @@ export function BookingSetup({ runtime, demo, onSaved }: { runtime: RuntimeApp; 
       <h2 className="text-base font-semibold">Выходной или день отпуска</h2>
       <p className="text-sm text-ink-muted">Закрывает день для новых записей. Уже принятые посещения сохраняются — их нужно перенести или отменить отдельно.</p>
       <label className="block space-y-1.5 text-sm font-medium">Мастер для выходного<select aria-label="Мастер для выходного" className={control} value={offMaster} onChange={event => setOffMaster(event.target.value)} disabled={pending}><option value="">Выберите мастера</option>{masters.map(master => <option key={master.id} value={master.id}>{String(master.data[config.master.name])}</option>)}</select></label>
-      <label className="block space-y-1.5 text-sm font-medium">Дата выходного<input aria-label="Дата выходного" type="date" className={control} value={offDay} onChange={event => setOffDay(event.target.value)} disabled={pending} /></label>
+      <label className="block space-y-1.5 text-sm font-medium">Дата выходного<RuDateInput aria-label="Дата выходного" className={control} value={offDay} onValue={setOffDay} disabled={pending} /></label>
       <button type="button" disabled={pending || !offMaster || !offDay} className="rounded-xl border border-sand-200 px-4 py-2.5 text-sm font-medium disabled:opacity-40" onClick={async () => {
         if (demo) { setMessage('Это демонстрация. Выходной не сохраняется.'); return }
         setPending(true); setMessage(null)

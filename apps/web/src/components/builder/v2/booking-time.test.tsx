@@ -35,17 +35,26 @@ describe('calendar and client context in a new booking', () => {
     expect(change).toHaveBeenCalledWith(b.visit.client,'Ирина')
     expect(change).toHaveBeenCalledWith(b.visit.phone,'+79160000000')
     expect(change).toHaveBeenCalledWith(b.visit.email,'irina@example.com')
-    expect(screen.getByText('Оля · 20 ноября · 09:00')).toBeTruthy()
+    expect(screen.getByText('Оля · 20.11.2026 · 09:00')).toBeTruthy()
     expect(screen.queryByText('Когда вам удобно?')).toBeNull()
     expect(screen.queryByLabelText('Дата записи')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Изменить' }))
     expect((screen.getByLabelText('Дата записи') as HTMLInputElement).value).toBe('2026-11-20')
+    expect(screen.getByText('20.11.2026')).toBeTruthy()
     expect((screen.getByLabelText('Мастер') as HTMLSelectElement).value).toBe('master_olya')
   })
   it('does not silently select a different slot after the chosen time becomes unavailable', async () => {
     const { b, change } = seedFixture(false)
     await screen.findByText('Выбранное время занято или не подходит для этой услуги. Выберите другое свободное время или мастера.')
     expect(change.mock.calls.some(([fieldId]) => fieldId === b.visit.start)).toBe(false)
+  })
+  it('asks for a service before listing free time on a blank owner form', () => {
+    const built = buildTemplate({ template: salon, workspaceId: 'wsp_blank' })
+    const app = buildBookingV2App(built, { id: 'app_blank', workspaceId: 'wsp_blank', name: 'Студия', slug: 'blank', email: 'owner@example.com' })
+    const booking = app.booking!
+    mocked.context = { app, scope: { formId: booking.ownerCreateFormId!, screenId: booking.formScreenId }, values: {}, errors: {}, disabled: false, key: 'blank', onPending: vi.fn(), change: vi.fn(), inspect: vi.fn(), state: { values: {}, labels: {}, fingerprint: 'blank', fields: [] } }
+    render(<BookingDemoAvailability value={() => ({ ok: true, timeZone: 'Europe/Moscow', service: { id: 's', name: 'Стрижка', price: 1, minutes: 60 }, masters: [], slots: [] })}><BookingTimeFields app={app} editing={false} /></BookingDemoAvailability>)
+    expect(screen.getByText('Выберите услугу, чтобы увидеть свободное время.')).toBeTruthy()
   })
   it('never copies owner contacts into the customer form', async () => {
     const { b, change } = seedFixture(true,false)

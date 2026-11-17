@@ -7,6 +7,10 @@ export const ruDateText = (value: string) => {
   return match ? `${match[3]}.${match[2]}.${match[1]}` : ''
 }
 
+/** Instant as `дд.мм.гггг` in the given zone, independent of the browser locale. */
+export const ruNumericDate = (value: Date, timeZone: string) =>
+  new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone }).format(value)
+
 /** Clock time as `чч:мм`, without an AM/PM marker. */
 export const ruTimeText = (value: string) => {
   const match = /^(\d{2}):(\d{2})/.exec(value)

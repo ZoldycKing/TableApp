@@ -71,7 +71,7 @@
 .choiceRow { display: flex; flex-wrap: wrap; gap: 6px; }
 .choiceRow button { min-height: 36px; padding: 6px 10px; border-radius: 999px; border: 1px solid var(--v2-line, #dce2d6); background: var(--v2-surface, #fff); color: inherit; font: inherit; font-size: 13px; }
 .choiceRow button[aria-pressed='true'] { background: var(--v2-soft, #e7eef6); border-color: var(--v2-accent, #315f91); }
-.timer { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 36px; padding: 8px 10px; border-radius: 12px; background: #fff4d6; color: #7a5410; font-weight: 700; }
+.timer { display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 8px 10px; border-radius: 12px; background: #fff4d6; color: #7a5410; font-weight: 700; }
 .money { display: grid; gap: 8px; }
 .moneyRow { display: grid; grid-template-columns: minmax(0, 1fr) 96px 28px; gap: 6px; align-items: center; }
 .minuteFix { display: flex; gap: 8px; align-items: center; min-width: 0; }
@@ -112,8 +112,13 @@
   padding: 8px 10px; font: inherit; color: inherit; background: var(--v2-surface, #fff);
 }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.status { display: flex; flex-wrap: nowrap; gap: 8px; }
-.status button { flex: 1 1 0; min-width: 0; padding-inline: 8px; }
+.status { display: flex; flex-wrap: nowrap; gap: 6px; }
+.status button { flex: 1 1 0; min-width: 0; padding-inline: 6px; white-space: nowrap; font-size: 13px; }
+.headerActions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end; }
+.stepper { display: inline-flex; align-items: center; gap: 8px; }
+.stepper button { width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--v2-line, #dce2d6); background: var(--v2-surface, #fff); font: inherit; font-size: 18px; }
+.stepper strong { min-width: 24px; text-align: center; font-variant-numeric: tabular-nums; }
+.preview { margin: 0; color: var(--v2-muted, #687568); font-size: 13px; line-height: 1.4; }
 .filePick { position: relative; }
 .fileInput { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); border: 0; }
 .filePick span {
@@ -137,17 +142,16 @@
   .board { grid-template-columns: minmax(0, 1fr) 300px; }
 }
 @container builder-app (min-width: 980px) {
-  .job[data-table] { grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr) minmax(0, 1.15fr) minmax(128px, 176px) minmax(156px, 220px); align-items: center; column-gap: 16px; row-gap: 0; min-height: 96px; padding: 10px 14px; }
-  .job[data-table]:not([data-address]) { grid-template-columns: minmax(0, 1.7fr) minmax(0, 1.15fr) minmax(128px, 176px) minmax(156px, 220px); }
+  .job[data-table] { grid-template-columns: minmax(0, 1fr) 176px minmax(160px, 240px) 172px 196px; align-items: center; column-gap: 16px; row-gap: 0; min-height: 96px; padding: 10px 14px; }
+  .job[data-table] > * { min-width: 0; }
   .job[data-table] .titleRow { grid-column: 1; grid-row: 1; }
   .job[data-table] .jobLine[data-who] { grid-column: 2; grid-row: 1; }
   .job[data-table] .jobLine[data-address] { grid-column: 3; grid-row: 1; }
-  .job[data-table] .assignee { grid-column: 4; grid-row: 1; display: flex; max-width: 100%; overflow: hidden; }
+  .job[data-table] .assignee { grid-column: 4; grid-row: 1; display: flex; align-items: center; max-width: 100%; min-width: 0; overflow: hidden; }
+  .job[data-table] .assignee > [role='img'] { flex: none; width: 30px; height: 30px; border-radius: 50%; overflow: hidden; }
+  .job[data-table] .assignee > [role='img'] img { width: 30px; height: 30px; object-fit: cover; }
+  .job[data-table] .assignee > span:not([role='img']) { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .job[data-table] .jobFoot { grid-column: 5; grid-row: 1; justify-content: flex-end; }
-  .job[data-table]:not([data-address]) .jobLine[data-who] { grid-column: 2; }
-  .job[data-table]:not([data-address]) .assignee { grid-column: 3; }
-  .job[data-table]:not([data-address]) .jobFoot { grid-column: 4; }
-  .job[data-table] .assignee > span { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .job[data-table] .badges { flex-wrap: nowrap; justify-content: flex-end; }
   .job[data-table] .badge { white-space: nowrap; }
 }
@@ -157,6 +161,8 @@
   .job:not([data-table]) .jobFoot { flex-direction: column; align-items: flex-start; }
   .cardBadges .badge { padding: 2px 6px; font-size: 11px; }
   .assignee > span, .jobTitle { overflow: visible; text-overflow: unset; white-space: normal; }
+  .status { width: 100%; }
+  .status button { font-size: 12px; padding-inline: 4px; }
   .signaturePad { height: 112px; }
   .filePick span { min-height: 76px; }
   .form textarea { min-height: 72px; }

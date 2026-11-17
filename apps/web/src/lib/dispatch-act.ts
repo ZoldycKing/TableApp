@@ -9,6 +9,9 @@ export type WorkActInput = {
   address: string
   technician: string
   date: string
+  /** Short act number, printed in the header. */
+  number?: string
+  company?: string
   actualTime: string
   checklist: readonly ChecklistItem[]
   notes: string
@@ -59,9 +62,9 @@ export async function buildWorkActPdf(input: WorkActInput, fontBytes: Uint8Array
   }
 
   text('Акт выполненных работ', margin, y, 18)
-  y -= 28
-  text('Сервисный выезд', margin, y, 11, muted)
-  y -= 16
+  y -= 22
+  text([input.company || 'Сервисный выезд', input.number ? `Акт № ${input.number}` : '', input.date].filter(Boolean).join(' · '), margin, y, 11, muted)
+  y -= 18
   rule(y)
   y -= 16
 
@@ -82,9 +85,9 @@ export async function buildWorkActPdf(input: WorkActInput, fontBytes: Uint8Array
   }
 
   const section = (title: string) => {
-    y -= 6
+    y -= 16
     text(title, margin, y, 12)
-    y -= 8
+    y -= 16
     rule(y)
     y -= 14
   }
@@ -117,7 +120,7 @@ export async function buildWorkActPdf(input: WorkActInput, fontBytes: Uint8Array
   } else {
     for (const item of input.checklist.slice(0, 12)) {
       drawCheck(page, margin, y - 11, item.done)
-      const label = wrap(font, item.label, 10, width - 22)[0] ?? item.label
+      const label = wrap(font, item.done ? item.label : `${item.label} — не выполнено`, 10, width - 22)[0] ?? item.label
       text(label, margin + 16, y, 10, item.done ? ink : muted)
       y -= 16
     }
@@ -152,8 +155,10 @@ export async function buildWorkActPdf(input: WorkActInput, fontBytes: Uint8Array
     }
   }
 
-  if (y > 90) {
+  if (y > 110) {
     section('Подпись клиента')
+    text(input.client || 'Клиент', margin, y, 10)
+    y -= 14
     if (input.signature) {
       try {
         const image = input.signature.mime === 'image/png' ? await doc.embedPng(input.signature.bytes) : await doc.embedJpg(input.signature.bytes)
@@ -168,8 +173,11 @@ export async function buildWorkActPdf(input: WorkActInput, fontBytes: Uint8Array
 }
 
 function drawCheck(page: PDFPage, x: number, y: number, done: boolean) {
-  page.drawRectangle({ x, y, width: 9, height: 9, borderWidth: 1, borderColor: done ? green : muted, color: done ? green : rgb(1, 1, 1) })
-  if (!done) return
-  page.drawLine({ start: { x: x + 2, y: y + 4 }, end: { x: x + 4, y: y + 2 }, thickness: 1.2, color: rgb(1, 1, 1) })
-  page.drawLine({ start: { x: x + 4, y: y + 2 }, end: { x: x + 7.5, y: y + 7 }, thickness: 1.2, color: rgb(1, 1, 1) })
+  page.drawRectangle({ x, y, width: 9, height: 9, borderWidth: 1, borderColor: done ? green : muted, color: done ? green : rgb(0.96, 0.96, 0.95) })
+  if (done) {
+    page.drawLine({ start: { x: x + 2, y: y + 4 }, end: { x: x + 4, y: y + 2 }, thickness: 1.2, color: rgb(1, 1, 1) })
+    page.drawLine({ start: { x: x + 4, y: y + 2 }, end: { x: x + 7.5, y: y + 7 }, thickness: 1.2, color: rgb(1, 1, 1) })
+    return
+  }
+  page.drawLine({ start: { x: x + 2, y: y + 4.5 }, end: { x: x + 7, y: y + 4.5 }, thickness: 1.2, color: muted })
 }

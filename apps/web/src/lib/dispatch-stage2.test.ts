@@ -33,7 +33,7 @@ describe('field service checklist', () => {
     const marked = toggleChecklistItem(toggleChecklistItem(items, 0), 2)
     expect(checklistProgress(marked)).toEqual({ done: 2, total: 3 })
     expect(parseChecklist(JSON.stringify(marked))).toEqual(marked)
-    expect(completionChecklistWarning(marked)).toBe('Остались пункты чек-листа: 1 из 3.')
+    expect(completionChecklistWarning(marked)).toBe('Не отмечено 1 из 3 пунктов чек-листа. Можно завершить — в акте они будут помечены как невыполненные.')
     expect(completionChecklistWarning(marked.map(item => ({ ...item, done: true })))).toBeNull()
     expect(completionChecklistWarning([])).toBeNull()
   })

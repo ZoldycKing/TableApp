@@ -16,18 +16,20 @@ import {
   type ChecklistItem, type MoneyLine, type RepeatRule,
 } from '@/lib/dispatch-stage2'
 import { buildWorkActPdf, type ActImage } from '@/lib/dispatch-act'
+import { progressValues } from '@/lib/dispatch-persist'
+import { savePublishedDispatchAction } from '@/app/dispatch-actions'
 import { usePublishedV2 } from './published-context'
 import { teamCalendarSnapshot } from '@/lib/team-calendar-model'
 import { applyDemoCalendarMove } from '@/lib/team-calendar-demo-move'
 import type { BuilderV2DataRecord } from '@/lib/builder-v2-data-types'
 import { useBuilderV2NodeData } from './use-data'
-import { TeamCalendarView } from './booking-calendar'
+import { DateMenu, TeamCalendarView } from './booking-calendar'
 import { AppDialog } from './app-dialog'
 import { DetailCardShell, DetailSection, ListScreenShell, ShellSearchField } from './layout-shell'
 import { BookingAvatar } from './booking-avatar'
 import { RuDateInput, RuTimeInput, ruNumericDate } from './ru-fields'
 import { SignaturePad } from './signature-pad'
-import { CameraIcon } from '@phosphor-icons/react'
+import { CameraIcon, ClockIcon } from '@phosphor-icons/react'
 import { ProtoIcon } from '../prototype/icons'
 import scroll from './scroll-overflow.module.css'
 import { useScrollOverflow } from './scroll-overflow'
@@ -199,10 +201,10 @@ function JobButton(props: ScreenProps & { row: AppV2Record; showAssignee?: boole
   const address = props.clientAddress != null ? distinctJobAddress(rawAddress, props.clientAddress) : rawAddress
   const when = whenLabel(facts.when)
   const series = textOf(read(props.row, props.dispatch.job.seriesId))
-  return <li><button type="button" className={css.job} data-table={props.showAssignee ? true : undefined} data-address={props.showAssignee && address ? true : undefined} onClick={() => props.onNavigate?.(props.dispatch.jobScreenId, props.row.id)}>
+  return <li><button type="button" className={css.job} data-table={props.showAssignee ? true : undefined} data-address={props.showAssignee ? true : undefined} onClick={() => props.onNavigate?.(props.dispatch.jobScreenId, props.row.id)}>
     <span className={css.titleRow}><strong className={css.jobTitle}>{textOf(props.row.values[props.dispatch.job.what])}</strong>{series ? <span className={css.series}>Серия</span> : null}</span>
     <span className={css.jobLine} data-who>{props.hideClient ? <span>{when}</span> : <><span>{clientLabel(props, props.row) || 'Клиент не указан'}</span><span>{when}</span></>}</span>
-    {address ? <span className={css.jobLine} data-address>{address}</span> : null}
+    {props.showAssignee || address ? <span className={css.jobLine} data-address>{address || ''}</span> : null}
     {props.showAssignee ? <span className={css.assignee}>{person ? <><BookingAvatar name={person.name} photo={person.photo} small /><span>{person.name}</span></> : <><ProtoIcon name="user" size={16} /><span>Не назначено</span></>}</span> : null}
     <span className={css.jobFoot}><JobBadges priority={facts.priority} status={facts.status} overdue={overdue} /></span>
   </button></li>
@@ -458,11 +460,13 @@ function patchRows(props: ScreenProps, id: string, patch: Record<string, AppV2Js
 
 function JobCard(props: ScreenProps) {
   const demo = useContext(DispatchRowsContext)
+  const published = usePublishedV2()
   const row = props.rows.find(item => item.id === props.record?.id) ?? props.record
   const [note, setNote] = useState('')
   const [error, setError] = useState('')
   const [complete, setComplete] = useState(demo?.open === 'complete')
   const [repeat, setRepeat] = useState(demo?.open === 'repeat')
+  const [fixOpen, setFixOpen] = useState(false)
   const [minutesDraft, setMinutesDraft] = useState('')
   const running = row ? jobFacts(props, row).status === 'На месте' && typeof read(row, props.dispatch.job.actualMinutes) !== 'number' : false
   const now = useNow(running)
@@ -485,10 +489,18 @@ function JobCard(props: ScreenProps) {
   const storedMinutes = read(row, props.dispatch.job.actualMinutes)
   const minutes = actualMinutesOf({ onSiteAt: textOf(read(row, props.dispatch.job.onSiteAt)), doneAt: textOf(read(row, props.dispatch.job.doneAt)), actualMinutes: typeof storedMinutes === 'number' ? storedMinutes : null, now })
   const dispatcher = props.actor.roleIds.includes('owner')
-  const setStatus = (statusId: string, extra: Record<string, AppV2Json> = {}) => patchRows(props, row.id, { [props.dispatch.job.status]: statusId, ...extra })
+  const saveProgress = async (input: Parameters<typeof progressValues>[1]) => {
+    const values = progressValues(props.dispatch.job, input)
+    if (props.replace) { patchRows(props, row.id, values); return }
+    if (!published || published.revision === 'demo') return
+    const result = await savePublishedDispatchAction(published.slug, { kind: 'progress', revision: published.revision, screenId: props.screenId, recordId: row.id, ...input })
+    if (!result.ok) setError(result.error)
+    else published.refresh(result.message)
+  }
+  const setStatus = (statusId: string, extra: { onSiteAt?: string } = {}) => { void saveProgress({ status: statusId, ...extra }) }
   const toggleCheck = (index: number) => {
     if (!props.dispatch.job.checklist) return
-    patchRows(props, row.id, { [props.dispatch.job.checklist]: serializeChecklist(toggleChecklistItem(checklist, index)) })
+    void saveProgress({ checklist: serializeChecklist(toggleChecklistItem(checklist, index)) })
   }
   const addNote = () => {
     const draft = noteDraft({ text: note, author: props.actor.name?.trim() || (props.actor.roleIds.includes('owner') ? 'Диспетчер' : 'Мастер'), authorEmail: props.actor.email ?? '', at: new Date().toISOString(), jobId: row.id, masterEmail: props.actor.roleIds.includes('staff') && !props.actor.roleIds.includes('owner') ? props.actor.email ?? '' : facts.masterEmail })
@@ -506,15 +518,19 @@ function JobCard(props: ScreenProps) {
       subtitle={whenLabel(facts.when)}
       chips={<span className={css.cardBadges}><JobBadges priority={facts.priority} status={facts.status} overdue={isOverdue(facts, props.now)} statusFirst />{textOf(read(row, props.dispatch.job.seriesId)) ? <span className={css.series}>Серия</span> : null}</span>}
       back={{ label: props.actor.roleIds.includes('staff') && !props.actor.roleIds.includes('owner') ? 'Мои выезды' : 'Заявки', onClick: () => props.onNavigate?.(props.actor.roleIds.includes('staff') && !props.actor.roleIds.includes('owner') ? props.dispatch.technicianScreenId : props.dispatch.overviewScreenId) }}
-      actions={<StatusActions facts={facts} dispatcher={dispatcher} onEnRoute={() => setStatus(props.dispatch.statuses.enRoute)} onSite={() => {
-        const field = props.dispatch.job.onSiteAt
-        const started = field && !textOf(read(row, field))
-        setStatus(props.dispatch.statuses.onSite, started ? { [field]: startVisit(Date.now()).onSiteAt } : {})
-      }} onDone={() => setComplete(true)} onReopen={() => setStatus(props.dispatch.statuses.assigned)} />}
+      actions={<div className={css.headerActions}>
+        <StatusActions facts={facts} dispatcher={dispatcher} onEnRoute={() => setStatus(props.dispatch.statuses.enRoute)} onSite={() => {
+          const field = props.dispatch.job.onSiteAt
+          const started = field && !textOf(read(row, field))
+          setStatus(props.dispatch.statuses.onSite, started ? { onSiteAt: startVisit(Date.now()).onSiteAt } : {})
+        }} onDone={() => setComplete(true)} onReopen={() => setStatus(props.dispatch.statuses.assigned)} />
+        {(facts.status === 'Выполнено' || facts.status === 'Готово') ? <button type="button" className={buttons.secondary} onClick={() => void downloadAct(props, row, checklist, works, materials, formatRub(total), minutes)}><ProtoIcon name="download" size={16} />Скачать акт</button> : null}
+        {dispatcher ? <button type="button" className={buttons.secondary} onClick={() => setRepeat(true)}>Повторять</button> : null}
+      </div>}
     >
       <div className={css.columns}>
         <div className={css.sections}>
-          {running && minutes != null ? <p className={css.timer} data-dispatch-timer>На объекте · {formatDuration(minutes)}</p> : null}
+          {running && minutes != null ? <p className={css.timer} data-dispatch-timer><ClockIcon size={18} aria-hidden="true" />На объекте · {formatDuration(minutes)}</p> : null}
           {checklist.length ? <DetailSection title={`Чек-лист · ${progress.done}/${progress.total}`}>
             <ul className={css.checkList}>{checklist.map((item, index) => <li key={item.label}><CheckControl checked={item.done} label={item.label} onToggle={() => toggleCheck(index)} /></li>)}</ul>
           </DetailSection> : null}
@@ -524,8 +540,7 @@ function JobCard(props: ScreenProps) {
               <div><dt>Адрес</dt><dd>{address ? <a className={css.tap} href={`https://yandex.ru/maps/?text=${encodeURIComponent(address)}`} target="_blank" rel="noreferrer"><ProtoIcon name="mapPin" size={16} /><span>{address}</span></a> : 'Не указан'}</dd></div>
               <div><dt>Телефон</dt><dd>{phoneLink ? <a className={css.tap} href={phoneLink}><ProtoIcon name="call" size={16} /><span>{phone}</span></a> : phone || 'Не указан'}</dd></div>
               <div><dt>Мастер</dt><dd>{textOf(row.values[props.dispatch.job.master]) || 'Не назначен'}</dd></div>
-              {minutes != null ? <div><dt>Фактическое время</dt><dd>{formatDuration(minutes)}</dd></div> : null}
-              {dispatcher && props.dispatch.job.actualMinutes && (facts.status === 'Выполнено' || facts.status === 'Готово') ? <div><dt>Поправка, мин</dt><dd><form className={css.minuteFix} onSubmit={event => { event.preventDefault(); const parsed = correctMinutes(minutesDraft); if (!parsed.ok) { setError(parsed.error); return }; patchRows(props, row.id, { [props.dispatch.job.actualMinutes!]: parsed.minutes }); setError(''); setMinutesDraft('') }}><input aria-label="Фактические минуты" inputMode="numeric" value={minutesDraft} placeholder={String(minutes ?? '')} onChange={event => setMinutesDraft(event.target.value)} /><button type="submit" className={buttons.secondary}>Сохранить</button></form></dd></div> : null}
+              {minutes != null ? <div><dt>Фактическое время</dt><dd>{formatDuration(minutes)}{dispatcher && props.dispatch.job.actualMinutes && (facts.status === 'Выполнено' || facts.status === 'Готово') ? <> · <button type="button" className={css.linkButton} onClick={() => { setMinutesDraft(String(minutes)); setFixOpen(true) }}>Исправить</button></> : null}</dd></div> : null}
             </dl>
           </DetailSection>
           <DetailSection title="Заметки">
@@ -552,8 +567,6 @@ function JobCard(props: ScreenProps) {
               <div className={css.total}><span>Итого</span><span>{formatRub(total)}</span></div>
             </div>
           </DetailSection> : null}
-          {(facts.status === 'Выполнено' || facts.status === 'Готово') ? <button type="button" className={buttons.secondary} onClick={() => void downloadAct(props, row, checklist, works, materials, formatRub(total), minutes)}>Скачать акт</button> : null}
-          {dispatcher ? <button type="button" className={buttons.textButton} onClick={() => setRepeat(true)}>Повторять</button> : null}
           <DetailSection title="Отчёт о выполнении">
             {report || signature ? <div className={css.report}>
               {report ? <p>{report}</p> : <p className={css.empty}>Описание работы ещё не сохранено.</p>}
@@ -569,6 +582,12 @@ function JobCard(props: ScreenProps) {
     </DetailCardShell>
     {complete ? <CompleteDialog {...props} row={row} checklist={checklist} onClose={() => setComplete(false)} /> : null}
     {repeat ? <RepeatDialog {...props} row={row} onClose={() => setRepeat(false)} /> : null}
+    {fixOpen && props.dispatch.job.actualMinutes ? <AppDialog title="Фактическое время" placement="center" onClose={() => setFixOpen(false)} footer={<button type="submit" form="fix-minutes" className={buttons.primary}>Сохранить</button>}>
+      <form id="fix-minutes" className={css.form} onSubmit={event => { event.preventDefault(); const parsed = correctMinutes(minutesDraft); if (!parsed.ok) { setError(parsed.error); return }; void saveProgress({ actualMinutes: parsed.minutes }); setError(''); setFixOpen(false) }}>
+        <label>Минуты на объекте<input aria-label="Фактические минуты" inputMode="numeric" value={minutesDraft} onChange={event => setMinutesDraft(event.target.value.replace(/[^\d]/g, ''))} /></label>
+        {error ? <p className={css.error} role="alert">{error}</p> : null}
+      </form>
+    </AppDialog> : null}
   </div>
 }
 
@@ -595,7 +614,7 @@ async function downloadAct(props: ScreenProps, row: AppV2Record, checklist: Chec
   const photos = (await Promise.all((Array.isArray(stored) ? stored : []).map(item => imageFrom(mediaUrl([item]))))).filter((item): item is ActImage => item !== null)
   const pdf = await buildWorkActPdf({
     client: clientLabel(props, row), address: addressOf(props, row), technician: textOf(row.values[props.dispatch.job.master]),
-    date: whenLabel(row.values[props.dispatch.job.when]).split(',')[0] ?? '', actualTime: minutes == null ? '' : formatDuration(minutes),
+    date: whenLabel(row.values[props.dispatch.job.when]).split(',')[0] ?? '', number: row.id.replace(/[^a-z0-9]/gi, '').slice(-4).toUpperCase(), company: 'Сервис «Мастерская»', actualTime: minutes == null ? '' : formatDuration(minutes),
     checklist, notes: textOf(row.values[props.dispatch.job.report]), works, materials, total, photos,
     signature: await imageFrom(mediaUrl(row.values[props.dispatch.job.signature])),
   }, font)
@@ -692,7 +711,7 @@ function CompleteDialog(props: ScreenProps & { row: AppV2Record; checklist: Chec
   }
   return <AppDialog title="Отчёт о выполнении" placement="center" onClose={props.onClose} footer={<button type="submit" form={formId} className={buttons.primary} disabled={busy}>Завершить заявку</button>}>
     <form id={formId} className={css.form} onSubmit={event => { event.preventDefault(); void save() }}>
-      {warning ? <p className={css.warn} role="status">{warning} Можно завершить заявку, пункты останутся в акте.</p> : null}
+      {warning ? <p className={css.warn} role="status">{warning}</p> : null}
       <label>Что сделано<textarea value={report} onChange={event => setReport(event.target.value)} required /></label>
       <label className={css.filePick}>Фото с выезда<input className={css.fileInput} type="file" accept="image/jpeg,image/png,image/webp" multiple aria-label="Добавить фото" onChange={event => {
         const chosen = [...event.target.files ?? []]
@@ -709,30 +728,45 @@ function CompleteDialog(props: ScreenProps & { row: AppV2Record; checklist: Chec
   </AppDialog>
 }
 
+function SeriesPreview({ start, rule, until, count }: { start: string; rule: RepeatRule; until: string | null; count: number | null }) {
+  const dates = recurrenceOccurrences({ start, rule, until, count }).slice(1)
+  const label = dates.map(iso => {
+    const wall = instantToWallClock(new Date(iso), DISPATCH_TIME_ZONE)
+    if (!wall) return ''
+    const [, month, day] = wall.date.split('-')
+    return `${day}.${month}`
+  }).filter(Boolean)
+  const word = label.length % 10 === 1 && label.length % 100 !== 11 ? 'выезд' : label.length % 10 >= 2 && label.length % 10 <= 4 && (label.length % 100 < 12 || label.length % 100 > 14) ? 'выезда' : 'выездов'
+  if (!label.length) return <p className={css.preview}>Новых выездов в этом пределе нет.</p>
+  return <p className={css.preview}>Будет создано {label.length} {word}: {label.join(', ')}</p>
+}
+
 function RepeatDialog(props: ScreenProps & { row: AppV2Record; onClose: () => void }) {
   const formId = useId()
+  const published = usePublishedV2()
   const current = repeatRuleFromName(choiceName(props.tables, props.dispatch.jobsTableId, props.dispatch.job.repeat ?? '', read(props.row, props.dispatch.job.repeat)))
   const [rule, setRule] = useState<RepeatRule>(current ?? 'weekly')
+  const [limit, setLimit] = useState<'date' | 'count'>(textOf(read(props.row, props.dispatch.job.repeatUntil)) ? 'date' : 'count')
   const [until, setUntil] = useState(textOf(read(props.row, props.dispatch.job.repeatUntil)).slice(0, 10))
-  const [count, setCount] = useState(textOf(read(props.row, props.dispatch.job.repeatCount)) || '4')
+  const [amount, setAmount] = useState(4)
   const [scope, setScope] = useState<'one' | 'series'>(textOf(read(props.row, props.dispatch.job.seriesId)) ? 'series' : 'one')
   const [error, setError] = useState('')
   const series = textOf(read(props.row, props.dispatch.job.seriesId))
-  const save = () => {
+  const save = async () => {
     const repeatField = props.dispatch.job.repeat
     const untilField = props.dispatch.job.repeatUntil
     const countField = props.dispatch.job.repeatCount
     const seriesField = props.dispatch.job.seriesId
     if (!repeatField || !seriesField) { setError('Повтор ещё не подключён к этой заявке.'); return }
-    const total = Number(count)
-    if (count.trim() && (!Number.isFinite(total) || total < 1)) { setError('Укажите число повторов.'); return }
+    if (limit === 'date' && !until) { setError('Выберите дату окончания.'); return }
+    const total = limit === 'count' ? amount + 1 : null
     const seriesId = series || `series_${crypto.randomUUID().replaceAll('-', '').slice(0, 12)}`
     const choiceId = props.tables.find(table => table.id === props.dispatch.jobsTableId)?.fields.find(field => field.id === repeatField)?.choices?.find(choice => choice.name === repeatName(rule))?.id ?? repeatName(rule)
-    const dates = recurrenceOccurrences({ start: textOf(props.row.values[props.dispatch.job.when]), rule, until: until || null, count: count.trim() ? total : null })
+    const dates = recurrenceOccurrences({ start: textOf(props.row.values[props.dispatch.job.when]), rule, until: limit === 'date' ? until : null, count: total })
     if (dates.length < 1) { setError('Не удалось построить даты серии.'); return }
     const jobs = props.of(props.dispatch.jobsTableId).map(item => ({ id: item.id, seriesId: textOf(item.values[seriesField]), when: item.values[props.dispatch.job.when], status: jobFacts(props, item).status }))
     const targets = series ? seriesEditIds(jobs, props.row.id, scope) : [props.row.id]
-    const patch = { [repeatField]: choiceId, ...(untilField ? { [untilField]: until || null } : {}), ...(countField ? { [countField]: count.trim() ? total : null } : {}), [seriesField]: seriesId }
+    const patch = { [repeatField]: choiceId, ...(untilField ? { [untilField]: limit === 'date' ? until : null } : {}), ...(countField ? { [countField]: total } : {}), [seriesField]: seriesId }
     let rows = props.rows.map(item => targets.includes(item.id) ? { ...item, values: { ...item.values, ...patch } } : item)
     if (!series) {
       const checklistField = props.dispatch.job.checklist
@@ -751,15 +785,23 @@ function RepeatDialog(props: ScreenProps & { row: AppV2Record; onClose: () => vo
       }))
       rows = [...rows, ...created]
     }
-    props.replace?.(rows as AppV2Record[])
+    if (props.replace) { props.replace(rows as AppV2Record[]); props.onClose(); return }
+    if (!published || published.revision === 'demo') { setError('Сохранение серии доступно в опубликованном приложении.'); return }
+    const result = await savePublishedDispatchAction(published.slug, {
+      kind: 'series', revision: published.revision, screenId: props.screenId, recordId: props.row.id,
+      rule, until: limit === 'date' ? until : null, count: total, scope,
+    })
+    if (!result.ok) { setError(result.error); return }
+    published.refresh(result.message)
     props.onClose()
   }
   return <AppDialog title="Повторять заявку" placement="center" onClose={props.onClose} footer={<button type="submit" form={formId} className={buttons.primary}>Сохранить серию</button>}>
-    <form id={formId} className={css.form} onSubmit={event => { event.preventDefault(); save() }}>
+    <form id={formId} className={css.form} onSubmit={event => { event.preventDefault(); void save() }}>
       <Choices label="Как часто" value={rule} options={REPEAT_OPTIONS.map(item => ({ id: item.rule, name: item.name }))} onChange={value => setRule(value as RepeatRule)} />
-      <label>Повторять до<RuDateInput value={until} onValue={setUntil} aria-label="Повторять до" /></label>
-      <label>Число повторов<input inputMode="numeric" aria-label="Число повторов" value={count} onChange={event => setCount(event.target.value)} /></label>
-      {series ? <Choices label="Что изменить" value={scope} options={[{ id: 'one', name: 'Только эту заявку' }, { id: 'series', name: 'Всю серию' }]} onChange={value => setScope(value as 'one' | 'series')} /> : <p className={css.meta}>Будут созданы выезды на ближайшие три месяца, с общим признаком серии.</p>}
+      <Choices label="Ограничение" value={limit} options={[{ id: 'date', name: 'До даты' }, { id: 'count', name: 'Количество раз' }]} onChange={value => setLimit(value as 'date' | 'count')} />
+      {limit === 'date' ? <label>Повторять до<DateMenu value={until} onValue={setUntil} label="Повторять до" /></label> : <div className={css.choices}><span>Сколько ещё выездов</span><div className={css.stepper}><button type="button" aria-label="Меньше" onClick={() => setAmount(value => Math.max(1, value - 1))}>−</button><strong>{amount}</strong><button type="button" aria-label="Больше" onClick={() => setAmount(value => Math.min(24, value + 1))}>+</button></div></div>}
+      <SeriesPreview start={textOf(props.row.values[props.dispatch.job.when])} rule={rule} until={limit === 'date' ? until : null} count={limit === 'count' ? amount + 1 : null} />
+      {series ? <Choices label="Что изменить" value={scope} options={[{ id: 'one', name: 'Только эту заявку' }, { id: 'series', name: 'Всю серию' }]} onChange={value => setScope(value as 'one' | 'series')} /> : null}
       {error ? <p className={css.error} role="alert">{error}</p> : null}
     </form>
   </AppDialog>

@@ -40,7 +40,7 @@ export function dispatchTemplateDemoModel(example = templateExample('zayavki')) 
     }
     if (row.tableId === dispatch.jobsTableId && values[dispatch.job.what] === 'Замена ламп в витрине') {
       values[dispatch.job.signature] = [{ url: '/template-media/dispatch/act-signature.png', name: 'Подпись клиента.png', mime: 'image/png' }]
-      values[dispatch.job.photo] = [{ url: '/template-media/dispatch/act-photo.png', name: 'Витрина.png', mime: 'image/png' }]
+      values[dispatch.job.photo] = [{ url: '/template-media/dispatch/act-photo.jpg', name: 'Витрина.jpg', mime: 'image/jpeg' }]
     }
     return { id: row.id, tableId: row.tableId, values } as AppV2Record
   })

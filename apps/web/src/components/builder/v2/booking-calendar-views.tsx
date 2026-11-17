@@ -6,6 +6,7 @@ import {
   type TeamCalendarEvent,
 } from '@/lib/team-calendar-core'
 import { ProtoIcon } from '../prototype/icons'
+import { BookingAvatar } from './booking-avatar'
 import css from './booking-calendar.module.css'
 
 export const bookingCalendarDateLabel = (day: string, options: Intl.DateTimeFormatOptions) =>
@@ -151,8 +152,8 @@ function ShiftInfo({ data, resourceId, day, editing, onOpenPeriod }: { data: Tea
   return <HoursEdit periods={shift?.windows ?? []} unavailable={shift?.windows === null} closed={shift?.closed} person={`${person}, ${dayName(day)}`} editing={editing} onOpenPeriod={onOpenPeriod} usualBreak={usualBreakKey(data, resourceId)} />
 }
 
-function PersonMark() {
-  return <span className={css.avatar} aria-hidden><ProtoIcon name="user" size={16} /></span>
+function PersonMark({ name, photo }: { name: string; photo?: TeamCalendarSnapshot['resources'][number]['photo'] }) {
+  return <span aria-hidden="true"><BookingAvatar small name={name} photo={photo} /></span>
 }
 
 /** Every person and every appointment stays visible; the row grows with its busiest day. */
@@ -182,7 +183,7 @@ export function BookingWeekOverview({
         <tbody>
           {resources.map(person => (
             <tr key={person.id}>
-              <th scope="row" className={css.weekMaster}><PersonMark /><strong>{person.name}</strong></th>
+              <th scope="row" className={css.weekMaster}><PersonMark name={person.name} photo={person.photo} /><strong>{person.name}</strong></th>
               {data.days.map(day => {
                 const events = data.events.filter(event => event.resourceId === person.id && event.day === day && event.status !== 'cancelled')
                 return (
@@ -240,7 +241,7 @@ export function BookingDayAgenda({
         {resources.map(person => {
           return (
             <div className={css.rosterRow} key={person.id}>
-              <PersonMark />
+              <PersonMark name={person.name} photo={person.photo} />
               <strong>{person.name}</strong>
               {showWorkingHours && <ShiftInfo data={data} resourceId={person.id} day={day} editing={editing} onOpenPeriod={working ? onOpenPeriod : undefined} />}
             </div>

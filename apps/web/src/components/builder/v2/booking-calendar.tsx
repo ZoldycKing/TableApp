@@ -75,7 +75,7 @@ function useDismiss(open: boolean, root: { current: HTMLElement | null }, close:
   }, [open, root, close])
 }
 
-function DateMenu({ value, onValue, label }: { value: string; onValue: (value: string) => void; label: string }) {
+export function DateMenu({ value, onValue, label }: { value: string; onValue: (value: string) => void; label: string }) {
   const [open, setOpen] = useState(false)
   const root = useRef<HTMLDivElement>(null)
   const close = () => setOpen(false)
@@ -251,7 +251,7 @@ export function TeamCalendarView({
   return (
     <div ref={root} className={css.root} data-booking-calendar data-working={working || undefined} data-compact={compact || undefined}>
       <ListScreenShell
-        title={title}
+        title={compactWeek ? (view === 'week' ? 'Доска' : view === 'list' ? 'Список' : 'Доска дня') : title}
         meta={meta ?? (showWorkingHours ? 'Записи и рабочие часы команды' : 'Записи команды')}
         actions={(
           <div className={css.actions}>

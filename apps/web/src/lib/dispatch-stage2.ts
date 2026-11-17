@@ -71,7 +71,7 @@ export function completionChecklistWarning(items: readonly ChecklistItem[]): str
   const { done, total } = checklistProgress(items)
   if (!total || done >= total) return null
   const left = total - done
-  return `Остались пункты чек-листа: ${left} из ${total}.`
+  return `Не отмечено ${left} из ${total} пунктов чек-листа. Можно завершить — в акте они будут помечены как невыполненные.`
 }
 
 export function startVisit(now: number) {

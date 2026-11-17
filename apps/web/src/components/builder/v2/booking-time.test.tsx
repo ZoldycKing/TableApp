@@ -48,6 +48,14 @@ describe('calendar and client context in a new booking', () => {
     await screen.findByText('Выбранное время занято или не подходит для этой услуги. Выберите другое свободное время или мастера.')
     expect(change.mock.calls.some(([fieldId]) => fieldId === b.visit.start)).toBe(false)
   })
+  it('asks for a service before listing free time on a blank owner form', () => {
+    const built = buildTemplate({ template: salon, workspaceId: 'wsp_blank' })
+    const app = buildBookingV2App(built, { id: 'app_blank', workspaceId: 'wsp_blank', name: 'Студия', slug: 'blank', email: 'owner@example.com' })
+    const booking = app.booking!
+    mocked.context = { app, scope: { formId: booking.ownerCreateFormId!, screenId: booking.formScreenId }, values: {}, errors: {}, disabled: false, key: 'blank', onPending: vi.fn(), change: vi.fn(), inspect: vi.fn(), state: { values: {}, labels: {}, fingerprint: 'blank', fields: [] } }
+    render(<BookingDemoAvailability value={() => ({ ok: true, timeZone: 'Europe/Moscow', service: { id: 's', name: 'Стрижка', price: 1, minutes: 60 }, masters: [], slots: [] })}><BookingTimeFields app={app} editing={false} /></BookingDemoAvailability>)
+    expect(screen.getByText('Выберите услугу, чтобы увидеть свободное время.')).toBeTruthy()
+  })
   it('never copies owner contacts into the customer form', async () => {
     const { b, change } = seedFixture(true,false)
     await waitFor(() => expect(change).toHaveBeenCalledWith(b.visit.start,'2026-11-20T06:00:00Z'))

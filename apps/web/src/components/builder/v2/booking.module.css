@@ -60,6 +60,9 @@
 .timeControls label { display: grid; gap: 8px; font-size: 13px; }
 .timeFields fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
 .timeFields legend { margin-bottom: 12px; font-size: 14px; font-weight: 650; }
+.slotField { display: grid; gap: 12px; margin-top: 16px; border: 0; padding: 0; min-width: 0; }
+.slotField legend { padding: 0; font-size: 14px; font-weight: 650; }
+.timeFields .slotField { margin-top: 0; }
 .timeHint { margin: 0 0 12px; }
 .slots { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 10px; max-height: none; overflow: visible; padding: 4px 0 0; }
 .ownerStack { display: flex; flex-direction: column; gap: 16px; }

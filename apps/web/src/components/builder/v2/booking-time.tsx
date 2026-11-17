@@ -86,8 +86,8 @@ export function BookingTimeFields({ app, editing }: { app: AppV2; editing: boole
       <label>Дата<RuDateInput aria-label="Дата записи" min={today} max={new Date(new Date(`${today}T12:00:00Z`).getTime() + bookingRules(config).horizonDays * 86400000).toISOString().slice(0, 10)} value={selectedDay} disabled={context?.disabled || editing} onValue={value => { appliedTime.current = true; setSeedNotice(''); setDay(value); resetChoice() }} /></label>
     </div>
     {seedNotice && <p role="status" className={css.timeHint}>{seedNotice}</p>}
-    <fieldset disabled={context?.disabled || loading || editing}><legend>Свободное время</legend>
-      {loading ? <p role="status">Проверяем расписание…</p> : result?.ok ? <>
+    <fieldset className={css.slotField} disabled={context?.disabled || loading || editing}><legend>Свободное время</legend>
+      {owner && !recordId && !result ? <p role="status" className={css.empty}>Выберите услугу, чтобы увидеть свободное время.</p> : loading ? <p role="status">Проверяем расписание…</p> : result?.ok ? <>
         <p className={css.timeHint}>Местное время студии · {new Intl.DateTimeFormat('ru-RU', { timeZone, timeZoneName: 'shortOffset' }).formatToParts(new Date()).find(part => part.type === 'timeZoneName')?.value.replace('GMT', 'UTC')}</p>
         {result.slots.length ? <div className={css.slots}>{result.slots.map(slot => <button key={`${slot.start}:${slot.masterId}`} type="button" aria-pressed={selected === slot.masterId && chosen === slot.start} onClick={() => { change(config.visit.master, [slot.masterId]); change(config.visit.start, slot.start); if (owner) { setEditingSlot(false); setSeedNotice('') } }}><strong>{slot.time}</strong><span>{slot.masterName}</span></button>)}</div> : <p role="status" className={css.empty}>На эту дату нет свободного времени. Выберите другую дату или мастера.</p>}
       </> : editing ? <p className={css.timeHint}>Клиент выберет здесь свободное время из расписания мастера.</p> : result && !result.ok ? <div role="alert"><p>{result.error}</p><button type="button" className={styles.secondary} onClick={() => setRetry(value => value + 1)}>Проверить ещё раз</button></div> : null}

@@ -69,7 +69,7 @@ describe.skipIf(!process.env.DATABASE_URL)('dispatch permissions and setup again
   it('loads only assigned rows and no hidden fields through the actual runtime loader', async () => {
     const { visitor } = await appSession.currentAppAccess(app)
     const loaded = (await runtime.loadPublishedApp(slug, visitor))!
-    expect(loaded.tables[main.id]!.rows).toHaveLength(2)
+    expect(loaded.tables[main.id]!.rows).toHaveLength(5)
     expect(loaded.tables[main.id]!.rows.every(row => ![f.price, f.paid, f.email, f.client].some(id => id in row.data))).toBe(true)
     expect(loaded.tables[main.id]!.rows[0]!.data[f.clientName]).toEqual(['ИП Соколов'])
     expect(JSON.stringify(loaded)).not.toContain('Ремонт витринного холодильника')
@@ -80,7 +80,7 @@ describe.skipIf(!process.env.DATABASE_URL)('dispatch permissions and setup again
     const row = built.rows.find(row => row.tableId === main.id)!
     const done = ownFields.find(field => field.id === f.status)!
     if (done.type !== 'single_select') throw new Error('missing status')
-    const doneId = done.options.choices.find(choice => choice.name === 'Готово')!.id
+    const doneId = done.options.choices.find(choice => choice.name === 'Выполнено')!.id
     const result = await actions.appUpdateRowAction(slug, main.id, row.id, {
       [f.status]: doneId, [f.comment]: 'Synthetic master report', [f.email]: 'andrey@example.invalid',
       [f.price]: 1, [f.paid]: true, [f.client]: [], [f.date]: '2026-12-31',
@@ -108,8 +108,8 @@ describe.skipIf(!process.env.DATABASE_URL)('dispatch permissions and setup again
     const { visitor: dispatcher } = await appSession.currentAppAccess(app)
     const loaded = (await runtime.loadPublishedApp(slug, dispatcher))!
     const clients = built.tables.find(table => table.id !== main.id)!
-    expect(loaded.relatedTitles[clients.id]).toHaveLength(4)
-    expect(loaded.tables[clients.id]!.rows).toHaveLength(4)
+    expect(loaded.relatedTitles[clients.id]).toHaveLength(7)
+    expect(loaded.tables[clients.id]!.rows).toHaveLength(7)
     const row = built.rows.find(row => row.tableId === main.id)!
     expect((await actions.appUpdateRowAction(slug, main.id, row.id, { [f.email]: 'andrey@example.invalid', [f.price]: 19000 }, 1)).ok).toBe(true)
     identity.email = 'sergey@example.invalid'

@@ -91,8 +91,9 @@
   border-radius: 0;
   padding: 14px 16px calc(14px + env(safe-area-inset-bottom, 0px));
 }
+.body[data-scroll] { overflow: auto; padding: 16px 16px 20px; }
 @container builder-app (max-width: 560px) {
-  .panel {
+  .panel[data-placement='sheet'] {
     top: auto;
     bottom: 0;
     left: 0;
@@ -101,5 +102,9 @@
     max-height: 92%;
     transform: none;
     border-radius: 16px 16px 0 0;
+  }
+  .panel[data-placement='center'] {
+    width: min(40rem, calc(100% - 16px));
+    max-height: calc(100% - 16px);
   }
 }

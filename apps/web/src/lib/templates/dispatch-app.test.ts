@@ -36,13 +36,13 @@ describe('dispatcher and master preset', () => {
     expect(homeScreenFor(f.app, asRole('manager'))?.type).toBe('dashboard')
     const first = f.runtime('staff', ' Sergey@Example.Invalid ').tables[f.main.id]!
     const second = f.runtime('staff', 'andrey@example.invalid').tables[f.main.id]!
-    expect(first.rows).toHaveLength(2)
-    expect(second.rows).toHaveLength(2)
+    expect(first.rows).toHaveLength(5)
+    expect(second.rows).toHaveLength(4)
     expect(first.rows.some(row => second.rows.some(other => other.id === row.id))).toBe(false)
     expect(first.rows[0]!.data[config.clientName]).toEqual(['ИП Соколов'])
     expect(f.runtime('staff').tables[f.main.id]!.rows).toHaveLength(0)
     expect(f.runtime('staff', 'unassigned@example.invalid').tables[f.main.id]!.rows).toHaveLength(0)
-    expect(f.runtime('manager', 'dispatcher@example.invalid').tables[f.main.id]!.rows).toHaveLength(6)
+    expect(f.runtime('manager', 'dispatcher@example.invalid').tables[f.main.id]!.rows).toHaveLength(16)
   })
   it('does not send financial fields, assignment email, the client relation or client directory to a master', () => {
     const f = fixture(), config = dispatchFields(f.ownFields), runtime = f.runtime('staff', 'sergey@example.invalid')

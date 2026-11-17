@@ -172,6 +172,24 @@ export const appV2Schema = z.strictObject({
     initialStage: z.string().min(1).max(80),
     terminalStages: z.array(z.string().min(1).max(80)).max(20).optional(),
   }).optional(),
+  /** Field-service starter: dispatcher board, technician jobs, notes and completion. Absent outside that install. */
+  dispatch: z.strictObject({
+    jobsTableId: id, clientsTableId: id, mastersTableId: id, notesTableId: id,
+    overviewScreenId: id, boardScreenId: id, jobScreenId: id, clientsScreenId: id, clientScreenId: id,
+    technicianScreenId: id, mastersScreenId: id, calendarNodeId: id,
+    createJobFormId: id, assignFormId: id, noteFormId: id, completeFormId: id,
+    job: z.strictObject({
+      what: id, client: id, clientName: id, phone: id, address: id, status: id, priority: id,
+      master: id, masterEmail: id, technician: id, date: id, when: id, minutes: id,
+      price: id, paid: id, photo: id, comment: id, report: id, signature: id,
+    }),
+    client: z.strictObject({ name: id, phone: id, address: id, note: id }),
+    master: z.strictObject({ name: id, email: id, phone: id, photo: id, active: id }),
+    note: z.strictObject({ text: id, job: id, at: id, author: id, authorEmail: id, masterEmail: id }),
+    statuses: z.strictObject({ fresh: id, assigned: id, enRoute: id, onSite: id, done: id, cancelled: id }),
+    priorities: z.strictObject({ low: id, normal: id, high: id, urgent: id }),
+    activeChoiceId: id, inactiveChoiceId: id,
+  }).optional(),
   /** Internal warehouse starter (stock from movements). Absent outside that install. */
   inventory: z.strictObject({
     itemsTableId: id, movementsTableId: id, warehousesTableId: id,

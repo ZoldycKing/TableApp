@@ -29,6 +29,8 @@ import { buildCrmV2App, isCrmTemplate } from '@/lib/templates/crm-v2'
 import { buildInventoryV2App, isInventoryTemplate } from '@/lib/templates/inventory-v2'
 import { buildShopV2App, isShopTemplate } from '@/lib/templates/shop-v2'
 import { buildBookingV2App, isBookingTemplate } from '@/lib/templates/booking-v2'
+import { buildDispatchV2App, isDispatchTemplate } from '@/lib/templates/dispatch-v2'
+import { stageDispatchPortrait } from '@/lib/templates/dispatch-portrait-files'
 import { stageBookingSampleFile } from '@/lib/templates/booking-sample-files'
 import { stageSalonPortrait } from '@/lib/templates/salon-portraits'
 import { discardInventorySampleFiles, stageInventorySampleFile } from '@/lib/templates/inventory-sample-files'
@@ -93,7 +95,7 @@ export async function applyTemplateAction(
    * производственный учёт, склад с приёмками и заявки с ролями мастера и диспетчера.
    */
   const draft = templatePreset(generated, built)
-  const nativeV2 = isShopTemplate(template.id) || isCrmTemplate(template.id) || isInventoryTemplate(template.id) || isBookingTemplate(template.id)
+  const nativeV2 = isShopTemplate(template.id) || isCrmTemplate(template.id) || isInventoryTemplate(template.id) || isBookingTemplate(template.id) || isDispatchTemplate(template.id)
   // Production uses "director" for the creator's existing owner role.
   if (!nativeV2 && (draft.booking || draft.customer || draft.inventory || draft.production || template.id === 'crm')) draft.allowlist = [{ email: auth.member.email, roleId: draft.production ? 'director' : 'manager', company: '' }]
 
@@ -128,6 +130,16 @@ export async function applyTemplateAction(
         }
       }
     }
+    if (isDispatchTemplate(template.id)) {
+      const masters = built.tables.find(table => table.name === 'Мастера')
+      const photo = masters && built.fields.find(field => field.tableId === masters.id && field.name === 'Фото')
+      if (masters?.primaryFieldId && photo) {
+        for (const row of built.rows.filter(item => item.tableId === masters.id)) {
+          const file = await stageDispatchPortrait(workspaceId, auth.member.userId, row.data[masters.primaryFieldId])
+          if (file) { row.data[photo.id] = [file]; sampleFiles.push({ tableId: masters.id, rowId: row.id, fieldId: photo.id, file }) }
+        }
+      }
+    }
     if (isInventoryTemplate(template.id) && built.inventory?.item.image) {
       const tableId = built.inventory.tables.items
       const titleFieldId = built.inventory.item.name
@@ -154,7 +166,7 @@ export async function applyTemplateAction(
       await lockAppSlugs(tx)
       draft.slug = await uniqueSlug(slugify(built.appName), undefined, tx)
       const meta = { id: appId, workspaceId, name: built.appName, slug: draft.slug, email: auth.member.email }
-      const native = isShopTemplate(template.id) ? buildShopV2App(built, meta) : isCrmTemplate(template.id) ? buildCrmV2App(built, meta) : isInventoryTemplate(template.id) ? buildInventoryV2App(built, meta) : isBookingTemplate(template.id) ? buildBookingV2App(built, meta) : null
+      const native = isShopTemplate(template.id) ? buildShopV2App(built, meta) : isCrmTemplate(template.id) ? buildCrmV2App(built, meta) : isInventoryTemplate(template.id) ? buildInventoryV2App(built, meta) : isBookingTemplate(template.id) ? buildBookingV2App(built, meta) : isDispatchTemplate(template.id) ? buildDispatchV2App(built, meta) : null
       if (native) {
         const { catalog } = await loadBuilderV2Catalog(workspaceId, tx)
         const valid = validateAppV2Definition(native, catalog)

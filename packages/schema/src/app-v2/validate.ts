@@ -415,6 +415,25 @@ export function validateAppV2(app: AppV2, catalog: AppV2Catalog, options: { mode
     }
     for (const [fieldId, tableId] of [[booking.servicePhotoFieldId, booking.tables.services], [booking.serviceDescriptionFieldId, booking.tables.services], [booking.masterPhotoFieldId, booking.tables.masters], [booking.masterDescriptionFieldId, booking.tables.masters], [booking.masterRoleFieldId, booking.tables.masters]]) if (fieldId && catalog.fields.get(fieldId)?.tableId !== tableId) issue('booking_field', path, 'Поле карточки относится к другой таблице')
   }
+  if (app.dispatch) {
+    const dispatch = app.dispatch, path = 'dispatch'
+    table(dispatch.jobsTableId, path); table(dispatch.clientsTableId, path); table(dispatch.mastersTableId, path); table(dispatch.notesTableId, path)
+    const group = (tableId: string, values: Record<string, string>) => {
+      for (const fieldId of Object.values(values)) field(fieldId, tableId, path)
+    }
+    group(dispatch.jobsTableId, dispatch.job)
+    group(dispatch.clientsTableId, dispatch.client)
+    group(dispatch.mastersTableId, dispatch.master)
+    group(dispatch.notesTableId, dispatch.note)
+    const technician = field(dispatch.job.technician, dispatch.jobsTableId, path)
+    if (technician && technician.relationTableId && technician.relationTableId !== dispatch.mastersTableId) issue('dispatch_technician', path, 'Заявка должна ссылаться на таблицу мастеров')
+    const client = field(dispatch.job.client, dispatch.jobsTableId, path)
+    if (client && client.relationTableId && client.relationTableId !== dispatch.clientsTableId) issue('dispatch_client', path, 'Заявка должна ссылаться на таблицу клиентов')
+    for (const screenId of [dispatch.overviewScreenId, dispatch.boardScreenId, dispatch.jobScreenId, dispatch.clientsScreenId, dispatch.clientScreenId, dispatch.technicianScreenId, dispatch.mastersScreenId]) if (!screens.has(screenId)) issue('dispatch_screen', path, 'Экран заявок удалён')
+    for (const formId of [dispatch.createJobFormId, dispatch.assignFormId, dispatch.noteFormId, dispatch.completeFormId]) if (nodes.get(formId)?.type !== 'form') issue('dispatch_form', path, 'Форма заявок удалена')
+    const calendar = nodes.get(dispatch.calendarNodeId)
+    if (calendar?.type !== 'team_calendar') issue('dispatch_calendar', path, 'Доска дня должна быть календарём команды')
+  }
   if (app.shop) {
     const shop = app.shop, path = 'shop'
     table(shop.catalogTableId, path); table(shop.ordersTableId, path); table(shop.itemsTableId, path)

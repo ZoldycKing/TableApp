@@ -57,6 +57,18 @@ export async function moveTeamCalendarEvent(
     [data.resourceFieldId]: [input.resourceId],
     [data.startFieldId]: new Date(instant).toISOString(),
   }
+  const dispatch = app.dispatch
+  if (dispatch && data.resourceFieldId === dispatch.job.technician) {
+    const [technician] = await context.tx.select().from(rows).where(and(eq(rows.id, input.resourceId), eq(rows.tableId, dispatch.mastersTableId), isNull(rows.deletedAt))).limit(1)
+    if (!technician) throw new RowWriteError('missing', 'Мастер не найден.')
+    const technicianValues = technician.data as Record<string, unknown>
+    if (technicianValues[dispatch.master.active] !== dispatch.activeChoiceId) throw new RowWriteError('denied', 'Этот мастер неактивен и не назначается на выезды.')
+    const email = String(technicianValues[dispatch.master.email] ?? '').trim().toLowerCase()
+    if (!email) throw new RowWriteError('invalid', 'У мастера не указана почта для доступа к заявке.')
+    values[dispatch.job.master] = String(technicianValues[dispatch.master.name] ?? '')
+    values[dispatch.job.masterEmail] = email
+    values[dispatch.job.date] = values[data.startFieldId]!
+  }
   if (data.endFieldId) {
     const previousStart = dateInstant((stored.data as Record<string, unknown>)[data.startFieldId], snapshot.timeZone)
     const previousEnd = dateInstant((stored.data as Record<string, unknown>)[data.endFieldId], snapshot.timeZone)

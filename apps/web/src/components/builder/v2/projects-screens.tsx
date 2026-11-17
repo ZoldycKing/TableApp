@@ -510,14 +510,19 @@ function TaskCard(props: ScreenProps) {
             const late = isOverdue(childFacts, props.now)
             const done = isDone(childFacts.status)
             const title = textOf(child.values[props.kit.task.title])
+            const noteCount = props.of(props.kit.commentsTableId).filter(item => firstId(item.values[props.kit.comment.task]) === child.id).length
             return <li key={child.id} className={css.subtaskCard} data-overdue={late || undefined}>
               <button type="button" role="checkbox" aria-checked={done} aria-label={`Закрыть: ${title}`} className={css.subtaskCheck} onClick={() => toggleChild(child)}><span data-on={done || undefined}>{done ? <ProtoIcon name="check" size={12} /> : null}</span></button>
               <button type="button" className={css.subtaskOpen} onClick={() => props.onNavigate?.(props.kit.taskScreenId, child.id)}>
                 <span className={css.subtaskMain}>
-                  <span className={css.cardTitle}>{title}</span>
+                  <span className={css.subtaskTitle} data-done={done || undefined}>{title}</span>
                   <span className={css.subtaskBadges}><Badge name={childFacts.status} /><Badge name={childFacts.priority} /></span>
                 </span>
                 <span className={css.subtaskAside}>
+                  {noteCount > 0 ? <span className={css.subtaskComments} data-subtask-comments={noteCount} aria-label={`${noteCount} ${noteCount === 1 ? 'комментарий' : noteCount < 5 ? 'комментария' : 'комментариев'}`}>
+                    <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" d="M3.1 2.6h9.8c.83 0 1.5.67 1.5 1.5v5.4c0 .83-.67 1.5-1.5 1.5H7.3L4.2 13.6V11H3.1c-.83 0-1.5-.67-1.5-1.5V4.1c0-.83.67-1.5 1.5-1.5z" /></svg>
+                    <span>{noteCount}</span>
+                  </span> : null}
                   {who ? <BookingAvatar name={who.name} photo={who.photo} small /> : <span className={css.subtaskAvatar}><ProtoIcon name="user" size={16} /></span>}
                   <span className={css.due} data-overdue={late || undefined}>{formatDay(childFacts.due) || 'Без срока'}</span>
                   <ProtoIcon name="arrow" size={16} />

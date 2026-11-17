@@ -19,7 +19,8 @@
   right: 30px;
   display: flex;
   align-items: center;
-  padding-inline-start: 12px;
+  padding-inline-start: 8px;
+  white-space: nowrap;
   pointer-events: none;
   color: var(--v2-ink, #253c2d);
   font-variant-numeric: tabular-nums;

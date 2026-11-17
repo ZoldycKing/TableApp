@@ -135,12 +135,12 @@ export function BuilderV2FormPreview({ app, form, screenId, recordId, enabled, e
   return <Context.Provider value={{ app, scope, inspect, state: visible.state, values: visible.values, errors: visible.errors, disabled, key:key+':'+refresh,upload,onPending, change: (id, value) => { if (disabled) return; generation.current++; setData(old=>old.key===key?{...old,values:{...old.values,[id]:value},errors:{},error:'',success:false}:old) } }}><form ref={formRef} className={`${styles.formBlock} ${ui.form} ${checkout ? ui.commerceForm : ''} ${inventoryDialogForm || reorderForm ? ui.purchaseForm : ''}`} data-commerce={checkout ? 'checkout' : undefined} data-purchase={purchaseForm || undefined} data-count={countForm || undefined} data-reorder={reorderForm || undefined} noValidate onSubmit={event => { event.preventDefault(); void check() }} aria-label={formTitle} aria-busy={!editing && enabled && (visible.loading || visible.checking || pendingCount>0)}>
     <div data-form-body>
     {bookingForm ? null : <h3 className={ui.formTitle} id={checkout ? 'shop-checkout' : undefined}>{checkout ? 'Оформление заказа' : formTitle}</h3>}
-    <div className={ownerForm ? bookingCss.ownerStack : undefined}>
+    <div className={ownerForm ? bookingCss.ownerStack : bookingForm ? bookingCss.clientFields : undefined}>
     {bookingForm && <div className={bookingCss.picker}><BookingTimeFields app={app} editing={editing} /></div>}
     {checkout ? <p className={ui.shopCheckoutNote}>После оформления мы свяжемся, чтобы подтвердить заказ. Оплата при получении.</p> : null}
     <ShopCheckoutSync />
     {!editing && enabled && visible.loading && <p role="status" className={ui.hint}>Подготавливаем форму…</p>}
-    <div className={ownerForm ? bookingCss.ownerFields : `${styles.canvasBlocks}${purchaseForm || countForm ? ` ${ui.purchaseFields}` : ''}`}>{children}</div>
+    <div className={ownerForm ? bookingCss.ownerFields : `${bookingForm ? bookingCss.afterSlots : ''} ${styles.canvasBlocks}${purchaseForm || countForm ? ` ${ui.purchaseFields}` : ''}`}>{children}</div>
     </div>
     {!visible.confirmation&&visible.error && <div className={ui.liveData}><p role="alert" className={ui.dataError}>{visible.error}</p>{(!visible.state || visible.stale) && <button type="button" className={styles.textButton} onClick={() => working ? window.location.reload() : setRefresh(value => value + 1)}>Обновить форму</button>}</div>}
     {visible.success && !refreshesCard && !visible.effects?.some(effect => effect.type === 'notify') && <p role="status" className={ui.formSuccess}>{working ? form.mode === 'edit' ? 'Изменения сохранены.' : `Запись сохранена в таблице «${working.tableName}».` : 'Форма заполнена верно. Это проверка: запись в таблицу не добавлена.'}</p>}

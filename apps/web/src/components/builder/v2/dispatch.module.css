@@ -10,12 +10,14 @@
 .counter[data-active] { border-color: var(--v2-accent, #315f91); box-shadow: inset 0 0 0 1px var(--v2-accent, #315f91); }
 .counter[data-tone='rose'] strong { color: #9f1239; }
 .counter[data-tone='rose'][data-active] { background: #fff5f6; }
-.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.chip, .sort {
-  min-height: 36px; padding: 6px 10px; border-radius: 999px; border: 1px solid var(--v2-line, #dce2d6);
-  background: var(--v2-surface, #fff); color: var(--v2-ink, #253c2d); font: inherit; font-size: 13px;
-}
-.chip[aria-pressed='true'], .sort[aria-pressed='true'] { background: var(--v2-soft, #e7eef6); border-color: var(--v2-accent, #315f91); }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-width: 0; }
+.chips { display: flex; flex: 1 1 180px; gap: 6px; align-items: center; min-width: 0; overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; }
+.chips::-webkit-scrollbar { display: none; height: 0; }
+.chip { flex: none; min-height: 36px; padding: 6px 10px; border-radius: 999px; border: 1px solid var(--v2-line, #dce2d6); background: var(--v2-surface, #fff); color: var(--v2-ink, #253c2d); font: inherit; font-size: 13px; white-space: nowrap; }
+.chip[aria-pressed='true'] { background: var(--v2-soft, #e7eef6); border-color: var(--v2-accent, #315f91); }
+.segment { display: inline-flex; flex: none; padding: 3px; border-radius: 999px; background: var(--v2-page, #eef1f6); }
+.segment button { min-height: 30px; padding: 4px 10px; border: 0; border-radius: 999px; background: transparent; color: var(--v2-muted, #687568); font: inherit; font-size: 12px; font-weight: 650; white-space: nowrap; }
+.segment button[aria-pressed='true'] { background: var(--v2-surface, #fff); color: var(--v2-ink, #253c2d); box-shadow: 0 0 0 1px var(--v2-line, #dce2d6); }
 .list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .job {
   display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; width: 100%; min-width: 0; padding: 8px 12px;
@@ -29,6 +31,8 @@
 .panelCard strong { display: block; min-width: 0; font-size: 15px; line-height: 1.35; overflow-wrap: anywhere; }
 .meta { display: flex; flex-wrap: wrap; gap: 6px 10px; color: var(--v2-muted, #687568); font-size: 13px; line-height: 1.35; }
 .badges { display: inline-flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.cardBadges { flex-wrap: nowrap; gap: 4px; max-width: 100%; }
+.cardBadges .badge { flex: none; white-space: nowrap; }
 .badge {
   display: inline-flex; align-items: center; min-height: 24px; padding: 2px 8px; border-radius: 999px;
   font-size: 12px; font-weight: 700; line-height: 1.2; background: var(--v2-soft, #eef2f6); color: var(--v2-ink, #253c2d);
@@ -54,12 +58,15 @@
 .facts div { display: grid; gap: 2px; min-width: 0; }
 .facts dt { color: var(--v2-muted, #687568); font-size: 12px; }
 .facts dd { margin: 0; overflow-wrap: anywhere; }
+.facts .tap { align-items: flex-start; }
+.facts .tap span { white-space: normal; overflow: visible; text-overflow: unset; }
 .columns { display: grid; gap: 16px; min-width: 0; }
 .sections { display: grid; gap: 16px; align-content: start; min-width: 0; }
 .tap { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; color: var(--v2-accent, #315f91); font-weight: 650; text-decoration: none; }
 .tap span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.status button[data-state='done'] { color: var(--v2-muted, #687568); background: var(--v2-bg, #f4f6f3); }
-.status button[data-state='later'] { font-weight: 600; }
+.status button { font-weight: 650; }
+.status button[data-state='done'] { color: var(--v2-muted, #687568); background: var(--v2-bg, #f4f6f3); border-color: transparent; }
+.status button[data-state='later'] { color: var(--v2-ink, #253c2d); background: transparent; border-color: var(--v2-line, #dce2d6); font-weight: 650; }
 .notes { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
 .note { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 10px; align-items: start; }
 .note p { margin: 2px 0 0; overflow-wrap: anywhere; }
@@ -77,7 +84,8 @@
   padding: 8px 10px; font: inherit; color: inherit; background: var(--v2-surface, #fff);
 }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.status { display: flex; flex-wrap: wrap; gap: 8px; }
+.status { display: flex; flex-wrap: nowrap; gap: 8px; }
+.status button { flex: 1 1 0; min-width: 0; padding-inline: 8px; }
 .filePick { position: relative; }
 .fileInput { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); border: 0; }
 .filePick span {
@@ -101,16 +109,20 @@
   .board { grid-template-columns: minmax(0, 1fr) 300px; }
 }
 @container builder-app (min-width: 980px) {
-  .job { grid-template-columns: minmax(150px, 1.25fr) minmax(150px, 1fr) minmax(140px, 1.1fr) auto; align-items: center; gap: 4px 14px; min-height: 92px; padding: 12px 14px; }
-  .jobTitle { grid-column: 1; grid-row: 1; }
-  .jobLine[data-who] { grid-column: 2; grid-row: 1; }
-  .jobLine[data-address] { grid-column: 3; grid-row: 1; }
-  .jobFoot { grid-column: 4; grid-row: 1; justify-content: flex-end; }
+  .job[data-table] { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1.05fr) minmax(0, 1.15fr) 148px 220px; align-items: center; column-gap: 12px; row-gap: 0; min-height: 96px; padding: 10px 14px; }
+  .job[data-table] .jobTitle { grid-column: 1; grid-row: 1; }
+  .job[data-table] .jobLine[data-who] { grid-column: 2; grid-row: 1; }
+  .job[data-table] .jobLine[data-address] { grid-column: 3; grid-row: 1; }
+  .job[data-table] .assignee { grid-column: 4; grid-row: 1; }
+  .job[data-table] .jobFoot { grid-column: 5; grid-row: 1; justify-content: flex-end; }
+  .job[data-table] .badges { flex-wrap: nowrap; justify-content: flex-end; }
+  .job[data-table] .badge { white-space: nowrap; }
 }
 @container builder-app (max-width: 719px) {
   .board { grid-template-columns: minmax(0, 1fr); }
   .panel { order: -1; }
-  .jobFoot { flex-direction: column; align-items: flex-start; }
+  .job:not([data-table]) .jobFoot { flex-direction: column; align-items: flex-start; }
+  .cardBadges .badge { padding: 2px 6px; font-size: 11px; }
   .assignee > span, .jobTitle { overflow: visible; text-overflow: unset; white-space: normal; }
   .signaturePad { height: 112px; }
   .filePick span { min-height: 76px; }

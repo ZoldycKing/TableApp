@@ -1,5 +1,5 @@
 'use client'
-import { createContext, useContext, useState } from 'react'
+import { createContext, useContext, useId, useRef, useState } from 'react'
 import { dateInstant, instantToWallClock } from '@tableapp/schema'
 import type { AppV2, AppV2Node, AppV2Record } from '@tableapp/schema/app-v2'
 import type { BuilderV2Table } from '@/lib/builder-v2'
@@ -20,6 +20,8 @@ import { RuDateInput, RuTimeInput, ruNumericDate } from './ru-fields'
 import { SignaturePad } from './signature-pad'
 import { CameraIcon } from '@phosphor-icons/react'
 import { ProtoIcon } from '../prototype/icons'
+import scroll from './scroll-overflow.module.css'
+import { useScrollOverflow } from './scroll-overflow'
 import buttons from '../prototype/prototype.module.css'
 import type { AppV2RendererProps } from './view'
 import css from './dispatch.module.css'
@@ -87,10 +89,12 @@ function Badge({ name }: { name: string }) {
   return <span className={css.badge} data-tone={toneOf(name)}>{name}</span>
 }
 
-function JobBadges({ priority, status, overdue }: { priority: string; status: string; overdue: boolean }) {
+function JobBadges({ priority, status, overdue, statusFirst = false }: { priority: string; status: string; overdue: boolean; statusFirst?: boolean }) {
+  const priorityBadge = <Badge name={priority} />
+  const statusBadge = <Badge name={status} />
   return <span className={css.badges}>
-    <Badge name={priority} />
-    <Badge name={status} />
+    {statusFirst ? statusBadge : priorityBadge}
+    {statusFirst ? priorityBadge : statusBadge}
     {overdue ? <span className={css.badge} data-tone="red">Просрочено</span> : null}
   </span>
 }
@@ -151,19 +155,19 @@ const clientLabel = (props: ScreenProps, row: AppV2Record) => textOf(row.values[
 const addressOf = (props: ScreenProps, row: AppV2Record) => textOf(row.values[props.dispatch.job.address])
 const phoneOf = (props: ScreenProps, row: AppV2Record) => textOf(row.values[props.dispatch.job.phone])
 
-function JobButton(props: ScreenProps & { row: AppV2Record; showAssignee?: boolean }) {
+function JobButton(props: ScreenProps & { row: AppV2Record; showAssignee?: boolean; hideClient?: boolean }) {
   const facts = jobFacts(props, props.row)
   const overdue = isOverdue(facts, props.now)
   const person = technicians(props).find(item => item.id === facts.technicianId)
   const address = addressOf(props, props.row)
-  return <li><button type="button" className={css.job} onClick={() => props.onNavigate?.(props.dispatch.jobScreenId, props.row.id)}>
+  const when = whenLabel(facts.when)
+  const who = props.hideClient ? when : `${clientLabel(props, props.row) || 'Клиент не указан'} · ${when}`
+  return <li><button type="button" className={css.job} data-table={props.showAssignee ? true : undefined} onClick={() => props.onNavigate?.(props.dispatch.jobScreenId, props.row.id)}>
     <strong className={css.jobTitle}>{textOf(props.row.values[props.dispatch.job.what])}</strong>
-    <span className={css.jobLine} data-who>{`${clientLabel(props, props.row) || 'Клиент не указан'} · ${whenLabel(facts.when)}`}</span>
+    <span className={css.jobLine} data-who>{who}</span>
     <span className={css.jobLine} data-address>{address || 'Адрес не указан'}</span>
-    <span className={css.jobFoot}>
-      {props.showAssignee ? <span className={css.assignee}>{person ? <><BookingAvatar name={person.name} photo={person.photo} small /><span>{person.name}</span></> : <><ProtoIcon name="user" size={16} /><span>Не назначено</span></>}</span> : null}
-      <JobBadges priority={facts.priority} status={facts.status} overdue={overdue} />
-    </span>
+    {props.showAssignee ? <span className={css.assignee}>{person ? <><BookingAvatar name={person.name} photo={person.photo} small /><span>{person.name}</span></> : <><ProtoIcon name="user" size={16} /><span>Не назначено</span></>}</span> : null}
+    <span className={css.jobFoot}><JobBadges priority={facts.priority} status={facts.status} overdue={overdue} /></span>
   </button></li>
 }
 
@@ -172,6 +176,8 @@ function Overview(props: ScreenProps) {
   const [priority, setPriority] = useState('')
   const [sort, setSort] = useState<'when' | 'priority'>('when')
   const [search, setSearch] = useState('')
+  const chips = useRef<HTMLDivElement>(null)
+  useScrollOverflow(chips, [priority])
   const jobs = props.of(props.dispatch.jobsTableId).map(row => ({ row, facts: jobFacts(props, row) }))
   const counts = {
     overdue: jobs.filter(item => matchesCounter(item.facts, 'overdue', props.now)).length,
@@ -196,10 +202,14 @@ function Overview(props: ScreenProps) {
         </button>)}
       </div>
       <div className={css.toolbar}>
-        <button type="button" className={css.chip} aria-pressed={!priority} onClick={() => setPriority('')}>Все приоритеты</button>
-        {PRIORITIES.map(item => <button key={item} type="button" className={css.chip} aria-pressed={priority === item} onClick={() => setPriority(current => current === item ? '' : item)}>{item}</button>)}
-        <button type="button" className={css.sort} aria-pressed={sort === 'when'} onClick={() => setSort('when')}>По времени</button>
-        <button type="button" className={css.sort} aria-pressed={sort === 'priority'} onClick={() => setSort('priority')}>По приоритету</button>
+        <div ref={chips} className={`${css.chips} ${scroll.row}`} role="group" aria-label="Приоритет">
+          <button type="button" className={css.chip} aria-pressed={!priority} onClick={() => setPriority('')}>Все приоритеты</button>
+          {PRIORITIES.map(item => <button key={item} type="button" className={css.chip} aria-pressed={priority === item} onClick={() => setPriority(current => current === item ? '' : item)}>{item}</button>)}
+        </div>
+        <div className={css.segment} role="group" aria-label="Сортировка">
+          <button type="button" aria-pressed={sort === 'when'} onClick={() => setSort('when')}>По времени</button>
+          <button type="button" aria-pressed={sort === 'priority'} onClick={() => setSort('priority')}>По приоритету</button>
+        </div>
       </div>
       {shown.length ? <ul className={css.list}>{shown.map(item => <JobButton key={item.row.id} {...props} row={item.row} showAssignee />)}</ul> : <p className={css.empty}>{search || counter || priority ? 'Таких заявок нет. Снимите фильтр или измените поиск.' : 'Заявок пока нет.'}</p>}
       </div>
@@ -270,6 +280,7 @@ function Board(props: ScreenProps) {
         resourceLabel="Мастер" resourcesLabel="Мастера" showMetrics={false} showWorkingHours={false} showAmounts={false} showNoShows={false}
         defaultView="day" hourPixels={48} loader={loader} loaderKey={jobs.map(row => `${row.id}:${textOf(row.values[props.dispatch.job.when])}:${textOf(row.values[props.dispatch.job.technician])}`).join('|')}
         onOpenVisit={id => props.onNavigate?.(props.dispatch.jobScreenId, id)}
+        plainControls
         onMove={props.replace ? move : undefined}
         onCreate={slot => setAssign({ jobId: unassigned[0]?.id ?? null, technicianId: slot.resourceId ?? '', day: slot.day ?? '', time: slot.time ?? '10:00' })}
       /> : <p className={css.empty}>Доска дня не настроена.</p>}
@@ -373,7 +384,7 @@ function StatusActions({ facts, dispatcher, onEnRoute, onSite, onDone, onReopen 
     { label: 'Выполнено', state: current === 2 ? 'next' : 'later', onClick: onDone },
   ] as const
   return <div className={css.status}>
-    {steps.map(step => <button key={step.label} type="button" className={step.state === 'next' ? buttons.primary : buttons.secondary} data-state={step.state} disabled={step.state === 'done'} onClick={step.onClick}>{step.label}</button>)}
+    {steps.map(step => <button key={step.label} type="button" className={step.state === 'next' ? buttons.primary : buttons.secondary} data-state={step.state} disabled={step.state === 'done'} onClick={step.onClick}>{step.state === 'done' ? <ProtoIcon name="check" size={16} /> : null}{step.label}</button>)}
   </div>
 }
 
@@ -408,8 +419,7 @@ function JobCard(props: ScreenProps) {
     <DetailCardShell
       title={textOf(row.values[props.dispatch.job.what])}
       subtitle={whenLabel(facts.when)}
-      badge={<JobBadges priority={facts.priority} status="" overdue={isOverdue(facts, props.now)} />}
-      chips={<Badge name={facts.status} />}
+      chips={<span className={css.cardBadges}><JobBadges priority={facts.priority} status={facts.status} overdue={isOverdue(facts, props.now)} statusFirst /></span>}
       back={{ label: props.actor.roleIds.includes('staff') && !props.actor.roleIds.includes('owner') ? 'Мои выезды' : 'Заявки', onClick: () => props.onNavigate?.(props.actor.roleIds.includes('staff') && !props.actor.roleIds.includes('owner') ? props.dispatch.technicianScreenId : props.dispatch.overviewScreenId) }}
       actions={<StatusActions facts={facts} dispatcher={props.actor.roleIds.includes('owner')} onEnRoute={() => setStatus(props.dispatch.statuses.enRoute)} onSite={() => setStatus(props.dispatch.statuses.onSite)} onDone={() => setComplete(true)} onReopen={() => setStatus(props.dispatch.statuses.assigned)} />}
     >
@@ -458,6 +468,7 @@ function JobCard(props: ScreenProps) {
 }
 
 function CompleteDialog(props: ScreenProps & { row: AppV2Record; onClose: () => void }) {
+  const formId = useId()
   const [report, setReport] = useState(textOf(props.row.values[props.dispatch.job.report]))
   const [signature, setSignature] = useState<string | null>(mediaUrl(props.row.values[props.dispatch.job.signature]))
   const [photos, setPhotos] = useState<{ url: string; name: string }[]>([])
@@ -472,8 +483,8 @@ function CompleteDialog(props: ScreenProps & { row: AppV2Record; onClose: () => 
     props.replace?.(props.rows.map(row => row.id === props.row.id ? { ...row, values: { ...row.values, ...result.patch } } : row) as AppV2Record[])
     props.onClose()
   }
-  return <AppDialog title="Отчёт о выполнении" placement="center" onClose={props.onClose}>
-    <form className={css.form} onSubmit={event => { event.preventDefault(); save() }}>
+  return <AppDialog title="Отчёт о выполнении" placement="center" onClose={props.onClose} footer={<button type="submit" form={formId} className={buttons.primary}>Завершить заявку</button>}>
+    <form id={formId} className={css.form} onSubmit={event => { event.preventDefault(); save() }}>
       <label>Что сделано<textarea value={report} onChange={event => setReport(event.target.value)} required /></label>
       <label className={css.filePick}>Фото с выезда<input className={css.fileInput} type="file" accept="image/*" multiple aria-label="Добавить фото" onChange={event => {
         const files = [...event.target.files ?? []]
@@ -485,7 +496,6 @@ function CompleteDialog(props: ScreenProps & { row: AppV2Record; onClose: () => 
       }} /><span><CameraIcon size={22} aria-hidden="true" />{photos.length ? `Выбрано фото: ${photos.length}` : 'Добавить фото'}</span></label>
       <SignaturePad onChange={setSignature} />
       {error ? <p className={css.error} role="alert">{error}</p> : null}
-      <button type="submit" className={buttons.primary}>Завершить заявку</button>
     </form>
   </AppDialog>
 }
@@ -508,17 +518,20 @@ function ClientCard(props: ScreenProps) {
   const [open, setOpen] = useState(false)
   if (!row) return <p className={css.empty}>Клиент не найден.</p>
   const jobs = props.of(props.dispatch.jobsTableId).filter(item => technicianIdOf(item.values[props.dispatch.job.client]) === row.id || clientLabel(props, item) === textOf(row.values[props.dispatch.client.name]))
+  const phone = textOf(row.values[props.dispatch.client.phone])
+  const address = textOf(row.values[props.dispatch.client.address])
+  const phoneLink = telHref(phone)
   return <div className={css.root} data-dispatch-screen="client">
-    <DetailCardShell title={textOf(row.values[props.dispatch.client.name])} subtitle={textOf(row.values[props.dispatch.client.address])} back={{ label: 'Клиенты', onClick: () => props.onNavigate?.(props.dispatch.clientsScreenId) }} actions={<button type="button" className={buttons.primary} onClick={() => setOpen(true)}>Новая заявка</button>}>
+    <DetailCardShell title={textOf(row.values[props.dispatch.client.name])} subtitle={address} back={{ label: 'Клиенты', onClick: () => props.onNavigate?.(props.dispatch.clientsScreenId) }} actions={<button type="button" className={buttons.primary} onClick={() => setOpen(true)}>Новая заявка</button>}>
       <DetailSection title="Контакты">
         <dl className={css.facts}>
-          <div><dt>Телефон</dt><dd>{telHref(textOf(row.values[props.dispatch.client.phone])) ? <a href={telHref(textOf(row.values[props.dispatch.client.phone]))!}>{textOf(row.values[props.dispatch.client.phone])}</a> : 'Не указан'}</dd></div>
-          <div><dt>Адрес</dt><dd>{textOf(row.values[props.dispatch.client.address]) || 'Не указан'}</dd></div>
+          <div><dt>Телефон</dt><dd>{phoneLink ? <a className={css.tap} href={phoneLink}><ProtoIcon name="call" size={16} /><span>{phone}</span></a> : 'Не указан'}</dd></div>
+          <div><dt>Адрес</dt><dd>{address ? <a className={css.tap} href={`https://yandex.ru/maps/?text=${encodeURIComponent(address)}`} target="_blank" rel="noreferrer"><ProtoIcon name="mapPin" size={16} /><span>{address}</span></a> : 'Не указан'}</dd></div>
           <div><dt>Заметки</dt><dd>{textOf(row.values[props.dispatch.client.note]) || 'Нет заметок'}</dd></div>
         </dl>
       </DetailSection>
       <DetailSection title="Заявки">
-        {jobs.length ? <ul className={css.list}>{jobs.map(item => <JobButton key={item.id} {...props} row={item} showAssignee />)}</ul> : <p className={css.empty}>Заявок этого клиента ещё нет.</p>}
+        {jobs.length ? <ul className={css.list}>{jobs.map(item => <JobButton key={item.id} {...props} row={item} showAssignee hideClient />)}</ul> : <p className={css.empty}>Заявок этого клиента ещё нет.</p>}
       </DetailSection>
     </DetailCardShell>
     {open ? <CreateJobDialog {...props} client={row} onClose={() => setOpen(false)} /> : null}

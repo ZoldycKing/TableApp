@@ -53,6 +53,7 @@ export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,childre
   // Mockup: one desktop top row (logo + pills + user). Detail back lives in page content.
   const showNav = screens.length > 1
   const shellTopNav = showNav && (navigation === 'tabs' || navigation === 'bottom')
+  const showBrand = shellTopNav || !showNav
   // Compact mobile brand bar always; desktop chrome header only for catalog/profile/legacy titles.
   const showChromeHeader = !shellTopNav || catalogDetail || profile || Boolean(title && !back) || true
   const mobileBrandOnly = shellTopNav && !(catalogDetail || profile || (title && !back))
@@ -126,7 +127,7 @@ export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,childre
     {showChromeHeader ? <header className={`${styles.appHeader} ${css.header}`} data-brand-only={mobileBrandOnly || undefined}>
       <div className={`${css.chromeBar} ${presentation.contentWidth}`}>
         {back && !shellTopNav ? <button type="button" className={presentation.iconControl} onClick={back} aria-label="Назад" title="Назад"><ProtoIcon name="back" /></button> : <span className={css.headerMark}>{mark}</span>}
-        {shellTopNav ? <span className={css.railBrand}><span>{appName}</span></span> : null}
+        {showBrand ? <span className={css.railBrand}><span>{appName}</span></span> : null}
         {profile && <BuilderV2RecordAvatar name={title} id={scrollKey || screenId} icon="users" />}
         {!mobileBrandOnly && catalogDetail ? <span className={css.catalogIdentity}>{sectionScreen?.name ?? appName}</span>
           : !mobileBrandOnly && title ? <div>

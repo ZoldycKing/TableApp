@@ -4,7 +4,7 @@ import type { AppV2, AppV2Json, AppV2Record } from '@tableapp/schema/app-v2'
 import type { BuilderV2Table } from '@/lib/builder-v2'
 import {
   activeTimerFor, captureProjectTemplate, canLinkTasks, canStartTimer, DAY_CAPACITY, eachDay, entryMinutes, formatClock,
-  formatMinutes, formatSpentPair, materializeTemplate, parseTemplatePayload, recurrenceLabel, repeatName, repeatRuleFromName,
+  formatCommentWhen, formatMinutes, formatSpentPair, materializeTemplate, parseTemplatePayload, recurrenceLabel, repeatName, repeatRuleFromName,
   serializeTemplatePayload, shareToken, stagesWord, startTimerStamp, stopTimerValues, tasksWord, totalSpentMinutes, validateManualMinutes,
   WEEK_CAPACITY, workloadFor, type DependencyLink, type RepeatRule, type TimeEntry,
 } from '@/lib/projects-stage2'
@@ -240,10 +240,10 @@ export function CommentChat(props: Stage2Helpers & {
           <div className={css.chatMeta}>
             {who ? <BookingAvatar name={who.name} photo={who.photo} small /> : null}
             <strong>{author || 'Сотрудник'}</strong>
-            <time dateTime={textOf(row.values[kit.comment.at])}>{formatClock(row.values[kit.comment.at])}</time>
+            <time dateTime={textOf(row.values[kit.comment.at])}>{formatCommentWhen(row.values[kit.comment.at], props.now)}</time>
             {kit.comment.editedAt && row.values[kit.comment.editedAt] ? <span>изменено</span> : null}
           </div>
-          {quoted ? <blockquote className={css.chatQuote}>{textOf(quoted.values[kit.comment.text])}</blockquote> : null}
+          {quoted ? <blockquote className={css.chatQuote} title={textOf(quoted.values[kit.comment.text])}>{textOf(quoted.values[kit.comment.text])}</blockquote> : null}
           <p>{textOf(row.values[kit.comment.text])}</p>
           <div className={css.chatActions}>
             <button type="button" onClick={() => { setReplyTo(row.id); setEditing(null); setMenuFor(null) }}>Ответить</button>
@@ -271,7 +271,9 @@ export function CommentChat(props: Stage2Helpers & {
           rows={2}
           placeholder="Написать комментарий… @ — упомянуть"
         />
-        <button type="button" className={buttons.primary} onClick={() => void save()}>{editing ? 'Сохранить' : 'Отправить'}</button>
+        <button type="button" className={css.chatSend} aria-label={editing ? 'Сохранить' : 'Отправить'} onClick={() => void save()}>
+          <ProtoIcon name={editing ? 'check' : 'send'} size={18} />
+        </button>
       </div>
       {error ? <p className={css.error} role="alert">{error}</p> : null}
     </div>
@@ -448,7 +450,7 @@ export function TemplatesScreen(props: Stage2Helpers & { initialOpen?: 'template
   const [saveFrom, setSaveFrom] = useState(props.initialOpen === 'template')
   return <div className={css.root} data-projects-screen="templates">
     <div className={css.toolbar}><h1>Шаблоны</h1><span className={css.grow} />
-      {props.leader ? <button type="button" className={buttons.primary} onClick={() => setSaveFrom(true)}>Сохранить проект</button> : null}
+      {props.leader ? <button type="button" className={buttons.primary} onClick={() => setSaveFrom(true)}>Сохранить как шаблон</button> : null}
     </div>
     <div className={css.pad}>
       <div className={css.templateGrid}>{templates.length ? templates.map(row => {
@@ -510,7 +512,7 @@ function SaveTemplateDialog(props: Stage2Helpers & { onClose: () => void }) {
   }
   return <AppDialog title="Сохранить как шаблон" placement="center" onClose={props.onClose} footer={<button type="submit" form={formId} className={buttons.primary}>Сохранить</button>}>
     <form id={formId} className={css.form} onSubmit={event => { event.preventDefault(); save() }}>
-      <label>Название шаблона<input type="text" value={name} onChange={event => setName(event.target.value)} /></label>
+      <label>Название шаблона<input type="text" value={name} onChange={event => setName(event.target.value)} placeholder="Например, Сайт под ключ" /></label>
       <fieldset className={css.field}><legend>Проект</legend><div className={css.choiceRow}>{projects.map(row => <button key={row.id} type="button" aria-pressed={row.id === projectId} onClick={() => setProjectId(row.id)}>{textOf(row.values[kit.project.title])}</button>)}</div></fieldset>
       {error ? <p className={css.error}>{error}</p> : null}
     </form>

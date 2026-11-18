@@ -445,18 +445,34 @@ export function matchesRoleFilter(input: {
   return input.observerEmails.includes(email)
 }
 
-/** Orthogonal finish→start connector. Optional clearanceX routes the vertical segment past intervening bars. */
+/**
+ * Orthogonal finish→start connector.
+ * Exit/enter at bar edges (before outside titles), travel on row gutters, and
+ * keep the long vertical on laneX (left of intervening bars/labels).
+ */
 export function ganttArrowPath(
   from: { x: number; y: number },
   to: { x: number; y: number },
-  _rowHeight = 56,
-  clearanceX?: number,
+  rowHeight = 56,
+  laneX?: number,
 ) {
-  const out = 16
-  const tip = Math.max(0, to.x - 2)
+  const tip = Math.max(0, to.x)
   if (Math.abs(to.y - from.y) < 1) return `M ${from.x} ${from.y} H ${tip}`
-  const clear = Math.max(from.x + out, clearanceX ?? from.x + out, tip + out)
-  return `M ${from.x} ${from.y} H ${clear} V ${to.y} H ${tip}`
+  const down = to.y > from.y
+  const fromSeam = from.y + (down ? rowHeight / 2 : -rowHeight / 2)
+  const toSeam = to.y + (down ? -rowHeight / 2 : rowHeight / 2)
+  const lane = Math.max(4, laneX ?? Math.min(from.x, tip) - 48)
+  return `M ${from.x} ${from.y} V ${fromSeam} H ${lane} V ${toSeam} H ${tip} V ${to.y}`
+}
+
+/** Compact comment time: clock only when same civil day as now, otherwise full date + time. */
+export function formatCommentWhen(value: unknown, now: number, timeZone = PROJECTS_TIME_ZONE) {
+  if (typeof value !== 'string' || !value) return ''
+  const wall = instantToWallClock(new Date(value), timeZone)
+  if (!wall) return ''
+  const time = wall.time.slice(0, 5)
+  if (wall.date === todayKey(now, timeZone)) return time
+  return `${formatDay(wall.date)} ${time}`
 }
 
 export function formatSpentPair(spent: number, estimate: number | null) {

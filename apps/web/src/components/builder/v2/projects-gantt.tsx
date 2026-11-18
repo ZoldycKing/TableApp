@@ -70,7 +70,7 @@ export function ProjectsGantt(props: Props) {
   const todayOffset = days.includes(today) ? dayIndex(range.start, today) : -1
   const labelWidth = narrow ? 120 : 220
   const rowHeight = narrow ? 72 : 56
-  const labelPad = narrow ? 180 : 220
+  const labelPad = narrow ? 48 : 220
   const chartWidth = Math.max(days.length * width + labelPad, 1)
 
   useEffect(() => {
@@ -81,8 +81,7 @@ export function ProjectsGantt(props: Props) {
     if (scrolled.current || !scroller.current || todayOffset < 0) return
     const node = scroller.current
     const lead = narrow ? 12 : Math.max(48, node.clientWidth * 0.35)
-    const target = Math.max(0, todayOffset * width - lead)
-    node.scrollLeft = target
+    node.scrollLeft = Math.max(0, todayOffset * width - lead)
     scrolled.current = true
   }, [todayOffset, width, days.length, narrow])
 
@@ -135,7 +134,7 @@ export function ProjectsGantt(props: Props) {
           <button key={id} type="button" aria-pressed={zoom === id} onClick={() => setZoom(id)}>{name}</button>
         ))}
       </div>
-      {!props.readOnly ? <p className={css.quiet}>{linkFrom ? 'Выберите задачу-последователя или нажмите ещё раз, чтобы отменить' : 'Потяните полосу, чтобы сдвинуть срок. Точки по краям — связь «финиш → старт».'}</p> : null}
+      {!props.readOnly ? <p className={css.quiet}>{linkFrom ? 'Выберите задачу-последователя или нажмите ещё раз, чтобы отменить' : 'Потяните полосу, чтобы сдвинуть срок. Наведите на полосу — связь «финиш → старт».'}</p> : null}
     </div>
     <div className={css.ganttFrame} style={{ '--gantt-label': `${labelWidth}px` } as CSSProperties}>
       <div className={css.ganttSide} style={{ width: labelWidth }}>
@@ -178,19 +177,18 @@ export function ProjectsGantt(props: Props) {
                 const fromIndex = top.findIndex(task => task.id === link.fromId)
                 const toIndex = top.findIndex(task => task.id === link.toId)
                 if (!fromBar || !toBar || fromIndex < 0 || toIndex < 0) return []
-                const lo = Math.min(fromIndex, toIndex)
-                const hi = Math.max(fromIndex, toIndex)
-                let clearance = (fromBar.dayOffset + fromBar.daySpan) * width + 16
-                for (let i = lo; i <= hi; i += 1) {
-                  const mid = bars.find(bar => bar.id === top[i]!.id)
-                  if (mid) clearance = Math.max(clearance, (mid.dayOffset + mid.daySpan) * width + 16)
-                }
-                clearance = Math.max(clearance, toBar.dayOffset * width + 16)
                 const from = { x: (fromBar.dayOffset + fromBar.daySpan) * width, y: fromIndex * rowHeight + rowHeight / 2 }
                 const to = { x: toBar.dayOffset * width, y: toIndex * rowHeight + rowHeight / 2 }
+                const lo = Math.min(fromIndex, toIndex)
+                const hi = Math.max(fromIndex, toIndex)
+                let lane = Math.min(from.x, to.x) - 48
+                for (let i = lo; i <= hi; i += 1) {
+                  const mid = bars.find(bar => bar.id === top[i]!.id)
+                  if (mid) lane = Math.min(lane, mid.dayOffset * width - 16)
+                }
                 return <path
                   key={link.id}
-                  d={ganttArrowPath(from, to, rowHeight, clearance)}
+                  d={ganttArrowPath(from, to, rowHeight, Math.max(4, lane))}
                   className={css.ganttArrow}
                   markerEnd="url(#projects-gantt-arrow)"
                   onClick={() => !props.readOnly && props.onUnlink?.(link.id)}
@@ -200,13 +198,15 @@ export function ProjectsGantt(props: Props) {
             {top.map((task, index) => {
               const bar = bars.find(item => item.id === task.id)
               const barWidth = bar ? Math.max(bar.daySpan * width, width) : 0
-              const inside = Boolean(bar && !narrow && titleFits(task.title, barWidth - (props.readOnly ? 16 : 40)))
+              const showOutside = Boolean(bar && !narrow && !titleFits(task.title, barWidth - (props.readOnly ? 16 : 40)))
+              const showInside = Boolean(bar && !narrow && !showOutside)
               return <div key={task.id} className={css.ganttRow} style={{ top: index * rowHeight, height: rowHeight }}>
                 {bar ? <>
                   <div
                     className={css.ganttBar}
                     data-bar-id={bar.id}
                     data-done={bar.done || undefined}
+                    data-dragging={drag?.id === bar.id || undefined}
                     style={{ left: bar.dayOffset * width, width: barWidth }}
                     onPointerDown={event => {
                       if (props.readOnly) return
@@ -227,9 +227,9 @@ export function ProjectsGantt(props: Props) {
                         setLinkFrom(null)
                       }}><ProtoIcon name="link" size={12} /></button>
                     </> : null}
-                    {inside ? <span>{task.title}</span> : null}
+                    {showInside ? <span>{task.title}</span> : null}
                   </div>
-                  {!inside ? <span
+                  {showOutside ? <span
                     className={css.ganttBarLabel}
                     data-bar-label={bar.id}
                     title={task.title}

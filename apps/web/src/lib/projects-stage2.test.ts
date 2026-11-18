@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
   activeTimerFor, canLinkTasks, canStartTimer, captureProjectTemplate, entryMinutes, filterClientComments,
-  formatCommentWhen, formatDayRange, formatMinutes, formatSpentPair, formatSpentPairCompact, ganttArrowPath, ganttBarTone,
-  columnWidth, ganttBars, ganttHeaderLabel, ganttHeaderLabelVisible, ganttRange, groupTasksByWeek, isWeekendDay,
-  materializeTemplate, matchesRoleFilter,
-  mondayOf, moveBarDates, nextOccurrenceDay, projectSpentMinutes, recurrenceLabel, resizeBarDates, shouldSpawnOnComplete,
-  stopTimerValues, totalSpentMinutes, validateManualMinutes, weekMiniBar, weekRangeLabel, workloadFor,
+  formatCommentWhen, formatDayRange, formatDayRangeSpaced, formatMinutes, formatSpentPair, formatSpentPairCompact,
+  ganttArrowPath, ganttBarProgress, ganttBarTone, ganttCaptionSide, ganttCaptionWidth, columnWidth, ganttBars,
+  ganttHeaderLabel, ganttHeaderLabelVisible, ganttRange, groupTasksByWeek, isWeekendDay, materializeTemplate,
+  matchesRoleFilter, mondayOf, moveBarDates, nextOccurrenceDay, projectMiniBar, projectSpentMinutes, recurrenceLabel,
+  resizeBarDates, shouldSpawnOnComplete, stopTimerValues, totalSpentMinutes, validateManualMinutes, weekMiniBar,
+  weekRangeLabel, workloadFor,
 } from './projects-stage2'
 
 describe('project dependencies', () => {
@@ -86,6 +87,19 @@ describe('gantt clarity helpers', () => {
     expect(groups[0]?.tasks.map(task => task.id)).toEqual(['a'])
     expect(groups[1]?.tasks.map(task => task.id)).toEqual(['b'])
     expect(weekMiniBar('2026-11-17', '2026-11-19', '2026-11-16')).toEqual({ left: 1 / 7, width: 3 / 7 })
+    expect(formatDayRangeSpaced('2026-11-12', '2026-11-18')).toBe('12.11.2026 – 18.11.2026')
+    expect(ganttBarProgress(120, 240, 'В работе')).toBe(50)
+    expect(ganttBarProgress(10, 100, 'Готово')).toBe(100)
+    expect(ganttCaptionSide({
+      barLeft: 800, barWidth: 100, chartWidth: 920, labelWidth: 160, todayX: null,
+    })).toBe('left')
+    expect(ganttCaptionSide({
+      barLeft: 40, barWidth: 80, chartWidth: 900, labelWidth: 120, todayX: null,
+    })).toBe('right')
+    expect(ganttCaptionWidth('Коротко', true)).toBeGreaterThan(28)
+    expect(projectMiniBar('2026-11-12', '2026-11-14', '2026-11-10', '2026-11-20', '2026-11-18')).toMatchObject({
+      left: 2 / 11, width: 3 / 11,
+    })
   })
 })
 

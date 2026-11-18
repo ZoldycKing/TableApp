@@ -268,6 +268,91 @@ export function weekMiniBar(start: string | null, due: string | null, monday: st
   return { left: offset / 7, width: span / 7 }
 }
 
+/** «12.11.2026 – 18.11.2026» with spaces around the dash (phone deadlines list). */
+export function formatDayRangeSpaced(start: string | null, due: string | null) {
+  const from = formatDay(start)
+  const to = formatDay(due)
+  if (from && to && from !== to) return `${from} – ${to}`
+  return from || to || ''
+}
+
+/** Spent/estimate fill for a Gantt bar (0–100). Done tasks are full. */
+export function ganttBarProgress(spent: number, estimate: number | null, status: string) {
+  if (isDone(status)) return 100
+  if (estimate != null && estimate > 0) return Math.max(0, Math.min(100, Math.round((spent / estimate) * 100)))
+  return 0
+}
+
+/** Approximate px width of the avatar + name caption beside a bar. */
+export function ganttCaptionWidth(title: string, hasAvatar: boolean) {
+  const text = Math.min(220, Math.max(40, Math.ceil(title.length * 7.1)))
+  return (hasAvatar ? 28 : 0) + text + 10
+}
+
+export type GanttCaptionSide = 'left' | 'right'
+
+/**
+ * Prefer the right of the bar; flip left when the right side would clip the
+ * chart, collide with another bar, or cover the today marker.
+ */
+export function ganttCaptionSide(input: {
+  barLeft: number
+  barWidth: number
+  chartWidth: number
+  labelWidth: number
+  todayX: number | null
+  otherBars?: readonly { left: number; right: number }[]
+  gap?: number
+}): GanttCaptionSide {
+  const gap = input.gap ?? 8
+  const barLeft = input.barLeft
+  const barRight = input.barLeft + input.barWidth
+  const others = input.otherBars ?? []
+
+  const overlaps = (left: number, right: number) =>
+    others.some(bar => left < bar.right - 0.5 && right > bar.left + 0.5)
+
+  const crossesToday = (left: number, right: number) => {
+    if (input.todayX == null) return false
+    const x = input.todayX
+    // Keep a small clear band around the today line / its «Сегодня» chip.
+    return left < x + 10 && right > x - 10
+  }
+
+  const rightLeft = barRight + gap
+  const rightRight = rightLeft + input.labelWidth
+
+  const rightOk = rightRight <= input.chartWidth - 4
+    && !overlaps(rightLeft, rightRight)
+    && !crossesToday(rightLeft, rightRight)
+
+  if (rightOk) return 'right'
+  return 'left'
+}
+
+/** Task span as fractions of the project [start, end], plus today marker 0–1. */
+export function projectMiniBar(
+  start: string | null,
+  due: string | null,
+  projectStart: string,
+  projectEnd: string,
+  today: string | null,
+) {
+  const from = civilDay(start) || civilDay(due)
+  const to = civilDay(due) || from
+  if (!from || !to || !projectStart || !projectEnd || projectStart > projectEnd) return null
+  const total = Math.max(1, dayIndex(projectStart, projectEnd) + 1)
+  const clippedStart = from < projectStart ? projectStart : from > projectEnd ? projectEnd : from
+  const clippedEnd = to > projectEnd ? projectEnd : to < projectStart ? projectStart : to
+  const offset = Math.max(0, Math.min(total - 1, dayIndex(projectStart, clippedStart)))
+  const widthDays = Math.max(1, Math.min(total - offset, dayIndex(clippedStart, clippedEnd) + 1))
+  let todayAt: number | null = null
+  if (today && today >= projectStart && today <= projectEnd) {
+    todayAt = (dayIndex(projectStart, today) + 0.5) / total
+  }
+  return { left: offset / total, width: widthDays / total, todayAt }
+}
+
 export function moveBarDates(start: string, end: string, deltaDays: number) {
   return { start: addDays(start, deltaDays), end: addDays(end, deltaDays) }
 }

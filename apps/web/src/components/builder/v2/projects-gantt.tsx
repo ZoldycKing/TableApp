@@ -2,8 +2,9 @@
 import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import type { AppV2Json } from '@tableapp/schema/app-v2'
 import {
-  columnWidth, dayIndex, eachDay, formatDayRange, formatSpentPair, ganttArrowPath, ganttBarTone, ganttBars, ganttHeaderLabel, ganttRange,
-  groupTasksByWeek, isWeekendDay, moveBarDates, resizeBarDates, weekMiniBar, type DependencyLink, type GanttBarTone, type GanttZoom,
+  columnWidth, dayIndex, eachDay, formatDayRange, formatSpentPair, ganttArrowPath, ganttBarTone, ganttBars, ganttHeaderLabel,
+  ganttHeaderLabelVisible, ganttRange, groupTasksByWeek, isWeekendDay, moveBarDates, resizeBarDates, weekMiniBar,
+  type DependencyLink, type GanttBarTone, type GanttZoom,
 } from '@/lib/projects-stage2'
 import { todayKey } from '@/lib/projects-logic'
 import { BookingAvatar } from './booking-avatar'
@@ -83,7 +84,7 @@ function GanttPopover(props: {
     <strong>{props.task.title}</strong>
     <span className={css.quiet}>{range}</span>
     <span className={css.ganttPopoverStatus} data-tone={toneOf(props.task, props.now)}>{props.task.status || 'Без статуса'}</span>
-    <span className={css.ganttPopoverProgress} data-gantt-progress>Прогресс: {progress}</span>
+    <span className={`${css.quiet} ${css.ganttPopoverProgress}`} data-gantt-progress>Прогресс: {progress}</span>
     {props.task.assigneeName ? <span className={css.ganttPopoverWho}>
       <BookingAvatar name={props.task.assigneeName} photo={props.task.assigneePhoto} small />
       <span>{props.task.assigneeName}</span>
@@ -152,6 +153,7 @@ export function ProjectsGantt(props: Props) {
   const [activeId, setActiveId] = useState<string | null>(null)
   const [popoverId, setPopoverId] = useState<string | null>(null)
   const [popoverPos, setPopoverPos] = useState<{ left: number; top: number } | null>(null)
+  const [scrollLeft, setScrollLeft] = useState(0)
   const [drag, setDrag] = useState<{ id: string; mode: 'move' | 'start' | 'end'; originX: number; start: string; end: string; moved: boolean } | null>(null)
   const scroller = useRef<HTMLDivElement>(null)
   const scrolled = useRef(false)
@@ -165,7 +167,7 @@ export function ProjectsGantt(props: Props) {
   const width = columnWidth(zoom)
   const todayOffset = days.includes(today) ? dayIndex(range.start, today) : -1
   const labelWidth = narrow ? 132 : 228
-  const rowHeight = narrow ? 72 : 56
+  const rowHeight = narrow ? 88 : 56
   const labelPad = narrow ? 48 : 220
   const chartWidth = Math.max(days.length * width + labelPad, 1)
   const popoverTask = popoverId ? top.find(task => task.id === popoverId) ?? null : null
@@ -186,7 +188,9 @@ export function ProjectsGantt(props: Props) {
       const node = scroller.current
       if (!node || scrolled.current) return
       const lead = narrow ? Math.max(8, width * 2) : Math.max(48, node.clientWidth * 0.35)
-      node.scrollLeft = Math.max(0, todayOffset * width - lead)
+      const next = Math.max(0, todayOffset * width - lead)
+      node.scrollLeft = next
+      setScrollLeft(next)
       scrolled.current = true
     })
     return () => window.cancelAnimationFrame(frame)
@@ -371,15 +375,28 @@ export function ProjectsGantt(props: Props) {
           </button>
         })}
       </div>
-      <div className={css.ganttScroll} ref={scroller} onPointerMove={onPointerMove} onPointerUp={finishDrag} onPointerCancel={finishDrag}>
+      <div
+        className={css.ganttScroll}
+        ref={scroller}
+        onScroll={event => setScrollLeft(event.currentTarget.scrollLeft)}
+        onPointerMove={onPointerMove}
+        onPointerUp={finishDrag}
+        onPointerCancel={finishDrag}
+      >
         <div className={css.ganttInner} style={{ width: chartWidth }}>
-          <div className={css.ganttHead} style={{ gridTemplateColumns: `repeat(${days.length}, ${width}px)` }}>
-            {days.map((day, index) => <div
-              key={day}
-              className={css.ganttDay}
-              data-today={day === today || undefined}
-              data-weekend={zoom === 'day' && isWeekendDay(day) || undefined}
-            >{ganttHeaderLabel(day, index, zoom)}</div>)}
+          <div className={css.ganttHead} data-zoom={zoom} style={{ gridTemplateColumns: `repeat(${days.length}, ${width}px)` }}>
+            {days.map((day, index) => {
+              const label = ganttHeaderLabel(day, index, zoom)
+              const show = ganttHeaderLabelVisible(index, width, label, zoom, scrollLeft)
+              return <div
+                key={day}
+                className={css.ganttDay}
+                data-today={day === today || undefined}
+                data-weekend={zoom === 'day' && isWeekendDay(day) || undefined}
+                data-label={show || undefined}
+                title={show ? label : undefined}
+              >{show ? label : ''}</div>
+            })}
           </div>
           <div className={css.ganttBody} style={{ height: Math.max(top.length, 1) * rowHeight }}>
             {zoom === 'day' ? days.map((day, index) => isWeekendDay(day) ? <div

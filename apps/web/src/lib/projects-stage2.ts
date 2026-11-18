@@ -137,8 +137,16 @@ export function ganttBars(tasks: readonly GanttTask[], rangeStart: string): Gant
 
 export function columnWidth(zoom: GanttZoom) {
   if (zoom === 'day') return 44
-  if (zoom === 'week') return 28
+  if (zoom === 'week') return 36
   return 14
+}
+
+/** Approximate px width of a week/month header label for clip checks. */
+export function ganttHeaderLabelWidth(label: string, zoom: GanttZoom) {
+  if (!label) return 0
+  if (zoom === 'day') return Math.ceil(label.length * 6.2) + 8
+  if (zoom === 'week') return Math.ceil(label.length * 6.6) + 6
+  return Math.ceil(label.length * 7.2) + 8
 }
 
 export type GanttBarTone = 'done' | 'progress' | 'review' | 'todo' | 'overdue'
@@ -207,8 +215,22 @@ export function ganttHeaderLabel(day: string, index: number, zoom: GanttZoom) {
     if (index % 7 !== 0) return ''
     return `${String(date.getUTCDate()).padStart(2, '0')}.${String(date.getUTCMonth() + 1).padStart(2, '0')}`
   }
-  if (day.endsWith('-01') || index === 0) return MONTHS_NOMINATIVE[date.getUTCMonth()] ?? formatDay(day).slice(3)
+  if (day.endsWith('-01')) return MONTHS_NOMINATIVE[date.getUTCMonth()] ?? formatDay(day).slice(3)
   return ''
+}
+
+/** Hide a header label when its cell is scrolled off the left edge (avoids clipped «.11»). */
+export function ganttHeaderLabelVisible(index: number, columnPx: number, label: string, zoom: GanttZoom, scrollLeft: number) {
+  if (!label) return false
+  const cellLeft = index * columnPx
+  // Left-aligned labels start at the cell edge — hide once that edge is past the viewport.
+  if (cellLeft < scrollLeft - 0.5) return false
+  if (zoom === 'week' || zoom === 'month') {
+    const needed = ganttHeaderLabelWidth(label, zoom)
+    const room = zoom === 'week' ? columnPx * 7 - 4 : columnPx * 28
+    if (needed > room) return false
+  }
+  return true
 }
 
 export type WeekPlanGroup<T extends { start: string | null; due: string | null }> = {

@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   activeTimerFor, canLinkTasks, canStartTimer, captureProjectTemplate, entryMinutes, filterClientComments,
   formatCommentWhen, formatDayRange, formatMinutes, formatSpentPair, formatSpentPairCompact, ganttArrowPath, ganttBarTone,
-  ganttBars, ganttHeaderLabel, ganttRange, groupTasksByWeek, isWeekendDay, materializeTemplate, matchesRoleFilter,
+  columnWidth, ganttBars, ganttHeaderLabel, ganttHeaderLabelVisible, ganttRange, groupTasksByWeek, isWeekendDay,
+  materializeTemplate, matchesRoleFilter,
   mondayOf, moveBarDates, nextOccurrenceDay, projectSpentMinutes, recurrenceLabel, resizeBarDates, shouldSpawnOnComplete,
   stopTimerValues, totalSpentMinutes, validateManualMinutes, weekMiniBar, weekRangeLabel, workloadFor,
 } from './projects-stage2'
@@ -60,7 +61,17 @@ describe('gantt clarity helpers', () => {
     expect(weekRangeLabel('2026-11-16')).toBe('16–22 ноября')
     expect(formatDayRange('2026-11-12', '2026-11-15')).toBe('12.11.2026–15.11.2026')
     expect(ganttHeaderLabel('2026-11-18', 0, 'day')).toBe('18 ср')
+    expect(ganttHeaderLabel('2026-11-16', 0, 'week')).toBe('16.11')
+    expect(ganttHeaderLabel('2026-11-17', 1, 'week')).toBe('')
     expect(ganttHeaderLabel('2026-11-01', 0, 'month')).toBe('Ноябрь')
+    expect(ganttHeaderLabel('2026-11-02', 0, 'month')).toBe('')
+    expect(columnWidth('week')).toBe(36)
+    expect(ganttHeaderLabelVisible(0, 36, '16.11', 'week', 0)).toBe(true)
+    expect(ganttHeaderLabelVisible(7, 36, '23.11', 'week', 0)).toBe(true)
+    expect(ganttHeaderLabelVisible(7, 36, '23.11', 'week', 7 * 36 + 1)).toBe(false)
+    expect(ganttHeaderLabelVisible(7, 36, '23.11', 'week', 7 * 36 - 1)).toBe(true)
+    expect(ganttHeaderLabelVisible(0, 14, 'Ноябрь', 'month', 0)).toBe(true)
+    expect(ganttHeaderLabelVisible(0, 36, '', 'week', 0)).toBe(false)
   })
 
   it('groups dated tasks by week and builds mini bars', () => {

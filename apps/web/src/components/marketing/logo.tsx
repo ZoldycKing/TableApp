@@ -3,6 +3,9 @@
  *
  * В шапках — lockup (знак + слово). В узкой полоске кабинета и там,
  * где места мало, — только знак. Соотношение сторон не растягиваем.
+ *
+ * Высота задаётся через `--logo-h` (по умолчанию из prop `height`), чтобы
+ * медиаправила могли уменьшить логотип на телефоне без inline-конфликта.
  */
 
 const LOCKUP_RATIO = 668.07 / 199
@@ -17,8 +20,8 @@ export function Logo({
    * Lockup для тёмного фона (белый знак и слово).
    */
   reversed = false,
-  /** Высота в шапках ≈ 24–32px. */
-  height = 28,
+  /** Высота по умолчанию; CSS может переопределить через `--logo-h`. */
+  height = 26,
 }: {
   className?: string
   mark?: boolean
@@ -40,7 +43,12 @@ export function Logo({
       height={height}
       draggable={false}
       className={`block shrink-0 ${className}`}
-      style={{ height, width: 'auto', maxHeight: height }}
+      style={{
+        ['--logo-h' as string]: `${height}px`,
+        height: 'var(--logo-h)',
+        width: 'auto',
+        maxHeight: 'var(--logo-h)',
+      }}
     />
   )
 }

@@ -82,8 +82,15 @@
 .choiceRow { display: flex; gap: 6px; min-width: 0; overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; padding-bottom: 2px; }
 .form .choiceRow { flex-wrap: wrap; overflow: visible; }
 .form .choiceRow button { white-space: normal; max-width: 100%; }
-.segment { display: grid; width: 100%; min-width: 0; border: 1px solid var(--v2-line, #dce3ed); border-radius: 10px; overflow: hidden; background: var(--v2-surface, #fff); }
-.segment button { min-width: 0; min-height: 36px; padding: 6px 4px; border: 0; border-right: 1px solid var(--v2-line, #dce3ed); background: transparent; color: inherit; font: inherit; font-size: 12px; font-weight: 650; line-height: 1.2; white-space: nowrap; }
+.segment {
+  display: grid; width: 100%; min-width: 0; border: 1px solid var(--v2-line, #dce3ed); border-radius: 10px;
+  overflow: hidden; background: var(--v2-surface, #fff); align-content: center;
+}
+.segment button {
+  min-width: 0; min-height: 36px; padding: 6px 4px; box-sizing: border-box;
+  border: 0; border-right: 1px solid var(--v2-line, #dce3ed); background: transparent; color: inherit;
+  font: inherit; font-size: 12px; font-weight: 650; line-height: 1.2; white-space: nowrap;
+}
 .segment button:last-child { border-right: 0; }
 .segment button[aria-pressed='true'] { background: var(--v2-soft, #e7eef6); color: var(--v2-ink, #111827); }
 .peoplePick { display: flex; flex-wrap: nowrap; gap: 8px; min-width: 0; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
@@ -269,7 +276,6 @@
   .ganttLinkBtn { display: none; }
   .ganttBar { top: 12px; height: 24px; }
   .ganttToolbarRow { flex-direction: column; align-items: stretch; }
-  .ganttToolbarRow .segment { max-width: none; }
   .ganttToggle { justify-content: space-between; width: 100%; }
   .chatActions { flex-wrap: nowrap; }
   .chatMeta { flex-wrap: nowrap; gap: 4px; }
@@ -283,7 +289,19 @@
 .ganttExplainer { margin: 0; color: var(--v2-ink, #1f2937); font-size: 14px; line-height: 1.4; font-weight: 650; }
 .ganttDragHint { margin: 0; color: var(--v2-muted, #526075); font-size: 12px; line-height: 1.35; }
 .ganttToolbarRow { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-width: 0; }
-.ganttToolbarRow .segment { flex: 1 1 220px; max-width: 320px; }
+.ganttToolbarRow .segment {
+  flex: 1 1 220px; max-width: 320px; min-height: 36px; height: auto; max-height: 40px;
+  align-self: center; grid-auto-rows: 36px; align-content: center;
+}
+.ganttToolbar .segment button { min-height: 36px; height: 36px; max-height: 40px; padding-block: 0; box-sizing: border-box; }
+/* После общих правил: на телефоне колонка не должна раздувать сегмент по flex-basis. */
+@media (max-width: 720px) {
+  .ganttToolbarRow .segment {
+    flex: 0 0 auto; width: 100%; max-width: none; height: 36px; max-height: 40px;
+    align-self: stretch;
+  }
+  .ganttToolbar .segment { height: 36px; max-height: 40px; }
+}
 .ganttToggle {
   display: inline-flex; align-items: center; gap: 10px; min-height: 36px; padding: 4px 4px 4px 12px;
   border: 1px solid var(--v2-line, #dce3ed); border-radius: 999px; background: var(--v2-surface, #fff);

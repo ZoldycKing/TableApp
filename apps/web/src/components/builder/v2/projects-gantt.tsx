@@ -63,7 +63,7 @@ function useNarrow() {
 }
 
 function titleFits(title: string, barWidth: number) {
-  return barWidth >= Math.min(200, 48 + title.length * 7.4)
+  return barWidth >= Math.min(168, 36 + title.length * 6.2)
 }
 
 function toneOf(task: GanttTaskRow, now: number): GanttBarTone {
@@ -89,7 +89,7 @@ function GanttPopover(props: {
       <BookingAvatar name={props.task.assigneeName} photo={props.task.assigneePhoto} small />
       <span>{props.task.assigneeName}</span>
     </span> : null}
-    {progress ? <span className={css.quiet}>Прогресс: {progress}</span> : null}
+    {progress ? <span className={css.ganttPopoverProgress} data-gantt-progress>Прогресс: {progress}</span> : null}
     <div className={css.ganttPopoverActions}>
       {!props.readOnly ? <button type="button" className={buttons.primary} onClick={props.onOpen}>Открыть задачу</button> : null}
       <button type="button" className={buttons.secondary} onClick={props.onClose}>Закрыть</button>
@@ -177,14 +177,18 @@ export function ProjectsGantt(props: Props) {
 
   useEffect(() => {
     scrolled.current = false
-  }, [zoom, range.start, props.now, narrow])
+  }, [zoom, range.start, props.now, narrow, phoneMode])
 
   useEffect(() => {
-    if (scrolled.current || !scroller.current || todayOffset < 0) return
-    const node = scroller.current
-    const lead = narrow ? 12 : Math.max(48, node.clientWidth * 0.35)
-    node.scrollLeft = Math.max(0, todayOffset * width - lead)
-    scrolled.current = true
+    if (scrolled.current || todayOffset < 0 || (narrow && phoneMode !== 'chart')) return
+    const frame = window.requestAnimationFrame(() => {
+      const node = scroller.current
+      if (!node || scrolled.current) return
+      const lead = narrow ? Math.max(8, width * 2) : Math.max(48, node.clientWidth * 0.35)
+      node.scrollLeft = Math.max(0, todayOffset * width - lead)
+      scrolled.current = true
+    })
+    return () => window.cancelAnimationFrame(frame)
   }, [todayOffset, width, days.length, narrow, phoneMode])
 
   useEffect(() => () => {

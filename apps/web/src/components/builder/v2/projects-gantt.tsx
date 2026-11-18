@@ -195,7 +195,6 @@ export function ProjectsGantt(props: Props) {
   const [drag, setDrag] = useState<{ id: string; mode: 'move' | 'start' | 'end'; originX: number; start: string; end: string; moved: boolean } | null>(null)
   const scroller = useRef<HTMLDivElement>(null)
   const scrolled = useRef(false)
-  const hoverTimer = useRef<number | null>(null)
   const today = todayKey(props.now)
   const rows = useMemo(() => flattenGanttRows(props.tasks), [props.tasks])
   const dated = rows.filter(task => task.start || task.due)
@@ -233,10 +232,6 @@ export function ProjectsGantt(props: Props) {
     })
     return () => window.cancelAnimationFrame(frame)
   }, [todayOffset, width, days.length, narrow])
-
-  useEffect(() => () => {
-    if (hoverTimer.current) window.clearTimeout(hoverTimer.current)
-  }, [])
 
   const placeBar = (el: HTMLElement, start: string, end: string) => {
     el.style.left = `${dayIndex(range.start, start) * width}px`
@@ -293,29 +288,8 @@ export function ProjectsGantt(props: Props) {
     setPopoverId(id)
   }
 
-  const openPopover = (id: string, fromHover = false, anchor?: HTMLElement | null) => {
-    if (fromHover && narrow) return
-    if (fromHover) {
-      if (hoverTimer.current) window.clearTimeout(hoverTimer.current)
-      hoverTimer.current = window.setTimeout(() => placePopover(id, anchor), 120)
-      return
-    }
+  const openPopover = (id: string, anchor?: HTMLElement | null) => {
     placePopover(id, anchor)
-  }
-
-  const leavePopover = () => {
-    if (hoverTimer.current) window.clearTimeout(hoverTimer.current)
-    if (!narrow) {
-      hoverTimer.current = window.setTimeout(() => {
-        setPopoverId(null)
-        setActiveId(null)
-        setPopoverPos(null)
-      }, 180)
-    }
-  }
-
-  const keepPopover = () => {
-    if (hoverTimer.current) window.clearTimeout(hoverTimer.current)
   }
 
   const closePopover = () => {
@@ -326,11 +300,15 @@ export function ProjectsGantt(props: Props) {
 
   const linkVisible = (link: DependencyLink) => {
     if (showLinks) return true
-    if (!activeId) return false
-    return link.fromId === activeId || link.toId === activeId
+    if (!activeId && !hoverId) return false
+    const focus = activeId || hoverId
+    return link.fromId === focus || link.toId === focus
   }
 
-  const linkActive = (link: DependencyLink) => Boolean(activeId && (link.fromId === activeId || link.toId === activeId))
+  const linkActive = (link: DependencyLink) => {
+    const focus = activeId || hoverId
+    return Boolean(focus && (link.fromId === focus || link.toId === focus))
+  }
 
   const enterRow = (id: string) => setHoverId(id)
   const leaveRow = (id: string) => setHoverId(current => current === id ? null : current)
@@ -348,11 +326,6 @@ export function ProjectsGantt(props: Props) {
 
   const noDates = rows.length > 0 && dated.length === 0
   const todayX = todayOffset >= 0 ? todayOffset * width : null
-  const barBoxes = bars.map(bar => ({
-    id: bar.id,
-    left: bar.dayOffset * width,
-    right: bar.dayOffset * width + Math.max(bar.daySpan * width, width),
-  }))
 
   return <div className={css.gantt} data-projects-gantt>
     <div className={css.ganttToolbar}>
@@ -399,9 +372,9 @@ export function ProjectsGantt(props: Props) {
             data-active={activeId === task.id || undefined}
             data-hover={lit || undefined}
             title={task.title}
-            onClick={event => openPopover(task.id, false, event.currentTarget)}
-            onMouseEnter={event => { enterRow(task.id); openPopover(task.id, true, event.currentTarget) }}
-            onMouseLeave={() => { leaveRow(task.id); leavePopover() }}
+            onClick={event => openPopover(task.id, event.currentTarget)}
+            onMouseEnter={() => enterRow(task.id)}
+            onMouseLeave={() => leaveRow(task.id)}
             onFocus={() => enterRow(task.id)}
             onBlur={() => leaveRow(task.id)}
           >
@@ -433,7 +406,9 @@ export function ProjectsGantt(props: Props) {
                 data-weekend={zoom === 'day' && isWeekendDay(day) || undefined}
                 data-label={show || undefined}
                 title={show ? label : undefined}
-              >{show ? label : ''}</div>
+              >
+                {day === today ? <span className={css.ganttTodayLabel}>Сегодня</span> : (show ? label : '')}
+              </div>
             })}
           </div>
           <div className={css.ganttBody} style={{ height: Math.max(rows.length, 1) * rowHeight }}>
@@ -443,9 +418,7 @@ export function ProjectsGantt(props: Props) {
               style={{ left: index * width, width }}
               aria-hidden
             /> : null) : null}
-            {todayOffset >= 0 ? <div className={css.ganttToday} style={{ left: todayOffset * width }} aria-hidden>
-              <span className={css.ganttTodayLabel}>Сегодня</span>
-            </div> : null}
+            {todayOffset >= 0 ? <div className={css.ganttToday} style={{ left: todayOffset * width }} aria-hidden /> : null}
             <svg className={css.ganttArrows} width={chartWidth} height={Math.max(rows.length, 1) * rowHeight} aria-hidden>
               <defs>
                 <marker id={`projects-gantt-arrow-${markerId}`} markerWidth="12" markerHeight="10" refX="10" refY="5" orient="auto" markerUnits="userSpaceOnUse">
@@ -495,7 +468,6 @@ export function ProjectsGantt(props: Props) {
                 chartWidth,
                 labelWidth: captionW,
                 todayX,
-                otherBars: barBoxes.filter(item => item.id !== bar.id),
               }) : 'right'
               const captionMax = bar
                 ? Math.max(48, side === 'right'
@@ -526,7 +498,7 @@ export function ProjectsGantt(props: Props) {
                       title={task.title}
                       onPointerDown={event => {
                         if (props.readOnly) {
-                          openPopover(task.id, false, event.currentTarget)
+                          openPopover(task.id, event.currentTarget)
                           return
                         }
                         event.currentTarget.setPointerCapture?.(event.pointerId)
@@ -535,10 +507,10 @@ export function ProjectsGantt(props: Props) {
                       }}
                       onClick={event => {
                         if (drag?.moved) return
-                        openPopover(task.id, false, event.currentTarget)
+                        openPopover(task.id, event.currentTarget)
                       }}
-                      onMouseEnter={event => openPopover(task.id, true, event.currentTarget)}
-                      onMouseLeave={leavePopover}
+                      onMouseEnter={() => enterRow(task.id)}
+                      onMouseLeave={() => leaveRow(task.id)}
                     >
                       {progress > 0 ? <span className={css.ganttBarFill} data-gantt-fill style={{ width: `${progress}%` }} aria-hidden /> : null}
                       {!props.readOnly ? <>
@@ -562,9 +534,9 @@ export function ProjectsGantt(props: Props) {
                       data-side={side}
                       title={task.title}
                       style={{ maxWidth: Math.min(captionW, captionMax) }}
-                      onClick={event => openPopover(task.id, false, event.currentTarget)}
-                      onMouseEnter={event => openPopover(task.id, true, event.currentTarget)}
-                      onMouseLeave={leavePopover}
+                      onClick={event => openPopover(task.id, event.currentTarget)}
+                      onMouseEnter={() => enterRow(task.id)}
+                      onMouseLeave={() => leaveRow(task.id)}
                     >
                       {task.assigneeName ? <span className={css.ganttBarAvatar}><BookingAvatar name={task.assigneeName} photo={task.assigneePhoto} small /></span> : null}
                       <span className={css.ganttBarCaptionText}>{task.title}</span>
@@ -581,8 +553,6 @@ export function ProjectsGantt(props: Props) {
     {popoverTask && popoverPos ? <div
       className={css.ganttPopoverFixed}
       style={{ left: popoverPos.left, top: popoverPos.top, transform: 'translateY(-100%)' }}
-      onMouseEnter={keepPopover}
-      onMouseLeave={leavePopover}
     >
       <GanttPopover
         task={popoverTask}

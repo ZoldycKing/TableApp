@@ -292,8 +292,8 @@ export function ganttCaptionWidth(title: string, hasAvatar: boolean) {
 export type GanttCaptionSide = 'left' | 'right'
 
 /**
- * Prefer the right of the bar; flip left when the right side would clip the
- * chart, collide with another bar, or cover the today marker.
+ * Prefer the right of the bar; flip left near the chart’s right edge.
+ * `otherBars` is reserved for same-row collisions (usually empty).
  */
 export function ganttCaptionSide(input: {
   barLeft: number
@@ -305,27 +305,16 @@ export function ganttCaptionSide(input: {
   gap?: number
 }): GanttCaptionSide {
   const gap = input.gap ?? 8
-  const barLeft = input.barLeft
   const barRight = input.barLeft + input.barWidth
   const others = input.otherBars ?? []
 
   const overlaps = (left: number, right: number) =>
     others.some(bar => left < bar.right - 0.5 && right > bar.left + 0.5)
 
-  const crossesToday = (left: number, right: number) => {
-    if (input.todayX == null) return false
-    const x = input.todayX
-    // Keep a small clear band around the today line / its «Сегодня» chip.
-    return left < x + 10 && right > x - 10
-  }
-
   const rightLeft = barRight + gap
   const rightRight = rightLeft + input.labelWidth
 
-  const rightOk = rightRight <= input.chartWidth - 4
-    && !overlaps(rightLeft, rightRight)
-    && !crossesToday(rightLeft, rightRight)
-
+  const rightOk = rightRight <= input.chartWidth - 4 && !overlaps(rightLeft, rightRight)
   if (rightOk) return 'right'
   return 'left'
 }

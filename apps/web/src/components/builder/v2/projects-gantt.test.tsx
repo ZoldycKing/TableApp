@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { ProjectsGantt } from './projects-gantt'
 
@@ -68,7 +68,6 @@ it('shows only links for the hovered task until «Показать связи» 
   render(<ProjectsGantt tasks={tasks} links={links} now={now} onOpenTask={vi.fn()} />)
   const bar = document.querySelector('[data-bar-id="t1"] [data-tone]') as HTMLElement
   fireEvent.mouseEnter(bar)
-  act(() => { vi.advanceTimersByTime(150) })
   expect(document.querySelectorAll('[data-gantt-link]')).toHaveLength(1)
   expect(document.querySelector('[data-gantt-link="l1"]')).toBeTruthy()
   fireEvent.click(screen.getByRole('switch', { name: 'Показать связи' }))

@@ -94,7 +94,7 @@ export type GanttBar = {
 }
 
 export function ganttRange(tasks: readonly GanttTask[], today: string, pad = 3) {
-  const days = tasks.flatMap(task => [task.start, task.due].filter((value): value is string => Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value))))
+  const days = tasks.flatMap(task => [civilDay(task.start), civilDay(task.due)].filter((value): value is string => Boolean(value)))
   if (!days.length) return { start: addDays(today, -pad), end: addDays(today, pad + 14) }
   const sorted = [...days].sort()
   return { start: addDays(sorted[0]!, -pad), end: addDays(sorted[sorted.length - 1]!, pad) }
@@ -118,8 +118,8 @@ export function dayIndex(start: string, day: string) {
 
 export function ganttBars(tasks: readonly GanttTask[], rangeStart: string): GanttBar[] {
   return tasks.flatMap(task => {
-    const start = task.start && /^\d{4}-\d{2}-\d{2}$/.test(task.start) ? task.start : task.due && /^\d{4}-\d{2}-\d{2}$/.test(task.due) ? task.due : null
-    const end = task.due && /^\d{4}-\d{2}-\d{2}$/.test(task.due) ? task.due : start
+    const start = civilDay(task.start) || civilDay(task.due)
+    const end = civilDay(task.due) || start
     if (!start || !end) return []
     const from = start <= end ? start : end
     const to = start <= end ? end : start

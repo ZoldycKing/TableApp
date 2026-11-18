@@ -288,7 +288,7 @@ export const proekty: TemplateDef = {
       views: [{ name: 'Все записи', type: 'grid' }],
       rows: [
         { key: 'tm1', values: { task: { rowKey: 't2' }, project: { rowKey: 'site' }, person: { rowKey: 'anna' }, email: 'anna@example.invalid', startedAt: inDays(0, 9, 0), endedAt: inDays(0, 10, 30), minutes: 90, note: 'Сетка и тарифы' } },
-        { key: 'tm2', values: { task: { rowKey: 't2' }, project: { rowKey: 'site' }, person: { rowKey: 'anna' }, email: 'anna@example.invalid', startedAt: inDays(0, 11, 0), endedAt: null, minutes: null, note: 'Правки по комментарию' } },
+        { key: 'tm2', values: { task: { rowKey: 't2' }, project: { rowKey: 'site' }, person: { rowKey: 'anna' }, email: 'anna@example.invalid', startedAt: inDays(0, 8, 0), endedAt: null, minutes: null, note: 'Правки по комментарию' } },
         { key: 'tm3', values: { task: { rowKey: 't4' }, project: { rowKey: 'site' }, person: { rowKey: 'igor' }, email: 'igor@example.invalid', startedAt: inDays(-1, 14, 0), endedAt: inDays(-1, 16, 0), minutes: 120, note: 'Шапка' } },
         { key: 'tm4', values: { task: { rowKey: 't1' }, project: { rowKey: 'site' }, person: { rowKey: 'anna' }, email: 'anna@example.invalid', startedAt: inDays(-2, 10, 0), endedAt: inDays(-2, 12, 0), minutes: 120, note: 'Структура разделов' } },
       ],

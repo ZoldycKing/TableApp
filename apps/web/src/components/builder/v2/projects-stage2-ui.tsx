@@ -8,7 +8,7 @@ import {
   shareToken, startTimerStamp, stopTimerValues, totalSpentMinutes, validateManualMinutes, workloadFor, type DependencyLink,
   type RepeatRule, type TimeEntry,
 } from '@/lib/projects-stage2'
-import { formatDay, todayKey, weekEndKey } from '@/lib/projects-logic'
+import { civilDay, formatDay, todayKey, weekEndKey } from '@/lib/projects-logic'
 import { commentWrite, linkWrite, shareWrite, templateWrite, timeWrite } from '@/lib/projects-persist'
 import { DateMenu } from './booking-calendar'
 import { AppDialog } from './app-dialog'
@@ -272,8 +272,8 @@ export function GanttScreen(props: Stage2Helpers & { projectId?: string }) {
   const tasks = props.of(kit.tasksTableId).filter(row => firstId(row.values[kit.task.project]) === projectId).map(row => ({
     id: row.id,
     title: textOf(row.values[kit.task.title]),
-    start: kit.task.start ? (textOf(row.values[kit.task.start]) || null) : null,
-    due: textOf(row.values[kit.task.due]) || null,
+    start: kit.task.start ? civilDay(row.values[kit.task.start]) : null,
+    due: civilDay(row.values[kit.task.due]),
     status: props.choiceName(kit.tasksTableId, kit.task.status, row.values[kit.task.status]),
     parentId: firstId(row.values[kit.task.parent]),
     estimate: kit.task.estimate && typeof row.values[kit.task.estimate] === 'number' ? Number(row.values[kit.task.estimate]) : null,
@@ -314,9 +314,6 @@ export function GanttScreen(props: Stage2Helpers & { projectId?: string }) {
     <div className={css.toolbar}>
       <h1>Гант</h1>
       <span className={css.grow} />
-      <div className={css.actions}>
-        <select aria-label="Проект" value={projectId} onChange={event => setProjectId(event.target.value)} style={{ display: 'none' }} />
-      </div>
     </div>
     <div className={css.pad}>
       <div className={css.choiceRow} role="radiogroup" aria-label="Проект">
@@ -391,11 +388,11 @@ function addDaysSafe(day: string, days: number) {
   return date.toISOString().slice(0, 10)
 }
 
-export function TemplatesScreen(props: Stage2Helpers) {
+export function TemplatesScreen(props: Stage2Helpers & { initialOpen?: 'template' | 'from-template' | null }) {
   const kit = props.kit
-  const [createFrom, setCreateFrom] = useState<string | null>(null)
-  const [saveFrom, setSaveFrom] = useState(false)
   const templates = kit.templatesTableId ? props.of(kit.templatesTableId) : []
+  const [createFrom, setCreateFrom] = useState<string | null>(props.initialOpen === 'from-template' ? templates[0]?.id ?? null : null)
+  const [saveFrom, setSaveFrom] = useState(props.initialOpen === 'template')
   return <div className={css.root} data-projects-screen="templates">
     <div className={css.toolbar}><h1>Шаблоны</h1><span className={css.grow} />
       {props.leader ? <button type="button" className={buttons.primary} onClick={() => setSaveFrom(true)}>Сохранить проект</button> : null}
@@ -423,7 +420,7 @@ function SaveTemplateDialog(props: Stage2Helpers & { onClose: () => void }) {
   const save = () => {
     if (!name.trim() || !projectId || !kit.template || !kit.templatesTableId) { setError('Укажите название и проект.'); return }
     const project = projects.find(item => item.id === projectId)
-    const anchor = textOf(project?.values[kit.project.start]) || todayKey(props.now)
+    const anchor = civilDay(project?.values[kit.project.start]) || todayKey(props.now)
     const stages = props.of(kit.stagesTableId).filter(row => firstId(row.values[kit.stage.project]) === projectId).map(row => ({
       id: row.id, title: textOf(row.values[kit.stage.title]), goal: textOf(row.values[kit.stage.goal]),
       start: row.values[kit.stage.start], end: row.values[kit.stage.end],
@@ -543,8 +540,8 @@ export function ClientProjectView(props: Stage2Helpers & { recordId: string }) {
   const ganttTasks = tasks.map(task => ({
     id: task.id,
     title: textOf(task.values[kit.task.title]),
-    start: kit.task.start ? textOf(task.values[kit.task.start!]) || null : null,
-    due: textOf(task.values[kit.task.due]) || null,
+    start: kit.task.start ? civilDay(task.values[kit.task.start!]) : null,
+    due: civilDay(task.values[kit.task.due]),
     status: props.choiceName(kit.tasksTableId, kit.task.status, task.values[kit.task.status]),
     parentId: '',
     estimate: null,

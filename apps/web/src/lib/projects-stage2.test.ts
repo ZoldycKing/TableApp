@@ -21,13 +21,15 @@ describe('gantt bars', () => {
     const tasks = [
       { id: 't1', title: 'Макет', start: '2026-11-10', due: '2026-11-12', status: 'В работе', parentId: '' },
       { id: 't2', title: 'Без дат', start: null, due: null, status: 'К работе', parentId: '' },
+      { id: 't3', title: 'ISO', start: '2026-11-11T07:00:00.000Z', due: '2026-11-13T07:00:00.000Z', status: 'К работе', parentId: '' },
     ]
     const range = ganttRange(tasks, '2026-11-17', 0)
     expect(range.start).toBe('2026-11-10')
-    expect(range.end).toBe('2026-11-12')
+    expect(range.end).toBe('2026-11-13')
     const bars = ganttBars(tasks, '2026-11-10')
-    expect(bars).toHaveLength(1)
+    expect(bars).toHaveLength(2)
     expect(bars[0]).toMatchObject({ id: 't1', dayOffset: 0, daySpan: 3, done: false })
+    expect(bars.find(bar => bar.id === 't3')).toMatchObject({ dayOffset: 1, daySpan: 3 })
     expect(moveBarDates('2026-11-10', '2026-11-12', 2)).toEqual({ start: '2026-11-12', end: '2026-11-14' })
     expect(resizeBarDates('2026-11-10', '2026-11-12', 'end', 1)).toEqual({ start: '2026-11-10', end: '2026-11-13' })
     expect(resizeBarDates('2026-11-10', '2026-11-12', 'start', 5)).toEqual({ start: '2026-11-12', end: '2026-11-12' })

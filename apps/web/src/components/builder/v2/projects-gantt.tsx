@@ -1,5 +1,5 @@
 'use client'
-import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import {
   columnWidth, dayIndex, eachDay, formatMinutes, ganttArrowPath, ganttBars, ganttRange, moveBarDates, resizeBarDates,
   type DependencyLink, type GanttZoom,
@@ -31,11 +31,23 @@ type Props = {
   onUnlink?: (linkId: string) => void
 }
 
+function useLabelWidth() {
+  const [width, setWidth] = useState(200)
+  useEffect(() => {
+    const update = () => setWidth(window.matchMedia('(max-width: 720px)').matches ? 148 : 200)
+    update()
+    window.addEventListener('resize', update)
+    return () => window.removeEventListener('resize', update)
+  }, [])
+  return width
+}
+
 export function ProjectsGantt(props: Props) {
   const [zoom, setZoom] = useState<GanttZoom>('week')
   const [linkFrom, setLinkFrom] = useState<string | null>(null)
   const [drag, setDrag] = useState<{ id: string; mode: 'move' | 'start' | 'end'; originX: number; start: string; end: string } | null>(null)
   const scroller = useRef<HTMLDivElement>(null)
+  const scrolled = useRef(false)
   const today = todayKey(props.now)
   const top = props.tasks.filter(task => !task.parentId)
   const range = useMemo(() => ganttRange(top, today, zoom === 'day' ? 2 : zoom === 'week' ? 7 : 14), [top, today, zoom])
@@ -44,7 +56,25 @@ export function ProjectsGantt(props: Props) {
   const width = columnWidth(zoom)
   const todayOffset = days.includes(today) ? dayIndex(range.start, today) : -1
   const rowHeight = 44
-  const labelWidth = 200
+  const labelWidth = useLabelWidth()
+
+  useEffect(() => {
+    scrolled.current = false
+  }, [zoom, range.start, props.now])
+
+  useEffect(() => {
+    if (scrolled.current || !scroller.current || todayOffset < 0) return
+    const node = scroller.current
+    const target = Math.max(0, labelWidth + todayOffset * width - Math.max(48, node.clientWidth * 0.35))
+    node.scrollLeft = target
+    scrolled.current = true
+  }, [todayOffset, width, labelWidth, days.length])
+
+  const placeBar = (el: HTMLElement, start: string, end: string) => {
+    el.style.left = `${labelWidth + dayIndex(range.start, start) * width}px`
+    el.style.width = `${Math.max(1, dayIndex(start, end) + 1) * width}px`
+    el.style.transform = ''
+  }
 
   const onPointerMove = (event: ReactPointerEvent) => {
     if (!drag || props.readOnly) return
@@ -54,8 +84,7 @@ export function ProjectsGantt(props: Props) {
       : resizeBarDates(drag.start, drag.end, drag.mode === 'start' ? 'start' : 'end', delta)
     const el = scroller.current?.querySelector(`[data-bar-id="${drag.id}"]`) as HTMLElement | null
     if (!el) return
-    el.style.transform = `translateX(${dayIndex(range.start, next.start) * width}px)`
-    el.style.width = `${Math.max(1, dayIndex(next.start, next.end) + 1) * width}px`
+    placeBar(el, next.start, next.end)
     el.dataset.previewStart = next.start
     el.dataset.previewEnd = next.end
   }
@@ -66,7 +95,12 @@ export function ProjectsGantt(props: Props) {
     const start = el?.dataset.previewStart || drag.start
     const end = el?.dataset.previewEnd || drag.end
     setDrag(null)
-    if (el) { el.style.transform = ''; el.style.width = '' }
+    if (el) {
+      const bar = bars.find(item => item.id === drag.id)
+      if (bar) placeBar(el, bar.start, bar.end)
+      delete el.dataset.previewStart
+      delete el.dataset.previewEnd
+    }
     if (start !== drag.start || end !== drag.end) props.onDates?.(drag.id, start, end)
   }
 
@@ -88,7 +122,7 @@ export function ProjectsGantt(props: Props) {
     <div className={css.ganttScroll} ref={scroller} onPointerMove={onPointerMove} onPointerUp={finishDrag} onPointerCancel={finishDrag}>
       <div className={css.ganttInner} style={{ width: labelWidth + days.length * width }}>
         <div className={css.ganttHead} style={{ gridTemplateColumns: `${labelWidth}px repeat(${days.length}, ${width}px)` }}>
-          <div className={css.ganttCorner}>Задача</div>
+          <div className={css.ganttCorner} style={{ width: labelWidth }}>Задача</div>
           {days.map((day, index) => <div key={day} className={css.ganttDay} data-today={day === today || undefined}>{headerLabel(day, index)}</div>)}
         </div>
         <div className={css.ganttBody} style={{ minHeight: Math.max(top.length, 1) * rowHeight }}>

@@ -50,7 +50,7 @@ export function ElayaHeader({ signedIn }: { signedIn: boolean }) {
   return <div role={open ? 'dialog' : undefined} aria-modal={open || undefined} aria-label={open ? 'Меню сайта' : undefined}>
     <div className={styles.headerSpace} />
     <header className={styles.navigation} ref={header} data-elaya-header>
-      <Link href="/" aria-label="TableApp, главная"><ElayaBrand /></Link>
+      <Link href="/" aria-label="Scatta, главная"><ElayaBrand /></Link>
       <nav className={styles.navLinks} aria-label="Разделы сайта">
         {LINKS.map(link => <Link key={link.href} href={link.href} aria-current={isCurrent(pathname, link.href) ? 'page' : undefined}>{link.label}</Link>)}
       </nav>

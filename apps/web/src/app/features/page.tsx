@@ -11,7 +11,7 @@ import { pageMetadata } from '@/lib/seo'
 import styles from '@/components/marketing/elaya/inner-pages.module.css'
 
 export const dynamic = 'force-dynamic'
-export const metadata = pageMetadata({ path:'/features', title:'Возможности TableApp в действии', description:'Посмотрите, как одни записи работают в таблице, на доске и в календаре, как считаются суммы и что видит каждая роль. Попробуйте на учебных данных.' })
+export const metadata = pageMetadata({ path:'/features', title:'Возможности Scatta в действии', description:'Посмотрите, как одни записи работают в таблице, на доске и в календаре, как считаются суммы и что видит каждая роль. Попробуйте на учебных данных.' })
 
 export default async function FeaturesPage() {
   const member = await currentMember()

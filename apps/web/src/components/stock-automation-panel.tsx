@@ -60,7 +60,7 @@ export function StockAutomationPanel({ appId, itemTableId, columns, settings, ta
         <h2 id="stock-check-title" className="text-lg font-semibold">Ежедневная проверка остатков</h2>
         {settings && <span className="rounded-full bg-sand-100 px-3 py-1 text-xs text-ink-soft">{settings.nextRunAt ? 'По расписанию' : 'На паузе'}</span>}
       </div>
-      <p className="mt-2 max-w-xl text-sm leading-6 text-ink-soft">Если остаток равен минимуму или ниже, TableApp создаёт задачу на закупку. Пока задача по товару открыта, новая не появится.</p>
+      <p className="mt-2 max-w-xl text-sm leading-6 text-ink-soft">Если остаток равен минимуму или ниже, Scatta создаёт задачу на закупку. Пока задача по товару открыта, новая не появится.</p>
       {!itemTableId && <p className="mt-4 text-sm text-ink-soft">Чтобы настроить или запустить проверку, опубликуйте приложение со складом.</p>}
       {itemTableId && !columns.length && <p className="mt-4 text-sm text-ink-soft">Добавьте числовое поле с минимальным остатком в таблицу товаров. <Link href={`/t/${encodeURIComponent(itemTableId)}`} className="underline underline-offset-4">Открыть таблицу товаров</Link></p>}
       {itemTableId && columns.length > 0 && <form className="mt-5 space-y-4" onSubmit={event => {

@@ -31,7 +31,7 @@ export default async function SolutionPage({ params }: { params: Promise<{ slug:
 
   return <MarketingShell signedIn={Boolean(member)}>
     <PageHero
-      trail={[{ href: '/', label: 'TableApp' }, { href: '/solutions', label: 'Решения' }, { label: solution.name }]}
+      trail={[{ href: '/', label: 'Scatta' }, { href: '/solutions', label: 'Решения' }, { label: solution.name }]}
       icon={<TemplateIcon id={solution.templateId ?? 'portal'} className="size-12" />}
       title={solution.h1}
       lead={solution.lead}

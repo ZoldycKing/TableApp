@@ -72,7 +72,7 @@ export default async function PricingPage() {
   return (
     <MarketingShell signedIn={Boolean(member)}>
       <PageHero
-        trail={[{ href: '/', label: 'TableApp' }, { label: 'Тарифы' }]}
+        trail={[{ href: '/', label: 'Scatta' }, { label: 'Тарифы' }]}
         title="Начните бесплатно."
         lead="Начните бесплатно со своих данных. Если понадобится больше места или приложений, выберите подходящий тариф."
       />

@@ -16,7 +16,7 @@ export function AgentationDevtools() {
   return (
     <Toolbar
       key={pathname}
-      appName="TableApp"
+      appName="Scatta"
       endpoint="http://127.0.0.1:4747"
       enableKeyboardShortcuts={false}
       className="hidden md:block"

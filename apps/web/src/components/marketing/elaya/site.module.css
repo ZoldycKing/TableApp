@@ -29,8 +29,8 @@
 .shell :is(a,button,input,summary):focus-visible, .navigation :is(a,button):focus-visible, .menuOverlay a:focus-visible, .footer a:focus-visible { outline: 2px solid #3f684d; outline-offset: 4px; }
 .headerSpace { height: 96px; }
 .navigation { position: fixed; z-index: 70; top: 24px; left: 50%; transform: translateX(-50%); width: min(1120px, calc(100% - 48px)); height: 64px; padding: 8px 16px; border: 1px solid #d6ddd1; border-radius: 9999px; background: rgb(250 251 248 / .88); backdrop-filter: blur(24px); display: flex; align-items: center; justify-content: space-between; gap: 24px; box-shadow: 0 4px 24px #20252108; transition: background .7s var(--elaya-ease); }
-.brand { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; font-size: 20px; line-height: 28px; letter-spacing: -.04em; font-weight: 700; }
-.brand svg { width: 32px; height: 32px; }
+.brand { display: inline-flex; align-items: center; flex-shrink: 0; line-height: 0; }
+.brand img { height: 28px; width: auto; max-height: 28px; display: block; }
 .navLinks, .navActions { display: flex; align-items: center; gap: 24px; }
 .navLinks a, .login { font-size: 14px; line-height: 20px; color: #536057; transition: color .7s var(--elaya-ease); }
 .navLinks a:hover, .navLinks a[aria-current], .login:hover { color: #1d3425; }

@@ -1,6 +1,6 @@
 import { ImageResponse } from 'next/og'
 
-export const alt = 'TableApp — приложения поверх ваших таблиц'
+export const alt = 'Scatta — приложения поверх ваших таблиц'
 export const size = { width: 1200, height: 630 }
 export const contentType = 'image/png'
 
@@ -45,7 +45,7 @@ export default async function OpengraphImage() {
             <div style={{ height: 6, width: 22, borderRadius: 3, background: '#ffffff', opacity: 0.72 }} />
             <div style={{ height: 6, width: 27, borderRadius: 3, background: '#ffffff', opacity: 0.5 }} />
           </div>
-          <div style={{ fontSize: 30, color: '#3f4a3c', fontWeight: 600 }}>TableApp</div>
+          <div style={{ fontSize: 30, color: '#3f4a3c', fontWeight: 600 }}>Scatta</div>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>

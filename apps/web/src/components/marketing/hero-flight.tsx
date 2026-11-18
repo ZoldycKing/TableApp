@@ -48,7 +48,7 @@ export function HeroFlight({ interactive = false }: { interactive?: boolean }) {
         <button className={frame.control} type="button" aria-label={interactive ? 'Сбросить приёмку' : 'Повторить показ'} onClick={() => { focusTarget.current = null; replay() }}>{interactive ? 'Сначала' : 'Повторить'}</button>
       </div>
     </div>
-    {!interactive && <div className={frame.heroProgress} aria-label="Как работает TableApp">
+    {!interactive && <div className={frame.heroProgress} aria-label="Как работает Scatta">
       {labels.map((label, index) => <span key={label} aria-current={scene === index ? 'step' : undefined}>
         <i data-active={scene === index} data-running={running} />{label}
       </span>)}

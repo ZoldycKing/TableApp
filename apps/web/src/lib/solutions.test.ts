@@ -134,7 +134,7 @@ describe('описания для поиска', () => {
   it('заголовки и описания разумной длины', () => {
     for (const solution of SOLUTIONS) {
       expect(solution.seoTitle.length, solution.slug).toBeGreaterThan(15)
-      // С хвостом «· TableApp» заголовок должен оставаться читаемым в выдаче.
+      // С хвостом «· Scatta» заголовок должен оставаться читаемым в выдаче.
       expect(solution.seoTitle.length, solution.slug).toBeLessThanOrEqual(60)
       expect(solution.description.length, solution.slug).toBeGreaterThan(70)
       expect(solution.description.length, solution.slug).toBeLessThanOrEqual(170)

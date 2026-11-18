@@ -294,7 +294,7 @@ function MobileBar({ email, onOpen }: { email: string; onOpen: () => void }) {
       </button>
 
       <Link href="/app" className="outline-none focus-visible:ring-2 focus-visible:ring-sage-400">
-        <Logo />
+        <Logo mark height={28} />
       </Link>
 
       <button type="button" aria-label="Помощь" onClick={() => window.dispatchEvent(new Event(OWNER_HELP_EVENT))} className="ml-auto flex size-11 shrink-0 items-center justify-center rounded-lg text-ink-soft outline-none hover:bg-sand-100 focus-visible:ring-2 focus-visible:ring-sage-400"><ShellIcon name="help" className="size-5" /></button>

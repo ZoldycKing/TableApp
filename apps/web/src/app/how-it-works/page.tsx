@@ -7,7 +7,7 @@ import { currentMember } from '@/lib/session'
 import styles from '@/components/marketing/elaya/content-pages.module.css'
 
 export const dynamic = 'force-dynamic'
-export const metadata = pageMetadata({ path:'/how-it-works', title:'Как превратить таблицу в приложение', description:'Добавьте данные, настройте экраны и доступ, опубликуйте приложение. Посмотрите каждый шаг на примере TableApp.' })
+export const metadata = pageMetadata({ path:'/how-it-works', title:'Как превратить таблицу в приложение', description:'Добавьте данные, настройте экраны и доступ, опубликуйте приложение. Посмотрите каждый шаг на примере Scatta.' })
 
 const QUESTIONS = [
   {
@@ -36,16 +36,16 @@ export default async function HowItWorksPage() {
   const member = await currentMember()
   const start = member ? '/import' : '/login?next=%2Fimport'
   return <MarketingShell signedIn={Boolean(member)}>
-    <PageHero trail={[{href:'/',label:'TableApp'},{label:'Как это работает'}]} title="От таблицы до приложения." lead="Добавьте данные и настройте нужные разделы. Работайте сами или дайте доступ команде и клиентам." actions={<><PrimaryLink href={start}>Загрузить свою таблицу</PrimaryLink><SecondaryLink href="/templates">Выбрать шаблон</SecondaryLink></>} />
+    <PageHero trail={[{href:'/',label:'Scatta'},{label:'Как это работает'}]} title="От таблицы до приложения." lead="Добавьте данные и настройте нужные разделы. Работайте сами или дайте доступ команде и клиентам." actions={<><PrimaryLink href={start}>Загрузить свою таблицу</PrimaryLink><SecondaryLink href="/templates">Выбрать шаблон</SecondaryLink></>} />
     <Section><ProductDemo /></Section>
     <Section>
       <div className={styles.journey}>
         <article><span>01 / Данные</span><FileXlsIcon size={32} aria-hidden /><h2>Загрузите копию таблицы</h2><p>Подойдёт Excel или CSV. Из Google или Яндекс Таблиц сначала скачайте файл. Перед загрузкой проверьте листы и колонки.</p></article>
         <article><span>02 / Экраны</span><GridFourIcon size={32} aria-hidden /><h2>Подготовьте приложение</h2><p>Выберите разделы и поля, с которыми хотите работать. Если приложением будут пользоваться другие люди, настройте им доступ.</p></article>
-        <article><span>03 / Работа</span><LinkIcon size={32} aria-hidden /><h2>Начните пользоваться</h2><p>Откройте приложение с компьютера или телефона. Сохранённые изменения видны в таблицах TableApp. Если нужен доступ другим людям, отправьте им ссылку.</p></article>
+        <article><span>03 / Работа</span><LinkIcon size={32} aria-hidden /><h2>Начните пользоваться</h2><p>Откройте приложение с компьютера или телефона. Сохранённые изменения видны в таблицах Scatta. Если нужен доступ другим людям, отправьте им ссылку.</p></article>
       </div>
     </Section>
-    <Section width="narrow"><div className={styles.note}><p>Исходный файл не меняется. Автоматической синхронизации с ним нет. Формулы и связи между листами нужно настроить в TableApp.</p><ImportGuideLink /></div></Section>
+    <Section width="narrow"><div className={styles.note}><p>Исходный файл не меняется. Автоматической синхронизации с ним нет. Формулы и связи между листами нужно настроить в Scatta.</p><ImportGuideLink /></div></Section>
     <Section title="О начале работы" width="narrow"><FaqList items={QUESTIONS} /></Section>
     <CtaSection title="Попробуйте" accent="на своих данных." text="Бесплатный тариф без ограничения по времени. Карта не нужна." href={start} label="Загрузить свою таблицу" secondary={{href:'/templates',label:'Сначала открыть шаблон'}} />
   </MarketingShell>

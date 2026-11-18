@@ -37,7 +37,7 @@ afterEach(() => {
 function configure(): void {
   process.env.SMTP_URL = 'smtps://u%40example.ru:secret@smtp.example.ru:465'
   process.env.MAIL_FROM = 'u@example.ru'
-  process.env.MAIL_FROM_NAME = 'TableApp'
+  process.env.MAIL_FROM_NAME = 'Scatta'
 }
 
 function fault(code: string): Error & { code: string } {
@@ -46,7 +46,7 @@ function fault(code: string): Error & { code: string } {
 
 const LETTER = {
   to: 'kto@example.ru',
-  subject: 'Вход в TableApp',
+  subject: 'Вход в Scatta',
   link: 'https://app.example.ru/auth?token=SEKRETNYY-TOKEN',
   code: '328823',
 }
@@ -160,7 +160,7 @@ describe('отправитель', () => {
     const { sendMagicLink } = await import('./mailer')
     await sendMagicLink(LETTER)
 
-    expect(sendMail.mock.calls[0]![0].from).toBe('TableApp <u@example.ru>')
+    expect(sendMail.mock.calls[0]![0].from).toBe('Scatta <u@example.ru>')
   })
 
   it('без имени — один адрес', async () => {
@@ -180,11 +180,11 @@ describe('письма', () => {
     const letter = compose({ kind: 'sign_in', link: 'https://x.ru/a', code: '123456' })
     expect(letter.text).toContain('123456')
     expect(letter.html).toContain('123456')
-    expect(letter.subject).toBe('Вход в TableApp')
+    expect(letter.subject).toBe('Вход в Scatta')
   })
 
   it('вход в приложение назван приложением, а не платформой', () => {
-    // Человек входит в «Кабинет клиента», а про TableApp может не знать.
+    // Человек входит в «Кабинет клиента», а про Scatta может не знать.
     const letter = compose({
       kind: 'app_sign_in',
       link: 'https://x.ru/a',

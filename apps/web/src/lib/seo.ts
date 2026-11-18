@@ -13,17 +13,17 @@ import { absolute } from './site-url'
 export type PageMeta = {
   /** Адрес страницы от корня: по нему считается canonical и OpenGraph. */
   path: string
-  /** Заголовок вкладки и ссылки в поиске. Без хвоста «· TableApp» — он общий. */
+  /** Заголовок вкладки и ссылки в поиске. Без хвоста «· Scatta» — он общий. */
   title: string
   /** Описание для выдачи: одно предложение о том, что человек здесь найдёт. */
   description: string
   /** Тип страницы для соцсетей. Статья — для правовых документов. */
   type?: 'website' | 'article'
   /**
-   * Заголовок целиком, без общего хвоста «· TableApp».
+   * Заголовок целиком, без общего хвоста «· Scatta».
    *
    * Нужен главной: её заголовок уже начинается с имени продукта, и хвост
-   * превратил бы его в «TableApp — … · TableApp».
+   * превратил бы его в «Scatta — … · Scatta».
    */
   exact?: boolean
 }
@@ -33,9 +33,9 @@ export function pageMetadata({ path, title, description, type = 'website', exact
   /*
    * В соцсети уходит название продукта вместе с заголовком — так ссылка
    * узнаётся в ленте. Но не дважды: заголовок главной уже начинается
-   * с «TableApp», и хвост превращал его в «TableApp — … · TableApp».
+   * с «Scatta», и хвост превращал его в «Scatta — … · Scatta».
    */
-  const social = exact ? title : `${title} · TableApp`
+  const social = exact ? title : `${title} · Scatta`
 
   return {
     title: exact ? { absolute: title } : title,
@@ -44,7 +44,7 @@ export function pageMetadata({ path, title, description, type = 'website', exact
     openGraph: {
       type,
       locale: 'ru_RU',
-      siteName: 'TableApp',
+      siteName: 'Scatta',
       url,
       title: social,
       description,

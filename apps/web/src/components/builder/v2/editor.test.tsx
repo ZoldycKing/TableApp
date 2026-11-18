@@ -19,7 +19,7 @@ vi.mock('@/app/builder-v2-actions', () => ({ saveBuilderV2DraftAction: vi.fn(), 
 vi.mock('@/app/builder-v2-data-actions', () => ({ readBuilderV2DataAction: vi.fn(async () => ({ ok: true, page: { kind: 'collection', rows: [], value: null, total: 0, next: null } })), readBuilderV2RecordAction: vi.fn() }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }))
 vi.mock('next/link', () => ({ default: ({ children, prefetch: _prefetch, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { prefetch?: boolean }) => <a {...props}>{children}</a> }))
-vi.mock('@/components/marketing/logo', () => ({ Logo: () => <span>TableApp</span> }))
+vi.mock('@/components/marketing/logo', () => ({ Logo: () => <span>Scatta</span> }))
 vi.mock('../prototype/icons', () => ({ ProtoIcon: () => null }))
 
 beforeEach(() => {

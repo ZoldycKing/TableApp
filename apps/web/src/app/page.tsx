@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic'
 
 export const metadata = pageMetadata({
   path: '/',
-  title: 'TableApp — приложение для бизнеса из ваших таблиц',
+  title: 'Scatta — приложение для бизнеса из ваших таблиц',
   description:
     'Соберите из Excel или CSV приложение для заказов, клиентов и учёта. Настройте рабочие экраны и доступ для себя, сотрудников и клиентов.',
   exact: true,
@@ -28,15 +28,15 @@ const SCHEMA = {
     {
       '@type': 'Organization',
       '@id': `${SITE_URL}/#organization`,
-      name: 'TableApp',
+      name: 'Scatta',
       url: `${SITE_URL}/`,
       email: 'hello@tableapp.ru',
       description:
-        'TableApp помогает собрать приложение для бизнеса на основе собственных таблиц.',
+        'Scatta помогает собрать приложение для бизнеса на основе собственных таблиц.',
     },
     {
       '@type': 'SoftwareApplication',
-      name: 'TableApp',
+      name: 'Scatta',
       applicationCategory: 'BusinessApplication',
       operatingSystem: 'Web',
       url: `${SITE_URL}/`,

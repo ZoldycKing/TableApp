@@ -105,7 +105,7 @@ export function isTotpSetupSecret(secret: string): boolean {
 }
 
 /** Ссылка для приложения-аутентификатора: из неё же рисуется QR-код. */
-export function totpUri(secret: string, email: string, issuer = 'TableApp'): string {
+export function totpUri(secret: string, email: string, issuer = 'Scatta'): string {
   const label = encodeURIComponent(`${issuer}:${email}`)
   const params = new URLSearchParams({
     secret,

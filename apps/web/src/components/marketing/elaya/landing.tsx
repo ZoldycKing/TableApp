@@ -17,15 +17,15 @@ const TEMPLATES = [
   { id: 'proizvodstvo', title: 'Производство', text: 'Выпуск продукции и расход материалов по нормам.' },
 ]
 export const ELAYA_FAQ = [
-  { question: 'Для какого бизнеса подойдёт TableApp?', answer: 'Для магазина, сервиса, мастерской или небольшого производства, где заказы, клиенты или остатки уже ведутся в таблицах. Можно загрузить свои данные или начать с готового шаблона.' },
-  { question: 'Нужно ли уметь программировать?', answer: 'Нет. Загрузите данные, выберите вид экранов и настройте доступ в интерфейсе TableApp. Начать можно с готового шаблона.' },
-  { question: 'Можно перенести Google или Яндекс Таблицу?', answer: 'Да. Скачайте её в формате Excel или CSV и загрузите в TableApp. Дальше работайте здесь: исходный файл не меняется, автоматической синхронизации с ним нет.' },
+  { question: 'Для какого бизнеса подойдёт Scatta?', answer: 'Для магазина, сервиса, мастерской или небольшого производства, где заказы, клиенты или остатки уже ведутся в таблицах. Можно загрузить свои данные или начать с готового шаблона.' },
+  { question: 'Нужно ли уметь программировать?', answer: 'Нет. Загрузите данные, выберите вид экранов и настройте доступ в интерфейсе Scatta. Начать можно с готового шаблона.' },
+  { question: 'Можно перенести Google или Яндекс Таблицу?', answer: 'Да. Скачайте её в формате Excel или CSV и загрузите в Scatta. Дальше работайте здесь: исходный файл не меняется, автоматической синхронизации с ним нет.' },
   { question: 'Приложение работает на телефоне?', answer: 'Да. Оно открывается по ссылке в браузере телефона или компьютера. На телефоне его можно добавить на домашний экран.' },
   { question: 'Кто увидит мои данные?', answer: 'Вы выбираете, кому доступно приложение и что в нём видно. Можно пользоваться только самому, а позже настроить доступ другим людям.' },
-  { question: 'Формулы Excel тоже перенесутся?', answer: 'При загрузке переносятся данные. Формулы Excel, связи между листами и сводные таблицы автоматически не воссоздаются. Расчёты и сводные показатели можно настроить в TableApp.' },
+  { question: 'Формулы Excel тоже перенесутся?', answer: 'При загрузке переносятся данные. Формулы Excel, связи между листами и сводные таблицы автоматически не воссоздаются. Расчёты и сводные показатели можно настроить в Scatta.' },
   { question: 'Где будут храниться мои данные?', answer: 'На серверах в России. Таблицы можно выгрузить из своего пространства в Excel или CSV.' },
   { question: 'Нужно платить за каждого сотрудника?', answer: 'Нет. Сотрудники и клиенты отдельно не тарифицируются. Бесплатный тариф включает 2 000 строк и одно опубликованное приложение. Платные тарифы дают больше места для данных и файлов.' },
-  { question: 'Можно использовать TableApp для личных задач?', answer: 'Да. Можно собрать приложение для планов, расходов или своих списков и пользоваться только самому. Названия разделов, поля и доступ настраиваете вы.' },
+  { question: 'Можно использовать Scatta для личных задач?', answer: 'Да. Можно собрать приложение для планов, расходов или своих списков и пользоваться только самому. Названия разделов, поля и доступ настраиваете вы.' },
 ] as const
 
 export function ElayaLanding({ signedIn, entry, freeRows, startPrice }: { signedIn: boolean; entry: string; freeRows: string; startPrice: string }) {
@@ -56,13 +56,13 @@ export function ElayaLanding({ signedIn, entry, freeRows, startPrice }: { signed
       <section className={styles.setup} aria-labelledby="setup-title">
         <Appear><span className={styles.eyebrow}>02 / Начало работы</span><h2 id="setup-title">Из файла в приложение.<br />Шаг за шагом.</h2><p className={styles.sectionLead}>Начните со своих данных.<br />Разделы и оформление настройте под себя.</p></Appear>
         <SetupSteps />
-        <div className={styles.importHint}><p>После загрузки работайте в TableApp. Исходный файл остаётся у вас и не меняется.</p><ImportGuideLink /></div>
+        <div className={styles.importHint}><p>После загрузки работайте в Scatta. Исходный файл остаётся у вас и не меняется.</p><ImportGuideLink /></div>
       </section>
 
       <section className={styles.benefits} id="dlya-biznesa" aria-labelledby="business-title">
-        <Appear className={styles.sectionTop}><div><span className={styles.eyebrow}>Работа с общими данными</span><h2 id="business-title">Команда работает.<br />Данные обновляются.</h2></div><p>Один сотрудник принимает товар, другой смотрит остаток. Все работают с актуальными данными в TableApp.</p></Appear>
+        <Appear className={styles.sectionTop}><div><span className={styles.eyebrow}>Работа с общими данными</span><h2 id="business-title">Команда работает.<br />Данные обновляются.</h2></div><p>Один сотрудник принимает товар, другой смотрит остаток. Все работают с актуальными данными в Scatta.</p></Appear>
         <div className={styles.feature}>
-          <Appear className={styles.featureCopy}><span className={styles.featureNumber}>Общие данные</span><h2>Приняли товар.<br />Остаток уже в таблице.</h2><p>Сотрудник работает с телефона. Вы видите результат в общей таблице TableApp. Переносить записи вручную не нужно.</p><Link href="/templates/zakazy" className={styles.textLink}>Открыть пример магазина<ArrowUpRightIcon size={20} aria-hidden /></Link></Appear>
+          <Appear className={styles.featureCopy}><span className={styles.featureNumber}>Общие данные</span><h2>Приняли товар.<br />Остаток уже в таблице.</h2><p>Сотрудник работает с телефона. Вы видите результат в общей таблице Scatta. Переносить записи вручную не нужно.</p><Link href="/templates/zakazy" className={styles.textLink}>Открыть пример магазина<ArrowUpRightIcon size={20} aria-hidden /></Link></Appear>
           <Appear delay={80}><ReceiptDemo /></Appear>
         </div>
       </section>
@@ -73,7 +73,7 @@ export function ElayaLanding({ signedIn, entry, freeRows, startPrice }: { signed
       </div></section>
 
       <section className={styles.pricing} id="tarify" aria-labelledby="pricing-title">
-        <Appear className={styles.sectionTop}><div><span className={styles.eyebrow}>Без платы за каждого человека</span><h2 id="pricing-title">Сначала попробуйте.<br />Бесплатно.</h2></div><p>Соберите приложение на своих данных и решите, подходит ли вам TableApp.</p></Appear>
+        <Appear className={styles.sectionTop}><div><span className={styles.eyebrow}>Без платы за каждого человека</span><h2 id="pricing-title">Сначала попробуйте.<br />Бесплатно.</h2></div><p>Соберите приложение на своих данных и решите, подходит ли вам Scatta.</p></Appear>
         <div className={styles.priceGrid}>
           <Appear className={styles.priceCard}><h3>Для первого приложения</h3><p className={styles.priceDescription}>Без ограничения по времени</p><div className={styles.price}>0 ₽<small>/ месяц</small></div><ul><li><CheckIcon size={20} aria-hidden />{freeRows} строк данных</li><li><CheckIcon size={20} aria-hidden />Одно опубликованное приложение</li><li><CheckIcon size={20} aria-hidden />Клиенты и команда без отдельной платы</li></ul><Link href={entry} className={styles.primary}>Создать приложение<ArrowUpRightIcon size={20} aria-hidden /></Link></Appear>
           <Appear delay={80} className={`${styles.priceCard} ${styles.priceCardPaid}`}><h3>Когда понадобится больше</h3><p className={styles.priceDescription}>Тариф под объём ваших данных</p><div className={styles.price}><span>от</span>{startPrice} ₽<small>/ месяц</small></div><ul><li><CheckIcon size={20} aria-hidden />Больше строк и места для файлов</li><li><CheckIcon size={20} aria-hidden />Больше опубликованных приложений</li><li><CheckIcon size={20} aria-hidden />Цена не зависит от числа людей</li></ul><Link href="/pricing" className={styles.secondary}>Сравнить тарифы<ArrowRightIcon size={20} aria-hidden /></Link></Appear>

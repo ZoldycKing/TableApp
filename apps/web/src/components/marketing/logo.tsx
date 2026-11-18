@@ -1,30 +1,46 @@
+/**
+ * Логотип Scatta для светлых и тёмных поверхностей.
+ *
+ * В шапках — lockup (знак + слово). В узкой полоске кабинета и там,
+ * где места мало, — только знак. Соотношение сторон не растягиваем.
+ */
+
+const LOCKUP_RATIO = 668.07 / 199
+
 export function Logo({
   className = '',
   /**
-   * Классы для слова «TableApp».
-   *
-   * Свёрнутой панели нужен только знак, и сжимается слово вместе с ней —
-   * плавно. Как именно, решает вызывающий: у панели это анимация ширины,
-   * у телефона и страниц сайта слово видно всегда.
+   * Только знак: свёрнутая боковая панель и тесная шапка телефона.
    */
-  wordClassName = '',
+  mark = false,
+  /**
+   * Lockup для тёмного фона (белый знак и слово).
+   */
+  reversed = false,
+  /** Высота в шапках ≈ 24–32px. */
+  height = 28,
 }: {
   className?: string
-  wordClassName?: string
+  mark?: boolean
+  reversed?: boolean
+  height?: number
 }) {
+  const src = mark
+    ? '/brand/svg/mark.svg'
+    : reversed
+      ? '/brand/svg/lockup-reversed.svg'
+      : '/brand/svg/lockup.svg'
+  const width = mark ? height : Math.round(height * LOCKUP_RATIO)
+
   return (
-    <span className={`inline-flex items-center gap-2 ${className}`}>
-      <svg width="32" height="32" viewBox="0 0 26 26" fill="none" aria-hidden className="shrink-0">
-        <rect x="1" y="1" width="24" height="24" rx="7" className="fill-sage-500" />
-        <rect x="6" y="7" width="14" height="2.6" rx="1.3" fill="white" opacity="0.95" />
-        <rect x="6" y="12" width="9" height="2.6" rx="1.3" fill="white" opacity="0.72" />
-        <rect x="6" y="17" width="11" height="2.6" rx="1.3" fill="white" opacity="0.5" />
-      </svg>
-      <span
-        className={`overflow-hidden font-display text-xl font-bold tracking-tight text-ink ${wordClassName}`}
-      >
-        TableApp
-      </span>
-    </span>
+    <img
+      src={src}
+      alt="Scatta"
+      width={width}
+      height={height}
+      draggable={false}
+      className={`block shrink-0 ${className}`}
+      style={{ height, width: 'auto', maxHeight: height }}
+    />
   )
 }

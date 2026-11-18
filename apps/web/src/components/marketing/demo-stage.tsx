@@ -90,7 +90,7 @@ export function DemoStage({ roles, activeRole, initialDevice, deviceChosen, desc
 
 export function DeviceFrame({ device, height, bezel, children }: { device: Device; height: number; bezel: number; children: ReactNode }) {
   return <div className={styles.deviceFrame} data-device={device} data-bezel={bezel > 0} style={{ height: height + bezel * 2, ...(device === 'mobile' && bezel ? { padding: bezel } : {}) }}>
-    {device === 'desktop' && <div className={styles.browserChrome}><span aria-hidden><i /><i /><i /></span><span>Приложение TableApp</span><span>Пример</span></div>}
+    {device === 'desktop' && <div className={styles.browserChrome}><span aria-hidden><i /><i /><i /></span><span>Приложение Scatta</span><span>Пример</span></div>}
     <div className={`demo-frame ${styles.deviceContent}`} style={{ height }}>{children}</div>
   </div>
 }

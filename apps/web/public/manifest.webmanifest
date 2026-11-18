@@ -1,0 +1,24 @@
+{
+  "name": "Scatta",
+  "short_name": "Scatta",
+  "description": "Приложение для бизнеса из ваших таблиц",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fafbf8",
+  "theme_color": "#527157",
+  "lang": "ru",
+  "icons": [
+    {
+      "src": "/brand/favicon/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/brand/favicon/icon-512-dark.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

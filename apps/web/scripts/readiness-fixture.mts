@@ -17,7 +17,7 @@ export async function createReadinessFixture(count = 600) {
   const session = randomBytes(32).toString('base64url'), token = randomBytes(32).toString('base64url')
   const recordIds = Array.from({ length: count }, () => newId('row'))
   await db.transaction(async (tx) => {
-    await tx.insert(users).values({ id: ids.user, email, name: 'Проверка TableApp' })
+    await tx.insert(users).values({ id: ids.user, email, name: 'Проверка Scatta' })
     await tx.insert(workspaces).values({ id: ids.workspace, ownerId: ids.user, name: 'Проверка готовности', slug: `readiness-${ids.workspace}` })
     await tx.insert(workspaceMembers).values({ workspaceId: ids.workspace, userId: ids.user, role: 'owner', acceptedAt: new Date() })
     await tx.insert(sessions).values({ id: session, userId: ids.user, expiresAt: new Date(Date.now() + 1800000) })

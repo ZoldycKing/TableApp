@@ -5,7 +5,7 @@ import { Logo } from '@/components/marketing/logo'
 import { ShellIcon } from './icons'
 import { NavList } from './nav-list'
 import { UserMenu } from './user-menu'
-import { LABEL, LABEL_MOTION, ROW, type ShellVariant } from './variant'
+import { ROW, type ShellVariant } from './variant'
 import { WorkspaceSwitcher, type ShellWorkspace } from './workspace-switcher'
 import { BusinessTree } from './business-tree'
 import type { BusinessNavigation } from '@/lib/business-navigation-types'
@@ -96,10 +96,10 @@ export function SidebarPanel({
         <div className="flex items-center gap-1">
           <Link
             href="/app"
-            aria-label="TableApp — обзор пространства"
+            aria-label="Scatta — обзор пространства"
             className={`flex h-9 min-w-0 flex-1 items-center rounded-xl outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-sage-400 ${ROW[variant]}`}
           >
-            <Logo wordClassName={`${LABEL[variant]} ${LABEL_MOTION}`} />
+            <Logo mark={variant === 'rail'} height={variant === 'rail' ? 28 : 26} />
           </Link>
 
           {variant === 'wide' ? button : null}

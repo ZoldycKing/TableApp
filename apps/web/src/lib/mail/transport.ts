@@ -13,7 +13,7 @@ import nodemailer, { type Transporter } from 'nodemailer'
  * ```
  * SMTP_URL=smtps://user%40yandex.ru:пароль-приложения@smtp.yandex.ru:465
  * MAIL_FROM=user@yandex.ru
- * MAIL_FROM_NAME=TableApp
+ * MAIL_FROM_NAME=Scatta
  * ```
  *
  * `@` в логине внутри адреса пишется как `%40`, иначе разбор адреса

@@ -37,8 +37,8 @@ export default async function SolutionsPage() {
   return (
     <MarketingShell signedIn={Boolean(member)}>
       <PageHero
-        trail={[{ href: '/', label: 'TableApp' }, { label: 'Решения' }]}
-        title="Как TableApp помогает в работе."
+        trail={[{ href: '/', label: 'Scatta' }, { label: 'Решения' }]}
+        title="Как Scatta помогает в работе."
         lead="Выберите рабочую задачу и посмотрите, как с ней справляются клиент, сотрудник и руководитель."
         actions={
           <>

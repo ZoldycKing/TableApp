@@ -382,9 +382,9 @@
 .ganttBar:hover .ganttLinkBtn, .ganttBar:focus-within .ganttLinkBtn, .ganttBar[data-dragging] .ganttLinkBtn { opacity: 1; }
 .ganttEmpty { position: absolute; top: 16px; min-height: 24px; padding: 0 8px; border: 0; background: transparent; color: var(--v2-muted, #526075); font: inherit; font-size: 12px; }
 .ganttHint { display: flex; justify-content: flex-end; }
-.ganttPopoverAnchor {
-  position: absolute; z-index: 12; width: min(280px, calc(100% - 16px));
-  transform: translateY(calc(-100% - 8px));
+.ganttPopoverFixed {
+  position: fixed; z-index: 40; width: min(280px, calc(100vw - 16px));
+  pointer-events: auto;
 }
 .ganttPopover {
   display: grid; gap: 6px; min-width: 0; padding: 12px; border: 1px solid var(--v2-line, #dce3ed);

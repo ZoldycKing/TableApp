@@ -151,6 +151,7 @@ export function ProjectsGantt(props: Props) {
   const [linkFrom, setLinkFrom] = useState<string | null>(null)
   const [activeId, setActiveId] = useState<string | null>(null)
   const [popoverId, setPopoverId] = useState<string | null>(null)
+  const [popoverPos, setPopoverPos] = useState<{ left: number; top: number } | null>(null)
   const [drag, setDrag] = useState<{ id: string; mode: 'move' | 'start' | 'end'; originX: number; start: string; end: string; moved: boolean } | null>(null)
   const scroller = useRef<HTMLDivElement>(null)
   const scrolled = useRef(false)
@@ -232,24 +233,32 @@ export function ProjectsGantt(props: Props) {
       delete el.dataset.previewEnd
     }
     if (moved && (start !== drag.start || end !== drag.end)) props.onDates?.(id, start, end)
-    else if (!moved) {
-      setActiveId(id)
-      setPopoverId(id)
+    else if (!moved) placePopover(id)
+  }
+
+  const placePopover = (id: string) => {
+    const el = scroller.current?.querySelector(`[data-bar-id="${id}"]`) as HTMLElement | null
+    const rect = el?.getBoundingClientRect()
+    if (rect) {
+      const width = 280
+      const left = Math.min(Math.max(8, rect.left), Math.max(8, window.innerWidth - width - 8))
+      const top = Math.max(8, rect.top - 12)
+      setPopoverPos({ left, top })
+    } else {
+      setPopoverPos({ left: 24, top: 120 })
     }
+    setActiveId(id)
+    setPopoverId(id)
   }
 
   const openPopover = (id: string, fromHover = false) => {
     if (fromHover && narrow) return
     if (fromHover) {
       if (hoverTimer.current) window.clearTimeout(hoverTimer.current)
-      hoverTimer.current = window.setTimeout(() => {
-        setActiveId(id)
-        setPopoverId(id)
-      }, 120)
+      hoverTimer.current = window.setTimeout(() => placePopover(id), 120)
       return
     }
-    setActiveId(id)
-    setPopoverId(id)
+    placePopover(id)
   }
 
   const leavePopover = () => {
@@ -258,12 +267,19 @@ export function ProjectsGantt(props: Props) {
       hoverTimer.current = window.setTimeout(() => {
         setPopoverId(null)
         setActiveId(null)
+        setPopoverPos(null)
       }, 180)
     }
   }
 
   const keepPopover = () => {
     if (hoverTimer.current) window.clearTimeout(hoverTimer.current)
+  }
+
+  const closePopover = () => {
+    setPopoverId(null)
+    setActiveId(null)
+    setPopoverPos(null)
   }
 
   const linkVisible = (link: DependencyLink) => {
@@ -461,21 +477,6 @@ export function ProjectsGantt(props: Props) {
                     title={task.title}
                     style={{ left: (bar.dayOffset + bar.daySpan) * width + 8, top: Math.max(14, (rowHeight - 18) / 2) }}
                   >{task.title}</span> : null}
-                  {popoverTask?.id === task.id ? <div
-                    className={css.ganttPopoverAnchor}
-                    data-placement="above"
-                    style={{ left: Math.max(8, bar.dayOffset * width), top: 10 }}
-                    onMouseEnter={keepPopover}
-                    onMouseLeave={leavePopover}
-                  >
-                    <GanttPopover
-                      task={popoverTask}
-                      now={props.now}
-                      readOnly={props.readOnly}
-                      onOpen={() => props.onOpenTask(popoverTask.id)}
-                      onClose={() => { setPopoverId(null); setActiveId(null) }}
-                    />
-                  </div> : null}
                 </> : <button type="button" className={css.ganttEmpty} style={{ left: 8 }} onClick={() => props.onOpenTask(task.id)}>Нет дат</button>}
               </div>
             })}
@@ -484,6 +485,20 @@ export function ProjectsGantt(props: Props) {
         </div>
       </div>
     </div>}
+    {popoverTask && popoverPos ? <div
+      className={css.ganttPopoverFixed}
+      style={{ left: popoverPos.left, top: popoverPos.top, transform: 'translateY(-100%)' }}
+      onMouseEnter={keepPopover}
+      onMouseLeave={leavePopover}
+    >
+      <GanttPopover
+        task={popoverTask}
+        now={props.now}
+        readOnly={props.readOnly}
+        onOpen={() => props.onOpenTask(popoverTask.id)}
+        onClose={closePopover}
+      />
+    </div> : null}
     {linkFrom && !props.readOnly ? <div className={css.ganttHint}><button type="button" className={buttons.secondary} onClick={() => setLinkFrom(null)}>Отменить связь</button></div> : null}
   </div>
 }

@@ -69,7 +69,7 @@ export function ProjectsGantt(props: Props) {
   const width = columnWidth(zoom)
   const todayOffset = days.includes(today) ? dayIndex(range.start, today) : -1
   const labelWidth = narrow ? 120 : 220
-  const rowHeight = narrow ? 76 : 56
+  const rowHeight = narrow ? 88 : 56
   const labelPad = narrow ? 48 : 220
   const chartWidth = Math.max(days.length * width + labelPad, 1)
 

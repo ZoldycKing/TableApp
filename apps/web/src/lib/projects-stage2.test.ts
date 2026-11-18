@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   activeTimerFor, canLinkTasks, canStartTimer, captureProjectTemplate, entryMinutes, filterClientComments,
-  formatCommentWhen, formatMinutes, formatSpentPair, formatSpentPairCompact, ganttArrowPath, ganttBars, ganttRange, materializeTemplate, matchesRoleFilter,
-  moveBarDates, nextOccurrenceDay, projectSpentMinutes, recurrenceLabel, resizeBarDates, shouldSpawnOnComplete,
-  stopTimerValues, totalSpentMinutes, validateManualMinutes, workloadFor,
+  formatCommentWhen, formatDayRange, formatMinutes, formatSpentPair, formatSpentPairCompact, ganttArrowPath, ganttBarTone,
+  columnWidth, ganttBars, ganttHeaderLabel, ganttHeaderLabelVisible, ganttRange, groupTasksByWeek, isWeekendDay,
+  materializeTemplate, matchesRoleFilter,
+  mondayOf, moveBarDates, nextOccurrenceDay, projectSpentMinutes, recurrenceLabel, resizeBarDates, shouldSpawnOnComplete,
+  stopTimerValues, totalSpentMinutes, validateManualMinutes, weekMiniBar, weekRangeLabel, workloadFor,
 } from './projects-stage2'
 
 describe('project dependencies', () => {
@@ -42,6 +44,48 @@ describe('gantt bars', () => {
     expect(formatSpentPairCompact(45, null)).toBe('45 мин')
     expect(formatCommentWhen('2026-11-18T09:55:00.000Z', Date.parse('2026-11-18T12:00:00.000Z'))).toBe('12:55')
     expect(formatCommentWhen('2026-11-17T09:55:00.000Z', Date.parse('2026-11-18T12:00:00.000Z'))).toContain('17.11.2026')
+  })
+})
+
+describe('gantt clarity helpers', () => {
+  const now = Date.parse('2026-11-18T12:00:00.000Z')
+  it('maps status and overdue into distinct bar tones', () => {
+    expect(ganttBarTone('Готово', '2026-11-10', now)).toBe('done')
+    expect(ganttBarTone('В работе', '2026-11-20', now)).toBe('progress')
+    expect(ganttBarTone('На проверке', '2026-11-20', now)).toBe('review')
+    expect(ganttBarTone('К работе', '2026-11-20', now)).toBe('todo')
+    expect(ganttBarTone('В работе', '2026-11-10', now)).toBe('overdue')
+    expect(isWeekendDay('2026-11-14')).toBe(true)
+    expect(isWeekendDay('2026-11-18')).toBe(false)
+    expect(mondayOf('2026-11-18')).toBe('2026-11-16')
+    expect(weekRangeLabel('2026-11-16')).toBe('16–22 ноября')
+    expect(formatDayRange('2026-11-12', '2026-11-15')).toBe('12.11.2026–15.11.2026')
+    expect(ganttHeaderLabel('2026-11-18', 0, 'day')).toBe('18 ср')
+    expect(ganttHeaderLabel('2026-11-16', 0, 'week')).toBe('16.11')
+    expect(ganttHeaderLabel('2026-11-17', 1, 'week')).toBe('')
+    expect(ganttHeaderLabel('2026-11-01', 0, 'month')).toBe('Ноябрь')
+    expect(ganttHeaderLabel('2026-11-02', 0, 'month')).toBe('')
+    expect(columnWidth('week')).toBe(36)
+    expect(ganttHeaderLabelVisible(0, 36, '16.11', 'week', 0)).toBe(true)
+    expect(ganttHeaderLabelVisible(7, 36, '23.11', 'week', 0)).toBe(true)
+    expect(ganttHeaderLabelVisible(7, 36, '23.11', 'week', 7 * 36 + 1)).toBe(false)
+    expect(ganttHeaderLabelVisible(7, 36, '23.11', 'week', 7 * 36 - 1)).toBe(true)
+    expect(ganttHeaderLabelVisible(0, 14, 'Ноябрь', 'month', 0)).toBe(true)
+    expect(ganttHeaderLabelVisible(0, 36, '', 'week', 0)).toBe(false)
+  })
+
+  it('groups dated tasks by week and builds mini bars', () => {
+    const tasks = [
+      { id: 'a', start: '2026-11-17', due: '2026-11-19' },
+      { id: 'b', start: null, due: '2026-11-24' },
+      { id: 'c', start: null, due: null },
+    ]
+    const groups = groupTasksByWeek(tasks)
+    expect(groups).toHaveLength(2)
+    expect(groups[0]?.label).toBe('16–22 ноября')
+    expect(groups[0]?.tasks.map(task => task.id)).toEqual(['a'])
+    expect(groups[1]?.tasks.map(task => task.id)).toEqual(['b'])
+    expect(weekMiniBar('2026-11-17', '2026-11-19', '2026-11-16')).toEqual({ left: 1 / 7, width: 3 / 7 })
   })
 })
 

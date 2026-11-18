@@ -1,5 +1,5 @@
 import { calendarDay, dateInstant, instantToWallClock } from '@tableapp/schema'
-import { DONE_STATUS, PROJECTS_TIME_ZONE, civilDay, formatDay, isDone, todayKey } from './projects-logic'
+import { DONE_STATUS, PROJECTS_TIME_ZONE, civilDay, formatDay, isDone, isOverdue, todayKey } from './projects-logic'
 
 /** Stage 2: Gantt links, time tracking, templates, recurrence, workload and client access. */
 
@@ -137,8 +137,135 @@ export function ganttBars(tasks: readonly GanttTask[], rangeStart: string): Gant
 
 export function columnWidth(zoom: GanttZoom) {
   if (zoom === 'day') return 44
-  if (zoom === 'week') return 28
+  if (zoom === 'week') return 36
   return 14
+}
+
+/** Approximate px width of a week/month header label for clip checks. */
+export function ganttHeaderLabelWidth(label: string, zoom: GanttZoom) {
+  if (!label) return 0
+  if (zoom === 'day') return Math.ceil(label.length * 6.2) + 8
+  if (zoom === 'week') return Math.ceil(label.length * 6.6) + 6
+  return Math.ceil(label.length * 7.2) + 8
+}
+
+export type GanttBarTone = 'done' | 'progress' | 'review' | 'todo' | 'overdue'
+
+/** Status/overdue tone for Gantt bars and legend dots. */
+export function ganttBarTone(status: string, due: string | null, now: number): GanttBarTone {
+  if (isDone(status)) return 'done'
+  if (isOverdue({ status, due }, now)) return 'overdue'
+  if (status === 'На проверке') return 'review'
+  if (status === 'В работе') return 'progress'
+  return 'todo'
+}
+
+export function isWeekendDay(day: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return false
+  const weekday = new Date(`${day}T12:00:00Z`).getUTCDay()
+  return weekday === 0 || weekday === 6
+}
+
+const MONTHS_GENITIVE = [
+  'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+  'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря',
+] as const
+
+const MONTHS_NOMINATIVE = [
+  'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+  'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь',
+] as const
+
+const WEEKDAYS_SHORT = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'] as const
+
+export function mondayOf(day: string) {
+  const date = new Date(`${day}T12:00:00Z`)
+  const offset = (date.getUTCDay() + 6) % 7
+  date.setUTCDate(date.getUTCDate() - offset)
+  return date.toISOString().slice(0, 10)
+}
+
+/** «16–22 ноября» or «28 ноября – 4 декабря». */
+export function weekRangeLabel(monday: string) {
+  const start = new Date(`${monday}T12:00:00Z`)
+  const end = new Date(start)
+  end.setUTCDate(end.getUTCDate() + 6)
+  const startDay = start.getUTCDate()
+  const endDay = end.getUTCDate()
+  const startMonth = start.getUTCMonth()
+  const endMonth = end.getUTCMonth()
+  if (startMonth === endMonth) return `${startDay}–${endDay} ${MONTHS_GENITIVE[startMonth]}`
+  return `${startDay} ${MONTHS_GENITIVE[startMonth]} – ${endDay} ${MONTHS_GENITIVE[endMonth]}`
+}
+
+export function formatDayRange(start: string | null, due: string | null) {
+  const from = formatDay(start)
+  const to = formatDay(due)
+  if (from && to && from !== to) return `${from}–${to}`
+  return from || to || ''
+}
+
+export function ganttHeaderLabel(day: string, index: number, zoom: GanttZoom) {
+  const date = new Date(`${day}T12:00:00Z`)
+  if (zoom === 'day') {
+    const weekday = WEEKDAYS_SHORT[date.getUTCDay()] ?? ''
+    return `${String(date.getUTCDate()).padStart(2, '0')} ${weekday}`
+  }
+  if (zoom === 'week') {
+    if (index % 7 !== 0) return ''
+    return `${String(date.getUTCDate()).padStart(2, '0')}.${String(date.getUTCMonth() + 1).padStart(2, '0')}`
+  }
+  if (day.endsWith('-01')) return MONTHS_NOMINATIVE[date.getUTCMonth()] ?? formatDay(day).slice(3)
+  return ''
+}
+
+/** Hide a header label when its cell is scrolled off the left edge (avoids clipped «.11»). */
+export function ganttHeaderLabelVisible(index: number, columnPx: number, label: string, zoom: GanttZoom, scrollLeft: number) {
+  if (!label) return false
+  const cellLeft = index * columnPx
+  // Left-aligned labels start at the cell edge — hide once that edge is past the viewport.
+  if (cellLeft < scrollLeft - 0.5) return false
+  if (zoom === 'week' || zoom === 'month') {
+    const needed = ganttHeaderLabelWidth(label, zoom)
+    const room = zoom === 'week' ? columnPx * 7 - 4 : columnPx * 28
+    if (needed > room) return false
+  }
+  return true
+}
+
+export type WeekPlanGroup<T extends { start: string | null; due: string | null }> = {
+  monday: string
+  label: string
+  tasks: T[]
+}
+
+/** Group dated tasks by the Monday of their start (or due). Undated tasks omitted. */
+export function groupTasksByWeek<T extends { start: string | null; due: string | null }>(tasks: readonly T[]): WeekPlanGroup<T>[] {
+  const buckets = new Map<string, T[]>()
+  for (const task of tasks) {
+    const anchor = civilDay(task.start) || civilDay(task.due)
+    if (!anchor) continue
+    const monday = mondayOf(anchor)
+    const list = buckets.get(monday) ?? []
+    list.push(task)
+    buckets.set(monday, list)
+  }
+  return [...buckets.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([monday, group]) => ({ monday, label: weekRangeLabel(monday), tasks: group }))
+}
+
+/** Mini-bar offsets inside a week row: 0–1 fractions of the week span. */
+export function weekMiniBar(start: string | null, due: string | null, monday: string) {
+  const from = civilDay(start) || civilDay(due)
+  const to = civilDay(due) || from
+  if (!from || !to) return null
+  const weekEnd = addDays(monday, 6)
+  const clippedStart = from < monday ? monday : from > weekEnd ? weekEnd : from
+  const clippedEnd = to > weekEnd ? weekEnd : to < monday ? monday : to
+  const offset = Math.max(0, Math.min(6, dayIndex(monday, clippedStart)))
+  const span = Math.max(1, Math.min(7 - offset, dayIndex(clippedStart, clippedEnd) + 1))
+  return { left: offset / 7, width: span / 7 }
 }
 
 export function moveBarDates(start: string, end: string, deltaDays: number) {

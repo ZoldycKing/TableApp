@@ -56,7 +56,7 @@ export function EmptyAccount({ email }: { email: string }) {
   }
   return <div className="platform-surface">
     <header className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-5 py-5 sm:px-8">
-      <Link href="/app" aria-label="TableApp — личный кабинет"><Logo /></Link>
+      <Link href="/app" aria-label="Scatta — личный кабинет"><Logo /></Link>
       <div className="flex min-w-0 items-center gap-2 text-sm"><span className="max-w-[60vw] truncate text-ink-soft" title={email}>{email}</span><button type="button" disabled={pending} className="min-h-11 rounded-lg px-3 text-ink-soft hover:bg-sand-100 focus-visible:ring-2 focus-visible:ring-sage-400" onClick={async () => { if (inFlight.current) return; inFlight.current = true; setPending(true); try { await signOutMemberAction(); window.location.assign('/login') } catch { inFlight.current = false; setPending(false); setError('Не удалось выйти. Попробуйте ещё раз.') } }}>Выйти</button></div>
     </header>
     <main className="mx-auto max-w-5xl px-5 pb-12 pt-7 sm:px-8 sm:pt-10">

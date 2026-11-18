@@ -38,7 +38,7 @@ export default async function LoginPage({
     <div className="platform-surface">
       <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center px-6 py-12">
         <Link href="/" className="mb-8 self-start transition-opacity hover:opacity-80">
-          <Logo />
+          <Logo height={34} />
         </Link>
 
         {chosen ? (

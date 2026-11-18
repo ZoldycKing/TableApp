@@ -82,7 +82,7 @@ export default async function TemplatePage({ params, searchParams }: { params: P
   const dispatch = template.id === 'zayavki'
   const projects = template.id === 'proekty'
   return <MarketingShell signedIn={Boolean(member)}>
-    <PageHero trail={[{href:'/',label:'TableApp'},{href:'/templates',label:'Шаблоны'},{label:template.name}]} icon={<TemplateIcon id={template.id} className="size-12" />} title={template.name} lead={copy.description} note={template.audience} actions={<><PrimaryLink href={start}>Начать с этого шаблона</PrimaryLink><SecondaryLink href="#primer">Посмотреть экраны</SecondaryLink></>} />
+    <PageHero trail={[{href:'/',label:'Scatta'},{href:'/templates',label:'Шаблоны'},{label:template.name}]} icon={<TemplateIcon id={template.id} className="size-12" />} title={template.name} lead={copy.description} note={template.audience} actions={<><PrimaryLink href={start}>Начать с этого шаблона</PrimaryLink><SecondaryLink href="#primer">Посмотреть экраны</SecondaryLink></>} />
     {shop && <Section id="primer" title="Попробуйте магазин"><ShopTemplateDemo path="/templates/zakazy" view={view} device={device} /></Section>}
     {salon && <Section id="primer" title="Попробуйте салон"><BookingTemplateDemo view={view} phone={device === 'phone'} /></Section>}
     {dispatch && <Section id="primer" title="Попробуйте заявки"><DispatchDemo view={view} phone={device === 'phone'} /></Section>}

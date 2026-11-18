@@ -63,8 +63,26 @@ function useNarrow() {
   return narrow
 }
 
-function titleFits(title: string, barWidth: number) {
-  return barWidth >= Math.min(168, 36 + title.length * 6.2)
+/** Родители, затем их подзадачи; сироты — в конце. */
+function flattenGanttRows(tasks: GanttTaskRow[]): GanttTaskRow[] {
+  const tops = tasks.filter(task => !task.parentId)
+  const seen = new Set<string>()
+  const rows: GanttTaskRow[] = []
+  for (const parent of tops) {
+    rows.push(parent)
+    seen.add(parent.id)
+    for (const child of tasks) {
+      if (child.parentId !== parent.id || seen.has(child.id)) continue
+      rows.push(child)
+      seen.add(child.id)
+    }
+  }
+  for (const task of tasks) {
+    if (seen.has(task.id)) continue
+    rows.push(task)
+    seen.add(task.id)
+  }
+  return rows
 }
 
 function toneOf(task: GanttTaskRow, now: number): GanttBarTone {
@@ -159,18 +177,17 @@ export function ProjectsGantt(props: Props) {
   const scrolled = useRef(false)
   const hoverTimer = useRef<number | null>(null)
   const today = todayKey(props.now)
-  const top = props.tasks.filter(task => !task.parentId)
-  const dated = top.filter(task => task.start || task.due)
-  const range = useMemo(() => ganttRange(top, today, zoom === 'day' ? 2 : zoom === 'week' ? 7 : 14), [top, today, zoom])
+  const rows = useMemo(() => flattenGanttRows(props.tasks), [props.tasks])
+  const dated = rows.filter(task => task.start || task.due)
+  const range = useMemo(() => ganttRange(rows, today, zoom === 'day' ? 2 : zoom === 'week' ? 7 : 14), [rows, today, zoom])
   const days = useMemo(() => eachDay(range.start, range.end), [range.start, range.end])
-  const bars = useMemo(() => ganttBars(top, range.start), [top, range.start])
+  const bars = useMemo(() => ganttBars(rows, range.start), [rows, range.start])
   const width = columnWidth(zoom)
   const todayOffset = days.includes(today) ? dayIndex(range.start, today) : -1
-  const labelWidth = narrow ? 132 : 228
-  const rowHeight = narrow ? 88 : 56
-  const labelPad = narrow ? 48 : 220
-  const chartWidth = Math.max(days.length * width + labelPad, 1)
-  const popoverTask = popoverId ? top.find(task => task.id === popoverId) ?? null : null
+  const labelWidth = narrow ? 124 : 228
+  const rowHeight = narrow ? 56 : 48
+  const chartWidth = Math.max(days.length * width + 24, 1)
+  const popoverTask = popoverId ? rows.find(task => task.id === popoverId) ?? null : null
 
   useEffect(() => {
     setPhoneMode(narrow ? 'list' : 'chart')
@@ -218,8 +235,6 @@ export function ProjectsGantt(props: Props) {
     placeBar(el, next.start, next.end)
     el.dataset.previewStart = next.start
     el.dataset.previewEnd = next.end
-    const label = scroller.current?.querySelector(`[data-bar-label="${drag.id}"]`) as HTMLElement | null
-    if (label) label.style.left = `${dayIndex(range.start, next.end) * width + width + 8}px`
   }
 
   const finishDrag = () => {
@@ -240,12 +255,14 @@ export function ProjectsGantt(props: Props) {
     else if (!moved) placePopover(id)
   }
 
-  const placePopover = (id: string) => {
-    const el = scroller.current?.querySelector(`[data-bar-id="${id}"]`) as HTMLElement | null
+  const placePopover = (id: string, anchor?: HTMLElement | null) => {
+    const el = anchor
+      ?? (scroller.current?.querySelector(`[data-bar-id="${id}"]`) as HTMLElement | null)
+      ?? (document.querySelector(`[data-gantt-label="${id}"]`) as HTMLElement | null)
     const rect = el?.getBoundingClientRect()
     if (rect) {
-      const width = 280
-      const left = Math.min(Math.max(8, rect.left), Math.max(8, window.innerWidth - width - 8))
+      const box = 280
+      const left = Math.min(Math.max(8, rect.left), Math.max(8, window.innerWidth - box - 8))
       const top = Math.max(8, rect.top - 12)
       setPopoverPos({ left, top })
     } else {
@@ -255,14 +272,14 @@ export function ProjectsGantt(props: Props) {
     setPopoverId(id)
   }
 
-  const openPopover = (id: string, fromHover = false) => {
+  const openPopover = (id: string, fromHover = false, anchor?: HTMLElement | null) => {
     if (fromHover && narrow) return
     if (fromHover) {
       if (hoverTimer.current) window.clearTimeout(hoverTimer.current)
-      hoverTimer.current = window.setTimeout(() => placePopover(id), 120)
+      hoverTimer.current = window.setTimeout(() => placePopover(id, anchor), 120)
       return
     }
-    placePopover(id)
+    placePopover(id, anchor)
   }
 
   const leavePopover = () => {
@@ -307,7 +324,7 @@ export function ProjectsGantt(props: Props) {
         </ul>
       </div>
       <WeekPlanList
-        tasks={top}
+        tasks={rows.filter(task => !task.parentId)}
         now={props.now}
         selectedId={activeId}
         onSelect={setActiveId}
@@ -316,7 +333,7 @@ export function ProjectsGantt(props: Props) {
     </div>
   }
 
-  const noDates = top.length > 0 && dated.length === 0
+  const noDates = rows.length > 0 && dated.length === 0
 
   return <div className={css.gantt} data-projects-gantt data-narrow={narrow || undefined} data-phone-mode={narrow ? 'chart' : undefined}>
     <div className={css.ganttToolbar}>
@@ -350,28 +367,29 @@ export function ProjectsGantt(props: Props) {
         {linkFrom ? 'Выберите задачу-последователя или нажмите ещё раз, чтобы отменить' : 'Потяните полосу, чтобы сдвинуть срок'}
       </p> : null}
     </div>
-    {noDates ? <p className={css.empty} data-gantt-empty>У задач нет сроков — добавьте даты, чтобы увидеть план</p> : <div className={css.ganttFrame} style={{ '--gantt-label': `${labelWidth}px` } as CSSProperties}>
-      <div className={css.ganttSide} style={{ width: labelWidth }}>
+    {noDates ? <p className={css.empty} data-gantt-empty>У задач нет сроков — добавьте даты, чтобы увидеть план</p> : <div className={css.ganttFrame} style={{ '--gantt-label': `${labelWidth}px`, '--gantt-row': `${rowHeight}px` } as CSSProperties}>
+      <div className={css.ganttSide} style={{ width: labelWidth }} data-gantt-names>
         <div className={css.ganttCorner}>Задача</div>
-        {top.map(task => {
+        {rows.map(task => {
           const tone = toneOf(task, props.now)
-          const rangeLabel = formatDayRange(task.start, task.due) || 'Без срока'
+          const nested = Boolean(task.parentId)
           return <button
             key={task.id}
             type="button"
             className={css.ganttLabel}
             style={{ height: rowHeight }}
+            data-gantt-label={task.id}
+            data-nested={nested || undefined}
             data-active={activeId === task.id || undefined}
-            title={`${task.title}\n${rangeLabel}`}
-            onClick={() => { setActiveId(task.id); props.onOpenTask(task.id) }}
-            onMouseEnter={() => openPopover(task.id, true)}
+            title={task.title}
+            onClick={event => openPopover(task.id, false, event.currentTarget)}
+            onMouseEnter={event => openPopover(task.id, true, event.currentTarget)}
             onMouseLeave={leavePopover}
           >
             <span className={css.ganttLabelTitle}>
               <span className={css.ganttStatusDot} data-tone={tone} aria-hidden />
               <strong>{task.title}</strong>
             </span>
-            <span>{rangeLabel}</span>
           </button>
         })}
       </div>
@@ -398,7 +416,7 @@ export function ProjectsGantt(props: Props) {
               >{show ? label : ''}</div>
             })}
           </div>
-          <div className={css.ganttBody} style={{ height: Math.max(top.length, 1) * rowHeight }}>
+          <div className={css.ganttBody} style={{ height: Math.max(rows.length, 1) * rowHeight }}>
             {zoom === 'day' ? days.map((day, index) => isWeekendDay(day) ? <div
               key={`we-${day}`}
               className={css.ganttWeekend}
@@ -406,7 +424,7 @@ export function ProjectsGantt(props: Props) {
               aria-hidden
             /> : null) : null}
             {todayOffset >= 0 ? <div className={css.ganttToday} style={{ left: todayOffset * width }} aria-hidden /> : null}
-            <svg className={css.ganttArrows} width={chartWidth} height={Math.max(top.length, 1) * rowHeight} aria-hidden>
+            <svg className={css.ganttArrows} width={chartWidth} height={Math.max(rows.length, 1) * rowHeight} aria-hidden>
               <defs>
                 <marker id={`projects-gantt-arrow-${markerId}`} markerWidth="12" markerHeight="10" refX="10" refY="5" orient="auto" markerUnits="userSpaceOnUse">
                   <path d="M0,0 L10,5 L0,10 Z" fill="currentColor" />
@@ -416,8 +434,8 @@ export function ProjectsGantt(props: Props) {
                 if (!linkVisible(link)) return []
                 const fromBar = bars.find(bar => bar.id === link.fromId)
                 const toBar = bars.find(bar => bar.id === link.toId)
-                const fromIndex = top.findIndex(task => task.id === link.fromId)
-                const toIndex = top.findIndex(task => task.id === link.toId)
+                const fromIndex = rows.findIndex(task => task.id === link.fromId)
+                const toIndex = rows.findIndex(task => task.id === link.toId)
                 if (!fromBar || !toBar || fromIndex < 0 || toIndex < 0) return []
                 const from = { x: (fromBar.dayOffset + fromBar.daySpan) * width, y: fromIndex * rowHeight + rowHeight / 2 }
                 const to = { x: toBar.dayOffset * width, y: toIndex * rowHeight + rowHeight / 2 }
@@ -425,7 +443,7 @@ export function ProjectsGantt(props: Props) {
                 const hi = Math.max(fromIndex, toIndex)
                 let lane = Math.min(from.x, to.x) - 48
                 for (let i = lo; i <= hi; i += 1) {
-                  const mid = bars.find(bar => bar.id === top[i]!.id)
+                  const mid = bars.find(bar => bar.id === rows[i]!.id)
                   if (mid) lane = Math.min(lane, mid.dayOffset * width - 16)
                 }
                 const active = linkActive(link)
@@ -441,35 +459,34 @@ export function ProjectsGantt(props: Props) {
                 />
               })}
             </svg>
-            {top.map((task, index) => {
+            {rows.map((task, index) => {
               const bar = bars.find(item => item.id === task.id)
               const tone = toneOf(task, props.now)
               const barWidth = bar ? Math.max(bar.daySpan * width, width) : 0
-              const showOutside = Boolean(bar && !narrow && !titleFits(task.title, barWidth - (props.readOnly ? 28 : 52)))
-              const showInside = Boolean(bar && !narrow && !showOutside)
-              return <div key={task.id} className={css.ganttRow} style={{ top: index * rowHeight, height: rowHeight }}>
-                {bar ? <>
+              return <div key={task.id} className={css.ganttRow} style={{ top: index * rowHeight, height: rowHeight }} data-gantt-row={task.id}>
+                {bar ? (
                   <div
                     className={css.ganttBar}
                     data-bar-id={bar.id}
                     data-tone={tone}
                     data-active={activeId === task.id || undefined}
                     data-dragging={drag?.id === bar.id || undefined}
+                    title={task.title}
                     style={{ left: bar.dayOffset * width, width: barWidth }}
                     onPointerDown={event => {
                       if (props.readOnly) {
-                        openPopover(task.id)
+                        openPopover(task.id, false, event.currentTarget)
                         return
                       }
                       event.currentTarget.setPointerCapture?.(event.pointerId)
                       setDrag({ id: bar.id, mode: 'move', originX: event.clientX, start: bar.start, end: bar.end, moved: false })
                       setActiveId(task.id)
                     }}
-                    onClick={() => {
+                    onClick={event => {
                       if (drag?.moved) return
-                      openPopover(task.id)
+                      openPopover(task.id, false, event.currentTarget)
                     }}
-                    onMouseEnter={() => openPopover(task.id, true)}
+                    onMouseEnter={event => openPopover(task.id, true, event.currentTarget)}
                     onMouseLeave={leavePopover}
                   >
                     {task.assigneeName ? <span className={css.ganttBarAvatar}><BookingAvatar name={task.assigneeName} photo={task.assigneePhoto} small /></span> : null}
@@ -486,18 +503,11 @@ export function ProjectsGantt(props: Props) {
                         setLinkFrom(null)
                       }}><ProtoIcon name="link" size={12} /></button>
                     </> : null}
-                    {showInside ? <span className={css.ganttBarTitle}>{task.title}</span> : null}
                   </div>
-                  {showOutside ? <span
-                    className={css.ganttBarLabel}
-                    data-bar-label={bar.id}
-                    title={task.title}
-                    style={{ left: (bar.dayOffset + bar.daySpan) * width + 8, top: Math.max(14, (rowHeight - 18) / 2) }}
-                  >{task.title}</span> : null}
-                </> : <button type="button" className={css.ganttEmpty} style={{ left: 8 }} onClick={() => props.onOpenTask(task.id)}>Нет дат</button>}
+                ) : null}
               </div>
             })}
-            {!top.length ? <p className={css.empty} style={{ padding: 16 }}>В проекте пока нет задач для Ганта.</p> : null}
+            {!rows.length ? <p className={css.empty} style={{ padding: 16 }}>В проекте пока нет задач для Ганта.</p> : null}
           </div>
         </div>
       </div>

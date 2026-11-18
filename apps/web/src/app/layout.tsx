@@ -12,15 +12,25 @@ import { AgentationDevtools } from '@/components/agentation-devtools'
  * не разошлись в написании домена.
  */
 
-const title = 'TableApp — приложение для бизнеса из ваших таблиц'
+const title = 'Scatta — приложение для бизнеса из ваших таблиц'
 const description =
   'Соберите из своих таблиц приложение для заказов, клиентов и учёта. Настройте рабочие экраны и доступ для себя, сотрудников и клиентов.'
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
-  title: { default: title, template: '%s · TableApp' },
+  title: { default: title, template: '%s · Scatta' },
   description,
-  applicationName: 'TableApp',
+  applicationName: 'Scatta',
+  manifest: '/manifest.webmanifest',
+  icons: {
+    icon: [
+      { url: '/brand/favicon/favicon.ico', sizes: 'any' },
+      { url: '/brand/favicon/favicon-16.png', sizes: '16x16', type: 'image/png' },
+      { url: '/brand/favicon/favicon-32.png', sizes: '32x32', type: 'image/png' },
+      { url: '/brand/favicon/favicon-48.png', sizes: '48x48', type: 'image/png' },
+    ],
+    apple: [{ url: '/brand/favicon/apple-touch-icon-180.png', sizes: '180x180', type: 'image/png' }],
+  },
   /*
    * Канонического адреса здесь нет намеренно.
    *
@@ -32,7 +42,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: 'website',
     locale: 'ru_RU',
-    siteName: 'TableApp',
+    siteName: 'Scatta',
     title,
     description,
   },

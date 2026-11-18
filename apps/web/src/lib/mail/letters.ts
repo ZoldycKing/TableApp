@@ -22,7 +22,7 @@ function shell(body: string, footer: string): string {
 <html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"></head>
 <body style="margin:0;padding:24px 12px;background:${SAND};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;color:${INK}">
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:480px;margin:0 auto">
-<tr><td style="padding:0 0 20px"><span style="font-size:17px;font-weight:700;letter-spacing:-0.2px">TableApp</span></td></tr>
+<tr><td style="padding:0 0 20px"><span style="font-size:17px;font-weight:700;letter-spacing:-0.2px">Scatta</span></td></tr>
 <tr><td style="background:#ffffff;border:1px solid ${BORDER};border-radius:16px;padding:28px 24px">${body}</td></tr>
 <tr><td style="padding:16px 4px 0;font-size:12px;line-height:1.5;color:${MUTED}">${footer}</td></tr>
 </table></body></html>`
@@ -47,14 +47,14 @@ export type LetterInput = {
   link: string
   /** Шестизначный код: у приглашения его нет. */
   code?: string
-  /** Название приложения — когда входят не в TableApp, а в кабинет фирмы. */
+  /** Название приложения — когда входят не в Scatta, а в кабинет фирмы. */
   appName?: string
   /** Кто пригласил: без этого приглашение читается как спам. */
   invitedBy?: string
 }
 
 export function compose(input: LetterInput): { subject: string; text: string; html: string } {
-  const where = input.appName ? `«${input.appName}»` : 'TableApp'
+  const where = input.appName ? `«${input.appName}»` : 'Scatta'
 
   if (input.kind === 'invite') {
     const who = input.invitedBy ? `${input.invitedBy} приглашает` : 'Вас приглашают'

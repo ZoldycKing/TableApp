@@ -82,8 +82,15 @@
 .choiceRow { display: flex; gap: 6px; min-width: 0; overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; padding-bottom: 2px; }
 .form .choiceRow { flex-wrap: wrap; overflow: visible; }
 .form .choiceRow button { white-space: normal; max-width: 100%; }
-.segment { display: grid; width: 100%; min-width: 0; border: 1px solid var(--v2-line, #dce3ed); border-radius: 10px; overflow: hidden; background: var(--v2-surface, #fff); }
-.segment button { min-width: 0; min-height: 36px; padding: 6px 4px; border: 0; border-right: 1px solid var(--v2-line, #dce3ed); background: transparent; color: inherit; font: inherit; font-size: 12px; font-weight: 650; line-height: 1.2; white-space: nowrap; }
+.segment {
+  display: grid; width: 100%; min-width: 0; border: 1px solid var(--v2-line, #dce3ed); border-radius: 10px;
+  overflow: hidden; background: var(--v2-surface, #fff); align-content: center;
+}
+.segment button {
+  min-width: 0; min-height: 36px; padding: 6px 4px; box-sizing: border-box;
+  border: 0; border-right: 1px solid var(--v2-line, #dce3ed); background: transparent; color: inherit;
+  font: inherit; font-size: 12px; font-weight: 650; line-height: 1.2; white-space: nowrap;
+}
 .segment button:last-child { border-right: 0; }
 .segment button[aria-pressed='true'] { background: var(--v2-soft, #e7eef6); color: var(--v2-ink, #111827); }
 .peoplePick { display: flex; flex-wrap: nowrap; gap: 8px; min-width: 0; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
@@ -265,12 +272,10 @@
   .workloadGrid { min-width: 560px; }
   .toolbar { flex-wrap: wrap; align-items: flex-start; }
   .toolbar .segment { width: 100%; max-width: 280px; }
-  .ganttFrame { grid-template-columns: 132px minmax(0, 1fr); }
-  .ganttBarLabel { display: none; }
+  .ganttFrame { grid-template-columns: var(--gantt-label, 120px) minmax(0, 1fr); }
   .ganttLinkBtn { display: none; }
-  .ganttBar { top: 18px; }
+  .ganttBar { top: 12px; height: 24px; }
   .ganttToolbarRow { flex-direction: column; align-items: stretch; }
-  .ganttToolbarRow .segment { max-width: none; }
   .ganttToggle { justify-content: space-between; width: 100%; }
   .chatActions { flex-wrap: nowrap; }
   .chatMeta { flex-wrap: nowrap; gap: 4px; }
@@ -284,7 +289,19 @@
 .ganttExplainer { margin: 0; color: var(--v2-ink, #1f2937); font-size: 14px; line-height: 1.4; font-weight: 650; }
 .ganttDragHint { margin: 0; color: var(--v2-muted, #526075); font-size: 12px; line-height: 1.35; }
 .ganttToolbarRow { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-width: 0; }
-.ganttToolbarRow .segment { flex: 1 1 220px; max-width: 320px; }
+.ganttToolbarRow .segment {
+  flex: 1 1 220px; max-width: 320px; min-height: 36px; height: auto; max-height: 40px;
+  align-self: center; grid-auto-rows: 36px; align-content: center;
+}
+.ganttToolbar .segment button { min-height: 36px; height: 36px; max-height: 40px; padding-block: 0; box-sizing: border-box; }
+/* После общих правил: на телефоне колонка не должна раздувать сегмент по flex-basis. */
+@media (max-width: 720px) {
+  .ganttToolbarRow .segment {
+    flex: 0 0 auto; width: 100%; max-width: none; height: 36px; max-height: 40px;
+    align-self: stretch;
+  }
+  .ganttToolbar .segment { height: 36px; max-height: 40px; }
+}
 .ganttToggle {
   display: inline-flex; align-items: center; gap: 10px; min-height: 36px; padding: 4px 4px 4px 12px;
   border: 1px solid var(--v2-line, #dce3ed); border-radius: 999px; background: var(--v2-surface, #fff);
@@ -312,9 +329,18 @@
 .ganttSwatch[data-tone='todo'] { background: #c5d4e6; border-color: #23486f; }
 .ganttSwatch[data-tone='overdue'] { background: #f5b5bc; border-color: #9f1239; }
 .ganttSwatch[data-tone='today'] { width: 4px; height: 16px; border-radius: 2px; background: #9f1239; border: 0; }
-.ganttFrame { display: grid; grid-template-columns: var(--gantt-label, 220px) minmax(0, 1fr); border: 1px solid var(--v2-line, #dce3ed); border-radius: 14px; background: var(--v2-surface, #fff); overflow: hidden; min-width: 0; }
-.ganttSide { display: grid; grid-template-rows: 40px; align-content: start; border-right: 1px solid var(--v2-line, #dce3ed); background: var(--v2-surface, #fff); z-index: 2; }
-.ganttScroll { overflow-x: auto; overflow-y: visible; min-width: 0; -webkit-overflow-scrolling: touch; }
+.ganttFrame {
+  display: grid; grid-template-columns: var(--gantt-label, 220px) minmax(0, 1fr);
+  border: 1px solid var(--v2-line, #dce3ed); border-radius: 14px; background: var(--v2-surface, #fff);
+  overflow: hidden; min-width: 0; align-items: start;
+}
+/* Имена остаются на месте при горизонтальной прокрутке шкалы; вертикаль — общая. */
+.ganttSide {
+  display: grid; grid-template-rows: 40px; align-content: start;
+  border-right: 1px solid var(--v2-line, #dce3ed); background: var(--v2-surface, #fff);
+  position: sticky; left: 0; z-index: 3; min-width: 0;
+}
+.ganttScroll { overflow-x: auto; overflow-y: hidden; min-width: 0; -webkit-overflow-scrolling: touch; }
 .ganttInner { position: relative; min-width: 100%; }
 .ganttHead { display: grid; position: sticky; top: 0; z-index: 4; background: var(--v2-page, #f3f4f6); border-bottom: 1px solid var(--v2-line, #dce3ed); }
 .ganttCorner, .ganttDay { min-height: 40px; padding: 8px 4px; font-size: 11px; font-weight: 700; color: var(--v2-muted, #526075); text-align: center; white-space: nowrap; box-sizing: border-box; overflow: hidden; }
@@ -333,36 +359,38 @@
 .ganttArrow[data-dimmed] { opacity: .2; }
 .ganttArrow[data-active] { opacity: 1; stroke-width: 2.25; color: #23486f; }
 .ganttRow { position: absolute; left: 0; right: 0; display: block; border-bottom: 1px solid var(--v2-line, #e8edf3); z-index: 2; }
-.ganttLabel { display: grid; align-content: center; gap: 3px; width: 100%; padding: 6px 8px; border: 0; border-bottom: 1px solid var(--v2-line, #e8edf3); background: var(--v2-surface, #fff); color: inherit; font: inherit; text-align: left; box-sizing: border-box; }
+.ganttLabel {
+  display: flex; align-items: center; gap: 0; width: 100%; min-width: 0; min-height: var(--gantt-row, 48px);
+  padding: 6px 10px; border: 0; border-bottom: 1px solid var(--v2-line, #e8edf3);
+  background: var(--v2-surface, #fff); color: inherit; font: inherit; text-align: left; box-sizing: border-box;
+}
+.ganttLabel[data-nested] { padding-left: 28px; }
 .ganttLabel[data-active] { background: #f3f7fb; }
-.ganttLabelTitle { display: flex; align-items: flex-start; gap: 6px; min-width: 0; }
-.ganttStatusDot { flex: none; width: 8px; height: 8px; margin-top: 4px; border-radius: 999px; background: #c5d4e6; }
+.ganttLabelTitle { display: flex; align-items: flex-start; gap: 6px; min-width: 0; width: 100%; }
+.ganttStatusDot { flex: none; width: 8px; height: 8px; margin-top: 5px; border-radius: 999px; background: #c5d4e6; }
 .ganttStatusDot[data-tone='done'] { background: #1f6b3a; }
 .ganttStatusDot[data-tone='progress'] { background: #b7791f; }
 .ganttStatusDot[data-tone='review'] { background: #3d457f; }
 .ganttStatusDot[data-tone='todo'] { background: #3d5f86; }
 .ganttStatusDot[data-tone='overdue'] { background: #9f1239; }
-.ganttLabel strong { font-size: 12px; line-height: 1.3; overflow-wrap: anywhere; }
-.ganttLabel > span:last-child { color: var(--v2-muted, #526075); font-size: 11px; line-height: 1.25; overflow-wrap: anywhere; padding-left: 14px; }
-/* Phone: up to 3 lines with a real ellipsis; full title stays on the button title / tap. */
+.ganttLabel strong {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2;
+  overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1 1 auto;
+  font-size: 12px; font-weight: 700; line-height: 1.35; max-height: calc(1.35em * 2);
+  white-space: normal; word-break: break-word; overflow-wrap: anywhere;
+}
 @media (max-width: 720px) {
-  .ganttLabel { padding: 6px 6px 5px; gap: 3px; align-content: start; }
-  .ganttLabelTitle { min-width: 0; align-items: flex-start; }
+  .ganttLabel { padding: 6px 6px; align-items: flex-start; }
+  .ganttLabel[data-nested] { padding-left: 18px; }
   .ganttLabel strong {
-    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3;
-    overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1;
-    font-size: 11px; line-height: 1.45; max-height: calc(1.45em * 3);
-    word-break: break-word; overflow-wrap: anywhere;
+    font-size: 11px; line-height: 1.4; max-height: calc(1.4em * 2);
   }
-  .ganttLabel > span:last-child {
-    display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    font-size: 10px; line-height: 1.35; min-width: 0; padding-left: 14px;
-  }
+  .ganttStatusDot { margin-top: 3px; }
 }
 .ganttBar {
-  position: absolute; top: 14px; height: 28px; display: flex; align-items: center; gap: 6px; padding: 0 8px 0 4px;
+  position: absolute; top: 10px; height: 28px; display: flex; align-items: center; gap: 6px; padding: 0 6px 0 4px;
   border-radius: 8px; background: #c5d4e6; color: #23486f; font-size: 12px; font-weight: 700;
-  cursor: grab; touch-action: none; overflow: visible; z-index: 2; box-sizing: border-box;
+  cursor: grab; touch-action: none; overflow: hidden; z-index: 2; box-sizing: border-box;
   border: 1px solid color-mix(in srgb, currentColor 28%, transparent);
 }
 .ganttBar[data-tone='done'] { background: #c8e6cc; color: #1f6b3a; }
@@ -373,8 +401,6 @@
 .ganttBar[data-active] { box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 45%, transparent); }
 .ganttBarAvatar { flex: none; display: inline-grid; place-items: center; width: 22px; height: 22px; }
 .ganttBarAvatar :global([class*='avatar']) { width: 22px; height: 22px; }
-.ganttBarTitle { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ganttBarLabel { position: absolute; z-index: 3; padding: 1px 4px; color: var(--v2-ink, #1f2937); font-size: 12px; font-weight: 650; line-height: 1.25; white-space: nowrap; pointer-events: none; overflow: visible; text-overflow: unset; max-width: none; background: var(--v2-surface, #fff); border-radius: 4px; }
 .ganttHandle { position: absolute; top: 0; bottom: 0; width: 10px; padding: 0; border: 0; background: transparent; cursor: ew-resize; opacity: 0; transition: opacity .12s ease; }
 .ganttHandle[data-edge='start'] { left: 0; }
 .ganttHandle[data-edge='end'] { right: 0; }
@@ -386,7 +412,6 @@
 .ganttLinkBtn { flex: none; display: inline-grid; place-items: center; width: 22px; height: 22px; margin-left: auto; padding: 0; border: 0; border-radius: 999px; background: rgba(255,255,255,.85); color: inherit; opacity: 0; transition: opacity .12s ease; }
 .ganttBar:hover .ganttHandle, .ganttBar:focus-within .ganttHandle, .ganttBar[data-dragging] .ganttHandle,
 .ganttBar:hover .ganttLinkBtn, .ganttBar:focus-within .ganttLinkBtn, .ganttBar[data-dragging] .ganttLinkBtn { opacity: 1; }
-.ganttEmpty { position: absolute; top: 16px; min-height: 24px; padding: 0 8px; border: 0; background: transparent; color: var(--v2-muted, #526075); font: inherit; font-size: 12px; }
 .ganttHint { display: flex; justify-content: flex-end; }
 .ganttPopoverFixed {
   position: fixed; z-index: 40; width: min(280px, calc(100vw - 16px));

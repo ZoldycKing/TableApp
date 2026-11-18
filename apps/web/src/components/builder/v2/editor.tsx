@@ -169,7 +169,7 @@ export function AppV2Editor({ initialApp, initialRevision, initialPublishedRevis
       document.removeEventListener('visibilitychange', refresh)
     }
   }, [app.id, adoptDraft, logoUploading, modal])
-  useEffect(() => { document.title = `${app.name || 'Приложение'} · Конструктор · TableApp` }, [app.name])
+  useEffect(() => { document.title = `${app.name || 'Приложение'} · Конструктор · Scatta` }, [app.name])
   const commit = (next: AppV2) => {
     if (!canEdit) return false
     if (next.nodes.length > 2000 || next.screens.length > 100 || next.sources.length > 200 || next.workflows.length > 100) { setError('Достигнут предел количества экранов или элементов'); return false }

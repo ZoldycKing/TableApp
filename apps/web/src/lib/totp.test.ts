@@ -75,9 +75,9 @@ describe('base32', () => {
 describe('ссылка для аутентификатора', () => {
   it('содержит секрет, издателя и адрес', () => {
     const uri = totpUri('JBSWY3DPEHPK3PXP', 'owner@example.ru')
-    expect(uri.startsWith('otpauth://totp/TableApp%3Aowner%40example.ru?')).toBe(true)
+    expect(uri.startsWith('otpauth://totp/Scatta%3Aowner%40example.ru?')).toBe(true)
     expect(uri).toContain('secret=JBSWY3DPEHPK3PXP')
-    expect(uri).toContain('issuer=TableApp')
+    expect(uri).toContain('issuer=Scatta')
   })
 })
 

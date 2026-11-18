@@ -30,21 +30,21 @@ describe('помощник метаданных', () => {
   })
 
   it('заголовок для соцсетей назван вместе с продуктом', () => {
-    expect(meta.openGraph?.title).toContain('TableApp')
+    expect(meta.openGraph?.title).toContain('Scatta')
     expect(meta.title).toBe('Производственный учёт без сложных Excel-таблиц')
   })
 
-  it('главной хвост «· TableApp» не приписывается', () => {
+  it('главной хвост «· Scatta» не приписывается', () => {
     // Её заголовок уже начинается с имени продукта.
     const home = pageMetadata({
       path: '/',
-      title: 'TableApp — приложения из таблиц для сотрудников и клиентов',
+      title: 'Scatta — приложения из таблиц для сотрудников и клиентов',
       description: 'Загрузите таблицу — получите рабочее приложение.',
       exact: true,
     })
-    expect(home.title).toEqual({ absolute: 'TableApp — приложения из таблиц для сотрудников и клиентов' })
-    // И в соцсетях тоже один раз: «TableApp — … · TableApp» читается как ошибка.
-    expect(home.openGraph?.title).toBe('TableApp — приложения из таблиц для сотрудников и клиентов')
+    expect(home.title).toEqual({ absolute: 'Scatta — приложения из таблиц для сотрудников и клиентов' })
+    // И в соцсетях тоже один раз: «Scatta — … · Scatta» читается как ошибка.
+    expect(home.openGraph?.title).toBe('Scatta — приложения из таблиц для сотрудников и клиентов')
   })
 })
 

@@ -49,7 +49,7 @@ export function LandingContent({ signedIn, entry, freeRows, startPrice }: {
           <Reveal className={styles.workingCopy}>
             <h2 id="working-title">Работа<br />с телефона.</h2>
             <p>Сотрудник принимает товар. Остаток меняется в общей таблице — переносить данные вручную не нужно.</p>
-            <Link href="/how-it-works" className={styles.textLink}>Как устроен TableApp <span aria-hidden>↗</span></Link>
+            <Link href="/how-it-works" className={styles.textLink}>Как устроен Scatta <span aria-hidden>↗</span></Link>
           </Reveal>
           <Reveal delay={120} className={styles.workingDemo}><HeroFlight interactive /></Reveal>
         </div>

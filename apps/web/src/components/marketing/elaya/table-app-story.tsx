@@ -82,7 +82,7 @@ export function TableAppStory({ audience = 'business' }: { audience?: 'business'
   return <div ref={clock.ref} className={styles.story} data-table-app-story data-section={section.id} data-playing={clock.playing}>
     <div className={styles.composition}>
       <figure className={styles.source}>
-        <figcaption>Таблицы в TableApp</figcaption>
+        <figcaption>Таблицы в Scatta</figcaption>
         <div className={styles.workbook}>
           <div className={styles.fileName}><FileXlsIcon size={20} aria-hidden /><strong>{business ? 'Учёт мастерской.xlsx' : 'Мои проекты.xlsx'}</strong><span>3 листа</span></div>
           <div className={styles.sheetContent} key={section.id}>

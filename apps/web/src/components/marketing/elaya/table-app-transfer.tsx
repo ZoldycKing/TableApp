@@ -44,7 +44,7 @@ export function TableAppTransfer() {
               <div className={styles.sheetHeader}><TableIcon size={20} aria-hidden /><strong>{screen.title}</strong><span>Таблица</span></div>
               <table aria-label={`Таблица «${screen.title}»`}><thead><tr>{screen.columns.map(column => <th scope="col" key={column}>{column}</th>)}</tr></thead>
                 <tbody>{screen.rows.map((row, i) => <tr key={row.name} data-first={i === 0}><td>{row.name}</td><td>{row.detail}</td><td>{row.value}</td></tr>)}</tbody></table>
-              <div className={styles.sheetFooter}><span>3 строки</span><span>Данные в TableApp</span></div>
+              <div className={styles.sheetFooter}><span>3 строки</span><span>Данные в Scatta</span></div>
             </div>
           </div>
         })}

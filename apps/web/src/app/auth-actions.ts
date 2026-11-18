@@ -304,7 +304,7 @@ export async function requestMemberLoginAction(
   })
 
   const link = `${await originUrl()}/auth?token=${token}`
-  const result = await sendMagicLink({ to: email, subject: 'Вход в TableApp', link, code })
+  const result = await sendMagicLink({ to: email, subject: 'Вход в Scatta', link, code })
   await logAuth(email, 'code_sent', 'member')
 
   return replyToRequest(result, tokenId)

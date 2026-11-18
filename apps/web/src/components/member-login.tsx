@@ -223,7 +223,7 @@ export function MemberLogin({
         })
       }}
     >
-      <h1 className="text-2xl font-semibold tracking-tight">Вход в TableApp</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">Вход в Scatta</h1>
       <p className="text-sm text-[var(--color-ink-muted)]">
         Введите почту — пришлём код. Пароль не нужен.
       </p>

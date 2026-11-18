@@ -43,7 +43,8 @@
 .skip:focus { top: 8px; }
 .header { display: flex; align-items: center; justify-content: space-between; gap: 24px; min-height: 80px; padding: 16px 24px; background: var(--v2-surface, #fff); border-bottom: 1px solid var(--line); }
 .brandArea, .headerActions { display: flex; align-items: center; gap: 16px; min-width: 0; }
-.brand { flex-shrink: 0; color: inherit; }
+.brand { flex-shrink: 0; color: inherit; line-height: 0; }
+.brand img { height: 28px; width: auto; max-height: 28px; display: block; }
 .brandArea > input { width: 200px; font-weight: 600; border-color: transparent; padding-inline: 8px; }
 .brandArea > input:hover { border-color: var(--line); }
 .headerDivider { height: 24px; width: 1px; background: var(--line); flex-shrink: 0; }

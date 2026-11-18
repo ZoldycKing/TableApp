@@ -75,7 +75,7 @@ export async function startPaymentAction(plan: string, months = 1): Promise<Star
       id: paymentId,
       amount,
       currency: CURRENCY,
-      description: `TableApp, тариф «${PLANS[paid].name}», ${months} мес.`,
+      description: `Scatta, тариф «${PLANS[paid].name}», ${months} мес.`,
       returnUrl: `${await originUrl()}/usage?payment=${paymentId}`,
     })
 

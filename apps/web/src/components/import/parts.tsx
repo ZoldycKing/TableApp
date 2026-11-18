@@ -265,7 +265,7 @@ export function PreviewTable({
                       {field.name}
                     </p>
                     <select
-                      aria-label={`Колонка TableApp для «${field.name}»`}
+                      aria-label={`Колонка Scatta для «${field.name}»`}
                       value={setup.mapping[index] ?? ''}
                       disabled={busy}
                       onChange={(event) => onMap(index, event.target.value)}
@@ -375,7 +375,7 @@ export function Summary({
         перенесённую книгу целиком, должен узнать правду здесь.
       */}
       <p className="mt-3 text-xs leading-relaxed text-[var(--color-ink-muted)]">
-        Переносятся значения ячеек. Формулы Excel и связи нужно будет настроить в TableApp.
+        Переносятся значения ячеек. Формулы Excel и связи нужно будет настроить в Scatta.
       </p>
     </div>
   )
@@ -408,7 +408,7 @@ export function Results({
 
   return (
     <section className="mt-6">
-      <h2 className="text-lg font-medium">{failed.length ? 'Проверьте результат загрузки' : 'Данные в TableApp'}</h2>
+      <h2 className="text-lg font-medium">{failed.length ? 'Проверьте результат загрузки' : 'Данные в Scatta'}</h2>
 
       <ul className="mt-3 space-y-2">
         {setups.map((setup) => {

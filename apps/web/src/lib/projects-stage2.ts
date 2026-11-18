@@ -268,6 +268,127 @@ export function weekMiniBar(start: string | null, due: string | null, monday: st
   return { left: offset / 7, width: span / 7 }
 }
 
+/** «12.11.2026 – 18.11.2026» with spaces around the dash (phone deadlines list). */
+export function formatDayRangeSpaced(start: string | null, due: string | null) {
+  const from = formatDay(start)
+  const to = formatDay(due)
+  if (from && to && from !== to) return `${from} – ${to}`
+  return from || to || ''
+}
+
+/** Spent/estimate fill for a Gantt bar (0–100). Done tasks are full. */
+export function ganttBarProgress(spent: number, estimate: number | null, status: string) {
+  if (isDone(status)) return 100
+  if (estimate != null && estimate > 0) return Math.max(0, Math.min(100, Math.round((spent / estimate) * 100)))
+  return 0
+}
+
+/** Approximate px width of the avatar + name caption beside a bar. */
+export function ganttCaptionWidth(title: string, hasAvatar: boolean) {
+  const text = Math.min(220, Math.max(40, Math.ceil(title.length * 7.1)))
+  return (hasAvatar ? 28 : 0) + text + 10
+}
+
+export type GanttCaptionSide = 'left' | 'right'
+
+export type GanttCaptionPlacement = {
+  side: GanttCaptionSide
+  /** Cap so the label stays inside the visible timeline viewport. */
+  maxWidth: number
+}
+
+/**
+ * Prefer right of the bar; flip left when the visible viewport has no room.
+ * Uses scroll position + viewport width (not the full chart width). Caption is
+ * only placed when its anchor sits inside the visible window — otherwise it
+ * would stick past the container edge. If neither side fits the preferred
+ * width, pick the side with more room and ellipsize.
+ */
+export function ganttCaptionPlacement(input: {
+  barLeft: number
+  barWidth: number
+  labelWidth: number
+  viewLeft: number
+  viewWidth: number
+  gap?: number
+}): GanttCaptionPlacement {
+  const gap = input.gap ?? 8
+  const pad = 4
+  const viewWidth = Math.max(0, input.viewWidth)
+  const viewLeft = input.viewLeft
+  const viewRight = viewLeft + viewWidth
+  const barRight = input.barLeft + input.barWidth
+  // Right caption starts at barRight+gap; left caption ends at barLeft-gap.
+  // Anchors outside the visible window would paint past the clip edge.
+  const rightStart = barRight + gap
+  const leftEnd = input.barLeft - gap
+  const rightRoom = rightStart >= viewLeft + pad && rightStart < viewRight - pad
+    ? Math.max(0, viewRight - pad - rightStart)
+    : 0
+  const leftRoom = leftEnd > viewLeft + pad && leftEnd <= viewRight - pad
+    ? Math.max(0, leftEnd - (viewLeft + pad))
+    : 0
+  const want = Math.max(0, input.labelWidth)
+
+  if (rightRoom >= want && want > 0) return { side: 'right', maxWidth: want }
+  if (leftRoom >= want && want > 0) return { side: 'left', maxWidth: want }
+
+  if (rightRoom === 0 && leftRoom === 0) {
+    return { side: 'right', maxWidth: 0 }
+  }
+  if (rightRoom >= leftRoom) {
+    return { side: 'right', maxWidth: Math.min(want || rightRoom, rightRoom) }
+  }
+  return { side: 'left', maxWidth: Math.min(want || leftRoom, leftRoom) }
+}
+
+/** @deprecated Prefer ganttCaptionPlacement — kept for older call sites/tests. */
+export function ganttCaptionSide(input: {
+  barLeft: number
+  barWidth: number
+  chartWidth: number
+  labelWidth: number
+  todayX: number | null
+  viewLeft?: number
+  viewWidth?: number
+  otherBars?: readonly { left: number; right: number }[]
+  gap?: number
+}): GanttCaptionSide {
+  const viewLeft = input.viewLeft ?? 0
+  const viewWidth = input.viewWidth ?? input.chartWidth
+  return ganttCaptionPlacement({
+    barLeft: input.barLeft,
+    barWidth: input.barWidth,
+    labelWidth: input.labelWidth,
+    viewLeft,
+    viewWidth,
+    gap: input.gap,
+  }).side
+}
+
+/** Task span as fractions of the project [start, end], plus today marker 0–1. */
+export function projectMiniBar(
+  start: string | null,
+  due: string | null,
+  projectStart: string,
+  projectEnd: string,
+  today: string | null,
+) {
+  const from = civilDay(start) || civilDay(due)
+  const to = civilDay(due) || from
+  if (!from || !to || !projectStart || !projectEnd || projectStart > projectEnd) return null
+  const total = Math.max(1, dayIndex(projectStart, projectEnd) + 1)
+  const clippedStart = from < projectStart ? projectStart : from > projectEnd ? projectEnd : from
+  const clippedEnd = to > projectEnd ? projectEnd : to < projectStart ? projectStart : to
+  const offset = Math.max(0, Math.min(total - 1, dayIndex(projectStart, clippedStart)))
+  const widthDays = Math.max(1, Math.min(total - offset, dayIndex(clippedStart, clippedEnd) + 1))
+  let todayAt: number | null = null
+  if (today && today >= projectStart && today <= projectEnd) {
+    todayAt = (dayIndex(projectStart, today) + 0.5) / total
+  }
+  return { left: offset / total, width: widthDays / total, todayAt }
+}
+
 export function moveBarDates(start: string, end: string, deltaDays: number) {
   return { start: addDays(start, deltaDays), end: addDays(end, deltaDays) }
 }

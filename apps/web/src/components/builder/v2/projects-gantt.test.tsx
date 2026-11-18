@@ -1,10 +1,24 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { ProjectsGantt } from './projects-gantt'
 
 beforeEach(() => {
   vi.useFakeTimers()
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    configurable: true,
+    value: vi.fn().mockImplementation((query: string) => ({
+      matches: false,
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+      onchange: null,
+    })),
+  })
 })
 
 afterEach(() => {
@@ -50,13 +64,11 @@ it('shows explainer, legend and hides dependency links by default', () => {
   expect(toggle.querySelector('input')).toBeNull()
 })
 
-it('shows only links for the hovered task until «Показать связи» is on', () => {
+it('keeps dependency links hidden until «Показать связи» is on — hover does not reveal them', () => {
   render(<ProjectsGantt tasks={tasks} links={links} now={now} onOpenTask={vi.fn()} />)
-  const bar = document.querySelector('[data-bar-id="t1"]') as HTMLElement
+  const bar = document.querySelector('[data-bar-id="t1"] [data-tone]') as HTMLElement
   fireEvent.mouseEnter(bar)
-  act(() => { vi.advanceTimersByTime(150) })
-  expect(document.querySelectorAll('[data-gantt-link]')).toHaveLength(1)
-  expect(document.querySelector('[data-gantt-link="l1"]')).toBeTruthy()
+  expect(document.querySelectorAll('[data-gantt-link]')).toHaveLength(0)
   fireEvent.click(screen.getByRole('switch', { name: 'Показать связи' }))
   expect(screen.getByRole('switch', { name: 'Показать связи' }).getAttribute('aria-checked')).toBe('true')
   expect(document.querySelectorAll('[data-gantt-link]')).toHaveLength(2)
@@ -65,7 +77,7 @@ it('shows only links for the hovered task until «Показать связи» 
 it('opens a task popover with dates, status and open link', () => {
   const onOpenTask = vi.fn()
   render(<ProjectsGantt tasks={tasks} links={links} now={now} onOpenTask={onOpenTask} />)
-  const bar = document.querySelector('[data-bar-id="t2"]') as HTMLElement
+  const bar = document.querySelector('[data-bar-id="t2"] [data-tone]') as HTMLElement
   fireEvent.click(bar)
   const popover = screen.getByRole('dialog', { name: 'Макет главной страницы' })
   expect(within(popover).getByText('15.11.2026–18.11.2026')).toBeTruthy()
@@ -83,14 +95,22 @@ it('opens the same popover from the name column without navigating away', () => 
   expect(onOpenTask).not.toHaveBeenCalled()
 })
 
-it('keeps task names only in the sticky column — no labels on or beside bars', () => {
+it('opens the popover from the caption beside the bar', () => {
+  const onOpenTask = vi.fn()
+  render(<ProjectsGantt tasks={tasks} links={links} now={now} onOpenTask={onOpenTask} />)
+  fireEvent.click(document.querySelector('[data-bar-label="t1"]') as HTMLElement)
+  expect(screen.getByRole('dialog', { name: 'Собрать структуру разделов' })).toBeTruthy()
+  expect(onOpenTask).not.toHaveBeenCalled()
+})
+
+it('keeps bars text-free and shows avatar+name captions outside the bar', () => {
   const long = 'Очень длинное название задачи для проверки переноса на две строки без обрезки в полосе'
   render(<ProjectsGantt
     tasks={[
       ...tasks,
       {
         id: 't4', title: long, start: '2026-11-10', due: '2026-11-20',
-        status: 'В работе', parentId: '', estimate: null, spent: 0,
+        status: 'В работе', parentId: '', estimate: null, spent: 0, assigneeName: 'Анна Волкова',
       },
     ]}
     links={[]}
@@ -98,18 +118,56 @@ it('keeps task names only in the sticky column — no labels on or beside bars',
     onOpenTask={vi.fn()}
   />)
   expect(document.querySelectorAll('[data-bar-id]')).toHaveLength(4)
-  for (const bar of document.querySelectorAll('[data-bar-id]')) {
-    expect(bar.textContent?.includes(long) ?? false).toBe(false)
-    expect(bar.textContent?.includes('Собрать структуру') ?? false).toBe(false)
+  for (const wrap of document.querySelectorAll('[data-bar-id]')) {
+    const bar = wrap.querySelector('[data-tone]') as HTMLElement
+    expect(bar.textContent?.trim() ?? '').toBe('')
   }
-  const label = document.querySelector('[data-gantt-label="t4"]') as HTMLElement
-  expect(label).toBeTruthy()
-  expect(label.getAttribute('title')).toBe(long)
-  expect(within(label).getByText(long)).toBeTruthy()
+  const caption = document.querySelector('[data-bar-label="t4"]') as HTMLElement
+  expect(caption).toBeTruthy()
+  expect(caption.getAttribute('title')).toBe(long)
+  expect(within(caption).getByText(long)).toBeTruthy()
+  expect(caption.querySelector('[aria-label="Анна Волкова"]')).toBeTruthy()
   expect(document.querySelector('[data-gantt-names]')).toBeTruthy()
 })
 
-it('indents subtasks under their parent in the name column', () => {
+it('caps caption width to the visible timeline viewport and flips near the right edge', () => {
+  render(<ProjectsGantt
+    tasks={[
+      {
+        id: 'edge',
+        title: 'Задача у правого края шкалы с длинным названием для подписи',
+        start: '2026-11-16', due: '2026-11-18',
+        status: 'В работе', parentId: '', estimate: null, spent: 0, assigneeName: 'Анна Волкова',
+      },
+    ]}
+    links={[]}
+    now={now}
+    onOpenTask={vi.fn()}
+  />)
+  fireEvent.click(screen.getByRole('button', { name: 'Дни' }))
+  const scroll = document.querySelector('[class*="ganttScroll"]') as HTMLElement
+  expect(scroll).toBeTruthy()
+  Object.defineProperty(scroll, 'clientWidth', { configurable: true, value: 240 })
+  Object.defineProperty(scroll, 'scrollLeft', { configurable: true, value: 0, writable: true })
+  fireEvent.scroll(scroll)
+  const caption = document.querySelector('[data-bar-label="edge"]') as HTMLElement
+  expect(caption.getAttribute('data-side')).toBe('left')
+  const max = Number.parseFloat(caption.style.maxWidth || '0')
+  expect(max).toBeGreaterThan(0)
+  expect(max).toBeLessThanOrEqual(240)
+})
+
+it('highlights the whole row on hover across name column and timeline', () => {
+  render(<ProjectsGantt tasks={tasks} links={[]} now={now} onOpenTask={vi.fn()} />)
+  const label = document.querySelector('[data-gantt-label="t2"]') as HTMLElement
+  fireEvent.mouseEnter(label)
+  expect(label.hasAttribute('data-hover')).toBe(true)
+  expect(document.querySelector('[data-gantt-row="t2"]')?.hasAttribute('data-hover')).toBe(true)
+  fireEvent.mouseLeave(label)
+  expect(label.hasAttribute('data-hover')).toBe(false)
+})
+
+it('aligns status dots and indents nested task text with a tree connector', () => {
   render(<ProjectsGantt
     tasks={[
       tasks[0]!,
@@ -127,14 +185,18 @@ it('indents subtasks under their parent in the name column', () => {
   expect(names).toEqual(['t1', 'c1', 't2'])
   expect(document.querySelector('[data-gantt-label="c1"]')?.hasAttribute('data-nested')).toBe(true)
   expect(document.querySelector('[data-gantt-label="t1"]')?.hasAttribute('data-nested')).toBe(false)
+  expect(document.querySelector('[data-gantt-label="c1"] [data-gantt-tree]')).toBeTruthy()
+  expect(document.querySelector('[data-gantt-label="t1"] [data-gantt-tree]')).toBeNull()
   expect(document.querySelector('[data-bar-id="c1"]')).toBeTruthy()
 })
 
-it('colors bars by tone including overdue', () => {
+it('colors bars by tone including overdue and paints progress fill', () => {
   render(<ProjectsGantt tasks={tasks} links={[]} now={now} onOpenTask={vi.fn()} />)
-  expect(document.querySelector('[data-bar-id="t3"]')?.getAttribute('data-tone')).toBe('done')
-  expect(document.querySelector('[data-bar-id="t1"]')?.getAttribute('data-tone')).toBe('overdue')
-  expect(document.querySelector('[data-bar-id="t2"]')?.getAttribute('data-tone')).toBe('review')
+  expect(document.querySelector('[data-bar-id="t3"] [data-tone]')?.getAttribute('data-tone')).toBe('done')
+  expect(document.querySelector('[data-bar-id="t1"] [data-tone]')?.getAttribute('data-tone')).toBe('overdue')
+  expect(document.querySelector('[data-bar-id="t2"] [data-tone]')?.getAttribute('data-tone')).toBe('review')
+  const fill = document.querySelector('[data-bar-id="t1"] [data-gantt-fill]') as HTMLElement
+  expect(fill?.style.width).toBe('50%')
 })
 
 it('shows empty state when tasks have no dates', () => {
@@ -147,9 +209,9 @@ it('shows empty state when tasks have no dates', () => {
   expect(screen.getByText('У задач нет сроков — добавьте даты, чтобы увидеть план')).toBeTruthy()
 })
 
-it('uses week plan list on phone by default', () => {
+it('shows «Сроки» list on phone and hides chart toggles', () => {
   const matchMedia = vi.fn().mockImplementation((query: string) => ({
-    matches: query.includes('max-width: 720px'),
+    matches: query.includes('max-width: 767px'),
     media: query,
     addEventListener: vi.fn(),
     removeEventListener: vi.fn(),
@@ -159,12 +221,28 @@ it('uses week plan list on phone by default', () => {
     onchange: null,
   }))
   Object.defineProperty(window, 'matchMedia', { writable: true, configurable: true, value: matchMedia })
-  render(<ProjectsGantt tasks={tasks} links={links} now={now} onOpenTask={vi.fn()} />)
-  expect(screen.getByRole('heading', { name: 'План по неделям' })).toBeTruthy()
-  expect(document.querySelector('[data-gantt-week-plan]')).toBeTruthy()
-  expect(screen.getByRole('button', { name: 'Список' }).getAttribute('aria-pressed')).toBe('true')
-  fireEvent.click(screen.getByRole('button', { name: 'Диаграмма' }))
-  expect(document.querySelector('[data-projects-gantt]')?.getAttribute('data-phone-mode')).toBe('chart')
-  expect(document.querySelector('[data-gantt-week-plan]')).toBeNull()
-  expect(document.querySelector('[data-gantt-names]')).toBeTruthy()
+  const onOpenTask = vi.fn()
+  render(<ProjectsGantt
+    tasks={[
+      tasks[0]!,
+      {
+        id: 'c1', title: 'Подзадача: навигация', start: '2026-11-13', due: '2026-11-15',
+        status: 'К работе', parentId: 't1', estimate: null, spent: 0, assigneeName: 'Анна Волкова',
+      },
+      tasks[1]!,
+    ]}
+    links={links}
+    now={now}
+    onOpenTask={onOpenTask}
+  />)
+  expect(screen.getByRole('heading', { name: 'Сроки' })).toBeTruthy()
+  expect(document.querySelector('[data-gantt-deadlines]')).toBeTruthy()
+  expect(screen.queryByRole('button', { name: 'Список' })).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Диаграмма' })).toBeNull()
+  expect(screen.queryByRole('switch', { name: 'Показать связи' })).toBeNull()
+  expect(screen.queryByRole('radiogroup', { name: 'Масштаб Ганта' })).toBeNull()
+  expect(screen.getByText('12.11.2026 – 16.11.2026')).toBeTruthy()
+  expect(document.querySelector('[data-nested="true"]')).toBeTruthy()
+  fireEvent.click(screen.getByText('Макет главной страницы'))
+  expect(onOpenTask).toHaveBeenCalledWith('t2')
 })

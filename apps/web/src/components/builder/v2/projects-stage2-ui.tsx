@@ -303,7 +303,7 @@ export function GanttScreen(props: Stage2Helpers & { projectId?: string }) {
       due: civilDay(row.values[kit.task.due]),
       status: props.choiceName(kit.tasksTableId, kit.task.status, row.values[kit.task.status]),
       parentId: firstId(row.values[kit.task.parent]),
-      estimate: kit.task.estimate && typeof row.values[kit.task.estimate] === 'number' ? Number(row.values[kit.task.estimate]) : null,
+      estimate: kit.task.estimate && Number.isFinite(Number(row.values[kit.task.estimate])) ? Number(row.values[kit.task.estimate]) : null,
       spent: totalSpentMinutes(entries, row.id, props.now),
       assigneeName: who?.name ?? '',
       assigneePhoto: who?.photo,

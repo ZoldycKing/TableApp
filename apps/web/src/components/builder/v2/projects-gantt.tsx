@@ -78,9 +78,7 @@ function GanttPopover(props: {
   onClose: () => void
 }) {
   const range = formatDayRange(props.task.start, props.task.due) || 'Без срока'
-  const progress = props.task.estimate != null || props.task.spent
-    ? formatSpentPair(props.task.spent, props.task.estimate)
-    : ''
+  const progress = formatSpentPair(props.task.spent, props.task.estimate)
   return <div className={css.ganttPopover} role="dialog" aria-label={props.task.title} data-gantt-popover>
     <strong>{props.task.title}</strong>
     <span className={css.quiet}>{range}</span>
@@ -89,7 +87,7 @@ function GanttPopover(props: {
       <BookingAvatar name={props.task.assigneeName} photo={props.task.assigneePhoto} small />
       <span>{props.task.assigneeName}</span>
     </span> : null}
-    {progress ? <span className={css.ganttPopoverProgress} data-gantt-progress>Прогресс: {progress}</span> : null}
+    <span className={css.ganttPopoverProgress} data-gantt-progress>Прогресс: {progress}</span>
     <div className={css.ganttPopoverActions}>
       {!props.readOnly ? <button type="button" className={buttons.primary} onClick={props.onOpen}>Открыть задачу</button> : null}
       <button type="button" className={buttons.secondary} onClick={props.onClose}>Закрыть</button>
@@ -173,6 +171,8 @@ export function ProjectsGantt(props: Props) {
 
   useEffect(() => {
     setPhoneMode(narrow ? 'list' : 'chart')
+    setActiveId(null)
+    setPopoverId(null)
   }, [narrow])
 
   useEffect(() => {
@@ -279,8 +279,8 @@ export function ProjectsGantt(props: Props) {
       <div className={css.ganttToolbar}>
         <p className={css.ganttExplainer}>План проекта на календаре: каждая полоса — задача от начала до срока.</p>
         <div className={css.segment} role="radiogroup" aria-label="Вид плана" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
-          <button type="button" aria-pressed onClick={() => setPhoneMode('list')}>Список</button>
-          <button type="button" aria-pressed={false} onClick={() => setPhoneMode('chart')}>Диаграмма</button>
+          <button type="button" aria-pressed onClick={() => { setPhoneMode('list'); setActiveId(null); setPopoverId(null); setShowLinks(false) }}>Список</button>
+          <button type="button" aria-pressed={false} onClick={() => { setPhoneMode('chart'); setActiveId(null); setPopoverId(null) }}>Диаграмма</button>
         </div>
         <ul className={css.ganttLegend} aria-label="Обозначения">
           {LEGEND.map(item => <li key={item.tone}><span className={css.ganttSwatch} data-tone={item.tone} /><span>{item.label}</span></li>)}
@@ -302,8 +302,8 @@ export function ProjectsGantt(props: Props) {
     <div className={css.ganttToolbar}>
       <p className={css.ganttExplainer}>План проекта на календаре: каждая полоса — задача от начала до срока.</p>
       {narrow ? <div className={css.segment} role="radiogroup" aria-label="Вид плана" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
-        <button type="button" aria-pressed={false} onClick={() => setPhoneMode('list')}>Список</button>
-        <button type="button" aria-pressed onClick={() => setPhoneMode('chart')}>Диаграмма</button>
+        <button type="button" aria-pressed={false} onClick={() => { setPhoneMode('list'); setActiveId(null); setPopoverId(null); setShowLinks(false) }}>Список</button>
+        <button type="button" aria-pressed onClick={() => { setPhoneMode('chart'); setActiveId(null); setPopoverId(null) }}>Диаграмма</button>
       </div> : null}
       <div className={css.ganttToolbarRow}>
         <div className={css.segment} role="radiogroup" aria-label="Масштаб Ганта" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>
@@ -412,8 +412,8 @@ export function ProjectsGantt(props: Props) {
               const bar = bars.find(item => item.id === task.id)
               const tone = toneOf(task, props.now)
               const barWidth = bar ? Math.max(bar.daySpan * width, width) : 0
-              const showOutside = Boolean(bar && !titleFits(task.title, barWidth - (props.readOnly ? 28 : 52)))
-              const showInside = Boolean(bar && !showOutside)
+              const showOutside = Boolean(bar && !narrow && !titleFits(task.title, barWidth - (props.readOnly ? 28 : 52)))
+              const showInside = Boolean(bar && !narrow && !showOutside)
               return <div key={task.id} className={css.ganttRow} style={{ top: index * rowHeight, height: rowHeight }}>
                 {bar ? <>
                   <div

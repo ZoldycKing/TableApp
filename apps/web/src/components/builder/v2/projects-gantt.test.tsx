@@ -70,7 +70,7 @@ it('opens a task popover with dates, status and open link', () => {
   const popover = screen.getByRole('dialog', { name: 'Макет главной страницы' })
   expect(within(popover).getByText('15.11.2026–18.11.2026')).toBeTruthy()
   expect(within(popover).getByText('На проверке')).toBeTruthy()
-  expect(within(popover).getByText(/Прогресс: 1 ч 30 мин \/ 6 ч/)).toBeTruthy()
+  expect(within(popover).getByText('Прогресс: 1 ч 30 мин / 6 ч')).toBeTruthy()
   fireEvent.click(within(popover).getByRole('button', { name: 'Открыть задачу' }))
   expect(onOpenTask).toHaveBeenCalledWith('t2')
 })

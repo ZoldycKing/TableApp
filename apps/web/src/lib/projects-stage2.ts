@@ -480,6 +480,24 @@ export function formatSpentPair(spent: number, estimate: number | null) {
   return formatMinutes(spent)
 }
 
+/** Compact duration for narrow UI: «0 / 1,5 ч», «45 мин», «2 ч». */
+export function formatMinutesCompact(minutes: number): string {
+  const rounded = Math.max(0, Math.round(minutes))
+  if (rounded === 0) return '0'
+  if (rounded % 60 === 0) return `${rounded / 60} ч`
+  if (rounded < 60) return `${rounded} мин`
+  const hours = Math.floor(rounded / 60)
+  const rest = rounded % 60
+  const frac = Math.round((rest / 60) * 10) / 10
+  const value = (hours + frac).toFixed(1).replace('.', ',').replace(/,0$/, '')
+  return `${value} ч`
+}
+
+export function formatSpentPairCompact(spent: number, estimate: number | null) {
+  if (estimate != null && estimate > 0) return `${formatMinutesCompact(spent)}/${formatMinutesCompact(estimate)}`
+  return formatMinutesCompact(spent)
+}
+
 export function tasksWord(count: number) {
   const mod10 = count % 10
   const mod100 = count % 100

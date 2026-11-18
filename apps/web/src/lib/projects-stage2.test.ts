@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   activeTimerFor, canLinkTasks, canStartTimer, captureProjectTemplate, entryMinutes, filterClientComments,
-  formatCommentWhen, formatMinutes, formatSpentPair, ganttArrowPath, ganttBars, ganttRange, materializeTemplate, matchesRoleFilter,
+  formatCommentWhen, formatMinutes, formatSpentPair, formatSpentPairCompact, ganttArrowPath, ganttBars, ganttRange, materializeTemplate, matchesRoleFilter,
   moveBarDates, nextOccurrenceDay, projectSpentMinutes, recurrenceLabel, resizeBarDates, shouldSpawnOnComplete,
   stopTimerValues, totalSpentMinutes, validateManualMinutes, workloadFor,
 } from './projects-stage2'
@@ -38,6 +38,8 @@ describe('gantt bars', () => {
     expect(formatSpentPair(330, 360)).toBe('5 ч 30 мин / 6 ч')
     expect(formatSpentPair(0, 180)).toBe('0 мин / 3 ч')
     expect(formatSpentPair(0, null)).toBe('0 мин')
+    expect(formatSpentPairCompact(0, 90)).toBe('0/1,5 ч')
+    expect(formatSpentPairCompact(45, null)).toBe('45 мин')
     expect(formatCommentWhen('2026-11-18T09:55:00.000Z', Date.parse('2026-11-18T12:00:00.000Z'))).toBe('12:55')
     expect(formatCommentWhen('2026-11-17T09:55:00.000Z', Date.parse('2026-11-18T12:00:00.000Z'))).toContain('17.11.2026')
   })

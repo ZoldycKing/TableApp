@@ -266,8 +266,15 @@
   .toolbar { flex-wrap: wrap; align-items: flex-start; }
   .toolbar .segment { width: 100%; max-width: 280px; }
   .ganttFrame { grid-template-columns: 120px minmax(0, 1fr); }
-  .ganttLabel strong { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
-  .ganttLabel span { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; overflow: hidden; }
+  .ganttLabel { padding: 5px 6px; gap: 2px; align-content: start; }
+  .ganttLabel strong {
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+    font-size: 11px; line-height: 14px; max-height: 28px; word-break: break-word; overflow-wrap: anywhere;
+  }
+  .ganttLabel span {
+    display: block; overflow: hidden; text-overflow: clip; white-space: nowrap;
+    font-size: 10px; line-height: 12px; max-height: 12px; min-width: 0;
+  }
   .ganttBarLabel { display: none; }
   .ganttLinkBtn { display: none; }
   .ganttBar { top: 18px; }
@@ -335,7 +342,15 @@
 .chatMeta strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit; }
 .chatMeta time { flex: none; white-space: nowrap; }
 .chatMeta time::before { content: '·'; margin-right: 6px; }
-.chatQuote { margin: 0; padding: 6px 8px; border-left: 3px solid var(--v2-accent, #456849); background: rgba(255,255,255,.55); font-size: 12px; color: var(--v2-muted, #526075); overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.chatQuote {
+  margin: 0; padding: 5px 8px; border-left: 3px solid var(--v2-accent, #456849); background: #eef1f5;
+  color: var(--v2-muted, #526075); overflow: hidden; max-height: 40px; box-sizing: border-box;
+}
+.chatQuoteText {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  overflow: hidden; text-overflow: ellipsis; word-break: break-word;
+  font-size: 12px; line-height: 15px; max-height: 30px;
+}
 .chatActions { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 .chatActions button { min-height: 28px; padding: 2px 8px; border: 0; border-radius: 8px; background: transparent; color: var(--v2-muted, #526075); font: inherit; font-size: 12px; font-weight: 650; }
 .chatMore { position: relative; }

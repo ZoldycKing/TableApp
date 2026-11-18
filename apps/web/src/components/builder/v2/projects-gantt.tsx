@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import {
-  columnWidth, dayIndex, eachDay, formatSpentPair, ganttArrowPath, ganttBars, ganttRange, moveBarDates, resizeBarDates,
+  columnWidth, dayIndex, eachDay, formatSpentPair, formatSpentPairCompact, ganttArrowPath, ganttBars, ganttRange, moveBarDates, resizeBarDates,
   type DependencyLink, type GanttZoom,
 } from '@/lib/projects-stage2'
 import { formatDay, todayKey } from '@/lib/projects-logic'
@@ -69,7 +69,7 @@ export function ProjectsGantt(props: Props) {
   const width = columnWidth(zoom)
   const todayOffset = days.includes(today) ? dayIndex(range.start, today) : -1
   const labelWidth = narrow ? 120 : 220
-  const rowHeight = narrow ? 72 : 56
+  const rowHeight = narrow ? 76 : 56
   const labelPad = narrow ? 48 : 220
   const chartWidth = Math.max(days.length * width + labelPad, 1)
 
@@ -141,7 +141,10 @@ export function ProjectsGantt(props: Props) {
         <div className={css.ganttCorner}>Задача</div>
         {top.map(task => {
           const due = formatDay(task.due)
-          const spent = task.estimate != null || task.spent ? formatSpentPair(task.spent, task.estimate) : ''
+          const spentFull = task.estimate != null || task.spent ? formatSpentPair(task.spent, task.estimate) : ''
+          const spent = narrow
+            ? (task.estimate != null || task.spent ? formatSpentPairCompact(task.spent, task.estimate) : '')
+            : spentFull
           const meta = narrow
             ? [due ? due.slice(0, 5) : 'Без срока', spent].filter(Boolean).join(' · ')
             : [due || 'Без срока', spent].filter(Boolean).join(' · ')
@@ -150,7 +153,7 @@ export function ProjectsGantt(props: Props) {
             type="button"
             className={css.ganttLabel}
             style={{ height: rowHeight }}
-            title={`${task.title}\n${[due || 'Без срока', spent].filter(Boolean).join(' · ')}`}
+            title={`${task.title}\n${[due || 'Без срока', spentFull].filter(Boolean).join(' · ')}`}
             onClick={() => props.onOpenTask(task.id)}
           >
             <strong>{task.title}</strong>

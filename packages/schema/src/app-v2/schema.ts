@@ -175,7 +175,11 @@ export const appV2Schema = z.strictObject({
   /** Projects and tasks starter. Absent outside that install. */
   projects: z.strictObject({
     projectsTableId: id, tasksTableId: id, peopleTableId: id, clientsTableId: id, commentsTableId: id, eventsTableId: id, stagesTableId: id,
+    /** Stage 2 tables. Absent on installs created before Gantt, time and templates. */
+    timeTableId: id.optional(), linksTableId: id.optional(), templatesTableId: id.optional(), sharesTableId: id.optional(),
     mineScreenId: id, boardScreenId: id, projectsScreenId: id, projectScreenId: id, taskScreenId: id, peopleScreenId: id, clientsScreenId: id,
+    /** Stage 2 screens. */
+    ganttScreenId: id.optional(), workloadScreenId: id.optional(), templatesScreenId: id.optional(), clientScreenId: id.optional(),
     createTaskFormId: id, editTaskFormId: id, createProjectFormId: id, editProjectFormId: id, commentFormId: id,
     project: z.strictObject({
       title: id, client: id, owner: id, start: id, due: id, budget: id, status: id, progress: id,
@@ -183,17 +187,30 @@ export const appV2Schema = z.strictObject({
     task: z.strictObject({
       title: id, project: id, assignee: id, assigneeEmail: id, due: id, priority: id, status: id,
       description: id, checklist: id, files: id, sort: id, parent: id, stage: id,
+      /** Stage 2 task fields. */
+      start: id.optional(), estimate: id.optional(), author: id.optional(), authorEmail: id.optional(), observers: id.optional(),
+      seriesId: id.optional(), repeat: id.optional(), repeatUntil: id.optional(), repeatEvery: id.optional(),
     }),
     stage: z.strictObject({ title: id, project: id, start: id, end: id, goal: id, status: id }),
     person: z.strictObject({ name: id, email: id, phone: id, photo: id, role: id, active: id }),
     client: z.strictObject({ name: id, phone: id, email: id, note: id }),
-    comment: z.strictObject({ text: id, task: id, project: id, at: id, author: id, authorEmail: id, assigneeEmail: id, mentions: id }),
+    comment: z.strictObject({
+      text: id, task: id, project: id, at: id, author: id, authorEmail: id, assigneeEmail: id, mentions: id,
+      replyTo: id.optional(), editedAt: id.optional(), internal: id.optional(),
+    }),
     event: z.strictObject({ text: id, project: id, task: id, at: id, kind: id, author: id, authorEmail: id, assigneeEmail: id }),
+    time: z.strictObject({
+      task: id, project: id, person: id, email: id, startedAt: id, endedAt: id, minutes: id, note: id,
+    }).optional(),
+    link: z.strictObject({ title: id, project: id, from: id, to: id }).optional(),
+    template: z.strictObject({ name: id, payload: id, createdAt: id, author: id }).optional(),
+    share: z.strictObject({ token: id, project: id, label: id, createdAt: id }).optional(),
     statuses: z.strictObject({ todo: id, doing: id, review: id, done: id }),
     priorities: z.strictObject({ low: id, medium: id, high: id, urgent: id }),
     projectStatuses: z.strictObject({ draft: id, active: id, paused: id, done: id, cancelled: id }),
     eventKinds: z.strictObject({ created: id, status: id, comment: id }),
     stageStatuses: z.strictObject({ planned: id, current: id, done: id }),
+    repeats: z.strictObject({ none: id, daily: id, weekly: id, monthly: id, custom: id }).optional(),
     activeChoiceId: id,
   }).optional(),
   /** Field-service starter: dispatcher board, technician jobs, notes and completion. Absent outside that install. */

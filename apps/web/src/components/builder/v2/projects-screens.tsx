@@ -6,6 +6,7 @@ import {
   BUCKETS, PRIORITIES, TASK_STATUSES, eventText, formatDay, formatRub, insertMention, isDone, isOverdue, matchesDue, mentionQuery, mentionedNames, progressPercent, reorderColumn, subtaskProgress, taskBucket,
   type DueFilter, type TaskFacts,
 } from '@/lib/projects-logic'
+import { formatSpentPair, matchesRoleFilter, totalSpentMinutes } from '@/lib/projects-stage2'
 import { commentWrite, eventWrite, moveUpdates, projectWrite, taskWrite } from '@/lib/projects-persist'
 import { parseChecklist, serializeChecklist, toggleChecklistItem, type ChecklistItem } from '@/lib/dispatch-stage2'
 import { savePublishedProjectsAction } from '@/app/projects-actions'
@@ -19,10 +20,15 @@ import { ProtoIcon } from '../prototype/icons'
 import buttons from '../prototype/prototype.module.css'
 import type { AppV2RendererProps } from './view'
 import css from './projects.module.css'
+import {
+  ClientProjectView, CommentChat, GanttScreen, RecurrenceDialog, ShareProjectDialog, TaskRolesLine, TaskTimePanel,
+  TemplatesScreen, WorkloadScreen, projectSpentSummary, repeatLabelFor, timeEntries,
+  type Stage2Helpers,
+} from './projects-stage2-ui'
 
-export type ProjectsTab = 'stages' | 'tasks' | 'team' | 'files' | 'feed'
-export type ProjectsOpen = 'filters' | 'edit' | 'create' | 'comment' | 'mention' | null
-export type ProjectsBundle = { rows: AppV2Record[]; setRows?: (rows: AppV2Record[]) => void; open?: ProjectsOpen; tab?: ProjectsTab }
+export type ProjectsTab = 'stages' | 'tasks' | 'gantt' | 'team' | 'files' | 'feed'
+export type ProjectsOpen = 'filters' | 'edit' | 'create' | 'comment' | 'mention' | 'share' | 'recurrence' | 'template' | 'from-template' | null
+export type ProjectsBundle = { rows: AppV2Record[]; setRows?: (rows: AppV2Record[]) => void; open?: ProjectsOpen; tab?: ProjectsTab; now?: number }
 export const ProjectsRowsContext = createContext<ProjectsBundle | null>(null)
 
 const PLACEHOLDER: AppV2Node = { id: 'projects_placeholder', name: 'placeholder', type: 'heading', value: { kind: 'literal', value: '' }, size: 's', visibleTo: null, visibleWhen: null }
@@ -108,10 +114,19 @@ export function ProjectsScreen(props: AppV2RendererProps) {
   const commentsPage = useBuilderV2NodeData(props.app, commentsNode ?? PLACEHOLDER, live && Boolean(commentsNode), '', scope)
   const eventsPage = useBuilderV2NodeData(props.app, eventsNode ?? PLACEHOLDER, live && Boolean(eventsNode), '', scope)
   const stagesPage = useBuilderV2NodeData(props.app, stagesNode ?? PLACEHOLDER, live && Boolean(stagesNode), '', scope)
-  if (!kit || !props.app.screens.some(screen => screen.id === screenId && [kit.mineScreenId, kit.boardScreenId, kit.projectsScreenId, kit.projectScreenId, kit.taskScreenId, kit.peopleScreenId, kit.clientsScreenId].includes(screen.id))) return null
-  const rows = demo?.rows ?? [tasksPage, projectsPage, peoplePage, clientsPage, commentsPage, eventsPage, stagesPage].flatMap(page => page.page?.rows ?? [])
+  const timeNode = node(kit?.timeTableId ?? '')
+  const linksNode = node(kit?.linksTableId ?? '')
+  const templatesNode = node(kit?.templatesTableId ?? '')
+  const sharesNode = node(kit?.sharesTableId ?? '')
+  const timePage = useBuilderV2NodeData(props.app, timeNode ?? PLACEHOLDER, live && Boolean(timeNode), '', scope)
+  const linksPage = useBuilderV2NodeData(props.app, linksNode ?? PLACEHOLDER, live && Boolean(linksNode), '', scope)
+  const templatesPage = useBuilderV2NodeData(props.app, templatesNode ?? PLACEHOLDER, live && Boolean(templatesNode), '', scope)
+  const sharesPage = useBuilderV2NodeData(props.app, sharesNode ?? PLACEHOLDER, live && Boolean(sharesNode), '', scope)
+  const stage2Screens = [kit?.ganttScreenId, kit?.workloadScreenId, kit?.templatesScreenId, kit?.clientScreenId].filter(Boolean) as string[]
+  if (!kit || !props.app.screens.some(screen => screen.id === screenId && [kit.mineScreenId, kit.boardScreenId, kit.projectsScreenId, kit.projectScreenId, kit.taskScreenId, kit.peopleScreenId, kit.clientsScreenId, ...stage2Screens].includes(screen.id))) return null
+  const rows = demo?.rows ?? [tasksPage, projectsPage, peoplePage, clientsPage, commentsPage, eventsPage, stagesPage, timePage, linksPage, templatesPage, sharesPage].flatMap(page => page.page?.rows ?? [])
   const of = (tableId: string) => rows.filter(row => row.tableId === tableId)
-  const shared = { ...props, kit, rows, of, replace: demo?.setRows, now: Date.now(), leader: props.actor.roleIds.includes('owner') }
+  const shared = { ...props, kit, rows, of, replace: demo?.setRows, now: demo?.now ?? Date.now(), leader: props.actor.roleIds.includes('owner') }
   if (screenId === kit.mineScreenId) return <Mine {...shared} />
   if (screenId === kit.boardScreenId) return <Board {...shared} />
   if (screenId === kit.projectsScreenId) return <ProjectList {...shared} />
@@ -119,7 +134,35 @@ export function ProjectsScreen(props: AppV2RendererProps) {
   if (screenId === kit.taskScreenId) return <TaskCard {...shared} />
   if (screenId === kit.peopleScreenId) return <PeopleList {...shared} />
   if (screenId === kit.clientsScreenId) return <ClientList {...shared} />
+  if (kit.ganttScreenId && screenId === kit.ganttScreenId) return <GanttScreen {...stage2(shared)} />
+  if (kit.workloadScreenId && screenId === kit.workloadScreenId) return <WorkloadScreen {...stage2(shared)} />
+  if (kit.templatesScreenId && screenId === kit.templatesScreenId) return <TemplatesScreen {...stage2(shared)} initialOpen={demo?.open === 'template' || demo?.open === 'from-template' ? demo.open : null} />
+  if (kit.clientScreenId && screenId === kit.clientScreenId) return <ClientProjectView {...stage2(shared)} recordId={recordId ?? ''} />
   return null
+}
+
+function stage2(props: ScreenProps): Stage2Helpers {
+  return {
+    kit: props.kit,
+    tables: props.tables,
+    rows: props.rows,
+    of: props.of,
+    replace: props.replace,
+    now: props.now,
+    leader: props.leader,
+    actor: props.actor,
+    onNavigate: props.onNavigate,
+    choiceName: (tableId, fieldId, value) => choiceName(props.tables, tableId, fieldId, value),
+    choiceId: (tableId, fieldId, name) => choiceId(props.tables, tableId, fieldId, name),
+    people: () => people(props),
+    saveRemote: async body => {
+      const published = publishedHolder.current
+      if (!published || published.revision === 'demo') return false
+      const result = await savePublishedProjectsAction(published.slug, { revision: published.revision, screenId: props.screenId, ...body })
+      if (result.ok) published.refresh(result.message)
+      return result.ok
+    },
+  }
 }
 
 type ScreenProps = Omit<AppV2RendererProps, 'rows'> & {
@@ -131,19 +174,40 @@ type ScreenProps = Omit<AppV2RendererProps, 'rows'> & {
   leader: boolean
 }
 
-function taskFacts(props: ScreenProps, row: AppV2Record): TaskFacts {
+type TaskFactsExtra = TaskFacts & {
+  start: unknown
+  estimate: number | null
+  authorId: string
+  authorEmail: string
+  observerIds: string[]
+  repeat: string
+  repeatEvery: number | null
+}
+
+function taskFacts(props: ScreenProps, row: AppV2Record): TaskFactsExtra {
   const task = props.kit.task
   return {
     id: row.id,
     status: choiceName(props.tables, props.kit.tasksTableId, task.status, row.values[task.status]),
     priority: choiceName(props.tables, props.kit.tasksTableId, task.priority, row.values[task.priority]),
     due: row.values[task.due],
+    start: task.start ? row.values[task.start] : null,
+    estimate: task.estimate && typeof row.values[task.estimate] === 'number' ? Number(row.values[task.estimate]) : null,
     assigneeId: firstId(row.values[task.assignee]),
     assigneeEmail: textOf(row.values[task.assigneeEmail]).trim().toLowerCase(),
+    authorId: task.author ? firstId(row.values[task.author]) : '',
+    authorEmail: task.authorEmail ? textOf(row.values[task.authorEmail]).trim().toLowerCase() : '',
+    observerIds: (() => {
+      if (!task.observers) return [] as string[]
+      const value = row.values[task.observers]
+      return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
+    })(),
     projectId: firstId(row.values[task.project]),
     parentId: firstId(row.values[task.parent]),
     stageId: firstId(row.values[task.stage]),
     sort: Number(row.values[task.sort] ?? 0) || 0,
+    repeat: task.repeat ? choiceName(props.tables, props.kit.tasksTableId, task.repeat, row.values[task.repeat]) : '',
+    repeatEvery: task.repeatEvery && typeof row.values[task.repeatEvery] === 'number' ? Number(row.values[task.repeatEvery]) : null,
   }
 }
 
@@ -254,9 +318,14 @@ function Mine(props: ScreenProps) {
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS)
   const [open, setOpen] = useState(false)
   const email = (props.actor.email ?? '').trim().toLowerCase()
-  const tasks = props.of(props.kit.tasksTableId).map(row => ({ row, facts: taskFacts(props, row) })).filter(item => item.facts.assigneeEmail === email).filter(item => passFilters(props, item, filters)).sort((a, b) => a.facts.sort - b.facts.sort)
+  const observerEmails = (facts: TaskFactsExtra) => facts.observerIds.map(id => personById(props, id)?.email ?? '').filter(Boolean)
+  const tasks = props.of(props.kit.tasksTableId).map(row => ({ row, facts: taskFacts(props, row) }))
+    .filter(item => item.facts.assigneeEmail === email)
+    .filter(item => passFilters(props, item, filters)).sort((a, b) => a.facts.sort - b.facts.sort)
   const mentions = props.of(props.kit.tasksTableId).map(row => ({ row, facts: taskFacts(props, row) })).filter(item => item.facts.assigneeEmail !== email && mentionedIds(props, email).has(item.row.id) && !isDone(item.facts.status)).filter(item => passFilters(props, item, filters))
-  const any = tasks.some(item => taskBucket(item.facts, props.now)) || mentions.length
+  const authored = props.of(props.kit.tasksTableId).map(row => ({ row, facts: taskFacts(props, row) })).filter(item => item.facts.authorEmail === email && item.facts.assigneeEmail !== email && !isDone(item.facts.status)).filter(item => passFilters(props, item, filters))
+  const watching = props.of(props.kit.tasksTableId).map(row => ({ row, facts: taskFacts(props, row) })).filter(item => observerEmails(item.facts).includes(email) && item.facts.assigneeEmail !== email && item.facts.authorEmail !== email && !isDone(item.facts.status)).filter(item => passFilters(props, item, filters))
+  const any = tasks.some(item => taskBucket(item.facts, props.now)) || mentions.length || authored.length || watching.length
   return <div className={css.root} data-projects-screen="mine">
     <div className={css.toolbar}><h1>Мои задачи</h1><span className={css.grow} /><div className={css.actions}><button type="button" className={buttons.secondary} onClick={() => setOpen(true)}>Фильтры</button></div></div>
     <div className={css.pad}><div className={css.groups}>
@@ -266,10 +335,12 @@ function Mine(props: ScreenProps) {
           if (!items.length) return null
           return <section key={bucket.id} className={css.group}><h2>{bucket.label} <span>{items.length}</span></h2><ul className={css.list}>{items.map(item => <li key={item.row.id}><TaskCardView {...props} variant="mine" row={item.row} onOpen={() => props.onNavigate?.(props.kit.taskScreenId, item.row.id)} /></li>)}</ul></section>
         })}
+        {authored.length ? <section className={css.group} data-projects-group="author"><h2>Я постановщик <span>{authored.length}</span></h2><ul className={css.list}>{authored.map(item => <li key={item.row.id}><TaskCardView {...props} variant="mine" row={item.row} onOpen={() => props.onNavigate?.(props.kit.taskScreenId, item.row.id)} /></li>)}</ul></section> : null}
+        {watching.length ? <section className={css.group} data-projects-group="observer"><h2>Я наблюдаю <span>{watching.length}</span></h2><ul className={css.list}>{watching.map(item => <li key={item.row.id}><TaskCardView {...props} variant="mine" row={item.row} onOpen={() => props.onNavigate?.(props.kit.taskScreenId, item.row.id)} /></li>)}</ul></section> : null}
         {mentions.length ? <section className={css.group} data-projects-group="mentions"><h2>Упоминания <span>{mentions.length}</span></h2><ul className={css.list}>{mentions.map(item => <li key={item.row.id}><TaskCardView {...props} variant="mine" row={item.row} onOpen={() => props.onNavigate?.(props.kit.taskScreenId, item.row.id)} /></li>)}</ul></section> : null}
       </> : <p className={css.empty}>На вашу почту задач нет. На доске видны задачи, которые вам назначены.</p>}
     </div></div>
-    {open ? <FiltersDialog {...props} value={filters} onChange={setFilters} onClose={() => setOpen(false)} hideAssignee /> : null}
+    {open ? <FiltersDialog {...props} value={filters} onChange={setFilters} onClose={() => setOpen(false)} hideAssignee showRole /> : null}
   </div>
 }
 
@@ -313,7 +384,7 @@ function Board(props: ScreenProps) {
         </section>
       })}
     </div></div>
-    {openFilters ? <FiltersDialog {...props} value={filters} onChange={setFilters} onClose={() => setOpenFilters(false)} showStage /> : null}
+    {openFilters ? <FiltersDialog {...props} value={filters} onChange={setFilters} onClose={() => setOpenFilters(false)} showStage showRole /> : null}
     {create ? <TaskEditor {...props} mode="create" onClose={() => setCreate(false)} /> : null}
     {statusFor ? <StatusDialog {...props} rowId={statusFor} onClose={() => setStatusFor(null)} /> : null}
   </div>
@@ -355,6 +426,7 @@ function ProjectCard(props: ScreenProps) {
   const row = props.rows.find(item => item.id === props.record?.id) ?? props.record
   const [tab, setTab] = useState<ProjectsTab>(demo?.tab ?? 'stages')
   const [edit, setEdit] = useState(false)
+  const [share, setShare] = useState(demo?.open === 'share')
   if (!row) return <p className={css.empty}>Проект не найден.</p>
   const status = choiceName(props.tables, props.kit.projectsTableId, props.kit.project.status, row.values[props.kit.project.status])
   const progress = projectProgress(props, row.id)
@@ -375,23 +447,25 @@ function ProjectCard(props: ScreenProps) {
   const due = formatDay(row.values[props.kit.project.due])
   const overdue = status !== 'Сдан' && status !== 'Отменён' && isOverdue({ status: 'К работе', due: row.values[props.kit.project.due] }, props.now)
   const closed = topTasks.filter(item => isDone(item.facts.status)).length
+  const spent = projectSpentSummary(stage2(props), row.id)
+  const estimate = topTasks.reduce((sum, item) => sum + (item.facts.estimate ?? 0), 0)
   return <div className={css.root} data-projects-screen="project" data-projects-tab={tab}>
     <DetailCardShell
       title={textOf(row.values[props.kit.project.title])}
       subtitle={clientTitle(props, clientId) || 'Клиент не указан'}
       chips={<Badge name={status} />}
       back={{ label: 'Проекты', onClick: () => props.onNavigate?.(props.kit.projectsScreenId) }}
-      actions={props.leader ? <button type="button" className={buttons.secondary} onClick={() => setEdit(true)}>Изменить</button> : null}
+      actions={props.leader ? <div className={css.headerActions}><button type="button" className={buttons.secondary} onClick={() => setShare(true)}>Ссылка клиенту</button><button type="button" className={buttons.secondary} onClick={() => setEdit(true)}>Изменить</button></div> : null}
       metrics={[
         { key: 'start', caption: 'Начало', value: formatDay(row.values[props.kit.project.start]) || '—' },
         { key: 'due', caption: 'Срок', value: due || '—', tone: overdue ? 'rose' : undefined },
-        { key: 'budget', caption: 'Бюджет', value: typeof row.values[props.kit.project.budget] === 'number' ? formatRub(Number(row.values[props.kit.project.budget])) : '—' },
+        { key: 'time', caption: 'Время', value: `${spent ? `${Math.round(spent / 60 * 10) / 10} ч` : '0 ч'}${estimate ? ` / ${Math.round(estimate / 60 * 10) / 10} ч` : ''}` },
         { key: 'progress', caption: 'Прогресс', value: `${progress}%`, note: <span className={css.metricProgress}><span className={css.bar} role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100} aria-label="Прогресс проекта"><span style={{ width: `${progress}%` }} /></span>{closed} из {topTasks.length} задач</span> },
       ]}
     >
       <div className={css.pad}>
         <div className={css.tabs} role="tablist" aria-label="Разделы проекта">
-          {([['stages', 'Этапы'], ['tasks', 'Задачи'], ['team', 'Команда'], ['files', 'Файлы'], ['feed', 'Лента']] as const).map(([id, label]) => <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)}>{label}</button>)}
+          {([['stages', 'Этапы'], ['tasks', 'Задачи'], ['gantt', 'Гант'], ['team', 'Команда'], ['files', 'Файлы'], ['feed', 'Лента']] as const).map(([id, label]) => <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)}>{label}</button>)}
         </div>
         {tab === 'stages' ? <div className={css.stages}>{projectStages.map(stage => {
           const items = topTasks.filter(item => item.facts.stageId === stage.id)
@@ -411,6 +485,7 @@ function ProjectCard(props: ScreenProps) {
           return <section className={css.stage}><header><h3>Без этапа</h3></header><ul className={css.list}>{loose.map(item => <li key={item.row.id}><TaskCardView {...props} variant="project" row={item.row} onOpen={() => props.onNavigate?.(props.kit.taskScreenId, item.row.id)} /></li>)}</ul></section>
         })()}</div> : null}
         {tab === 'tasks' ? <ul className={css.list}>{topTasks.length ? topTasks.map(item => <li key={item.row.id}><TaskCardView {...props} variant="project" row={item.row} onOpen={() => props.onNavigate?.(props.kit.taskScreenId, item.row.id)} /></li>) : <li className={css.empty}>В проекте пока нет задач.</li>}</ul> : null}
+        {tab === 'gantt' ? <GanttScreen {...stage2(props)} projectId={row.id} /> : null}
         {tab === 'team' ? <div className={css.team}>{[...team.values()].map(person => person ? <div key={person.id} className={css.personLine}><BookingAvatar name={person.name} photo={person.photo} small /><span><strong>{person.name}</strong><br /><span className={css.quiet}>{person.id === owner?.id ? `Ответственный · ${person.role}` : person.role}<br />{openTasksLabel(tasks.filter(item => item.facts.assigneeId === person.id && !isDone(item.facts.status)).length)}</span></span></div> : null)}</div> : null}
         {tab === 'files' ? <ul className={css.files}>{files.length ? files.map(file => <li key={file.id}><ProtoIcon name="file" size={18} /><div><strong className={css.fileName}>{file.name}</strong><div className={css.quiet}>{file.task} · {fileSize(file.size)}</div></div></li>) : <li className={css.empty}>Файлов по проекту пока нет.</li>}</ul> : null}
         {tab === 'feed' ? <ul className={css.feed}>{feed.length ? feed.map(item => {
@@ -421,6 +496,7 @@ function ProjectCard(props: ScreenProps) {
       </div>
     </DetailCardShell>
     {edit ? <ProjectEditor {...props} row={row} onClose={() => setEdit(false)} /> : null}
+    {share ? <ShareProjectDialog {...stage2(props)} projectId={row.id} onClose={() => setShare(false)} /> : null}
   </div>
 }
 
@@ -429,6 +505,7 @@ function TaskCard(props: ScreenProps) {
   const row = props.rows.find(item => item.id === props.record?.id) ?? props.record
   const [edit, setEdit] = useState(demo?.open === 'edit')
   const [comment, setComment] = useState(demo?.open === 'comment' || demo?.open === 'mention')
+  const [recurrence, setRecurrence] = useState(demo?.open === 'recurrence')
   const [error, setError] = useState('')
   const [subtask, setSubtask] = useState('')
   const [point, setPoint] = useState('')
@@ -439,10 +516,9 @@ function TaskCard(props: ScreenProps) {
   const checklist = parseChecklist(row.values[props.kit.task.checklist])
   const children = props.of(props.kit.tasksTableId).filter(item => taskFacts(props, item).parentId === row.id).sort((a, b) => taskFacts(props, a).sort - taskFacts(props, b).sort)
   const progress = subtaskProgress(children.map(item => taskFacts(props, item).status))
-  const names = people(props).map(item => item.name)
-  const comments = props.of(props.kit.commentsTableId).filter(item => firstId(item.values[props.kit.comment.task]) === row.id)
-    .sort((a, b) => String(a.values[props.kit.comment.at] ?? '').localeCompare(String(b.values[props.kit.comment.at] ?? '')))
   const files = fileItems(row.values[props.kit.task.files])
+  const spent = totalSpentMinutes(timeEntries(stage2(props)), row.id, props.now)
+  const active = timeEntries(stage2(props)).some(entry => entry.taskId === row.id && !entry.endedAt && entry.email === (props.actor.email ?? '').trim().toLowerCase())
   const toggle = (index: number) => { void saveTaskPatch(props, row, { checklist: serializeChecklist(toggleChecklistItem(checklist, index)) }, setError) }
   const setStatus = (name: string) => { void saveTaskPatch(props, row, { statusId: choiceId(props.tables, props.kit.tasksTableId, props.kit.task.status, name) }, setError) }
   const toggleChild = (child: AppV2Record) => {
@@ -476,9 +552,10 @@ function TaskCard(props: ScreenProps) {
           <span>{taskName || 'Подзадача'}</span>
         </nav> : null}
         <div className={css.taskHeadRow}>
-          <span className={css.cardFoot}><Badge name={facts.priority} />{overdue ? <Badge name="Просрочено" /> : null}</span>
-          <div className={css.headerActions}><button type="button" className={buttons.secondary} onClick={() => setEdit(true)}>Изменить</button><button type="button" className={buttons.secondary} onClick={() => setComment(true)}>Комментарий</button></div>
+          <span className={css.cardFoot}><Badge name={facts.priority} />{overdue ? <Badge name="Просрочено" /> : null}{facts.repeat && facts.repeat !== 'Не повторять' ? <span className={css.repeatBadge}>{repeatLabelFor(stage2(props), row)}</span> : null}{active ? <span className={css.timerActive} data-timer-active><span className={css.timerDot} />Таймер</span> : null}</span>
+          <div className={css.headerActions}><button type="button" className={buttons.secondary} onClick={() => setRecurrence(true)}>Повтор</button><button type="button" className={buttons.secondary} onClick={() => setEdit(true)}>Изменить</button><button type="button" className={buttons.secondary} onClick={() => setComment(true)}>Комментарий</button></div>
         </div>
+        <TaskRolesLine {...stage2(props)} authorId={facts.authorId} observerIds={facts.observerIds} repeat={facts.repeat} every={facts.repeatEvery} />
         <Segmented plain label="Статус" value={String(row.values[props.kit.task.status] ?? '')} options={TASK_STATUSES.map(name => ({ id: choiceId(props.tables, props.kit.tasksTableId, props.kit.task.status, name), name }))} onChange={id => { const name = TASK_STATUSES.find(item => choiceId(props.tables, props.kit.tasksTableId, props.kit.task.status, item) === id); if (name) setStatus(name) }} />
         {facts.parentId ? (() => {
           const parentRow = props.of(props.kit.tasksTableId).find(item => item.id === facts.parentId)
@@ -498,11 +575,13 @@ function TaskCard(props: ScreenProps) {
         { key: 'project', caption: 'Проект', value: <button type="button" className={css.metricText} onClick={() => props.onNavigate?.(props.kit.projectScreenId, facts.projectId)}>{projectName}</button> },
         { key: 'who', caption: 'Исполнитель', value: <span className={css.metricPerson}>{person ? <BookingAvatar name={person.name} photo={person.photo} small /> : null}<span>{person?.name || 'Не назначен'}</span></span> },
         { key: 'due', caption: 'Срок', value: <span className={css.metricText} data-overdue={overdue || undefined}>{formatDay(facts.due) || 'Не указан'}</span>, tone: overdue ? 'rose' : undefined },
+        { key: 'time', caption: 'Время', value: <span className={css.metricText}>{formatSpentPair(spent, facts.estimate)}</span> },
         ...(facts.parentId ? [] : [{ key: 'sub', caption: 'Подзадачи', value: <span className={css.metricText}>{progress.total ? `${progress.done} из ${progress.total}` : 'Нет'}</span> }]),
       ]}
     >
       <div className={css.pad}>
         {textOf(row.values[props.kit.task.description]) ? <DetailSection title="Описание"><p>{textOf(row.values[props.kit.task.description])}</p></DetailSection> : null}
+        <TaskTimePanel {...stage2(props)} taskId={row.id} projectId={facts.projectId} estimate={facts.estimate} />
         {facts.parentId ? null : <DetailSection title="Подзадачи">
           {children.length ? <ul className={css.subtaskList} data-subtask-list>{children.map(child => {
             const childFacts = taskFacts(props, child)
@@ -542,12 +621,8 @@ function TaskCard(props: ScreenProps) {
             <button type="submit" className={buttons.secondary}>Добавить пункт</button>
           </form>
         </DetailSection>
-        <div data-task-comments><DetailSection title="Комментарии">
-          {comments.length ? <ul className={css.notes}>{comments.map(item => {
-            const author = textOf(item.values[props.kit.comment.author])
-            const who = personByEmail(props, textOf(item.values[props.kit.comment.authorEmail]))
-            return <li key={item.id} className={css.note}><BookingAvatar name={author || 'Автор'} photo={who?.photo} small /><div><strong>{author || 'Сотрудник'}</strong> <time dateTime={textOf(item.values[props.kit.comment.at])}>{formatDay(item.values[props.kit.comment.at])}</time><p><CommentText text={textOf(item.values[props.kit.comment.text])} names={names} /></p></div></li>
-          })}</ul> : <p className={css.empty}>Комментариев пока нет.</p>}
+        <div data-task-comments data-task-chat><DetailSection title="Комментарии">
+          <CommentChat {...stage2(props)} taskId={row.id} projectId={facts.projectId} assigneeEmail={facts.assigneeEmail} onRefresh={() => publishedHolder.current?.refresh('')} />
         </DetailSection></div>
         <DetailSection title="Файлы">
           {files.length ? <ul className={css.files}>{files.map(file => <li key={file.id}><ProtoIcon name="file" size={18} /><div><strong className={css.fileName}>{file.name}</strong><div className={css.quiet}>{fileSize(file.size)}</div></div></li>)}</ul> : <p className={css.empty}>Файлов пока нет.</p>}
@@ -557,12 +632,34 @@ function TaskCard(props: ScreenProps) {
     </DetailCardShell>
     {edit ? <TaskEditor {...props} mode="edit" row={row} onClose={() => setEdit(false)} /> : null}
     {comment ? <CommentDialog {...props} row={row} onClose={() => setComment(false)} /> : null}
+    {recurrence && props.kit.task.repeat ? <RecurrenceDialog {...stage2(props)}
+      value={String(row.values[props.kit.task.repeat] ?? '')}
+      every={facts.repeatEvery != null ? String(facts.repeatEvery) : ''}
+      until={props.kit.task.repeatUntil ? civilInput(row.values[props.kit.task.repeatUntil]) : ''}
+      onChange={value => {
+        void saveTaskPatch(props, row, {
+          ...(props.kit.task.repeat ? { } : {}),
+        } as never, setError)
+        if (props.replace) {
+          props.replace(props.rows.map(item => item.id === row.id ? {
+            ...item,
+            values: {
+              ...item.values,
+              [props.kit.task.repeat!]: value.repeatId,
+              ...(props.kit.task.repeatEvery ? { [props.kit.task.repeatEvery]: value.every ? Number(value.every) : null } : {}),
+              ...(props.kit.task.repeatUntil ? { [props.kit.task.repeatUntil]: value.until || null } : {}),
+            },
+          } : item))
+        }
+      }}
+      onClose={() => setRecurrence(false)}
+    /> : null}
   </div>
 }
 
-type Filters = { assignee: string; project: string; due: DueFilter; priority: string; stage: string }
-const EMPTY_FILTERS: Filters = { assignee: '', project: '', due: '', priority: '', stage: '' }
-function passFilters(props: ScreenProps, item: { facts: TaskFacts }, filters: Filters) {
+type Filters = { assignee: string; project: string; due: DueFilter; priority: string; stage: string; role: '' | 'author' | 'observer' | 'assignee' }
+const EMPTY_FILTERS: Filters = { assignee: '', project: '', due: '', priority: '', stage: '', role: '' }
+function passFilters(props: ScreenProps, item: { facts: TaskFactsExtra }, filters: Filters) {
   if (filters.assignee && item.facts.assigneeId !== filters.assignee) return false
   if (filters.project && item.facts.projectId !== filters.project) return false
   if (filters.priority && item.facts.priority !== filters.priority) return false
@@ -570,16 +667,28 @@ function passFilters(props: ScreenProps, item: { facts: TaskFacts }, filters: Fi
     const stage = stagesOf(props).find(entry => entry.id === item.facts.stageId)
     if (stage?.status !== 'Текущий') return false
   } else if (filters.stage && item.facts.stageId !== filters.stage) return false
+  if (filters.role) {
+    const email = props.actor.email?.trim().toLowerCase() ?? ''
+    const observerEmails = item.facts.observerIds.map(id => personById(props, id)?.email ?? '').filter(Boolean)
+    if (!matchesRoleFilter({
+      filter: filters.role,
+      email,
+      assigneeEmail: item.facts.assigneeEmail,
+      authorEmail: item.facts.authorEmail,
+      observerEmails,
+    })) return false
+  }
   return matchesDue(item.facts, filters.due, props.now)
 }
 
-function FiltersDialog(props: ScreenProps & { value: Filters; onChange: (value: Filters) => void; onClose: () => void; hideAssignee?: boolean; showStage?: boolean }) {
+function FiltersDialog(props: ScreenProps & { value: Filters; onChange: (value: Filters) => void; onClose: () => void; hideAssignee?: boolean; showStage?: boolean; showRole?: boolean }) {
   const [draft, setDraft] = useState(props.value)
   const assignees = people(props).filter(person => person.active)
   const projects = props.of(props.kit.projectsTableId).map(row => ({ id: row.id, name: textOf(row.values[props.kit.project.title]) }))
   const stages = stagesOf(props).filter(stage => !draft.project || stage.projectId === draft.project)
   return <AppDialog title="Фильтры" placement="center" onClose={props.onClose} footer={<div className={css.footerRow}><button type="button" className={buttons.secondary} onClick={() => setDraft(EMPTY_FILTERS)}>Сбросить</button><button type="button" className={buttons.primary} onClick={() => { props.onChange(draft); props.onClose() }}>Показать</button></div>}>
     <div className={css.form}>
+      {props.showRole ? <ChoiceRow label="Роль" value={draft.role} options={[{ id: '', name: 'Исполнитель' }, { id: 'author', name: 'Я постановщик' }, { id: 'observer', name: 'Я наблюдаю' }]} onChange={role => setDraft({ ...draft, role: role as Filters['role'] })} /> : null}
       {props.hideAssignee ? null : <PeoplePick label="Исполнитель" value={draft.assignee} people={assignees} onChange={assignee => setDraft({ ...draft, assignee: draft.assignee === assignee ? '' : assignee })} allowEmpty />}
       <ProjectPick value={draft.project} options={[{ id: '', name: 'Все проекты' }, ...projects]} onChange={project => setDraft({ ...draft, project, stage: '' })} />
       {props.showStage ? <ChoiceRow label="Этап" value={draft.stage} options={[{ id: '', name: 'Все' }, { id: 'current', name: 'Текущий этап' }, ...stages.map(stage => ({ id: stage.id, name: stage.title }))]} onChange={stage => setDraft({ ...draft, stage })} /> : null}

@@ -75,7 +75,7 @@ function useDismiss(open: boolean, root: { current: HTMLElement | null }, close:
   }, [open, root, close])
 }
 
-export function DateMenu({ value, onValue, label }: { value: string; onValue: (value: string) => void; label: string }) {
+export function DateMenu({ value, onValue, label, emptyLabel = 'дд.мм.гггг', clearLabel }: { value: string; onValue: (value: string) => void; label: string; emptyLabel?: string; clearLabel?: string }) {
   const [open, setOpen] = useState(false)
   const root = useRef<HTMLDivElement>(null)
   const close = () => setOpen(false)
@@ -99,7 +99,7 @@ export function DateMenu({ value, onValue, label }: { value: string; onValue: (v
   }
   return <div className={css.picker} ref={root}>
     <button type="button" className={css.pickerButton} aria-label={label} aria-expanded={open} aria-haspopup="dialog" onClick={() => setOpen(current => !current)}>
-      <ProtoIcon name="calendar" size={16} /><span>{ruDateText(value) || 'дд.мм.гггг'}</span>
+      <ProtoIcon name="calendar" size={16} /><span>{ruDateText(value) || emptyLabel}</span>
     </button>
     {open ? <div className={css.pickerPanel} role="dialog" aria-label={label}>
       <div className={css.pickerHead}>
@@ -107,6 +107,7 @@ export function DateMenu({ value, onValue, label }: { value: string; onValue: (v
         <strong>{title}</strong>
         <button type="button" aria-label="Следующий месяц" onClick={() => shift(1)}><ProtoIcon name="arrow" size={16} /></button>
       </div>
+      {clearLabel ? <button type="button" className={css.pickerClear} onClick={() => { onValue(''); setOpen(false) }}>{clearLabel}</button> : null}
       <div className={css.pickerWeek}>{['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'].map(name => <span key={name}>{name}</span>)}</div>
       <div className={css.pickerDays}>
         {Array.from({ length: pad }, (_, index) => <span key={`pad-${index}`} />)}

@@ -12,6 +12,10 @@ export function guardProjectsCreate(app: AppV2, actor: AppV2Actor, tableId: stri
   return authorizeAppV2Write(app, actor, { operation: 'create', tableId, values })
 }
 
+export function guardProjectsDelete(app: AppV2, actor: AppV2Actor, row: AppV2Record) {
+  return authorizeAppV2Write(app, actor, { operation: 'delete', row })
+}
+
 type TaskRow = { id: string; statusName: string; sort: number }
 
 /** New status and order after a drag. The owner rewrites the column; an assignee only moves their own card. */
@@ -59,6 +63,11 @@ export function taskWrite(task: ProjectsApp['task'], input: {
   assigneeId?: string
   assigneeEmail?: string
   due?: string | null
+  start?: string | null
+  estimate?: number | null
+  authorId?: string
+  authorEmail?: string
+  observerIds?: string[]
   priorityId?: string
   statusId?: string
   description?: string
@@ -67,14 +76,23 @@ export function taskWrite(task: ProjectsApp['task'], input: {
   sort?: number
   parentId?: string
   stageId?: string | null
+  seriesId?: string | null
+  repeatId?: string | null
+  repeatUntil?: string | null
+  repeatEvery?: number | null
 }): Record<string, AppV2Json> {
   const values: Record<string, AppV2Json> = {}
-  const put = (key: string, value: AppV2Json | undefined) => { if (value !== undefined) values[key] = value }
+  const put = (key: string | undefined, value: AppV2Json | undefined) => { if (key && value !== undefined) values[key] = value }
   put(task.title, input.title)
   put(task.project, input.projectId ? [input.projectId] : undefined)
   put(task.assignee, input.assigneeId ? [input.assigneeId] : undefined)
   put(task.assigneeEmail, input.assigneeEmail)
   put(task.due, input.due)
+  put(task.start, input.start)
+  put(task.estimate, input.estimate)
+  put(task.author, input.authorId ? [input.authorId] : undefined)
+  put(task.authorEmail, input.authorEmail)
+  put(task.observers, input.observerIds)
   put(task.priority, input.priorityId)
   put(task.status, input.statusId)
   put(task.description, input.description)
@@ -83,6 +101,10 @@ export function taskWrite(task: ProjectsApp['task'], input: {
   put(task.sort, input.sort)
   put(task.parent, input.parentId === '' ? [] : input.parentId ? [input.parentId] : undefined)
   put(task.stage, input.stageId === null ? [] : input.stageId ? [input.stageId] : undefined)
+  put(task.seriesId, input.seriesId)
+  put(task.repeat, input.repeatId)
+  put(task.repeatUntil, input.repeatUntil)
+  put(task.repeatEvery, input.repeatEvery)
   return values
 }
 
@@ -95,6 +117,9 @@ export function commentWrite(comment: ProjectsApp['comment'], input: {
   authorEmail: string
   assigneeEmail: string
   mentionIds?: string[]
+  replyToId?: string | null
+  editedAt?: string | null
+  internal?: boolean
 }): Record<string, AppV2Json> {
   return {
     [comment.text]: input.text,
@@ -105,6 +130,73 @@ export function commentWrite(comment: ProjectsApp['comment'], input: {
     [comment.authorEmail]: input.authorEmail,
     [comment.assigneeEmail]: input.assigneeEmail,
     ...(input.mentionIds ? { [comment.mentions]: input.mentionIds } : {}),
+    ...(comment.replyTo && input.replyToId !== undefined ? { [comment.replyTo]: input.replyToId ? [input.replyToId] : [] } : {}),
+    ...(comment.editedAt && input.editedAt !== undefined ? { [comment.editedAt]: input.editedAt } : {}),
+    ...(comment.internal && input.internal !== undefined ? { [comment.internal]: input.internal } : {}),
+  }
+}
+
+export function timeWrite(time: NonNullable<ProjectsApp['time']>, input: {
+  taskId: string
+  projectId: string
+  personId: string
+  email: string
+  startedAt: string
+  endedAt?: string | null
+  minutes?: number | null
+  note?: string
+}): Record<string, AppV2Json> {
+  return {
+    [time.task]: [input.taskId],
+    [time.project]: [input.projectId],
+    [time.person]: [input.personId],
+    [time.email]: input.email,
+    [time.startedAt]: input.startedAt,
+    [time.endedAt]: input.endedAt ?? null,
+    [time.minutes]: input.minutes ?? null,
+    [time.note]: input.note ?? '',
+  }
+}
+
+export function linkWrite(link: NonNullable<ProjectsApp['link']>, input: {
+  title: string
+  projectId: string
+  fromId: string
+  toId: string
+}): Record<string, AppV2Json> {
+  return {
+    [link.title]: input.title,
+    [link.project]: [input.projectId],
+    [link.from]: [input.fromId],
+    [link.to]: [input.toId],
+  }
+}
+
+export function templateWrite(template: NonNullable<ProjectsApp['template']>, input: {
+  name: string
+  payload: string
+  createdAt: string
+  author: string
+}): Record<string, AppV2Json> {
+  return {
+    [template.name]: input.name,
+    [template.payload]: input.payload,
+    [template.createdAt]: input.createdAt,
+    [template.author]: input.author,
+  }
+}
+
+export function shareWrite(share: NonNullable<ProjectsApp['share']>, input: {
+  token: string
+  projectId: string
+  label: string
+  createdAt: string
+}): Record<string, AppV2Json> {
+  return {
+    [share.token]: input.token,
+    [share.project]: [input.projectId],
+    [share.label]: input.label,
+    [share.createdAt]: input.createdAt,
   }
 }
 

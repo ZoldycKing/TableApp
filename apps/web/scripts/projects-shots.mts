@@ -36,47 +36,72 @@ const open = async (page: Page, view: string) => {
     return Boolean(screen && screen.getAttribute('data-projects-screen') !== 'loading')
   }, { timeout: 30000 })
   await page.waitForTimeout(500)
-  if (view === 'task-comments') {
-    const comments = page.locator('[data-task-comments]')
+  if (view === 'task-chat' || view === 'task-comments') {
+    const comments = page.locator('[data-task-comments]').first()
     await comments.scrollIntoViewIfNeeded()
     await page.waitForTimeout(300)
+  }
+  if (view === 'task-time') {
+    const time = page.locator('[data-task-time]')
+    await time.scrollIntoViewIfNeeded()
+    await page.waitForTimeout(300)
+  }
+  if (view === 'client') {
+    const gantt = page.locator('[data-projects-gantt]')
+    await gantt.scrollIntoViewIfNeeded()
+    await page.waitForTimeout(300)
+  }
+  if (view === 'gantt' || view === 'project-gantt' || view === 'client') {
+    await page.waitForSelector('[data-projects-gantt] [data-bar-id]', { timeout: 15000 }).catch(() => undefined)
+    await page.waitForTimeout(500)
+    await page.evaluate(() => {
+      const root = document.querySelector('[data-projects-gantt]') as HTMLElement | null
+      const scroll = document.querySelector('[data-projects-gantt] [class*="ganttScroll"]') as HTMLElement | null
+      const today = document.querySelector('[data-projects-gantt] [class*="ganttToday"]') as HTMLElement | null
+      if (scroll && today) {
+        const narrow = root?.hasAttribute('data-narrow') || window.innerWidth <= 720
+        const left = today.offsetLeft
+        scroll.scrollLeft = Math.max(0, left - (narrow ? 16 : Math.max(40, scroll.clientWidth * 0.35)))
+      }
+    })
+    await page.waitForTimeout(300)
+  }
+  if (view === 'recurrence') {
+    const custom = page.locator('[data-recurrence-dialog] button', { hasText: 'Свой интервал' })
+    if (await custom.count()) {
+      await custom.click()
+      await page.waitForTimeout(300)
+    }
   }
 }
 
 const browser = await chromium.launch({ headless: true })
 
 const desktop = [
-  ['board', 'projects-desktop-board.png'],
-  ['mine', 'projects-desktop-mine.png'],
-  ['project', 'projects-desktop-project-tasks.png'],
-  ['project-team', 'projects-desktop-project-team.png'],
-  ['project-files', 'projects-desktop-project-files.png'],
-  ['project-feed', 'projects-desktop-project-feed.png'],
-  ['task', 'projects-desktop-task.png'],
-  ['subtask', 'projects-desktop-subtask.png'],
-  ['stages', 'projects-desktop-stages.png'],
-  ['mention', 'projects-desktop-mention.png'],
-  ['mentions', 'projects-desktop-mentions.png'],
-  ['filters', 'projects-desktop-filters.png'],
-  ['edit', 'projects-desktop-edit.png'],
-  ['projects', 'projects-desktop-projects.png'],
-  ['people', 'projects-desktop-people.png'],
-  ['clients', 'projects-desktop-clients.png'],
+  ['gantt', 'projects-s2-desktop-gantt.png'],
+  ['project-gantt', 'projects-s2-desktop-project-gantt.png'],
+  ['task-time', 'projects-s2-desktop-timer.png'],
+  ['task', 'projects-s2-desktop-roles.png'],
+  ['task-chat', 'projects-s2-desktop-chat.png'],
+  ['template', 'projects-s2-desktop-template-save.png'],
+  ['from-template', 'projects-s2-desktop-from-template.png'],
+  ['recurrence', 'projects-s2-desktop-recurrence.png'],
+  ['workload', 'projects-s2-desktop-workload.png'],
+  ['share', 'projects-s2-desktop-share.png'],
+  ['client', 'projects-s2-desktop-client.png'],
 ] as const
 
 const phone = [
-  ['mine', 'projects-phone-mine.png'],
-  ['board', 'projects-phone-board.png'],
-  ['project', 'projects-phone-project.png'],
-  ['task', 'projects-phone-task.png'],
-  ['subtask', 'projects-phone-subtask.png'],
-  ['stages', 'projects-phone-stages.png'],
-  ['mention', 'projects-phone-mention.png'],
-  ['mentions', 'projects-phone-mentions.png'],
-  ['task-comments', 'projects-phone-task-comments.png'],
-  ['edit', 'projects-phone-modal.png'],
-  ['filters', 'projects-phone-filters.png'],
-  ['projects', 'projects-phone-projects.png'],
+  ['gantt', 'projects-s2-phone-gantt.png'],
+  ['task-time', 'projects-s2-phone-timer.png'],
+  ['task', 'projects-s2-phone-roles.png'],
+  ['task-chat', 'projects-s2-phone-chat.png'],
+  ['template', 'projects-s2-phone-template-save.png'],
+  ['from-template', 'projects-s2-phone-from-template.png'],
+  ['recurrence', 'projects-s2-phone-recurrence.png'],
+  ['workload', 'projects-s2-phone-workload.png'],
+  ['share', 'projects-s2-phone-share.png'],
+  ['client', 'projects-s2-phone-client.png'],
 ] as const
 
 {

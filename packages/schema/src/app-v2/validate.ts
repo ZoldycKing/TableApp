@@ -443,6 +443,10 @@ export function validateAppV2(app: AppV2, catalog: AppV2Catalog, options: { mode
     const projects = app.projects, path = 'projects'
     table(projects.projectsTableId, path); table(projects.tasksTableId, path); table(projects.peopleTableId, path)
     table(projects.clientsTableId, path); table(projects.commentsTableId, path); table(projects.eventsTableId, path); table(projects.stagesTableId, path)
+    if (projects.timeTableId) table(projects.timeTableId, path)
+    if (projects.linksTableId) table(projects.linksTableId, path)
+    if (projects.templatesTableId) table(projects.templatesTableId, path)
+    if (projects.sharesTableId) table(projects.sharesTableId, path)
     const group = (tableId: string, values: Record<string, string | undefined>) => {
       for (const fieldId of Object.values(values)) if (fieldId) field(fieldId, tableId, path)
     }
@@ -453,6 +457,10 @@ export function validateAppV2(app: AppV2, catalog: AppV2Catalog, options: { mode
     group(projects.commentsTableId, projects.comment)
     group(projects.eventsTableId, projects.event)
     group(projects.stagesTableId, projects.stage)
+    if (projects.timeTableId && projects.time) group(projects.timeTableId, projects.time)
+    if (projects.linksTableId && projects.link) group(projects.linksTableId, projects.link)
+    if (projects.templatesTableId && projects.template) group(projects.templatesTableId, projects.template)
+    if (projects.sharesTableId && projects.share) group(projects.sharesTableId, projects.share)
     const client = field(projects.project.client, projects.projectsTableId, path)
     if (client && client.relationTableId && client.relationTableId !== projects.clientsTableId) issue('projects_client', path, 'Проект должен ссылаться на клиентов')
     const owner = field(projects.project.owner, projects.projectsTableId, path)
@@ -469,7 +477,27 @@ export function validateAppV2(app: AppV2, catalog: AppV2Catalog, options: { mode
     if (stageProject && stageProject.relationTableId && stageProject.relationTableId !== projects.projectsTableId) issue('projects_stage_project', path, 'Этап должен ссылаться на проект')
     const mentions = field(projects.comment.mentions, projects.commentsTableId, path)
     if (mentions && mentions.relationTableId && mentions.relationTableId !== projects.peopleTableId) issue('projects_mentions', path, 'Упоминание должно ссылаться на сотрудников')
-    for (const screenId of [projects.mineScreenId, projects.boardScreenId, projects.projectsScreenId, projects.projectScreenId, projects.taskScreenId, projects.peopleScreenId, projects.clientsScreenId]) if (!screens.has(screenId)) issue('projects_screen', path, 'Экран проектов удалён')
+    if (projects.task.author) {
+      const author = field(projects.task.author, projects.tasksTableId, path)
+      if (author && author.relationTableId && author.relationTableId !== projects.peopleTableId) issue('projects_author', path, 'Постановщик должен ссылаться на сотрудников')
+    }
+    if (projects.task.observers) {
+      const observers = field(projects.task.observers, projects.tasksTableId, path)
+      if (observers && observers.relationTableId && observers.relationTableId !== projects.peopleTableId) issue('projects_observers', path, 'Наблюдатели должны ссылаться на сотрудников')
+    }
+    if (projects.comment.replyTo) {
+      const reply = field(projects.comment.replyTo, projects.commentsTableId, path)
+      if (reply && reply.relationTableId && reply.relationTableId !== projects.commentsTableId) issue('projects_reply', path, 'Ответ должен ссылаться на комментарии')
+    }
+    if (projects.linksTableId && projects.link) {
+      const from = field(projects.link.from, projects.linksTableId, path)
+      const to = field(projects.link.to, projects.linksTableId, path)
+      if (from && from.relationTableId && from.relationTableId !== projects.tasksTableId) issue('projects_link_from', path, 'Зависимость должна ссылаться на задачи')
+      if (to && to.relationTableId && to.relationTableId !== projects.tasksTableId) issue('projects_link_to', path, 'Зависимость должна ссылаться на задачи')
+    }
+    for (const screenId of [projects.mineScreenId, projects.boardScreenId, projects.projectsScreenId, projects.projectScreenId, projects.taskScreenId, projects.peopleScreenId, projects.clientsScreenId, projects.ganttScreenId, projects.workloadScreenId, projects.templatesScreenId, projects.clientScreenId]) {
+      if (screenId && !screens.has(screenId)) issue('projects_screen', path, 'Экран проектов удалён')
+    }
     for (const formId of [projects.createTaskFormId, projects.editTaskFormId, projects.createProjectFormId, projects.editProjectFormId, projects.commentFormId]) if (nodes.get(formId)?.type !== 'form') issue('projects_form', path, 'Форма проектов удалена')
   }
   if (app.shop) {

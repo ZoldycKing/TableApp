@@ -349,7 +349,7 @@
 .chatQuoteText {
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
   overflow: hidden; text-overflow: ellipsis; word-break: break-word;
-  font-size: 12px; line-height: 14px; max-height: 28px;
+  font-size: 12px; line-height: 14px; height: 28px; max-height: 28px;
 }
 .chatActions { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 .chatActions button { min-height: 28px; padding: 2px 8px; border: 0; border-radius: 8px; background: transparent; color: var(--v2-muted, #526075); font: inherit; font-size: 12px; font-weight: 650; }

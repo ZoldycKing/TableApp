@@ -12,6 +12,10 @@ export function guardProjectsCreate(app: AppV2, actor: AppV2Actor, tableId: stri
   return authorizeAppV2Write(app, actor, { operation: 'create', tableId, values })
 }
 
+export function guardProjectsDelete(app: AppV2, actor: AppV2Actor, row: AppV2Record) {
+  return authorizeAppV2Write(app, actor, { operation: 'delete', row })
+}
+
 type TaskRow = { id: string; statusName: string; sort: number }
 
 /** New status and order after a drag. The owner rewrites the column; an assignee only moves their own card. */

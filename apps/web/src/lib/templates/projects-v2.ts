@@ -120,8 +120,8 @@ export function buildProjectsV2App(built: BuiltTemplate, meta: { id: string; wor
     minutes: column('Время', 'Минуты').id,
     note: column('Время', 'Заметка').id,
   }
-  const linkTitle = column('Зависимости', 'Связь').id
   const linkFields = {
+    title: column('Зависимости', 'Связь').id,
     project: column('Зависимости', 'Проект').id,
     from: column('Зависимости', 'Предшественник').id,
     to: column('Зависимости', 'Последователь').id,
@@ -281,7 +281,7 @@ export function buildProjectsV2App(built: BuiltTemplate, meta: { id: string; wor
   const projectTasks = collection('Задачи проекта', tasks.id, task.title, ids.taskScreenId, both, task.sort, tasksByProject, projects.id)
   const projectPeople = collection('Сотрудники проекта', people.id, person.name, null, both, person.name)
   const projectClients = collection('Клиенты проекта', clients.id, client.name, null, owner, client.name)
-  const projectLinks = collection('Зависимости проекта', links.id, linkTitle, null, both, linkTitle, linksByProject, projects.id)
+  const projectLinks = collection('Зависимости проекта', links.id, linkFields.title, null, both, linkFields.title, linksByProject, projects.id)
   const projectTime = collection('Время проекта', time.id, timeFields.note, null, both, timeFields.startedAt, timeByProject, projects.id)
   const projectShares = collection('Ссылки проекта', shares.id, shareFields.label, null, owner, shareFields.createdAt, { op: 'includes', left: { kind: 'row', fieldId: shareFields.project }, right: { kind: 'screen_row_id' } }, projects.id)
   const allProjects = collection('Проекты', projects.id, project.title, ids.projectScreenId, owner, project.due)
@@ -296,7 +296,7 @@ export function buildProjectsV2App(built: BuiltTemplate, meta: { id: string; wor
   const projectEvents = collection('Лента проекта', events.id, event.text, null, both, event.at, eventsByProject, projects.id)
   const ganttTasks = collection('Задачи Ганта', tasks.id, task.title, ids.taskScreenId, teamAndClient, task.sort)
   const ganttStages = collection('Этапы Ганта', stages.id, stage.title, null, teamAndClient, stage.start)
-  const ganttLinks = collection('Связи Ганта', links.id, linkTitle, null, teamAndClient, linkTitle)
+  const ganttLinks = collection('Связи Ганта', links.id, linkFields.title, null, teamAndClient, linkFields.title)
   const ganttProjects = collection('Проекты Ганта', projects.id, project.title, ids.projectScreenId, teamAndClient, project.due)
   const ganttPeople = collection('Сотрудники Ганта', people.id, person.name, null, teamAndClient, person.name)
   const workloadTasks = collection('Задачи нагрузки', tasks.id, task.title, ids.taskScreenId, both, task.due)
@@ -304,7 +304,7 @@ export function buildProjectsV2App(built: BuiltTemplate, meta: { id: string; wor
   const workloadTime = collection('Время нагрузки', time.id, timeFields.note, null, both, timeFields.startedAt)
   const clientTasks = collection('Задачи клиента', tasks.id, task.title, null, clientRole, task.sort, tasksByProject, projects.id)
   const clientStages = collection('Этапы клиента', stages.id, stage.title, null, clientRole, stage.start, { op: 'includes', left: { kind: 'row', fieldId: stage.project }, right: { kind: 'screen_row_id' } }, projects.id)
-  const clientLinks = collection('Связи клиента', links.id, linkTitle, null, clientRole, linkTitle, linksByProject, projects.id)
+  const clientLinks = collection('Связи клиента', links.id, linkFields.title, null, clientRole, linkFields.title, linksByProject, projects.id)
   const clientPeople = collection('Команда клиента', people.id, person.name, null, clientRole, person.name)
   const screen = (id: string, name: string, menuLabel: string | undefined, icon: string, audience: AppV2Audience, contextTableId: string | null, rootIds: string[], navigation: boolean) =>
     ({ id, name, ...(menuLabel ? { menuLabel } : {}), icon, audience, contextTableId, rootIds, navigation, events: { enter: null } })
@@ -381,11 +381,12 @@ export function buildProjectsV2App(built: BuiltTemplate, meta: { id: string; wor
           grant(clientRole, { read: { fieldIds: columnsOf(stages.id), rows: all } }),
         ] },
         { tableId: comments.id, grants: [
-          grant(owner, { read: { fieldIds: columnsOf(comments.id), rows: all }, create: { fieldIds: editable(comments.id) }, update: { fieldIds: editable(comments.id), rows: all } }),
+          grant(owner, { read: { fieldIds: columnsOf(comments.id), rows: all }, create: { fieldIds: editable(comments.id) }, update: { fieldIds: editable(comments.id), rows: all }, delete: { rows: owned(comment.authorEmail) } }),
           grant(staff, {
             read: { fieldIds: columnsOf(comments.id), rows: all },
             create: { fieldIds: [comment.text, comment.task, comment.project, comment.at, comment.author, comment.authorEmail, comment.assigneeEmail, comment.mentions, comment.replyTo, comment.editedAt, comment.internal] },
             update: { fieldIds: [comment.text, comment.editedAt, comment.mentions, comment.replyTo], rows: owned(comment.authorEmail) },
+            delete: { rows: owned(comment.authorEmail) },
           }),
         ] },
         { tableId: events.id, grants: [

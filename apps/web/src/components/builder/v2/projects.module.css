@@ -260,4 +260,68 @@
   .metricText, .metricPerson { white-space: normal; overflow-wrap: anywhere; }
   .personLine { min-width: 0; align-items: center; }
   .segment button { font-size: 11px; padding-inline: 2px; }
+  .ganttLabel { width: 148px !important; }
+  .chatBubble { max-width: 92%; }
+  .workloadGrid { min-width: 520px; }
 }
+
+.gantt { display: grid; gap: 10px; min-width: 0; }
+.ganttToolbar { display: grid; gap: 8px; }
+.ganttScroll { overflow: auto; border: 1px solid var(--v2-line, #dce3ed); border-radius: 14px; background: var(--v2-surface, #fff); -webkit-overflow-scrolling: touch; }
+.ganttInner { position: relative; min-width: 100%; }
+.ganttHead { display: grid; position: sticky; top: 0; z-index: 2; background: var(--v2-page, #f3f4f6); border-bottom: 1px solid var(--v2-line, #dce3ed); }
+.ganttCorner, .ganttDay { min-height: 36px; padding: 8px 4px; font-size: 11px; font-weight: 700; color: var(--v2-muted, #526075); text-align: center; white-space: nowrap; }
+.ganttCorner { position: sticky; left: 0; z-index: 3; text-align: left; padding-left: 12px; background: var(--v2-page, #f3f4f6); border-right: 1px solid var(--v2-line, #dce3ed); }
+.ganttDay[data-today] { color: var(--v2-accent, #456849); background: #e8f0ea; }
+.ganttBody { position: relative; }
+.ganttToday { position: absolute; top: 0; bottom: 0; width: 2px; background: #9f1239; z-index: 1; pointer-events: none; }
+.ganttArrows { position: absolute; inset: 0; pointer-events: none; color: #6b7c8f; overflow: visible; }
+.ganttArrow { fill: none; stroke: currentColor; stroke-width: 1.5; pointer-events: stroke; cursor: pointer; }
+.ganttRow { position: absolute; left: 0; right: 0; display: block; border-bottom: 1px solid var(--v2-line, #e8edf3); }
+.ganttLabel { position: sticky; left: 0; z-index: 2; display: grid; align-content: center; gap: 2px; height: 100%; padding: 6px 10px; border: 0; border-right: 1px solid var(--v2-line, #dce3ed); background: var(--v2-surface, #fff); color: inherit; font: inherit; text-align: left; }
+.ganttLabel strong { font-size: 13px; line-height: 1.25; overflow-wrap: anywhere; }
+.ganttLabel span { color: var(--v2-muted, #526075); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ganttBar { position: absolute; top: 8px; height: 28px; display: flex; align-items: center; gap: 4px; padding: 0 8px; border-radius: 8px; background: #d7e5f4; color: #23486f; font-size: 12px; font-weight: 700; cursor: grab; touch-action: none; overflow: hidden; }
+.ganttBar[data-done] { background: #d7edd9; color: #1f6b3a; }
+.ganttBar span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ganttHandle { position: absolute; top: 0; bottom: 0; width: 8px; padding: 0; border: 0; background: transparent; cursor: ew-resize; }
+.ganttHandle[data-edge='start'] { left: 0; }
+.ganttHandle[data-edge='end'] { right: 0; }
+.ganttLinkBtn { flex: none; display: inline-grid; place-items: center; width: 20px; height: 20px; margin-left: auto; padding: 0; border: 0; border-radius: 999px; background: rgba(255,255,255,.7); color: inherit; }
+.ganttEmpty { position: absolute; top: 10px; min-height: 24px; padding: 0 8px; border: 0; background: transparent; color: var(--v2-muted, #526075); font: inherit; font-size: 12px; }
+.ganttHint { display: flex; justify-content: flex-end; }
+
+.timerRow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.timerActive { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 2px 10px; border-radius: 999px; background: #fff4d6; color: #7a5410; font-size: 12px; font-weight: 700; }
+.timerDot { width: 8px; height: 8px; border-radius: 999px; background: #c2410c; animation: projectsPulse 1.2s ease-in-out infinite; }
+@keyframes projectsPulse { 50% { opacity: .35; } }
+.timeList { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.timeItem { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: start; padding: 8px 0; border-top: 1px solid var(--v2-line, #dce3ed); }
+.timeItem:first-child { border-top: 0; padding-top: 0; }
+
+.chat { display: grid; gap: 10px; }
+.chatList { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.chatBubble { display: grid; gap: 4px; max-width: 78%; padding: 10px 12px; border-radius: 14px; background: var(--v2-page, #eef2f6); }
+.chatBubble[data-own] { justify-self: end; background: #e5f0e7; border-bottom-right-radius: 4px; }
+.chatBubble:not([data-own]) { justify-self: start; border-bottom-left-radius: 4px; }
+.chatMeta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; font-size: 12px; color: var(--v2-muted, #526075); }
+.chatQuote { margin: 0; padding: 6px 8px; border-left: 3px solid var(--v2-accent, #456849); background: rgba(255,255,255,.55); font-size: 12px; color: var(--v2-muted, #526075); overflow-wrap: anywhere; }
+.chatActions { display: flex; flex-wrap: wrap; gap: 6px; }
+.chatActions button { min-height: 28px; padding: 2px 8px; border: 0; border-radius: 8px; background: transparent; color: var(--v2-muted, #526075); font: inherit; font-size: 12px; font-weight: 650; }
+.chatComposer { display: grid; gap: 8px; }
+
+.workload { display: grid; gap: 10px; overflow: auto; }
+.workloadGrid { display: grid; gap: 0; min-width: 640px; border: 1px solid var(--v2-line, #dce3ed); border-radius: 14px; overflow: hidden; background: var(--v2-surface, #fff); }
+.workloadRow { display: grid; grid-template-columns: 180px repeat(var(--days, 7), minmax(64px, 1fr)) 88px; border-top: 1px solid var(--v2-line, #e8edf3); }
+.workloadRow:first-child { border-top: 0; background: var(--v2-page, #f3f4f6); font-weight: 700; }
+.workloadCell { min-height: 48px; padding: 8px; font-size: 12px; overflow-wrap: anywhere; }
+.workloadCell[data-overload] { background: #ffe4e6; color: #9f1239; font-weight: 700; }
+.workloadPerson { display: flex; align-items: center; gap: 8px; font-weight: 700; }
+
+.clientBanner { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 12px; background: #e8f0ea; color: #1f6b3a; font-size: 13px; font-weight: 650; }
+.roleLine { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.repeatBadge { display: inline-flex; align-items: center; gap: 4px; min-height: 24px; padding: 2px 8px; border-radius: 999px; background: #e8e9f8; color: #3d457f; font-size: 12px; font-weight: 700; }
+.templateCard { display: grid; gap: 6px; width: 100%; min-width: 0; padding: 12px; border: 1px solid var(--v2-line, #dce3ed); border-radius: 12px; background: var(--v2-surface, #fff); text-align: left; color: inherit; font: inherit; }
+.templateCard strong { overflow-wrap: anywhere; }
+.shareBox { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--v2-line, #dce3ed); border-radius: 12px; background: var(--v2-page, #f3f4f6); }
+.shareBox code { display: block; padding: 8px 10px; border-radius: 8px; background: #fff; font-size: 12px; overflow-wrap: anywhere; }

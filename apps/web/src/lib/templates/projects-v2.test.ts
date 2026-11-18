@@ -26,7 +26,11 @@ describe('projects template', () => {
     expect(validateAppV2(app, catalog, { mode: 'publish' })).toEqual([])
     const kit = app.projects!
     expect(app.homeScreenId).toBe(kit.mineScreenId)
-    expect(app.roles.map(role => role.name)).toEqual(['Руководитель', 'Исполнитель'])
+    expect(app.roles.map(role => role.name)).toEqual(['Руководитель', 'Исполнитель', 'Клиент'])
+    expect(kit.ganttScreenId).toBeTruthy()
+    expect(kit.timeTableId).toBeTruthy()
+    expect(kit.task.start).toBeTruthy()
+    expect(kit.repeats?.weekly).toBeTruthy()
     const tasks = built.rows.filter(row => row.tableId === kit.tasksTableId)
     const projects = built.rows.filter(row => row.tableId === kit.projectsTableId)
     for (const project of projects) {

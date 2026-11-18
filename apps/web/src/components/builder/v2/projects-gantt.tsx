@@ -1,7 +1,7 @@
 'use client'
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import {
-  columnWidth, dayIndex, eachDay, formatMinutes, ganttArrowPath, ganttBars, ganttRange, moveBarDates, resizeBarDates,
+  columnWidth, dayIndex, eachDay, formatSpentPair, ganttArrowPath, ganttBars, ganttRange, moveBarDates, resizeBarDates,
   type DependencyLink, type GanttZoom,
 } from '@/lib/projects-stage2'
 import { formatDay, todayKey } from '@/lib/projects-logic'
@@ -31,19 +31,32 @@ type Props = {
   onUnlink?: (linkId: string) => void
 }
 
-function useLabelWidth() {
-  const [width, setWidth] = useState(200)
+function isNarrowViewport() {
+  return typeof window !== 'undefined'
+    && typeof window.matchMedia === 'function'
+    && window.matchMedia('(max-width: 720px)').matches
+}
+
+function useNarrow() {
+  const [narrow, setNarrow] = useState(isNarrowViewport)
   useEffect(() => {
-    const update = () => setWidth(window.matchMedia('(max-width: 720px)').matches ? 148 : 200)
+    if (typeof window.matchMedia !== 'function') return
+    const media = window.matchMedia('(max-width: 720px)')
+    const update = () => setNarrow(media.matches)
     update()
-    window.addEventListener('resize', update)
-    return () => window.removeEventListener('resize', update)
+    media.addEventListener('change', update)
+    return () => media.removeEventListener('change', update)
   }, [])
-  return width
+  return narrow
+}
+
+function titleFits(title: string, barWidth: number) {
+  return barWidth >= Math.min(200, 36 + title.length * 7.4)
 }
 
 export function ProjectsGantt(props: Props) {
-  const [zoom, setZoom] = useState<GanttZoom>('week')
+  const narrow = useNarrow()
+  const [zoom, setZoom] = useState<GanttZoom>(() => isNarrowViewport() ? 'day' : 'week')
   const [linkFrom, setLinkFrom] = useState<string | null>(null)
   const [drag, setDrag] = useState<{ id: string; mode: 'move' | 'start' | 'end'; originX: number; start: string; end: string } | null>(null)
   const scroller = useRef<HTMLDivElement>(null)
@@ -55,23 +68,26 @@ export function ProjectsGantt(props: Props) {
   const bars = useMemo(() => ganttBars(top, range.start), [top, range.start])
   const width = columnWidth(zoom)
   const todayOffset = days.includes(today) ? dayIndex(range.start, today) : -1
-  const rowHeight = 44
-  const labelWidth = useLabelWidth()
+  const labelWidth = narrow ? 120 : 220
+  const rowHeight = narrow ? 72 : 56
+  const labelPad = narrow ? 180 : 220
+  const chartWidth = Math.max(days.length * width + labelPad, 1)
 
   useEffect(() => {
     scrolled.current = false
-  }, [zoom, range.start, props.now])
+  }, [zoom, range.start, props.now, narrow])
 
   useEffect(() => {
     if (scrolled.current || !scroller.current || todayOffset < 0) return
     const node = scroller.current
-    const target = Math.max(0, labelWidth + todayOffset * width - Math.max(48, node.clientWidth * 0.35))
+    const lead = narrow ? 12 : Math.max(48, node.clientWidth * 0.35)
+    const target = Math.max(0, todayOffset * width - lead)
     node.scrollLeft = target
     scrolled.current = true
-  }, [todayOffset, width, labelWidth, days.length])
+  }, [todayOffset, width, days.length, narrow])
 
   const placeBar = (el: HTMLElement, start: string, end: string) => {
-    el.style.left = `${labelWidth + dayIndex(range.start, start) * width}px`
+    el.style.left = `${dayIndex(range.start, start) * width}px`
     el.style.width = `${Math.max(1, dayIndex(start, end) + 1) * width}px`
     el.style.transform = ''
   }
@@ -87,6 +103,8 @@ export function ProjectsGantt(props: Props) {
     placeBar(el, next.start, next.end)
     el.dataset.previewStart = next.start
     el.dataset.previewEnd = next.end
+    const label = scroller.current?.querySelector(`[data-bar-label="${drag.id}"]`) as HTMLElement | null
+    if (label) label.style.left = `${dayIndex(range.start, next.end) * width + width + 8}px`
   }
 
   const finishDrag = () => {
@@ -110,7 +128,7 @@ export function ProjectsGantt(props: Props) {
     return day.endsWith('-01') ? formatDay(day).slice(3) : ''
   }
 
-  return <div className={css.gantt} data-projects-gantt>
+  return <div className={css.gantt} data-projects-gantt data-narrow={narrow || undefined}>
     <div className={css.ganttToolbar}>
       <div className={css.segment} role="radiogroup" aria-label="Масштаб Ганта" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>
         {([['day', 'Дни'], ['week', 'Недели'], ['month', 'Месяцы']] as const).map(([id, name]) => (
@@ -119,67 +137,109 @@ export function ProjectsGantt(props: Props) {
       </div>
       {!props.readOnly ? <p className={css.quiet}>{linkFrom ? 'Выберите задачу-последователя или нажмите ещё раз, чтобы отменить' : 'Потяните полосу, чтобы сдвинуть срок. Точки по краям — связь «финиш → старт».'}</p> : null}
     </div>
-    <div className={css.ganttScroll} ref={scroller} onPointerMove={onPointerMove} onPointerUp={finishDrag} onPointerCancel={finishDrag}>
-      <div className={css.ganttInner} style={{ width: labelWidth + days.length * width }}>
-        <div className={css.ganttHead} style={{ gridTemplateColumns: `${labelWidth}px repeat(${days.length}, ${width}px)` }}>
-          <div className={css.ganttCorner} style={{ width: labelWidth }}>Задача</div>
-          {days.map((day, index) => <div key={day} className={css.ganttDay} data-today={day === today || undefined}>{headerLabel(day, index)}</div>)}
-        </div>
-        <div className={css.ganttBody} style={{ minHeight: Math.max(top.length, 1) * rowHeight }}>
-          {todayOffset >= 0 ? <div className={css.ganttToday} style={{ left: labelWidth + todayOffset * width }} aria-hidden /> : null}
-          <svg className={css.ganttArrows} width={labelWidth + days.length * width} height={Math.max(top.length, 1) * rowHeight}>
-            {props.links.flatMap(link => {
-              const fromBar = bars.find(bar => bar.id === link.fromId)
-              const toBar = bars.find(bar => bar.id === link.toId)
-              const fromIndex = top.findIndex(task => task.id === link.fromId)
-              const toIndex = top.findIndex(task => task.id === link.toId)
-              if (!fromBar || !toBar || fromIndex < 0 || toIndex < 0) return []
-              const from = { x: labelWidth + (fromBar.dayOffset + fromBar.daySpan) * width, y: fromIndex * rowHeight + rowHeight / 2 }
-              const to = { x: labelWidth + toBar.dayOffset * width, y: toIndex * rowHeight + rowHeight / 2 }
-              return <path key={link.id} d={ganttArrowPath(from, to)} className={css.ganttArrow} markerEnd="url(#projects-gantt-arrow)" onClick={() => !props.readOnly && props.onUnlink?.(link.id)} />
+    <div className={css.ganttFrame} style={{ '--gantt-label': `${labelWidth}px` } as CSSProperties}>
+      <div className={css.ganttSide} style={{ width: labelWidth }}>
+        <div className={css.ganttCorner}>Задача</div>
+        {top.map(task => {
+          const due = formatDay(task.due)
+          const spent = task.estimate != null || task.spent ? formatSpentPair(task.spent, task.estimate) : ''
+          const meta = narrow
+            ? [due ? due.slice(0, 5) : 'Без срока', spent].filter(Boolean).join(' · ')
+            : [due || 'Без срока', spent].filter(Boolean).join(' · ')
+          return <button
+            key={task.id}
+            type="button"
+            className={css.ganttLabel}
+            style={{ height: rowHeight }}
+            title={`${task.title}\n${[due || 'Без срока', spent].filter(Boolean).join(' · ')}`}
+            onClick={() => props.onOpenTask(task.id)}
+          >
+            <strong>{task.title}</strong>
+            <span>{meta}</span>
+          </button>
+        })}
+      </div>
+      <div className={css.ganttScroll} ref={scroller} onPointerMove={onPointerMove} onPointerUp={finishDrag} onPointerCancel={finishDrag}>
+        <div className={css.ganttInner} style={{ width: chartWidth }}>
+          <div className={css.ganttHead} style={{ gridTemplateColumns: `repeat(${days.length}, ${width}px)` }}>
+            {days.map((day, index) => <div key={day} className={css.ganttDay} data-today={day === today || undefined}>{headerLabel(day, index)}</div>)}
+          </div>
+          <div className={css.ganttBody} style={{ height: Math.max(top.length, 1) * rowHeight }}>
+            {todayOffset >= 0 ? <div className={css.ganttToday} style={{ left: todayOffset * width }} aria-hidden /> : null}
+            <svg className={css.ganttArrows} width={chartWidth} height={Math.max(top.length, 1) * rowHeight} aria-hidden>
+              <defs>
+                <marker id="projects-gantt-arrow" markerWidth="12" markerHeight="10" refX="10" refY="5" orient="auto" markerUnits="userSpaceOnUse">
+                  <path d="M0,0 L10,5 L0,10 Z" fill="#4b5c6e" />
+                </marker>
+              </defs>
+              {props.links.flatMap(link => {
+                const fromBar = bars.find(bar => bar.id === link.fromId)
+                const toBar = bars.find(bar => bar.id === link.toId)
+                const fromIndex = top.findIndex(task => task.id === link.fromId)
+                const toIndex = top.findIndex(task => task.id === link.toId)
+                if (!fromBar || !toBar || fromIndex < 0 || toIndex < 0) return []
+                const lo = Math.min(fromIndex, toIndex)
+                const hi = Math.max(fromIndex, toIndex)
+                let clearance = (fromBar.dayOffset + fromBar.daySpan) * width + 16
+                for (let i = lo; i <= hi; i += 1) {
+                  const mid = bars.find(bar => bar.id === top[i]!.id)
+                  if (mid) clearance = Math.max(clearance, (mid.dayOffset + mid.daySpan) * width + 16)
+                }
+                clearance = Math.max(clearance, toBar.dayOffset * width + 16)
+                const from = { x: (fromBar.dayOffset + fromBar.daySpan) * width, y: fromIndex * rowHeight + rowHeight / 2 }
+                const to = { x: toBar.dayOffset * width, y: toIndex * rowHeight + rowHeight / 2 }
+                return <path
+                  key={link.id}
+                  d={ganttArrowPath(from, to, rowHeight, clearance)}
+                  className={css.ganttArrow}
+                  markerEnd="url(#projects-gantt-arrow)"
+                  onClick={() => !props.readOnly && props.onUnlink?.(link.id)}
+                />
+              })}
+            </svg>
+            {top.map((task, index) => {
+              const bar = bars.find(item => item.id === task.id)
+              const barWidth = bar ? Math.max(bar.daySpan * width, width) : 0
+              const inside = Boolean(bar && !narrow && titleFits(task.title, barWidth - (props.readOnly ? 16 : 40)))
+              return <div key={task.id} className={css.ganttRow} style={{ top: index * rowHeight, height: rowHeight }}>
+                {bar ? <>
+                  <div
+                    className={css.ganttBar}
+                    data-bar-id={bar.id}
+                    data-done={bar.done || undefined}
+                    style={{ left: bar.dayOffset * width, width: barWidth }}
+                    onPointerDown={event => {
+                      if (props.readOnly) return
+                      event.currentTarget.setPointerCapture(event.pointerId)
+                      setDrag({ id: bar.id, mode: 'move', originX: event.clientX, start: bar.start, end: bar.end })
+                    }}
+                  >
+                    {!props.readOnly ? <>
+                      <button type="button" className={css.ganttHandle} data-edge="start" aria-label="Изменить начало"
+                        onPointerDown={event => { event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId); setDrag({ id: bar.id, mode: 'start', originX: event.clientX, start: bar.start, end: bar.end }) }} />
+                      <button type="button" className={css.ganttHandle} data-edge="end" aria-label="Изменить срок"
+                        onPointerDown={event => { event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId); setDrag({ id: bar.id, mode: 'end', originX: event.clientX, start: bar.start, end: bar.end }) }} />
+                      <button type="button" className={css.ganttLinkBtn} aria-label="Связать задачу" onClick={event => {
+                        event.stopPropagation()
+                        if (!linkFrom) { setLinkFrom(task.id); return }
+                        if (linkFrom === task.id) { setLinkFrom(null); return }
+                        props.onLink?.(linkFrom, task.id)
+                        setLinkFrom(null)
+                      }}><ProtoIcon name="link" size={12} /></button>
+                    </> : null}
+                    {inside ? <span>{task.title}</span> : null}
+                  </div>
+                  {!inside ? <span
+                    className={css.ganttBarLabel}
+                    data-bar-label={bar.id}
+                    title={task.title}
+                    style={{ left: (bar.dayOffset + bar.daySpan) * width + 8, top: Math.max(14, (rowHeight - 18) / 2) }}
+                  >{task.title}</span> : null}
+                </> : <button type="button" className={css.ganttEmpty} style={{ left: 8 }} onClick={() => props.onOpenTask(task.id)}>Нет дат</button>}
+              </div>
             })}
-            <defs>
-              <marker id="projects-gantt-arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
-                <path d="M0,0 L6,3 L0,6 Z" fill="currentColor" />
-              </marker>
-            </defs>
-          </svg>
-          {top.map((task, index) => {
-            const bar = bars.find(item => item.id === task.id)
-            return <div key={task.id} className={css.ganttRow} style={{ top: index * rowHeight, height: rowHeight }}>
-              <button type="button" className={css.ganttLabel} style={{ width: labelWidth }} onClick={() => props.onOpenTask(task.id)}>
-                <strong>{task.title}</strong>
-                <span>{formatDay(task.due) || 'Без срока'}{task.estimate ? ` · ${formatMinutes(task.estimate)}` : ''}{task.spent ? ` / ${formatMinutes(task.spent)}` : ''}</span>
-              </button>
-              {bar ? <div
-                className={css.ganttBar}
-                data-bar-id={bar.id}
-                data-done={bar.done || undefined}
-                style={{ left: labelWidth + bar.dayOffset * width, width: bar.daySpan * width }}
-                onPointerDown={event => {
-                  if (props.readOnly) return
-                  event.currentTarget.setPointerCapture(event.pointerId)
-                  setDrag({ id: bar.id, mode: 'move', originX: event.clientX, start: bar.start, end: bar.end })
-                }}
-              >
-                {!props.readOnly ? <>
-                  <button type="button" className={css.ganttHandle} data-edge="start" aria-label="Изменить начало"
-                    onPointerDown={event => { event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId); setDrag({ id: bar.id, mode: 'start', originX: event.clientX, start: bar.start, end: bar.end }) }} />
-                  <button type="button" className={css.ganttHandle} data-edge="end" aria-label="Изменить срок"
-                    onPointerDown={event => { event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId); setDrag({ id: bar.id, mode: 'end', originX: event.clientX, start: bar.start, end: bar.end }) }} />
-                  <button type="button" className={css.ganttLinkBtn} aria-label="Связать задачу" onClick={event => {
-                    event.stopPropagation()
-                    if (!linkFrom) { setLinkFrom(task.id); return }
-                    if (linkFrom === task.id) { setLinkFrom(null); return }
-                    props.onLink?.(linkFrom, task.id)
-                    setLinkFrom(null)
-                  }}><ProtoIcon name="link" size={12} /></button>
-                </> : null}
-                <span>{task.title}</span>
-              </div> : <button type="button" className={css.ganttEmpty} style={{ left: labelWidth + 8 }} onClick={() => props.onOpenTask(task.id)}>Нет дат</button>}
-            </div>
-          })}
-          {!top.length ? <p className={css.empty} style={{ padding: 16 }}>В проекте пока нет задач для Ганта.</p> : null}
+            {!top.length ? <p className={css.empty} style={{ padding: 16 }}>В проекте пока нет задач для Ганта.</p> : null}
+          </div>
         </div>
       </div>
     </div>

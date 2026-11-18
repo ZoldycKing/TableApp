@@ -6,7 +6,7 @@ import {
   BUCKETS, PRIORITIES, TASK_STATUSES, eventText, formatDay, formatRub, insertMention, isDone, isOverdue, matchesDue, mentionQuery, mentionedNames, progressPercent, reorderColumn, subtaskProgress, taskBucket,
   type DueFilter, type TaskFacts,
 } from '@/lib/projects-logic'
-import { matchesRoleFilter, totalSpentMinutes } from '@/lib/projects-stage2'
+import { formatSpentPair, matchesRoleFilter, totalSpentMinutes } from '@/lib/projects-stage2'
 import { commentWrite, eventWrite, moveUpdates, projectWrite, taskWrite } from '@/lib/projects-persist'
 import { parseChecklist, serializeChecklist, toggleChecklistItem, type ChecklistItem } from '@/lib/dispatch-stage2'
 import { savePublishedProjectsAction } from '@/app/projects-actions'
@@ -575,7 +575,7 @@ function TaskCard(props: ScreenProps) {
         { key: 'project', caption: 'Проект', value: <button type="button" className={css.metricText} onClick={() => props.onNavigate?.(props.kit.projectScreenId, facts.projectId)}>{projectName}</button> },
         { key: 'who', caption: 'Исполнитель', value: <span className={css.metricPerson}>{person ? <BookingAvatar name={person.name} photo={person.photo} small /> : null}<span>{person?.name || 'Не назначен'}</span></span> },
         { key: 'due', caption: 'Срок', value: <span className={css.metricText} data-overdue={overdue || undefined}>{formatDay(facts.due) || 'Не указан'}</span>, tone: overdue ? 'rose' : undefined },
-        { key: 'time', caption: 'Время', value: <span className={css.metricText}>{Math.round(spent)} мин{facts.estimate ? ` / ${facts.estimate} мин` : ''}</span> },
+        { key: 'time', caption: 'Время', value: <span className={css.metricText}>{formatSpentPair(spent, facts.estimate)}</span> },
         ...(facts.parentId ? [] : [{ key: 'sub', caption: 'Подзадачи', value: <span className={css.metricText}>{progress.total ? `${progress.done} из ${progress.total}` : 'Нет'}</span> }]),
       ]}
     >

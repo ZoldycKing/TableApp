@@ -3,10 +3,10 @@ import { useEffect, useId, useState } from 'react'
 import type { AppV2, AppV2Json, AppV2Record } from '@tableapp/schema/app-v2'
 import type { BuilderV2Table } from '@/lib/builder-v2'
 import {
-  activeTimerFor, captureProjectTemplate, canLinkTasks, canStartTimer, eachDay, entryMinutes, formatClock, formatMinutes,
-  materializeTemplate, parseTemplatePayload, recurrenceLabel, repeatName, repeatRuleFromName, serializeTemplatePayload,
-  shareToken, startTimerStamp, stopTimerValues, totalSpentMinutes, validateManualMinutes, workloadFor, type DependencyLink,
-  type RepeatRule, type TimeEntry,
+  activeTimerFor, captureProjectTemplate, canLinkTasks, canStartTimer, DAY_CAPACITY, eachDay, entryMinutes, formatClock,
+  formatMinutes, formatSpentPair, materializeTemplate, parseTemplatePayload, recurrenceLabel, repeatName, repeatRuleFromName,
+  serializeTemplatePayload, shareToken, stagesWord, startTimerStamp, stopTimerValues, tasksWord, totalSpentMinutes, validateManualMinutes,
+  WEEK_CAPACITY, workloadFor, type DependencyLink, type RepeatRule, type TimeEntry,
 } from '@/lib/projects-stage2'
 import { civilDay, formatDay, todayKey, weekEndKey } from '@/lib/projects-logic'
 import { commentWrite, linkWrite, shareWrite, templateWrite, timeWrite } from '@/lib/projects-persist'
@@ -120,7 +120,7 @@ export function TaskTimePanel(props: Stage2Helpers & { taskId: string; projectId
 
   return <DetailSection title="Время">
     <div className={css.timerRow} data-task-time>
-      <strong>{formatMinutes(spent)}{props.estimate ? ` из ${formatMinutes(props.estimate)}` : ''}</strong>
+      <strong>{formatSpentPair(spent, props.estimate)}</strong>
       {runningHere ? <span className={css.timerActive} data-timer-active><span className={css.timerDot} />Идёт таймер</span> : null}
       {props.readOnly ? null : <>
         {runningHere
@@ -128,11 +128,11 @@ export function TaskTimePanel(props: Stage2Helpers & { taskId: string; projectId
           : <button type="button" className={buttons.primary} onClick={() => void start()}>Старт</button>}
       </>}
     </div>
-    {props.readOnly ? null : <div className={css.form}>
-      <label>Минуты вручную<input inputMode="numeric" value={manual} onChange={event => setManual(event.target.value)} placeholder="Например 45" /></label>
-      <label>Заметка<input type="text" value={note} onChange={event => setNote(event.target.value)} /></label>
-      <button type="button" className={buttons.secondary} onClick={() => void addManual()}>Добавить запись</button>
-      {error ? <p className={css.error} role="alert">{error}</p> : null}
+    {props.readOnly ? null : <div className={css.timeManual}>
+      <label>Минуты<input type="text" inputMode="numeric" value={manual} onChange={event => setManual(event.target.value)} placeholder="45" /></label>
+      <label>Заметка<input type="text" value={note} onChange={event => setNote(event.target.value)} placeholder="Что сделали" /></label>
+      <button type="button" className={buttons.secondary} onClick={() => void addManual()}>Добавить</button>
+      {error ? <p className={css.error} role="alert" style={{ gridColumn: '1 / -1' }}>{error}</p> : null}
     </div>}
     <ul className={css.timeList}>{mine.length ? mine.map(entry => {
       const who = props.people().find(item => item.email === entry.email)
@@ -152,11 +152,9 @@ export function TaskRolesLine(props: Stage2Helpers & {
 }) {
   const author = props.people().find(item => item.id === props.authorId)
   const observers = props.observerIds.map(id => props.people().find(item => item.id === id)).filter(Boolean)
-  const rule = repeatRuleFromName(props.repeat)
   return <div className={css.roleLine} data-task-roles>
     {author ? <span className={css.quiet}>Постановщик: <strong>{author.name}</strong></span> : null}
     {observers.length ? <span className={css.quiet}>Наблюдают: {observers.map(item => item!.name).join(', ')}</span> : null}
-    {rule ? <span className={css.repeatBadge} data-task-repeat>{recurrenceLabel(rule, props.every)}</span> : null}
   </div>
 }
 
@@ -176,6 +174,7 @@ export function CommentChat(props: Stage2Helpers & {
   const [text, setText] = useState('')
   const [replyTo, setReplyTo] = useState<string | null>(null)
   const [editing, setEditing] = useState<string | null>(null)
+  const [menuFor, setMenuFor] = useState<string | null>(null)
   const [error, setError] = useState('')
   useEffect(() => {
     if (!props.onRefresh || props.replace) return
@@ -221,6 +220,7 @@ export function CommentChat(props: Stage2Helpers & {
   }
 
   const remove = async (id: string) => {
+    setMenuFor(null)
     if (props.replace) { props.replace(props.rows.filter(row => row.id !== id)); return }
     await props.saveRemote?.({ kind: 'comment-delete', recordId: id })
   }
@@ -246,19 +246,33 @@ export function CommentChat(props: Stage2Helpers & {
           {quoted ? <blockquote className={css.chatQuote}>{textOf(quoted.values[kit.comment.text])}</blockquote> : null}
           <p>{textOf(row.values[kit.comment.text])}</p>
           <div className={css.chatActions}>
-            <button type="button" onClick={() => { setReplyTo(row.id); setEditing(null) }}>Ответить</button>
-            {own ? <>
-              <button type="button" onClick={() => { setEditing(row.id); setText(textOf(row.values[kit.comment.text])); setReplyTo(quotedId || null) }}>Изменить</button>
-              <button type="button" onClick={() => void remove(row.id)}>Удалить</button>
-            </> : null}
+            <button type="button" onClick={() => { setReplyTo(row.id); setEditing(null); setMenuFor(null) }}>Ответить</button>
+            {own ? <div className={css.chatMore}>
+              <button type="button" aria-label="Ещё действия" aria-expanded={menuFor === row.id} onClick={() => setMenuFor(menuFor === row.id ? null : row.id)}>⋯</button>
+              {menuFor === row.id ? <div className={css.chatMoreMenu}>
+                <button type="button" onClick={() => { setEditing(row.id); setText(textOf(row.values[kit.comment.text])); setReplyTo(quotedId || null); setMenuFor(null) }}>Изменить</button>
+                <button type="button" onClick={() => void remove(row.id)}>Удалить</button>
+              </div> : null}
+            </div> : null}
           </div>
         </li>
       }) : <li className={css.empty}>Комментариев пока нет.</li>}
     </ul>
     <div className={css.chatComposer}>
-      {replyPreview ? <blockquote className={css.chatQuote}>В ответ: {textOf(replyPreview.values[kit.comment.text])} <button type="button" className={buttons.secondary} onClick={() => setReplyTo(null)}>Снять</button></blockquote> : null}
-      <label>Сообщение<textarea value={text} onChange={event => setText(event.target.value)} rows={3} /></label>
-      <button type="button" className={buttons.primary} onClick={() => void save()}>{editing ? 'Сохранить' : 'Отправить'}</button>
+      {replyPreview ? <div className={css.chatReplyBar}>
+        <p>В ответ: {textOf(replyPreview.values[kit.comment.text])}</p>
+        <button type="button" aria-label="Отменить ответ" onClick={() => setReplyTo(null)}>×</button>
+      </div> : null}
+      <div className={css.chatComposerBox}>
+        <textarea
+          aria-label="Сообщение"
+          value={text}
+          onChange={event => setText(event.target.value)}
+          rows={2}
+          placeholder="Написать комментарий… @ — упомянуть"
+        />
+        <button type="button" className={buttons.primary} onClick={() => void save()}>{editing ? 'Сохранить' : 'Отправить'}</button>
+      </div>
       {error ? <p className={css.error} role="alert">{error}</p> : null}
     </div>
   </div>
@@ -333,8 +347,20 @@ export function GanttScreen(props: Stage2Helpers & { projectId?: string }) {
   </div>
 }
 
+function weekdayShort(day: string) {
+  const date = new Date(`${day}T12:00:00Z`)
+  return ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'][date.getUTCDay()] ?? ''
+}
+
 export function WorkloadScreen(props: Stage2Helpers) {
   const [mode, setMode] = useState<'day' | 'week'>('day')
+  const [narrow, setNarrow] = useState(false)
+  useEffect(() => {
+    const update = () => setNarrow(window.matchMedia('(max-width: 720px)').matches)
+    update()
+    window.addEventListener('resize', update)
+    return () => window.removeEventListener('resize', update)
+  }, [])
   const today = todayKey(props.now)
   const days = mode === 'day'
     ? eachDay(today, addDaysSafe(today, 6))
@@ -345,12 +371,14 @@ export function WorkloadScreen(props: Stage2Helpers) {
   const entries = timeEntries(props)
   const tasks = props.of(kit.tasksTableId).map(row => ({
     id: row.id,
+    title: textOf(row.values[kit.task.title]),
     assigneeId: firstId(row.values[kit.task.assignee]),
     due: row.values[kit.task.due],
     estimate: kit.task.estimate && typeof row.values[kit.task.estimate] === 'number' ? Number(row.values[kit.task.estimate]) : null,
     status: props.choiceName(kit.tasksTableId, kit.task.status, row.values[kit.task.status]),
   }))
   const people = props.people().filter(person => person.active)
+  const capacity = mode === 'day' ? DAY_CAPACITY : WEEK_CAPACITY
   const rows = workloadFor({ people, tasks, entries, days: columns, mode, now: props.now })
 
   return <div className={css.root} data-projects-screen="workload">
@@ -364,15 +392,33 @@ export function WorkloadScreen(props: Stage2Helpers) {
       <div className={css.workload} data-workload>
         <div className={css.workloadGrid} style={{ ['--days' as string]: String(columns.length) }}>
           <div className={css.workloadRow}>
-            <div className={css.workloadCell}>Сотрудник</div>
-            {columns.map(day => <div key={day} className={css.workloadCell}>{formatDay(day)}</div>)}
+            <div className={`${css.workloadCell} ${css.workloadPerson}`}>Сотрудник</div>
+            {columns.map(day => <div key={day} className={`${css.workloadCell} ${css.workloadCellHead}`}>{narrow ? `${formatDay(day).slice(0, 5)} ${weekdayShort(day)}` : formatDay(day)}</div>)}
             <div className={css.workloadCell}>Итого</div>
           </div>
           {rows.map(person => {
             const who = people.find(item => item.id === person.id)
             return <div key={person.id} className={css.workloadRow} data-overload={person.overloaded || undefined}>
               <div className={`${css.workloadCell} ${css.workloadPerson}`}>{who ? <BookingAvatar name={who.name} photo={who.photo} small /> : null}<span>{person.name}</span></div>
-              {person.cells.map(cell => <div key={cell.day} className={css.workloadCell} data-overload={cell.overload || undefined}>{cell.taskCount ? `${cell.taskCount} · ${formatMinutes(cell.minutes)}` : '—'}</div>)}
+              {person.cells.map(cell => {
+                const titles = tasks.filter(task => task.assigneeId === person.id && civilDay(task.due) === cell.day && !['Готово'].includes(task.status)).map(task => task.title)
+                const label = cell.taskCount
+                  ? cell.overload
+                    ? `${formatMinutes(cell.minutes)} из ${formatMinutes(capacity)}`
+                    : `${cell.taskCount} ${tasksWord(cell.taskCount)}`
+                  : '—'
+                return <div
+                  key={cell.day}
+                  className={css.workloadCell}
+                  data-overload={cell.overload || undefined}
+                  title={titles.length ? titles.join('\n') : undefined}
+                >
+                  {cell.taskCount ? <span className={css.workloadStack}>
+                    <strong>{label}</strong>
+                    <span>{cell.overload ? `${cell.taskCount} ${tasksWord(cell.taskCount)}` : formatMinutes(cell.minutes)}</span>
+                  </span> : '—'}
+                </div>
+              })}
               <div className={css.workloadCell}>{formatMinutes(person.totalMinutes)}</div>
             </div>
           })}
@@ -388,6 +434,13 @@ function addDaysSafe(day: string, days: number) {
   return date.toISOString().slice(0, 10)
 }
 
+function templateStats(payloadRaw: unknown) {
+  const payload = parseTemplatePayload(payloadRaw)
+  if (!payload) return { stages: 0, tasks: 0, endOffset: null as number | null }
+  const ends = payload.stages.map(stage => stage.endOffset).concat(payload.tasks.map(task => task.dueOffset)).filter((value): value is number => value != null)
+  return { stages: payload.stages.length, tasks: payload.tasks.filter(task => !task.parentKey).length, endOffset: ends.length ? Math.max(...ends) : null }
+}
+
 export function TemplatesScreen(props: Stage2Helpers & { initialOpen?: 'template' | 'from-template' | null }) {
   const kit = props.kit
   const templates = kit.templatesTableId ? props.of(kit.templatesTableId) : []
@@ -398,12 +451,17 @@ export function TemplatesScreen(props: Stage2Helpers & { initialOpen?: 'template
       {props.leader ? <button type="button" className={buttons.primary} onClick={() => setSaveFrom(true)}>Сохранить проект</button> : null}
     </div>
     <div className={css.pad}>
-      <div className={css.team}>{templates.length ? templates.map(row => (
-        <button key={row.id} type="button" className={css.templateCard} onClick={() => setCreateFrom(row.id)}>
+      <div className={css.templateGrid}>{templates.length ? templates.map(row => {
+        const stats = templateStats(row.values[kit.template!.payload])
+        return <article key={row.id} className={css.templateCard}>
           <strong>{textOf(row.values[kit.template!.name])}</strong>
-          <span className={css.quiet}>{textOf(row.values[kit.template!.author])} · {formatDay(row.values[kit.template!.createdAt])}</span>
-        </button>
-      )) : <p className={css.empty}>Шаблонов пока нет. Сохраните проект с этапами и задачами.</p>}</div>
+          <p className={css.templateMeta}>{stats.stages} {stagesWord(stats.stages)} · {stats.tasks} {tasksWord(stats.tasks)} · {textOf(row.values[kit.template!.author])} · {formatDay(row.values[kit.template!.createdAt])}</p>
+          <div className={css.templateActions}>
+            <button type="button" className={buttons.primary} onClick={() => setCreateFrom(row.id)}>Создать проект</button>
+            <button type="button" className={buttons.secondary} aria-label="Ещё" onClick={() => setCreateFrom(row.id)}>⋯</button>
+          </div>
+        </article>
+      }) : <p className={css.empty}>Шаблонов пока нет. Сохраните проект с этапами и задачами.</p>}</div>
     </div>
     {saveFrom ? <SaveTemplateDialog {...props} onClose={() => setSaveFrom(false)} /> : null}
     {createFrom ? <CreateFromTemplateDialog {...props} templateId={createFrom} onClose={() => setCreateFrom(null)} /> : null}
@@ -519,11 +577,14 @@ function CreateFromTemplateDialog(props: Stage2Helpers & { templateId: string; o
     void props.saveRemote?.({ kind: 'template-create', templateId: props.templateId, title: title.trim(), start })
     props.onClose()
   }
+  const stats = templateStats(row.values[kit.template.payload])
+  const endDay = stats.endOffset != null ? addDaysSafe(start, stats.endOffset) : null
   return <AppDialog title="Проект из шаблона" placement="center" onClose={props.onClose} footer={<button type="submit" form={formId} className={buttons.primary}>Создать проект</button>}>
     <form id={formId} className={css.form} data-from-template onSubmit={event => { event.preventDefault(); save() }}>
       <p className={css.quiet}>Шаблон: {textOf(row.values[kit.template.name])}</p>
+      <p className={css.quiet}>Будет создано: {stats.stages} {stagesWord(stats.stages)} · {stats.tasks} {tasksWord(stats.tasks)}{endDay ? ` · срок до ${formatDay(endDay)}` : ''}</p>
       <label>Название проекта<input type="text" value={title} onChange={event => setTitle(event.target.value)} /></label>
-      <div className={css.field}><span>Дата старта</span><DateMenu label="Дата старта" value={start} onValue={setStart} /></div>
+      <div className={css.field}><span>Дата старта</span><DateMenu label="Дата старта" value={start} onValue={setStart} emptyLabel="Выберите дату" /></div>
       {error ? <p className={css.error}>{error}</p> : null}
     </form>
   </AppDialog>
@@ -610,15 +671,35 @@ export function RecurrenceDialog(props: Stage2Helpers & {
     id: kit.repeats ? props.choiceId(kit.tasksTableId, kit.task.repeat!, name) : name,
     name,
   }))
+  const initialEvery = Math.max(1, Number(props.every) || 3)
   const [repeatId, setRepeatId] = useState(props.value)
-  const [every, setEvery] = useState(props.every)
+  const [unit, setUnit] = useState<'days' | 'weeks'>(initialEvery % 7 === 0 ? 'weeks' : 'days')
+  const [every, setEvery] = useState(String(unit === 'weeks' ? Math.max(1, Math.round(initialEvery / 7)) : initialEvery))
+  const [weekdays, setWeekdays] = useState<number[]>([1, 2, 3, 4, 5])
   const [until, setUntil] = useState(props.until)
   const selected = options.find(item => item.id === repeatId)?.name ?? ''
-  return <AppDialog title="Повтор задачи" placement="center" onClose={props.onClose} footer={<button type="button" className={buttons.primary} onClick={() => { props.onChange({ repeatId, every, until }); props.onClose() }}>Готово</button>}>
+  const days = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
+  const everyDays = () => {
+    const n = Math.max(1, Math.min(365, Math.floor(Number(every) || 1)))
+    return String(unit === 'weeks' ? n * 7 : n)
+  }
+  return <AppDialog title="Повтор задачи" placement="center" onClose={props.onClose} footer={<button type="button" className={buttons.primary} onClick={() => { props.onChange({ repeatId, every: selected === 'Свой интервал' ? everyDays() : every, until }); props.onClose() }}>Готово</button>}>
     <div className={css.form} data-recurrence-dialog>
       <fieldset className={css.field}><legend>Правило</legend><div className={css.choiceRow}>{options.map(option => <button key={option.id || option.name} type="button" aria-pressed={option.id === repeatId} onClick={() => setRepeatId(option.id)}>{option.name}</button>)}</div></fieldset>
-      {selected === 'Свой интервал' ? <label>Каждые, дн.<input inputMode="numeric" value={every} onChange={event => setEvery(event.target.value)} /></label> : null}
-      {selected !== 'Не повторять' ? <div className={css.field}><span>Повторять до</span><DateMenu label="Повторять до" value={until} onValue={setUntil} /></div> : null}
+      {selected === 'Свой интервал' ? <>
+        <fieldset className={css.field}><legend>Интервал</legend><div className={css.choiceRow}>
+          <button type="button" aria-pressed={unit === 'days'} onClick={() => setUnit('days')}>Дни</button>
+          <button type="button" aria-pressed={unit === 'weeks'} onClick={() => setUnit('weeks')}>Недели</button>
+        </div></fieldset>
+        <label>Каждые, {unit === 'weeks' ? 'нед.' : 'дн.'}<input type="text" inputMode="numeric" value={every} onChange={event => setEvery(event.target.value)} placeholder="3" /></label>
+        {unit === 'weeks' ? <fieldset className={css.field}><legend>Дни недели</legend><div className={css.choiceRow}>{days.map((day, index) => {
+          const value = index + 1
+          const on = weekdays.includes(value)
+          return <button key={day} type="button" aria-pressed={on} onClick={() => setWeekdays(on ? weekdays.filter(item => item !== value) : [...weekdays, value].sort((a, b) => a - b))}>{day}</button>
+        })}</div></fieldset> : null}
+        <p className={css.quiet}>Новая задача появится через указанный интервал после срока текущей{unit === 'weeks' && weekdays.length ? ` · дни: ${weekdays.map(day => days[day - 1]).join(', ')}` : ''}.</p>
+      </> : null}
+      {selected !== 'Не повторять' ? <div className={css.field}><span>Повторять до</span><DateMenu label="Повторять до" value={until} onValue={setUntil} emptyLabel="Без окончания" clearLabel="Без окончания" /></div> : null}
     </div>
   </AppDialog>
 }

@@ -445,9 +445,39 @@ export function matchesRoleFilter(input: {
   return input.observerEmails.includes(email)
 }
 
-export function ganttArrowPath(from: { x: number; y: number }, to: { x: number; y: number }) {
-  const mid = from.x + Math.max(12, (to.x - from.x) / 2)
-  return `M ${from.x} ${from.y} C ${mid} ${from.y}, ${mid} ${to.y}, ${to.x} ${to.y}`
+/** Orthogonal finish→start connector. Optional clearanceX routes the vertical segment past intervening bars. */
+export function ganttArrowPath(
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+  _rowHeight = 56,
+  clearanceX?: number,
+) {
+  const out = 16
+  const tip = Math.max(0, to.x - 2)
+  if (Math.abs(to.y - from.y) < 1) return `M ${from.x} ${from.y} H ${tip}`
+  const clear = Math.max(from.x + out, clearanceX ?? from.x + out, tip + out)
+  return `M ${from.x} ${from.y} H ${clear} V ${to.y} H ${tip}`
+}
+
+export function formatSpentPair(spent: number, estimate: number | null) {
+  if (estimate != null && estimate > 0) return `${formatMinutes(spent)} / ${formatMinutes(estimate)}`
+  return formatMinutes(spent)
+}
+
+export function tasksWord(count: number) {
+  const mod10 = count % 10
+  const mod100 = count % 100
+  if (mod10 === 1 && mod100 !== 11) return 'задача'
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'задачи'
+  return 'задач'
+}
+
+export function stagesWord(count: number) {
+  const mod10 = count % 10
+  const mod100 = count % 100
+  if (mod10 === 1 && mod100 !== 11) return 'этап'
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'этапа'
+  return 'этапов'
 }
 
 export { addDays, addMonths, DAY_CAPACITY, WEEK_CAPACITY, DONE_STATUS, calendarDay, dateInstant, todayKey }

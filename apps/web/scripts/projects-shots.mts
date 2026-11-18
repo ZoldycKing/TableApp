@@ -55,11 +55,23 @@ const open = async (page: Page, view: string) => {
     await page.waitForSelector('[data-projects-gantt] [data-bar-id]', { timeout: 15000 }).catch(() => undefined)
     await page.waitForTimeout(500)
     await page.evaluate(() => {
+      const root = document.querySelector('[data-projects-gantt]') as HTMLElement | null
       const scroll = document.querySelector('[data-projects-gantt] [class*="ganttScroll"]') as HTMLElement | null
       const today = document.querySelector('[data-projects-gantt] [class*="ganttToday"]') as HTMLElement | null
-      if (scroll && today) scroll.scrollLeft = Math.max(0, today.offsetLeft - Math.max(40, scroll.clientWidth * 0.35))
+      if (scroll && today) {
+        const narrow = root?.hasAttribute('data-narrow') || window.innerWidth <= 720
+        const left = today.offsetLeft
+        scroll.scrollLeft = Math.max(0, left - (narrow ? 16 : Math.max(40, scroll.clientWidth * 0.35)))
+      }
     })
     await page.waitForTimeout(300)
+  }
+  if (view === 'recurrence') {
+    const custom = page.locator('[data-recurrence-dialog] button', { hasText: 'Свой интервал' })
+    if (await custom.count()) {
+      await custom.click()
+      await page.waitForTimeout(300)
+    }
   }
 }
 

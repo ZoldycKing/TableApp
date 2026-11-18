@@ -287,7 +287,7 @@ export function buildProjectsV2App(built: BuiltTemplate, meta: { id: string; wor
   const allProjects = collection('Проекты', projects.id, project.title, ids.projectScreenId, owner, project.due)
   const allPeople = collection('Сотрудники', people.id, person.name, null, owner, person.name)
   const allClients = collection('Клиенты', clients.id, client.name, null, owner, client.name)
-  const allTemplates = collection('Шаблоны', templates.id, templateFields.name, null, owner, templateFields.createdAt)
+  const allTemplates = collection('Шаблоны', templates.id, templateFields.name, null, both, templateFields.createdAt)
   const taskFamily = collection('Задачи карточки', tasks.id, task.title, null, both, task.sort)
   const taskComments = collection('Комментарии задачи', comments.id, comment.text, null, both, comment.at, byTask, tasks.id)
   const taskPeople = collection('Сотрудники задачи', people.id, person.name, null, both, person.name)
@@ -343,9 +343,9 @@ export function buildProjectsV2App(built: BuiltTemplate, meta: { id: string; wor
       screen(ids.mineScreenId, 'Мои задачи', 'Задачи', 'clipboard', both, null, [mineTasks, minePeople, mineProjects, mineComments], true),
       screen(ids.boardScreenId, 'Доска', undefined, 'table', both, null, [boardTasks, boardPeople, boardProjects, boardStages, ids.createTaskFormId], true),
       screen(ids.ganttScreenId, 'Гант', undefined, 'chart', teamAndClient, null, [ganttTasks, ganttStages, ganttLinks, ganttProjects, ganttPeople], true),
-      screen(ids.workloadScreenId, 'Нагрузка', undefined, 'users', both, null, [workloadTasks, workloadPeople, workloadTime], true),
       screen(ids.projectsScreenId, 'Проекты', undefined, 'folder', both, null, [allProjects, allClients, allPeople, ids.createProjectFormId], true),
-      screen(ids.templatesScreenId, 'Шаблоны', undefined, 'copy', owner, null, [allTemplates], true),
+      screen(ids.workloadScreenId, 'Нагрузка', undefined, 'users', both, null, [workloadTasks, workloadPeople, workloadTime], true),
+      screen(ids.templatesScreenId, 'Шаблоны', undefined, 'copy', both, null, [allTemplates], true),
       screen(ids.peopleScreenId, 'Команда', undefined, 'users', both, null, [collection('Карточки сотрудников', people.id, person.name, null, both, person.name)], true),
       screen(ids.clientsScreenId, 'Клиенты', undefined, 'building', both, null, [collection('Карточки клиентов', clients.id, client.name, null, both, client.name)], true),
       screen(ids.projectScreenId, 'Проект', undefined, 'folder', both, projects.id, [...projectFacts, projectTasks, projectStages, projectEvents, projectPeople, projectClients, projectLinks, projectTime, projectShares, ids.editProjectFormId], false),
@@ -408,6 +408,7 @@ export function buildProjectsV2App(built: BuiltTemplate, meta: { id: string; wor
         ] },
         { tableId: templates.id, grants: [
           grant(owner, { read: { fieldIds: columnsOf(templates.id), rows: all }, create: { fieldIds: editable(templates.id) }, update: { fieldIds: editable(templates.id), rows: all }, delete: { rows: all } }),
+          grant(staff, { read: { fieldIds: columnsOf(templates.id), rows: all } }),
         ] },
         { tableId: shares.id, grants: [
           grant(owner, { read: { fieldIds: columnsOf(shares.id), rows: all }, create: { fieldIds: editable(shares.id) }, update: { fieldIds: editable(shares.id), rows: all }, delete: { rows: all } }),

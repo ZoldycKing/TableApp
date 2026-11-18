@@ -79,20 +79,22 @@ export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,childre
     const row=navItems.current
     if(!row)return
     const measure=()=>{
-      if(navigation==='sidebar'||row.clientWidth<8){setFit(navigation==='sidebar'?screens.length:screens.length>5?4:screens.length);return}
+      const phoneNav=Boolean(phone||(typeof window!=='undefined'&&typeof window.matchMedia==='function'&&window.matchMedia('(max-width: 720px)').matches))
+      const hardCap=phoneNav?4:screens.length
+      if(navigation==='sidebar'||row.clientWidth<8){setFit(navigation==='sidebar'?screens.length:Math.min(hardCap,screens.length>5?4:screens.length));return}
       const tabs=[...row.querySelectorAll<HTMLElement>(':scope > [data-nav-item]')]
       const extra=row.querySelector<HTMLElement>(':scope > [data-nav-more]')
       const reveal=(count:number)=>{
         tabs.forEach((tab,index)=>{tab.hidden=index>=count})
         if(extra)extra.hidden=count>=tabs.length
       }
-      reveal(tabs.length)
-      if(row.scrollWidth<=row.clientWidth+1){setFit(current=>current===tabs.length?current:tabs.length);return}
-      let count=tabs.length
+      reveal(Math.min(hardCap,tabs.length))
+      if(!phoneNav&&row.scrollWidth<=row.clientWidth+1){setFit(current=>current===tabs.length?current:tabs.length);return}
+      let count=Math.min(hardCap,tabs.length)
       while(count>0){
-        count-=1
         reveal(count)
         if(row.scrollWidth<=row.clientWidth+1)break
+        count-=1
       }
       setFit(current=>current===count?current:count)
     }

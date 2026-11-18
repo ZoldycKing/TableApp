@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   activeTimerFor, canLinkTasks, canStartTimer, captureProjectTemplate, entryMinutes, filterClientComments,
-  formatMinutes, ganttBars, ganttRange, materializeTemplate, matchesRoleFilter, moveBarDates, nextOccurrenceDay,
-  projectSpentMinutes, recurrenceLabel, resizeBarDates, shouldSpawnOnComplete, stopTimerValues, totalSpentMinutes,
-  validateManualMinutes, workloadFor,
+  formatMinutes, formatSpentPair, ganttArrowPath, ganttBars, ganttRange, materializeTemplate, matchesRoleFilter,
+  moveBarDates, nextOccurrenceDay, projectSpentMinutes, recurrenceLabel, resizeBarDates, shouldSpawnOnComplete,
+  stopTimerValues, totalSpentMinutes, validateManualMinutes, workloadFor,
 } from './projects-stage2'
 
 describe('project dependencies', () => {
@@ -33,6 +33,11 @@ describe('gantt bars', () => {
     expect(moveBarDates('2026-11-10', '2026-11-12', 2)).toEqual({ start: '2026-11-12', end: '2026-11-14' })
     expect(resizeBarDates('2026-11-10', '2026-11-12', 'end', 1)).toEqual({ start: '2026-11-10', end: '2026-11-13' })
     expect(resizeBarDates('2026-11-10', '2026-11-12', 'start', 5)).toEqual({ start: '2026-11-12', end: '2026-11-12' })
+    expect(ganttArrowPath({ x: 10, y: 10 }, { x: 80, y: 50 })).toContain(' V ')
+    expect(ganttArrowPath({ x: 100, y: 10 }, { x: 40, y: 50 }, 56, 130)).toContain('H 130')
+    expect(formatSpentPair(330, 360)).toBe('5 ч 30 мин / 6 ч')
+    expect(formatSpentPair(0, 180)).toBe('0 мин / 3 ч')
+    expect(formatSpentPair(0, null)).toBe('0 мин')
   })
 })
 

@@ -342,13 +342,13 @@
 .ganttArrow[data-active] { opacity: 1; stroke-width: 2.25; color: #23486f; }
 .ganttRow { position: absolute; left: 0; right: 0; display: block; border-bottom: 1px solid var(--v2-line, #e8edf3); z-index: 2; }
 .ganttLabel {
-  display: grid; align-content: center; gap: 0; width: 100%; min-width: 0;
+  display: flex; align-items: center; gap: 0; width: 100%; min-width: 0; min-height: var(--gantt-row, 48px);
   padding: 6px 10px; border: 0; border-bottom: 1px solid var(--v2-line, #e8edf3);
   background: var(--v2-surface, #fff); color: inherit; font: inherit; text-align: left; box-sizing: border-box;
 }
-.ganttLabel[data-nested] { padding-left: 22px; }
+.ganttLabel[data-nested] { padding-left: 28px; }
 .ganttLabel[data-active] { background: #f3f7fb; }
-.ganttLabelTitle { display: flex; align-items: flex-start; gap: 6px; min-width: 0; }
+.ganttLabelTitle { display: flex; align-items: flex-start; gap: 6px; min-width: 0; width: 100%; }
 .ganttStatusDot { flex: none; width: 8px; height: 8px; margin-top: 5px; border-radius: 999px; background: #c5d4e6; }
 .ganttStatusDot[data-tone='done'] { background: #1f6b3a; }
 .ganttStatusDot[data-tone='progress'] { background: #b7791f; }
@@ -356,18 +356,18 @@
 .ganttStatusDot[data-tone='todo'] { background: #3d5f86; }
 .ganttStatusDot[data-tone='overdue'] { background: #9f1239; }
 .ganttLabel strong {
-  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
-  overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1;
-  font-size: 12px; line-height: 1.35; max-height: calc(1.35em * 2);
-  word-break: break-word; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2;
+  overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1 1 auto;
+  font-size: 12px; font-weight: 700; line-height: 1.35; max-height: calc(1.35em * 2);
+  white-space: normal; word-break: break-word; overflow-wrap: anywhere;
 }
 @media (max-width: 720px) {
-  .ganttLabel { padding: 4px 6px; }
-  .ganttLabel[data-nested] { padding-left: 14px; }
+  .ganttLabel { padding: 6px 6px; align-items: flex-start; }
+  .ganttLabel[data-nested] { padding-left: 18px; }
   .ganttLabel strong {
-    font-size: 11px; line-height: 1.35; max-height: calc(1.35em * 2);
+    font-size: 11px; line-height: 1.4; max-height: calc(1.4em * 2);
   }
-  .ganttStatusDot { margin-top: 4px; }
+  .ganttStatusDot { margin-top: 3px; }
 }
 .ganttBar {
   position: absolute; top: 10px; height: 28px; display: flex; align-items: center; gap: 6px; padding: 0 6px 0 4px;

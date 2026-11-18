@@ -243,7 +243,11 @@ export function CommentChat(props: Stage2Helpers & {
             <time dateTime={textOf(row.values[kit.comment.at])}>{formatCommentWhen(row.values[kit.comment.at], props.now)}</time>
             {kit.comment.editedAt && row.values[kit.comment.editedAt] ? <span>изменено</span> : null}
           </div>
-          {quoted ? <blockquote className={css.chatQuote} title={textOf(quoted.values[kit.comment.text])}><span className={css.chatQuoteText}>{textOf(quoted.values[kit.comment.text])}</span></blockquote> : null}
+          {quoted ? (() => {
+            const full = textOf(quoted.values[kit.comment.text])
+            const clipped = full.length > 52 ? `${full.slice(0, 51).trimEnd()}…` : full
+            return <blockquote className={css.chatQuote} title={full}><span className={css.chatQuoteText}>{clipped}</span></blockquote>
+          })() : null}
           <p>{textOf(row.values[kit.comment.text])}</p>
           <div className={css.chatActions}>
             <button type="button" onClick={() => { setReplyTo(row.id); setEditing(null); setMenuFor(null) }}>Ответить</button>

@@ -82,11 +82,13 @@ const desktop = [
 const phone = [
   ['gantt', 'projects-s2-phone-gantt.png'],
   ['task-time', 'projects-s2-phone-timer.png'],
+  ['task', 'projects-s2-phone-roles.png'],
   ['task-chat', 'projects-s2-phone-chat.png'],
   ['template', 'projects-s2-phone-template-save.png'],
   ['from-template', 'projects-s2-phone-from-template.png'],
   ['recurrence', 'projects-s2-phone-recurrence.png'],
   ['workload', 'projects-s2-phone-workload.png'],
+  ['share', 'projects-s2-phone-share.png'],
   ['client', 'projects-s2-phone-client.png'],
 ] as const
 

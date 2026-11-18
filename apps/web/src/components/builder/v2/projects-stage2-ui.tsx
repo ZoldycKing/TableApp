@@ -245,7 +245,7 @@ export function CommentChat(props: Stage2Helpers & {
           </div>
           {quoted ? (() => {
             const full = textOf(quoted.values[kit.comment.text])
-            const clipped = full.length > 52 ? `${full.slice(0, 51).trimEnd()}…` : full
+            const clipped = full.length > 44 ? `${full.slice(0, 43).trimEnd()}…` : full
             return <blockquote className={css.chatQuote} title={full}><span className={css.chatQuoteText}>{clipped}</span></blockquote>
           })() : null}
           <p>{textOf(row.values[kit.comment.text])}</p>

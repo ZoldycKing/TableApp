@@ -1,10 +1,12 @@
 'use client'
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
+import type { AppV2Json } from '@tableapp/schema/app-v2'
 import {
-  columnWidth, dayIndex, eachDay, formatSpentPair, formatSpentPairCompact, ganttArrowPath, ganttBars, ganttRange, moveBarDates, resizeBarDates,
-  type DependencyLink, type GanttZoom,
+  columnWidth, dayIndex, eachDay, formatDayRange, formatSpentPair, ganttArrowPath, ganttBarTone, ganttBars, ganttHeaderLabel, ganttRange,
+  groupTasksByWeek, isWeekendDay, moveBarDates, resizeBarDates, weekMiniBar, type DependencyLink, type GanttBarTone, type GanttZoom,
 } from '@/lib/projects-stage2'
-import { formatDay, todayKey } from '@/lib/projects-logic'
+import { todayKey } from '@/lib/projects-logic'
+import { BookingAvatar } from './booking-avatar'
 import { ProtoIcon } from '../prototype/icons'
 import buttons from '../prototype/prototype.module.css'
 import css from './projects.module.css'
@@ -18,6 +20,8 @@ export type GanttTaskRow = {
   parentId: string
   estimate: number | null
   spent: number
+  assigneeName?: string
+  assigneePhoto?: AppV2Json
 }
 
 type Props = {
@@ -30,6 +34,14 @@ type Props = {
   onLink?: (fromId: string, toId: string) => void
   onUnlink?: (linkId: string) => void
 }
+
+const LEGEND: { tone: GanttBarTone | 'today'; label: string }[] = [
+  { tone: 'done', label: 'Готово' },
+  { tone: 'progress', label: 'В работе' },
+  { tone: 'review', label: 'На проверке' },
+  { tone: 'overdue', label: 'Просрочено' },
+  { tone: 'today', label: 'Сегодня' },
+]
 
 function isNarrowViewport() {
   return typeof window !== 'undefined'
@@ -51,27 +63,117 @@ function useNarrow() {
 }
 
 function titleFits(title: string, barWidth: number) {
-  return barWidth >= Math.min(200, 36 + title.length * 7.4)
+  return barWidth >= Math.min(200, 48 + title.length * 7.4)
+}
+
+function toneOf(task: GanttTaskRow, now: number): GanttBarTone {
+  return ganttBarTone(task.status, task.due, now)
+}
+
+function GanttPopover(props: {
+  task: GanttTaskRow
+  now: number
+  readOnly?: boolean
+  onOpen: () => void
+  onClose: () => void
+}) {
+  const range = formatDayRange(props.task.start, props.task.due) || 'Без срока'
+  const progress = props.task.estimate != null || props.task.spent
+    ? formatSpentPair(props.task.spent, props.task.estimate)
+    : ''
+  return <div className={css.ganttPopover} role="dialog" aria-label={props.task.title} data-gantt-popover>
+    <strong>{props.task.title}</strong>
+    <span className={css.quiet}>{range}</span>
+    <span className={css.ganttPopoverStatus} data-tone={toneOf(props.task, props.now)}>{props.task.status || 'Без статуса'}</span>
+    {props.task.assigneeName ? <span className={css.ganttPopoverWho}>
+      <BookingAvatar name={props.task.assigneeName} photo={props.task.assigneePhoto} small />
+      <span>{props.task.assigneeName}</span>
+    </span> : null}
+    {progress ? <span className={css.quiet}>Прогресс: {progress}</span> : null}
+    <div className={css.ganttPopoverActions}>
+      {!props.readOnly ? <button type="button" className={buttons.primary} onClick={props.onOpen}>Открыть задачу</button> : null}
+      <button type="button" className={buttons.secondary} onClick={props.onClose}>Закрыть</button>
+    </div>
+  </div>
+}
+
+function WeekPlanList(props: {
+  tasks: GanttTaskRow[]
+  now: number
+  onOpenTask: (id: string) => void
+  onSelect: (id: string) => void
+  selectedId: string | null
+}) {
+  const groups = useMemo(() => groupTasksByWeek(props.tasks), [props.tasks])
+  if (!groups.length) {
+    return <p className={css.empty} data-gantt-empty>У задач нет сроков — добавьте даты, чтобы увидеть план</p>
+  }
+  return <div className={css.weekPlan} data-gantt-week-plan>
+    <h2 className={css.weekPlanTitle}>План по неделям</h2>
+    {groups.map(group => <section key={group.monday} className={css.weekPlanGroup}>
+      <h3>{group.label}</h3>
+      <ul className={css.weekPlanList}>
+        {group.tasks.map(task => {
+          const tone = toneOf(task, props.now)
+          const mini = weekMiniBar(task.start, task.due, group.monday)
+          const range = formatDayRange(task.start, task.due)
+          return <li key={task.id}>
+            <button
+              type="button"
+              className={css.weekPlanRow}
+              data-tone={tone}
+              data-selected={props.selectedId === task.id || undefined}
+              onClick={() => { props.onSelect(task.id); props.onOpenTask(task.id) }}
+            >
+              <span className={css.weekPlanStrip} aria-hidden data-tone={tone} />
+              <span className={css.weekPlanBody}>
+                <strong>{task.title}</strong>
+                <span className={css.quiet}>{range || 'Без срока'} · {task.status}</span>
+                {mini ? <span className={css.weekPlanMini} aria-hidden>
+                  <span style={{ left: `${mini.left * 100}%`, width: `${mini.width * 100}%` }} data-tone={tone} />
+                </span> : null}
+              </span>
+              {task.assigneeName
+                ? <BookingAvatar name={task.assigneeName} photo={task.assigneePhoto} small />
+                : <span className={css.weekPlanAvatar}><ProtoIcon name="user" size={16} /></span>}
+            </button>
+          </li>
+        })}
+      </ul>
+    </section>)}
+  </div>
 }
 
 export function ProjectsGantt(props: Props) {
   const narrow = useNarrow()
+  const markerId = useId().replace(/:/g, '')
   const [zoom, setZoom] = useState<GanttZoom>(() => isNarrowViewport() ? 'day' : 'week')
+  const [showLinks, setShowLinks] = useState(false)
+  const [phoneMode, setPhoneMode] = useState<'list' | 'chart'>(() => isNarrowViewport() ? 'list' : 'chart')
   const [linkFrom, setLinkFrom] = useState<string | null>(null)
-  const [drag, setDrag] = useState<{ id: string; mode: 'move' | 'start' | 'end'; originX: number; start: string; end: string } | null>(null)
+  const [activeId, setActiveId] = useState<string | null>(null)
+  const [popoverId, setPopoverId] = useState<string | null>(null)
+  const [drag, setDrag] = useState<{ id: string; mode: 'move' | 'start' | 'end'; originX: number; start: string; end: string; moved: boolean } | null>(null)
   const scroller = useRef<HTMLDivElement>(null)
   const scrolled = useRef(false)
+  const hoverTimer = useRef<number | null>(null)
   const today = todayKey(props.now)
   const top = props.tasks.filter(task => !task.parentId)
+  const dated = top.filter(task => task.start || task.due)
   const range = useMemo(() => ganttRange(top, today, zoom === 'day' ? 2 : zoom === 'week' ? 7 : 14), [top, today, zoom])
   const days = useMemo(() => eachDay(range.start, range.end), [range.start, range.end])
   const bars = useMemo(() => ganttBars(top, range.start), [top, range.start])
   const width = columnWidth(zoom)
   const todayOffset = days.includes(today) ? dayIndex(range.start, today) : -1
-  const labelWidth = narrow ? 120 : 220
-  const rowHeight = narrow ? 88 : 56
+  const labelWidth = narrow ? 132 : 228
+  const rowHeight = narrow ? 72 : 56
   const labelPad = narrow ? 48 : 220
   const chartWidth = Math.max(days.length * width + labelPad, 1)
+  const popoverTask = popoverId ? top.find(task => task.id === popoverId) ?? null : null
+
+  useEffect(() => {
+    setPhoneMode(narrow ? 'list' : 'chart')
+  }, [narrow])
 
   useEffect(() => {
     scrolled.current = false
@@ -83,7 +185,11 @@ export function ProjectsGantt(props: Props) {
     const lead = narrow ? 12 : Math.max(48, node.clientWidth * 0.35)
     node.scrollLeft = Math.max(0, todayOffset * width - lead)
     scrolled.current = true
-  }, [todayOffset, width, days.length, narrow])
+  }, [todayOffset, width, days.length, narrow, phoneMode])
+
+  useEffect(() => () => {
+    if (hoverTimer.current) window.clearTimeout(hoverTimer.current)
+  }, [])
 
   const placeBar = (el: HTMLElement, start: string, end: string) => {
     el.style.left = `${dayIndex(range.start, start) * width}px`
@@ -94,6 +200,7 @@ export function ProjectsGantt(props: Props) {
   const onPointerMove = (event: ReactPointerEvent) => {
     if (!drag || props.readOnly) return
     const delta = Math.round((event.clientX - drag.originX) / width)
+    if (delta !== 0 && !drag.moved) setDrag({ ...drag, moved: true })
     const next = drag.mode === 'move'
       ? moveBarDates(drag.start, drag.end, delta)
       : resizeBarDates(drag.start, drag.end, drag.mode === 'start' ? 'start' : 'end', delta)
@@ -111,70 +218,165 @@ export function ProjectsGantt(props: Props) {
     const el = scroller.current?.querySelector(`[data-bar-id="${drag.id}"]`) as HTMLElement | null
     const start = el?.dataset.previewStart || drag.start
     const end = el?.dataset.previewEnd || drag.end
+    const moved = drag.moved
+    const id = drag.id
     setDrag(null)
     if (el) {
-      const bar = bars.find(item => item.id === drag.id)
+      const bar = bars.find(item => item.id === id)
       if (bar) placeBar(el, bar.start, bar.end)
       delete el.dataset.previewStart
       delete el.dataset.previewEnd
     }
-    if (start !== drag.start || end !== drag.end) props.onDates?.(drag.id, start, end)
+    if (moved && (start !== drag.start || end !== drag.end)) props.onDates?.(id, start, end)
+    else if (!moved) {
+      setActiveId(id)
+      setPopoverId(id)
+    }
   }
 
-  const headerLabel = (day: string, index: number) => {
-    if (zoom === 'day') return formatDay(day).slice(0, 5)
-    if (zoom === 'week') return index % 7 === 0 ? formatDay(day).slice(0, 5) : ''
-    return day.endsWith('-01') ? formatDay(day).slice(3) : ''
+  const openPopover = (id: string, fromHover = false) => {
+    if (fromHover && narrow) return
+    if (fromHover) {
+      if (hoverTimer.current) window.clearTimeout(hoverTimer.current)
+      hoverTimer.current = window.setTimeout(() => {
+        setActiveId(id)
+        setPopoverId(id)
+      }, 120)
+      return
+    }
+    setActiveId(id)
+    setPopoverId(id)
   }
 
-  return <div className={css.gantt} data-projects-gantt data-narrow={narrow || undefined}>
-    <div className={css.ganttToolbar}>
-      <div className={css.segment} role="radiogroup" aria-label="Масштаб Ганта" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>
-        {([['day', 'Дни'], ['week', 'Недели'], ['month', 'Месяцы']] as const).map(([id, name]) => (
-          <button key={id} type="button" aria-pressed={zoom === id} onClick={() => setZoom(id)}>{name}</button>
-        ))}
+  const leavePopover = () => {
+    if (hoverTimer.current) window.clearTimeout(hoverTimer.current)
+    if (!narrow) {
+      hoverTimer.current = window.setTimeout(() => {
+        setPopoverId(null)
+        setActiveId(null)
+      }, 180)
+    }
+  }
+
+  const keepPopover = () => {
+    if (hoverTimer.current) window.clearTimeout(hoverTimer.current)
+  }
+
+  const linkVisible = (link: DependencyLink) => {
+    if (showLinks) return true
+    if (!activeId) return false
+    return link.fromId === activeId || link.toId === activeId
+  }
+
+  const linkActive = (link: DependencyLink) => Boolean(activeId && (link.fromId === activeId || link.toId === activeId))
+
+  if (narrow && phoneMode === 'list') {
+    return <div className={css.gantt} data-projects-gantt data-narrow data-phone-mode="list">
+      <div className={css.ganttToolbar}>
+        <p className={css.ganttExplainer}>План проекта на календаре: каждая полоса — задача от начала до срока.</p>
+        <div className={css.segment} role="radiogroup" aria-label="Вид плана" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
+          <button type="button" aria-pressed onClick={() => setPhoneMode('list')}>Список</button>
+          <button type="button" aria-pressed={false} onClick={() => setPhoneMode('chart')}>Диаграмма</button>
+        </div>
+        <ul className={css.ganttLegend} aria-label="Обозначения">
+          {LEGEND.map(item => <li key={item.tone}><span className={css.ganttSwatch} data-tone={item.tone} /><span>{item.label}</span></li>)}
+        </ul>
       </div>
-      {!props.readOnly ? <p className={css.quiet}>{linkFrom ? 'Выберите задачу-последователя или нажмите ещё раз, чтобы отменить' : 'Потяните полосу, чтобы сдвинуть срок. Наведите на полосу — связь «финиш → старт».'}</p> : null}
+      <WeekPlanList
+        tasks={top}
+        now={props.now}
+        selectedId={activeId}
+        onSelect={setActiveId}
+        onOpenTask={props.onOpenTask}
+      />
     </div>
-    <div className={css.ganttFrame} style={{ '--gantt-label': `${labelWidth}px` } as CSSProperties}>
+  }
+
+  const noDates = top.length > 0 && dated.length === 0
+
+  return <div className={css.gantt} data-projects-gantt data-narrow={narrow || undefined} data-phone-mode={narrow ? 'chart' : undefined}>
+    <div className={css.ganttToolbar}>
+      <p className={css.ganttExplainer}>План проекта на календаре: каждая полоса — задача от начала до срока.</p>
+      {narrow ? <div className={css.segment} role="radiogroup" aria-label="Вид плана" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
+        <button type="button" aria-pressed={false} onClick={() => setPhoneMode('list')}>Список</button>
+        <button type="button" aria-pressed onClick={() => setPhoneMode('chart')}>Диаграмма</button>
+      </div> : null}
+      <div className={css.ganttToolbarRow}>
+        <div className={css.segment} role="radiogroup" aria-label="Масштаб Ганта" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>
+          {([['day', 'Дни'], ['week', 'Недели'], ['month', 'Месяцы']] as const).map(([id, name]) => (
+            <button key={id} type="button" aria-pressed={zoom === id} onClick={() => setZoom(id)}>{name}</button>
+          ))}
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={showLinks}
+          className={css.ganttToggle}
+          data-on={showLinks || undefined}
+          onClick={() => setShowLinks(value => !value)}
+        >
+          <span>Показать связи</span>
+          <i aria-hidden="true" />
+        </button>
+      </div>
+      <ul className={css.ganttLegend} aria-label="Обозначения">
+        {LEGEND.map(item => <li key={item.tone}><span className={css.ganttSwatch} data-tone={item.tone} /><span>{item.label}</span></li>)}
+      </ul>
+      {!props.readOnly ? <p className={css.ganttDragHint} title="Потяните полосу, чтобы сдвинуть срок. Наведите на полосу — связь «финиш → старт».">
+        {linkFrom ? 'Выберите задачу-последователя или нажмите ещё раз, чтобы отменить' : 'Потяните полосу, чтобы сдвинуть срок'}
+      </p> : null}
+    </div>
+    {noDates ? <p className={css.empty} data-gantt-empty>У задач нет сроков — добавьте даты, чтобы увидеть план</p> : <div className={css.ganttFrame} style={{ '--gantt-label': `${labelWidth}px` } as CSSProperties}>
       <div className={css.ganttSide} style={{ width: labelWidth }}>
         <div className={css.ganttCorner}>Задача</div>
         {top.map(task => {
-          const due = formatDay(task.due)
-          const spentFull = task.estimate != null || task.spent ? formatSpentPair(task.spent, task.estimate) : ''
-          const spent = narrow
-            ? (task.estimate != null || task.spent ? formatSpentPairCompact(task.spent, task.estimate) : '')
-            : spentFull
-          const meta = narrow
-            ? [due ? due.slice(0, 5) : 'Без срока', spent].filter(Boolean).join(' · ')
-            : [due || 'Без срока', spent].filter(Boolean).join(' · ')
+          const tone = toneOf(task, props.now)
+          const rangeLabel = formatDayRange(task.start, task.due) || 'Без срока'
           return <button
             key={task.id}
             type="button"
             className={css.ganttLabel}
             style={{ height: rowHeight }}
-            title={`${task.title}\n${[due || 'Без срока', spentFull].filter(Boolean).join(' · ')}`}
-            onClick={() => props.onOpenTask(task.id)}
+            data-active={activeId === task.id || undefined}
+            title={`${task.title}\n${rangeLabel}`}
+            onClick={() => { setActiveId(task.id); props.onOpenTask(task.id) }}
+            onMouseEnter={() => openPopover(task.id, true)}
+            onMouseLeave={leavePopover}
           >
-            <strong>{task.title}</strong>
-            <span>{meta}</span>
+            <span className={css.ganttLabelTitle}>
+              <span className={css.ganttStatusDot} data-tone={tone} aria-hidden />
+              <strong>{task.title}</strong>
+            </span>
+            <span>{rangeLabel}</span>
           </button>
         })}
       </div>
       <div className={css.ganttScroll} ref={scroller} onPointerMove={onPointerMove} onPointerUp={finishDrag} onPointerCancel={finishDrag}>
         <div className={css.ganttInner} style={{ width: chartWidth }}>
           <div className={css.ganttHead} style={{ gridTemplateColumns: `repeat(${days.length}, ${width}px)` }}>
-            {days.map((day, index) => <div key={day} className={css.ganttDay} data-today={day === today || undefined}>{headerLabel(day, index)}</div>)}
+            {days.map((day, index) => <div
+              key={day}
+              className={css.ganttDay}
+              data-today={day === today || undefined}
+              data-weekend={zoom === 'day' && isWeekendDay(day) || undefined}
+            >{ganttHeaderLabel(day, index, zoom)}</div>)}
           </div>
           <div className={css.ganttBody} style={{ height: Math.max(top.length, 1) * rowHeight }}>
+            {zoom === 'day' ? days.map((day, index) => isWeekendDay(day) ? <div
+              key={`we-${day}`}
+              className={css.ganttWeekend}
+              style={{ left: index * width, width }}
+              aria-hidden
+            /> : null) : null}
             {todayOffset >= 0 ? <div className={css.ganttToday} style={{ left: todayOffset * width }} aria-hidden /> : null}
             <svg className={css.ganttArrows} width={chartWidth} height={Math.max(top.length, 1) * rowHeight} aria-hidden>
               <defs>
-                <marker id="projects-gantt-arrow" markerWidth="12" markerHeight="10" refX="10" refY="5" orient="auto" markerUnits="userSpaceOnUse">
-                  <path d="M0,0 L10,5 L0,10 Z" fill="#4b5c6e" />
+                <marker id={`projects-gantt-arrow-${markerId}`} markerWidth="12" markerHeight="10" refX="10" refY="5" orient="auto" markerUnits="userSpaceOnUse">
+                  <path d="M0,0 L10,5 L0,10 Z" fill="currentColor" />
                 </marker>
               </defs>
               {props.links.flatMap(link => {
+                if (!linkVisible(link)) return []
                 const fromBar = bars.find(bar => bar.id === link.fromId)
                 const toBar = bars.find(bar => bar.id === link.toId)
                 const fromIndex = top.findIndex(task => task.id === link.fromId)
@@ -189,39 +391,56 @@ export function ProjectsGantt(props: Props) {
                   const mid = bars.find(bar => bar.id === top[i]!.id)
                   if (mid) lane = Math.min(lane, mid.dayOffset * width - 16)
                 }
+                const active = linkActive(link)
                 return <path
                   key={link.id}
                   d={ganttArrowPath(from, to, rowHeight, Math.max(4, lane))}
                   className={css.ganttArrow}
-                  markerEnd="url(#projects-gantt-arrow)"
+                  data-gantt-link={link.id}
+                  data-active={active || undefined}
+                  data-dimmed={showLinks && activeId && !active || undefined}
+                  markerEnd={`url(#projects-gantt-arrow-${markerId})`}
                   onClick={() => !props.readOnly && props.onUnlink?.(link.id)}
                 />
               })}
             </svg>
             {top.map((task, index) => {
               const bar = bars.find(item => item.id === task.id)
+              const tone = toneOf(task, props.now)
               const barWidth = bar ? Math.max(bar.daySpan * width, width) : 0
-              const showOutside = Boolean(bar && !narrow && !titleFits(task.title, barWidth - (props.readOnly ? 16 : 40)))
-              const showInside = Boolean(bar && !narrow && !showOutside)
+              const showOutside = Boolean(bar && !titleFits(task.title, barWidth - (props.readOnly ? 28 : 52)))
+              const showInside = Boolean(bar && !showOutside)
               return <div key={task.id} className={css.ganttRow} style={{ top: index * rowHeight, height: rowHeight }}>
                 {bar ? <>
                   <div
                     className={css.ganttBar}
                     data-bar-id={bar.id}
-                    data-done={bar.done || undefined}
+                    data-tone={tone}
+                    data-active={activeId === task.id || undefined}
                     data-dragging={drag?.id === bar.id || undefined}
                     style={{ left: bar.dayOffset * width, width: barWidth }}
                     onPointerDown={event => {
-                      if (props.readOnly) return
-                      event.currentTarget.setPointerCapture(event.pointerId)
-                      setDrag({ id: bar.id, mode: 'move', originX: event.clientX, start: bar.start, end: bar.end })
+                      if (props.readOnly) {
+                        openPopover(task.id)
+                        return
+                      }
+                      event.currentTarget.setPointerCapture?.(event.pointerId)
+                      setDrag({ id: bar.id, mode: 'move', originX: event.clientX, start: bar.start, end: bar.end, moved: false })
+                      setActiveId(task.id)
                     }}
+                    onClick={() => {
+                      if (drag?.moved) return
+                      openPopover(task.id)
+                    }}
+                    onMouseEnter={() => openPopover(task.id, true)}
+                    onMouseLeave={leavePopover}
                   >
+                    {task.assigneeName ? <span className={css.ganttBarAvatar}><BookingAvatar name={task.assigneeName} photo={task.assigneePhoto} small /></span> : null}
                     {!props.readOnly ? <>
                       <button type="button" className={css.ganttHandle} data-edge="start" aria-label="Изменить начало"
-                        onPointerDown={event => { event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId); setDrag({ id: bar.id, mode: 'start', originX: event.clientX, start: bar.start, end: bar.end }) }} />
+                        onPointerDown={event => { event.stopPropagation(); event.currentTarget.setPointerCapture?.(event.pointerId); setDrag({ id: bar.id, mode: 'start', originX: event.clientX, start: bar.start, end: bar.end, moved: false }) }} />
                       <button type="button" className={css.ganttHandle} data-edge="end" aria-label="Изменить срок"
-                        onPointerDown={event => { event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId); setDrag({ id: bar.id, mode: 'end', originX: event.clientX, start: bar.start, end: bar.end }) }} />
+                        onPointerDown={event => { event.stopPropagation(); event.currentTarget.setPointerCapture?.(event.pointerId); setDrag({ id: bar.id, mode: 'end', originX: event.clientX, start: bar.start, end: bar.end, moved: false }) }} />
                       <button type="button" className={css.ganttLinkBtn} aria-label="Связать задачу" onClick={event => {
                         event.stopPropagation()
                         if (!linkFrom) { setLinkFrom(task.id); return }
@@ -230,7 +449,7 @@ export function ProjectsGantt(props: Props) {
                         setLinkFrom(null)
                       }}><ProtoIcon name="link" size={12} /></button>
                     </> : null}
-                    {showInside ? <span>{task.title}</span> : null}
+                    {showInside ? <span className={css.ganttBarTitle}>{task.title}</span> : null}
                   </div>
                   {showOutside ? <span
                     className={css.ganttBarLabel}
@@ -238,6 +457,20 @@ export function ProjectsGantt(props: Props) {
                     title={task.title}
                     style={{ left: (bar.dayOffset + bar.daySpan) * width + 8, top: Math.max(14, (rowHeight - 18) / 2) }}
                   >{task.title}</span> : null}
+                  {popoverTask?.id === task.id ? <div
+                    className={css.ganttPopoverAnchor}
+                    style={{ left: Math.max(8, bar.dayOffset * width), top: rowHeight - 4 }}
+                    onMouseEnter={keepPopover}
+                    onMouseLeave={leavePopover}
+                  >
+                    <GanttPopover
+                      task={popoverTask}
+                      now={props.now}
+                      readOnly={props.readOnly}
+                      onOpen={() => props.onOpenTask(popoverTask.id)}
+                      onClose={() => { setPopoverId(null); setActiveId(null) }}
+                    />
+                  </div> : null}
                 </> : <button type="button" className={css.ganttEmpty} style={{ left: 8 }} onClick={() => props.onOpenTask(task.id)}>Нет дат</button>}
               </div>
             })}
@@ -245,7 +478,7 @@ export function ProjectsGantt(props: Props) {
           </div>
         </div>
       </div>
-    </div>
+    </div>}
     {linkFrom && !props.readOnly ? <div className={css.ganttHint}><button type="button" className={buttons.secondary} onClick={() => setLinkFrom(null)}>Отменить связь</button></div> : null}
   </div>
 }

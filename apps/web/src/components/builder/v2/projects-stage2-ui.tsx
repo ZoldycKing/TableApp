@@ -134,13 +134,16 @@ export function TaskTimePanel(props: Stage2Helpers & { taskId: string; projectId
       <button type="button" className={buttons.secondary} onClick={() => void addManual()}>Добавить</button>
       {error ? <p className={css.error} role="alert" style={{ gridColumn: '1 / -1' }}>{error}</p> : null}
     </div>}
-    <ul className={css.timeList}>{mine.length ? mine.map(entry => {
-      const who = props.people().find(item => item.email === entry.email)
-      return <li key={entry.id} className={css.timeItem}>
-        <span><strong>{who?.name || entry.email}</strong><br /><span className={css.quiet}>{formatClock(entry.startedAt)}{entry.endedAt ? ` — ${formatClock(entry.endedAt)}` : ' · идёт'}{entry.note ? ` · ${entry.note}` : ''}</span></span>
-        <strong>{formatMinutes(entryMinutes(entry, props.now))}</strong>
-      </li>
-    }) : <li className={css.empty}>Записей времени пока нет.</li>}</ul>
+    <div className={css.timeEntries} data-time-entries>
+      <h3 className={css.timeEntriesTitle}>Записи времени</h3>
+      <ul className={css.timeList}>{mine.length ? mine.map(entry => {
+        const who = props.people().find(item => item.email === entry.email)
+        return <li key={entry.id} className={css.timeItem}>
+          <span><strong>{who?.name || entry.email}</strong><br /><span className={css.quiet}>{formatClock(entry.startedAt)}{entry.endedAt ? ` — ${formatClock(entry.endedAt)}` : ' · идёт'}{entry.note ? ` · ${entry.note}` : ''}</span></span>
+          <strong>{formatMinutes(entryMinutes(entry, props.now))}</strong>
+        </li>
+      }) : <li className={css.empty}>Записей времени пока нет.</li>}</ul>
+    </div>
   </DetailSection>
 }
 
@@ -289,16 +292,23 @@ export function GanttScreen(props: Stage2Helpers & { projectId?: string }) {
   const projects = props.of(kit.projectsTableId)
   const [projectId, setProjectId] = useState(props.projectId || projects[0]?.id || '')
   const entries = timeEntries(props)
-  const tasks = props.of(kit.tasksTableId).filter(row => firstId(row.values[kit.task.project]) === projectId).map(row => ({
-    id: row.id,
-    title: textOf(row.values[kit.task.title]),
-    start: kit.task.start ? civilDay(row.values[kit.task.start]) : null,
-    due: civilDay(row.values[kit.task.due]),
-    status: props.choiceName(kit.tasksTableId, kit.task.status, row.values[kit.task.status]),
-    parentId: firstId(row.values[kit.task.parent]),
-    estimate: kit.task.estimate && typeof row.values[kit.task.estimate] === 'number' ? Number(row.values[kit.task.estimate]) : null,
-    spent: totalSpentMinutes(entries, row.id, props.now),
-  }))
+  const peopleList = props.people()
+  const tasks = props.of(kit.tasksTableId).filter(row => firstId(row.values[kit.task.project]) === projectId).map(row => {
+    const assigneeId = firstId(row.values[kit.task.assignee])
+    const who = peopleList.find(item => item.id === assigneeId)
+    return {
+      id: row.id,
+      title: textOf(row.values[kit.task.title]),
+      start: kit.task.start ? civilDay(row.values[kit.task.start]) : null,
+      due: civilDay(row.values[kit.task.due]),
+      status: props.choiceName(kit.tasksTableId, kit.task.status, row.values[kit.task.status]),
+      parentId: firstId(row.values[kit.task.parent]),
+      estimate: kit.task.estimate && typeof row.values[kit.task.estimate] === 'number' ? Number(row.values[kit.task.estimate]) : null,
+      spent: totalSpentMinutes(entries, row.id, props.now),
+      assigneeName: who?.name ?? '',
+      assigneePhoto: who?.photo,
+    }
+  })
   const links = dependencyLinks(props, projectId)
   const client = props.actor.roleIds.includes('client')
 
@@ -604,16 +614,23 @@ export function ClientProjectView(props: Stage2Helpers & { recordId: string }) {
   const tasks = props.of(kit.tasksTableId).filter(item => firstId(item.values[kit.task.project]) === row.id && !firstId(item.values[kit.task.parent]))
   const stages = props.of(kit.stagesTableId).filter(item => firstId(item.values[kit.stage.project]) === row.id)
   const entries = timeEntries(props)
-  const ganttTasks = tasks.map(task => ({
-    id: task.id,
-    title: textOf(task.values[kit.task.title]),
-    start: kit.task.start ? civilDay(task.values[kit.task.start!]) : null,
-    due: civilDay(task.values[kit.task.due]),
-    status: props.choiceName(kit.tasksTableId, kit.task.status, task.values[kit.task.status]),
-    parentId: '',
-    estimate: null,
-    spent: 0,
-  }))
+  const peopleList = props.people()
+  const ganttTasks = tasks.map(task => {
+    const assigneeId = firstId(task.values[kit.task.assignee])
+    const who = peopleList.find(item => item.id === assigneeId)
+    return {
+      id: task.id,
+      title: textOf(task.values[kit.task.title]),
+      start: kit.task.start ? civilDay(task.values[kit.task.start!]) : null,
+      due: civilDay(task.values[kit.task.due]),
+      status: props.choiceName(kit.tasksTableId, kit.task.status, task.values[kit.task.status]),
+      parentId: '',
+      estimate: null,
+      spent: 0,
+      assigneeName: who?.name ?? '',
+      assigneePhoto: who?.photo,
+    }
+  })
   return <div className={css.root} data-projects-screen="client">
     <div className={css.pad}>
       <div className={css.clientBanner} data-client-banner><ProtoIcon name="check" size={16} />Только просмотр · внутренние комментарии и учёт времени скрыты</div>

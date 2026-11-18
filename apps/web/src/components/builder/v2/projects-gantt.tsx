@@ -83,11 +83,11 @@ function GanttPopover(props: {
     <strong>{props.task.title}</strong>
     <span className={css.quiet}>{range}</span>
     <span className={css.ganttPopoverStatus} data-tone={toneOf(props.task, props.now)}>{props.task.status || 'Без статуса'}</span>
+    <span className={css.ganttPopoverProgress} data-gantt-progress>Прогресс: {progress}</span>
     {props.task.assigneeName ? <span className={css.ganttPopoverWho}>
       <BookingAvatar name={props.task.assigneeName} photo={props.task.assigneePhoto} small />
       <span>{props.task.assigneeName}</span>
     </span> : null}
-    <span className={css.ganttPopoverProgress} data-gantt-progress>Прогресс: {progress}</span>
     <div className={css.ganttPopoverActions}>
       {!props.readOnly ? <button type="button" className={buttons.primary} onClick={props.onOpen}>Открыть задачу</button> : null}
       <button type="button" className={buttons.secondary} onClick={props.onClose}>Закрыть</button>
@@ -463,7 +463,8 @@ export function ProjectsGantt(props: Props) {
                   >{task.title}</span> : null}
                   {popoverTask?.id === task.id ? <div
                     className={css.ganttPopoverAnchor}
-                    style={{ left: Math.max(8, bar.dayOffset * width), top: rowHeight - 4 }}
+                    data-placement="above"
+                    style={{ left: Math.max(8, bar.dayOffset * width), top: 10 }}
                     onMouseEnter={keepPopover}
                     onMouseLeave={leavePopover}
                   >

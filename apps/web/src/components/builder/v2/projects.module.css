@@ -314,14 +314,14 @@
 .ganttSwatch[data-tone='today'] { width: 4px; height: 16px; border-radius: 2px; background: #9f1239; border: 0; }
 .ganttFrame { display: grid; grid-template-columns: var(--gantt-label, 220px) minmax(0, 1fr); border: 1px solid var(--v2-line, #dce3ed); border-radius: 14px; background: var(--v2-surface, #fff); overflow: hidden; min-width: 0; }
 .ganttSide { display: grid; grid-template-rows: 40px; align-content: start; border-right: 1px solid var(--v2-line, #dce3ed); background: var(--v2-surface, #fff); z-index: 2; }
-.ganttScroll { overflow: auto; min-width: 0; -webkit-overflow-scrolling: touch; }
+.ganttScroll { overflow-x: auto; overflow-y: visible; min-width: 0; -webkit-overflow-scrolling: touch; }
 .ganttInner { position: relative; min-width: 100%; }
 .ganttHead { display: grid; position: sticky; top: 0; z-index: 4; background: var(--v2-page, #f3f4f6); border-bottom: 1px solid var(--v2-line, #dce3ed); }
 .ganttCorner, .ganttDay { min-height: 40px; padding: 8px 4px; font-size: 11px; font-weight: 700; color: var(--v2-muted, #526075); text-align: center; white-space: nowrap; box-sizing: border-box; }
 .ganttCorner { display: flex; align-items: center; text-align: left; padding-left: 12px; background: var(--v2-page, #f3f4f6); border-bottom: 1px solid var(--v2-line, #dce3ed); }
 .ganttDay[data-today] { color: var(--v2-accent, #456849); background: #e8f0ea; }
 .ganttDay[data-weekend] { background: #eef1f5; }
-.ganttBody { position: relative; }
+.ganttBody { position: relative; overflow: visible; }
 .ganttWeekend { position: absolute; top: 0; bottom: 0; background: #f4f6f9; pointer-events: none; z-index: 0; }
 .ganttToday { position: absolute; top: 0; bottom: 0; width: 2px; background: #9f1239; z-index: 1; pointer-events: none; }
 .ganttArrows { position: absolute; left: 0; top: 0; pointer-events: none; color: #4b5c6e; overflow: visible; z-index: 1; }
@@ -382,7 +382,10 @@
 .ganttBar:hover .ganttLinkBtn, .ganttBar:focus-within .ganttLinkBtn, .ganttBar[data-dragging] .ganttLinkBtn { opacity: 1; }
 .ganttEmpty { position: absolute; top: 16px; min-height: 24px; padding: 0 8px; border: 0; background: transparent; color: var(--v2-muted, #526075); font: inherit; font-size: 12px; }
 .ganttHint { display: flex; justify-content: flex-end; }
-.ganttPopoverAnchor { position: absolute; z-index: 8; width: min(280px, calc(100% - 16px)); }
+.ganttPopoverAnchor {
+  position: absolute; z-index: 12; width: min(280px, calc(100% - 16px));
+  transform: translateY(calc(-100% - 8px));
+}
 .ganttPopover {
   display: grid; gap: 6px; min-width: 0; padding: 12px; border: 1px solid var(--v2-line, #dce3ed);
   border-radius: 12px; background: var(--v2-surface, #fff); box-shadow: 0 10px 28px rgba(17, 24, 39, .12);

@@ -64,12 +64,11 @@ it('shows explainer, legend and hides dependency links by default', () => {
   expect(toggle.querySelector('input')).toBeNull()
 })
 
-it('shows only links for the hovered task until «Показать связи» is on', () => {
+it('keeps dependency links hidden until «Показать связи» is on — hover does not reveal them', () => {
   render(<ProjectsGantt tasks={tasks} links={links} now={now} onOpenTask={vi.fn()} />)
   const bar = document.querySelector('[data-bar-id="t1"] [data-tone]') as HTMLElement
   fireEvent.mouseEnter(bar)
-  expect(document.querySelectorAll('[data-gantt-link]')).toHaveLength(1)
-  expect(document.querySelector('[data-gantt-link="l1"]')).toBeTruthy()
+  expect(document.querySelectorAll('[data-gantt-link]')).toHaveLength(0)
   fireEvent.click(screen.getByRole('switch', { name: 'Показать связи' }))
   expect(screen.getByRole('switch', { name: 'Показать связи' }).getAttribute('aria-checked')).toBe('true')
   expect(document.querySelectorAll('[data-gantt-link]')).toHaveLength(2)
@@ -131,7 +130,7 @@ it('keeps bars text-free and shows avatar+name captions outside the bar', () => 
   expect(document.querySelector('[data-gantt-names]')).toBeTruthy()
 })
 
-it('flips the caption to the left when the bar is near the right edge', () => {
+it('caps caption width to the visible timeline viewport and flips near the right edge', () => {
   render(<ProjectsGantt
     tasks={[
       {
@@ -146,8 +145,16 @@ it('flips the caption to the left when the bar is near the right edge', () => {
     onOpenTask={vi.fn()}
   />)
   fireEvent.click(screen.getByRole('button', { name: 'Дни' }))
+  const scroll = document.querySelector('[class*="ganttScroll"]') as HTMLElement
+  expect(scroll).toBeTruthy()
+  Object.defineProperty(scroll, 'clientWidth', { configurable: true, value: 240 })
+  Object.defineProperty(scroll, 'scrollLeft', { configurable: true, value: 0, writable: true })
+  fireEvent.scroll(scroll)
   const caption = document.querySelector('[data-bar-label="edge"]') as HTMLElement
   expect(caption.getAttribute('data-side')).toBe('left')
+  const max = Number.parseFloat(caption.style.maxWidth || '0')
+  expect(max).toBeGreaterThan(0)
+  expect(max).toBeLessThanOrEqual(240)
 })
 
 it('highlights the whole row on hover across name column and timeline', () => {

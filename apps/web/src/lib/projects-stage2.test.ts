@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   activeTimerFor, canLinkTasks, canStartTimer, captureProjectTemplate, entryMinutes, filterClientComments,
   formatCommentWhen, formatDayRange, formatDayRangeSpaced, formatMinutes, formatSpentPair, formatSpentPairCompact,
-  ganttArrowPath, ganttBarProgress, ganttBarTone, ganttCaptionSide, ganttCaptionWidth, columnWidth, ganttBars,
+  ganttArrowPath, ganttBarProgress, ganttBarTone, ganttCaptionPlacement, ganttCaptionWidth, columnWidth, ganttBars,
   ganttHeaderLabel, ganttHeaderLabelVisible, ganttRange, groupTasksByWeek, isWeekendDay, materializeTemplate,
   matchesRoleFilter, mondayOf, moveBarDates, nextOccurrenceDay, projectMiniBar, projectSpentMinutes, recurrenceLabel,
   resizeBarDates, shouldSpawnOnComplete, stopTimerValues, totalSpentMinutes, validateManualMinutes, weekMiniBar,
@@ -90,12 +90,36 @@ describe('gantt clarity helpers', () => {
     expect(formatDayRangeSpaced('2026-11-12', '2026-11-18')).toBe('12.11.2026 – 18.11.2026')
     expect(ganttBarProgress(120, 240, 'В работе')).toBe(50)
     expect(ganttBarProgress(10, 100, 'Готово')).toBe(100)
-    expect(ganttCaptionSide({
-      barLeft: 800, barWidth: 100, chartWidth: 920, labelWidth: 160, todayX: null,
-    })).toBe('left')
-    expect(ganttCaptionSide({
-      barLeft: 40, barWidth: 80, chartWidth: 900, labelWidth: 120, todayX: null,
-    })).toBe('right')
+    expect(ganttCaptionPlacement({
+      barLeft: 200, barWidth: 80, labelWidth: 160, viewLeft: 0, viewWidth: 300,
+    })).toEqual({ side: 'left', maxWidth: 160 })
+    expect(ganttCaptionPlacement({
+      barLeft: 40, barWidth: 80, labelWidth: 120, viewLeft: 0, viewWidth: 900,
+    })).toEqual({ side: 'right', maxWidth: 120 })
+    // Visible viewport is narrow: flip left and ellipsize to the room that fits.
+    const tight = ganttCaptionPlacement({
+      barLeft: 250, barWidth: 40, labelWidth: 180, viewLeft: 0, viewWidth: 320,
+    })
+    expect(tight.side).toBe('left')
+    expect(tight.maxWidth).toBeLessThanOrEqual(180)
+    expect(tight.maxWidth).toBeLessThanOrEqual(250 - 8 - 4)
+    // After horizontal scroll the visible window moves — flip using viewLeft.
+    expect(ganttCaptionPlacement({
+      barLeft: 600, barWidth: 50, labelWidth: 140, viewLeft: 400, viewWidth: 280,
+    })).toMatchObject({ side: 'left' })
+    // Neither side fits the full label: pick the larger room, never past the edge.
+    const squeeze = ganttCaptionPlacement({
+      barLeft: 100, barWidth: 120, labelWidth: 200, viewLeft: 0, viewWidth: 240,
+    })
+    expect(squeeze.maxWidth).toBeLessThanOrEqual(Math.max(
+      240 - 4 - (220 + 8),
+      100 - 8 - 4,
+    ))
+    expect(squeeze.maxWidth).toBeGreaterThan(0)
+    // Bar past the visible right edge: no caption (would clip the container).
+    expect(ganttCaptionPlacement({
+      barLeft: 1100, barWidth: 80, labelWidth: 160, viewLeft: 0, viewWidth: 1066,
+    }).maxWidth).toBe(0)
     expect(ganttCaptionWidth('Коротко', true)).toBeGreaterThan(28)
     expect(projectMiniBar('2026-11-12', '2026-11-14', '2026-11-10', '2026-11-20', '2026-11-18')).toMatchObject({
       left: 2 / 11, width: 3 / 11,

@@ -339,10 +339,10 @@
 .ganttSide {
   display: grid; grid-template-rows: 40px; align-content: start;
   border-right: 1px solid var(--v2-line, #dce3ed); background: var(--v2-surface, #fff);
-  position: sticky; left: 0; z-index: 3; min-width: 0;
+  position: sticky; left: 0; z-index: 3; min-width: 0; overflow: hidden;
 }
 .ganttScroll { overflow-x: auto; overflow-y: hidden; min-width: 0; -webkit-overflow-scrolling: touch; }
-.ganttInner { position: relative; min-width: 100%; }
+.ganttInner { position: relative; min-width: 100%; overflow: hidden; }
 .ganttHead { display: grid; position: sticky; top: 0; z-index: 4; background: var(--v2-page, #f3f4f6); border-bottom: 1px solid var(--v2-line, #dce3ed); }
 .ganttCorner, .ganttDay { min-height: 40px; padding: 8px 4px; font-size: 11px; font-weight: 700; color: var(--v2-muted, #526075); text-align: center; white-space: nowrap; box-sizing: border-box; overflow: hidden; }
 .ganttDay { position: relative; display: flex; align-items: center; justify-content: center; }
@@ -353,7 +353,7 @@
 }
 .ganttDay[data-today] { color: var(--v2-accent, #456849); background: #e8f0ea; }
 .ganttDay[data-weekend] { background: #eef1f5; }
-.ganttBody { position: relative; overflow: visible; }
+.ganttBody { position: relative; overflow: hidden; }
 .ganttWeekend { position: absolute; top: 0; bottom: 0; background: #f4f6f9; pointer-events: none; z-index: 0; }
 .ganttToday { position: absolute; top: 0; bottom: 0; width: 2px; background: #9f1239; z-index: 1; pointer-events: none; }
 .ganttTodayLabel {
@@ -418,15 +418,15 @@
 }
 .ganttBarCaption {
   position: absolute; top: 50%; transform: translateY(-50%);
-  display: inline-flex; align-items: center; gap: 6px; min-width: 0;
+  display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 220px;
   padding: 0; border: 0; background: transparent; color: #4b5563; font: inherit;
   font-size: 12px; font-weight: 700; line-height: 1.35; text-align: left; cursor: pointer;
-  z-index: 3; max-width: 220px;
+  z-index: 3; overflow: hidden; box-sizing: border-box;
 }
 .ganttBarCaption[data-side='right'] { left: calc(100% + 8px); }
-.ganttBarCaption[data-side='left'] { right: calc(100% + 8px); flex-direction: row; }
+.ganttBarCaption[data-side='left'] { right: calc(100% + 8px); }
 .ganttBarCaptionText {
-  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  min-width: 0; flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   color: #4b5563; font-size: 12px; font-weight: 700; line-height: 1.35;
 }
 .ganttBarAvatar { flex: none; display: inline-grid; place-items: center; width: 22px; height: 22px; }

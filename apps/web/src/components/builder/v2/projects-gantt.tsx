@@ -3,7 +3,7 @@ import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type P
 import type { AppV2Json } from '@tableapp/schema/app-v2'
 import {
   columnWidth, dayIndex, eachDay, formatDayRange, formatDayRangeSpaced, formatSpentPair, ganttArrowPath,
-  ganttBarProgress, ganttBarTone, ganttBars, ganttCaptionSide, ganttCaptionWidth, ganttHeaderLabel,
+  ganttBarProgress, ganttBarTone, ganttBars, ganttCaptionPlacement, ganttCaptionWidth, ganttHeaderLabel,
   ganttHeaderLabelVisible, ganttRange, isWeekendDay, moveBarDates, projectMiniBar, resizeBarDates,
   type DependencyLink, type GanttBarTone, type GanttZoom,
 } from '@/lib/projects-stage2'
@@ -192,6 +192,7 @@ export function ProjectsGantt(props: Props) {
   const [popoverId, setPopoverId] = useState<string | null>(null)
   const [popoverPos, setPopoverPos] = useState<{ left: number; top: number } | null>(null)
   const [scrollLeft, setScrollLeft] = useState(0)
+  const [viewWidth, setViewWidth] = useState(0)
   const [drag, setDrag] = useState<{ id: string; mode: 'move' | 'start' | 'end'; originX: number; start: string; end: string; moved: boolean } | null>(null)
   const scroller = useRef<HTMLDivElement>(null)
   const scrolled = useRef(false)
@@ -228,10 +229,29 @@ export function ProjectsGantt(props: Props) {
       const next = Math.max(0, todayOffset * width - lead)
       node.scrollLeft = next
       setScrollLeft(next)
+      setViewWidth(node.clientWidth)
       scrolled.current = true
     })
     return () => window.cancelAnimationFrame(frame)
   }, [todayOffset, width, days.length, narrow])
+
+  useEffect(() => {
+    if (narrow) return
+    const node = scroller.current
+    if (!node) return
+    const measure = () => {
+      const next = node.clientWidth
+      if (next > 0) setViewWidth(current => (current === next ? current : next))
+    }
+    measure()
+    if (typeof ResizeObserver !== 'function') {
+      window.addEventListener('resize', measure)
+      return () => window.removeEventListener('resize', measure)
+    }
+    const observer = new ResizeObserver(measure)
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [narrow, rows.length, zoom, chartWidth])
 
   const placeBar = (el: HTMLElement, start: string, end: string) => {
     el.style.left = `${dayIndex(range.start, start) * width}px`
@@ -298,16 +318,12 @@ export function ProjectsGantt(props: Props) {
     setPopoverPos(null)
   }
 
-  const linkVisible = (link: DependencyLink) => {
-    if (showLinks) return true
-    if (!activeId && !hoverId) return false
-    const focus = activeId || hoverId
-    return link.fromId === focus || link.toId === focus
-  }
+  /** Связи только при включённом «Показать связи» — иначе в шкале остаётся лишь линия «Сегодня». */
+  const linkVisible = (_link: DependencyLink) => showLinks
 
   const linkActive = (link: DependencyLink) => {
     const focus = activeId || hoverId
-    return Boolean(focus && (link.fromId === focus || link.toId === focus))
+    return Boolean(showLinks && focus && (link.fromId === focus || link.toId === focus))
   }
 
   const enterRow = (id: string) => setHoverId(id)
@@ -325,7 +341,9 @@ export function ProjectsGantt(props: Props) {
   }
 
   const noDates = rows.length > 0 && dated.length === 0
-  const todayX = todayOffset >= 0 ? todayOffset * width : null
+  // Prefer measured scroller width; never fall back to full chart width (that
+  // keeps captions on the right until they clip at the visible edge).
+  const timelineViewWidth = viewWidth > 0 ? viewWidth : 0
 
   return <div className={css.gantt} data-projects-gantt>
     <div className={css.ganttToolbar}>
@@ -389,7 +407,11 @@ export function ProjectsGantt(props: Props) {
       <div
         className={css.ganttScroll}
         ref={scroller}
-        onScroll={event => setScrollLeft(event.currentTarget.scrollLeft)}
+        onScroll={event => {
+          setScrollLeft(event.currentTarget.scrollLeft)
+          const next = event.currentTarget.clientWidth
+          if (next > 0) setViewWidth(current => (current === next ? current : next))
+        }}
         onPointerMove={onPointerMove}
         onPointerUp={finishDrag}
         onPointerCancel={finishDrag}
@@ -419,7 +441,7 @@ export function ProjectsGantt(props: Props) {
               aria-hidden
             /> : null) : null}
             {todayOffset >= 0 ? <div className={css.ganttToday} style={{ left: todayOffset * width }} aria-hidden /> : null}
-            <svg className={css.ganttArrows} width={chartWidth} height={Math.max(rows.length, 1) * rowHeight} aria-hidden>
+            {showLinks ? <svg className={css.ganttArrows} width={chartWidth} height={Math.max(rows.length, 1) * rowHeight} aria-hidden>
               <defs>
                 <marker id={`projects-gantt-arrow-${markerId}`} markerWidth="12" markerHeight="10" refX="10" refY="5" orient="auto" markerUnits="userSpaceOnUse">
                   <path d="M0,0 L10,5 L0,10 Z" fill="currentColor" />
@@ -453,7 +475,7 @@ export function ProjectsGantt(props: Props) {
                   onClick={() => !props.readOnly && props.onUnlink?.(link.id)}
                 />
               })}
-            </svg>
+            </svg> : null}
             {rows.map((task, index) => {
               const bar = bars.find(item => item.id === task.id)
               const tone = toneOf(task, props.now)
@@ -462,18 +484,13 @@ export function ProjectsGantt(props: Props) {
               const progress = ganttBarProgress(task.spent, task.estimate, task.status)
               const lit = highlightId === task.id
               const captionW = ganttCaptionWidth(task.title, Boolean(task.assigneeName))
-              const side = bar ? ganttCaptionSide({
+              const placement = bar && timelineViewWidth > 0 ? ganttCaptionPlacement({
                 barLeft,
                 barWidth,
-                chartWidth,
                 labelWidth: captionW,
-                todayX,
-              }) : 'right'
-              const captionMax = bar
-                ? Math.max(48, side === 'right'
-                  ? chartWidth - (barLeft + barWidth) - 12
-                  : barLeft - 12)
-                : 0
+                viewLeft: scrollLeft,
+                viewWidth: timelineViewWidth,
+              }) : { side: 'right' as const, maxWidth: Math.min(captionW, 160) }
               return <div
                 key={task.id}
                 className={css.ganttRow}
@@ -527,20 +544,20 @@ export function ProjectsGantt(props: Props) {
                         }}><ProtoIcon name="link" size={12} /></button>
                       </> : null}
                     </div>
-                    <button
+                    {placement.maxWidth >= 24 ? <button
                       type="button"
                       className={css.ganttBarCaption}
                       data-bar-label={bar.id}
-                      data-side={side}
+                      data-side={placement.side}
                       title={task.title}
-                      style={{ maxWidth: Math.min(captionW, captionMax) }}
+                      style={{ maxWidth: placement.maxWidth }}
                       onClick={event => openPopover(task.id, event.currentTarget)}
                       onMouseEnter={() => enterRow(task.id)}
                       onMouseLeave={() => leaveRow(task.id)}
                     >
                       {task.assigneeName ? <span className={css.ganttBarAvatar}><BookingAvatar name={task.assigneeName} photo={task.assigneePhoto} small /></span> : null}
                       <span className={css.ganttBarCaptionText}>{task.title}</span>
-                    </button>
+                    </button> : null}
                   </div>
                 ) : null}
               </div>

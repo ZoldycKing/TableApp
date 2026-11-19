@@ -1,0 +1,91 @@
+:root {
+  color-scheme: light;
+  --sc-font: "Onest", system-ui, sans-serif;
+  --sc-radius-sm: 6px; --sc-radius-md: 10px; --sc-radius-lg: 14px; --sc-radius-xl: 18px; --sc-radius-full: 9999px;
+  --sc-bg-page: #FFFFFF;
+  --sc-bg-surface: #F6F5F2;
+  --sc-bg-elevated: #FFFFFF;
+  --sc-text: #15151A;
+  --sc-text-2: #5B5A60;
+  --sc-text-3: #6F6E74;
+  --sc-border-subtle: #ECEAE6;
+  --sc-border: #DAD7D1;
+  --sc-border-control: #8D8B86;
+  --sc-accent: #3F6B5C;
+  --sc-accent-hover: #335A4C;
+  --sc-accent-pressed: #2A4B3F;
+  --sc-accent-soft: #E7F0EC;
+  --sc-accent-text: #3F6B5C;
+  --sc-on-accent: #FFFFFF;
+  --sc-focus: #3F6B5C;
+  --sc-danger: #C93636;
+  --sc-danger-hover: #B02A2A;
+  --sc-danger-soft: #FCEBEB;
+  --sc-danger-text: #B42B2B;
+  --sc-warning: #B7791F;
+  --sc-warning-soft: #FBF1DC;
+  --sc-warning-text: #8A5A00;
+  --sc-success: #1E8E4E;
+  --sc-success-soft: #E4F4EA;
+  --sc-success-text: #17743F;
+  --sc-info: #2F6DB5;
+  --sc-info-soft: #E6EFFA;
+  --sc-info-text: #265C9C;
+  --sc-logo-dot: #C4623A;
+  --sc-st-new: #7A8591; --sc-st-new-bg: #EEF0F2; --sc-st-new-text: #4F5964; /* Новая */
+  --sc-st-progress: #4E7CA8; --sc-st-progress-bg: #E8EFF6; --sc-st-progress-text: #2F5D88; /* В работе */
+  --sc-st-review: #C18A2B; --sc-st-review-bg: #FAF0DC; --sc-st-review-text: #7D5410; /* На проверке */
+  --sc-st-done: #2E9460; --sc-st-done-bg: #E3F3EA; --sc-st-done-text: #1D6F43; /* Готово */
+  --sc-st-overdue: #C94A4A; --sc-st-overdue-bg: #FBEAEA; --sc-st-overdue-text: #A93232; /* Просрочено */
+  --sc-chart-1: #3F6B5C;
+  --sc-chart-2: #4E7CA8;
+  --sc-chart-3: #C28A2E;
+  --sc-chart-4: #9A6B9E;
+  --sc-chart-5: #7A8590;
+  --sc-focus-ring: 0 0 0 3px rgba(63,107,92,.28);
+}
+
+[data-theme="dark"] {
+  --sc-bg-page: #0C0C0D;
+  --sc-bg-surface: #151517;
+  --sc-bg-elevated: #1E1E21;
+  --sc-text: #F4F4F5;
+  --sc-text-2: #A9A8AE;
+  --sc-text-3: #8B8A91;
+  --sc-border-subtle: #212125;
+  --sc-border: #2E2E33;
+  --sc-border-control: #6E6D74;
+  --sc-accent: #7FAE97;
+  --sc-accent-hover: #96BDA9;
+  --sc-accent-pressed: #6A9A83;
+  --sc-accent-soft: #16241E;
+  --sc-accent-text: #7FAE97;
+  --sc-on-accent: #0F1512;
+  --sc-focus: #7FAE97;
+  --sc-danger: #E5605F;
+  --sc-danger-hover: #EE7A79;
+  --sc-danger-soft: #2C1616;
+  --sc-danger-text: #F28584;
+  --sc-warning: #E8B04C;
+  --sc-warning-soft: #2B2212;
+  --sc-warning-text: #EDBE68;
+  --sc-success: #3CC17A;
+  --sc-success-soft: #12261B;
+  --sc-success-text: #5ED394;
+  --sc-info: #6FA8E8;
+  --sc-info-soft: #14233A;
+  --sc-info-text: #8DBBF0;
+  --sc-logo-dot: #D9784F;
+  --sc-st-new: #9AA5B0; --sc-st-new-bg: #1F2327; --sc-st-new-text: #B4BEC8; /* Новая */
+  --sc-st-progress: #7FA8D4; --sc-st-progress-bg: #16212E; --sc-st-progress-text: #9CBFE6; /* В работе */
+  --sc-st-review: #E0AE5C; --sc-st-review-bg: #2A2213; --sc-st-review-text: #EBC27C; /* На проверке */
+  --sc-st-done: #4FC083; --sc-st-done-bg: #12261B; --sc-st-done-text: #6FD39D; /* Готово */
+  --sc-st-overdue: #E5605F; --sc-st-overdue-bg: #2C1616; --sc-st-overdue-text: #F28584; /* Просрочено */
+  --sc-chart-1: #7FAE97;
+  --sc-chart-2: #7FA8D4;
+  --sc-chart-3: #E0AE5C;
+  --sc-chart-4: #B891BC;
+  --sc-chart-5: #9AA5B0;
+  --sc-focus-ring: 0 0 0 3px rgba(127,174,151,.30);
+  color-scheme: dark;
+}

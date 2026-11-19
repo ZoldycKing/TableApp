@@ -6,7 +6,7 @@ import { templateExample } from './presentation'
 describe('task-based starters and compatibility', () => {
   it('offers sales once and keeps the former definitions available without advertising a separate cabinet', () => {
     const ids = STARTER_TEMPLATES.map(template => template.id)
-    expect(ids).toHaveLength(11)
+    expect(ids).toHaveLength(10)
     expect(new Set(ids).size).toBe(ids.length)
     expect(ids).not.toContain('katalog')
     expect(ids).not.toContain('portal')

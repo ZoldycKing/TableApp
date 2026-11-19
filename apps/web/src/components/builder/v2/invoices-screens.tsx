@@ -1,5 +1,5 @@
 'use client'
-import { createContext, useContext, useMemo, useState } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { AppV2, AppV2Json, AppV2Record } from '@tableapp/schema/app-v2'
 import type { BuilderV2Table } from '@/lib/builder-v2'
 import {
@@ -8,12 +8,14 @@ import {
   lineTotal, nextDocumentNumber, parseInvoiceLines, parsePayments, paymentsTotal, remainingBalance,
   resolveDocStatus, serializeInvoiceLines, serializePayments, summaryTotals, type DocKind, type DocStatus, type InvoiceLine, type PaymentEntry,
 } from '@/lib/invoices-logic'
-import { buildInvoicePdf } from '@/lib/invoices-pdf'
+import { builderV2FormatMoneyGrouped, builderV2MoneyInputChange, builderV2ParseMoneyInput } from '@/lib/builder-v2-money'
+import { buildInvoicePdf, type InvoicePdfImage } from '@/lib/invoices-pdf'
 import { useBuilderV2NodeData } from './use-data'
 import { DateMenu } from './booking-calendar'
 import { AppDialog } from './app-dialog'
 import { DetailCardShell, DetailSection, ListScreenShell, ShellSearchField } from './layout-shell'
 import { ProtoIcon } from '../prototype/icons'
+import buttons from '../prototype/prototype.module.css'
 import type { AppV2RendererProps } from './view'
 import css from './invoices.module.css'
 
@@ -74,6 +76,93 @@ function Badge({ name }: { name: string }) {
   return <span className={css.badge} data-tone={tone}>{name}</span>
 }
 
+function SearchPick({
+  label, value, options, onChange, placeholder, searchLabel, footer,
+}: {
+  label: string
+  value: string
+  options: { id: string; name: string }[]
+  onChange: (id: string) => void
+  placeholder: string
+  searchLabel: string
+  footer?: ReactNode
+}) {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const root = useRef<HTMLDivElement>(null)
+  const selected = options.find(option => option.id === value)
+  const shown = options.filter(option => option.name.toLocaleLowerCase('ru-RU').includes(query.trim().toLocaleLowerCase('ru-RU')))
+  useEffect(() => {
+    if (!open) return
+    const outside = (event: PointerEvent) => { if (event.target instanceof Node && !root.current?.contains(event.target)) setOpen(false) }
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') setOpen(false) }
+    document.addEventListener('pointerdown', outside)
+    document.addEventListener('keydown', escape)
+    return () => { document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape) }
+  }, [open])
+  return <div className={css.field} ref={root}><span>{label}</span><div className={css.picker}>
+    <button type="button" className={css.pickerButton} aria-expanded={open} aria-haspopup="listbox" onClick={() => setOpen(current => !current)}>
+      <span>{selected?.name || placeholder}</span><ProtoIcon name="down" size={16} />
+    </button>
+    {open ? <div className={css.pickerPanel}>
+      <input type="text" aria-label={searchLabel} placeholder={searchLabel} value={query} onChange={event => setQuery(event.target.value)} />
+      <ul role="listbox">
+        {shown.map(option => <li key={option.id}><button type="button" role="option" aria-selected={option.id === value} onClick={() => { onChange(option.id); setOpen(false); setQuery('') }}>{option.name}</button></li>)}
+        {shown.length ? null : <li className={css.empty}>Ничего не найдено</li>}
+      </ul>
+      {footer ? <div className={css.pickerExtra}>{footer}</div> : null}
+    </div> : null}
+  </div></div>
+}
+
+function formatMoneyTyping(value: number) {
+  return new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    .format(Number.isFinite(value) ? value : 0)
+    .replace(/\u00A0|\u202F/g, ' ')
+}
+
+function MoneyField({ label, value, onChange, ariaLabel }: { label?: string; value: number; onChange: (value: number) => void; ariaLabel?: string }) {
+  const [text, setText] = useState(() => formatMoneyTyping(value))
+  const input = useRef<HTMLInputElement>(null)
+  const caret = useRef<number | null>(null)
+  useEffect(() => {
+    if (document.activeElement === input.current) return
+    setText(formatMoneyTyping(value))
+  }, [value])
+  useEffect(() => {
+    if (caret.current == null || !input.current) return
+    input.current.setSelectionRange(caret.current, caret.current)
+    caret.current = null
+  }, [text])
+  return <div className={css.moneyField}>
+    {label ? <span>{label}</span> : null}
+    <div className={css.moneyInputWrap}>
+      <input
+        ref={input}
+        type="text"
+        inputMode="decimal"
+        aria-label={ariaLabel ?? label}
+        value={text}
+        onChange={event => {
+          const next = builderV2MoneyInputChange(event.target.value, event.target.selectionStart ?? event.target.value.length)
+          if (!next) return
+          caret.current = next.caret
+          setText(next.text)
+          const parsed = builderV2ParseMoneyInput(next.text)
+          if (parsed != null && Number.isFinite(parsed)) onChange(parsed)
+        }}
+        onBlur={() => {
+          const parsed = builderV2ParseMoneyInput(text)
+          const amount = parsed != null && Number.isFinite(parsed) ? parsed : 0
+          onChange(amount)
+          setText(formatMoneyTyping(amount))
+        }}
+      />
+      <span className={css.moneySuffix}>₽</span>
+    </div>
+  </div>
+}
+
 export function InvoicesScreen(props: AppV2RendererProps) {
   const kit = props.app.invoices
   const demo = useContext(InvoicesRowsContext)
@@ -108,6 +197,8 @@ type ScreenProps = AppV2RendererProps & {
   replace?: (rows: AppV2Record[]) => void
 }
 
+type ListFilters = { clientId: string; period: string }
+
 function docKind(row: AppV2Record, kit: ScreenProps['kit'], tables: readonly BuilderV2Table[]) {
   const label = choiceName(tables, kit.documentsTableId, kit.document.kind, row.values[kit.document.kind])
   return DOC_KIND_FROM_LABEL[label] ?? 'estimate'
@@ -126,11 +217,16 @@ function relationIds(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : typeof value === 'string' ? [value] : []
 }
 
+function mediaFiles(value: unknown): { url: string; name?: string; mime?: string }[] {
+  if (!Array.isArray(value)) return []
+  return value.filter((item): item is { url: string; name?: string; mime?: string } => Boolean(item && typeof item === 'object' && typeof (item as { url?: unknown }).url === 'string'))
+}
+
 function HomeList(props: ScreenProps) {
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('')
-  const [clientId, setClientId] = useState('')
-  const [period, setPeriod] = useState('')
+  const [filters, setFilters] = useState<ListFilters>({ clientId: '', period: '' })
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
   const docs = props.of(props.kit.documentsTableId)
   const clients = props.of(props.kit.clientsTableId)
@@ -145,44 +241,78 @@ function HomeList(props: ScreenProps) {
     const client = relatedName(props.allRows, props.tables, row.values[props.kit.document.client])
     const statusKey = resolvedOf(row)
     if (status && statusKey !== status) return false
-    if (clientId && !relationIds(row.values[props.kit.document.client]).includes(clientId)) return false
+    if (filters.clientId && !relationIds(row.values[props.kit.document.client]).includes(filters.clientId)) return false
     const date = toYmd(row.values[props.kit.document.date])
-    if (period === 'month' && date < monthStart()) return false
+    if (filters.period === 'month' && date < monthStart()) return false
     if (search && !`${number} ${client}`.toLowerCase().includes(search.toLowerCase())) return false
     return true
-  }), [clientId, docs, period, props, search, status])
+  }), [docs, filters, props, search, status])
   const summary = summaryTotals(docs.map(row => ({
     kind: docKind(row, props.kit, props.tables),
     status: resolvedOf(row),
     total: numOf(row.values[props.kit.document.total]),
     paid: numOf(row.values[props.kit.document.paid]),
   })))
-  return <ListScreenShell title="Документы" search={<ShellSearchField value={search} onChange={setSearch} placeholder="Номер или клиент" />} actions={<button type="button" onClick={() => setCreateOpen(true)}>Новый документ</button>}>
-    <div className={css.root}>
+  return <ListScreenShell
+    title="Документы"
+    search={<ShellSearchField value={search} onChange={setSearch} placeholder="Номер или клиент" />}
+    actions={<>
+      <button type="button" className={buttons.secondary} onClick={() => setFiltersOpen(true)}>Фильтры</button>
+      <button type="button" className={buttons.primary} onClick={() => setCreateOpen(true)}><ProtoIcon name="plus" size={16} />Новый документ</button>
+    </>}
+  >
+    <div className={css.root} data-invoices-home>
       <div className={css.summary}>
         <SummaryCard label="Выставлено" value={formatInvoiceMoney(summary.issued)} />
         <SummaryCard label="Оплачено" value={formatInvoiceMoney(summary.paid)} />
         <SummaryCard label="Долг" value={formatInvoiceMoney(summary.debt)} tone="debt" />
       </div>
       <div className={css.toolbar}>
-        <div className={css.chips}>{STATUSES.map(item => <button key={item} type="button" className={css.chip} aria-pressed={status === item} onClick={() => setStatus(status === item ? '' : item)}>{DOC_STATUS_LABEL[item]}</button>)}</div>
+        <div className={css.chips} data-wrap="true" role="toolbar" aria-label="Статус">
+          <button type="button" className={css.chip} aria-pressed={!status} onClick={() => setStatus('')}>Все</button>
+          {STATUSES.map(item => <button key={item} type="button" className={css.chip} aria-pressed={status === item} onClick={() => setStatus(status === item ? '' : item)}>{DOC_STATUS_LABEL[item]}</button>)}
+        </div>
       </div>
-      <ChoiceRow label="Клиент" value={clientId} options={[{ id: '', name: 'Все' }, ...clients.map(item => ({ id: item.id, name: textOf(item.values[props.kit.client.name]) }))]} onChange={setClientId} />
-      <ChoiceRow label="Период" value={period} options={[{ id: '', name: 'Все даты' }, { id: 'month', name: 'Текущий месяц' }]} onChange={setPeriod} />
       <ul className={`${css.list} ${css.phoneOnly}`}>{filtered.map(row => <li key={row.id}><DocCard row={row} {...props} onOpen={() => props.onNavigate?.(props.kit.documentScreenId, row.id)} /></li>)}</ul>
-      <table className={`${css.table} ${css.desktopOnly}`}><thead><tr><th>Номер</th><th>Вид</th><th>Клиент</th><th>Дата</th><th>Статус</th><th>Сумма</th></tr></thead><tbody>
-        {filtered.map(row => <tr key={row.id} style={{ cursor: 'pointer' }} onClick={() => props.onNavigate?.(props.kit.documentScreenId, row.id)}>
-          <td>{textOf(row.values[props.kit.document.number])}</td>
-          <td>{choiceName(props.tables, props.kit.documentsTableId, props.kit.document.kind, row.values[props.kit.document.kind])}</td>
-          <td>{relatedName(props.allRows, props.tables, row.values[props.kit.document.client])}</td>
-          <td>{formatInvoiceDate(toYmd(row.values[props.kit.document.date]) || textOf(row.values[props.kit.document.date]))}</td>
-          <td><Badge name={DOC_STATUS_LABEL[resolvedOf(row)]} /></td>
-          <td className={css.money}>{formatInvoiceMoney(numOf(row.values[props.kit.document.total]))}</td>
-        </tr>)}
-      </tbody></table>
+      <div className={`${css.tableWrap} ${css.desktopOnly}`}>
+        <table className={css.table}><thead><tr><th>Номер</th><th>Вид</th><th>Клиент</th><th>Дата</th><th>Статус</th><th data-num>Сумма</th></tr></thead><tbody>
+          {filtered.map(row => <tr key={row.id} style={{ cursor: 'pointer' }} onClick={() => props.onNavigate?.(props.kit.documentScreenId, row.id)}>
+            <td>{textOf(row.values[props.kit.document.number])}</td>
+            <td>{choiceName(props.tables, props.kit.documentsTableId, props.kit.document.kind, row.values[props.kit.document.kind])}</td>
+            <td>{relatedName(props.allRows, props.tables, row.values[props.kit.document.client])}</td>
+            <td>{formatInvoiceDate(toYmd(row.values[props.kit.document.date]) || textOf(row.values[props.kit.document.date]))}</td>
+            <td><Badge name={DOC_STATUS_LABEL[resolvedOf(row)]} /></td>
+            <td data-num className={css.money}>{formatInvoiceMoney(numOf(row.values[props.kit.document.total]))}</td>
+          </tr>)}
+        </tbody></table>
+      </div>
     </div>
+    {filtersOpen ? <FiltersDialog
+      clients={clients.map(item => ({ id: item.id, name: textOf(item.values[props.kit.client.name]) }))}
+      value={filters}
+      onChange={setFilters}
+      onClose={() => setFiltersOpen(false)}
+    /> : null}
     {createOpen ? <DocumentFormDialog {...props} onClose={() => setCreateOpen(false)} /> : null}
   </ListScreenShell>
+}
+
+function FiltersDialog({ clients, value, onChange, onClose }: {
+  clients: { id: string; name: string }[]
+  value: ListFilters
+  onChange: (value: ListFilters) => void
+  onClose: () => void
+}) {
+  const [draft, setDraft] = useState(value)
+  return <AppDialog title="Фильтры" placement="center" onClose={onClose} footer={<div className={css.footerRow}>
+    <button type="button" className={buttons.secondary} onClick={() => setDraft({ clientId: '', period: '' })}>Сбросить</button>
+    <button type="button" className={buttons.primary} onClick={() => { onChange(draft); onClose() }}>Показать</button>
+  </div>}>
+    <div className={css.formGrid}>
+      <ChoiceRow label="Клиент" value={draft.clientId} options={[{ id: '', name: 'Все' }, ...clients]} onChange={clientId => setDraft(current => ({ ...current, clientId }))} />
+      <ChoiceRow label="Период" value={draft.period} options={[{ id: '', name: 'Все даты' }, { id: 'month', name: 'Текущий месяц' }]} onChange={period => setDraft(current => ({ ...current, period }))} />
+    </div>
+  </AppDialog>
 }
 
 function DocCard({ row, onOpen, ...props }: ScreenProps & { row: AppV2Record; onOpen: () => void }) {
@@ -213,34 +343,49 @@ function DocumentCard(props: ScreenProps & { recordId: string }) {
   const lines = parseInvoiceLines(row.values[props.kit.document.lines])
   const payments = parsePayments(row.values[props.kit.document.payments])
   const total = numOf(row.values[props.kit.document.total])
+  const vat = numOf(row.values[props.kit.document.vatTotal])
+  const discount = numOf(row.values[props.kit.document.discountTotal])
+  const subtotal = numOf(row.values[props.kit.document.subtotal])
   const balance = remainingBalance(total, payments)
   const convertTarget = convertDocument(kind)
   const statusLabel = (() => {
     const current = docStatus(row, props.kit, props.tables)
     const resolved = resolveDocStatus({
       status: current,
-    due: toYmd(row.values[props.kit.document.due]),
-    total,
-    payments,
-  })
-  return DOC_STATUS_LABEL[resolved]
+      due: toYmd(row.values[props.kit.document.due]),
+      total,
+      payments,
+    })
+    return DOC_STATUS_LABEL[resolved]
   })()
-  return <DetailCardShell title={textOf(row.values[props.kit.document.number])} subtitle={`${DOC_KIND_LABEL[kind]} · ${relatedName(props.allRows, props.tables, row.values[props.kit.document.client])}`}>
+  return <DetailCardShell
+    title={textOf(row.values[props.kit.document.number])}
+    subtitle={`${DOC_KIND_LABEL[kind]} · ${relatedName(props.allRows, props.tables, row.values[props.kit.document.client])}`}
+    badge={<Badge name={statusLabel} />}
+    actions={<>
+      <button type="button" className={buttons.primary} onClick={() => setEditOpen(true)}>Редактировать</button>
+      <button type="button" className={buttons.secondary} onClick={() => setPdfOpen(true)}>PDF</button>
+      {kind === 'invoice' ? <button type="button" className={buttons.secondary} onClick={() => setPayOpen(true)}>Внести оплату</button> : null}
+      {convertTarget ? <button type="button" className={buttons.secondary} onClick={() => convertDoc(props, row, convertTarget)}>Превратить в {DOC_KIND_LABEL[convertTarget].toLowerCase()}</button> : null}
+    </>}
+  >
     <div className={css.root}>
       <DetailSection title="Сведения">
-        <p className={css.cardMeta}>Дата {formatInvoiceDate(toYmd(row.values[props.kit.document.date]) || textOf(row.values[props.kit.document.date]))}{kind === 'invoice' ? ` · оплатить до ${formatInvoiceDate(toYmd(row.values[props.kit.document.due]) || textOf(row.values[props.kit.document.due]))}` : ''}</p>
-        <Badge name={statusLabel} />
-        {textOf(row.values[props.kit.document.note]) ? <p className={css.cardMeta}>{textOf(row.values[props.kit.document.note])}</p> : null}
+        <div className={css.facts}>
+          <p className={css.cardMeta}>Дата {formatInvoiceDate(toYmd(row.values[props.kit.document.date]) || textOf(row.values[props.kit.document.date]))}{kind === 'invoice' ? ` · оплатить до ${formatInvoiceDate(toYmd(row.values[props.kit.document.due]) || textOf(row.values[props.kit.document.due]))}` : ''}</p>
+          {textOf(row.values[props.kit.document.note]) ? <p className={css.cardMeta}>{textOf(row.values[props.kit.document.note])}</p> : null}
+        </div>
       </DetailSection>
       <DetailSection title="Позиции"><LineTable lines={lines} readonly /></DetailSection>
       <DetailSection title="Итоги">
         <div className={css.totals}>
-          <span>Подытог: {formatInvoiceMoney(numOf(row.values[props.kit.document.subtotal]))}</span>
-          <span>Скидка: {formatInvoiceMoney(numOf(row.values[props.kit.document.discountTotal]))}</span>
-          <span>НДС: {formatInvoiceMoney(numOf(row.values[props.kit.document.vatTotal]))}</span>
-          <strong>Итого: {formatInvoiceMoney(total)}</strong>
-          <span>Оплачено: {formatInvoiceMoney(numOf(row.values[props.kit.document.paid]))}</span>
-          {kind === 'invoice' ? <span>Остаток: {formatInvoiceMoney(balance)}</span> : null}
+          <div className={css.totalsRow}><span>Подытог</span><span>{formatInvoiceMoney(subtotal)}</span></div>
+          <div className={css.totalsRow}><span>Скидка</span><span>{formatInvoiceMoney(discount)}</span></div>
+          <div className={css.totalsRow}><span>без НДС</span><span>{formatInvoiceMoney(Math.max(0, total - vat))}</span></div>
+          <div className={css.totalsRow}><span>НДС</span><span>{formatInvoiceMoney(vat)}</span></div>
+          <div className={css.totalsRow} data-total><span>Итого</span><strong>{formatInvoiceMoney(total)}</strong></div>
+          <div className={css.totalsRow}><span>Оплачено</span><span>{formatInvoiceMoney(numOf(row.values[props.kit.document.paid]))}</span></div>
+          {kind === 'invoice' ? <div className={css.totalsRow}><span>Остаток</span><span>{formatInvoiceMoney(balance)}</span></div> : null}
         </div>
       </DetailSection>
       {kind === 'invoice' && payments.length ? <DetailSection title="Платежи">
@@ -249,13 +394,6 @@ function DocumentCard(props: ScreenProps & { recordId: string }) {
           <span className={css.cardMeta}>{formatInvoiceDate(payment.date)}{payment.comment ? ` · ${payment.comment}` : ''}</span>
         </li>)}</ul>
       </DetailSection> : null}
-      <div className={css.actions}>
-        <button type="button" data-primary onClick={() => setEditOpen(true)}>Редактировать</button>
-        {kind === 'invoice' ? <button type="button" data-accent onClick={() => setPayOpen(true)}>Оплата</button> : null}
-        {convertTarget ? <button type="button" onClick={() => convertDoc(props, row, convertTarget)}>Преобразовать в {DOC_KIND_LABEL[convertTarget]}</button> : null}
-        <button type="button" onClick={() => setPdfOpen(true)}>PDF</button>
-        <button type="button" onClick={() => void downloadPdf(props, row)}>Скачать PDF</button>
-      </div>
     </div>
     {editOpen ? <DocumentFormDialog {...props} row={row} onClose={() => setEditOpen(false)} /> : null}
     {payOpen ? <PaymentDialog {...props} row={row} onClose={() => setPayOpen(false)} /> : null}
@@ -269,42 +407,92 @@ function LineTable({ lines, readonly, onChange }: { lines: InvoiceLine[]; readon
     const next = lines.map((line, i) => i === index ? { ...line, ...patch } : line)
     onChange(next)
   }
-  return <div className={css.lines}>
-    {lines.map((line, index) => {
-      const sum = lineTotal(line)
-      return <article key={`${line.name}-${index}`} className={css.lineCard} data-line>
-        {readonly ? <strong className={css.cardTitle}>{line.name || 'Без названия'}</strong> : <div className={css.inputRow}><span>Наименование</span><input aria-label={`Наименование ${index + 1}`} value={line.name} onChange={event => update(index, { name: event.target.value })} /></div>}
-        <div className={css.lineGrid}>
-          <div className={css.inputRow}><span>Кол-во</span>{readonly ? <span>{line.qty}</span> : <input aria-label={`Количество ${index + 1}`} inputMode="decimal" value={line.qty} onChange={event => update(index, { qty: Number(event.target.value) || 0 })} />}</div>
-          <div className={css.inputRow}><span>Ед.</span>{readonly ? <span>{line.unit}</span> : <input aria-label={`Единица ${index + 1}`} value={line.unit} onChange={event => update(index, { unit: event.target.value })} />}</div>
-          <div className={css.inputRow}><span>Цена</span>{readonly ? <span className={css.money}>{formatInvoiceMoney(line.price)}</span> : <input aria-label={`Цена ${index + 1}`} inputMode="decimal" value={line.price} onChange={event => update(index, { price: Number(event.target.value) || 0 })} />}</div>
-          <div className={css.inputRow}><span>Скидка %</span>{readonly ? <span>{line.discount}</span> : <input aria-label={`Скидка ${index + 1}`} inputMode="decimal" value={line.discount} onChange={event => update(index, { discount: Number(event.target.value) || 0 })} />}</div>
-        </div>
-        {readonly
-          ? <span className={css.cardMeta}>{line.vatIncluded ? `с НДС ${line.vatRate}%` : `без НДС · ставка ${line.vatRate}%`} · {formatInvoiceMoney(sum)}</span>
-          : <>
-            <ChoiceRow label="Ставка НДС" value={String(line.vatRate)} options={SELECTABLE_VAT_RATES.map(rate => ({ id: String(rate), name: `${rate}%` }))} onChange={value => update(index, { vatRate: Number(value) })} />
-            <ChoiceRow label="Учёт НДС" value={line.vatIncluded ? 'in' : 'ex'} options={[{ id: 'in', name: 'с НДС' }, { id: 'ex', name: 'без НДС' }]} onChange={value => update(index, { vatIncluded: value === 'in' })} />
-            <div className={css.lineFoot}><span className={css.money}>{formatInvoiceMoney(sum)}</span>{onChange && lines.length > 1 ? <button type="button" onClick={() => onChange(lines.filter((_, i) => i !== index))}>Удалить</button> : null}</div>
-          </>}
-      </article>
-    })}
-  </div>
+  return <>
+    <div className={`${css.tableWrap} ${css.desktopOnly}`}>
+      <table className={css.table} data-line-table>
+        <thead>
+          <tr>
+            <th>Наименование</th>
+            <th data-num>Кол-во</th>
+            <th>Ед.</th>
+            <th data-num>Цена</th>
+            <th data-num>Скидка</th>
+            <th data-num>НДС</th>
+            <th data-num>Сумма</th>
+            {!readonly ? <th></th> : null}
+          </tr>
+        </thead>
+        <tbody>
+          {lines.map((line, index) => <tr key={`${line.name}-${index}`}>
+            <td>{readonly ? (line.name || 'Без названия') : <input aria-label={`Наименование ${index + 1}`} value={line.name} onChange={event => update(index, { name: event.target.value })} />}</td>
+            <td data-num>{readonly ? line.qty : <input aria-label={`Количество ${index + 1}`} inputMode="decimal" value={line.qty} onChange={event => update(index, { qty: Number(event.target.value) || 0 })} />}</td>
+            <td>{readonly ? line.unit : <input aria-label={`Единица ${index + 1}`} value={line.unit} onChange={event => update(index, { unit: event.target.value })} />}</td>
+            <td data-num>{readonly ? formatInvoiceMoney(line.price) : <MoneyField ariaLabel={`Цена ${index + 1}`} value={line.price} onChange={price => update(index, { price })} />}</td>
+            <td data-num>{readonly ? `${line.discount}%` : <input aria-label={`Скидка ${index + 1}`} inputMode="decimal" value={line.discount} onChange={event => update(index, { discount: Number(event.target.value) || 0 })} />}</td>
+            <td data-num>{readonly ? `${line.vatRate}%` : <input aria-label={`НДС ${index + 1}`} inputMode="decimal" value={line.vatRate} onChange={event => update(index, { vatRate: Number(event.target.value) || 0 })} />}</td>
+            <td data-num className={css.money}>{formatInvoiceMoney(lineTotal(line))}</td>
+            {!readonly ? <td>{onChange && lines.length > 1 ? <button type="button" className={buttons.secondary} onClick={() => onChange(lines.filter((_, i) => i !== index))}>Удалить</button> : null}</td> : null}
+          </tr>)}
+        </tbody>
+      </table>
+    </div>
+    <div className={`${css.lines} ${css.phoneOnly}`}>
+      {lines.map((line, index) => {
+        const sum = lineTotal(line)
+        return <article key={`${line.name}-${index}`} className={css.lineCard} data-line>
+          {readonly ? <strong className={css.cardTitle}>{line.name || 'Без названия'}</strong> : <div className={css.inputRow}><span>Наименование</span><input aria-label={`Наименование ${index + 1}`} value={line.name} onChange={event => update(index, { name: event.target.value })} /></div>}
+          <div className={css.lineGrid}>
+            <div className={css.inputRow}><span>Кол-во</span>{readonly ? <span>{line.qty}</span> : <input aria-label={`Количество ${index + 1}`} inputMode="decimal" value={line.qty} onChange={event => update(index, { qty: Number(event.target.value) || 0 })} />}</div>
+            <div className={css.inputRow}><span>Ед.</span>{readonly ? <span>{line.unit}</span> : <input aria-label={`Единица ${index + 1}`} value={line.unit} onChange={event => update(index, { unit: event.target.value })} />}</div>
+            <div className={css.inputRow}><span>Цена</span>{readonly ? <span className={css.money}>{formatInvoiceMoney(line.price)}</span> : <MoneyField ariaLabel={`Цена ${index + 1}`} value={line.price} onChange={price => update(index, { price })} />}</div>
+            <div className={css.inputRow}><span>Скидка %</span>{readonly ? <span>{line.discount}</span> : <input aria-label={`Скидка ${index + 1}`} inputMode="decimal" value={line.discount} onChange={event => update(index, { discount: Number(event.target.value) || 0 })} />}</div>
+          </div>
+          {readonly
+            ? <span className={css.cardMeta}>{line.vatIncluded ? `с НДС ${line.vatRate}%` : `без НДС · ставка ${line.vatRate}%`} · {formatInvoiceMoney(sum)}</span>
+            : <>
+              <ChoiceRow label="Ставка НДС" value={String(line.vatRate)} options={SELECTABLE_VAT_RATES.map(rate => ({ id: String(rate), name: `${rate}%` }))} onChange={value => update(index, { vatRate: Number(value) })} />
+              <ChoiceRow label="Учёт НДС" value={line.vatIncluded ? 'in' : 'ex'} options={[{ id: 'in', name: 'с НДС' }, { id: 'ex', name: 'без НДС' }]} onChange={value => update(index, { vatIncluded: value === 'in' })} />
+              <div className={css.lineFoot}><span className={css.money}>{formatInvoiceMoney(sum)}</span>{onChange && lines.length > 1 ? <button type="button" className={buttons.secondary} onClick={() => onChange(lines.filter((_, i) => i !== index))}>Удалить</button> : null}</div>
+            </>}
+        </article>
+      })}
+    </div>
+  </>
 }
 
 function settingsRow(props: ScreenProps) {
   return props.of(props.kit.settingsTableId)[0] ?? null
 }
 
+async function loadPdfImage(url: string | undefined): Promise<InvoicePdfImage | null> {
+  if (!url) return null
+  try {
+    const response = await fetch(url)
+    if (!response.ok) return null
+    const mime = (response.headers.get('content-type') ?? '').includes('jpeg') ? 'image/jpeg' as const : 'image/png' as const
+    return { bytes: new Uint8Array(await response.arrayBuffer()), mime }
+  } catch {
+    return null
+  }
+}
+
 async function downloadPdf(props: ScreenProps, row: AppV2Record) {
   const settings = settingsRow(props)
   const kind = docKind(row, props.kit, props.tables)
   const lines = parseInvoiceLines(row.values[props.kit.document.lines]).map(line => ({
-    name: line.name, qty: line.qty, unit: line.unit, price: line.price, total: computeInvoiceTotals([line]).total,
+    name: line.name, qty: line.qty, unit: line.unit, price: line.price, discount: line.discount, total: lineTotal(line),
   }))
   const clientIds = relationIds(row.values[props.kit.document.client])
   const client = props.allRows.find(item => clientIds.includes(item.id))
-  const font = await fetch('/template-media/dispatch/NotoSans-Regular.ttf').then(response => response.arrayBuffer())
+  const logoUrl = mediaFiles(settings?.values[props.kit.settings.logo])[0]?.url
+  const signatureUrl = mediaFiles(settings?.values[props.kit.settings.signature])[0]?.url
+  const stampUrl = mediaFiles(settings?.values[props.kit.settings.stamp])[0]?.url
+  const [font, logo, signature, stamp] = await Promise.all([
+    fetch('/template-media/dispatch/NotoSans-Regular.ttf').then(response => response.arrayBuffer()),
+    loadPdfImage(logoUrl),
+    loadPdfImage(signatureUrl),
+    loadPdfImage(stampUrl),
+  ])
   const pdf = await buildInvoicePdf({
     kind,
     number: textOf(row.values[props.kit.document.number]),
@@ -331,6 +519,9 @@ async function downloadPdf(props: ScreenProps, row: AppV2Record) {
     vat: numOf(row.values[props.kit.document.vatTotal]),
     total: numOf(row.values[props.kit.document.total]),
     note: textOf(row.values[props.kit.document.note]),
+    logo,
+    signature,
+    stamp,
   }, new Uint8Array(font))
   const blob = new Blob([new Uint8Array(pdf)], { type: 'application/pdf' })
   const url = URL.createObjectURL(blob)
@@ -379,7 +570,23 @@ function DocumentFormDialog(props: ScreenProps & { row?: AppV2Record; onClose: (
   const [status, setStatus] = useState(props.row ? choiceName(props.tables, props.kit.documentsTableId, props.kit.document.status, props.row.values[props.kit.document.status]) : 'Черновик')
   const [note, setNote] = useState(textOf(props.row?.values[props.kit.document.note]))
   const [lines, setLines] = useState(initialLines)
+  const [clientFormOpen, setClientFormOpen] = useState(false)
   const totals = computeInvoiceTotals(lines)
+  const addFromCatalog = (id: string) => {
+    const item = products.find(row => row.id === id)
+    if (!item) return
+    const vatLabel = choiceName(props.tables, props.kit.productsTableId, props.kit.product.vatIncluded, item.values[props.kit.product.vatIncluded])
+    const vatRate = Number(choiceName(props.tables, props.kit.productsTableId, props.kit.product.vatRate, item.values[props.kit.product.vatRate]) || 20)
+    setLines([...lines, {
+      name: textOf(item.values[props.kit.product.name]),
+      qty: 1,
+      unit: textOf(item.values[props.kit.product.unit]) || 'шт',
+      price: numOf(item.values[props.kit.product.price]),
+      discount: 0,
+      vatRate,
+      vatIncluded: vatLabel !== 'без НДС',
+    }])
+  }
   const save = () => {
     const statusId = props.tables.find(table => table.id === props.kit.documentsTableId)?.fields.find(field => field.id === props.kit.document.status)?.choices?.find(choice => choice.name === status)?.id ?? props.kit.statuses.draft
     const kindId = props.tables.find(table => table.id === props.kit.documentsTableId)?.fields.find(field => field.id === props.kit.document.kind)?.choices?.find(choice => choice.name === kind)?.id ?? props.kit.kinds.estimate
@@ -416,48 +623,53 @@ function DocumentFormDialog(props: ScreenProps & { row?: AppV2Record; onClose: (
     }
     props.onClose()
   }
-  return <AppDialog title={props.row ? 'Редактировать документ' : 'Новый документ'} placement="center" onClose={props.onClose} footer={<button type="button" data-primary onClick={save}>Сохранить</button>}>
-    <div className={css.formGrid}>
-      <div className={css.inputRow}><span>Номер</span><input value={number} onChange={event => setNumber(event.target.value)} /></div>
-      <ChoiceRow label="Вид" value={kind} options={['Смета', 'Счёт', 'Акт'].map(name => ({ id: name, name }))} onChange={setKind} />
-      <ChoiceRow label="Клиент" value={client} options={clients.map(item => ({ id: item.id, name: textOf(item.values[props.kit.client.name]) }))} onChange={setClient} />
-      <SearchDate label="Дата" value={date} onValue={setDate} />
-      {kind === 'Счёт' ? <SearchDate label="Оплатить до" value={due} onValue={setDue} /> : null}
-      <ChoiceRow label="Статус" value={status} options={Object.values(DOC_STATUS_LABEL).map(name => ({ id: name, name }))} onChange={setStatus} />
-      <div className={css.inputRow}><span>Комментарий</span><textarea rows={2} value={note} onChange={event => setNote(event.target.value)} /></div>
-      <DetailSection title="Позиции">
-        <button type="button" onClick={() => setLines([...lines, emptyInvoiceLine()])}>Строка вручную</button>
-        <ChoiceRow label="Из каталога" value="" options={[{ id: '', name: '—' }, ...products.map(item => ({ id: item.id, name: textOf(item.values[props.kit.product.name]) }))]} onChange={id => {
-          if (!id) return
-          const item = products.find(row => row.id === id)
-          if (!item) return
-          const vatLabel = choiceName(props.tables, props.kit.productsTableId, props.kit.product.vatIncluded, item.values[props.kit.product.vatIncluded])
-          const vatRate = Number(choiceName(props.tables, props.kit.productsTableId, props.kit.product.vatRate, item.values[props.kit.product.vatRate]) || 20)
-          setLines([...lines, {
-            name: textOf(item.values[props.kit.product.name]),
-            qty: 1,
-            unit: textOf(item.values[props.kit.product.unit]) || 'шт',
-            price: numOf(item.values[props.kit.product.price]),
-            discount: 0,
-            vatRate,
-            vatIncluded: vatLabel !== 'без НДС',
-          }])
-        }} />
-        <LineTable lines={lines} onChange={setLines} />
-        <div className={css.totals}><strong>Итого: {formatInvoiceMoney(totals.total)}</strong></div>
-      </DetailSection>
-    </div>
-  </AppDialog>
+  return <>
+    <AppDialog title={props.row ? 'Редактировать документ' : 'Новый документ'} placement="center" onClose={props.onClose} footer={<button type="button" className={buttons.primary} onClick={save}>Сохранить</button>}>
+      <div className={css.formGrid}>
+        <div className={css.inputRow}><span>Номер</span><input value={number} onChange={event => setNumber(event.target.value)} /></div>
+        <ChoiceRow label="Вид" value={kind} options={['Смета', 'Счёт', 'Акт'].map(name => ({ id: name, name }))} onChange={setKind} />
+        <SearchPick
+          label="Клиент"
+          value={client}
+          options={clients.map(item => ({ id: item.id, name: textOf(item.values[props.kit.client.name]) }))}
+          onChange={setClient}
+          placeholder="Выберите клиента"
+          searchLabel="Найти клиента"
+          footer={<button type="button" className={buttons.secondary} onClick={() => setClientFormOpen(true)}><ProtoIcon name="plus" size={14} />Новый клиент</button>}
+        />
+        <SearchDate label="Дата" value={date} onValue={setDate} />
+        {kind === 'Счёт' ? <SearchDate label="Оплатить до" value={due} onValue={setDue} /> : null}
+        <ChoiceRow label="Статус" value={status} options={Object.values(DOC_STATUS_LABEL).map(name => ({ id: name, name }))} onChange={setStatus} />
+        <div className={css.inputRow}><span>Комментарий</span><textarea rows={2} value={note} onChange={event => setNote(event.target.value)} /></div>
+        <DetailSection title="Позиции">
+          <div className={css.lineTools}>
+            <button type="button" className={buttons.secondary} onClick={() => setLines([...lines, emptyInvoiceLine()])}>Строка вручную</button>
+          </div>
+          <SearchPick
+            label="Из каталога"
+            value=""
+            options={products.map(item => ({ id: item.id, name: textOf(item.values[props.kit.product.name]) }))}
+            onChange={addFromCatalog}
+            placeholder="Добавить позицию"
+            searchLabel="Найти в каталоге"
+          />
+          <LineTable lines={lines} onChange={setLines} />
+          <div className={css.totals}><div className={css.totalsRow} data-total><span>Итого</span><strong>{formatInvoiceMoney(totals.total)}</strong></div></div>
+        </DetailSection>
+      </div>
+    </AppDialog>
+    {clientFormOpen ? <ClientFormDialog {...props} onClose={() => setClientFormOpen(false)} onCreated={id => { setClient(id); setClientFormOpen(false) }} /> : null}
+  </>
 }
 
 function PaymentDialog(props: ScreenProps & { row: AppV2Record; onClose: () => void }) {
   const payments = parsePayments(props.row.values[props.kit.document.payments])
   const total = numOf(props.row.values[props.kit.document.total])
-  const [amount, setAmount] = useState(String(remainingBalance(total, payments)))
+  const [amount, setAmount] = useState(remainingBalance(total, payments))
   const [date, setDate] = useState(todayYmd())
   const [comment, setComment] = useState('')
   const save = () => {
-    const entry: PaymentEntry = { date, amount: Number(amount) || 0, comment }
+    const entry: PaymentEntry = { date, amount: amount || 0, comment }
     const nextPayments = [...payments, entry]
     const paid = paymentsTotal(nextPayments)
     const resolved = resolveDocStatus({
@@ -474,14 +686,14 @@ function PaymentDialog(props: ScreenProps & { row: AppV2Record; onClose: () => v
     })
     props.onClose()
   }
-  return <AppDialog title="Оплата" placement="center" onClose={props.onClose} footer={<button type="button" data-primary onClick={save}>Записать</button>}>
+  return <AppDialog title="Оплата" placement="center" onClose={props.onClose} footer={<button type="button" className={buttons.primary} onClick={save}>Записать</button>}>
     <div className={css.formGrid}>
       <p className={css.cardMeta}>Остаток: {formatInvoiceMoney(remainingBalance(total, payments))}</p>
       {payments.length ? <ul className={css.list}>{payments.map((payment, index) => <li key={`${payment.date}-${index}`} className={css.card}>
         <span className={css.cardTitle}>{formatInvoiceMoney(payment.amount)}</span>
         <span className={css.cardMeta}>{formatInvoiceDate(payment.date)}{payment.comment ? ` · ${payment.comment}` : ''}</span>
       </li>)}</ul> : null}
-      <div className={css.inputRow}><span>Сумма</span><input aria-label="Сумма оплаты" inputMode="decimal" value={amount} onChange={event => setAmount(event.target.value)} /></div>
+      <MoneyField label="Сумма" ariaLabel="Сумма оплаты" value={amount} onChange={setAmount} />
       <SearchDate label="Дата оплаты" value={date} onValue={setDate} />
       <div className={css.inputRow}><span>Комментарий</span><input aria-label="Комментарий к оплате" value={comment} onChange={event => setComment(event.target.value)} /></div>
     </div>
@@ -493,27 +705,43 @@ function PdfPreviewDialog(props: ScreenProps & { row: AppV2Record; onClose: () =
   const kind = docKind(props.row, props.kit, props.tables)
   const lines = parseInvoiceLines(props.row.values[props.kit.document.lines])
   const total = numOf(props.row.values[props.kit.document.total])
+  const vat = numOf(props.row.values[props.kit.document.vatTotal])
+  const discount = numOf(props.row.values[props.kit.document.discountTotal])
   const clientName = relatedName(props.allRows, props.tables, props.row.values[props.kit.document.client])
-  return <AppDialog title={`PDF · ${DOC_KIND_LABEL[kind]}`} placement="center" onClose={props.onClose} footer={<button type="button" data-primary onClick={() => void downloadPdf(props, props.row)}>Скачать</button>}>
+  const logo = mediaFiles(settings?.values[props.kit.settings.logo])[0]?.url
+  const signature = mediaFiles(settings?.values[props.kit.settings.signature])[0]?.url
+  const stamp = mediaFiles(settings?.values[props.kit.settings.stamp])[0]?.url
+  const showDiscount = lines.some(line => line.discount > 0) || discount > 0
+  const partySeller = kind === 'act' ? 'Исполнитель' : 'Продавец'
+  const partyBuyer = kind === 'act' ? 'Заказчик' : 'Покупатель'
+  return <AppDialog title={`PDF · ${DOC_KIND_LABEL[kind]}`} placement="center" onClose={props.onClose} footer={<button type="button" className={buttons.primary} onClick={() => void downloadPdf(props, props.row)}>Скачать</button>}>
     <div className={css.pdfPreview} data-pdf-preview>
       <header>
+        {logo ? <img className={css.pdfLogo} src={logo} alt="" /> : null}
         <strong>{textOf(settings?.values[props.kit.settings.companyName]) || 'Компания'}</strong>
         <span>ИНН {textOf(settings?.values[props.kit.settings.inn])}{textOf(settings?.values[props.kit.settings.kpp]) ? ` · КПП ${textOf(settings?.values[props.kit.settings.kpp])}` : ''}</span>
         <span>{textOf(settings?.values[props.kit.settings.address])}</span>
+        {textOf(settings?.values[props.kit.settings.bank]) ? <span>Банк: {textOf(settings?.values[props.kit.settings.bank])}</span> : null}
+        {textOf(settings?.values[props.kit.settings.bik]) ? <span>БИК: {textOf(settings?.values[props.kit.settings.bik])}</span> : null}
+        {textOf(settings?.values[props.kit.settings.account]) ? <span>Р/с: {textOf(settings?.values[props.kit.settings.account])}</span> : null}
+        {textOf(settings?.values[props.kit.settings.corrAccount]) ? <span>К/с: {textOf(settings?.values[props.kit.settings.corrAccount])}</span> : null}
       </header>
       <h2>{DOC_KIND_LABEL[kind]} № {textOf(props.row.values[props.kit.document.number])} от {formatInvoiceDate(toYmd(props.row.values[props.kit.document.date]) || textOf(props.row.values[props.kit.document.date]))}</h2>
-      <p>Покупатель: {clientName || '—'}</p>
-      <table className={css.table}><thead><tr><th>Наименование</th><th>Кол-во</th><th>Цена</th><th>Сумма</th></tr></thead><tbody>
-        {lines.map((line, index) => <tr key={`${line.name}-${index}`}><td>{line.name}</td><td>{line.qty} {line.unit}</td><td>{formatInvoiceMoney(line.price)}</td><td>{formatInvoiceMoney(lineTotal(line))}</td></tr>)}
+      <p>{partySeller}: {textOf(settings?.values[props.kit.settings.companyName]) || '—'}</p>
+      <p>{partyBuyer}: {clientName || '—'}</p>
+      {kind === 'act' ? <p className={css.cardMeta}>Услуги выполнены полностью и в срок, претензий по объёму, качеству и срокам выполнения работ заказчик не имеет.</p> : null}
+      <table className={css.table}><thead><tr><th>Наименование</th><th data-num>Кол-во</th><th data-num>Цена</th>{showDiscount ? <th data-num>Скидка</th> : null}<th data-num>Сумма</th></tr></thead><tbody>
+        {lines.map((line, index) => <tr key={`${line.name}-${index}`}><td>{line.name}</td><td data-num>{line.qty} {line.unit}</td><td data-num>{formatInvoiceMoney(line.price)}</td>{showDiscount ? <td data-num>{line.discount ? `${line.discount}%` : '—'}</td> : null}<td data-num>{formatInvoiceMoney(lineTotal(line))}</td></tr>)}
       </tbody></table>
       <div className={css.totals}>
-        <span>НДС: {formatInvoiceMoney(numOf(props.row.values[props.kit.document.vatTotal]))}</span>
-        <strong>Итого: {formatInvoiceMoney(total)}</strong>
+        <div className={css.totalsRow}><span>Скидка</span><span>{formatInvoiceMoney(discount)}</span></div>
+        <div className={css.totalsRow}><span>В т.ч. НДС</span><span>{formatInvoiceMoney(vat)}</span></div>
+        <div className={css.totalsRow} data-total><span>Итого</span><strong>{formatInvoiceMoney(total)}</strong></div>
         <span>{amountInWordsRu(total)}</span>
       </div>
       <footer className={css.pdfMarks}>
-        <span>Подпись</span>
-        <span>Печать</span>
+        <span>{signature ? <img src={signature} alt="Подпись" /> : 'Подпись'}</span>
+        <span>{stamp ? <img src={stamp} alt="Печать" /> : 'Печать'}</span>
       </footer>
     </div>
   </AppDialog>
@@ -523,7 +751,7 @@ function ClientsList(props: ScreenProps) {
   const [search, setSearch] = useState('')
   const [open, setOpen] = useState(false)
   const rows = props.of(props.kit.clientsTableId).filter(row => !search || textOf(row.values[props.kit.client.name]).toLowerCase().includes(search.toLowerCase()))
-  return <ListScreenShell title="Клиенты" search={<ShellSearchField value={search} onChange={setSearch} placeholder="Поиск клиента" />} actions={<button type="button" onClick={() => setOpen(true)}>Новый клиент</button>}>
+  return <ListScreenShell title="Клиенты" search={<ShellSearchField value={search} onChange={setSearch} placeholder="Поиск клиента" />} actions={<button type="button" className={buttons.primary} onClick={() => setOpen(true)}><ProtoIcon name="plus" size={16} />Новый клиент</button>}>
     <ul className={css.list}>{rows.map(row => <li key={row.id}><article className={css.card}>
       <strong className={css.cardTitle}>{textOf(row.values[props.kit.client.name])}</strong>
       <span className={css.cardMeta}>{textOf(row.values[props.kit.client.phone])} · {textOf(row.values[props.kit.client.email])}</span>
@@ -533,7 +761,7 @@ function ClientsList(props: ScreenProps) {
   </ListScreenShell>
 }
 
-function ClientFormDialog(props: ScreenProps & { row?: AppV2Record; onClose: () => void }) {
+function ClientFormDialog(props: ScreenProps & { row?: AppV2Record; onClose: () => void; onCreated?: (id: string) => void }) {
   const [name, setName] = useState(textOf(props.row?.values[props.kit.client.name]))
   const [phone, setPhone] = useState(textOf(props.row?.values[props.kit.client.phone]))
   const [email, setEmail] = useState(textOf(props.row?.values[props.kit.client.email]))
@@ -545,11 +773,17 @@ function ClientFormDialog(props: ScreenProps & { row?: AppV2Record; onClose: () 
       [props.kit.client.name]: name, [props.kit.client.phone]: phone, [props.kit.client.email]: email,
       [props.kit.client.inn]: inn, [props.kit.client.address]: address, [props.kit.client.note]: note,
     }
-    if (props.row) patchRow(props, props.row, payload)
-    else props.replace?.([...props.allRows, { id: `cli_${Math.random().toString(36).slice(2, 9)}`, tableId: props.kit.clientsTableId, values: payload }])
-    props.onClose()
+    if (props.row) {
+      patchRow(props, props.row, payload)
+      props.onClose()
+    } else {
+      const id = `cli_${Math.random().toString(36).slice(2, 9)}`
+      props.replace?.([...props.allRows, { id, tableId: props.kit.clientsTableId, values: payload }])
+      props.onCreated?.(id)
+      props.onClose()
+    }
   }
-  return <AppDialog title="Клиент" placement="center" onClose={props.onClose} footer={<button type="button" data-primary onClick={save}>Сохранить</button>}>
+  return <AppDialog title="Клиент" placement="center" onClose={props.onClose} footer={<button type="button" className={buttons.primary} onClick={save}>Сохранить</button>}>
     <div className={css.formGrid}>
       {[{ label: 'Клиент', value: name, set: setName }, { label: 'Телефон', value: phone, set: setPhone }, { label: 'Почта', value: email, set: setEmail }, { label: 'ИНН', value: inn, set: setInn }].map(field => <div key={field.label} className={css.inputRow}><span>{field.label}</span><input value={field.value} onChange={event => field.set(event.target.value)} /></div>)}
       <div className={css.inputRow}><span>Адрес</span><textarea rows={2} value={address} onChange={event => setAddress(event.target.value)} /></div>
@@ -562,7 +796,7 @@ function ProductsList(props: ScreenProps) {
   const [search, setSearch] = useState('')
   const [open, setOpen] = useState(false)
   const rows = props.of(props.kit.productsTableId).filter(row => !search || textOf(row.values[props.kit.product.name]).toLowerCase().includes(search.toLowerCase()))
-  return <ListScreenShell title="Каталог" search={<ShellSearchField value={search} onChange={setSearch} placeholder="Поиск позиции" />} actions={<button type="button" onClick={() => setOpen(true)}>Новая позиция</button>}>
+  return <ListScreenShell title="Каталог" search={<ShellSearchField value={search} onChange={setSearch} placeholder="Поиск позиции" />} actions={<button type="button" className={buttons.primary} onClick={() => setOpen(true)}><ProtoIcon name="plus" size={16} />Новая позиция</button>}>
     <ul className={css.list}>{rows.map(row => <li key={row.id}><article className={css.card}>
       <strong className={css.cardTitle}>{textOf(row.values[props.kit.product.name])}</strong>
       <span className={css.cardMeta}>{textOf(row.values[props.kit.product.unit])} · НДС {choiceName(props.tables, props.kit.productsTableId, props.kit.product.vatRate, row.values[props.kit.product.vatRate])}%</span>
@@ -575,7 +809,7 @@ function ProductsList(props: ScreenProps) {
 function ProductFormDialog(props: ScreenProps & { row?: AppV2Record; onClose: () => void }) {
   const [name, setName] = useState(textOf(props.row?.values[props.kit.product.name]))
   const [unit, setUnit] = useState(textOf(props.row?.values[props.kit.product.unit]) || 'шт')
-  const [price, setPrice] = useState(String(numOf(props.row?.values[props.kit.product.price])))
+  const [price, setPrice] = useState(numOf(props.row?.values[props.kit.product.price]))
   const [vatRate, setVatRate] = useState(choiceName(props.tables, props.kit.productsTableId, props.kit.product.vatRate, props.row?.values[props.kit.product.vatRate]) || '20')
   const [vatMode, setVatMode] = useState(choiceName(props.tables, props.kit.productsTableId, props.kit.product.vatIncluded, props.row?.values[props.kit.product.vatIncluded]) || 'с НДС')
   const [description, setDescription] = useState(textOf(props.row?.values[props.kit.product.description]))
@@ -584,18 +818,18 @@ function ProductFormDialog(props: ScreenProps & { row?: AppV2Record; onClose: ()
     const vatRateId = field(props.kit.product.vatRate)?.choices?.find(choice => choice.name === vatRate)?.id
     const vatIncludedId = field(props.kit.product.vatIncluded)?.choices?.find(choice => choice.name === vatMode)?.id
     const payload: Record<string, AppV2Json> = {
-      [props.kit.product.name]: name, [props.kit.product.unit]: unit, [props.kit.product.price]: Number(price) || 0,
+      [props.kit.product.name]: name, [props.kit.product.unit]: unit, [props.kit.product.price]: price || 0,
       [props.kit.product.vatRate]: vatRateId ?? '', [props.kit.product.vatIncluded]: vatIncludedId ?? '', [props.kit.product.description]: description,
     }
     if (props.row) patchRow(props, props.row, payload)
     else props.replace?.([...props.allRows, { id: `prd_${Math.random().toString(36).slice(2, 9)}`, tableId: props.kit.productsTableId, values: payload }])
     props.onClose()
   }
-  return <AppDialog title="Позиция каталога" placement="center" onClose={props.onClose} footer={<button type="button" data-primary onClick={save}>Сохранить</button>}>
+  return <AppDialog title="Позиция каталога" placement="center" onClose={props.onClose} footer={<button type="button" className={buttons.primary} onClick={save}>Сохранить</button>}>
     <div className={css.formGrid}>
       <div className={css.inputRow}><span>Название</span><input value={name} onChange={event => setName(event.target.value)} /></div>
       <div className={css.inputRow}><span>Единица</span><input value={unit} onChange={event => setUnit(event.target.value)} /></div>
-      <div className={css.inputRow}><span>Цена</span><input inputMode="decimal" value={price} onChange={event => setPrice(event.target.value)} /></div>
+      <MoneyField label="Цена" value={price} onChange={setPrice} />
       <ChoiceRow label="НДС" value={vatRate} options={['0', '10', '20'].map(item => ({ id: item, name: `${item}%` }))} onChange={setVatRate} />
       <ChoiceRow label="Учёт НДС" value={vatMode} options={[{ id: 'с НДС', name: 'с НДС' }, { id: 'без НДС', name: 'без НДС' }]} onChange={setVatMode} />
       <div className={css.inputRow}><span>Описание</span><textarea rows={2} value={description} onChange={event => setDescription(event.target.value)} /></div>
@@ -614,10 +848,18 @@ function SettingsCard(props: ScreenProps) {
     ['Телефон', props.kit.settings.phone], ['Почта', props.kit.settings.email],
     ['Нумерация смет', props.kit.settings.numberingEstimate], ['Нумерация счетов', props.kit.settings.numberingInvoice], ['Нумерация актов', props.kit.settings.numberingAct],
   ]
+  const logo = mediaFiles(draft[props.kit.settings.logo])[0]?.url
+  const signature = mediaFiles(draft[props.kit.settings.signature])[0]?.url
+  const stamp = mediaFiles(draft[props.kit.settings.stamp])[0]?.url
   return <DetailCardShell title="Настройки" subtitle="Реквизиты и нумерация документов">
     <div className={css.formGrid}>
       {entries.map(([label, fieldId]) => <div key={fieldId} className={css.inputRow}><span>{label}</span><input value={textOf(draft[fieldId])} onChange={event => set(fieldId, event.target.value)} /></div>)}
-      <button type="button" data-primary onClick={() => patchRow(props, row, { ...draft })}>Сохранить</button>
+      <div className={css.mediaPreview}>
+        {logo ? <img src={logo} alt="Логотип" /> : null}
+        {signature ? <img src={signature} alt="Подпись" /> : null}
+        {stamp ? <img src={stamp} alt="Печать" /> : null}
+      </div>
+      <button type="button" className={buttons.primary} onClick={() => patchRow(props, row, { ...draft })}>Сохранить</button>
     </div>
   </DetailCardShell>
 }

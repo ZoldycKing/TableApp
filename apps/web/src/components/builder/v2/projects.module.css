@@ -421,24 +421,24 @@
 .ganttBarWrap { position: absolute; top: 0; bottom: 0; z-index: 2; }
 .ganttBar {
   position: absolute; left: 0; right: 0; top: 12px; height: 24px; display: block; padding: 0;
-  border-radius: 8px; background: var(--sc-st-progress-bg); color: var(--sc-st-progress-text);
+  border-radius: 8px; background: var(--sc-st-progress); color: #fff;
   cursor: grab; touch-action: none; overflow: hidden; z-index: 2; box-sizing: border-box;
-  border: 1px solid color-mix(in srgb, currentColor 28%, transparent);
+  border: 1px solid color-mix(in srgb, #000 12%, transparent);
 }
-.ganttBar[data-tone='done'] { background: var(--sc-st-done-bg); color: var(--sc-st-done); }
-.ganttBar[data-tone='progress'] { background: var(--sc-st-review-bg); color: var(--sc-st-review-text); }
-.ganttBar[data-tone='review'] { background: var(--sc-st-review-bg); color: var(--sc-st-review); }
-.ganttBar[data-tone='todo'] { background: var(--sc-st-progress-bg); color: var(--sc-st-progress-text); }
-.ganttBar[data-tone='overdue'] { background: var(--sc-st-overdue-bg); color: var(--sc-st-overdue-text); }
+.ganttBar[data-tone='done'] { background: var(--sc-st-done); color: #fff; }
+.ganttBar[data-tone='progress'] { background: var(--sc-st-review); color: #fff; }
+.ganttBar[data-tone='review'] { background: var(--sc-st-review); color: #fff; }
+.ganttBar[data-tone='todo'] { background: var(--sc-st-progress); color: #fff; }
+.ganttBar[data-tone='overdue'] { background: var(--sc-st-overdue); color: #fff; }
 .ganttBar[data-active] { box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 45%, transparent); }
 .ganttBarFill {
   position: absolute; left: 0; top: 0; bottom: 0; border-radius: inherit;
-  background: color-mix(in srgb, currentColor 28%, transparent); pointer-events: none;
+  background: transparent; pointer-events: none;
 }
 .ganttBarCaption {
   position: absolute; top: 50%; transform: translateY(-50%);
   display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 220px;
-  padding: 0; border: 0; background: transparent; color: #4b5563; font: inherit;
+  padding: 0; border: 0; background: transparent; color: var(--v2-ink, #374151); font: inherit;
   font-size: 12px; font-weight: 700; line-height: 1.35; text-align: left; cursor: pointer;
   z-index: 3; overflow: hidden; box-sizing: border-box;
 }
@@ -446,7 +446,13 @@
 .ganttBarCaption[data-side='left'] { right: calc(100% + 8px); }
 .ganttBarCaptionText {
   min-width: 0; flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  color: #4b5563; font-size: 12px; font-weight: 700; line-height: 1.35;
+  color: var(--v2-ink, #374151); font-size: 12px; font-weight: 700; line-height: 1.35;
+}
+:global([data-theme='dark']) .ganttBarCaption,
+:global([data-theme='dark']) .ganttBarCaptionText,
+:global([data-scheme='dark']) .ganttBarCaption,
+:global([data-scheme='dark']) .ganttBarCaptionText {
+  color: var(--sc-text, #F4F4F5);
 }
 .ganttBarAvatar { flex: none; display: inline-grid; place-items: center; width: 22px; height: 22px; }
 .ganttBarAvatar :global([class*='avatar']) { width: 22px; height: 22px; }

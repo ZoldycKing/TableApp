@@ -31,7 +31,15 @@ export function invoicesTemplateDemoModel(example = templateExample('scheta')) {
       ...(field.options.choices ? { choices: field.options.choices as { id: string; name: string; color?: string }[] } : {}),
     })),
   }))
-  const rows = example.rows.map(row => ({ id: row.id, tableId: row.tableId, values: row.data as AppV2Record['values'] }))
+  const rows = example.rows.map(row => {
+    const values = { ...(row.data as AppV2Record['values']) }
+    if (row.tableId === kit.settingsTableId) {
+      values[kit.settings.logo] = [{ url: '/template-media/invoices/logo.png', name: 'logo.png', mime: 'image/png' }]
+      values[kit.settings.signature] = [{ url: '/template-media/invoices/signature.png', name: 'signature.png', mime: 'image/png' }]
+      values[kit.settings.stamp] = [{ url: '/template-media/invoices/stamp.png', name: 'stamp.png', mime: 'image/png' }]
+    }
+    return { id: row.id, tableId: row.tableId, values }
+  })
   return { app, tables, rows, kit }
 }
 

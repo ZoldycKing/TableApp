@@ -8,7 +8,7 @@ const page: CSSProperties = {
   margin: 0,
   minHeight: '100vh',
   background: '#e8ebe4',
-  color: '#253c2d',
+  color: 'var(--sc-accent)',
   fontFamily: "'ActSans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
   fontSynthesis: 'none',
 }
@@ -86,7 +86,7 @@ export default async function ActPreviewPage({ searchParams }: { searchParams: P
             <span>Заказчик</span>
             {!refused ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src="/template-media/dispatch/act-signature.png" alt="Подпись клиента" width={140} height={40} style={{ display: 'block', width: 140, height: 40, objectFit: 'contain', background: '#fff', borderBottom: '1px solid #253c2d' }} />
+              <img src="/template-media/dispatch/act-signature.png" alt="Подпись клиента" width={140} height={40} style={{ display: 'block', width: 140, height: 40, objectFit: 'contain', background: '#fff', borderBottom: '1px solid var(--sc-accent)' }} />
             ) : <span>________________</span>}
             <span>/ Иванова Мария Петровна</span>
           </p>

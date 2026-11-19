@@ -70,7 +70,7 @@ export function BookingForm({ runtime, row, demo, demoData, pending, initialValu
     return () => { stopped = true }
   }, [serviceId, day, masterId, runtime.app.slug, row?.id, demo, demoData, timeZone, retry, availabilityRevision])
   const service = services.find(row => row.id === serviceId)
-  const inputClass = 'w-full rounded-xl border border-sand-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-400'
+  const inputClass = 'w-full rounded-xl border border-sand-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-sage-500'
   return <form className="mx-auto max-w-xl space-y-5 rounded-2xl border border-sand-200 bg-white p-5 shadow-soft" onSubmit={event => {
     event.preventDefault()
     if (!chosen || loading || pending) return

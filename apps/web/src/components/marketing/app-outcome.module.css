@@ -9,7 +9,7 @@
 .tableHead, .row { display: grid; grid-template-columns: minmax(0,1fr) 66px 60px; align-items: center; padding-inline: 16px; gap: 8px; }
 .tableHead { font-size: 10px; height: 32px; color: var(--color-ink-soft); background: var(--color-sand-50); }
 .row { font-size: 12px; height: 42px; }
-.row:nth-child(even) { background: #fafbf8; }
+.row:nth-child(even) { background: var(--sc-bg-page); }
 .row > span:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .row > :not(:first-child), .tableHead > :not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
 .row strong { color: var(--color-sage-700); font-weight: 500; }

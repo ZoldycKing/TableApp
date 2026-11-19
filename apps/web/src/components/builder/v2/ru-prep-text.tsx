@@ -7,7 +7,7 @@ const PREP = 'АаВвИиКкОоСсУу'
 /**
  * Normalize NBSP/NNBSP after one-letter prepositions to a regular space and
  * wrap the prep+word so inherited negative letter-spacing cannot shrink that
- * gap below a normal Manrope space (reads as «Оклиенте» / «Осделке» otherwise).
+ * gap below a normal Onest space (reads as «Оклиенте» / «Осделке» otherwise).
  */
 export function ruPrepText(text: string): ReactNode {
   if (!text) return text

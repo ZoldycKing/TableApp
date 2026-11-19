@@ -62,7 +62,7 @@
   border-radius: 14px;
   background: #f6f7f9;
   --color-sand-50: #f6f7f9;
-  --color-sand-100: #eef1f5;
+  --color-sand-100: var(--sc-bg-surface);
   --color-sand-200: #e0e5e9;
   --color-ink: #172333;
   --color-ink-soft: #414e5f;

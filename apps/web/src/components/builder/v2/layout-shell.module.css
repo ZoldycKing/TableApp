@@ -5,9 +5,9 @@
   --shell-pad-y: 16px;
   --shell-gap: 0;
   --shell-row: 52px;
-  --shell-line: var(--v2-line, #dce2d6);
+  --shell-line: var(--v2-line, var(--sc-border));
   --shell-muted: var(--v2-muted, #687568);
-  --shell-ink: var(--v2-ink, #253c2d);
+  --shell-ink: var(--v2-ink, var(--sc-accent));
   --shell-surface: var(--v2-surface, #fff);
   --shell-bg: var(--v2-bg, #f8faf6);
   display: grid;
@@ -157,8 +157,8 @@
   margin-top: 2px;
   padding: 2px 8px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--v2-accent, #456849) 12%, var(--shell-surface));
-  color: var(--v2-accent, #456849);
+  background: color-mix(in srgb, var(--v2-accent, #3F6B5C) 12%, var(--shell-surface));
+  color: var(--v2-accent, #3F6B5C);
   font-size: 11px;
   font-weight: 700;
   line-height: 1.35;
@@ -382,7 +382,7 @@
   height: 18px;
   padding: 0 5px;
   border-radius: 999px;
-  background: var(--v2-accent, #456849);
+  background: var(--v2-accent, #3F6B5C);
   color: #fff;
   font-size: 11px;
   font-weight: 750;
@@ -481,9 +481,9 @@
   background: color-mix(in srgb, #122018 46%, transparent);
 }
 .filterPanel {
-  --filter-line: var(--v2-line, #dce2d6);
+  --filter-line: var(--v2-line, var(--sc-border));
   --filter-muted: var(--v2-muted, #687568);
-  --filter-ink: var(--v2-ink, #253c2d);
+  --filter-ink: var(--v2-ink, var(--sc-accent));
   --filter-surface: var(--v2-surface, #fff);
   --filter-bg: var(--v2-bg, #f8faf6);
   position: fixed;
@@ -547,7 +547,7 @@
 }
 .filterFieldset > legend {
   margin: 0 0 8px;
-  color: var(--filter-ink, var(--shell-ink, #253c2d));
+  color: var(--filter-ink, var(--shell-ink, var(--sc-accent)));
   font-size: 13px;
   font-weight: 750;
 }
@@ -555,7 +555,7 @@
 .filterRange { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .filterRange > label { display: grid; gap: 5px; color: var(--filter-muted, var(--shell-muted)); font-size: 12px; }
 .filterRange input { width: 100%; min-width: 0; min-height: 40px; box-sizing: border-box; border: 1px solid var(--filter-line, var(--shell-line)); border-radius: 8px; padding: 8px; background: var(--filter-surface, var(--shell-surface)); color: var(--filter-ink, var(--shell-ink)); font: inherit; font-size: 14px; }
-.filterRange input:focus-visible { outline: 2px solid var(--v2-accent, #456849); outline-offset: 2px; }
+.filterRange input:focus-visible { outline: 2px solid var(--v2-accent, #3F6B5C); outline-offset: 2px; }
 .filterError { margin: 8px 0 0; font-size: 12px; color: var(--v2-danger, #b42318); }
 .catalogSidebar .filterFieldset > legend { margin-bottom: 5px; }
 .catalogSidebar .filterOption { padding-inline: 5px; font-size: 13px; font-weight: 500; min-height: 36px; }
@@ -569,7 +569,7 @@
   padding: 0 10px;
   border: 1px solid transparent;
   border-radius: 10px;
-  color: var(--filter-ink, var(--shell-ink, #253c2d));
+  color: var(--filter-ink, var(--shell-ink, var(--sc-accent)));
   cursor: pointer;
   font-size: 14px;
   font-weight: 600;
@@ -589,20 +589,20 @@
   flex: none;
   width: 18px;
   height: 18px;
-  border: 2px solid color-mix(in srgb, var(--filter-muted, var(--shell-muted, #687568)) 55%, var(--filter-line, #dce2d6));
+  border: 2px solid color-mix(in srgb, var(--filter-muted, var(--shell-muted, #687568)) 55%, var(--filter-line, var(--sc-border)));
   border-radius: 999px;
   background: var(--filter-surface, var(--shell-surface, #fff));
   box-sizing: border-box;
 }
 .filterMark[data-appearance='checkbox'] { border-radius: 5px; }
 .filterMark[data-checked] {
-  border-color: var(--v2-accent, #456849);
-  background: var(--v2-accent, #456849);
+  border-color: var(--v2-accent, #3F6B5C);
+  background: var(--v2-accent, #3F6B5C);
   box-shadow: inset 0 0 0 3px var(--filter-surface, #fff);
 }
 .filterMark[data-appearance='checkbox'][data-checked] {
   box-shadow: none;
-  background: var(--v2-accent, #456849);
+  background: var(--v2-accent, #3F6B5C);
 }
 .filterMark[data-appearance='checkbox'][data-checked]::after {
   content: '';
@@ -618,11 +618,11 @@
   font-weight: 700;
 }
 .filterOption[data-active] {
-  border-color: var(--filter-line, var(--shell-line, #dce2d6));
+  border-color: var(--filter-line, var(--shell-line, var(--sc-border)));
   background: color-mix(in srgb, var(--filter-bg, var(--shell-bg, #f8faf6)) 70%, var(--filter-surface, #fff));
 }
 .filterOption:has(> input:focus-visible) {
-  outline: 2px solid color-mix(in srgb, var(--v2-accent, #456849) 45%, transparent);
+  outline: 2px solid color-mix(in srgb, var(--v2-accent, #3F6B5C) 45%, transparent);
   outline-offset: 1px;
 }
 .filterNav { display: grid; gap: 2px; }
@@ -637,7 +637,7 @@
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: var(--shell-ink, #253c2d);
+  color: var(--shell-ink, var(--sc-accent));
   font: inherit;
   font-size: 14px;
   font-weight: 600;
@@ -650,8 +650,8 @@
   font-weight: 700;
 }
 .filterNavItem[data-active] {
-  background: color-mix(in srgb, var(--v2-accent, #456849) 12%, var(--shell-surface, #fff));
-  color: var(--v2-accent, #456849);
+  background: color-mix(in srgb, var(--v2-accent, #3F6B5C) 12%, var(--shell-surface, #fff));
+  color: var(--v2-accent, #3F6B5C);
 }
 .filterNavItem[data-active] > strong { color: inherit; }
 .filterPanelFoot {
@@ -796,9 +796,9 @@
 .detailPage {
   --shell-max: min(100%, var(--app-content-width, 1480px));
   --shell-pad-x: clamp(16px, 3cqw, 28px);
-  --shell-line: var(--v2-line, #dce2d6);
+  --shell-line: var(--v2-line, var(--sc-border));
   --shell-muted: var(--v2-muted, #687568);
-  --shell-ink: var(--v2-ink, #253c2d);
+  --shell-ink: var(--v2-ink, var(--sc-accent));
   --shell-surface: var(--v2-surface, #fff);
   --shell-bg: var(--v2-bg, #f8faf6);
   display: grid;
@@ -816,7 +816,7 @@
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--v2-accent, #456849);
+  color: var(--v2-accent, #3F6B5C);
   font: inherit;
   font-size: 13px;
   font-weight: 700;

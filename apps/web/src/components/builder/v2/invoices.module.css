@@ -32,12 +32,16 @@
   min-width: 0;
 }
 .chips {
+  --chips-fade: 40px;
   position: relative;
   display: flex; flex: 1 1 160px; gap: 6px;
   min-width: 0; max-width: 100%;
   overflow-x: auto; flex-wrap: nowrap;
   scrollbar-width: none;
+  padding-inline-end: 12px;
+  -webkit-overflow-scrolling: touch;
 }
+.chips::-webkit-scrollbar { display: none; }
 .chip {
   flex: none; min-height: 36px; padding: 6px 10px; border-radius: 999px; border: 1px solid var(--v2-line, #d9dfd8);
   background: var(--v2-surface, #fff); font: inherit; font-size: 13px;
@@ -212,8 +216,20 @@
   .summaryCard strong { font-size: 0.98rem; }
   .chips {
     flex-wrap: nowrap; overflow-x: auto;
-    -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 40px), transparent);
-    mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 40px), transparent);
+    mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - var(--chips-fade)), transparent 100%);
+    -webkit-mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - var(--chips-fade)), transparent 100%);
+  }
+  .toolbar {
+    position: relative;
+  }
+  .toolbar::after {
+    content: '';
+    position: absolute;
+    top: 0; right: 0; bottom: 0;
+    width: var(--chips-fade, 40px);
+    pointer-events: none;
+    background: linear-gradient(to right, transparent, var(--v2-bg, #fff) 70%);
+    z-index: 2;
   }
 }
 /* Phone device frame (even when desktop viewport hosts the preview) */
@@ -223,6 +239,20 @@
 :global([data-phone='true']) .summaryCard:last-child { grid-column: 1 / -1; }
 :global([data-phone='true']) .chips {
   flex-wrap: nowrap; overflow-x: auto;
-  -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 40px), transparent);
-  mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 40px), transparent);
+  mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - var(--chips-fade)), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - var(--chips-fade)), transparent 100%);
+}
+:global([data-phone='true']) .toolbar { position: relative; }
+:global([data-phone='true']) .toolbar::after {
+  content: '';
+  position: absolute;
+  top: 0; right: 0; bottom: 0;
+  width: var(--chips-fade, 40px);
+  pointer-events: none;
+  background: linear-gradient(to right, transparent, var(--v2-bg, #fff) 70%);
+  z-index: 2;
+}
+:global([data-scheme='dark'] [data-phone='true']) .toolbar::after,
+:global([data-theme='dark'] [data-phone='true']) .toolbar::after {
+  background: linear-gradient(to right, transparent, var(--v2-bg, #0c0c0d) 70%);
 }

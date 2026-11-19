@@ -38,7 +38,7 @@ describe('task-based starters and compatibility', () => {
       const { app } = templateExample(id)
       expect(canEnter(app, ANONYMOUS), id).toBe(false)
       expect(canEnter(app, asRole('client', 'client@example.invalid')), id).toBe(false)
-      if (id === 'proekty' || id === 'scheta') {
+      if (id === 'proekty') {
         expect(visibleScreensFor(app, asRole('manager')).length, id).toBeGreaterThan(0)
         continue
       }

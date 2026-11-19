@@ -342,12 +342,12 @@
 }
 .ganttLegendCompact { gap: 6px 10px; font-size: 11px; }
 .ganttLegend li { display: inline-flex; align-items: center; gap: 6px; }
-.ganttSwatch { width: 14px; height: 14px; border-radius: 4px; flex: none; box-sizing: border-box; border: 1px solid transparent; }
-.ganttSwatch[data-tone='done'] { background: var(--sc-st-done-bg); border-color: var(--sc-st-done); }
-.ganttSwatch[data-tone='progress'] { background: var(--sc-st-review-bg); border-color: var(--sc-st-review-text); }
-.ganttSwatch[data-tone='review'] { background: var(--sc-st-review-bg); border-color: var(--sc-st-review); }
-.ganttSwatch[data-tone='todo'] { background: var(--sc-st-progress-bg); border-color: var(--sc-st-progress-text); }
-.ganttSwatch[data-tone='overdue'] { background: var(--sc-st-overdue-bg); border-color: var(--sc-st-overdue-text); }
+.ganttSwatch { width: 14px; height: 14px; border-radius: 4px; flex: none; box-sizing: border-box; border: 0; }
+.ganttSwatch[data-tone='done'] { background: var(--sc-st-done); }
+.ganttSwatch[data-tone='progress'] { background: var(--sc-st-review); }
+.ganttSwatch[data-tone='review'] { background: var(--sc-st-review); }
+.ganttSwatch[data-tone='todo'] { background: var(--sc-st-progress); }
+.ganttSwatch[data-tone='overdue'] { background: var(--sc-st-overdue); }
 .ganttSwatch[data-tone='today'] { width: 4px; height: 16px; border-radius: 2px; background: var(--sc-st-overdue-text); border: 0; }
 .ganttFrame {
   display: grid; grid-template-columns: var(--gantt-label, 220px) minmax(0, 1fr);

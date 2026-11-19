@@ -154,40 +154,41 @@ export async function buildInvoicePdf(input: InvoicePdfInput, fontBytes: Uint8Ar
   ])
 
   const showDiscount = input.lines.some(row => (row.discount ?? 0) > 0) || input.discount > 0
+  // Column right edges (from left margin): qty | unit | price | [discount] | sum
+  const colSum = margin + width
+  const colDiscount = showDiscount ? colSum - 62 : colSum
+  const colPrice = colDiscount - (showDiscount ? 58 : 62)
+  const colUnit = colPrice - 58
+  const colQty = colUnit - 42
+  const nameWidth = colQty - margin - 28
   y -= 6
   rule(y)
   y -= 14
   text('№', margin, y, 9, muted)
   text('Наименование', margin + 22, y, 9, muted)
-  if (showDiscount) {
-    right('Кол-во', margin + width - 210, y, 9, muted)
-    right('Цена', margin + width - 145, y, 9, muted)
-    right('Скидка', margin + width - 80, y, 9, muted)
-    right('Сумма', margin + width, y, 9, muted)
-  } else {
-    right('Кол-во', margin + width - 160, y, 9, muted)
-    right('Цена', margin + width - 80, y, 9, muted)
-    right('Сумма', margin + width, y, 9, muted)
-  }
+  right('Кол-во', colQty, y, 9, muted)
+  right('Ед.', colUnit, y, 9, muted)
+  right('Цена', colPrice, y, 9, muted)
+  if (showDiscount) right('Скидка', colDiscount, y, 9, muted)
+  right('Сумма', colSum, y, 9, muted)
   y -= 12
   rule(y)
   y -= 12
 
   input.lines.forEach((row, index) => {
     text(String(index + 1), margin, y, 9)
-    const name = wrap(font, row.name, 9, showDiscount ? width - 250 : width - 200)[0] ?? row.name
-    text(name, margin + 22, y, 9)
-    if (showDiscount) {
-      right(`${money(row.qty)} ${row.unit}`, margin + width - 210, y, 9)
-      right(money(row.price), margin + width - 145, y, 9)
-      right(row.discount ? `${money(row.discount)}%` : '—', margin + width - 80, y, 9)
-      right(money(row.total), margin + width, y, 9)
-    } else {
-      right(`${money(row.qty)} ${row.unit}`, margin + width - 160, y, 9)
-      right(money(row.price), margin + width - 80, y, 9)
-      right(money(row.total), margin + width, y, 9)
-    }
+    const nameLines = wrap(font, row.name, 9, nameWidth)
+    text(nameLines[0] ?? row.name, margin + 22, y, 9)
+    right(String(row.qty), colQty, y, 9)
+    right(row.unit || '—', colUnit, y, 9)
+    right(money(row.price), colPrice, y, 9)
+    if (showDiscount) right(row.discount ? `${money(row.discount)}%` : '—', colDiscount, y, 9)
+    right(money(row.total), colSum, y, 9)
     y -= 14
+    for (const extra of nameLines.slice(1, 3)) {
+      text(extra, margin + 22, y, 9)
+      y -= 12
+    }
     if (y < 200) return
   })
 

@@ -50,6 +50,7 @@ export function InvoicesDemo({ view = 'home', bare = false, phone = false, schem
   const [recordId, setRecordId] = useState<string | undefined>()
   const [selected, setSelected] = useState(view)
   const [mobile, setMobile] = useState(phone)
+  useEffect(() => { setMobile(phone) }, [phone])
   useEffect(() => { setModel(invoicesTemplateDemoModel()) }, [])
   useEffect(() => {
     if (!model) return

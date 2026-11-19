@@ -1,5 +1,7 @@
 'use client'
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import scroll from './scroll-overflow.module.css'
+import { useScrollOverflow } from './scroll-overflow'
 import type { AppV2, AppV2Json, AppV2Record } from '@tableapp/schema/app-v2'
 import type { BuilderV2Table } from '@/lib/builder-v2'
 import {
@@ -228,6 +230,8 @@ function HomeList(props: ScreenProps) {
   const [filters, setFilters] = useState<ListFilters>({ clientId: '', period: '' })
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
+  const chipsRef = useRef<HTMLDivElement>(null)
+  useScrollOverflow(chipsRef, [status])
   const docs = props.of(props.kit.documentsTableId)
   const clients = props.of(props.kit.clientsTableId)
   const resolvedOf = (row: AppV2Record) => resolveDocStatus({
@@ -268,7 +272,7 @@ function HomeList(props: ScreenProps) {
         <SummaryCard label="Долг" value={formatInvoiceMoney(summary.debt)} tone="debt" />
       </div>
       <div className={css.toolbar}>
-        <div className={css.chips} data-wrap="true" role="toolbar" aria-label="Статус">
+        <div ref={chipsRef} className={`${css.chips} ${scroll.row}`} role="toolbar" aria-label="Статус">
           <button type="button" className={css.chip} aria-pressed={!status} onClick={() => setStatus('')}>Все</button>
           {STATUSES.map(item => <button key={item} type="button" className={css.chip} aria-pressed={status === item} onClick={() => setStatus(status === item ? '' : item)}>{DOC_STATUS_LABEL[item]}</button>)}
         </div>
@@ -730,18 +734,45 @@ function PdfPreviewDialog(props: ScreenProps & { row: AppV2Record; onClose: () =
       <p>{partySeller}: {textOf(settings?.values[props.kit.settings.companyName]) || '—'}</p>
       <p>{partyBuyer}: {clientName || '—'}</p>
       {kind === 'act' ? <p className={css.cardMeta}>Услуги выполнены полностью и в срок, претензий по объёму, качеству и срокам выполнения работ заказчик не имеет.</p> : null}
-      <table className={css.table}><thead><tr><th>Наименование</th><th data-num>Кол-во</th><th data-num>Цена</th>{showDiscount ? <th data-num>Скидка</th> : null}<th data-num>Сумма</th></tr></thead><tbody>
-        {lines.map((line, index) => <tr key={`${line.name}-${index}`}><td>{line.name}</td><td data-num>{line.qty} {line.unit}</td><td data-num>{formatInvoiceMoney(line.price)}</td>{showDiscount ? <td data-num>{line.discount ? `${line.discount}%` : '—'}</td> : null}<td data-num>{formatInvoiceMoney(lineTotal(line))}</td></tr>)}
-      </tbody></table>
+      <div className={css.tableWrap}>
+        <table className={css.table} data-pdf-lines>
+          <thead>
+            <tr>
+              <th>Наименование</th>
+              <th data-num>Кол-во</th>
+              <th>Ед.</th>
+              <th data-num>Цена</th>
+              {showDiscount ? <th data-num>Скидка</th> : null}
+              <th data-num>Сумма</th>
+            </tr>
+          </thead>
+          <tbody>
+            {lines.map((line, index) => <tr key={`${line.name}-${index}`}>
+              <td data-name>{line.name}</td>
+              <td data-num>{line.qty}</td>
+              <td data-unit>{line.unit}</td>
+              <td data-num>{formatInvoiceMoney(line.price)}</td>
+              {showDiscount ? <td data-num>{line.discount ? `${line.discount}%` : '—'}</td> : null}
+              <td data-num>{formatInvoiceMoney(lineTotal(line))}</td>
+            </tr>)}
+          </tbody>
+        </table>
+      </div>
       <div className={css.totals}>
         <div className={css.totalsRow}><span>Скидка</span><span>{formatInvoiceMoney(discount)}</span></div>
         <div className={css.totalsRow}><span>В т.ч. НДС</span><span>{formatInvoiceMoney(vat)}</span></div>
         <div className={css.totalsRow} data-total><span>Итого</span><strong>{formatInvoiceMoney(total)}</strong></div>
         <span>{amountInWordsRu(total)}</span>
       </div>
-      <footer className={css.pdfMarks}>
-        <span>{signature ? <img src={signature} alt="Подпись" /> : 'Подпись'}</span>
-        <span>{stamp ? <img src={stamp} alt="Печать" /> : 'Печать'}</span>
+      <footer className={css.pdfMarks} data-pdf-marks>
+        <figure>
+          <figcaption>{kind === 'act' ? 'Исполнитель' : 'Подпись'}</figcaption>
+          {signature ? <img src={signature} alt="Подпись" /> : <span>—</span>}
+        </figure>
+        <figure>
+          <figcaption>{kind === 'act' ? 'Заказчик' : 'Печать'}</figcaption>
+          {stamp ? <img src={stamp} alt="Печать" /> : <span>—</span>}
+        </figure>
       </footer>
     </div>
   </AppDialog>

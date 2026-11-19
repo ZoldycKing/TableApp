@@ -14,7 +14,7 @@ function fixture(id: string) {
 describe('module contracts and legacy compatibility', () => {
   it.each(TEMPLATES.map(template => template.id))('describes %s without a second copy of settings or a change of permissions', id => {
     const { app, catalog } = fixture(id)
-    if (id === 'proekty' || id === 'scheta') {
+    if (id === 'proekty') {
       expect(app.modules ?? []).toHaveLength(0)
       expect(checkAppReferences(app, catalog)).toBeNull()
       return

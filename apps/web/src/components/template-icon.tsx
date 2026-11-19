@@ -1,6 +1,6 @@
 const ICONS: Record<string, string> = {
   zakazy: 'shop', katalog: 'shop', salon: 'salon', service: 'service', zayavki: 'field',
-  nedvizhimost: 'estate', dostavka: 'delivery', crm: 'crm', proekty: 'projects', scheta: 'invoices', sklad: 'warehouse', proizvodstvo: 'production', portal: 'crm',
+  nedvizhimost: 'estate', dostavka: 'delivery', crm: 'crm', proekty: 'projects', sklad: 'warehouse', proizvodstvo: 'production', portal: 'crm',
 }
 
 /** Authored in the approved prototype; these are decorative alongside template names. */

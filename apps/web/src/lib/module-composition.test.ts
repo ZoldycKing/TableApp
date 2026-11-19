@@ -16,7 +16,7 @@ function fixture(id: string) {
 describe('scoped module roles and pilot composition', () => {
   it.each(TEMPLATES.map(template => template.id))('preserves existing permissions while scoping %s', id => {
     const { app, catalog } = fixture(id)
-    if (id === 'proekty' || id === 'scheta') {
+    if (id === 'proekty') {
       expect(app.modules ?? []).toHaveLength(0)
       expect(checkAppReferences(app, catalog)).toBeNull()
       return

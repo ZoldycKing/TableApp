@@ -30,8 +30,25 @@
 .due { flex: none; display: inline-flex; align-items: center; min-height: 20px; color: var(--v2-muted, #526075); font-size: 13px; line-height: 20px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .due[data-overdue] { color: var(--sc-st-overdue-text); font-weight: 750; }
 .subtasks { flex: none; margin-left: auto; color: var(--v2-muted, #526075); font-size: 12px; font-weight: 650; white-space: nowrap; }
-.cardFoot { flex-wrap: wrap; justify-content: flex-start; gap: 8px; }
-.statusChip { flex: none; margin-left: auto; min-height: 28px; padding: 2px 8px; border: 1px solid var(--v2-line, var(--sc-border)); border-radius: 999px; background: var(--v2-surface, #fff); color: inherit; font: inherit; font-size: 12px; font-weight: 650; white-space: nowrap; }
+.cardFoot { flex-wrap: wrap; justify-content: flex-start; gap: 8px; align-items: center; }
+.cardActions { display: inline-flex; flex: none; margin-left: auto; align-items: center; gap: 6px; min-width: 0; }
+.statusChip { flex: none; min-height: 28px; padding: 2px 10px; border: 1px solid var(--v2-line, var(--sc-border)); border-radius: 999px; background: var(--v2-soft, var(--sc-accent-soft)); color: var(--v2-ink, var(--sc-accent)); font: inherit; font-size: 12px; font-weight: 650; white-space: nowrap; }
+.cardMenu { position: relative; flex: none; }
+.cardMenuButton {
+  display: inline-grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 1px solid var(--v2-line, var(--sc-border));
+  border-radius: 8px; background: var(--v2-surface, #fff); color: var(--v2-ink, var(--sc-accent)); font: inherit; font-size: 16px; line-height: 1; font-weight: 700;
+}
+.cardMenuPanel {
+  position: absolute; right: 0; top: calc(100% + 4px); z-index: 8; display: grid; gap: 2px; min-width: 168px; padding: 6px;
+  border: 1px solid var(--v2-line, var(--sc-border)); border-radius: 12px; background: var(--v2-surface, #fff); box-shadow: 0 10px 28px color-mix(in srgb, #102018 12%, transparent);
+}
+.cardMenuTitle { margin: 0; padding: 4px 8px 6px; color: var(--v2-muted, #526075); font-size: 11px; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; }
+.cardMenuPanel button {
+  display: block; width: 100%; min-height: 34px; padding: 6px 10px; border: 0; border-radius: 8px; background: transparent;
+  color: inherit; font: inherit; font-size: 13px; font-weight: 650; text-align: left;
+}
+.cardMenuPanel button:hover, .cardMenuPanel button:focus-visible { background: var(--v2-soft, var(--sc-accent-soft)); }
+.cardMenuPanel button[aria-current], .cardMenuPanel button:disabled { color: var(--v2-muted, #526075); }
 .groups { display: grid; gap: 16px; }
 .group { display: grid; gap: 8px; min-width: 0; }
 .group h2 { display: flex; align-items: baseline; gap: 8px; margin: 0; font-size: 15px; line-height: 1.3; }

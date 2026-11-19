@@ -1,5 +1,5 @@
 'use client'
-import { createContext, useContext, useId, useState, type DragEvent } from 'react'
+import { createContext, useContext, useEffect, useId, useRef, useState, type DragEvent } from 'react'
 import type { AppV2, AppV2Json, AppV2Node, AppV2Record } from '@tableapp/schema/app-v2'
 import type { BuilderV2Table } from '@/lib/builder-v2'
 import {
@@ -68,11 +68,35 @@ function CheckControl({ checked, label, onToggle }: { checked: boolean; label: s
   return <button type="button" role="checkbox" aria-checked={checked} className={css.check} onClick={onToggle}><span data-on={checked || undefined}>{checked ? <ProtoIcon name="check" size={12} /> : null}</span><span>{label}</span></button>
 }
 
-function statusChipLabel(status: string) {
-  if (status === 'К работе') return '→ В работу'
-  if (status === 'В работе') return '→ Проверку'
-  if (status === 'На проверке') return '→ Готово'
-  return '⋯'
+/** Phone-only advance verb on the board card. Done has no button. */
+export function boardAdvanceLabel(status: string): string | null {
+  if (status === 'К работе') return 'Взять в работу'
+  if (status === 'В работе') return 'На проверку'
+  if (status === 'На проверке') return 'Принять'
+  return null
+}
+
+export function boardNextStatus(status: string): string | null {
+  if (status === 'К работе') return 'В работе'
+  if (status === 'В работе') return 'На проверке'
+  if (status === 'На проверке') return 'Готово'
+  return null
+}
+
+/** Phone breakpoint for board card actions: viewports below 768px. */
+const BOARD_NARROW_QUERY = '(max-width: 767px)'
+
+function useBoardNarrow() {
+  const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia(BOARD_NARROW_QUERY).matches)
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return
+    const media = window.matchMedia(BOARD_NARROW_QUERY)
+    const update = () => setNarrow(media.matches)
+    update()
+    media.addEventListener('change', update)
+    return () => media.removeEventListener('change', update)
+  }, [])
+  return narrow
 }
 
 function openTasksLabel(count: number) {
@@ -274,7 +298,39 @@ function visibleTasks(props: ScreenProps) {
     .sort((a, b) => a.facts.sort - b.facts.sort || a.row.id.localeCompare(b.row.id))
 }
 
-function TaskCardView(props: ScreenProps & { row: AppV2Record; onOpen: () => void; onStatus?: () => void; variant?: 'board' | 'mine' | 'project' }) {
+function BoardStatusMenu(props: {
+  status: string
+  statuses: readonly { id: string; name: string }[]
+  onPick: (statusId: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const root = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const outside = (event: PointerEvent) => { if (event.target instanceof Node && !root.current?.contains(event.target)) setOpen(false) }
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') setOpen(false) }
+    document.addEventListener('pointerdown', outside)
+    document.addEventListener('keydown', escape)
+    return () => { document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape) }
+  }, [open])
+  const currentId = props.statuses.find(item => item.name === props.status)?.id ?? ''
+  return <div className={css.cardMenu} ref={root} data-board-menu>
+    <button type="button" className={css.cardMenuButton} aria-label="Ещё" aria-expanded={open} aria-haspopup="menu" onClick={() => setOpen(value => !value)}>⋯</button>
+    {open ? <div className={css.cardMenuPanel} role="menu" aria-label="Сменить статус">
+      <p className={css.cardMenuTitle}>Сменить статус</p>
+      {props.statuses.map(item => <button key={item.id || item.name} type="button" role="menuitem" aria-current={item.id === currentId || undefined} disabled={!item.id || item.name === props.status} onClick={() => { props.onPick(item.id); setOpen(false) }}>{item.name}</button>)}
+    </div> : null}
+  </div>
+}
+
+function TaskCardView(props: ScreenProps & {
+  row: AppV2Record
+  onOpen: () => void
+  onAdvance?: () => void
+  onPickStatus?: (statusId: string) => void
+  statuses?: readonly { id: string; name: string }[]
+  variant?: 'board' | 'mine' | 'project'
+}) {
   const facts = taskFacts(props, props.row)
   const overdue = isOverdue(facts, props.now)
   const person = personById(props, facts.assigneeId)
@@ -283,6 +339,8 @@ function TaskCardView(props: ScreenProps & { row: AppV2Record; onOpen: () => voi
   const variant = props.variant ?? 'board'
   const subtasks = progress.total ? `${progress.done} из ${progress.total}` : ''
   const parent = facts.parentId ? taskTitle(props, facts.parentId) : ''
+  const narrow = useBoardNarrow()
+  const advance = boardAdvanceLabel(facts.status)
   if (variant !== 'board') {
     return <article className={css.rowCard} data-overdue={overdue || undefined}>
       <button type="button" className={css.rowOpen} onClick={props.onOpen}>
@@ -297,7 +355,7 @@ function TaskCardView(props: ScreenProps & { row: AppV2Record; onOpen: () => voi
       </button>
     </article>
   }
-  return <article className={css.card} data-overdue={overdue || undefined} draggable onDragStart={event => { event.dataTransfer.setData('text/plain', props.row.id); event.dataTransfer.effectAllowed = 'move' }}>
+  return <article className={css.card} data-overdue={overdue || undefined} data-board-card draggable onDragStart={event => { event.dataTransfer.setData('text/plain', props.row.id); event.dataTransfer.effectAllowed = 'move' }}>
     <button type="button" className={css.cardOpen} onClick={props.onOpen}>
       <span className={css.cardTitle}>{textOf(props.row.values[props.kit.task.title])}</span>
       <span className={css.projectName}>{projectTitle(props, facts.projectId) || 'Без проекта'}</span>
@@ -309,7 +367,10 @@ function TaskCardView(props: ScreenProps & { row: AppV2Record; onOpen: () => voi
     <div className={css.cardFoot}>
       <Badge name={facts.priority} />
       {subtasks ? <span className={css.subtasks}>{subtasks}</span> : null}
-      {props.onStatus ? <button type="button" className={css.statusChip} onClick={props.onStatus}>{statusChipLabel(facts.status)}</button> : null}
+      <span className={css.cardActions}>
+        {narrow && advance && props.onAdvance ? <button type="button" className={css.statusChip} data-board-advance onClick={props.onAdvance}>{advance}</button> : null}
+        {props.statuses && props.onPickStatus ? <BoardStatusMenu status={facts.status} statuses={props.statuses} onPick={props.onPickStatus} /> : null}
+      </span>
     </div>
   </article>
 }
@@ -349,11 +410,16 @@ function Board(props: ScreenProps) {
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS)
   const [openFilters, setOpenFilters] = useState(demo?.open === 'filters')
   const [create, setCreate] = useState(demo?.open === 'create')
-  const [statusFor, setStatusFor] = useState<string | null>(null)
   const [over, setOver] = useState('')
   const [phoneStatus, setPhoneStatus] = useState<string>(TASK_STATUSES[0])
   const tasks = visibleTasks(props).filter(item => !item.facts.parentId).filter(item => passFilters(props, item, filters))
   const statuses = TASK_STATUSES.map(name => ({ name, id: choiceId(props.tables, props.kit.tasksTableId, props.kit.task.status, name) }))
+  const moveTo = (rowId: string, statusId: string) => { void saveMove(props, rowId, statusId, [rowId]) }
+  const advance = (row: AppV2Record, status: string) => {
+    const next = boardNextStatus(status)
+    const statusId = next ? choiceId(props.tables, props.kit.tasksTableId, props.kit.task.status, next) : ''
+    if (statusId) moveTo(row.id, statusId)
+  }
   const drop = (statusId: string, beforeId: string | null, event: DragEvent) => {
     event.preventDefault()
     const movedId = event.dataTransfer.getData('text/plain')
@@ -378,7 +444,14 @@ function Board(props: ScreenProps) {
         return <section key={status.id || status.name} className={css.column} data-active={phoneStatus === status.name || undefined} data-over={over === status.id || undefined} aria-label={status.name} onDragOver={event => { event.preventDefault(); setOver(status.id) }} onDragLeave={() => setOver(current => current === status.id ? '' : current)} onDrop={event => drop(status.id, null, event)}>
           <h2>{status.name} <span>{items.length}</span></h2>
           {items.map(item => <div key={item.row.id} onDragOver={event => { event.preventDefault(); event.stopPropagation() }} onDrop={event => { event.stopPropagation(); drop(status.id, item.row.id, event) }}>
-            <TaskCardView {...props} row={item.row} onOpen={() => props.onNavigate?.(props.kit.taskScreenId, item.row.id)} onStatus={() => setStatusFor(item.row.id)} />
+            <TaskCardView
+              {...props}
+              row={item.row}
+              statuses={statuses}
+              onOpen={() => props.onNavigate?.(props.kit.taskScreenId, item.row.id)}
+              onAdvance={() => advance(item.row, item.facts.status)}
+              onPickStatus={statusId => moveTo(item.row.id, statusId)}
+            />
           </div>)}
           {items.length ? null : <p className={css.empty}>В этой колонке задач нет.</p>}
         </section>
@@ -386,7 +459,6 @@ function Board(props: ScreenProps) {
     </div></div>
     {openFilters ? <FiltersDialog {...props} value={filters} onChange={setFilters} onClose={() => setOpenFilters(false)} showStage showRole /> : null}
     {create ? <TaskEditor {...props} mode="create" onClose={() => setCreate(false)} /> : null}
-    {statusFor ? <StatusDialog {...props} rowId={statusFor} onClose={() => setStatusFor(null)} /> : null}
   </div>
 }
 
@@ -695,15 +767,6 @@ function FiltersDialog(props: ScreenProps & { value: Filters; onChange: (value: 
       <ChoiceRow label="Срок" value={draft.due} options={[{ id: '', name: 'Любой' }, { id: 'today', name: 'Сегодня' }, { id: 'overdue', name: 'Просрочено' }, { id: 'week', name: 'На неделе' }, { id: 'later', name: 'Позже' }]} onChange={due => setDraft({ ...draft, due: due as DueFilter })} />
       <Segmented label="Приоритет" value={draft.priority} options={[{ id: '', name: 'Любой' }, ...PRIORITIES.map(name => ({ id: name, name }))]} onChange={priority => setDraft({ ...draft, priority })} />
     </div>
-  </AppDialog>
-}
-
-function StatusDialog(props: ScreenProps & { rowId: string; onClose: () => void }) {
-  const row = props.rows.find(item => item.id === props.rowId)
-  if (!row) return null
-  const statuses = TASK_STATUSES.map(name => ({ name, id: choiceId(props.tables, props.kit.tasksTableId, props.kit.task.status, name) }))
-  return <AppDialog title="Статус задачи" placement="center" onClose={props.onClose}>
-    <ChoiceRow label="Куда перенести" value={String(row.values[props.kit.task.status] ?? '')} options={statuses.map(item => ({ id: item.id, name: item.name }))} onChange={statusId => { void saveMove(props, row.id, statusId, [row.id]); props.onClose() }} />
   </AppDialog>
 }
 

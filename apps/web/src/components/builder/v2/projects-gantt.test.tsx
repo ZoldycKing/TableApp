@@ -190,13 +190,12 @@ it('aligns status dots and indents nested task text with a tree connector', () =
   expect(document.querySelector('[data-bar-id="c1"]')).toBeTruthy()
 })
 
-it('colors bars by tone including overdue and paints progress fill', () => {
+it('colors bars by tone including overdue with a solid fill (no progress portion)', () => {
   render(<ProjectsGantt tasks={tasks} links={[]} now={now} onOpenTask={vi.fn()} />)
   expect(document.querySelector('[data-bar-id="t3"] [data-tone]')?.getAttribute('data-tone')).toBe('done')
   expect(document.querySelector('[data-bar-id="t1"] [data-tone]')?.getAttribute('data-tone')).toBe('overdue')
   expect(document.querySelector('[data-bar-id="t2"] [data-tone]')?.getAttribute('data-tone')).toBe('review')
-  const fill = document.querySelector('[data-bar-id="t1"] [data-gantt-fill]') as HTMLElement
-  expect(fill?.style.width).toBe('50%')
+  expect(document.querySelector('[data-bar-id="t1"] [data-gantt-fill]')).toBeNull()
 })
 
 it('shows empty state when tasks have no dates', () => {

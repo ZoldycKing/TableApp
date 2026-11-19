@@ -3,7 +3,7 @@ import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type P
 import type { AppV2Json } from '@tableapp/schema/app-v2'
 import {
   columnWidth, dayIndex, eachDay, formatDayRange, formatDayRangeSpaced, formatSpentPair, ganttArrowPath,
-  ganttBarProgress, ganttBarTone, ganttBars, ganttCaptionPlacement, ganttCaptionWidth, ganttHeaderLabel,
+  ganttBarTone, ganttBars, ganttCaptionPlacement, ganttCaptionWidth, ganttHeaderLabel,
   ganttHeaderLabelVisible, ganttRange, isWeekendDay, moveBarDates, projectMiniBar, resizeBarDates,
   type DependencyLink, type GanttBarTone, type GanttZoom,
 } from '@/lib/projects-stage2'
@@ -481,7 +481,6 @@ export function ProjectsGantt(props: Props) {
               const tone = toneOf(task, props.now)
               const barWidth = bar ? Math.max(bar.daySpan * width, width) : 0
               const barLeft = bar ? bar.dayOffset * width : 0
-              const progress = ganttBarProgress(task.spent, task.estimate, task.status)
               const lit = highlightId === task.id
               const captionW = ganttCaptionWidth(task.title, Boolean(task.assigneeName))
               const placement = bar && timelineViewWidth > 0 ? ganttCaptionPlacement({
@@ -529,7 +528,6 @@ export function ProjectsGantt(props: Props) {
                       onMouseEnter={() => enterRow(task.id)}
                       onMouseLeave={() => leaveRow(task.id)}
                     >
-                      {progress > 0 ? <span className={css.ganttBarFill} data-gantt-fill style={{ width: `${progress}%` }} aria-hidden /> : null}
                       {!props.readOnly ? <>
                         <button type="button" className={css.ganttHandle} data-edge="start" aria-label="Изменить начало"
                           onPointerDown={event => { event.stopPropagation(); event.currentTarget.setPointerCapture?.(event.pointerId); setDrag({ id: bar.id, mode: 'start', originX: event.clientX, start: bar.start, end: bar.end, moved: false }) }} />

@@ -80,6 +80,8 @@
 .field[data-plain] { gap: 0; font-weight: 450; }
 .srOnly { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .choiceRow { display: flex; gap: 6px; min-width: 0; overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; padding-bottom: 2px; }
+.choiceWrap { flex-wrap: wrap; overflow: visible; }
+.choiceWrap button { white-space: normal; max-width: 100%; overflow-wrap: anywhere; text-align: left; }
 .form .choiceRow { flex-wrap: wrap; overflow: visible; }
 .form .choiceRow button { white-space: normal; max-width: 100%; }
 .segment {
@@ -395,9 +397,9 @@
   pointer-events: none; box-sizing: border-box;
 }
 .ganttLabel strong {
-  display: block; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1 1 auto;
+  display: block; min-width: 0; flex: 1 1 auto;
   font-size: 12px; font-weight: 700; line-height: 1.35; color: var(--v2-ink, #1f2937);
-  white-space: nowrap;
+  overflow-wrap: anywhere; white-space: normal;
 }
 .ganttBarWrap { position: absolute; top: 0; bottom: 0; z-index: 2; }
 .ganttBar {

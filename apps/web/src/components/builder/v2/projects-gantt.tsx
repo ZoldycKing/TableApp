@@ -204,7 +204,7 @@ export function ProjectsGantt(props: Props) {
   const bars = useMemo(() => ganttBars(rows, range.start), [rows, range.start])
   const width = columnWidth(zoom)
   const todayOffset = days.includes(today) ? dayIndex(range.start, today) : -1
-  const labelWidth = 228
+  const labelWidth = narrow ? 168 : 304
   const rowHeight = 48
   const chartWidth = Math.max(days.length * width + 24, 1)
   const popoverTask = popoverId ? rows.find(task => task.id === popoverId) ?? null : null

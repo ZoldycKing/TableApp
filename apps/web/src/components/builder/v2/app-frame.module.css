@@ -45,6 +45,7 @@
   --sc-focus: #7FAE97; --sc-danger: #E5605F; --sc-danger-soft: #2C1616;
   --sc-warning: #E8B04C; --sc-warning-soft: #2B2212;
   --sc-success: #3CC17A; --sc-success-soft: #12261B;
+  --sc-logo-dot: #D9784F;
   --sc-st-new: #9AA5B0; --sc-st-new-bg: #1F2327; --sc-st-new-text: #B4BEC8;
   --sc-st-progress: #7FA8D4; --sc-st-progress-bg: #16212E; --sc-st-progress-text: #9CBFE6;
   --sc-st-review: #E0AE5C; --sc-st-review-bg: #2A2213; --sc-st-review-text: #EBC27C;
@@ -70,6 +71,7 @@
     --sc-focus: #7FAE97; --sc-danger: #E5605F; --sc-danger-soft: #2C1616;
     --sc-warning: #E8B04C; --sc-warning-soft: #2B2212;
     --sc-success: #3CC17A; --sc-success-soft: #12261B;
+    --sc-logo-dot: #D9784F;
     --sc-st-new: #9AA5B0; --sc-st-new-bg: #1F2327; --sc-st-new-text: #B4BEC8;
     --sc-st-progress: #7FA8D4; --sc-st-progress-bg: #16212E; --sc-st-progress-text: #9CBFE6;
     --sc-st-review: #E0AE5C; --sc-st-review-bg: #2A2213; --sc-st-review-text: #EBC27C;

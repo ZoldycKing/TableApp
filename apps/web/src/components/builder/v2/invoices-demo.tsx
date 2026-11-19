@@ -46,8 +46,13 @@ export function InvoicesDemo({ view = 'home', bare = false, phone = false, schem
   useEffect(() => {
     if (!model) return
     const { kit } = model
-    const doc = model.rows.find(row => row.tableId === kit.documentsTableId)
-    const goal = view === 'document' ? { screenId: kit.documentScreenId, recordId: doc?.id, selected: 'document' }
+    const invoice = model.rows.find(row => row.tableId === kit.documentsTableId && String(row.values[kit.document.number] ?? '').startsWith('СЧ-'))
+      ?? model.rows.find(row => row.tableId === kit.documentsTableId)
+    const act = model.rows.find(row => row.tableId === kit.documentsTableId && String(row.values[kit.document.number] ?? '').startsWith('АКТ-'))
+    const goal = view === 'document' || view === 'payment' || view === 'edit' || view === 'pdf' || view === 'pdf-invoice'
+      ? { screenId: kit.documentScreenId, recordId: invoice?.id, selected: 'document' }
+      : view === 'pdf-act'
+        ? { screenId: kit.documentScreenId, recordId: act?.id ?? invoice?.id, selected: 'document' }
       : view === 'clients' ? { screenId: kit.clientsScreenId, recordId: undefined, selected: 'clients' }
       : view === 'products' ? { screenId: kit.productsScreenId, recordId: undefined, selected: 'products' }
       : view === 'settings' ? { screenId: kit.settingsScreenId, recordId: undefined, selected: 'settings' }
@@ -60,6 +65,7 @@ export function InvoicesDemo({ view = 'home', bare = false, phone = false, schem
   const visible = { ...themed, screens: themed.screens.filter(screen => canOpenAppV2Screen(themed, actor, screen.id)) }
   const navigate = (id: string, rowId?: string) => { setScreenId(id); setRecordId(rowId) }
   const record = rows.find(row => row.id === recordId)
+  const open = view === 'payment' ? 'payment' as const : view === 'edit' ? 'edit' as const : view === 'pdf' || view === 'pdf-invoice' || view === 'pdf-act' ? 'pdf' as const : null
   const target = (id: string) => {
     const { kit } = model
     if (id === 'document') return { screenId: kit.documentScreenId, recordId: rows.find(row => row.tableId === kit.documentsTableId)?.id }
@@ -68,7 +74,7 @@ export function InvoicesDemo({ view = 'home', bare = false, phone = false, schem
     if (id === 'settings') return { screenId: kit.settingsScreenId, recordId: undefined }
     return { screenId: kit.homeScreenId, recordId: undefined }
   }
-  const frame = <BuilderV2Theme app={themed}><InvoicesRowsContext value={{ rows, setRows }}>
+  const frame = <BuilderV2Theme app={themed}><InvoicesRowsContext value={{ rows, setRows, open }}>
     <div data-invoices-root data-invoices-screen={selected} data-preview-screen={screenId}>
       <BuilderV2AppFrame app={visible} screenId={screenId} title="" phone={mobile} deviceMode={mobile ? 'phone' : 'desktop'} fullScreen={bare} onNavigate={navigate}>
         <AppV2Renderer live app={visible} tables={model.tables} actor={actor} screenId={screenId} record={record} onNavigate={navigate} />

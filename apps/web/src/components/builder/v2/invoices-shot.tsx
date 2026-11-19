@@ -1,6 +1,6 @@
 'use client'
 import { InvoicesDemo } from './invoices-demo'
 
-export function InvoicesShot({ view, scheme }: { view: string; scheme?: 'light' | 'dark' }) {
-  return <InvoicesDemo view={view} bare scheme={scheme} />
+export function InvoicesShot({ view, scheme, phone }: { view: string; scheme?: 'light' | 'dark'; phone?: boolean }) {
+  return <InvoicesDemo view={view} bare scheme={scheme} phone={phone} />
 }

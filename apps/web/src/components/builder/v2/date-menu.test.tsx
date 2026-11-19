@@ -1,14 +1,17 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+/** @vitest-environment jsdom */
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DateMenu } from './booking-calendar'
+
+afterEach(() => {
+  cleanup()
+  vi.useRealTimers()
+})
 
 describe('DateMenu initial month', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-11-19T12:00:00'))
-  })
-  afterEach(() => {
-    vi.useRealTimers()
   })
 
   it('opens on the current month when value is empty', () => {

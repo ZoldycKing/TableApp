@@ -75,7 +75,8 @@ function useDismiss(open: boolean, root: { current: HTMLElement | null }, close:
   }, [open, root, close])
 }
 
-function dateMenuCursor(value: string, now = new Date()) {
+/** Shared date picker cursor: selected date's month, otherwise the current month. */
+export function dateMenuCursor(value: string, now = new Date()) {
   const match = value.match(/^(\d{4})-(\d{2})(?:-\d{2})?$/)
   if (match) {
     const year = Number(match[1])

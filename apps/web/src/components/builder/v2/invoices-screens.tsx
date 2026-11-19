@@ -3,9 +3,9 @@ import { createContext, useContext, useMemo, useState } from 'react'
 import type { AppV2, AppV2Json, AppV2Record } from '@tableapp/schema/app-v2'
 import type { BuilderV2Table } from '@/lib/builder-v2'
 import {
-  DOC_KIND_FROM_LABEL, DOC_KIND_LABEL, DOC_STATUS_FROM_LABEL, DOC_STATUS_LABEL,
-  computeInvoiceTotals, convertDocument, emptyInvoiceLine, formatInvoiceDate, formatInvoiceMoney,
-  nextDocumentNumber, parseInvoiceLines, parsePayments, paymentsTotal, remainingBalance,
+  DOC_KIND_FROM_LABEL, DOC_KIND_LABEL, DOC_STATUS_FROM_LABEL, DOC_STATUS_LABEL, SELECTABLE_VAT_RATES,
+  amountInWordsRu, computeInvoiceTotals, convertDocument, emptyInvoiceLine, formatInvoiceDate, formatInvoiceMoney,
+  lineTotal, nextDocumentNumber, parseInvoiceLines, parsePayments, paymentsTotal, remainingBalance,
   resolveDocStatus, serializeInvoiceLines, serializePayments, summaryTotals, type DocKind, type DocStatus, type InvoiceLine, type PaymentEntry,
 } from '@/lib/invoices-logic'
 import { buildInvoicePdf } from '@/lib/invoices-pdf'
@@ -17,7 +17,7 @@ import { ProtoIcon } from '../prototype/icons'
 import type { AppV2RendererProps } from './view'
 import css from './invoices.module.css'
 
-export type InvoicesBundle = { rows: AppV2Record[]; setRows?: (rows: AppV2Record[]) => void; open?: 'payment' | 'create' | null }
+export type InvoicesBundle = { rows: AppV2Record[]; setRows?: (rows: AppV2Record[]) => void; open?: 'payment' | 'create' | 'pdf' | 'edit' | null }
 export const InvoicesRowsContext = createContext<InvoicesBundle | null>(null)
 
 const PLACEHOLDER = { id: 'inv_ph', name: 'ph', type: 'heading' as const, value: { kind: 'literal' as const, value: '' }, size: 's' as const, visibleTo: null, visibleWhen: null }
@@ -128,10 +128,16 @@ function HomeList(props: ScreenProps) {
   const [createOpen, setCreateOpen] = useState(false)
   const docs = props.of(props.kit.documentsTableId)
   const clients = props.of(props.kit.clientsTableId)
+  const resolvedOf = (row: AppV2Record) => resolveDocStatus({
+    status: docStatus(row, props.kit, props.tables),
+    due: textOf(row.values[props.kit.document.due]),
+    total: numOf(row.values[props.kit.document.total]),
+    payments: parsePayments(row.values[props.kit.document.payments]),
+  })
   const filtered = useMemo(() => docs.filter(row => {
     const number = textOf(row.values[props.kit.document.number])
     const client = relatedName(props.allRows, props.tables, row.values[props.kit.document.client])
-    const statusKey = docStatus(row, props.kit, props.tables)
+    const statusKey = resolvedOf(row)
     if (status && statusKey !== status) return false
     if (clientId && !relationIds(row.values[props.kit.document.client]).includes(clientId)) return false
     const date = textOf(row.values[props.kit.document.date])
@@ -141,7 +147,7 @@ function HomeList(props: ScreenProps) {
   }), [clientId, docs, period, props, search, status])
   const summary = summaryTotals(docs.map(row => ({
     kind: docKind(row, props.kit, props.tables),
-    status: docStatus(row, props.kit, props.tables),
+    status: resolvedOf(row),
     total: numOf(row.values[props.kit.document.total]),
     paid: numOf(row.values[props.kit.document.paid]),
   })))
@@ -164,7 +170,7 @@ function HomeList(props: ScreenProps) {
           <td>{choiceName(props.tables, props.kit.documentsTableId, props.kit.document.kind, row.values[props.kit.document.kind])}</td>
           <td>{relatedName(props.allRows, props.tables, row.values[props.kit.document.client])}</td>
           <td>{formatInvoiceDate(textOf(row.values[props.kit.document.date]))}</td>
-          <td><Badge name={choiceName(props.tables, props.kit.documentsTableId, props.kit.document.status, row.values[props.kit.document.status])} /></td>
+          <td><Badge name={DOC_STATUS_LABEL[resolvedOf(row)]} /></td>
           <td className={css.money}>{formatInvoiceMoney(numOf(row.values[props.kit.document.total]))}</td>
         </tr>)}
       </tbody></table>
@@ -174,20 +180,28 @@ function HomeList(props: ScreenProps) {
 }
 
 function DocCard({ row, onOpen, ...props }: ScreenProps & { row: AppV2Record; onOpen: () => void }) {
+  const status = resolveDocStatus({
+    status: docStatus(row, props.kit, props.tables),
+    due: textOf(row.values[props.kit.document.due]),
+    total: numOf(row.values[props.kit.document.total]),
+    payments: parsePayments(row.values[props.kit.document.payments]),
+  })
   return <button type="button" className={css.card} onClick={onOpen}>
     <span className={css.cardTitle}>{textOf(row.values[props.kit.document.number])}</span>
-    <span className={css.cardMeta}>{relatedName(props.allRows, props.tables, row.values[props.kit.document.client])}</span>
+    <span className={css.cardMeta}>{relatedName(props.allRows, props.tables, row.values[props.kit.document.client])} · {choiceName(props.tables, props.kit.documentsTableId, props.kit.document.kind, row.values[props.kit.document.kind])}</span>
     <span className={css.cardFoot}>
-      <Badge name={choiceName(props.tables, props.kit.documentsTableId, props.kit.document.status, row.values[props.kit.document.status])} />
+      <Badge name={DOC_STATUS_LABEL[status]} />
       <span className={css.money}>{formatInvoiceMoney(numOf(row.values[props.kit.document.total]))}</span>
     </span>
   </button>
 }
 
 function DocumentCard(props: ScreenProps & { recordId: string }) {
+  const demo = useContext(InvoicesRowsContext)
   const row = props.of(props.kit.documentsTableId).find(item => item.id === props.recordId)
-  const [editOpen, setEditOpen] = useState(false)
-  const [payOpen, setPayOpen] = useState(false)
+  const [editOpen, setEditOpen] = useState(demo?.open === 'edit')
+  const [payOpen, setPayOpen] = useState(demo?.open === 'payment')
+  const [pdfOpen, setPdfOpen] = useState(demo?.open === 'pdf')
   if (!row) return null
   const kind = docKind(row, props.kit, props.tables)
   const lines = parseInvoiceLines(row.values[props.kit.document.lines])
@@ -195,32 +209,51 @@ function DocumentCard(props: ScreenProps & { recordId: string }) {
   const total = numOf(row.values[props.kit.document.total])
   const balance = remainingBalance(total, payments)
   const convertTarget = convertDocument(kind)
+  const statusLabel = (() => {
+    const current = docStatus(row, props.kit, props.tables)
+    const resolved = resolveDocStatus({
+      status: current,
+      due: textOf(row.values[props.kit.document.due]),
+      total,
+      payments,
+    })
+    return DOC_STATUS_LABEL[resolved]
+  })()
   return <DetailCardShell title={textOf(row.values[props.kit.document.number])} subtitle={`${DOC_KIND_LABEL[kind]} · ${relatedName(props.allRows, props.tables, row.values[props.kit.document.client])}`}>
     <div className={css.root}>
       <DetailSection title="Сведения">
         <p className={css.cardMeta}>Дата {formatInvoiceDate(textOf(row.values[props.kit.document.date]))}{kind === 'invoice' ? ` · оплатить до ${formatInvoiceDate(textOf(row.values[props.kit.document.due]))}` : ''}</p>
-        <Badge name={choiceName(props.tables, props.kit.documentsTableId, props.kit.document.status, row.values[props.kit.document.status])} />
+        <Badge name={statusLabel} />
         {textOf(row.values[props.kit.document.note]) ? <p className={css.cardMeta}>{textOf(row.values[props.kit.document.note])}</p> : null}
       </DetailSection>
       <DetailSection title="Позиции"><LineTable lines={lines} readonly /></DetailSection>
       <DetailSection title="Итоги">
         <div className={css.totals}>
           <span>Подытог: {formatInvoiceMoney(numOf(row.values[props.kit.document.subtotal]))}</span>
+          <span>Скидка: {formatInvoiceMoney(numOf(row.values[props.kit.document.discountTotal]))}</span>
           <span>НДС: {formatInvoiceMoney(numOf(row.values[props.kit.document.vatTotal]))}</span>
           <strong>Итого: {formatInvoiceMoney(total)}</strong>
           <span>Оплачено: {formatInvoiceMoney(numOf(row.values[props.kit.document.paid]))}</span>
           {kind === 'invoice' ? <span>Остаток: {formatInvoiceMoney(balance)}</span> : null}
         </div>
       </DetailSection>
+      {kind === 'invoice' && payments.length ? <DetailSection title="Платежи">
+        <ul className={css.list}>{payments.map((payment, index) => <li key={`${payment.date}-${index}`} className={css.card}>
+          <span className={css.cardTitle}>{formatInvoiceMoney(payment.amount)}</span>
+          <span className={css.cardMeta}>{formatInvoiceDate(payment.date)}{payment.comment ? ` · ${payment.comment}` : ''}</span>
+        </li>)}</ul>
+      </DetailSection> : null}
       <div className={css.actions}>
         <button type="button" data-primary onClick={() => setEditOpen(true)}>Редактировать</button>
         {kind === 'invoice' ? <button type="button" data-accent onClick={() => setPayOpen(true)}>Оплата</button> : null}
         {convertTarget ? <button type="button" onClick={() => convertDoc(props, row, convertTarget)}>Преобразовать в {DOC_KIND_LABEL[convertTarget]}</button> : null}
+        <button type="button" onClick={() => setPdfOpen(true)}>PDF</button>
         <button type="button" onClick={() => void downloadPdf(props, row)}>Скачать PDF</button>
       </div>
     </div>
     {editOpen ? <DocumentFormDialog {...props} row={row} onClose={() => setEditOpen(false)} /> : null}
     {payOpen ? <PaymentDialog {...props} row={row} onClose={() => setPayOpen(false)} /> : null}
+    {pdfOpen ? <PdfPreviewDialog {...props} row={row} onClose={() => setPdfOpen(false)} /> : null}
   </DetailCardShell>
 }
 
@@ -230,20 +263,27 @@ function LineTable({ lines, readonly, onChange }: { lines: InvoiceLine[]; readon
     const next = lines.map((line, i) => i === index ? { ...line, ...patch } : line)
     onChange(next)
   }
-  return <table className={css.table}><thead><tr><th>Наименование</th><th>Кол-во</th><th>Ед.</th><th>Цена</th><th>Скидка %</th><th>НДС</th><th>Сумма</th></tr></thead><tbody>
+  return <div className={css.lines}>
     {lines.map((line, index) => {
-      const totals = computeInvoiceTotals([line])
-      return <tr key={`${line.name}-${index}`}>
-        <td>{readonly ? line.name : <input value={line.name} onChange={event => update(index, { name: event.target.value })} />}</td>
-        <td>{readonly ? line.qty : <input inputMode="decimal" value={line.qty} onChange={event => update(index, { qty: Number(event.target.value) || 0 })} />}</td>
-        <td>{readonly ? line.unit : <input value={line.unit} onChange={event => update(index, { unit: event.target.value })} />}</td>
-        <td>{readonly ? formatInvoiceMoney(line.price) : <input inputMode="decimal" value={line.price} onChange={event => update(index, { price: Number(event.target.value) || 0 })} />}</td>
-        <td>{readonly ? line.discount : <input inputMode="decimal" value={line.discount} onChange={event => update(index, { discount: Number(event.target.value) || 0 })} />}</td>
-        <td>{readonly ? (line.vatIncluded ? `${line.vatRate}% с НДС` : `${line.vatRate}%`) : <span style={{ display: 'grid', gap: 4 }}><input inputMode="numeric" value={line.vatRate} onChange={event => update(index, { vatRate: Number(event.target.value) || 0 })} /><CheckToggle label="с НДС" checked={line.vatIncluded} onChange={vatIncluded => update(index, { vatIncluded })} /></span>}</td>
-        <td className={css.money}>{formatInvoiceMoney(totals.total)}</td>
-      </tr>
+      const sum = lineTotal(line)
+      return <article key={`${line.name}-${index}`} className={css.lineCard} data-line>
+        {readonly ? <strong className={css.cardTitle}>{line.name || 'Без названия'}</strong> : <div className={css.inputRow}><span>Наименование</span><input aria-label={`Наименование ${index + 1}`} value={line.name} onChange={event => update(index, { name: event.target.value })} /></div>}
+        <div className={css.lineGrid}>
+          <div className={css.inputRow}><span>Кол-во</span>{readonly ? <span>{line.qty}</span> : <input aria-label={`Количество ${index + 1}`} inputMode="decimal" value={line.qty} onChange={event => update(index, { qty: Number(event.target.value) || 0 })} />}</div>
+          <div className={css.inputRow}><span>Ед.</span>{readonly ? <span>{line.unit}</span> : <input aria-label={`Единица ${index + 1}`} value={line.unit} onChange={event => update(index, { unit: event.target.value })} />}</div>
+          <div className={css.inputRow}><span>Цена</span>{readonly ? <span className={css.money}>{formatInvoiceMoney(line.price)}</span> : <input aria-label={`Цена ${index + 1}`} inputMode="decimal" value={line.price} onChange={event => update(index, { price: Number(event.target.value) || 0 })} />}</div>
+          <div className={css.inputRow}><span>Скидка %</span>{readonly ? <span>{line.discount}</span> : <input aria-label={`Скидка ${index + 1}`} inputMode="decimal" value={line.discount} onChange={event => update(index, { discount: Number(event.target.value) || 0 })} />}</div>
+        </div>
+        {readonly
+          ? <span className={css.cardMeta}>{line.vatIncluded ? `с НДС ${line.vatRate}%` : `без НДС · ставка ${line.vatRate}%`} · {formatInvoiceMoney(sum)}</span>
+          : <>
+            <ChoiceRow label="Ставка НДС" value={String(line.vatRate)} options={SELECTABLE_VAT_RATES.map(rate => ({ id: String(rate), name: `${rate}%` }))} onChange={value => update(index, { vatRate: Number(value) })} />
+            <ChoiceRow label="Учёт НДС" value={line.vatIncluded ? 'in' : 'ex'} options={[{ id: 'in', name: 'с НДС' }, { id: 'ex', name: 'без НДС' }]} onChange={value => update(index, { vatIncluded: value === 'in' })} />
+            <div className={css.lineFoot}><span className={css.money}>{formatInvoiceMoney(sum)}</span>{onChange && lines.length > 1 ? <button type="button" onClick={() => onChange(lines.filter((_, i) => i !== index))}>Удалить</button> : null}</div>
+          </>}
+      </article>
     })}
-  </tbody></table>
+  </div>
 }
 
 function settingsRow(props: ScreenProps) {
@@ -337,11 +377,18 @@ function DocumentFormDialog(props: ScreenProps & { row?: AppV2Record; onClose: (
   const save = () => {
     const statusId = props.tables.find(table => table.id === props.kit.documentsTableId)?.fields.find(field => field.id === props.kit.document.status)?.choices?.find(choice => choice.name === status)?.id ?? props.kit.statuses.draft
     const kindId = props.tables.find(table => table.id === props.kit.documentsTableId)?.fields.find(field => field.id === props.kit.document.kind)?.choices?.find(choice => choice.name === kind)?.id ?? props.kit.kinds.estimate
-  const payments = props.row ? parsePayments(props.row.values[props.kit.document.payments]) : []
-  const resolved = resolveDocStatus({ status: DOC_STATUS_FROM_LABEL[status] ?? 'draft', due, total: totals.total, payments })
+    const payments = props.row ? parsePayments(props.row.values[props.kit.document.payments]) : []
+    const resolved = resolveDocStatus({ status: DOC_STATUS_FROM_LABEL[status] ?? 'draft', due, total: totals.total, payments })
     const resolvedId = props.tables.find(table => table.id === props.kit.documentsTableId)?.fields.find(field => field.id === props.kit.document.status)?.choices?.find(choice => choice.name === DOC_STATUS_LABEL[resolved])?.id ?? statusId
+    const settings = settingsRow(props)
+    const kindKey = DOC_KIND_FROM_LABEL[kind] ?? 'estimate'
+    const autoNumber = number.trim() || nextDocumentNumber(kindKey, props.of(props.kit.documentsTableId).map(item => textOf(item.values[props.kit.document.number])), {
+      estimate: textOf(settings?.values[props.kit.settings.numberingEstimate]) || 'СМ-{YYYY}-{NNN}',
+      invoice: textOf(settings?.values[props.kit.settings.numberingInvoice]) || 'СЧ-{YYYY}-{NNN}',
+      act: textOf(settings?.values[props.kit.settings.numberingAct]) || 'АКТ-{YYYY}-{NNN}',
+    })
     const payload: Record<string, AppV2Json> = {
-      [props.kit.document.number]: number,
+      [props.kit.document.number]: autoNumber,
       [props.kit.document.kind]: kindId,
       [props.kit.document.client]: client ? [client] : [],
       [props.kit.document.date]: date,
@@ -363,7 +410,7 @@ function DocumentFormDialog(props: ScreenProps & { row?: AppV2Record; onClose: (
     }
     props.onClose()
   }
-  return <AppDialog title={props.row ? 'Редактировать документ' : 'Новый документ'} onClose={props.onClose} footer={<button type="button" data-primary onClick={save}>Сохранить</button>}>
+  return <AppDialog title={props.row ? 'Редактировать документ' : 'Новый документ'} placement="center" onClose={props.onClose} footer={<button type="button" data-primary onClick={save}>Сохранить</button>}>
     <div className={css.formGrid}>
       <div className={css.inputRow}><span>Номер</span><input value={number} onChange={event => setNumber(event.target.value)} /></div>
       <ChoiceRow label="Вид" value={kind} options={['Смета', 'Счёт', 'Акт'].map(name => ({ id: name, name }))} onChange={setKind} />
@@ -421,12 +468,47 @@ function PaymentDialog(props: ScreenProps & { row: AppV2Record; onClose: () => v
     })
     props.onClose()
   }
-  return <AppDialog title="Оплата" onClose={props.onClose} footer={<button type="button" data-primary onClick={save}>Записать</button>}>
+  return <AppDialog title="Оплата" placement="center" onClose={props.onClose} footer={<button type="button" data-primary onClick={save}>Записать</button>}>
     <div className={css.formGrid}>
       <p className={css.cardMeta}>Остаток: {formatInvoiceMoney(remainingBalance(total, payments))}</p>
-      <div className={css.inputRow}><span>Сумма</span><input inputMode="decimal" value={amount} onChange={event => setAmount(event.target.value)} /></div>
+      {payments.length ? <ul className={css.list}>{payments.map((payment, index) => <li key={`${payment.date}-${index}`} className={css.card}>
+        <span className={css.cardTitle}>{formatInvoiceMoney(payment.amount)}</span>
+        <span className={css.cardMeta}>{formatInvoiceDate(payment.date)}{payment.comment ? ` · ${payment.comment}` : ''}</span>
+      </li>)}</ul> : null}
+      <div className={css.inputRow}><span>Сумма</span><input aria-label="Сумма оплаты" inputMode="decimal" value={amount} onChange={event => setAmount(event.target.value)} /></div>
       <SearchDate label="Дата оплаты" value={date} onValue={setDate} />
-      <div className={css.inputRow}><span>Комментарий</span><input value={comment} onChange={event => setComment(event.target.value)} /></div>
+      <div className={css.inputRow}><span>Комментарий</span><input aria-label="Комментарий к оплате" value={comment} onChange={event => setComment(event.target.value)} /></div>
+    </div>
+  </AppDialog>
+}
+
+function PdfPreviewDialog(props: ScreenProps & { row: AppV2Record; onClose: () => void }) {
+  const settings = settingsRow(props)
+  const kind = docKind(props.row, props.kit, props.tables)
+  const lines = parseInvoiceLines(props.row.values[props.kit.document.lines])
+  const total = numOf(props.row.values[props.kit.document.total])
+  const clientName = relatedName(props.allRows, props.tables, props.row.values[props.kit.document.client])
+  return <AppDialog title={`PDF · ${DOC_KIND_LABEL[kind]}`} placement="center" onClose={props.onClose} footer={<button type="button" data-primary onClick={() => void downloadPdf(props, props.row)}>Скачать</button>}>
+    <div className={css.pdfPreview} data-pdf-preview>
+      <header>
+        <strong>{textOf(settings?.values[props.kit.settings.companyName]) || 'Компания'}</strong>
+        <span>ИНН {textOf(settings?.values[props.kit.settings.inn])}{textOf(settings?.values[props.kit.settings.kpp]) ? ` · КПП ${textOf(settings?.values[props.kit.settings.kpp])}` : ''}</span>
+        <span>{textOf(settings?.values[props.kit.settings.address])}</span>
+      </header>
+      <h2>{DOC_KIND_LABEL[kind]} № {textOf(props.row.values[props.kit.document.number])} от {formatInvoiceDate(textOf(props.row.values[props.kit.document.date]))}</h2>
+      <p>Покупатель: {clientName || '—'}</p>
+      <table className={css.table}><thead><tr><th>Наименование</th><th>Кол-во</th><th>Цена</th><th>Сумма</th></tr></thead><tbody>
+        {lines.map((line, index) => <tr key={`${line.name}-${index}`}><td>{line.name}</td><td>{line.qty} {line.unit}</td><td>{formatInvoiceMoney(line.price)}</td><td>{formatInvoiceMoney(lineTotal(line))}</td></tr>)}
+      </tbody></table>
+      <div className={css.totals}>
+        <span>НДС: {formatInvoiceMoney(numOf(props.row.values[props.kit.document.vatTotal]))}</span>
+        <strong>Итого: {formatInvoiceMoney(total)}</strong>
+        <span>{amountInWordsRu(total)}</span>
+      </div>
+      <footer className={css.pdfMarks}>
+        <span>Подпись</span>
+        <span>Печать</span>
+      </footer>
     </div>
   </AppDialog>
 }
@@ -461,7 +543,7 @@ function ClientFormDialog(props: ScreenProps & { row?: AppV2Record; onClose: () 
     else props.replace?.([...props.allRows, { id: `cli_${Math.random().toString(36).slice(2, 9)}`, tableId: props.kit.clientsTableId, values: payload }])
     props.onClose()
   }
-  return <AppDialog title="Клиент" onClose={props.onClose} footer={<button type="button" data-primary onClick={save}>Сохранить</button>}>
+  return <AppDialog title="Клиент" placement="center" onClose={props.onClose} footer={<button type="button" data-primary onClick={save}>Сохранить</button>}>
     <div className={css.formGrid}>
       {[{ label: 'Клиент', value: name, set: setName }, { label: 'Телефон', value: phone, set: setPhone }, { label: 'Почта', value: email, set: setEmail }, { label: 'ИНН', value: inn, set: setInn }].map(field => <div key={field.label} className={css.inputRow}><span>{field.label}</span><input value={field.value} onChange={event => field.set(event.target.value)} /></div>)}
       <div className={css.inputRow}><span>Адрес</span><textarea rows={2} value={address} onChange={event => setAddress(event.target.value)} /></div>
@@ -503,7 +585,7 @@ function ProductFormDialog(props: ScreenProps & { row?: AppV2Record; onClose: ()
     else props.replace?.([...props.allRows, { id: `prd_${Math.random().toString(36).slice(2, 9)}`, tableId: props.kit.productsTableId, values: payload }])
     props.onClose()
   }
-  return <AppDialog title="Позиция каталога" onClose={props.onClose} footer={<button type="button" data-primary onClick={save}>Сохранить</button>}>
+  return <AppDialog title="Позиция каталога" placement="center" onClose={props.onClose} footer={<button type="button" data-primary onClick={save}>Сохранить</button>}>
     <div className={css.formGrid}>
       <div className={css.inputRow}><span>Название</span><input value={name} onChange={event => setName(event.target.value)} /></div>
       <div className={css.inputRow}><span>Единица</span><input value={unit} onChange={event => setUnit(event.target.value)} /></div>

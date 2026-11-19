@@ -278,7 +278,8 @@ export function summaryTotals(docs: readonly { status: DocStatus; kind: DocKind;
 
 export function formatInvoiceMoney(value: number): string {
   if (!Number.isFinite(value)) return '—'
-  return `${value.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽`
+  const amount = value.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).replace(/\u00a0|\u202f/g, ' ')
+  return `${amount} ₽`
 }
 
 export function formatInvoiceDate(raw: string): string {

@@ -8,7 +8,7 @@ import {
   lineTotal, nextDocumentNumber, parseInvoiceLines, parsePayments, paymentsTotal, remainingBalance,
   resolveDocStatus, serializeInvoiceLines, serializePayments, summaryTotals, type DocKind, type DocStatus, type InvoiceLine, type PaymentEntry,
 } from '@/lib/invoices-logic'
-import { builderV2FormatMoneyGrouped, builderV2MoneyInputChange, builderV2ParseMoneyInput } from '@/lib/builder-v2-money'
+import { builderV2MoneyInputChange, builderV2ParseMoneyInput } from '@/lib/builder-v2-money'
 import { buildInvoicePdf, type InvoicePdfImage } from '@/lib/invoices-pdf'
 import { useBuilderV2NodeData } from './use-data'
 import { DateMenu } from './booking-calendar'

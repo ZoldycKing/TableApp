@@ -74,10 +74,6 @@ function Badge({ name }: { name: string }) {
   return <span className={css.badge} data-tone={tone}>{name}</span>
 }
 
-function CheckToggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (next: boolean) => void }) {
-  return <button type="button" role="checkbox" aria-checked={checked} className={css.check} onClick={() => onChange(!checked)}><span data-on={checked || undefined}>{checked ? <ProtoIcon name="check" size={12} /> : null}</span><span>{label}</span></button>
-}
-
 export function InvoicesScreen(props: AppV2RendererProps) {
   const kit = props.app.invoices
   const demo = useContext(InvoicesRowsContext)

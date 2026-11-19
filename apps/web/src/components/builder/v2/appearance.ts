@@ -3,7 +3,7 @@ import type {AppV2} from '@tableapp/schema/app-v2'
 
 // All primary colors have readable white labels; dark themes use the lighter pair.
 export const BUILDER_V2_COLORS = {
-  green: ['Зелёный', '#456849', '#b5d3ad'], blue: ['Синий', '#315f91', '#afcbee'],
+  green: ['Зелёный', '#3F6B5C', '#7FAE97'], blue: ['Синий', '#315f91', '#afcbee'],
   indigo: ['Индиго', '#4b5296', '#bfc2ef'], violet: ['Фиолетовый', '#70529a', '#d0bbed'],
   purple: ['Пурпурный', '#854a90', '#e0b6e8'], pink: ['Розовый', '#9a426b', '#f0b5ce'],
   rose: ['Малиновый', '#9e4358', '#f3b4c2'], red: ['Красный', '#a0443a', '#f2b9ae'],

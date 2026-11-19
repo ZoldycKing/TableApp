@@ -1,0 +1,94 @@
+LIGHT
+  text on bg_page                            #15151A on #FFFFFF: 18.20  need 4.5  OK
+  text on bg_surface                         #15151A on #F6F5F2: 16.69  need 4.5  OK
+  text2 on bg_page                           #5B5A60 on #FFFFFF:  6.83  need 4.5  OK
+  text2 on bg_surface                        #5B5A60 on #F6F5F2:  6.26  need 4.5  OK
+  text3 on bg_page                           #6F6E74 on #FFFFFF:  5.05  need 4.5  OK
+  text3 on bg_surface                        #6F6E74 on #F6F5F2:  4.63  need 4.5  OK
+  accent_text on bg_page                     #3F6B5C on #FFFFFF:  6.05  need 4.5  OK
+  accent_text on bg_surface                  #3F6B5C on #F6F5F2:  5.55  need 4.5  OK
+  danger_text on bg_page                     #B42B2B on #FFFFFF:  6.32  need 4.5  OK
+  danger_text on bg_surface                  #B42B2B on #F6F5F2:  5.80  need 4.5  OK
+  warning_text on bg_page                    #8A5A00 on #FFFFFF:  5.93  need 4.5  OK
+  warning_text on bg_surface                 #8A5A00 on #F6F5F2:  5.44  need 4.5  OK
+  success_text on bg_page                    #17743F on #FFFFFF:  5.82  need 4.5  OK
+  success_text on bg_surface                 #17743F on #F6F5F2:  5.34  need 4.5  OK
+  info_text on bg_page                       #265C9C on #FFFFFF:  6.79  need 4.5  OK
+  info_text on bg_surface                    #265C9C on #F6F5F2:  6.23  need 4.5  OK
+  on_accent on accent (button)               #FFFFFF on #3F6B5C:  6.05  need 4.5  OK
+  on_accent on accent_hover                  #FFFFFF on #335A4C:  7.76  need 4.5  OK
+  accent_text on accent_soft (active nav)    #3F6B5C on #E7F0EC:  5.21  need 4.5  OK
+  danger_text on danger_soft                 #B42B2B on #FCEBEB:  5.49  need 4.5  OK
+  success_text on success_soft               #17743F on #E4F4EA:  5.11  need 4.5  OK
+  info_text on info_soft                     #265C9C on #E6EFFA:  5.85  need 4.5  OK
+  warning_text on warning_soft               #8A5A00 on #FBF1DC:  5.28  need 4.5  OK
+  white-ish on danger button                 #FFFFFF on #C93636:  5.17  need 4.5  OK
+  border_control on page (3:1 UI)            #8D8B86 on #FFFFFF:  3.40  need 3  OK
+  focus on page (3:1)                        #3F6B5C on #FFFFFF:  6.05  need 3  OK
+  accent on page (3:1 UI)                    #3F6B5C on #FFFFFF:  6.05  need 3  OK
+  danger icon/fill on page (3:1)             #C93636 on #FFFFFF:  5.17  need 3  OK
+  warning icon/fill on page (3:1)            #B7791F on #FFFFFF:  3.64  need 3  OK
+  success icon/fill on page (3:1)            #1E8E4E on #FFFFFF:  4.17  need 3  OK
+  info icon/fill on page (3:1)               #2F6DB5 on #FFFFFF:  5.28  need 3  OK
+  status Новая pill text                     #4F5964 on #EEF0F2:  6.24  need 4.5  OK
+  status Новая fill on page                  #7A8591 on #FFFFFF:  3.76  need 3  OK
+  status В работе pill text                  #2F5D88 on #E8EFF6:  5.95  need 4.5  OK
+  status В работе fill on page               #4E7CA8 on #FFFFFF:  4.40  need 3  OK
+  status На проверке pill text               #7D5410 on #FAF0DC:  5.90  need 4.5  OK
+  status На проверке fill on page            #C18A2B on #FFFFFF:  3.03  need 3  OK
+  status Готово pill text                    #1D6F43 on #E3F3EA:  5.36  need 4.5  OK
+  status Готово fill on page                 #2E9460 on #FFFFFF:  3.80  need 3  OK
+  status Просрочено pill text                #A93232 on #FBEAEA:  5.66  need 4.5  OK
+  status Просрочено fill on page             #C94A4A on #FFFFFF:  4.60  need 3  OK
+  chart 1 on page                            #3F6B5C on #FFFFFF:  6.05  need 3  OK
+  chart 2 on page                            #4E7CA8 on #FFFFFF:  4.40  need 3  OK
+  chart 3 on page                            #C28A2E on #FFFFFF:  3.01  need 3  OK
+  chart 4 on page                            #9A6B9E on #FFFFFF:  4.22  need 3  OK
+  chart 5 on page                            #7A8590 on #FFFFFF:  3.76  need 3  OK
+DARK
+  text on bg_page                            #F4F4F5 on #0C0C0D: 17.79  need 4.5  OK
+  text on bg_surface                         #F4F4F5 on #151517: 16.59  need 4.5  OK
+  text2 on bg_page                           #A9A8AE on #0C0C0D:  8.29  need 4.5  OK
+  text2 on bg_surface                        #A9A8AE on #151517:  7.73  need 4.5  OK
+  text3 on bg_page                           #8B8A91 on #0C0C0D:  5.72  need 4.5  OK
+  text3 on bg_surface                        #8B8A91 on #151517:  5.33  need 4.5  OK
+  accent_text on bg_page                     #7FAE97 on #0C0C0D:  7.82  need 4.5  OK
+  accent_text on bg_surface                  #7FAE97 on #151517:  7.30  need 4.5  OK
+  danger_text on bg_page                     #F28584 on #0C0C0D:  7.88  need 4.5  OK
+  danger_text on bg_surface                  #F28584 on #151517:  7.35  need 4.5  OK
+  warning_text on bg_page                    #EDBE68 on #0C0C0D: 11.33  need 4.5  OK
+  warning_text on bg_surface                 #EDBE68 on #151517: 10.57  need 4.5  OK
+  success_text on bg_page                    #5ED394 on #0C0C0D: 10.45  need 4.5  OK
+  success_text on bg_surface                 #5ED394 on #151517:  9.74  need 4.5  OK
+  info_text on bg_page                       #8DBBF0 on #0C0C0D:  9.78  need 4.5  OK
+  info_text on bg_surface                    #8DBBF0 on #151517:  9.12  need 4.5  OK
+  on_accent on accent (button)               #0F1512 on #7FAE97:  7.40  need 4.5  OK
+  on_accent on accent_hover                  #0F1512 on #96BDA9:  8.93  need 4.5  OK
+  accent_text on accent_soft (active nav)    #7FAE97 on #16241E:  6.44  need 4.5  OK
+  danger_text on danger_soft                 #F28584 on #2C1616:  6.86  need 4.5  OK
+  success_text on success_soft               #5ED394 on #12261B:  8.51  need 4.5  OK
+  info_text on info_soft                     #8DBBF0 on #14233A:  7.89  need 4.5  OK
+  warning_text on warning_soft               #EDBE68 on #2B2212:  9.08  need 4.5  OK
+  white-ish on danger button                 #1A0A0A on #E5605F:  5.65  need 4.5  OK
+  border_control on page (3:1 UI)            #6E6D74 on #0C0C0D:  3.82  need 3  OK
+  focus on page (3:1)                        #7FAE97 on #0C0C0D:  7.82  need 3  OK
+  accent on page (3:1 UI)                    #7FAE97 on #0C0C0D:  7.82  need 3  OK
+  danger icon/fill on page (3:1)             #E5605F on #0C0C0D:  5.74  need 3  OK
+  warning icon/fill on page (3:1)            #E8B04C on #0C0C0D: 10.00  need 3  OK
+  success icon/fill on page (3:1)            #3CC17A on #0C0C0D:  8.47  need 3  OK
+  info icon/fill on page (3:1)               #6FA8E8 on #0C0C0D:  7.86  need 3  OK
+  status Новая pill text                     #B4BEC8 on #1F2327:  8.39  need 4.5  OK
+  status Новая fill on page                  #9AA5B0 on #0C0C0D:  7.81  need 3  OK
+  status В работе pill text                  #9CBFE6 on #16212E:  8.53  need 4.5  OK
+  status В работе fill on page               #7FA8D4 on #0C0C0D:  7.87  need 3  OK
+  status На проверке pill text               #EBC27C on #2A2213:  9.38  need 4.5  OK
+  status На проверке fill on page            #E0AE5C on #0C0C0D:  9.66  need 3  OK
+  status Готово pill text                    #6FD39D on #12261B:  8.71  need 4.5  OK
+  status Готово fill on page                 #4FC083 on #0C0C0D:  8.57  need 3  OK
+  status Просрочено pill text                #F28584 on #2C1616:  6.86  need 4.5  OK
+  status Просрочено fill on page             #E5605F on #0C0C0D:  5.74  need 3  OK
+  chart 1 on page                            #7FAE97 on #0C0C0D:  7.82  need 3  OK
+  chart 2 on page                            #7FA8D4 on #0C0C0D:  7.87  need 3  OK
+  chart 3 on page                            #E0AE5C on #0C0C0D:  9.66  need 3  OK
+  chart 4 on page                            #B891BC on #0C0C0D:  7.28  need 3  OK
+  chart 5 on page                            #9AA5B0 on #0C0C0D:  7.81  need 3  OK

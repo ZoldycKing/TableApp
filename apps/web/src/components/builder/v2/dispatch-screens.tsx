@@ -235,9 +235,13 @@ function JobButton(props: ScreenProps & { row: AppV2Record; showAssignee?: boole
   const address = props.clientAddress != null ? distinctJobAddress(rawAddress, props.clientAddress) : rawAddress
   const when = whenLabel(facts.when)
   const series = textOf(read(props.row, props.dispatch.job.seriesId))
+  const client = clientLabel(props, props.row) || 'Клиент не указан'
   return <li><button type="button" className={css.job} data-table={props.showAssignee ? true : undefined} data-address={props.showAssignee ? true : undefined} onClick={() => props.onNavigate?.(props.dispatch.jobScreenId, props.row.id)}>
-    <span className={css.titleRow}><strong className={css.jobTitle}>{textOf(props.row.values[props.dispatch.job.what])}</strong>{series ? <span className={css.series}>Серия</span> : null}</span>
-    <span className={css.jobLine} data-who>{props.hideClient ? <span>{when}</span> : <><span>{clientLabel(props, props.row) || 'Клиент не указан'}</span><span>{when}</span></>}</span>
+    <span className={css.titleBlock}>
+      <span className={css.titleRow}><strong className={css.jobTitle}>{textOf(props.row.values[props.dispatch.job.what])}</strong>{series ? <span className={css.series}>Серия</span> : null}</span>
+      {props.hideClient ? null : <span className={css.jobClient}>{client}</span>}
+    </span>
+    <span className={css.jobLine} data-when>{when}</span>
     {props.showAssignee || address ? <span className={css.jobLine} data-address>{address || ''}</span> : null}
     {props.showAssignee ? <span className={css.assignee}>{person ? <><BookingAvatar name={person.name} photo={person.photo} small /><span>{person.name}</span></> : <><ProtoIcon name="user" size={16} /><span>Не назначено</span></>}</span> : null}
     <span className={css.jobFoot}><JobBadges priority={facts.priority} status={facts.status} overdue={overdue} /></span>

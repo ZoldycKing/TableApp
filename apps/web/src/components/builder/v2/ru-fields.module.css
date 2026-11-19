@@ -22,7 +22,7 @@
   padding-inline-start: 8px;
   white-space: nowrap;
   pointer-events: none;
-  color: var(--v2-ink, #253c2d);
+  color: var(--v2-ink, var(--sc-accent));
   font-variant-numeric: tabular-nums;
 }
 .readout[data-empty] { color: var(--v2-muted, #687568); }

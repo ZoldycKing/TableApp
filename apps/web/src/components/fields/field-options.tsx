@@ -6,7 +6,7 @@ import { CHOICE_COLORS } from '@/components/views/card'
 import type { TableSummary } from '@/lib/queries'
 
 const INPUT =
-  'w-full rounded border border-[var(--color-border-subtle)] px-2 py-1.5 text-sm outline-none focus:border-blue-500'
+  'w-full rounded border border-[var(--color-border-subtle)] px-2 py-1.5 text-sm outline-none focus:border-sage-500'
 const LABEL = 'block text-xs font-medium text-[var(--color-ink-muted)]'
 
 type Choice = { id: string; name: string; color: string }
@@ -66,7 +66,7 @@ export function ChoicesEditor({
             { id: newId('choice'), name: '', color: palette[choices.length % palette.length]! },
           ])
         }
-        className="rounded px-2 py-1 text-sm text-blue-700 hover:bg-blue-50"
+        className="rounded px-2 py-1 text-sm text-sage-700 hover:bg-sage-50"
       >
         + Вариант
       </button>

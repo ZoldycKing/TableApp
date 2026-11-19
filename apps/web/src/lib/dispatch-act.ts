@@ -31,10 +31,11 @@ export type WorkActInput = {
   refusalReason?: string
 }
 
-const ink = rgb(0.145, 0.235, 0.176)
-const muted = rgb(0.41, 0.46, 0.42)
-const line = rgb(0.86, 0.89, 0.84)
-const green = rgb(0.12, 0.42, 0.23)
+/* Brand sage #3F6B5C and status success #1E8E4E — PDF cannot use CSS vars. */
+const ink = rgb(63 / 255, 107 / 255, 92 / 255)
+const muted = rgb(91 / 255, 90 / 255, 96 / 255)
+const line = rgb(218 / 255, 215 / 255, 209 / 255)
+const green = rgb(30 / 255, 142 / 255, 78 / 255)
 
 function wrap(font: PDFFont, text: string, size: number, width: number): string[] {
   const source = text.replace(/\s+/g, ' ').trim()

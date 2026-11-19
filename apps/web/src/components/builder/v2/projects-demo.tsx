@@ -88,7 +88,7 @@ const goalFor = (app: AppV2, rows: AppV2Record[], view: string) => {
   return { ...base, screenId: kit.boardScreenId, recordId: undefined, tab: 'tasks' as const }
 }
 
-export function ProjectsDemo({ view = 'board', bare = false }: { view?: string; bare?: boolean }) {
+export function ProjectsDemo({ view = 'board', bare = false, scheme }: { view?: string; bare?: boolean; scheme?: 'light' | 'dark' }) {
   const [model, setModel] = useState<ReturnType<typeof projectsTemplateDemoModel> | null>(null)
   const [rows, setRows] = useState<AppV2Record[]>([])
   const [screenId, setScreenId] = useState('')
@@ -103,6 +103,7 @@ export function ProjectsDemo({ view = 'board', bare = false }: { view?: string; 
     setWho(goal.who); setScreenId(goal.screenId); setRecordId(goal.recordId); setOpen(goal.open); setTab(goal.tab); setRows(model.rows)
   }, [model, view])
   if (!model?.app.projects || !screenId) return <div data-projects-root data-projects-screen="loading" />
+  const themed = scheme ? { ...model.app, theme: { ...model.app.theme, scheme } } : model.app
   const actor: AppV2Actor = who === 'marina'
     ? { authenticated: true, id: 'demo_owner', roleIds: ['owner'], email: 'marina@example.invalid', name: 'Марина Соколова', company: '' }
     : who === 'igor'
@@ -110,9 +111,9 @@ export function ProjectsDemo({ view = 'board', bare = false }: { view?: string; 
       : who === 'client'
         ? { authenticated: true, id: 'demo_client', roleIds: ['client'], email: 'office@veter.example', name: 'Клиент', company: 'Северный ветер' }
         : { authenticated: true, id: 'demo_anna', roleIds: ['staff'], email: 'anna@example.invalid', name: 'Анна Волкова', company: '' }
-  const visible = { ...model.app, screens: model.app.screens.filter(screen => canOpenAppV2Screen(model.app, actor, screen.id)) }
+  const visible = { ...themed, screens: themed.screens.filter(screen => canOpenAppV2Screen(themed, actor, screen.id)) }
   const navigate = (id: string, rowId?: string) => { setScreenId(id); setRecordId(rowId); setOpen(null) }
-  const frame = <BuilderV2Theme app={model.app}><ProjectsRowsContext value={{ rows, setRows, open, tab, now: demoNowMs() }}>
+  const frame = <BuilderV2Theme app={themed}><ProjectsRowsContext value={{ rows, setRows, open, tab, now: demoNowMs() }}>
     <div data-projects-root data-projects-screen={view} data-preview-screen={screenId}>
       <BuilderV2AppFrame app={visible} screenId={screenId} title="" phone={false} deviceMode="auto" fullScreen={bare} onNavigate={navigate}>
         <AppV2Renderer live app={visible} tables={model.tables} actor={actor} screenId={screenId} record={rows.find(row => row.id === recordId)} onNavigate={navigate} />

@@ -21,7 +21,7 @@ export function SignaturePad({ onChange, label = 'Подпись клиента'
       context.lineWidth = 2.4
       context.lineCap = 'round'
       context.lineJoin = 'round'
-      context.strokeStyle = '#253c2d'
+      context.strokeStyle = '#3F6B5C'
     }
     paint()
   }, [])

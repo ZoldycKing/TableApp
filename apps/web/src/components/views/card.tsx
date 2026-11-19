@@ -121,7 +121,7 @@ export function RowCard({
       onClick={onClick}
       className={`rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-3 shadow-sm transition ${
         draggable ? 'cursor-grab active:cursor-grabbing' : ''
-      } ${onClick ? 'hover:border-blue-300' : ''}`}
+      } ${onClick ? 'hover:border-sage-300' : ''}`}
     >
       <p className="mb-1.5 text-sm font-medium">
         {title || <span className="text-[var(--color-ink-muted)]">Без названия</span>}

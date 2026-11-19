@@ -22,50 +22,61 @@ export default async function OpengraphImage() {
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'space-between',
-          background: '#f6f2e9',
+          background: '#F6F5F2',
           padding: 72,
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
-          {/* Тот же знак, что и в шапке сайта: скруглённый квадрат и три строки. */}
           <div
             style={{
               width: 56,
               height: 56,
-              borderRadius: 16,
-              background: '#618764',
+              borderRadius: 14,
+              background: '#3F6B5C',
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'center',
               gap: 5,
               padding: 12,
+              position: 'relative',
             }}
           >
             <div style={{ height: 6, borderRadius: 3, background: '#ffffff', opacity: 0.95 }} />
             <div style={{ height: 6, width: 22, borderRadius: 3, background: '#ffffff', opacity: 0.72 }} />
             <div style={{ height: 6, width: 27, borderRadius: 3, background: '#ffffff', opacity: 0.5 }} />
+            <div
+              style={{
+                position: 'absolute',
+                right: 10,
+                bottom: 10,
+                width: 8,
+                height: 8,
+                borderRadius: 999,
+                background: '#C4623A',
+              }}
+            />
           </div>
-          <div style={{ fontSize: 30, color: '#3f4a3c', fontWeight: 600 }}>Scatta</div>
+          <div style={{ fontSize: 30, color: '#15151A', fontWeight: 600 }}>Scatta</div>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-          <div style={{ fontSize: 72, lineHeight: 1.05, color: '#23261f', fontWeight: 700 }}>
+          <div style={{ fontSize: 72, lineHeight: 1.05, color: '#15151A', fontWeight: 700 }}>
             Ваши таблицы становятся приложением
           </div>
-          <div style={{ fontSize: 30, color: '#5c6152', maxWidth: 900 }}>
+          <div style={{ fontSize: 30, color: '#5B5A60', maxWidth: 900 }}>
             Загрузите таблицу — получите рабочее приложение для сотрудников и клиентов.
             Без программистов.
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 14, fontSize: 24, color: '#5c6152' }}>
-          <span style={{ background: '#e7e0d1', borderRadius: 999, padding: '10px 22px' }}>
+        <div style={{ display: 'flex', gap: 14, fontSize: 24, color: '#5B5A60' }}>
+          <span style={{ background: '#E7F0EC', borderRadius: 10, padding: '10px 22px', color: '#3F6B5C' }}>
             Данные в России
           </span>
-          <span style={{ background: '#e7e0d1', borderRadius: 999, padding: '10px 22px' }}>
+          <span style={{ background: '#E7F0EC', borderRadius: 10, padding: '10px 22px', color: '#3F6B5C' }}>
             Работает с телефона
           </span>
-          <span style={{ background: '#e7e0d1', borderRadius: 999, padding: '10px 22px' }}>
+          <span style={{ background: '#E7F0EC', borderRadius: 10, padding: '10px 22px', color: '#3F6B5C' }}>
             Бесплатный тариф
           </span>
         </div>

@@ -12,10 +12,12 @@
 
 export type LetterKind = 'sign_in' | 'app_sign_in' | 'invite' | 'verify_intake'
 
-const INK = '#1c1a17'
-const MUTED = '#6f6a63'
-const SAND = '#f7f5f1'
-const BORDER = '#e5e0d8'
+const INK = '#15151A'
+const MUTED = '#5B5A60'
+const SAND = '#F6F5F2'
+const BORDER = '#DAD7D1'
+const ACCENT = '#3F6B5C'
+const ON_ACCENT = '#FFFFFF'
 
 function shell(body: string, footer: string): string {
   return `<!doctype html>
@@ -33,7 +35,7 @@ function codeBlock(code: string): string {
 }
 
 function linkButton(link: string, label: string): string {
-  return `<a href="${link}" style="display:inline-block;padding:12px 22px;background:${INK};color:#ffffff;border-radius:12px;text-decoration:none;font-size:14px;font-weight:600">${label}</a>`
+  return `<a href="${link}" style="display:inline-block;padding:12px 22px;background:${ACCENT};color:${ON_ACCENT};border-radius:10px;text-decoration:none;font-size:14px;font-weight:600">${label}</a>`
 }
 
 export type LetterInput = {

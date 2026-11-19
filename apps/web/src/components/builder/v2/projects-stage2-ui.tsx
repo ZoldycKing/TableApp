@@ -346,7 +346,7 @@ export function GanttScreen(props: Stage2Helpers & { projectId?: string }) {
       <span className={css.grow} />
     </div>
     <div className={css.pad}>
-      <div className={css.choiceRow} role="radiogroup" aria-label="Проект">
+      <div className={`${css.choiceRow} ${css.choiceWrap}`} role="radiogroup" aria-label="Проект">
         {projects.map(row => <button key={row.id} type="button" aria-pressed={row.id === projectId} onClick={() => setProjectId(row.id)}>{textOf(row.values[kit.project.title])}</button>)}
       </div>
       <ProjectsGantt

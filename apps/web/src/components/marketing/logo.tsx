@@ -29,7 +29,9 @@ export function Logo({
   height?: number
 }) {
   const src = mark
-    ? '/brand/svg/mark.svg'
+    ? reversed
+      ? '/brand/svg/mark-reversed.svg'
+      : '/brand/svg/mark.svg'
     : reversed
       ? '/brand/svg/lockup-reversed.svg'
       : '/brand/svg/lockup.svg'

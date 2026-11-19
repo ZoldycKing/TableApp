@@ -4,8 +4,8 @@
   "description": "Приложение для бизнеса из ваших таблиц",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#fafbf8",
-  "theme_color": "#527157",
+  "background_color": "#FFFFFF",
+  "theme_color": "#3F6B5C",
   "lang": "ru",
   "icons": [
     {

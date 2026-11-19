@@ -6,37 +6,41 @@
 }
 .platform-primary, .platform-secondary {
   align-items: center; justify-content: center; gap: 8px;
-  min-height: 44px; padding: 8px 12px; border: 1px solid transparent;
-  border-radius: 9999px; font-size: 14px; line-height: 20px; font-weight: 600;
+  min-height: 40px; padding: 8px 14px; border: 1px solid transparent;
+  border-radius: var(--sc-radius-md); font-size: 14px; line-height: 20px; font-weight: 600;
   transition: background .24s cubic-bezier(.32,.72,0,1), transform .24s cubic-bezier(.32,.72,0,1), border-color .24s cubic-bezier(.32,.72,0,1);
 }
-.platform-primary { background: #253d2c; color: white; }
-.platform-primary:hover:not(:disabled) { background: #426145; }
-.platform-secondary { border-color: #dce2d6; background: white; color: #32583d; }
-.platform-secondary:hover:not(:disabled) { background: #edf1e7; border-color: #b8cdae; }
+.platform-primary { background: var(--sc-accent); color: var(--sc-on-accent); }
+.platform-primary:hover:not(:disabled) { background: var(--sc-accent-hover); }
+.platform-secondary { border-color: var(--sc-border); background: var(--sc-bg-elevated); color: var(--sc-text); }
+.platform-secondary:hover:not(:disabled) { background: var(--sc-bg-surface); border-color: var(--sc-border-control); }
 .platform-primary:active:not(:disabled), .platform-secondary:active:not(:disabled) { transform: scale(.98); }
 .platform-primary:disabled, .platform-secondary:disabled { opacity: .45; cursor: not-allowed; }
-.platform-input { width: 100%; min-width: 0; min-height: 44px; margin-top: 8px; padding: 8px 12px; border: 1px solid #cad6c1; border-radius: 8px; background: white; color: #202521; font-size: 14px; line-height: 20px; outline: none; transition: border-color .24s cubic-bezier(.32,.72,0,1), box-shadow .24s cubic-bezier(.32,.72,0,1); }
-.platform-input:focus { border-color: #527157; box-shadow: 0 0 0 3px #e3ecdc; }
-.platform-input:disabled { background: #edf1e7; }
-.platform-input[aria-invalid=true] { border-color: #b84942; }
+.platform-input {
+  width: 100%; min-width: 0; min-height: 40px; margin-top: 8px; padding: 8px 12px;
+  border: 1px solid var(--sc-border-control); border-radius: var(--sc-radius-md);
+  background: var(--sc-bg-elevated); color: var(--sc-text); font-size: 14px; line-height: 20px;
+  outline: none; transition: border-color .24s cubic-bezier(.32,.72,0,1), box-shadow .24s cubic-bezier(.32,.72,0,1);
+}
+.platform-input:focus { border-color: var(--sc-focus); box-shadow: var(--sc-focus-ring); }
+.platform-input:disabled { background: var(--sc-bg-surface); }
+.platform-input[aria-invalid=true] { border-color: var(--sc-danger); }
 .platform-primary:focus-visible, .platform-secondary:focus-visible,
-.platform-surface :is(a,button,summary,select):focus-visible { outline: 2px solid #426145; outline-offset: 4px; }
-.platform-surface { min-height: 100dvh; background: #fafbf8; color: #202521; }
+.platform-surface :is(a,button,summary,select):focus-visible { outline: 2px solid var(--sc-focus); outline-offset: 4px; }
+.platform-surface { min-height: 100dvh; background: var(--sc-bg-page); color: var(--sc-text); }
 .platform-surface :is(h1,h2,h3) { font-weight: 600; text-wrap: balance; }
 .platform-surface p { text-wrap: pretty; }
 .platform-surface main > h1, .platform-surface main > header h1 { font-size: 30px; line-height: 36px; letter-spacing: -.04em; }
-/* Legacy primary actions use the same treatment during the component migration. */
-.platform-surface :is(a,button).bg-ink { background: #253d2c; color: white; border-radius: 9999px; font-weight: 600; }
-.platform-surface :is(a,button).bg-ink:hover:not(:disabled) { background: #426145; }
+.platform-surface :is(a,button).bg-ink { background: var(--sc-accent); color: var(--sc-on-accent); border-radius: var(--sc-radius-md); font-weight: 600; }
+.platform-surface :is(a,button).bg-ink:hover:not(:disabled) { background: var(--sc-accent-hover); }
 .platform-surface :is(a,button,input,select,summary) { transition-timing-function: cubic-bezier(.32,.72,0,1); }
-.platform-surface #platform-sidebar { border-radius: 24px; box-shadow: 0 8px 32px -24px #253d2c40; }
-.platform-surface dialog { border: 1px solid #dce2d6; border-radius: 24px; }
-.platform-skip { position: fixed; top: 16px; left: 96px; z-index: 100; padding: 12px 16px; border-radius: 9999px; background: #253d2c; color: white; transform: translateY(-160%); }
+.platform-surface #platform-sidebar { border-radius: 24px; box-shadow: 0 8px 32px -24px color-mix(in srgb, var(--sc-accent) 25%, transparent); }
+.platform-surface dialog { border: 1px solid var(--sc-border); border-radius: 16px; box-shadow: none; }
+.platform-skip { position: fixed; top: 16px; left: 96px; z-index: 100; padding: 12px 16px; border-radius: var(--sc-radius-md); background: var(--sc-accent); color: var(--sc-on-accent); transform: translateY(-160%); }
 .platform-skip:focus { transform: none; }
-.platform-status { display: inline-flex; align-items: center; gap: 4px; border-radius: 9999px; background: #edf1e7; color: #426145; padding: 4px 8px; font-size: 12px; line-height: 16px; white-space: nowrap; }
-.platform-status[data-state=changes] { background: #f5ead5; color: #775b20; }
-.platform-status[data-state=draft] { background: #edf1e7; color: #586651; }
+.platform-status { display: inline-flex; align-items: center; gap: 4px; border-radius: var(--sc-radius-full); background: var(--sc-accent-soft); color: var(--sc-accent-text); padding: 4px 8px; font-size: 12px; line-height: 16px; white-space: nowrap; }
+.platform-status[data-state=changes] { background: var(--sc-warning-soft); color: var(--sc-warning-text); }
+.platform-status[data-state=draft] { background: var(--sc-bg-surface); color: var(--sc-text-2); }
 @media (max-width: 760px) {
   .platform-input { font-size: 16px; line-height: 24px; }
   .platform-surface main > h1, .platform-surface main > header h1 { font-size: 24px; line-height: 32px; }

@@ -326,7 +326,7 @@ export function buildProjectsV2App(built: BuiltTemplate, meta: { id: string; wor
   return {
     formatVersion: 2, id: meta.id, workspaceId: meta.workspaceId, name: meta.name, slug: meta.slug, purpose: 'business',
     appearance: { navigation: 'tabs', icon: 'clipboard', density: 'regular', corners: 'rounded' },
-    theme: { accent: 'blue', scheme: 'light', logoKey: null, iconKey: null },
+    theme: { accent: 'green', scheme: 'light', logoKey: null, iconKey: null },
     roles: [{ id: 'owner', name: 'Руководитель' }, { id: 'staff', name: 'Исполнитель' }, { id: 'client', name: 'Клиент' }],
     authentication: { mode: 'invite_only', defaultRoleId: null, members: [{ email: meta.email.trim().toLowerCase(), roleIds: ['owner'], company: '' }] },
     homeScreenId: ids.mineScreenId,

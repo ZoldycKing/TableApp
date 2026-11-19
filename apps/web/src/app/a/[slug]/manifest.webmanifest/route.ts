@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server'
 import { loadAppMeta } from '@/lib/app-runtime'
 
 const ACCENT_HEX: Record<string, string> = {
-  blue: '#2563eb', green: '#16a34a', violet: '#7c3aed', rose: '#e11d48',
-  amber: '#f59e0b', teal: '#0d9488', indigo: '#4f46e5', gray: '#475569',
+  blue: '#4E7CA8', green: '#3F6B5C', violet: '#9A6B9E', rose: '#C94A4A',
+  amber: '#C18A2B', teal: '#326e67', indigo: '#4b5296', gray: '#7A8591',
 }
 
 /** Манифест PWA: без него приложение не ставится на домашний экран. */
@@ -20,7 +20,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ slu
     display: 'standalone',
     orientation: 'portrait',
     background_color: '#ffffff',
-    theme_color: ACCENT_HEX[meta.accent] ?? ACCENT_HEX.blue,
+    theme_color: ACCENT_HEX[meta.accent] ?? ACCENT_HEX.green,
     lang: 'ru',
   })
 }

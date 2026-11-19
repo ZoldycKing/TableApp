@@ -75,14 +75,24 @@ function useDismiss(open: boolean, root: { current: HTMLElement | null }, close:
   }, [open, root, close])
 }
 
+/** Shared date picker cursor: selected date's month, otherwise the current month. */
+export function dateMenuCursor(value: string, now = new Date()) {
+  const match = value.match(/^(\d{4})-(\d{2})(?:-\d{2})?$/)
+  if (match) {
+    const year = Number(match[1])
+    const month = Number(match[2])
+    if (year >= 1 && month >= 1 && month <= 12) return { year, month }
+  }
+  return { year: now.getFullYear(), month: now.getMonth() + 1 }
+}
+
+/** Shared date picker: opens on the selected date's month, otherwise the current month. */
 export function DateMenu({ value, onValue, label, emptyLabel = 'дд.мм.гггг', clearLabel }: { value: string; onValue: (value: string) => void; label: string; emptyLabel?: string; clearLabel?: string }) {
   const [open, setOpen] = useState(false)
   const root = useRef<HTMLDivElement>(null)
   const close = () => setOpen(false)
   useDismiss(open, root, close)
-  const [yearText, monthText] = value.split('-')
-  const year = Number(yearText) || new Date().getFullYear()
-  const month = Number(monthText) || 1
+  const { year, month } = dateMenuCursor(value)
   const [cursor, setCursor] = useState({ year, month })
   useEffect(() => { setCursor({ year, month }) }, [year, month])
   const first = new Date(cursor.year, cursor.month - 1, 1)

@@ -6,7 +6,7 @@ import { templateExample } from './presentation'
 describe('task-based starters and compatibility', () => {
   it('offers sales once and keeps the former definitions available without advertising a separate cabinet', () => {
     const ids = STARTER_TEMPLATES.map(template => template.id)
-    expect(ids).toHaveLength(10)
+    expect(ids).toHaveLength(11)
     expect(new Set(ids).size).toBe(ids.length)
     expect(ids).not.toContain('katalog')
     expect(ids).not.toContain('portal')
@@ -38,7 +38,7 @@ describe('task-based starters and compatibility', () => {
       const { app } = templateExample(id)
       expect(canEnter(app, ANONYMOUS), id).toBe(false)
       expect(canEnter(app, asRole('client', 'client@example.invalid')), id).toBe(false)
-      if (id === 'proekty') {
+      if (id === 'proekty' || id === 'scheta') {
         expect(visibleScreensFor(app, asRole('manager')).length, id).toBeGreaterThan(0)
         continue
       }

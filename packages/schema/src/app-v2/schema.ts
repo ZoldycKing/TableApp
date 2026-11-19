@@ -350,6 +350,26 @@ export const appV2Schema = z.strictObject({
     countStatusCancelled: id.optional(),
     reorderPayloadFieldId: id.optional(),
   }).optional(),
+  /** Invoices, estimates and acts starter. Absent outside that install. */
+  invoices: z.strictObject({
+    documentsTableId: id, clientsTableId: id, productsTableId: id, settingsTableId: id,
+    homeScreenId: id, documentScreenId: id, clientsScreenId: id, productsScreenId: id, settingsScreenId: id,
+    createDocumentFormId: id, editDocumentFormId: id, paymentFormId: id,
+    createClientFormId: id, createProductFormId: id,
+    document: z.strictObject({
+      number: id, kind: id, client: id, date: id, due: id, status: id, lines: id, note: id, source: id,
+      subtotal: id, discountTotal: id, vatTotal: id, total: id, paid: id, payments: id,
+    }),
+    client: z.strictObject({ name: id, phone: id, email: id, inn: id, address: id, note: id }),
+    product: z.strictObject({ name: id, unit: id, price: id, vatRate: id, vatIncluded: id, description: id }),
+    settings: z.strictObject({
+      companyName: id, inn: id, kpp: id, address: id, bank: id, bik: id, account: id, corrAccount: id,
+      phone: id, email: id, logo: id, signature: id, stamp: id,
+      numberingEstimate: id, numberingInvoice: id, numberingAct: id,
+    }),
+    kinds: z.strictObject({ estimate: id, invoice: id, act: id }),
+    statuses: z.strictObject({ draft: id, sent: id, partial: id, paid: id, overdue: id }),
+  }).optional(),
 })
 export type AppV2 = z.infer<typeof appV2Schema>
 export type AppV2Workflow = AppV2['workflows'][number]

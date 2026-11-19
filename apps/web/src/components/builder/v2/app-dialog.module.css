@@ -117,6 +117,9 @@
   max-height: calc(100dvh - 48px);
   transform: translateX(-50%);
 }
+.panel[data-placement='center']:has([data-pdf-preview]) {
+  width: min(46rem, calc(100vw - 32px));
+}
 .panel[data-placement='center'] .body {
   flex: 1 1 auto;
   min-height: 0;

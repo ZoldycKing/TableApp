@@ -88,7 +88,7 @@ const goalFor = (app: AppV2, rows: AppV2Record[], view: string) => {
   return { ...base, screenId: kit.boardScreenId, recordId: undefined, tab: 'tasks' as const }
 }
 
-export function ProjectsDemo({ view = 'board', bare = false, scheme }: { view?: string; bare?: boolean; scheme?: 'light' | 'dark' }) {
+export function ProjectsDemo({ view = 'board', bare = false, scheme, phone = false }: { view?: string; bare?: boolean; scheme?: 'light' | 'dark'; phone?: boolean }) {
   const [model, setModel] = useState<ReturnType<typeof projectsTemplateDemoModel> | null>(null)
   const [rows, setRows] = useState<AppV2Record[]>([])
   const [screenId, setScreenId] = useState('')
@@ -115,7 +115,7 @@ export function ProjectsDemo({ view = 'board', bare = false, scheme }: { view?: 
   const navigate = (id: string, rowId?: string) => { setScreenId(id); setRecordId(rowId); setOpen(null) }
   const frame = <BuilderV2Theme app={themed}><ProjectsRowsContext value={{ rows, setRows, open, tab, now: demoNowMs() }}>
     <div data-projects-root data-projects-screen={view} data-preview-screen={screenId}>
-      <BuilderV2AppFrame app={visible} screenId={screenId} title="" phone={false} deviceMode="auto" fullScreen={bare} onNavigate={navigate}>
+      <BuilderV2AppFrame app={visible} screenId={screenId} title="" phone={phone} deviceMode={phone ? 'phone' : 'desktop'} fullScreen={bare} onNavigate={navigate}>
         <AppV2Renderer live app={visible} tables={model.tables} actor={actor} screenId={screenId} record={rows.find(row => row.id === recordId)} onNavigate={navigate} />
       </BuilderV2AppFrame>
     </div>

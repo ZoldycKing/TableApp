@@ -1,6 +1,6 @@
 'use client'
 import { ProjectsDemo } from './projects-demo'
 
-export function ProjectsShot({ view, scheme }: { view: string; scheme?: 'light' | 'dark' }) {
-  return <ProjectsDemo view={view} bare scheme={scheme} />
+export function ProjectsShot({ view, scheme, phone }: { view: string; scheme?: 'light' | 'dark'; phone?: boolean }) {
+  return <ProjectsDemo view={view} bare scheme={scheme} phone={phone} />
 }

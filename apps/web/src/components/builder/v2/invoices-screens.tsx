@@ -42,6 +42,16 @@ const relatedName = (rows: readonly AppV2Record[], tables: readonly BuilderV2Tab
 }
 const todayYmd = () => new Date().toISOString().slice(0, 10)
 const monthStart = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01` }
+/** Storage may keep full ISO instants from relative demo dates — DateMenu needs YYYY-MM-DD. */
+const toYmd = (value: unknown) => {
+  const text = textOf(value).trim()
+  if (!text) return ''
+  const ymd = text.match(/^(\d{4}-\d{2}-\d{2})/)
+  if (ymd) return ymd[1]!
+  const display = text.match(/^(\d{2})\.(\d{2})\.(\d{4})$/)
+  if (display) return `${display[3]}-${display[2]}-${display[1]}`
+  return ''
+}
 
 function collectionOn(app: AppV2, screenId: string, tableId: string) {
   const screen = app.screens.find(item => item.id === screenId)
@@ -130,7 +140,7 @@ function HomeList(props: ScreenProps) {
   const clients = props.of(props.kit.clientsTableId)
   const resolvedOf = (row: AppV2Record) => resolveDocStatus({
     status: docStatus(row, props.kit, props.tables),
-    due: textOf(row.values[props.kit.document.due]),
+    due: toYmd(row.values[props.kit.document.due]),
     total: numOf(row.values[props.kit.document.total]),
     payments: parsePayments(row.values[props.kit.document.payments]),
   })
@@ -140,7 +150,7 @@ function HomeList(props: ScreenProps) {
     const statusKey = resolvedOf(row)
     if (status && statusKey !== status) return false
     if (clientId && !relationIds(row.values[props.kit.document.client]).includes(clientId)) return false
-    const date = textOf(row.values[props.kit.document.date])
+    const date = toYmd(row.values[props.kit.document.date])
     if (period === 'month' && date < monthStart()) return false
     if (search && !`${number} ${client}`.toLowerCase().includes(search.toLowerCase())) return false
     return true
@@ -169,7 +179,7 @@ function HomeList(props: ScreenProps) {
           <td>{textOf(row.values[props.kit.document.number])}</td>
           <td>{choiceName(props.tables, props.kit.documentsTableId, props.kit.document.kind, row.values[props.kit.document.kind])}</td>
           <td>{relatedName(props.allRows, props.tables, row.values[props.kit.document.client])}</td>
-          <td>{formatInvoiceDate(textOf(row.values[props.kit.document.date]))}</td>
+          <td>{formatInvoiceDate(toYmd(row.values[props.kit.document.date]) || textOf(row.values[props.kit.document.date]))}</td>
           <td><Badge name={DOC_STATUS_LABEL[resolvedOf(row)]} /></td>
           <td className={css.money}>{formatInvoiceMoney(numOf(row.values[props.kit.document.total]))}</td>
         </tr>)}
@@ -182,7 +192,7 @@ function HomeList(props: ScreenProps) {
 function DocCard({ row, onOpen, ...props }: ScreenProps & { row: AppV2Record; onOpen: () => void }) {
   const status = resolveDocStatus({
     status: docStatus(row, props.kit, props.tables),
-    due: textOf(row.values[props.kit.document.due]),
+    due: toYmd(row.values[props.kit.document.due]),
     total: numOf(row.values[props.kit.document.total]),
     payments: parsePayments(row.values[props.kit.document.payments]),
   })
@@ -213,16 +223,16 @@ function DocumentCard(props: ScreenProps & { recordId: string }) {
     const current = docStatus(row, props.kit, props.tables)
     const resolved = resolveDocStatus({
       status: current,
-      due: textOf(row.values[props.kit.document.due]),
-      total,
-      payments,
-    })
-    return DOC_STATUS_LABEL[resolved]
+    due: toYmd(row.values[props.kit.document.due]),
+    total,
+    payments,
+  })
+  return DOC_STATUS_LABEL[resolved]
   })()
   return <DetailCardShell title={textOf(row.values[props.kit.document.number])} subtitle={`${DOC_KIND_LABEL[kind]} · ${relatedName(props.allRows, props.tables, row.values[props.kit.document.client])}`}>
     <div className={css.root}>
       <DetailSection title="Сведения">
-        <p className={css.cardMeta}>Дата {formatInvoiceDate(textOf(row.values[props.kit.document.date]))}{kind === 'invoice' ? ` · оплатить до ${formatInvoiceDate(textOf(row.values[props.kit.document.due]))}` : ''}</p>
+        <p className={css.cardMeta}>Дата {formatInvoiceDate(toYmd(row.values[props.kit.document.date]) || textOf(row.values[props.kit.document.date]))}{kind === 'invoice' ? ` · оплатить до ${formatInvoiceDate(toYmd(row.values[props.kit.document.due]) || textOf(row.values[props.kit.document.due]))}` : ''}</p>
         <Badge name={statusLabel} />
         {textOf(row.values[props.kit.document.note]) ? <p className={css.cardMeta}>{textOf(row.values[props.kit.document.note])}</p> : null}
       </DetailSection>
@@ -302,8 +312,8 @@ async function downloadPdf(props: ScreenProps, row: AppV2Record) {
   const pdf = await buildInvoicePdf({
     kind,
     number: textOf(row.values[props.kit.document.number]),
-    date: formatInvoiceDate(textOf(row.values[props.kit.document.date])),
-    due: formatInvoiceDate(textOf(row.values[props.kit.document.due])),
+    date: formatInvoiceDate(toYmd(row.values[props.kit.document.date]) || textOf(row.values[props.kit.document.date])),
+    due: formatInvoiceDate(toYmd(row.values[props.kit.document.due]) || textOf(row.values[props.kit.document.due])),
     seller: {
       company: textOf(settings?.values[props.kit.settings.companyName]),
       inn: textOf(settings?.values[props.kit.settings.inn]),
@@ -368,8 +378,8 @@ function DocumentFormDialog(props: ScreenProps & { row?: AppV2Record; onClose: (
   const [number, setNumber] = useState(props.row ? textOf(props.row.values[props.kit.document.number]) : '')
   const [kind, setKind] = useState(props.row ? choiceName(props.tables, props.kit.documentsTableId, props.kit.document.kind, props.row.values[props.kit.document.kind]) : 'Смета')
   const [client, setClient] = useState(() => relationIds(props.row?.values[props.kit.document.client])[0] ?? clients[0]?.id ?? '')
-  const [date, setDate] = useState(textOf(props.row?.values[props.kit.document.date]) || todayYmd())
-  const [due, setDue] = useState(textOf(props.row?.values[props.kit.document.due]) || todayYmd())
+  const [date, setDate] = useState(toYmd(props.row?.values[props.kit.document.date]) || todayYmd())
+  const [due, setDue] = useState(toYmd(props.row?.values[props.kit.document.due]) || todayYmd())
   const [status, setStatus] = useState(props.row ? choiceName(props.tables, props.kit.documentsTableId, props.kit.document.status, props.row.values[props.kit.document.status]) : 'Черновик')
   const [note, setNote] = useState(textOf(props.row?.values[props.kit.document.note]))
   const [lines, setLines] = useState(initialLines)
@@ -456,7 +466,7 @@ function PaymentDialog(props: ScreenProps & { row: AppV2Record; onClose: () => v
     const paid = paymentsTotal(nextPayments)
     const resolved = resolveDocStatus({
       status: 'sent',
-      due: textOf(props.row.values[props.kit.document.due]),
+      due: toYmd(props.row.values[props.kit.document.due]),
       total,
       payments: nextPayments,
     })
@@ -495,7 +505,7 @@ function PdfPreviewDialog(props: ScreenProps & { row: AppV2Record; onClose: () =
         <span>ИНН {textOf(settings?.values[props.kit.settings.inn])}{textOf(settings?.values[props.kit.settings.kpp]) ? ` · КПП ${textOf(settings?.values[props.kit.settings.kpp])}` : ''}</span>
         <span>{textOf(settings?.values[props.kit.settings.address])}</span>
       </header>
-      <h2>{DOC_KIND_LABEL[kind]} № {textOf(props.row.values[props.kit.document.number])} от {formatInvoiceDate(textOf(props.row.values[props.kit.document.date]))}</h2>
+      <h2>{DOC_KIND_LABEL[kind]} № {textOf(props.row.values[props.kit.document.number])} от {formatInvoiceDate(toYmd(props.row.values[props.kit.document.date]) || textOf(props.row.values[props.kit.document.date]))}</h2>
       <p>Покупатель: {clientName || '—'}</p>
       <table className={css.table}><thead><tr><th>Наименование</th><th>Кол-во</th><th>Цена</th><th>Сумма</th></tr></thead><tbody>
         {lines.map((line, index) => <tr key={`${line.name}-${index}`}><td>{line.name}</td><td>{line.qty} {line.unit}</td><td>{formatInvoiceMoney(line.price)}</td><td>{formatInvoiceMoney(lineTotal(line))}</td></tr>)}

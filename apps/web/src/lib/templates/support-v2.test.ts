@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { FieldType } from '@tableapp/schema'
 import { authorizeAppV2Write, projectAppV2Row, validateAppV2, type AppV2Actor, type AppV2Catalog, type AppV2Record } from '@tableapp/schema/app-v2'
 import { configureBuilderV2ScreenAccess } from '../builder-v2-read-access'
-import { filterTickets, isOverdue, nextTicketNumber, operatorTransitions, statusAfterClientReply, supportAuthorKind, supportAuthorLabel, supportSummary } from '../support-logic'
+import { filterTickets, isOverdue, nextTicketNumber, operatorTransitions, statusAfterClientReply, supportAuthorKind, supportAuthorLabel, supportDeadlineInstant, supportDeadlineParts, supportSummary } from '../support-logic'
 import { isSupportClient, isSupportDesk, projectSupportRows } from '../support-persist'
 import { buildTemplate } from './build'
 import { findTemplate } from './catalog'
@@ -109,5 +109,18 @@ describe('support template', () => {
     expect(supportAuthorLabel(byName)).toBe('Клиент')
     expect(supportAuthorLabel(desk)).toBe('Ответ клиенту')
     expect(byName).toBe(byEmail)
+    const moscowAfternoon = supportDeadlineInstant('2026-11-23', '16:00')
+    const moscowNight = supportDeadlineInstant('2026-11-23', '01:30')
+    expect(moscowAfternoon).toBe('2026-11-23T13:00:00.000Z')
+    expect(moscowNight).toBe('2026-11-22T22:30:00.000Z')
+    expect(supportDeadlineParts(moscowAfternoon)).toEqual({ date: '2026-11-23', time: '16:00' })
+    expect(supportDeadlineParts(moscowNight)).toEqual({ date: '2026-11-23', time: '01:30' })
+    expect(supportDeadlineInstant('2026-11-23', '00:00')).toBe('2026-11-22T21:00:00.000Z')
+    const again = supportDeadlineParts(moscowAfternoon)
+    expect(supportDeadlineInstant(again.date, again.time)).toBe(moscowAfternoon)
+    expect(supportDeadlineInstant(supportDeadlineParts(supportDeadlineInstant(again.date, again.time)!).date, again.time)).toBe(moscowAfternoon)
+    expect(supportDeadlineInstant('', '16:00')).toBeNull()
+    expect(supportDeadlineParts('')).toEqual({ date: '', time: '' })
+    expect(supportDeadlineInstant('2026-11-23', '')).toBe('2026-11-23T15:00:00.000Z')
   })
 })

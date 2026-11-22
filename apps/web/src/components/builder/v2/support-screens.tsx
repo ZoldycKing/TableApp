@@ -1,11 +1,13 @@
 'use client'
 import { createContext, useContext, useEffect, useId, useState } from 'react'
-import { instantToWallClock, wallClockToInstant } from '@tableapp/schema'
+import { instantToWallClock } from '@tableapp/schema'
 import type { AppV2, AppV2Node, AppV2Record } from '@tableapp/schema/app-v2'
 import { savePublishedSupportAction } from '@/app/support-actions'
-import { deadlineTime, filterTickets, isOpenStatus, isOverdue, operatorTransitions, supportAuthorKind, supportAuthorLabel, supportSummary, type SupportFilter, type SupportListItem } from '@/lib/support-logic'
+import { deadlineTime, filterTickets, isOpenStatus, isOverdue, operatorTransitions, supportAuthorKind, supportAuthorLabel, supportDeadlineInstant, supportDeadlineParts, supportSummary, type SupportFilter, type SupportListItem } from '@/lib/support-logic'
 import { applySupportChange, isSupportDesk, supportStatusName, type SupportChange } from '@/lib/support-persist'
 import { AppDialog } from './app-dialog'
+import { DateMenu } from './booking-calendar'
+import { RuTimeInput } from './ru-fields'
 import { DetailCardShell, DetailSection, ListScreenShell, ShellSearchField } from './layout-shell'
 import shell from './layout-shell.module.css'
 import { ProtoIcon } from '../prototype/icons'
@@ -60,20 +62,6 @@ function formatWhen(value: unknown, empty = 'Срок не задан') {
   if (!wall) return empty
   const [year, month, day] = wall.date.split('-')
   return `${day}.${month}.${year}, ${wall.time}`
-}
-
-function joinDeadline(date: string, time: string) {
-  if (!date) return null
-  const [year, month, day] = date.split('-').map(Number)
-  const [hour, minute] = (time || '18:00').split(':').map(Number)
-  if (!year || !month || !day) return null
-  return wallClockToInstant({ year, month, day, hour: hour || 0, minute: minute || 0, second: 0 }, 'Europe/Moscow').toISOString()
-}
-
-function splitDeadline(value: unknown) {
-  if (typeof value !== 'string') return { date: '', time: '' }
-  const wall = instantToWallClock(value, 'Europe/Moscow')
-  return wall ? { date: wall.date, time: wall.time } : { date: '', time: '' }
 }
 
 function transitionLabel(to: string) {
@@ -440,7 +428,7 @@ function AssignDialog(props: ScreenProps & { ticket: AppV2Record; onClose: () =>
   useDialogBehavior(props.onClose)
   const formId = useId()
   const fields = props.kit.ticket
-  const initialDeadline = splitDeadline(props.ticket.values[fields.deadline])
+  const initialDeadline = supportDeadlineParts(props.ticket.values[fields.deadline])
   const [assigneeId, setAssigneeId] = useState(firstId(props.ticket.values[fields.assignee]))
   const [priorityId, setPriorityId] = useState(textOf(props.ticket.values[fields.priority]))
   const [categoryId, setCategoryId] = useState(firstId(props.ticket.values[fields.category]))
@@ -454,7 +442,7 @@ function AssignDialog(props: ScreenProps & { ticket: AppV2Record; onClose: () =>
   const save = async () => {
     if (!priorityId || !categoryId) { setError('Выберите приоритет и категорию.'); return }
     setBusy(true)
-    const result = await commit(props, { kind: 'assign', recordId: props.ticket.id, assigneeId: assigneeId || null, priorityId, categoryId, deadline: joinDeadline(date, time) })
+    const result = await commit(props, { kind: 'assign', recordId: props.ticket.id, assigneeId: assigneeId || null, priorityId, categoryId, deadline: supportDeadlineInstant(date, time) })
     setBusy(false)
     if (!result.ok) { setError(result.error); return }
     props.onMessage(result.message)
@@ -466,8 +454,8 @@ function AssignDialog(props: ScreenProps & { ticket: AppV2Record; onClose: () =>
       <fieldset className={css.field}><legend>Приоритет</legend><div className={css.choiceRow} role="radiogroup" aria-label="Приоритет">{priorities.map(choice => <button key={choice.id} type="button" aria-pressed={choice.id === priorityId} onClick={() => setPriorityId(choice.id)}>{choice.name}</button>)}</div></fieldset>
       <label className={css.field}><span>Категория</span><select value={categoryId} onChange={event => setCategoryId(event.target.value)}>{categories.map(row => <option key={row.id} value={row.id}>{textOf(row.values[props.kit.category.name])}</option>)}</select></label>
       <div className={css.when}>
-        <label className={css.field}><span>Дата срока</span><input type="date" value={date} onChange={event => setDate(event.target.value)} /></label>
-        <label className={css.field}><span>Время</span><input type="time" value={time} onChange={event => setTime(event.target.value)} /></label>
+        <div className={css.field}><span>Дата срока</span><DateMenu label="Дата срока" value={date} onValue={setDate} /></div>
+        <label className={css.field}><span>Время</span><RuTimeInput value={time} onValue={setTime} aria-label="Время срока" /></label>
       </div>
       {error ? <p className={css.error} role="alert">{error}</p> : null}
     </form>

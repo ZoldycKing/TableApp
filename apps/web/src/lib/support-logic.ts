@@ -1,4 +1,8 @@
 /** Status names, transitions, deadlines and list filters for the support starter. */
+import { instantToWallClock, wallClockToInstant } from '@tableapp/schema'
+
+/** Wall clock for ticket deadlines. Moscow has no daylight-saving shift. */
+export const SUPPORT_DEADLINE_ZONE = 'Europe/Moscow'
 
 export const SUPPORT_STATUS_NAMES = ['Новое', 'В работе', 'Ждём клиента', 'Решено', 'Закрыто'] as const
 export type SupportStatusName = (typeof SUPPORT_STATUS_NAMES)[number]
@@ -23,6 +27,24 @@ export function deadlineTime(value: unknown): number | null {
   if (typeof value !== 'string' || !value.trim()) return null
   const time = Date.parse(value)
   return Number.isFinite(time) ? time : null
+}
+
+/** `ГГГГ-ММ-ДД` and `ЧЧ:ММ` in Moscow → an ISO instant. Empty date clears the deadline. */
+export function supportDeadlineInstant(date: string, time: string): string | null {
+  if (!date.trim()) return null
+  const [year, month, day] = date.split('-').map(Number)
+  const clock = /^(\d{2}):(\d{2})$/.exec(time.trim())
+  const hour = clock ? Number(clock[1]) : 18
+  const minute = clock ? Number(clock[2]) : 0
+  if (!year || !month || !day || month > 12 || day > 31 || hour > 23 || minute > 59) return null
+  return wallClockToInstant({ year, month, day, hour, minute, second: 0 }, SUPPORT_DEADLINE_ZONE).toISOString()
+}
+
+/** Instant → the same Moscow date and 24-hour time the form edits. */
+export function supportDeadlineParts(value: unknown): { date: string; time: string } {
+  if (typeof value !== 'string' || !value.trim()) return { date: '', time: '' }
+  const wall = instantToWallClock(value, SUPPORT_DEADLINE_ZONE)
+  return wall ?? { date: '', time: '' }
 }
 
 /** Open tickets past the deadline. Resolved and closed tickets are not overdue. */

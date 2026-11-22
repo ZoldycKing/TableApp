@@ -101,6 +101,8 @@
 }
 .field textarea { min-height: 120px; resize: vertical; }
 .when { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr); gap: 8px; }
+.when :global([class*='pickerButton']) { min-height: 44px; border-radius: 12px; font-size: 16px; font-weight: 450; }
+.when :global([class*='pickerPanel']) { top: auto; bottom: calc(100% + 6px); }
 .choiceRow { display: flex; flex-wrap: wrap; gap: 6px; }
 .choiceRow button { min-height: 40px; padding: 8px 12px; border-radius: 999px; border: 1px solid var(--v2-line, var(--sc-border)); background: transparent; color: inherit; font: inherit; }
 .choiceRow button[aria-pressed='true'] { background: var(--v2-soft, var(--sc-accent-soft)); border-color: var(--v2-accent, var(--sc-accent)); }

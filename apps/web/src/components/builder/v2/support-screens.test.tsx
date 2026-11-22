@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/app/support-actions', () => ({ savePublishedSupportAction: vi.fn() }))
@@ -49,6 +49,42 @@ describe('support screens', () => {
       expect(screen.queryByText('Внутренняя заметка. Клиент это не видит.')).toBeNull()
       expect(screen.getByRole('heading', { name: 'Не сходится сумма в отчёте за октябрь' })).toBeTruthy()
       client.unmount()
+    }
+  })
+
+  it('edits and sets a deadline in Moscow time without shifting it on a second save', async () => {
+    for (const phone of [false, true]) {
+      const view = render(<SupportDemo view="assign" bare phone={phone} />)
+      const dialog = await screen.findByRole('dialog', { name: 'Ответственный и срок' })
+      const date = within(dialog).getByRole('button', { name: 'Дата срока' })
+      const time = within(dialog).getByLabelText('Время срока') as HTMLInputElement
+      expect(date.textContent).toMatch(/^\d{2}\.\d{2}\.\d{4}$/)
+      expect(time.value).toMatch(/^\d{2}:\d{2}$/)
+      expect(dialog.textContent).not.toMatch(/AM|PM/)
+      expect(dialog.querySelector('input[type="date"]')).toBeNull()
+      fireEvent.click(date)
+      const calendar = within(dialog).getByRole('dialog', { name: 'Дата срока' })
+      fireEvent.click(within(calendar).getByRole('button', { name: '15' }))
+      expect(date.textContent).toMatch(/^15\.\d{2}\.\d{4}$/)
+      fireEvent.change(time, { target: { value: '09:05' } })
+      expect(time.value).toBe('09:05')
+      const shown = date.textContent?.trim() ?? ''
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+      const deadline = () => [...document.querySelectorAll('dt')].find(term => term.textContent?.trim() === 'Срок')?.nextElementSibling?.textContent?.trim() ?? ''
+      expect(await screen.findByText((_, node) => node?.tagName === 'DD' && (node.textContent ?? '').startsWith(`${shown}, 09:05`))).toBeTruthy()
+      const afterEdit = deadline()
+      fireEvent.click(screen.getByText('Статус и назначение'))
+      fireEvent.click(screen.getByRole('button', { name: 'Назначить' }))
+      const again = await screen.findByRole('dialog', { name: 'Ответственный и срок' })
+      expect(within(again).getByRole('button', { name: 'Дата срока' }).textContent?.trim()).toBe(shown)
+      expect((within(again).getByLabelText('Время срока') as HTMLInputElement).value).toBe('09:05')
+      fireEvent.click(within(again).getByRole('button', { name: 'Сохранить' }))
+      await waitFor(() => {
+        expect(screen.queryByRole('dialog', { name: 'Ответственный и срок' })).toBeNull()
+        expect(deadline()).toBe(afterEdit)
+      })
+      expect(screen.queryByText(/AM|PM/)).toBeNull()
+      view.unmount()
     }
   })
 

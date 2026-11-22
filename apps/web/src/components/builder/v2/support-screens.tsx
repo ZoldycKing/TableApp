@@ -3,10 +3,11 @@ import { createContext, useContext, useEffect, useId, useState } from 'react'
 import { instantToWallClock, wallClockToInstant } from '@tableapp/schema'
 import type { AppV2, AppV2Node, AppV2Record } from '@tableapp/schema/app-v2'
 import { savePublishedSupportAction } from '@/app/support-actions'
-import { deadlineTime, filterTickets, isOpenStatus, isOverdue, operatorTransitions, supportSummary, type SupportFilter, type SupportListItem } from '@/lib/support-logic'
+import { deadlineTime, filterTickets, isOpenStatus, isOverdue, operatorTransitions, supportAuthorKind, supportAuthorLabel, supportSummary, type SupportFilter, type SupportListItem } from '@/lib/support-logic'
 import { applySupportChange, isSupportDesk, supportStatusName, type SupportChange } from '@/lib/support-persist'
 import { AppDialog } from './app-dialog'
 import { DetailCardShell, DetailSection, ListScreenShell, ShellSearchField } from './layout-shell'
+import shell from './layout-shell.module.css'
 import { ProtoIcon } from '../prototype/icons'
 import { usePublishedV2 } from './published-context'
 import { useBuilderV2NodeData } from './use-data'
@@ -14,7 +15,7 @@ import type { AppV2RendererProps } from './view'
 import css from './support.module.css'
 
 export type SupportOpen = 'create' | 'reply' | 'note' | 'assign' | 'category' | null
-export type SupportBundle = { rows: AppV2Record[]; setRows?: (rows: AppV2Record[]) => void; open?: SupportOpen; now?: number }
+export type SupportBundle = { rows: AppV2Record[]; setRows?: (rows: AppV2Record[]) => void; open?: SupportOpen; now?: number; sample?: boolean }
 export const SupportRowsContext = createContext<SupportBundle | null>(null)
 
 const PLACEHOLDER: AppV2Node = { id: 'support_placeholder', name: 'placeholder', type: 'heading', value: { kind: 'literal', value: '' }, size: 's', visibleTo: null, visibleWhen: null }
@@ -75,10 +76,8 @@ function splitDeadline(value: unknown) {
   return wall ? { date: wall.date, time: wall.time } : { date: '', time: '' }
 }
 
-function transitionLabel(from: string, to: string) {
-  if (to === 'В работе' && (from === 'Решено' || from === 'Закрыто')) return 'Переоткрыть'
-  if (to === 'В работе' && from === 'Ждём клиента') return 'Вернуть в работу'
-  if (to === 'В работе') return 'Взять в работу'
+function transitionLabel(to: string) {
+  if (to === 'В работе') return 'В работу'
   if (to === 'Ждём клиента') return 'Ждём клиента'
   if (to === 'Решено') return 'Решено'
   if (to === 'Закрыто') return 'Закрыть'
@@ -192,6 +191,7 @@ function TicketList(props: ScreenProps) {
   const [open, setOpen] = useState<SupportOpen>(useContext(SupportRowsContext)?.open ?? null)
   const items = ticketItems(props)
   const summary = supportSummary(items, props.now)
+  const sample = useContext(SupportRowsContext)?.sample
   const visible = filterTickets(items, filter, props.actor.email ?? '', props.now)
     .sort((a, b) => {
       const open = Number(isOpenStatus(b.status)) - Number(isOpenStatus(a.status))
@@ -202,10 +202,11 @@ function TicketList(props: ScreenProps) {
   return <div className={css.root} data-support-root data-support-screen={desk ? 'queue' : 'client'}>
     <ListScreenShell
       title={desk ? 'Очередь обращений' : 'Мои обращения'}
-      meta={desk ? 'Ответы остаются в приложении. Почта и мессенджеры не отправляются.' : 'Здесь только ваши обращения и ответы оператора.'}
+      meta={desk ? 'Очередь службы поддержки.' : 'Ваши обращения и ответы.'}
       actions={<button type="button" className={css.primary} onClick={() => setOpen('create')}>{desk ? 'Новое обращение' : 'Написать обращение'}</button>}
     >
       <div className={css.stack}>
+        {sample ? <p className={css.sample} role="note">Демоданные: вымышленные обращения, не настоящая переписка.</p> : null}
         <fieldset className={css.summary} aria-label="Сводка обращений">
           <legend className={css.quiet}>Сводка</legend>
           <button type="button" aria-pressed={filter.scope === 'open'} onClick={() => setFilter(current => ({ ...current, scope: current.scope === 'open' ? 'all' : 'open' }))}><strong>{summary.open}</strong><span>Открытые</span></button>
@@ -264,7 +265,8 @@ function TicketButton({ item, now, onOpen }: { item: SupportListItem; now: numbe
 function TicketCard(props: ScreenProps) {
   const desk = isSupportDesk(props.actor)
   const ticket = props.of(props.kit.ticketsTableId).find(row => row.id === props.recordId) ?? (props.record?.tableId === props.kit.ticketsTableId ? props.record : undefined)
-  const [dialog, setDialog] = useState<SupportOpen>(useContext(SupportRowsContext)?.open ?? null)
+  const bundle = useContext(SupportRowsContext)
+  const [dialog, setDialog] = useState<SupportOpen>(bundle?.open ?? null)
   const [message, setMessage] = useState('')
   const back = desk ? props.kit.queueScreenId : props.kit.clientListScreenId
   if (!ticket) return <div className={css.root} data-support-root data-support-screen="missing">{props.loading ? <p role="status">Загружаем обращение…</p> : <div className={css.empty}><p>Обращение не найдено или вам недоступно.</p><button type="button" onClick={() => props.onNavigate?.(back)}>К списку</button></div>}</div>
@@ -279,14 +281,17 @@ function TicketCard(props: ScreenProps) {
   const replies = props.of(props.kit.repliesTableId).filter(row => firstId(row.values[props.kit.reply.ticket]) === ticket.id)
   const notes = desk ? props.of(props.kit.notesTableId).filter(row => firstId(row.values[props.kit.note.ticket]) === ticket.id) : []
   const clientName = textOf(ticket.values[fields.clientName])
-  const clientEmail = textOf(ticket.values[fields.clientEmail]).toLowerCase()
+  const clientEmail = textOf(ticket.values[fields.clientEmail])
   const timeline = [...replies.map(row => {
     const author = textOf(row.values[props.kit.reply.author])
-    const authorEmail = textOf(row.values[props.kit.reply.authorEmail]).toLowerCase()
-    return { id: row.id, at: textOf(row.values[props.kit.reply.at]), author, text: textOf(row.values[props.kit.reply.text]), internal: false, client: (clientEmail && authorEmail === clientEmail) || author === clientName }
-  }), ...notes.map(row => ({ id: row.id, at: textOf(row.values[props.kit.note.at]), author: textOf(row.values[props.kit.note.author]), text: textOf(row.values[props.kit.note.text]), internal: true, client: false }))]
+    const authorEmail = textOf(row.values[props.kit.reply.authorEmail])
+    const kind = supportAuthorKind({ author, authorEmail, clientName, clientEmail })
+    return { id: row.id, at: textOf(row.values[props.kit.reply.at]), author, text: textOf(row.values[props.kit.reply.text]), internal: false, label: supportAuthorLabel(kind) }
+  }), ...notes.map(row => ({ id: row.id, at: textOf(row.values[props.kit.note.at]), author: textOf(row.values[props.kit.note.author]), text: textOf(row.values[props.kit.note.text]), internal: true, label: 'Внутренняя заметка' }))]
     .sort((a, b) => a.at.localeCompare(b.at) || a.id.localeCompare(b.id))
   const transitions = desk ? operatorTransitions(status) : []
+  const replyLabel = status === 'Решено' || status === 'Закрыто' ? 'Переоткрыть' : 'Ответить'
+  const sample = bundle?.sample
   return <div className={css.root} data-support-root data-support-screen={desk ? 'ticket' : 'client-ticket'} data-support-status={status}>
     <DetailCardShell
       back={{ label: desk ? 'Очередь' : 'Мои обращения', onClick: () => props.onNavigate?.(back) }}
@@ -294,33 +299,45 @@ function TicketCard(props: ScreenProps) {
       subtitle={textOf(ticket.values[fields.number])}
       badge={<span className={css.badges}><Badge name={status} />{overdue ? <Badge name="Просрочено" /> : null}<Badge name={priority} /></span>}
       actions={<div className={css.actions}>
-        {desk && status !== 'Закрыто' ? <button type="button" onClick={() => setDialog('assign')}>Назначить</button> : null}
-        {transitions.map(next => <button key={next} type="button" data-primary={next === 'В работе' || next === 'Решено' ? 'true' : undefined} onClick={() => void runStatus(props, ticket.id, statusId(props, next), setMessage)}>{transitionLabel(status, next)}</button>)}
-        <button type="button" data-primary="true" onClick={() => setDialog('reply')}>{status === 'Решено' || status === 'Закрыто' ? 'Переоткрыть' : 'Ответить'}</button>
-        {desk ? <button type="button" onClick={() => setDialog('note')}>Внутренняя заметка</button> : null}
+        <button type="button" className={css.primary} onClick={() => setDialog('reply')}>{replyLabel}</button>
+        {transitions.length || desk ? <details className={css.moreActions}>
+          <summary>Статус и назначение</summary>
+          <div>
+            {desk && status !== 'Закрыто' ? <button type="button" onClick={() => setDialog('assign')}>Назначить</button> : null}
+            {transitions.map(next => <button key={next} type="button" onClick={() => void runStatus(props, ticket.id, statusId(props, next), setMessage)}>{transitionLabel(next)}</button>)}
+            {desk ? <button type="button" onClick={() => setDialog('note')}>Внутренняя заметка</button> : null}
+          </div>
+        </details> : null}
       </div>}
     >
-      <DetailSection title="Описание"><p className={css.description}>{textOf(ticket.values[fields.description]) || 'Описания нет.'}</p></DetailSection>
-      <DetailSection title="Сведения">
-        <dl className={css.facts}>
-          <div><dt>Клиент</dt><dd>{textOf(ticket.values[fields.clientName]) || 'Не указан'}</dd></div>
-          <div><dt>Ответственный</dt><dd>{assignee || 'Не назначен'}</dd></div>
-          <div><dt>Приоритет</dt><dd>{priority || 'Не указан'}</dd></div>
-          <div><dt>Категория</dt><dd>{category || 'Без категории'}</dd></div>
-          <div><dt>Срок</dt><dd>{formatWhen(ticket.values[fields.deadline])}{overdue ? '. Просрочено' : ''}</dd></div>
-        </dl>
-      </DetailSection>
-      <DetailSection title="Переписка">
-        {props.error ? <p className={css.error} role="alert">{props.error}</p> : null}
-        {message ? <p role="status">{message}</p> : null}
-        {!timeline.length ? <div className={css.empty}><p>Сообщений пока нет. Ответ появится в этой ленте.</p></div> : null}
-        <ol className={css.timeline} aria-label="Хронология">
-          {timeline.map(entry => <li key={entry.id} className={css.message} data-internal={entry.internal || undefined} data-support-note={entry.internal || undefined}>
-            <header><strong>{entry.author || 'Без имени'}</strong><span className={css.quiet}>{formatWhen(entry.at, 'Время не указано')}</span>{entry.internal ? <span className={css.noteFlag}>Внутренняя заметка. Клиент это не видит.</span> : <span className={css.quiet}>{entry.client ? 'Клиент' : 'Ответ клиенту'}</span>}</header>
-            <p>{entry.text}</p>
-          </li>)}
-        </ol>
-      </DetailSection>
+      {sample ? <p className={css.sample} role="note">Демоданные: вымышленные обращения, не настоящая переписка.</p> : null}
+      <div className={css.ticketCols}>
+        <div className={shell.detailMainCol}>
+          <DetailSection title="Описание"><p className={css.description}>{textOf(ticket.values[fields.description]) || 'Описания нет.'}</p></DetailSection>
+          <DetailSection title="Переписка">
+            {props.error ? <p className={css.error} role="alert">{props.error}</p> : null}
+            {message ? <p role="status">{message}</p> : null}
+            {!timeline.length ? <div className={css.empty}><p>Сообщений пока нет. Ответ появится в этой ленте.</p></div> : null}
+            <ol className={css.timeline} aria-label="Хронология">
+              {timeline.map(entry => <li key={entry.id} className={css.message} data-internal={entry.internal || undefined} data-support-note={entry.internal || undefined} data-author-kind={entry.internal ? 'note' : entry.label === 'Клиент' ? 'client' : 'operator'}>
+                <header><strong>{entry.author || 'Без имени'}</strong><span className={css.quiet}>{formatWhen(entry.at, 'Время не указано')}</span>{entry.internal ? <span className={css.noteFlag}>Внутренняя заметка. Клиент это не видит.</span> : <span className={css.quiet}>{entry.label}</span>}</header>
+                <p>{entry.text}</p>
+              </li>)}
+            </ol>
+          </DetailSection>
+        </div>
+        <aside className={`${shell.detailSideCol} ${css.factsCol}`}>
+          <DetailSection title="Сведения">
+            <dl className={css.facts}>
+              <div><dt>Клиент</dt><dd>{clientName || 'Не указан'}</dd></div>
+              <div><dt>Ответственный</dt><dd>{assignee || 'Не назначен'}</dd></div>
+              <div><dt>Приоритет</dt><dd>{priority || 'Не указан'}</dd></div>
+              <div><dt>Категория</dt><dd>{category || 'Без категории'}</dd></div>
+              <div><dt>Срок</dt><dd>{formatWhen(ticket.values[fields.deadline])}{overdue ? '. Просрочено' : ''}</dd></div>
+            </dl>
+          </DetailSection>
+        </aside>
+      </div>
     </DetailCardShell>
     {dialog === 'reply' ? <ReplyDialog {...props} ticketId={ticket.id} reopen={status === 'Решено' || status === 'Закрыто'} onClose={() => setDialog(null)} onMessage={setMessage} /> : null}
     {dialog === 'note' ? <NoteDialog {...props} ticketId={ticket.id} onClose={() => setDialog(null)} onMessage={setMessage} /> : null}
@@ -389,7 +406,7 @@ function ReplyDialog(props: ScreenProps & { ticketId: string; reopen: boolean; o
   return <AppDialog title={props.reopen ? 'Переоткрыть обращением' : 'Ответ'} onClose={props.onClose} footer={<button type="submit" form={formId} className={css.primary} disabled={busy}>{busy ? 'Сохраняем…' : props.reopen ? 'Переоткрыть' : 'Ответить'}</button>}>
     <form id={formId} data-support-form="reply" onSubmit={event => { event.preventDefault(); void save() }}>
       <label className={css.field}><span>{props.reopen ? 'Что изменилось' : 'Сообщение'}</span><textarea value={text} onChange={event => setText(event.target.value)} maxLength={4000} required /></label>
-      <p className={css.quiet}>Сообщение увидит вторая сторона в этом обращении. На почту оно не уходит.</p>
+      <p className={css.quiet}>Сообщение появится в переписке этого обращения.</p>
       {error ? <p className={css.error} role="alert">{error}</p> : null}
     </form>
   </AppDialog>

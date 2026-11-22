@@ -25,7 +25,7 @@ export function supportTemplateDemoModel(example = templateExample('podderzhka')
   return { app, tables, rows }
 }
 
-type DemoWho = 'anna' | 'irina' | 'marina'
+type DemoWho = 'anna' | 'irina' | 'marina' | 'petr'
 
 function demoNowMs(at = new Date()) {
   const wall = instantToWallClock(at, 'Europe/Moscow')
@@ -39,7 +39,7 @@ function goalFor(model: ReturnType<typeof supportTemplateDemoModel>, view: strin
   const ticket = (number: string) => model.rows.find(row => row.tableId === kit.ticketsTableId && row.values[kit.ticket.number] === number)
   const base = { who: 'anna' as DemoWho, open: null as SupportOpen }
   if (view === 'client' || view === 'create') return { ...base, who: 'irina' as const, screenId: kit.clientListScreenId, recordId: undefined, open: view === 'create' ? 'create' as const : null }
-  if (view === 'client-ticket') return { ...base, who: 'irina' as const, screenId: kit.clientTicketScreenId, recordId: ticket('ОБР-1028')?.id, open: null }
+  if (view === 'client-ticket') return { ...base, who: 'petr' as const, screenId: kit.clientTicketScreenId, recordId: ticket('ОБР-1042')?.id, open: null }
   if (view === 'settings') return { ...base, who: 'marina' as const, screenId: kit.settingsScreenId, recordId: undefined, open: null }
   if (view === 'clients') return { ...base, screenId: kit.clientsScreenId, recordId: undefined, open: null }
   if (view === 'ticket' || view === 'note' || view === 'assign' || view === 'reply') return { ...base, screenId: kit.ticketScreenId, recordId: ticket('ОБР-1042')?.id, open: view === 'assign' ? 'assign' as const : view === 'reply' ? 'reply' as const : view === 'note' ? 'note' as const : null }
@@ -48,6 +48,7 @@ function goalFor(model: ReturnType<typeof supportTemplateDemoModel>, view: strin
 
 function actorFor(who: DemoWho): AppV2Actor {
   if (who === 'irina') return { authenticated: true, id: 'demo_irina', roleIds: ['client'], email: 'irina@example.invalid', name: 'Ирина Петрова', company: '' }
+  if (who === 'petr') return { authenticated: true, id: 'demo_petr', roleIds: ['client'], email: 'petr@example.invalid', name: 'Пётр Орлов', company: '' }
   if (who === 'marina') return { authenticated: true, id: 'demo_marina', roleIds: ['owner'], email: 'marina@example.invalid', name: 'Марина Соколова', company: '' }
   return { authenticated: true, id: 'demo_anna', roleIds: ['staff'], email: 'anna@example.invalid', name: 'Анна Волкова', company: '' }
 }
@@ -68,14 +69,14 @@ export function SupportDemo({ view = 'queue', bare = false, scheme, phone = fals
     setScreenId(goal.screenId)
     setRecordId(goal.recordId)
     setOpen(goal.open)
-    setRows(goal.who === 'irina' ? projectSupportRows(model.app, actor, model.rows) : model.rows)
+    setRows(goal.who === 'irina' || goal.who === 'petr' ? projectSupportRows(model.app, actor, model.rows) : model.rows)
   }, [model, view])
   if (!model?.app.support || !screenId) return <div data-support-root data-support-screen="loading" />
   const themed = scheme ? { ...model.app, theme: { ...model.app.theme, scheme } } : model.app
   const actor = actorFor(who)
   const visible = { ...themed, screens: themed.screens.filter(screen => canOpenAppV2Screen(themed, actor, screen.id)) }
   const navigate = (id: string, rowId?: string) => { setScreenId(id); setRecordId(rowId); setOpen(null) }
-  return <BuilderV2Theme app={themed}><SupportRowsContext value={{ rows, setRows, open, now: demoNowMs() }}>
+  return <BuilderV2Theme app={themed}><SupportRowsContext value={{ rows, setRows, open, now: demoNowMs(), sample: true }}>
     <div data-support-root data-support-screen={view} data-preview-screen={screenId}>
       <BuilderV2AppFrame app={visible} screenId={screenId} title="" phone={phone} deviceMode={phone ? 'phone' : 'desktop'} fullScreen={bare} onNavigate={navigate}>
         <AppV2Renderer live app={visible} tables={model.tables} actor={actor} screenId={screenId} record={rows.find(row => row.id === recordId)} onNavigate={navigate} />

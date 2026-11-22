@@ -27,21 +27,29 @@ describe('support screens', () => {
     const summary = await screen.findByRole('group', { name: 'Сводка обращений' })
     expect(within(summary).getByRole('button', { name: /Просроченные/ }).textContent).toContain('2')
     expect(within(summary).getByRole('button', { name: /Ждём клиента/ }).textContent).toContain('2')
-    expect(screen.getAllByRole('button', { name: /Не открывается учебный кабинет/ }).length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('button', { name: /Не открывается кабинет/ }).length).toBeGreaterThan(0)
     queue.unmount()
 
     const operator = render(<SupportDemo view="ticket" bare />)
-    expect(await screen.findByText(/черновик ответа не отправлять/)).toBeTruthy()
+    expect(await screen.findByText(/в ответ клиенту это не писать/)).toBeTruthy()
     expect(screen.getByText('Внутренняя заметка. Клиент это не видит.')).toBeTruthy()
-    expect(screen.getByText(/строку отчёта проверили/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Ответить' })).toBeTruthy()
+    expect(screen.getByText('Статус и назначение')).toBeTruthy()
     operator.unmount()
 
-    render(<SupportDemo view="client-ticket" bare />)
-    expect(await screen.findByText(/список выгружается в разделе/)).toBeTruthy()
-    expect(screen.queryByText(/черновик ответа не отправлять/)).toBeNull()
-    expect(screen.queryByText(/Клиенту не показывать/)).toBeNull()
-    expect(screen.queryByText('Внутренняя заметка. Клиент это не видит.')).toBeNull()
-    expect(screen.queryByText(/Ошибка в учебном отчёте/)).toBeNull()
+    for (const phone of [false, true]) {
+      const client = render(<SupportDemo view="client-ticket" bare phone={phone} />)
+      const thread = await screen.findByRole('list', { name: 'Хронология' })
+      const own = within(thread).getByText('Пётр Орлов').closest('li') as HTMLElement
+      const reply = within(thread).getByText('Анна Волкова').closest('li') as HTMLElement
+      expect(within(own).getByText('Клиент')).toBeTruthy()
+      expect(within(own).queryByText('Ответ клиенту')).toBeNull()
+      expect(within(reply).getByText('Ответ клиенту')).toBeTruthy()
+      expect(screen.queryByText(/в ответ клиенту это не писать/)).toBeNull()
+      expect(screen.queryByText('Внутренняя заметка. Клиент это не видит.')).toBeNull()
+      expect(screen.getByRole('heading', { name: 'Не сходится сумма в отчёте за октябрь' })).toBeTruthy()
+      client.unmount()
+    }
   })
 
   it('opens the client form with the save action visible', async () => {

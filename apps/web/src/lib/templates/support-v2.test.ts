@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { FieldType } from '@tableapp/schema'
 import { authorizeAppV2Write, projectAppV2Row, validateAppV2, type AppV2Actor, type AppV2Catalog, type AppV2Record } from '@tableapp/schema/app-v2'
 import { configureBuilderV2ScreenAccess } from '../builder-v2-read-access'
-import { filterTickets, isOverdue, nextTicketNumber, operatorTransitions, statusAfterClientReply, supportSummary } from '../support-logic'
+import { filterTickets, isOverdue, nextTicketNumber, operatorTransitions, statusAfterClientReply, supportAuthorKind, supportAuthorLabel, supportSummary } from '../support-logic'
 import { isSupportClient, isSupportDesk, projectSupportRows } from '../support-persist'
 import { buildTemplate } from './build'
 import { findTemplate } from './catalog'
@@ -54,7 +54,7 @@ describe('support template', () => {
     const own = ticket('ОБР-1028')
     const foreign = ticket('ОБР-1042')
     const record = (row: typeof own): AppV2Record => ({ id: row.id, tableId: row.tableId, values: row.data as AppV2Record['values'] })
-    expect(projectAppV2Row(app, client, record(own))).toMatchObject({ [support.ticket.subject]: 'Как выгрузить учебный список' })
+    expect(projectAppV2Row(app, client, record(own))).toMatchObject({ [support.ticket.subject]: 'Где посмотреть свои обращения' })
     expect(projectAppV2Row(app, client, record(own))).not.toHaveProperty(support.ticket.assigneeEmail)
     expect(projectAppV2Row(app, other, record(own))).toEqual({})
     expect(projectAppV2Row(app, operator, record(foreign))).toHaveProperty(support.ticket.assigneeEmail)
@@ -64,11 +64,11 @@ describe('support template', () => {
     for (const note of notes) {
       expect(projectAppV2Row(app, client, record(note))).toEqual({})
       expect(projectAppV2Row(app, other, record(note))).toEqual({})
-      expect(projectAppV2Row(app, operator, record(note))[support.note.text]).toEqual(expect.stringContaining('Клиенту не показывать'))
+      expect(String(projectAppV2Row(app, operator, record(note))[support.note.text] ?? '')).not.toBe('')
     }
     const projected = projectSupportRows(app, client, built.rows.map(record))
-    expect(JSON.stringify(projected)).not.toContain('Клиенту не показывать')
-    expect(JSON.stringify(projected)).not.toContain('черновик ответа не отправлять')
+    expect(JSON.stringify(projected)).not.toContain('в ответ клиенту это не писать')
+    expect(JSON.stringify(projected)).not.toContain('Роль коллеги снята вручную')
     expect(projected.some(row => row.tableId === support.notesTableId)).toBe(false)
     expect(projected.filter(row => row.tableId === support.ticketsTableId).every(row => row.values[support.ticket.clientEmail] === undefined || row.values[support.ticket.clientEmail] === 'irina@example.invalid')).toBe(true)
 
@@ -102,5 +102,12 @@ describe('support template', () => {
     expect(statusAfterClientReply('Закрыто')).toBe('В работе')
     expect(statusAfterClientReply('Новое')).toBe('Новое')
     expect(nextTicketNumber(['ОБР-1048', 'черновик', 'ОБР-1033'])).toBe('ОБР-1049')
+    const byEmail = supportAuthorKind({ author: 'Кто угодно', authorEmail: 'petr@example.invalid', clientName: 'Пётр Орлов', clientEmail: 'petr@example.invalid' })
+    const byName = supportAuthorKind({ author: 'Пётр Орлов', clientName: 'Пётр Орлов' })
+    const desk = supportAuthorKind({ author: 'Анна Волкова', authorEmail: 'anna@example.invalid', clientName: 'Пётр Орлов', clientEmail: 'petr@example.invalid' })
+    expect(supportAuthorLabel(byEmail)).toBe('Клиент')
+    expect(supportAuthorLabel(byName)).toBe('Клиент')
+    expect(supportAuthorLabel(desk)).toBe('Ответ клиенту')
+    expect(byName).toBe(byEmail)
   })
 })

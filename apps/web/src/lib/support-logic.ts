@@ -112,3 +112,18 @@ export function nextTicketNumber(existing: readonly string[]) {
 export function sameEmail(left: unknown, right: unknown) {
   return typeof left === 'string' && typeof right === 'string' && left.trim().toLowerCase() === right.trim().toLowerCase() && left.trim() !== ''
 }
+
+/** Who wrote a public message. Email wins when both sides have it; otherwise the client name. Width and theme do not matter. */
+export function supportAuthorKind(input: { author: string; authorEmail?: string; clientName: string; clientEmail?: string }): 'client' | 'operator' {
+  const authorEmail = (input.authorEmail ?? '').trim().toLowerCase()
+  const clientEmail = (input.clientEmail ?? '').trim().toLowerCase()
+  if (authorEmail && clientEmail && authorEmail === clientEmail) return 'client'
+  const author = input.author.trim()
+  const clientName = input.clientName.trim()
+  if (author && clientName && author.localeCompare(clientName, 'ru', { sensitivity: 'accent' }) === 0) return 'client'
+  return 'operator'
+}
+
+export function supportAuthorLabel(kind: 'client' | 'operator') {
+  return kind === 'client' ? 'Клиент' : 'Ответ клиенту'
+}

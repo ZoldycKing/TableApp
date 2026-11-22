@@ -500,23 +500,6 @@ export function validateAppV2(app: AppV2, catalog: AppV2Catalog, options: { mode
     }
     for (const formId of [projects.createTaskFormId, projects.editTaskFormId, projects.createProjectFormId, projects.editProjectFormId, projects.commentFormId]) if (nodes.get(formId)?.type !== 'form') issue('projects_form', path, 'Форма проектов удалена')
   }
-  if (app.invoices) {
-    const invoices = app.invoices, path = 'invoices'
-    table(invoices.documentsTableId, path); table(invoices.clientsTableId, path); table(invoices.productsTableId, path); table(invoices.settingsTableId, path)
-    const group = (tableId: string, values: Record<string, string | undefined>) => {
-      for (const fieldId of Object.values(values)) if (fieldId) field(fieldId, tableId, path)
-    }
-    group(invoices.documentsTableId, invoices.document)
-    group(invoices.clientsTableId, invoices.client)
-    group(invoices.productsTableId, invoices.product)
-    group(invoices.settingsTableId, invoices.settings)
-    const clientLink = field(invoices.document.client, invoices.documentsTableId, path)
-    if (clientLink && clientLink.relationTableId && clientLink.relationTableId !== invoices.clientsTableId) issue('invoices_client', path, 'Документ должен ссылаться на клиентов')
-    const sourceLink = field(invoices.document.source, invoices.documentsTableId, path)
-    if (sourceLink && sourceLink.relationTableId && sourceLink.relationTableId !== invoices.documentsTableId) issue('invoices_source', path, 'Источник должен ссылаться на документы')
-    for (const screenId of [invoices.homeScreenId, invoices.documentScreenId, invoices.clientsScreenId, invoices.productsScreenId, invoices.settingsScreenId]) if (!screens.has(screenId)) issue('invoices_screen', path, 'Экран счетов удалён')
-    for (const formId of [invoices.createDocumentFormId, invoices.editDocumentFormId, invoices.paymentFormId, invoices.createClientFormId, invoices.createProductFormId]) if (nodes.get(formId)?.type !== 'form') issue('invoices_form', path, 'Форма счетов удалена')
-  }
   if (app.shop) {
     const shop = app.shop, path = 'shop'
     table(shop.catalogTableId, path); table(shop.ordersTableId, path); table(shop.itemsTableId, path)

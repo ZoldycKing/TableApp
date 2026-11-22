@@ -8,7 +8,7 @@ export const STARTER_GROUPS = [
   {
     id: 'internal-tools', name: 'Внутренний учёт',
     description: 'Для владельца и команды: клиенты и сделки, движение товаров, выпуск продукции. Публичный каталог и кабинет покупателя здесь не нужны.',
-    templateIds: ['crm', 'proekty', 'scheta', 'sklad', 'proizvodstvo'],
+    templateIds: ['crm', 'proekty', 'sklad', 'proizvodstvo'],
   },
 ] as const
 

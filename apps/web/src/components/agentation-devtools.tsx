@@ -11,7 +11,7 @@ export function AgentationDevtools() {
   const pathname = usePathname()
   if (!Toolbar) return null
   // Keep the floating toolbar off published /a apps — it overlaps inventory/CRM chrome.
-  if (pathname?.startsWith('/a/') || pathname?.startsWith('/p/') || pathname?.startsWith('/dispatch-shot') || pathname?.startsWith('/projects-shot')) return null
+  if (pathname?.startsWith('/a/') || pathname?.startsWith('/p/') || pathname?.startsWith('/dispatch-shot') || pathname?.startsWith('/projects-shot') || pathname?.startsWith('/support-shot')) return null
 
   return (
     <Toolbar

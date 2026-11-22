@@ -245,6 +245,24 @@ export const appV2Schema = z.strictObject({
     billingFormId: id.optional(),
     repeatFormId: id.optional(),
   }).optional(),
+  /** Support desk starter. Absent outside that install. Notes are a separate table with no client grant. */
+  support: z.strictObject({
+    ticketsTableId: id, clientsTableId: id, operatorsTableId: id, categoriesTableId: id, repliesTableId: id, notesTableId: id,
+    queueScreenId: id, ticketScreenId: id, clientListScreenId: id, clientTicketScreenId: id, clientsScreenId: id, settingsScreenId: id,
+    createFormId: id, operatorCreateFormId: id, replyFormId: id, noteFormId: id, assignFormId: id, categoryFormId: id,
+    ticket: z.strictObject({
+      number: id, subject: id, description: id, client: id, clientName: id, clientEmail: id,
+      assignee: id, assigneeEmail: id, priority: id, category: id, status: id, deadline: id, createdAt: id, updatedAt: id,
+    }),
+    client: z.strictObject({ name: id, email: id, phone: id, company: id, note: id }),
+    operator: z.strictObject({ name: id, email: id, phone: id, role: id, active: id }),
+    category: z.strictObject({ name: id, description: id, active: id }),
+    reply: z.strictObject({ text: id, ticket: id, at: id, author: id, authorEmail: id, clientEmail: id }),
+    note: z.strictObject({ text: id, ticket: id, at: id, author: id, authorEmail: id }),
+    statuses: z.strictObject({ fresh: id, progress: id, waiting: id, resolved: id, closed: id }),
+    priorities: z.strictObject({ low: id, normal: id, high: id, urgent: id }),
+    activeChoiceId: id, inactiveChoiceId: id,
+  }).optional(),
   /** Internal warehouse starter (stock from movements). Absent outside that install. */
   inventory: z.strictObject({
     itemsTableId: id, movementsTableId: id, warehousesTableId: id,

@@ -439,6 +439,40 @@ export function validateAppV2(app: AppV2, catalog: AppV2Catalog, options: { mode
     const calendar = nodes.get(dispatch.calendarNodeId)
     if (calendar?.type !== 'team_calendar') issue('dispatch_calendar', path, 'Доска дня должна быть календарём команды')
   }
+  if (app.support) {
+    const support = app.support, path = 'support'
+    table(support.ticketsTableId, path); table(support.clientsTableId, path); table(support.operatorsTableId, path)
+    table(support.categoriesTableId, path); table(support.repliesTableId, path); table(support.notesTableId, path)
+    const group = (tableId: string, values: Record<string, string | undefined>) => {
+      for (const fieldId of Object.values(values)) if (fieldId) field(fieldId, tableId, path)
+    }
+    group(support.ticketsTableId, support.ticket)
+    group(support.clientsTableId, support.client)
+    group(support.operatorsTableId, support.operator)
+    group(support.categoriesTableId, support.category)
+    group(support.repliesTableId, support.reply)
+    group(support.notesTableId, support.note)
+    const client = field(support.ticket.client, support.ticketsTableId, path)
+    if (client && client.relationTableId && client.relationTableId !== support.clientsTableId) issue('support_client', path, 'Обращение должно ссылаться на клиентов')
+    const assignee = field(support.ticket.assignee, support.ticketsTableId, path)
+    if (assignee && assignee.relationTableId && assignee.relationTableId !== support.operatorsTableId) issue('support_assignee', path, 'Ответственный должен ссылаться на операторов')
+    const category = field(support.ticket.category, support.ticketsTableId, path)
+    if (category && category.relationTableId && category.relationTableId !== support.categoriesTableId) issue('support_category', path, 'Категория обращения должна ссылаться на справочник')
+    const replyTicket = field(support.reply.ticket, support.repliesTableId, path)
+    if (replyTicket && replyTicket.relationTableId && replyTicket.relationTableId !== support.ticketsTableId) issue('support_reply', path, 'Ответ должен ссылаться на обращение')
+    const noteTicket = field(support.note.ticket, support.notesTableId, path)
+    if (noteTicket && noteTicket.relationTableId && noteTicket.relationTableId !== support.ticketsTableId) issue('support_note', path, 'Заметка должна ссылаться на обращение')
+    if (support.repliesTableId === support.notesTableId) issue('support_notes_table', path, 'Внутренние заметки хранятся отдельно от ответов клиенту')
+    const statusIds = [support.statuses.fresh, support.statuses.progress, support.statuses.waiting, support.statuses.resolved, support.statuses.closed]
+    if (new Set(statusIds).size !== statusIds.length) issue('support_status', path, 'Статусы обращения должны различаться')
+    for (const screenId of [support.queueScreenId, support.ticketScreenId, support.clientListScreenId, support.clientTicketScreenId, support.clientsScreenId, support.settingsScreenId]) if (!screens.has(screenId)) issue('support_screen', path, 'Экран обращений удалён')
+    for (const formId of [support.createFormId, support.operatorCreateFormId, support.replyFormId, support.noteFormId, support.assignFormId, support.categoryFormId]) if (nodes.get(formId)?.type !== 'form') issue('support_form', path, 'Форма обращений удалена')
+    const clientTicket = screens.get(support.clientTicketScreenId)
+    const clientList = screens.get(support.clientListScreenId)
+    if (clientTicket?.audience.kind === 'public' || clientList?.audience.kind === 'public') issue('support_client_public', path, 'Кабинет обращений не бывает публичным')
+    const noteOnClient = app.sources.some(source => source.tableId === support.notesTableId && app.nodes.some(node => node.type === 'collection' && node.sourceId === source.id && clientTicket?.rootIds.includes(node.id)))
+    if (noteOnClient) issue('support_client_notes', path, 'Экран клиента не показывает внутренние заметки')
+  }
   if (app.projects) {
     const projects = app.projects, path = 'projects'
     table(projects.projectsTableId, path); table(projects.tasksTableId, path); table(projects.peopleTableId, path)

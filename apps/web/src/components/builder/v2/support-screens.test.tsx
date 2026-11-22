@@ -27,7 +27,10 @@ describe('support screens', () => {
     const summary = await screen.findByRole('group', { name: 'Сводка обращений' })
     expect(within(summary).getByRole('button', { name: /Просроченные/ }).textContent).toContain('2')
     expect(within(summary).getByRole('button', { name: /Ждём клиента/ }).textContent).toContain('2')
-    expect(screen.getAllByRole('button', { name: /Не открывается кабинет/ }).length).toBeGreaterThan(0)
+    const openTicket = screen.getAllByRole('button', { name: /Не открывается кабинет/ })[0]
+    expect(openTicket?.textContent).toMatch(/ОБР-1048/)
+    expect(openTicket?.textContent?.trim().startsWith('Не открывается кабинет')).toBe(true)
+    expect(screen.getAllByText('Просрочено').length).toBeGreaterThan(0)
     queue.unmount()
 
     const operator = render(<SupportDemo view="ticket" bare />)

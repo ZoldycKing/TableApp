@@ -56,6 +56,28 @@ function Badge({ name }: { name: string }) {
   return <span className={css.badge} data-tone={toneOf(name)}>{name}</span>
 }
 
+function statusState(name: string) {
+  if (name === 'В работе') return 'work'
+  if (name === 'Ждём клиента') return 'wait'
+  if (name === 'Решено') return 'done'
+  if (name === 'Закрыто') return 'closed'
+  return 'fresh'
+}
+
+function QueueStatus({ name }: { name: string }) {
+  if (!name) return null
+  return <span className={css.mark} data-state={statusState(name)}><span className={css.dot} aria-hidden="true" />{name}</span>
+}
+
+function QueuePriority({ name }: { name: string }) {
+  if (!name) return null
+  return <span className={css.priority} data-urgent={name === 'Срочный' || undefined}>{name}</span>
+}
+
+function QueueDeadline({ value, overdue }: { value: unknown; overdue: boolean }) {
+  return <span className={css.deadline} data-overdue={overdue || undefined}>{formatWhen(value)}{overdue ? <span className={css.late}>Просрочено</span> : null}</span>
+}
+
 function formatWhen(value: unknown, empty = 'Срок не задан') {
   if (typeof value !== 'string' || !value) return empty
   const wall = instantToWallClock(value, 'Europe/Moscow')
@@ -198,7 +220,7 @@ function TicketList(props: ScreenProps) {
         <fieldset className={css.summary} aria-label="Сводка обращений">
           <legend className={css.quiet}>Сводка</legend>
           <button type="button" aria-pressed={filter.scope === 'open'} onClick={() => setFilter(current => ({ ...current, scope: current.scope === 'open' ? 'all' : 'open' }))}><strong>{summary.open}</strong><span>Открытые</span></button>
-          <button type="button" data-tone="rose" aria-pressed={filter.scope === 'overdue'} onClick={() => setFilter(current => ({ ...current, scope: current.scope === 'overdue' ? 'all' : 'overdue' }))}><strong>{summary.overdue}</strong><span>Просроченные</span></button>
+          <button type="button" aria-pressed={filter.scope === 'overdue'} onClick={() => setFilter(current => ({ ...current, scope: current.scope === 'overdue' ? 'all' : 'overdue' }))}><strong>{summary.overdue}</strong><span>Просроченные</span></button>
           <button type="button" aria-pressed={filter.scope === 'waiting'} onClick={() => setFilter(current => ({ ...current, scope: current.scope === 'waiting' ? 'all' : 'waiting' }))}><strong>{summary.waiting}</strong><span>Ждём клиента</span></button>
         </fieldset>
         <div className={css.filters}>
@@ -212,28 +234,36 @@ function TicketList(props: ScreenProps) {
         {props.loading ? <p className={css.status} role="status">Загружаем обращения…</p> : null}
         {props.error ? <div className={css.status} role="alert"><p className={css.error}>{props.error}</p><button type="button" onClick={props.reload}>Повторить</button></div> : null}
         {!props.loading && !props.error && !visible.length ? <div className={css.empty}><ProtoIcon name="clipboard" size={28} /><p>{items.length ? 'Нет обращений с такими условиями.' : desk ? 'Очередь пуста. Новое обращение появится здесь.' : 'У вас пока нет обращений.'}</p>{items.length ? <button type="button" onClick={() => setFilter(EMPTY_FILTER)}>Сбросить фильтры</button> : <button type="button" onClick={() => setOpen('create')}>{desk ? 'Создать обращение' : 'Написать обращение'}</button>}</div> : null}
-        <ul className={css.cards}>
+        {visible.length ? <><ul className={css.cards}>
           {visible.map(item => <li key={item.id}><TicketButton item={item} now={props.now} onOpen={() => props.onNavigate?.(desk ? props.kit.ticketScreenId : props.kit.clientTicketScreenId, item.id)} /></li>)}
         </ul>
         <div className={css.tableWrap}>
-          <table className={css.table}>
+          <table className={css.table} data-columns={desk ? 6 : 5}>
             <caption className={css.quiet}>Список обращений</caption>
+            <colgroup>
+              <col className={css.subjectCol} />
+              <col className={css.whoCol} />
+              <col className={css.stateCol} />
+              <col className={css.priorityCol} />
+              <col className={css.whenCol} />
+              {desk ? <col className={css.ownerCol} /> : null}
+            </colgroup>
             <thead><tr><th>Обращение</th><th>Клиент</th><th>Статус</th><th>Приоритет</th><th>Срок</th>{desk ? <th>Ответственный</th> : null}</tr></thead>
             <tbody>
               {visible.map(item => {
                 const overdue = isOverdue(item.status, item.deadline, props.now)
-                return <tr key={item.id} data-overdue={overdue || undefined}>
-                  <td><button type="button" className={css.rowButton} onClick={() => props.onNavigate?.(desk ? props.kit.ticketScreenId : props.kit.clientTicketScreenId, item.id)}>{item.number ? `${item.number}. ` : ''}{item.subject || 'Без темы'}</button></td>
-                  <td>{item.clientName || 'Клиент не указан'}</td>
-                  <td><Badge name={item.status} />{overdue ? <> <Badge name="Просрочено" /></> : null}</td>
-                  <td><Badge name={item.priority} /></td>
-                  <td>{formatWhen(item.deadline)}</td>
-                  {desk ? <td>{item.assigneeName || 'Не назначен'}</td> : null}
+                return <tr key={item.id}>
+                  <td><button type="button" className={css.rowButton} onClick={() => props.onNavigate?.(desk ? props.kit.ticketScreenId : props.kit.clientTicketScreenId, item.id)}><span className={css.subject}>{item.subject || 'Без темы'}</span>{item.number ? <span className={css.number}>{item.number}</span> : null}</button></td>
+                  <td><span className={css.person}>{item.clientName || 'Клиент не указан'}{item.category ? <span>{item.category}</span> : null}</span></td>
+                  <td><QueueStatus name={item.status} /></td>
+                  <td><QueuePriority name={item.priority} /></td>
+                  <td><QueueDeadline value={item.deadline} overdue={overdue} /></td>
+                  {desk ? <td><span className={css.person} data-empty={!item.assigneeName || undefined}>{item.assigneeName || 'Не назначен'}</span></td> : null}
                 </tr>
               })}
             </tbody>
           </table>
-        </div>
+        </div></> : null}
       </div>
     </ListScreenShell>
     {open === 'create' ? <CreateDialog {...props} desk={desk} onClose={() => setOpen(null)} onDone={id => { setOpen(null); if (id) props.onNavigate?.(backTo, undefined) }} /> : null}
@@ -242,11 +272,12 @@ function TicketList(props: ScreenProps) {
 
 function TicketButton({ item, now, onOpen }: { item: SupportListItem; now: number; onOpen: () => void }) {
   const overdue = isOverdue(item.status, item.deadline, now)
-  return <button type="button" className={css.card} data-overdue={overdue || undefined} onClick={onOpen}>
-    <strong className={css.cardTitle}>{item.number ? `${item.number}. ` : ''}{item.subject || 'Без темы'}</strong>
+  return <button type="button" className={css.card} onClick={onOpen}>
+    <span className={css.subject}>{item.subject || 'Без темы'}</span>
+    {item.number ? <span className={css.number}>{item.number}</span> : null}
     <span className={css.quiet}>{item.clientName || 'Клиент не указан'}{item.category ? ` · ${item.category}` : ''}</span>
-    <span className={css.badges}><Badge name={item.status} />{overdue ? <Badge name="Просрочено" /> : null}<Badge name={item.priority} /></span>
-    <span className={css.meta}>{item.assigneeName ? item.assigneeName : 'Не назначен'} · {formatWhen(item.deadline)}</span>
+    <span className={css.cardFacts}><QueueStatus name={item.status} /><QueuePriority name={item.priority} /></span>
+    <span className={css.meta}>{item.assigneeName || 'Не назначен'} · {formatWhen(item.deadline)}{overdue ? <span className={css.late}>Просрочено</span> : null}</span>
   </button>
 }
 

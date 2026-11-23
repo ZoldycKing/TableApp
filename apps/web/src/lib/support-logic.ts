@@ -1,5 +1,7 @@
 /** Status names, transitions, deadlines and list filters for the support starter. */
 import { instantToWallClock, wallClockToInstant } from '@tableapp/schema'
+import { supportQueueMatch, supportSlaView, type SupportQueueScope, type SupportSlaView } from './support-sla'
+export type { SupportQueueScope }
 
 /** Wall clock for ticket deadlines. Moscow has no daylight-saving shift. */
 export const SUPPORT_DEADLINE_ZONE = 'Europe/Moscow'
@@ -85,23 +87,25 @@ export type SupportListItem = {
   assigneeEmail: string
   assigneeName: string
   deadline: unknown
+  sla?: SupportSlaView
 }
 
 export type SupportFilter = {
   search: string
   status: string
+  priority?: string
   mine: boolean
-  scope: 'all' | 'open' | 'overdue' | 'waiting'
+  scope: SupportQueueScope
 }
 
 export function filterTickets(items: readonly SupportListItem[], filter: SupportFilter, actorEmail: string, now: number) {
   const query = filter.search.trim().toLocaleLowerCase('ru-RU')
   const mine = actorEmail.trim().toLowerCase()
   return items.filter(item => {
-    if (filter.scope === 'open' && !isOpenStatus(item.status)) return false
-    if (filter.scope === 'overdue' && !isOverdue(item.status, item.deadline, now)) return false
-    if (filter.scope === 'waiting' && item.status !== 'Ждём клиента') return false
+    const manualOverdue = isOverdue(item.status, item.deadline, now)
+    if (!supportQueueMatch({ status: item.status, assigneeEmail: item.assigneeEmail, sla: item.sla ?? supportSlaView([], null, now), manualOverdue }, filter.scope, mine)) return false
     if (filter.status && item.status !== filter.status) return false
+    if (filter.priority && item.priority !== filter.priority) return false
     if (filter.mine && item.assigneeEmail.trim().toLowerCase() !== mine) return false
     if (!query) return true
     const haystack = [item.number, item.subject, item.description, item.clientName, item.assigneeName, item.category, item.status, item.priority].join('\n').toLocaleLowerCase('ru-RU')

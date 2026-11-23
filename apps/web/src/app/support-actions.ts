@@ -1,4 +1,5 @@
 'use server'
+import { newId } from '@tableapp/schema'
 import { rows } from '@tableapp/db'
 import type { Field } from '@tableapp/schema'
 import type { AppV2Json, AppV2Record } from '@tableapp/schema/app-v2'
@@ -7,7 +8,7 @@ import { publishedV2Context, publishedV2Definition, publishedV2Screen } from '@/
 import { nextTicketNumber } from '@/lib/support-logic'
 import {
   assertClientReply, assertDesk, assertOperatorStatus, assertTicketAccess, categoryValues, isSupportClient, isSupportDesk,
-  noteValues, replyValues, supportActorEmail, ticketCreateValues, ticketPatchValues,
+  noteValues, replyValues, supportActorEmail,   ticketCreateValues, ticketPatchValues, supportEventRecord, supportPriorityName,
   guardSupportCreate, guardSupportUpdate, type SupportApp,
 } from '@/lib/support-persist'
 import { RowWriteError, createRow, mutationFields, updateRow, writeRows } from '@/lib/row-mutations'
@@ -18,7 +19,8 @@ type NoteRequest = { kind: 'note'; revision: string; screenId: string; recordId:
 type StatusRequest = { kind: 'status'; revision: string; screenId: string; recordId: string; statusId: string }
 type AssignRequest = { kind: 'assign'; revision: string; screenId: string; recordId: string; assigneeId: string | null; priorityId: string; categoryId: string; deadline: string | null }
 type CategoryRequest = { kind: 'category'; revision: string; screenId: string; recordId?: string; name: string; description: string; active: boolean }
-type Request = CreateRequest | ReplyRequest | NoteRequest | StatusRequest | AssignRequest | CategoryRequest
+type SlaRequest = { kind: 'sla'; revision: string; screenId: string; minutes: Record<string, number> }
+type Request = CreateRequest | ReplyRequest | NoteRequest | StatusRequest | AssignRequest | CategoryRequest | SlaRequest
 
 const text = (value: unknown, max: number) => typeof value === 'string' && value.trim().length > 0 && value.trim().length <= max ? value.trim() : null
 const optionalText = (value: unknown, max: number) => value == null || value === '' ? '' : typeof value === 'string' && value.trim().length <= max ? value.trim() : null
@@ -55,6 +57,15 @@ function readRequest(input: unknown): Request | null {
     const assigneeId = value.assigneeId == null || value.assigneeId === '' ? null : idValue(value.assigneeId)
     if (!recordId || !priorityId || !categoryId || deadline === undefined || (value.assigneeId != null && value.assigneeId !== '' && !assigneeId)) return null
     return { kind: 'assign', revision: value.revision, screenId: value.screenId, recordId, assigneeId, priorityId, categoryId, deadline }
+  }
+  if (value.kind === 'sla') {
+    if (!value.minutes || typeof value.minutes !== 'object') return null
+    const minutes: Record<string, number> = {}
+    for (const [key, item] of Object.entries(value.minutes as Record<string, unknown>)) {
+      if (!Number.isInteger(item) || Number(item) <= 0 || Number(item) > 7 * 24 * 60) return null
+      minutes[key] = Number(item)
+    }
+    return { kind: 'sla', revision: value.revision, screenId: value.screenId, minutes }
   }
   if (value.kind === 'category') {
     const name = text(value.name, 80)
@@ -130,8 +141,26 @@ export async function savePublishedSupportAction(slug: string, input: unknown): 
         })
         const decision = guardSupportCreate(app, actor, support.ticketsTableId, values)
         if (!decision.ok) throw new RowWriteError('denied', decision.error)
-        await createRow(context, support.ticketsTableId, { ...values, ...decision.ownerValues }, actorRef, { origin: 'runtime' })
+        const ticketId = newId('row')
+        await createRow(context, support.ticketsTableId, { ...values, ...decision.ownerValues }, actorRef, { id: ticketId, origin: 'runtime' })
+        await recordEvent(context, support, { ticketId, kind: 'created', at: now, priority: supportPriorityName(support, priorityId), status: 'Новое', actorEmail: supportActorEmail(actor) }, actorRef)
         return { ok: true as const, message: 'Обращение создано.' }
+      }
+      if (parsed.kind === 'sla') {
+        if (!actor.roleIds.includes('owner') || !support.slaTableId || !support.slaFields) throw new RowWriteError('denied', 'Нормативы меняет руководитель.')
+        const [stored] = await context.tx.select().from(rows).where(and(eq(rows.tableId, support.slaTableId), isNull(rows.deletedAt))).limit(1)
+        if (!stored) throw new RowWriteError('missing', 'Нормативы не найдены.')
+        const current = { id: stored.id, tableId: stored.tableId, values: stored.data as Record<string, AppV2Json> }
+        const values: Record<string, AppV2Json> = {}
+        for (const [key, fieldId] of Object.entries(support.slaFields)) {
+          const value = parsed.minutes[key]
+          if (value == null) throw new RowWriteError('invalid', 'Укажите все нормативы в минутах.')
+          values[fieldId] = value
+        }
+        const decision = guardSupportUpdate(app, actor, current, values)
+        if (!decision.ok) throw new RowWriteError('denied', decision.error)
+        await updateRow(context, support.slaTableId, current.id, values, actorRef)
+        return { ok: true as const, message: 'Нормативы сохранены.' }
       }
       if (parsed.kind === 'category') {
         if (!actor.roleIds.includes('owner')) throw new RowWriteError('denied', 'Категории меняет руководитель.')
@@ -177,6 +206,7 @@ export async function savePublishedSupportAction(slug: string, input: unknown): 
           const update = guardSupportUpdate(app, actor, ticket, patch)
           if (!update.ok) throw new RowWriteError('denied', update.error)
           await updateRow(context, support.ticketsTableId, ticket.id, patch, actorRef)
+          if (next.next !== statusName) await recordEvent(context, support, { ticketId: ticket.id, kind: 'status', at: now, priority: supportPriorityName(support, String(ticket.values[support.ticket.priority] ?? '')), status: next.next, actorEmail: supportActorEmail(actor) }, actorRef)
           return { ok: true as const, message: next.next === 'В работе' && statusName !== 'В работе' ? 'Ответ сохранён, обращение снова в работе.' : 'Ответ сохранён.' }
         }
         const desk = assertDesk(actor)
@@ -186,6 +216,7 @@ export async function savePublishedSupportAction(slug: string, input: unknown): 
         if (!decision.ok) throw new RowWriteError('denied', decision.error)
         await createRow(context, support.repliesTableId, values, actorRef, { origin: 'runtime' })
         await touchTicket(context, app, actor, support, ticket, actorRef, now)
+        await recordEvent(context, support, { ticketId: ticket.id, kind: 'public_reply', at: now, priority: supportPriorityName(support, String(ticket.values[support.ticket.priority] ?? '')), status: statusName, actorEmail: supportActorEmail(actor) }, actorRef)
         return { ok: true as const, message: 'Ответ клиенту сохранён.' }
       }
       if (parsed.kind === 'status') {
@@ -198,6 +229,7 @@ export async function savePublishedSupportAction(slug: string, input: unknown): 
         const decision = guardSupportUpdate(app, actor, ticket, patch)
         if (!decision.ok) throw new RowWriteError('denied', decision.error)
         await updateRow(context, support.ticketsTableId, ticket.id, patch, actorRef)
+        await recordEvent(context, support, { ticketId: ticket.id, kind: 'status', at: now, priority: supportPriorityName(support, String(ticket.values[support.ticket.priority] ?? '')), status: nextName, actorEmail: supportActorEmail(actor) }, actorRef)
         return { ok: true as const, message: 'Статус сохранён.' }
       }
       const desk = assertDesk(actor)
@@ -219,11 +251,18 @@ export async function savePublishedSupportAction(slug: string, input: unknown): 
       const decision = guardSupportUpdate(app, actor, ticket, patch)
       if (!decision.ok) throw new RowWriteError('denied', decision.error)
       await updateRow(context, support.ticketsTableId, ticket.id, patch, actorRef)
+      if (String(ticket.values[support.ticket.priority] ?? '') !== parsed.priorityId) await recordEvent(context, support, { ticketId: ticket.id, kind: 'priority', at: now, priority: supportPriorityName(support, parsed.priorityId), status: statusName, actorEmail: supportActorEmail(actor) }, actorRef)
       return { ok: true as const, message: 'Обращение сохранено.' }
     })
   } catch (error) {
     return { ok: false, error: error instanceof RowWriteError ? error.message : 'Не удалось сохранить обращение.' }
   }
+}
+
+async function recordEvent(context: Parameters<typeof createRow>[0], support: SupportApp, input: { ticketId: string; kind: 'created' | 'status' | 'priority' | 'public_reply'; at: string; priority: string; status: string; actorEmail: string }, actorRef: { id: string; kind: 'app_user' }) {
+  const event = supportEventRecord(support, input)
+  if (!event) return
+  await createRow(context, event.tableId, event.values, actorRef, { id: event.id, origin: 'runtime' })
 }
 
 async function touchTicket(context: Parameters<typeof updateRow>[0], app: Parameters<typeof guardSupportUpdate>[0], actor: Parameters<typeof guardSupportUpdate>[1], support: SupportApp, ticket: AppV2Record, actorRef: { id: string; kind: 'app_user' }, now: string) {

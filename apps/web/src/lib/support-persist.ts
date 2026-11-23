@@ -2,6 +2,7 @@ import { newId } from '@tableapp/schema'
 import type { AppV2, AppV2Actor, AppV2Json, AppV2Record } from '@tableapp/schema/app-v2'
 import { authorizeAppV2Write, projectAppV2Row } from '@tableapp/schema/app-v2'
 import { canOperatorTransition, clientCanReply, isSupportStatus, nextTicketNumber, sameEmail, statusAfterClientReply, type SupportStatusName } from './support-logic'
+import { type SupportSlaEvent, type SupportSlaPolicy } from './support-sla'
 
 export type SupportApp = NonNullable<AppV2['support']>
 
@@ -164,6 +165,71 @@ export function supportStatusId(support: SupportApp, name: string) {
 
 const textOf = (value: unknown) => typeof value === 'string' ? value : ''
 
+export function supportPriorityName(support: SupportApp, id: string) {
+  if (id === support.priorities.urgent) return 'Срочный'
+  if (id === support.priorities.high) return 'Высокий'
+  if (id === support.priorities.low) return 'Низкий'
+  return 'Обычный'
+}
+
+export function supportEventRecord(support: SupportApp, input: { ticketId: string; kind: SupportSlaEvent['kind']; at: string; priority: string; status: string; actorEmail: string }): AppV2Record | null {
+  if (!support.eventsTableId || !support.event) return null
+  return {
+    id: newId('row'), tableId: support.eventsTableId,
+    values: {
+      [support.event.ticket]: [input.ticketId],
+      [support.event.kind]: input.kind,
+      [support.event.at]: input.at,
+      [support.event.priority]: input.priority,
+      [support.event.status]: input.status,
+      [support.event.actorEmail]: input.actorEmail,
+    },
+  }
+}
+
+export function supportStoredEvents(support: SupportApp, rows: readonly AppV2Record[], ticketId: string): SupportSlaEvent[] {
+  if (!support.eventsTableId || !support.event) return []
+  const event = support.event
+  return rows.flatMap(row => {
+    if (row.tableId !== support.eventsTableId) return []
+    const link = row.values[event.ticket]
+    const linked = Array.isArray(link) ? link.find((item): item is string => typeof item === 'string') : ''
+    if (linked !== ticketId) return []
+    const at = Date.parse(String(row.values[event.at] ?? ''))
+    const kind = row.values[event.kind]
+    if (!Number.isFinite(at) || (kind !== 'created' && kind !== 'status' && kind !== 'priority' && kind !== 'public_reply')) return []
+    return [{ at, kind, priority: String(row.values[event.priority] ?? ''), status: String(row.values[event.status] ?? '') }]
+  })
+}
+
+export function supportPolicyFromRows(support: SupportApp, rows: readonly AppV2Record[]): SupportSlaPolicy | null {
+  const base = support.sla
+  if (!base) return null
+  const fields = support.slaFields
+  const row = support.slaTableId ? rows.find(item => item.tableId === support.slaTableId) : undefined
+  if (!fields || !row) return base
+  const minutes = (id: string, fallback: number) => {
+    const value = row.values[id]
+    return typeof value === 'number' && Number.isInteger(value) && value > 0 && value <= 7 * 24 * 60 ? value : fallback
+  }
+  return {
+    calendarHours: true,
+    riskMinutes: minutes(fields.riskMinutes, base.riskMinutes),
+    firstResponseMinutes: {
+      urgent: minutes(fields.urgentFirst, base.firstResponseMinutes.urgent),
+      high: minutes(fields.highFirst, base.firstResponseMinutes.high),
+      normal: minutes(fields.normalFirst, base.firstResponseMinutes.normal),
+      low: minutes(fields.lowFirst, base.firstResponseMinutes.low),
+    },
+    resolutionMinutes: {
+      urgent: minutes(fields.urgentResolve, base.resolutionMinutes.urgent),
+      high: minutes(fields.highResolve, base.resolutionMinutes.high),
+      normal: minutes(fields.normalResolve, base.resolutionMinutes.normal),
+      low: minutes(fields.lowResolve, base.resolutionMinutes.low),
+    },
+  }
+}
+
 export type SupportChange =
   | { kind: 'create'; subject: string; description: string; categoryId: string; clientId?: string; priorityId?: string }
   | { kind: 'reply'; recordId: string; text: string }
@@ -171,6 +237,7 @@ export type SupportChange =
   | { kind: 'status'; recordId: string; statusId: string }
   | { kind: 'assign'; recordId: string; assigneeId: string | null; priorityId: string; categoryId: string; deadline: string | null }
   | { kind: 'category'; recordId?: string; name: string; description: string; active: boolean }
+  | { kind: 'sla'; minutes: Record<string, number> }
 
 /** In-memory twin of the published action, so the gallery uses the same rules as the server. */
 export function applySupportChange(app: AppV2, actor: AppV2Actor, rows: readonly AppV2Record[], change: SupportChange, now: string): { ok: true; rows: AppV2Record[]; message: string } | { ok: false; error: string } {
@@ -178,6 +245,20 @@ export function applySupportChange(app: AppV2, actor: AppV2Actor, rows: readonly
   if (!support || !actor.authenticated) return { ok: false, error: 'Для сохранения нужно войти' }
   const replace = (row: AppV2Record, values: Record<string, AppV2Json>) => rows.map(item => item.id === row.id ? { ...item, values: { ...item.values, ...values } } : item)
   const ticketRow = (id: string) => rows.find(row => row.id === id && row.tableId === support.ticketsTableId)
+  if (change.kind === 'sla') {
+    if (!actor.roleIds.includes('owner') || !support.slaTableId || !support.slaFields) return { ok: false, error: 'Нормативы меняет руководитель.' }
+    const current = rows.find(row => row.tableId === support.slaTableId)
+    if (!current) return { ok: false, error: 'Нормативы не найдены.' }
+    const values: Record<string, AppV2Json> = {}
+    for (const [key, fieldId] of Object.entries(support.slaFields)) {
+      const value = change.minutes[key]
+      if (value == null || !Number.isInteger(value) || value <= 0 || value > 7 * 24 * 60) return { ok: false, error: 'Укажите минуты от 1 до 10080.' }
+      values[fieldId] = value
+    }
+    const decision = guardSupportUpdate(app, actor, current, values)
+    if (!decision.ok) return decision
+    return { ok: true, rows: replace(current, values), message: 'Нормативы сохранены.' }
+  }
   if (change.kind === 'category') {
     if (!actor.roleIds.includes('owner')) return { ok: false, error: 'Категории меняет руководитель.' }
     const values = categoryValues(support.category, change)
@@ -217,7 +298,9 @@ export function applySupportChange(app: AppV2, actor: AppV2Actor, rows: readonly
     const decision = guardSupportCreate(app, actor, support.ticketsTableId, values)
     if (!decision.ok) return decision
     const stored = { ...values, ...decision.ownerValues }
-    return { ok: true, rows: [...rows, { id: newId('row'), tableId: support.ticketsTableId, values: stored }], message: 'Обращение создано.' }
+    const ticketId = newId('row')
+    const event = supportEventRecord(support, { ticketId, kind: 'created', at: now, priority: supportPriorityName(support, priorityId), status: 'Новое', actorEmail: supportActorEmail(actor) })
+    return { ok: true, rows: [...rows, { id: ticketId, tableId: support.ticketsTableId, values: stored }, ...(event ? [event] : [])], message: 'Обращение создано.' }
   }
   const ticket = ticketRow(change.recordId)
   if (!ticket) return { ok: false, error: 'Обращение не найдено.' }
@@ -248,7 +331,8 @@ export function applySupportChange(app: AppV2, actor: AppV2Actor, rows: readonly
       const patch = ticketPatchValues(support.ticket, { statusId, updatedAt: now })
       const update = guardSupportUpdate(app, actor, ticket, patch)
       if (!update.ok) return update
-      return { ok: true, rows: [...replace(ticket, patch), { id: newId('row'), tableId: support.repliesTableId, values: { ...values, ...decision.ownerValues } }], message: 'Ответ сохранён.' }
+      const statusEvent = next.next !== statusName ? supportEventRecord(support, { ticketId: ticket.id, kind: 'status', at: now, priority: supportPriorityName(support, textOf(ticket.values[support.ticket.priority])), status: next.next, actorEmail: supportActorEmail(actor) }) : null
+      return { ok: true, rows: [...replace(ticket, patch), { id: newId('row'), tableId: support.repliesTableId, values: { ...values, ...decision.ownerValues } }, ...(statusEvent ? [statusEvent] : [])], message: 'Ответ сохранён.' }
     }
     const desk = assertDesk(actor)
     if (!desk.ok) return desk
@@ -258,7 +342,8 @@ export function applySupportChange(app: AppV2, actor: AppV2Actor, rows: readonly
     const patch = ticketPatchValues(support.ticket, { updatedAt: now })
     const update = guardSupportUpdate(app, actor, ticket, patch)
     if (!update.ok) return update
-    return { ok: true, rows: [...replace(ticket, patch), { id: newId('row'), tableId: support.repliesTableId, values }], message: 'Ответ клиенту сохранён.' }
+    const replyEvent = supportEventRecord(support, { ticketId: ticket.id, kind: 'public_reply', at: now, priority: supportPriorityName(support, textOf(ticket.values[support.ticket.priority])), status: statusName, actorEmail: supportActorEmail(actor) })
+    return { ok: true, rows: [...replace(ticket, patch), { id: newId('row'), tableId: support.repliesTableId, values }, ...(replyEvent ? [replyEvent] : [])], message: 'Ответ клиенту сохранён.' }
   }
   if (change.kind === 'status') {
     const desk = assertDesk(actor)
@@ -276,7 +361,8 @@ export function applySupportChange(app: AppV2, actor: AppV2Actor, rows: readonly
     const patch = ticketPatchValues(support.ticket, { statusId: change.statusId, updatedAt: now, ...(assigneeId ? { assigneeId, assigneeEmail } : {}) })
     const decision = guardSupportUpdate(app, actor, ticket, patch)
     if (!decision.ok) return decision
-    return { ok: true, rows: replace(ticket, patch), message: 'Статус сохранён.' }
+    const statusEvent = supportEventRecord(support, { ticketId: ticket.id, kind: 'status', at: now, priority: supportPriorityName(support, textOf(ticket.values[support.ticket.priority])), status: nextName, actorEmail: supportActorEmail(actor) })
+    return { ok: true, rows: [...replace(ticket, patch), ...(statusEvent ? [statusEvent] : [])], message: 'Статус сохранён.' }
   }
   const desk = assertDesk(actor)
   if (!desk.ok) return desk
@@ -294,7 +380,9 @@ export function applySupportChange(app: AppV2, actor: AppV2Actor, rows: readonly
   const patch = ticketPatchValues(support.ticket, { assigneeId: change.assigneeId, assigneeEmail, priorityId: change.priorityId, categoryId: category.id, deadline: change.deadline, updatedAt: now })
   const decision = guardSupportUpdate(app, actor, ticket, patch)
   if (!decision.ok) return decision
-  return { ok: true, rows: replace(ticket, patch), message: 'Обращение сохранено.' }
+  const previousPriority = textOf(ticket.values[support.ticket.priority])
+  const priorityEvent = previousPriority !== change.priorityId ? supportEventRecord(support, { ticketId: ticket.id, kind: 'priority', at: now, priority: supportPriorityName(support, change.priorityId), status: statusName, actorEmail: supportActorEmail(actor) }) : null
+  return { ok: true, rows: [...replace(ticket, patch), ...(priorityEvent ? [priorityEvent] : [])], message: 'Обращение сохранено.' }
 }
 
 export function assertClientReply(status: string): { ok: true; next: string } | { ok: false; error: string } {

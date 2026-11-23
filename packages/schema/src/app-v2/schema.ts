@@ -248,7 +248,9 @@ export const appV2Schema = z.strictObject({
   /** Support desk starter. Absent outside that install. Notes are a separate table with no client grant. */
   support: z.strictObject({
     ticketsTableId: id, clientsTableId: id, operatorsTableId: id, categoriesTableId: id, repliesTableId: id, notesTableId: id,
+    eventsTableId: id.optional(), slaTableId: id.optional(),
     queueScreenId: id, ticketScreenId: id, clientListScreenId: id, clientTicketScreenId: id, clientsScreenId: id, settingsScreenId: id,
+    dashboardScreenId: id.optional(), boardScreenId: id.optional(),
     createFormId: id, operatorCreateFormId: id, replyFormId: id, noteFormId: id, assignFormId: id, categoryFormId: id,
     ticket: z.strictObject({
       number: id, subject: id, description: id, client: id, clientName: id, clientEmail: id,
@@ -259,6 +261,19 @@ export const appV2Schema = z.strictObject({
     category: z.strictObject({ name: id, description: id, active: id }),
     reply: z.strictObject({ text: id, ticket: id, at: id, author: id, authorEmail: id, clientEmail: id }),
     note: z.strictObject({ text: id, ticket: id, at: id, author: id, authorEmail: id }),
+    event: z.strictObject({ ticket: id, kind: id, at: id, priority: id, status: id, actorEmail: id }).optional(),
+    slaFields: z.strictObject({
+      urgentFirst: id, highFirst: id, normalFirst: id, lowFirst: id,
+      urgentResolve: id, highResolve: id, normalResolve: id, lowResolve: id,
+      riskMinutes: id,
+    }).optional(),
+    /** Calendar hours, 24/7. Absent on apps installed before norms. */
+    sla: z.strictObject({
+      calendarHours: z.literal(true),
+      riskMinutes: z.number().int().positive().max(7 * 24 * 60),
+      firstResponseMinutes: z.strictObject({ urgent: z.number().int().positive(), high: z.number().int().positive(), normal: z.number().int().positive(), low: z.number().int().positive() }),
+      resolutionMinutes: z.strictObject({ urgent: z.number().int().positive(), high: z.number().int().positive(), normal: z.number().int().positive(), low: z.number().int().positive() }),
+    }).optional(),
     statuses: z.strictObject({ fresh: id, progress: id, waiting: id, resolved: id, closed: id }),
     priorities: z.strictObject({ low: id, normal: id, high: id, urgent: id }),
     activeChoiceId: id, inactiveChoiceId: id,

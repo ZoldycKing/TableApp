@@ -1,4 +1,5 @@
 import { newId } from '@tableapp/schema'
+import { SUPPORT_SLA_STARTER } from '../support-sla'
 import type { AppV2, AppV2Audience, AppV2Grant, AppV2Node } from '@tableapp/schema/app-v2'
 import type { BuiltTemplate } from './build'
 
@@ -29,6 +30,7 @@ export function buildSupportV2App(built: BuiltTemplate, meta: { id: string; work
   }
   const tickets = table('Обращения'), clients = table('Клиенты'), operators = table('Операторы')
   const categories = table('Категории'), replies = table('Ответы'), notes = table('Заметки')
+  const events = table('События'), norms = table('Нормативы')
   const ticket = {
     number: column('Обращения', 'Номер').id,
     subject: column('Обращения', 'Тема').id,
@@ -79,6 +81,25 @@ export function buildSupportV2App(built: BuiltTemplate, meta: { id: string; work
     author: column('Заметки', 'Автор').id,
     authorEmail: column('Заметки', 'Почта автора').id,
   }
+  const event = {
+    ticket: column('События', 'Обращение').id,
+    kind: column('События', 'Событие').id,
+    at: column('События', 'Когда').id,
+    priority: column('События', 'Приоритет').id,
+    status: column('События', 'Статус').id,
+    actorEmail: column('События', 'Кто').id,
+  }
+  const slaFields = {
+    urgentFirst: column('Нормативы', 'Срочный, первый ответ').id,
+    highFirst: column('Нормативы', 'Высокий, первый ответ').id,
+    normalFirst: column('Нормативы', 'Обычный, первый ответ').id,
+    lowFirst: column('Нормативы', 'Низкий, первый ответ').id,
+    urgentResolve: column('Нормативы', 'Срочный, решение').id,
+    highResolve: column('Нормативы', 'Высокий, решение').id,
+    normalResolve: column('Нормативы', 'Обычный, решение').id,
+    lowResolve: column('Нормативы', 'Низкий, решение').id,
+    riskMinutes: column('Нормативы', 'Порог риска').id,
+  }
   const statuses = {
     fresh: choice('Обращения', 'Статус', 'Новое'),
     progress: choice('Обращения', 'Статус', 'В работе'),
@@ -95,6 +116,7 @@ export function buildSupportV2App(built: BuiltTemplate, meta: { id: string; work
   const ids = {
     queueScreenId: newId('screen'), ticketScreenId: newId('screen'), clientListScreenId: newId('screen'),
     clientTicketScreenId: newId('screen'), clientsScreenId: newId('screen'), settingsScreenId: newId('screen'),
+    dashboardScreenId: newId('screen'), boardScreenId: newId('screen'),
     createFormId: newId('component'), operatorCreateFormId: newId('component'), replyFormId: newId('component'),
     noteFormId: newId('component'), assignFormId: newId('component'), categoryFormId: newId('component'),
   }
@@ -223,6 +245,16 @@ export function buildSupportV2App(built: BuiltTemplate, meta: { id: string; work
   const directory = collection('Справочник клиентов', clients.id, client.name, null, client.name)
   const settingsCategories = collection('Категории настроек', categories.id, category.name, null, category.name)
   const settingsOperators = collection('Операторы настроек', operators.id, operator.name, null, operator.name)
+  const queueEvents = collection('События очереди', events.id, event.kind, null, event.at)
+  const queueNorms = collection('Нормативы очереди', norms.id, slaFields.riskMinutes, null, null)
+  const boardTickets = collection('Обращения доски', tickets.id, ticket.subject, openTicket, ticket.updatedAt)
+  const boardEvents = collection('События доски', events.id, event.kind, null, event.at)
+  const boardNorms = collection('Нормативы доски', norms.id, slaFields.riskMinutes, null, null)
+  const dashEvents = collection('События главной', events.id, event.kind, null, event.at)
+  const dashNorms = collection('Нормативы главной', norms.id, slaFields.riskMinutes, null, null)
+  const dashTickets = collection('Обращения главной', tickets.id, ticket.subject, openTicket, ticket.updatedAt)
+  const settingsNorms = collection('Нормативы настроек', norms.id, slaFields.riskMinutes, null, null)
+  const ticketEvents = collection('События карточки', events.id, event.kind, null, event.at, byTicket(event.ticket), tickets.id)
   const screen = (id: string, name: string, menuLabel: string | undefined, icon: string, audience: AppV2Audience, contextTableId: string | null, rootIds: string[], navigation: boolean) =>
     ({ id, name, ...(menuLabel ? { menuLabel } : {}), icon, audience, contextTableId, rootIds, navigation, events: { enter: null } })
   const columnsOf = (tableId: string) => built.fields.filter(item => item.tableId === tableId).map(item => item.id)
@@ -240,19 +272,23 @@ export function buildSupportV2App(built: BuiltTemplate, meta: { id: string; work
     theme: { accent: 'green', scheme: 'light', logoKey: null, iconKey: null },
     roles: [{ id: 'owner', name: 'Руководитель' }, { id: 'staff', name: 'Оператор' }, { id: 'client', name: 'Клиент' }],
     authentication: { mode: 'verified_email', defaultRoleId: 'client', members: [{ email: meta.email.trim().toLowerCase(), roleIds: ['owner'], company: '' }] },
-    homeScreenId: ids.queueScreenId,
+    homeScreenId: ids.dashboardScreenId,
     support: {
       ticketsTableId: tickets.id, clientsTableId: clients.id, operatorsTableId: operators.id, categoriesTableId: categories.id,
-      repliesTableId: replies.id, notesTableId: notes.id, ...ids, ticket, client, operator, category, reply, note,
+      repliesTableId: replies.id, notesTableId: notes.id, eventsTableId: events.id, slaTableId: norms.id,
+      ...ids, ticket, client, operator, category, reply, note, event, slaFields,
+      sla: SUPPORT_SLA_STARTER,
       statuses, priorities,
       activeChoiceId: choice('Операторы', 'Статус', 'Активен'),
       inactiveChoiceId: choice('Операторы', 'Статус', 'Неактивен'),
     },
     screens: [
-      screen(ids.queueScreenId, 'Очередь', 'Очередь', 'clipboard', desk, null, [queueTickets, queueClients, queueOperators, queueCategories, ids.operatorCreateFormId], true),
-      screen(ids.ticketScreenId, 'Обращение', undefined, 'clipboard', desk, tickets.id, [ticketReplies, ticketNotes, ticketOperators, ticketCategories, ticketClients, ids.replyFormId, ids.noteFormId, ids.assignFormId], false),
+      screen(ids.dashboardScreenId, 'Главная', 'Главная', 'home', desk, null, [dashTickets, dashEvents, dashNorms], true),
+      screen(ids.queueScreenId, 'Очередь', 'Очередь', 'clipboard', desk, null, [queueTickets, queueClients, queueOperators, queueCategories, queueEvents, queueNorms, ids.operatorCreateFormId], true),
+      screen(ids.boardScreenId, 'Доска', 'Доска', 'apps', desk, null, [boardTickets, boardEvents, boardNorms], true),
+      screen(ids.ticketScreenId, 'Обращение', undefined, 'clipboard', desk, tickets.id, [ticketReplies, ticketNotes, ticketOperators, ticketCategories, ticketClients, ticketEvents, ids.replyFormId, ids.noteFormId, ids.assignFormId], false),
       screen(ids.clientsScreenId, 'Клиенты', 'Клиенты', 'users', desk, null, [directory], true),
-      screen(ids.settingsScreenId, 'Настройки', 'Настройки', 'settings', owner, null, [settingsCategories, settingsOperators, ids.categoryFormId], true),
+      screen(ids.settingsScreenId, 'Настройки', 'Настройки', 'settings', owner, null, [settingsCategories, settingsOperators, settingsNorms, ids.categoryFormId], true),
       screen(ids.clientListScreenId, 'Мои обращения', 'Обращения', 'clipboard', clientRole, null, [clientTickets, clientCategories, ids.createFormId], true),
       screen(ids.clientTicketScreenId, 'Моё обращение', undefined, 'clipboard', clientRole, tickets.id, [clientReplies, clientOperators, clientTicketCategories], false),
     ],
@@ -283,6 +319,14 @@ export function buildSupportV2App(built: BuiltTemplate, meta: { id: string; work
           grant(owner, { read: { fieldIds: columnsOf(operators.id), rows: all }, create: { fieldIds: editable(operators.id) }, update: { fieldIds: editable(operators.id), rows: all } }),
           grant(staff, { read: { fieldIds: columnsOf(operators.id), rows: all } }),
           grant(clientRole, { read: { fieldIds: [operator.name, operator.role], rows: all } }),
+        ] },
+        { tableId: events.id, grants: [
+          grant(owner, { read: { fieldIds: columnsOf(events.id), rows: all }, create: { fieldIds: editable(events.id) } }),
+          grant(staff, { read: { fieldIds: columnsOf(events.id), rows: all }, create: { fieldIds: editable(events.id) } }),
+        ] },
+        { tableId: norms.id, grants: [
+          grant(owner, { read: { fieldIds: columnsOf(norms.id), rows: all }, update: { fieldIds: editable(norms.id), rows: all } }),
+          grant(staff, { read: { fieldIds: columnsOf(norms.id), rows: all } }),
         ] },
         { tableId: categories.id, grants: [
           grant(owner, { read: { fieldIds: columnsOf(categories.id), rows: all }, create: { fieldIds: editable(categories.id) }, update: { fieldIds: editable(categories.id), rows: all } }),

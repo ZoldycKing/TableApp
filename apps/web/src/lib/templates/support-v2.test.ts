@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { FieldType } from '@tableapp/schema'
-import { authorizeAppV2Write, projectAppV2Row, validateAppV2, type AppV2Actor, type AppV2Catalog, type AppV2Record } from '@tableapp/schema/app-v2'
+import { authorizeAppV2Write, canOpenAppV2Screen, projectAppV2Row, validateAppV2, type AppV2Actor, type AppV2Catalog, type AppV2Record } from '@tableapp/schema/app-v2'
 import { configureBuilderV2ScreenAccess } from '../builder-v2-read-access'
 import { filterTickets, isOverdue, nextTicketNumber, operatorTransitions, statusAfterClientReply, supportAuthorKind, supportAuthorLabel, supportDeadlineInstant, supportDeadlineParts, supportSummary } from '../support-logic'
 import { isSupportClient, isSupportDesk, projectSupportRows } from '../support-persist'
@@ -33,7 +33,9 @@ describe('support template', () => {
     const { built, app, catalog, support } = fixture()
     expect(validateAppV2(app, catalog)).toEqual([])
     expect(validateAppV2(app, catalog, { mode: 'publish' })).toEqual([])
-    expect(app.homeScreenId).toBe(support.queueScreenId)
+    expect(app.homeScreenId).toBe(support.dashboardScreenId)
+    expect(app.screens.find(screen => screen.id === support.clientListScreenId)?.audience).toMatchObject({ kind: 'roles', roleIds: ['client'] })
+    expect(app.screens.find(screen => screen.id === support.dashboardScreenId)?.audience).toMatchObject({ kind: 'roles', roleIds: ['owner', 'staff'] })
     expect(app.roles.map(role => role.name)).toEqual(['Руководитель', 'Оператор', 'Клиент'])
     expect(app.authentication.mode).toBe('verified_email')
     expect(app.authentication.defaultRoleId).toBe('client')
@@ -71,6 +73,21 @@ describe('support template', () => {
     expect(JSON.stringify(projected)).not.toContain('Роль коллеги снята вручную')
     expect(projected.some(row => row.tableId === support.notesTableId)).toBe(false)
     expect(projected.filter(row => row.tableId === support.ticketsTableId).every(row => row.values[support.ticket.clientEmail] === undefined || row.values[support.ticket.clientEmail] === 'irina@example.invalid')).toBe(true)
+    const visibleToClient = app.screens.filter(screen => canOpenAppV2Screen(app, client, screen.id))
+    const clientHome = visibleToClient.find(screen => screen.id === app.homeScreenId) ?? visibleToClient.find(screen => !screen.contextTableId)
+    expect(clientHome?.id).toBe(support.clientListScreenId)
+    expect(canOpenAppV2Screen(app, client, support.dashboardScreenId!)).toBe(false)
+    expect(canOpenAppV2Screen(app, client, support.boardScreenId!)).toBe(false)
+    expect(canOpenAppV2Screen(app, client, support.queueScreenId)).toBe(false)
+    expect(canOpenAppV2Screen(app, operator, support.dashboardScreenId!)).toBe(true)
+    const events = built.rows.filter(row => row.tableId === support.eventsTableId)
+    const norms = built.rows.filter(row => row.tableId === support.slaTableId)
+    expect(events.length).toBeGreaterThan(0)
+    expect(norms).toHaveLength(1)
+    for (const row of [...events, ...norms]) expect(projectAppV2Row(app, client, record(row))).toEqual({})
+    expect(projectAppV2Row(app, operator, record(events[0]!))).not.toEqual({})
+    expect(authorizeAppV2Write(app, client, { operation: 'create', tableId: support.eventsTableId!, values: {} }).ok).toBe(false)
+    expect(authorizeAppV2Write(app, client, { operation: 'update', row: record(norms[0]!), values: {} }).ok).toBe(false)
 
     expect(authorizeAppV2Write(app, client, { operation: 'create', tableId: support.notesTableId, values: { [support.note.text]: 'тайком' } }).ok).toBe(false)
     expect(authorizeAppV2Write(app, operator, { operation: 'create', tableId: support.notesTableId, values: { [support.note.text]: 'заметка', [support.note.ticket]: [own.id], [support.note.at]: '2026-11-22T09:00:00.000Z', [support.note.author]: 'Анна', [support.note.authorEmail]: 'anna@example.invalid' } }).ok).toBe(true)

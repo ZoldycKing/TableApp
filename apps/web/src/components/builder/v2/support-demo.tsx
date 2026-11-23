@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { fieldTimeZone, instantToWallClock, wallClockToInstant, type Field } from '@tableapp/schema'
 import { canOpenAppV2Screen, type AppV2Actor, type AppV2Record } from '@tableapp/schema/app-v2'
 import type { BuilderV2Table } from '@/lib/builder-v2'
@@ -41,6 +41,8 @@ function goalFor(model: ReturnType<typeof supportTemplateDemoModel>, view: strin
   if (view === 'client' || view === 'create') return { ...base, who: 'irina' as const, screenId: kit.clientListScreenId, recordId: undefined, open: view === 'create' ? 'create' as const : null }
   if (view === 'client-ticket') return { ...base, who: 'petr' as const, screenId: kit.clientTicketScreenId, recordId: ticket('ОБР-1042')?.id, open: null }
   if (view === 'settings') return { ...base, who: 'marina' as const, screenId: kit.settingsScreenId, recordId: undefined, open: null }
+  if (view === 'dashboard') return { ...base, who: 'anna' as const, screenId: kit.dashboardScreenId ?? kit.queueScreenId, recordId: undefined, open: null }
+  if (view === 'board') return { ...base, screenId: kit.boardScreenId ?? kit.queueScreenId, recordId: undefined, open: null }
   if (view === 'clients') return { ...base, screenId: kit.clientsScreenId, recordId: undefined, open: null }
   if (view === 'ticket' || view === 'note' || view === 'assign' || view === 'reply') return { ...base, screenId: kit.ticketScreenId, recordId: ticket('ОБР-1042')?.id, open: view === 'assign' ? 'assign' as const : view === 'reply' ? 'reply' as const : view === 'note' ? 'note' as const : null }
   return { ...base, screenId: kit.queueScreenId, recordId: undefined, open: null }
@@ -60,6 +62,7 @@ export function SupportDemo({ view = 'queue', bare = false, scheme, phone = fals
   const [recordId, setRecordId] = useState<string | undefined>()
   const [who, setWho] = useState<DemoWho>('anna')
   const [open, setOpen] = useState<SupportOpen>(null)
+  const queueFocus = useRef<import('@/lib/support-logic').SupportQueueScope | null>(null)
   useEffect(() => { setModel(supportTemplateDemoModel()) }, [])
   useEffect(() => {
     if (!model) return
@@ -76,7 +79,7 @@ export function SupportDemo({ view = 'queue', bare = false, scheme, phone = fals
   const actor = actorFor(who)
   const visible = { ...themed, screens: themed.screens.filter(screen => canOpenAppV2Screen(themed, actor, screen.id)) }
   const navigate = (id: string, rowId?: string) => { setScreenId(id); setRecordId(rowId); setOpen(null) }
-  return <BuilderV2Theme app={themed}><SupportRowsContext value={{ rows, setRows, open, now: demoNowMs(), sample: true }}>
+  return <BuilderV2Theme app={themed}><SupportRowsContext value={{ rows, setRows, open, now: demoNowMs(), sample: true, queueFocus }}>
     <div data-support-root data-support-screen={view} data-preview-screen={screenId}>
       <BuilderV2AppFrame app={visible} screenId={screenId} title="" phone={phone} deviceMode={phone ? 'phone' : 'desktop'} fullScreen={bare} onNavigate={navigate}>
         <AppV2Renderer live app={visible} tables={model.tables} actor={actor} screenId={screenId} record={rows.find(row => row.id === recordId)} onNavigate={navigate} />

@@ -463,6 +463,16 @@ export function validateAppV2(app: AppV2, catalog: AppV2Catalog, options: { mode
     const noteTicket = field(support.note.ticket, support.notesTableId, path)
     if (noteTicket && noteTicket.relationTableId && noteTicket.relationTableId !== support.ticketsTableId) issue('support_note', path, 'Заметка должна ссылаться на обращение')
     if (support.repliesTableId === support.notesTableId) issue('support_notes_table', path, 'Внутренние заметки хранятся отдельно от ответов клиенту')
+    if (support.eventsTableId) {
+      table(support.eventsTableId, path)
+      if (support.event) group(support.eventsTableId, support.event)
+    }
+    if (support.slaTableId) {
+      table(support.slaTableId, path)
+      if (support.slaFields) group(support.slaTableId, support.slaFields)
+    }
+    if (support.dashboardScreenId && !screens.has(support.dashboardScreenId)) issue('support_screen', path, 'Экран обращений удалён')
+    if (support.boardScreenId && !screens.has(support.boardScreenId)) issue('support_screen', path, 'Экран обращений удалён')
     const statusIds = [support.statuses.fresh, support.statuses.progress, support.statuses.waiting, support.statuses.resolved, support.statuses.closed]
     if (new Set(statusIds).size !== statusIds.length) issue('support_status', path, 'Статусы обращения должны различаться')
     for (const screenId of [support.queueScreenId, support.ticketScreenId, support.clientListScreenId, support.clientTicketScreenId, support.clientsScreenId, support.settingsScreenId]) if (!screens.has(screenId)) issue('support_screen', path, 'Экран обращений удалён')
@@ -472,6 +482,8 @@ export function validateAppV2(app: AppV2, catalog: AppV2Catalog, options: { mode
     if (clientTicket?.audience.kind === 'public' || clientList?.audience.kind === 'public') issue('support_client_public', path, 'Кабинет обращений не бывает публичным')
     const noteOnClient = app.sources.some(source => source.tableId === support.notesTableId && app.nodes.some(node => node.type === 'collection' && node.sourceId === source.id && clientTicket?.rootIds.includes(node.id)))
     if (noteOnClient) issue('support_client_notes', path, 'Экран клиента не показывает внутренние заметки')
+    const eventOnClient = Boolean(support.eventsTableId && app.sources.some(source => source.tableId === support.eventsTableId && app.nodes.some(node => node.type === 'collection' && node.sourceId === source.id && (clientTicket?.rootIds.includes(node.id) || clientList?.rootIds.includes(node.id)))))
+    if (eventOnClient) issue('support_client_events', path, 'Экран клиента не показывает служебные события')
   }
   if (app.projects) {
     const projects = app.projects, path = 'projects'

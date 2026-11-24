@@ -89,9 +89,9 @@ function ChipRemoveButton({ disabled, onRemove }: { disabled?: boolean; onRemove
       aria-label="Убрать файл"
       disabled={disabled}
       onClick={(event) => { event.preventDefault(); event.stopPropagation(); onRemove?.() }}
-      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sage-700 hover:bg-sage-100 disabled:opacity-40"
+      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[#3F6B5C] hover:bg-sage-100 disabled:opacity-40"
     >
-      <ProtoIcon name="close" size={14} />
+      <ProtoIcon name="close" size={16} />
     </button>
   )
 }

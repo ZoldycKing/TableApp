@@ -21,7 +21,7 @@ describe('conversation inside a record card', () => {
     mocks.read.mockResolvedValue({ ok: true, value: { ...empty, conversationId: 'thread', messages: [{ id: 'message', sequence: 1, body: 'Документ по заказу', author: 'Client', mine: true, version: 0, createdAt: '2026-10-12T10:00:00Z', edited: false, deleted: false,
       files: [{ id: 'attachment', key: 'workspace/receipt.txt', name: 'Акт.txt', mime: 'text/plain', size: 10, width: null, height: null }], canModerate: true, canViewRevisions: true }] } })
     const ui = render(<ConversationPanel {...props} />)
-    expect((await ui.findByRole('link', { name: 'Акт.txt' })).getAttribute('href')).toBe('/api/files/workspace/receipt.txt')
+    expect((await ui.findByRole('link', { name: /Акт\.txt/ })).getAttribute('href')).toBe('/api/files/workspace/receipt.txt?v=2')
     await waitFor(() => expect(mocks.mark).toHaveBeenCalledWith('business', 'orders', 'own-order', 1, false))
   })
   it('uses the owner circuit explicitly on the business page', async () => {

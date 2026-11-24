@@ -8,8 +8,9 @@ import { templateExample } from '@/lib/templates/presentation'
 import { expandSupportLargeTeam } from '@/lib/templates/support-large-team'
 import { supportPortraitUrl } from '@/lib/templates/support-portraits'
 import { buildSupportV2App } from '@/lib/templates/support-v2'
+import { conversationShotAlert, conversationShotDraftFiles, conversationShotPage } from '@/components/runtime/conversation-shot'
 import { BuilderV2AppFrame, BuilderV2Theme } from './app-frame'
-import { SupportRowsContext, type SupportOpen } from './support-screens'
+import { SupportRowsContext, type SupportConversationShot, type SupportOpen } from './support-screens'
 import { AppV2Renderer } from './view'
 
 export function supportTemplateDemoModel(example = templateExample('podderzhka'), team: 'small' | 'large' = 'small') {
@@ -45,13 +46,23 @@ function demoNowMs(at = new Date()) {
   return wallClockToInstant({ year, month, day, hour: 12, minute: 0, second: 0 }, 'Europe/Moscow').getTime()
 }
 
+function conversationShotFor(view: string, staff: boolean): SupportConversationShot | undefined {
+  if (!view.endsWith('-files') && !view.includes(':files')) return undefined
+  return {
+    preview: conversationShotPage(staff),
+    previewFiles: conversationShotDraftFiles,
+    previewAlert: conversationShotAlert,
+  }
+}
+
 function goalFor(model: ReturnType<typeof supportTemplateDemoModel>, view: string) {
   const kit = model.app.support!
   const ticket = (number: string) => model.rows.find(row => row.tableId === kit.ticketsTableId && row.values[kit.ticket.number] === number)
-  const base = { who: 'anna' as DemoWho, open: null as SupportOpen, previewClient: undefined as string | undefined, previewMenuOpen: false }
+  const base = { who: 'anna' as DemoWho, open: null as SupportOpen, previewClient: undefined as string | undefined, previewMenuOpen: false, conversationShot: undefined as SupportConversationShot | undefined }
+  const bare = view.replace(/:files$/, '').replace(/-files$/, '')
   if (view === 'client' || view === 'create') return { ...base, who: 'irina' as const, screenId: kit.clientListScreenId, recordId: undefined, open: view === 'create' ? 'create' as const : null }
   if (view === 'client-preview') return { ...base, who: 'anna' as const, screenId: kit.clientListScreenId, recordId: undefined, open: null, previewClient: 'i.petrova@mail.ru', previewMenuOpen: true }
-  if (view === 'client-ticket') return { ...base, who: 'petr' as const, screenId: kit.clientTicketScreenId, recordId: ticket('ОБР-1042')?.id, open: null }
+  if (bare === 'client-ticket' || view === 'client-ticket-files') return { ...base, who: 'petr' as const, screenId: kit.clientTicketScreenId, recordId: ticket('ОБР-1042')?.id, open: null, conversationShot: conversationShotFor(view, false) }
   if (view === 'client-waiting') return { ...base, who: 'petr' as const, screenId: kit.clientTicketScreenId, recordId: ticket('ОБР-1033')?.id, open: null }
   if (view === 'settings') return { ...base, who: 'marina' as const, screenId: kit.settingsScreenId, recordId: undefined, open: null }
   // Same desk actor on Главная / Команда / Клиенты so desktop nav tabs stay identical across pages.
@@ -62,7 +73,15 @@ function goalFor(model: ReturnType<typeof supportTemplateDemoModel>, view: strin
     const client = model.rows.find(row => row.tableId === kit.clientsTableId && row.values[kit.client.email] === 'i.petrova@mail.ru')
     return { ...base, screenId: kit.clientScreenId ?? kit.clientsScreenId, recordId: client?.id, open: null }
   }
-  if (view === 'ticket' || view === 'note' || view === 'assign' || view === 'reply') return { ...base, screenId: kit.ticketScreenId, recordId: ticket('ОБР-1042')?.id, open: view === 'assign' ? 'assign' as const : view === 'reply' ? 'reply' as const : view === 'note' ? 'note' as const : null }
+  if (bare === 'ticket' || view === 'ticket-files' || view === 'note' || view === 'assign' || view === 'reply') {
+    return {
+      ...base,
+      screenId: kit.ticketScreenId,
+      recordId: ticket('ОБР-1042')?.id,
+      open: view === 'assign' ? 'assign' as const : view === 'reply' ? 'reply' as const : view === 'note' ? 'note' as const : null,
+      conversationShot: conversationShotFor(view, true),
+    }
+  }
   return { ...base, screenId: kit.queueScreenId, recordId: undefined, open: null }
 }
 
@@ -82,13 +101,17 @@ export function SupportDemo({ view = 'queue', bare = false, scheme, phone = fals
   const [open, setOpen] = useState<SupportOpen>(null)
   const [previewClient, setPreviewClient] = useState<string | undefined>()
   const [previewMenuOpen, setPreviewMenuOpen] = useState(false)
+  const [conversationShot, setConversationShot] = useState<SupportConversationShot | undefined>()
   const queueFocus = useRef<import('@/lib/support-logic').SupportQueueFocus | null>(null)
   const previewFocus = useRef<string | null>(null)
   useEffect(() => { setModel(supportTemplateDemoModel(undefined, team)) }, [team])
   useEffect(() => {
     if (!model) return
     const [baseView, ticketsView] = view.split(':')
-    const goal = goalFor(model, baseView || view)
+    const shotView = view === 'ticket:files' ? 'ticket-files'
+      : view === 'client-ticket:files' ? 'client-ticket-files'
+      : view
+    const goal = goalFor(model, shotView.includes('files') ? shotView : (baseView || view))
     const actor = actorFor(goal.who)
     setWho(goal.who)
     setScreenId(goal.screenId)
@@ -96,6 +119,7 @@ export function SupportDemo({ view = 'queue', bare = false, scheme, phone = fals
     setOpen(goal.open)
     setPreviewClient(goal.previewClient)
     setPreviewMenuOpen(goal.previewMenuOpen)
+    setConversationShot(goal.conversationShot)
     if (ticketsView === 'hot' || ticketsView === 'mine' || ticketsView === 'unassigned' || ticketsView === 'waiting' || ticketsView === 'closed' || ticketsView === 'open') {
       queueFocus.current = { view: ticketsView }
     } else if ((baseView || view) === 'queue') {
@@ -108,8 +132,8 @@ export function SupportDemo({ view = 'queue', bare = false, scheme, phone = fals
   const actor = actorFor(who)
   const visible = { ...themed, screens: themed.screens.filter(screen => canOpenAppV2Screen(themed, actor, screen.id)) }
   const navigate = (id: string, rowId?: string) => { setScreenId(id); setRecordId(rowId); setOpen(null) }
-  return <BuilderV2Theme app={themed}><SupportRowsContext value={{ rows, setRows, open, now: demoNowMs(), sample: true, queueFocus, previewClient, previewMenuOpen, previewFocus }}>
-    <div data-support-root data-support-screen={view} data-preview-screen={screenId} data-team-size={team}>
+  return <BuilderV2Theme app={themed}><SupportRowsContext value={{ rows, setRows, open, now: demoNowMs(), sample: true, queueFocus, previewClient, previewMenuOpen, previewFocus, conversationShot }}>
+    <div data-support-root data-support-screen={view} data-preview-screen={screenId} data-team-size={team} data-conversation-files={conversationShot ? '1' : undefined}>
       <BuilderV2AppFrame app={visible} screenId={screenId} title="" phone={phone} deviceMode={phone ? 'phone' : 'desktop'} fullScreen={bare} onNavigate={navigate}>
         <AppV2Renderer live app={visible} tables={model.tables} actor={actor} screenId={screenId} record={rows.find(row => row.id === recordId)} onNavigate={navigate} />
       </BuilderV2AppFrame>

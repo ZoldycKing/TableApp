@@ -22,7 +22,7 @@ describe('attachment upload lifecycle', () => {
     const ui = render(<Form />)
     fireEvent.change(input(ui.container), { target: { files: [new File(['a'], 'a.txt'), new File(['b'], 'b.txt')] } })
     await ui.findByText('Не удалось загрузить файл. Попробуйте ещё раз')
-    expect(ui.getByRole('link', { name: 'a.txt' })).toBeTruthy()
+    expect(ui.getByRole('link', { name: /a\.txt/ })).toBeTruthy()
   })
 
   it('does not restore a removed file when another upload finishes', async () => {
@@ -35,10 +35,10 @@ describe('attachment upload lifecycle', () => {
     const ui = render(<Form />)
     pick(ui.container, 'b.txt')
     fireEvent.click(ui.getByTitle('Убрать файл'))
-    expect(ui.queryByRole('link', { name: 'a.txt' })).toBeNull()
+    expect(ui.queryByRole('link', { name: /a\.txt/ })).toBeNull()
     await act(async () => { finish(response(file('b'))) })
-    expect(ui.getByRole('link', { name: 'b.txt' })).toBeTruthy()
-    expect(ui.queryByRole('link', { name: 'a.txt' })).toBeNull()
+    expect(ui.getByRole('link', { name: /b\.txt/ })).toBeTruthy()
+    expect(ui.queryByRole('link', { name: /a\.txt/ })).toBeNull()
   })
 
   it('ignores an upload that finishes after switching to another conversation', async () => {
@@ -53,7 +53,7 @@ describe('attachment upload lifecycle', () => {
     await act(async () => { finish(response(file('old'))) })
     expect(change).not.toHaveBeenCalled()
     expect(signal.aborted).toBe(true)
-    expect(ui.getByRole('button', { name: '+ файл' }).hasAttribute('disabled')).toBe(false)
+    expect(ui.getByRole('button', { name: 'Прикрепить файл' }).hasAttribute('disabled')).toBe(false)
     expect(busy).toHaveBeenLastCalledWith(false)
   })
 
@@ -66,7 +66,7 @@ describe('attachment upload lifecycle', () => {
     ui.rerender(<FileUpload {...props} value={[]} disabled />)
     ui.rerender(<FileUpload {...props} value={[]} />)
     await act(async () => { finish(response(file('late'))) })
-    await waitFor(() => expect(ui.getByRole('button', { name: '+ файл' }).hasAttribute('disabled')).toBe(false))
+    await waitFor(() => expect(ui.getByRole('button', { name: 'Прикрепить файл' }).hasAttribute('disabled')).toBe(false))
     expect(change).not.toHaveBeenCalled()
     expect(ui.queryByRole('link')).toBeNull()
   })

@@ -57,7 +57,11 @@ describe('support screens', () => {
     expect(screen.getByRole('button', { name: 'Статус' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Ответственный' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Приоритет' })).toBeTruthy()
-    expect(document.querySelector('[data-sla-badge]')).toBeTruthy()
+    const headerBadge = document.querySelector('[data-support-root] [data-sla-badge]') as HTMLElement | null
+    expect(headerBadge).toBeTruthy()
+    expect(headerBadge?.getAttribute('data-tone')).toMatch(/^(sage|amber|overdue|paused|met|missed)$/)
+    expect(headerBadge?.closest('[data-correspondence-module]')).toBeNull()
+    expect(document.querySelector('[data-correspondence-sla]')).toBeNull()
     expect(screen.getByText(/Ответ за|Решение за/)).toBeTruthy()
     operator.unmount()
 
@@ -70,6 +74,19 @@ describe('support screens', () => {
       expect(screen.queryByRole('radio', { name: 'Внутренняя заметка' })).toBeNull()
       client.unmount()
     }
+  })
+
+  it('keeps SLA badge in the ticket header with tonal colours, not inside Переписка', async () => {
+    render(<SupportDemo view="ticket" bare />)
+    await screen.findByRole('heading', { name: 'Не сходится сумма в отчёте за октябрь' })
+    const badge = document.querySelector('[data-sla-badge]') as HTMLElement | null
+    expect(badge).toBeTruthy()
+    expect(badge?.closest('[data-correspondence-module], [data-conversation-shot-panel]')).toBeNull()
+    expect(document.querySelector('[data-correspondence-sla]')).toBeNull()
+    const tone = badge?.getAttribute('data-tone')
+    expect(tone === 'sage' || tone === 'amber' || tone === 'overdue' || tone === 'paused').toBe(true)
+    if (tone === 'sage' || tone === 'amber') expect(badge?.textContent).toMatch(/Осталось/)
+    if (tone === 'overdue') expect(badge?.textContent).toMatch(/Просрочено/)
   })
 
   it('keeps the secure-upload composer with paperclip, pending chips and Отправить on the ticket page', async () => {

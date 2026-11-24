@@ -6,13 +6,15 @@ import type { BuilderV2Table } from '@/lib/builder-v2'
 import { projectServiceRows } from '@/lib/service-persist'
 import { templateExample } from '@/lib/templates/presentation'
 import { buildServiceV2App } from '@/lib/templates/service-v2'
-import { conversationShotAlert, conversationShotDraftFiles, conversationShotPage } from '@/components/runtime/conversation-shot'
+import { serviceConversationShotDraftFiles, serviceConversationShotPage } from '@/components/runtime/service-conversation-shot'
+import { servicePortraitUrl } from '@/lib/templates/service-portraits'
 import { BuilderV2AppFrame, BuilderV2Theme } from './app-frame'
 import { ServiceRowsContext, type ServiceConversationShot, type ServiceOpen } from './service-screens'
 import { AppV2Renderer } from './view'
 
 export function serviceTemplateDemoModel(example = templateExample('service')) {
   const app = buildServiceV2App(example.built, { id: example.app.id, workspaceId: example.app.workspaceId, name: 'Сервисный центр', slug: 'service-demo', email: 'sergey@service-demo.ru' })
+  const kit = app.service!
   const tables: BuilderV2Table[] = example.built.tables.map(table => ({
     ...table, views: [], primaryFieldId: table.primaryFieldId,
     fields: example.built.fields.filter(field => field.tableId === table.id).map(field => ({
@@ -22,7 +24,14 @@ export function serviceTemplateDemoModel(example = templateExample('service')) {
       ...(field.options.choices ? { choices: field.options.choices as { id: string; name: string; color?: string }[] } : {}),
     })),
   }))
-  const rows = example.rows.map(row => ({ id: row.id, tableId: row.tableId, values: { ...row.data } } as AppV2Record))
+  const rows = example.rows.map(row => {
+    const values = { ...row.data }
+    if (row.tableId === kit.mastersTableId && kit.master.photo) {
+      const url = servicePortraitUrl(values[kit.master.name])
+      if (url) values[kit.master.photo] = url
+    }
+    return { id: row.id, tableId: row.tableId, values } as AppV2Record
+  })
   return { app, tables, rows }
 }
 
@@ -35,12 +44,12 @@ function demoNowMs(at = new Date()) {
   return wallClockToInstant({ year, month, day, hour: 12, minute: 0, second: 0 }, 'Europe/Moscow').getTime()
 }
 
-/** Repair pages always use ConversationPanel so attachments stay on the real composer. */
+/** Repair pages use service-specific ConversationPanel fixtures (not support demo copy). */
 function conversationShotFor(_view: string, staff: boolean): ServiceConversationShot {
   return {
-    preview: conversationShotPage(staff),
-    previewFiles: staff ? conversationShotDraftFiles : [],
-    previewAlert: staff ? conversationShotAlert : null,
+    preview: serviceConversationShotPage(staff),
+    previewFiles: staff ? serviceConversationShotDraftFiles : [],
+    previewAlert: null,
   }
 }
 

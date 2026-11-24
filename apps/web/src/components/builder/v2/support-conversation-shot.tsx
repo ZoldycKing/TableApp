@@ -24,13 +24,11 @@ export function SupportConversationShotPanel({
   tableId,
   ticketId,
   shot,
-  slaBadge,
 }: {
   desk: boolean
   tableId: string
   ticketId: string
   shot: SupportConversationShot
-  slaBadge?: string | null
 }) {
   const root = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -48,7 +46,6 @@ export function SupportConversationShotPanel({
         configured
         business={desk}
         showContext={false}
-        slaBadge={desk ? slaBadge : null}
         fixture={shot.preview}
         fixtureFiles={shot.previewFiles}
         fixtureAlert={shot.previewAlert ?? null}

@@ -40,10 +40,16 @@ describe('service screens', () => {
 
     const desk = render(<ServiceDemo view="repair" bare />)
     expect(await screen.findByRole('heading', { name: 'Стиральная машина Bosch WLG' })).toBeTruthy()
-    expect(await screen.findByText('Клиент ждёт ответ по акту.')).toBeTruthy()
-    const note = screen.getByText('Клиент ждёт ответ по акту.').closest('[data-internal]') as HTMLElement
+    expect(await screen.findByText(/Заказали манжету у поставщика/)).toBeTruthy()
+    const note = screen.getByText(/Заказали манжету у поставщика/).closest('[data-internal]') as HTMLElement
     expect(note).toBeTruthy()
     expect(within(note).getByText('Внутренняя заметка')).toBeTruthy()
+    expect(screen.getByText(/когда будет готово/i)).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Диагностика' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Работы и запчасти' })).toBeTruthy()
+    expect(screen.getByText('Манжет люка Bosch')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Изменить' })).toBeNull()
+    expect(document.querySelector('[data-correspondence-sla]')).toBeNull()
     expect(await screen.findByRole('button', { name: 'Прикрепить файл' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Отправить' })).toBeTruthy()
     desk.unmount()
@@ -51,10 +57,16 @@ describe('service screens', () => {
     for (const phone of [false, true]) {
       const client = render(<ServiceDemo view="client-repair" bare phone={phone} />)
       expect(await screen.findByRole('heading', { name: 'Стиральная машина Bosch WLG' })).toBeTruthy()
-      expect(await screen.findByText('Добрый день. Прикладываю акт и фото по заявке.')).toBeTruthy()
-      expect(screen.queryByText('Клиент ждёт ответ по акту.')).toBeNull()
+      expect(await screen.findByText(/когда будет готово/i)).toBeTruthy()
+      expect(screen.getByText(/Манжет люка изношен/)).toBeTruthy()
+      expect(screen.queryByText(/Смету согласовываю/)).toBeNull()
+      expect(screen.queryByText(/Заказали манжету у поставщика/)).toBeNull()
       expect(screen.queryByText('Внутренняя заметка')).toBeNull()
-      expect(screen.queryByText(/не совместимый/)).toBeNull()
+      expect(screen.queryByText('Серийный / IMEI')).toBeNull()
+      expect(screen.queryByRole('button', { name: 'Статус' })).toBeNull()
+      expect(screen.getByLabelText('Прогресс ремонта')).toBeTruthy()
+      expect(screen.getByRole('button', { name: 'Согласовать стоимость' })).toBeTruthy()
+      expect(screen.getByText(/ул\. Сервисная/)).toBeTruthy()
       client.unmount()
     }
   })
@@ -85,11 +97,13 @@ describe('service screens', () => {
     expect(screen.getByRole('heading', { name: 'Мои ремонты' })).toBeTruthy()
   })
 
-  it('fills the dashboard with status counts and ready pickups', async () => {
+  it('fills the dashboard with status counts, masters load and revenue bars', async () => {
     render(<ServiceDemo view="dashboard" bare />)
     expect(await screen.findByRole('heading', { name: 'Сервисный центр' })).toBeTruthy()
     expect(screen.getByLabelText('Показатели сервиса')).toBeTruthy()
-    expect(screen.getAllByText('Просрочено').length).toBeGreaterThan(0)
+    expect(screen.getByRole('heading', { name: 'Загрузка мастеров' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Выручка по неделям' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Нужно согласование клиента' })).toBeTruthy()
     expect(screen.getAllByText('Готово к выдаче').length).toBeGreaterThan(0)
   })
 

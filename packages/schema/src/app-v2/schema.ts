@@ -289,6 +289,7 @@ export const appV2Schema = z.strictObject({
       number: id, device: id, serial: id, problem: id, diagnosis: id, work: id, parts: id, cost: id,
       client: id, clientName: id, clientEmail: id, master: id, masterEmail: id, status: id,
       deadline: id, createdAt: id, updatedAt: id, acceptedAt: id.optional(),
+      lines: id.optional(), approval: id.optional(), partsEta: id.optional(),
     }),
     client: z.strictObject({ name: id, email: id, phone: id, note: id }),
     master: z.strictObject({ name: id, email: id, phone: id, photo: id.optional(), active: id }),

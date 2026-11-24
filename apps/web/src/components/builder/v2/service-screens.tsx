@@ -4,10 +4,13 @@ import { instantToWallClock } from '@tableapp/schema'
 import type { AppV2, AppV2Node, AppV2Record } from '@tableapp/schema/app-v2'
 import { savePublishedServiceAction } from '@/app/service-actions'
 import {
-  SERVICE_REPAIR_VIEWS, filterRepairs, formatMoney, isOverdueRepair, serviceAuthorKind, serviceAuthorLabel,
-  serviceDashboard, serviceDeadlineInstant, serviceDeadlineParts, staffTransitions, type ServiceListItem, type ServiceRepairViewId,
+  SERVICE_CLIENT_STEPS, SERVICE_PICKUP, SERVICE_REPAIR_VIEWS, filterRepairs, formatMoney, isOverdueRepair,
+  parseServiceLines, serviceAuthorKind, serviceAuthorLabel, serviceClientStepIndex, serviceDashboard,
+  serviceDeadlineCountdown, serviceDeadlineInstant, serviceDeadlineParts, serviceLinesTotal, staffTransitions,
+  type ServiceListItem, type ServiceRepairViewId,
 } from '@/lib/service-logic'
 import { applyServiceChange, isServiceDesk, serviceStatusName, type ServiceChange } from '@/lib/service-persist'
+import { servicePortraitUrl } from '@/lib/templates/service-portraits'
 import { AppFrameDeviceContext } from './app-frame'
 import { AppDialog } from './app-dialog'
 import { DateMenu } from './booking-calendar'
@@ -87,7 +90,9 @@ function statusTone(name: string) {
   if (name === 'Ждём запчасти') return 'waiting'
   if (name === 'Готово к выдаче') return 'resolved'
   if (name === 'Выдано') return 'closed'
-  if (name === 'Отменён' || name === 'Просрочено') return 'urgent'
+  if (name === 'Отменён' || name === 'Просрочено') return 'overdue'
+  if (name === 'На согласовании') return 'waiting'
+  if (name === 'Согласовано') return 'resolved'
   return 'normal'
 }
 
@@ -96,16 +101,36 @@ function StatusBadge({ name }: { name: string }) {
   return <span className={css.badge} data-kind="status" data-tone={statusTone(name)}>{name}</span>
 }
 
+function DeadlineBadge({ status, deadline, now, compact = false }: { status: string; deadline: unknown; now: number; compact?: boolean }) {
+  const countdown = serviceDeadlineCountdown(status, deadline, now)
+  if (!countdown.known || !countdown.label) return null
+  return <span className={css.slaBadge} data-tone={countdown.tone} data-compact={compact || undefined} data-sla-badge title={countdown.label}>
+    {compact ? countdown.shortLabel : countdown.label}
+  </span>
+}
+
 function formatWhen(value: unknown, empty = 'Срок не задан') {
   if (typeof value !== 'string' || !value) return empty
   const wall = instantToWallClock(value, 'Europe/Moscow')
   if (!wall) return empty
   const [year, month, day] = wall.date.split('-')
-  return `${day}.${month}.${year}, ${wall.time}`
+  return wall.time ? `${day}.${month}.${year}, ${wall.time}` : `${day}.${month}.${year}`
 }
 
-function PersonMark({ name }: { name: string }) {
-  return <span className={css.avatar} data-size="sm" aria-hidden="true" title={name || undefined}><ProtoIcon name="user" size={14} /></span>
+function PersonMark({ name, photo, size = 28 }: { name: string; photo?: string; size?: number }) {
+  const url = photo || servicePortraitUrl(name) || undefined
+  const icon = size <= 24 ? 12 : 14
+  return <span className={css.avatar} data-size={size <= 24 ? 'sm' : 'md'} aria-hidden="true" title={name || undefined}>
+    {url ? <img src={url} alt="" width={size} height={size} /> : <ProtoIcon name="user" size={icon} />}
+  </span>
+}
+
+function choiceLabel(props: ScreenProps, fieldId: string | undefined, raw: unknown) {
+  if (!fieldId) return textOf(raw)
+  const field = props.tables.find(table => table.id === props.kit.repairsTableId)?.fields.find(item => item.id === fieldId)
+  const id = textOf(raw)
+  const match = field?.choices?.find(choice => choice.id === id || choice.name === id)
+  return match?.name || id
 }
 
 function useMenuOpen(open: boolean, root: RefObject<HTMLElement | null>, onClose: () => void) {
@@ -270,6 +295,9 @@ function repairItems(props: ScreenProps): ServiceListItem[] {
   const fields = props.kit.repair
   return props.of(props.kit.repairsTableId).map(row => {
     const masterId = firstId(row.values[fields.master])
+    const masterName = masterId ? nameOf(props, props.kit.mastersTableId, masterId, props.kit.master.name) : ''
+    const masterRow = masterId ? props.rows.find(item => item.id === masterId && item.tableId === props.kit.mastersTableId) : undefined
+    const masterPhotoRaw = masterRow && props.kit.master.photo ? textOf(masterRow.values[props.kit.master.photo]) : ''
     return {
       id: row.id,
       number: textOf(row.values[fields.number]),
@@ -277,12 +305,16 @@ function repairItems(props: ScreenProps): ServiceListItem[] {
       serial: textOf(row.values[fields.serial]),
       problem: textOf(row.values[fields.problem]),
       clientName: textOf(row.values[fields.clientName]),
-      masterName: masterId ? nameOf(props, props.kit.mastersTableId, masterId, props.kit.master.name) : '',
+      masterName,
       masterEmail: textOf(row.values[fields.masterEmail]),
+      masterPhoto: masterPhotoRaw || servicePortraitUrl(masterName) || undefined,
       status: serviceStatusName(props.kit, row.values[fields.status]) || textOf(row.values[fields.status]),
       cost: numberOf(row.values[fields.cost]),
       deadline: textOf(row.values[fields.deadline]),
       updatedAt: textOf(row.values[fields.updatedAt]),
+      approval: choiceLabel(props, fields.approval, fields.approval ? row.values[fields.approval] : ''),
+      partsEta: fields.partsEta ? textOf(row.values[fields.partsEta]) : '',
+      lines: fields.lines ? parseServiceLines(row.values[fields.lines]) : [],
     }
   })
 }
@@ -302,10 +334,11 @@ function DashboardScreen(props: ScreenProps) {
   const stats = serviceDashboard(items, props.now)
   const ready = items.filter(item => item.status === 'Готово к выдаче').slice(0, 5)
   const overdue = items.filter(item => isOverdueRepair(item.status, item.deadline, props.now)).slice(0, 5)
+  const maxWeek = Math.max(1, ...stats.revenueByWeek.map(week => week.value))
   return <div className={css.root} data-service-root data-service-screen="dashboard">
-    <ListScreenShell title="Сервисный центр" meta="Ремонты по статусам, просрочка и готовность к выдаче.">
+    <ListScreenShell title="Сервисный центр" meta="Ремонты по статусам, просрочка, загрузка мастеров и выручка.">
       <fieldset className={css.statCards} aria-label="Показатели сервиса">
-        <button type="button" className={css.statCard} onClick={() => props.onNavigate?.(props.kit.repairsScreenId)}><strong>{stats.open}</strong><span>В работе всего</span></button>
+        <button type="button" className={css.statCard} onClick={() => props.onNavigate?.(props.kit.repairsScreenId)}><strong>{stats.open}</strong><span>Открытых</span></button>
         <button type="button" className={css.statCard} data-tone="rose" onClick={() => props.onNavigate?.(props.kit.repairsScreenId)}><strong>{stats.overdue}</strong><span>Просрочено</span></button>
         <button type="button" className={css.statCard} onClick={() => props.onNavigate?.(props.kit.repairsScreenId)}><strong>{stats.ready}</strong><span>Готово к выдаче</span></button>
         <button type="button" className={css.statCard}><strong>{formatMoney(stats.revenue)}</strong><span>Выручка по готовым</span></button>
@@ -316,21 +349,60 @@ function DashboardScreen(props: ScreenProps) {
         <button type="button" onClick={() => props.onNavigate?.(props.kit.repairsScreenId)}><strong>{stats.parts}</strong><span>Ждём запчасти</span></button>
         <button type="button" onClick={() => props.onNavigate?.(props.kit.repairsScreenId)}><strong>{stats.ready}</strong><span>Готово к выдаче</span></button>
       </div>
+      <div className={css.dashGrid}>
+        <DetailSection title="Загрузка мастеров">
+          <ul className={css.cards} data-keep-cards>{stats.masters.map(master => (
+            <li key={master.email} className={css.card}>
+              <span className={css.mark}><PersonMark name={master.name} photo={master.photo} /><strong>{master.name}</strong></span>
+              <span className={css.quiet}>{master.open} в работе</span>
+            </li>
+          ))}</ul>
+        </DetailSection>
+        <DetailSection title="Выручка по неделям">
+          <div className={css.revBars} role="img" aria-label="Выручка по неделям">
+            {stats.revenueByWeek.map(week => (
+              <div key={week.label} className={css.revBar}>
+                <span className={css.revFill} style={{ height: `${Math.max(8, (week.value / maxWeek) * 100)}%` }} />
+                <strong>{week.value ? formatMoney(week.value) : '—'}</strong>
+                <span>{week.label}</span>
+              </div>
+            ))}
+          </div>
+        </DetailSection>
+      </div>
+      {stats.waitingParts.length ? <DetailSection title="Ждём запчасти">
+        <ul className={css.cards} data-keep-cards>{stats.waitingParts.slice(0, 4).map(item => <li key={item.id}>
+          <button type="button" className={css.card} onClick={() => props.onNavigate?.(props.kit.repairScreenId, item.id)}>
+            <span className={css.subject + ' ' + css.deviceOneLine}>{item.device}</span>
+            <span className={css.number}>{item.number} · ETA {item.partsEta ? formatWhen(item.partsEta, '—') : 'не указан'}</span>
+            <span className={css.cardFacts}><StatusBadge name={item.status} /><PersonMark name={item.masterName} photo={item.masterPhoto} size={24} /></span>
+          </button>
+        </li>)}</ul>
+      </DetailSection> : null}
+      {stats.needsApproval.length ? <DetailSection title="Нужно согласование клиента">
+        <ul className={css.cards} data-keep-cards>{stats.needsApproval.slice(0, 4).map(item => <li key={item.id}>
+          <button type="button" className={css.card} onClick={() => props.onNavigate?.(props.kit.repairScreenId, item.id)}>
+            <span className={css.subject + ' ' + css.deviceOneLine}>{item.device}</span>
+            <span className={css.number}>{item.number} · {formatMoney(item.cost)}</span>
+            <span className={css.cardFacts}><StatusBadge name="На согласовании" /></span>
+          </button>
+        </li>)}</ul>
+      </DetailSection> : null}
       {overdue.length ? <DetailSection title="Просроченные">
         <ul className={css.cards} data-keep-cards>{overdue.map(item => <li key={item.id}>
           <button type="button" className={css.card} onClick={() => props.onNavigate?.(props.kit.repairScreenId, item.id)}>
-            <span className={css.subject}>{item.device}</span>
+            <span className={css.subject + ' ' + css.deviceOneLine}>{item.device}</span>
             <span className={css.number}>{item.number} · {item.clientName}</span>
-            <span className={css.cardFacts}><StatusBadge name={item.status} /><StatusBadge name="Просрочено" /></span>
+            <span className={css.cardFacts}><StatusBadge name={item.status} /><DeadlineBadge status={item.status} deadline={item.deadline} now={props.now} compact /></span>
           </button>
         </li>)}</ul>
       </DetailSection> : null}
       {ready.length ? <DetailSection title="Готово к выдаче">
         <ul className={css.cards} data-keep-cards>{ready.map(item => <li key={item.id}>
           <button type="button" className={css.card} onClick={() => props.onNavigate?.(props.kit.repairScreenId, item.id)}>
-            <span className={css.subject}>{item.device}</span>
+            <span className={css.subject + ' ' + css.deviceOneLine}>{item.device}</span>
             <span className={css.number}>{item.number} · {formatMoney(item.cost)}</span>
-            <span className={css.cardFacts}><StatusBadge name={item.status} /></span>
+            <span className={css.cardFacts}><StatusBadge name={item.status} /><DeadlineBadge status={item.status} deadline={item.deadline} now={props.now} compact /></span>
           </button>
         </li>)}</ul>
       </DetailSection> : null}
@@ -371,63 +443,101 @@ function RepairList(props: ScreenProps) {
       </> : null}
       {clientView ? <>
         <h3>Открытые · {open.length}</h3>
-        <RepairRows items={open} now={props.now} onOpen={openRepair} />
+        <RepairRows items={open} now={props.now} onOpen={openRepair} clientFacing />
         <h3>Завершённые · {closed.length}</h3>
-        <RepairRows items={closed} now={props.now} onOpen={openRepair} />
+        <RepairRows items={closed} now={props.now} onOpen={openRepair} clientFacing />
       </> : <RepairRows items={filtered} now={props.now} onOpen={openRepair} desk={desk} onStatus={(id, name) => void runStatus(props, id, statusId(props, name), () => {})} />}
     </ListScreenShell>
     {createOpen && desk ? <CreateDialog {...props} onClose={() => setCreateOpen(false)} onDone={() => setCreateOpen(false)} /> : null}
   </div>
 }
 
-function RepairRows(props: { items: ServiceListItem[]; now: number; onOpen: (id: string) => void; desk?: boolean; onStatus?: (id: string, status: string) => void; keepCards?: boolean }) {
+function RepairRows(props: { items: ServiceListItem[]; now: number; onOpen: (id: string) => void; desk?: boolean; onStatus?: (id: string, status: string) => void; keepCards?: boolean; clientFacing?: boolean }) {
   if (!props.items.length) return <div className={css.empty}><p>Ремонтов в этом списке нет.</p></div>
+  const showMaster = !props.clientFacing
   return <>
-    <ul className={css.cards} data-ticket-cards data-keep-cards={props.keepCards || undefined}>{props.items.map(item => {
-      const overdue = isOverdueRepair(item.status, item.deadline, props.now)
-      return <li key={item.id} className={css.ticketCard} data-ticket-card>
+    <ul className={css.cards} data-ticket-cards data-keep-cards={props.keepCards || undefined}>{props.items.map(item => (
+      <li key={item.id} className={css.ticketCard} data-ticket-card>
         <button type="button" className={css.card} onClick={() => props.onOpen(item.id)}>
           <span className={css.ticketCardTop}>
-            <span className={css.subject}>{item.device || 'Без названия'}</span>
+            <span className={`${css.subject} ${css.deviceOneLine}`}>{item.device || 'Без названия'}</span>
+            {showMaster && item.masterName ? <PersonMark name={item.masterName} photo={item.masterPhoto} size={28} /> : null}
           </span>
           {item.number ? <span className={css.number}>{item.number}</span> : null}
           <span className={css.cardFacts}>
             <StatusBadge name={item.status} />
-            {overdue ? <StatusBadge name="Просрочено" /> : null}
+            <DeadlineBadge status={item.status} deadline={item.deadline} now={props.now} compact />
             {item.cost > 0 ? <span className={css.quiet}>{formatMoney(item.cost)}</span> : null}
           </span>
-          <span className={css.ticketCardLine}>
-            <span className={css.quiet}>{item.clientName || 'Без клиента'}{item.masterName ? ` · ${item.masterName}` : ''}</span>
-            <span className={css.quiet}>·</span>
-            <span className={css.quiet}>{item.deadline ? `Срок ${formatWhen(item.deadline, '')}` : 'Срок не задан'}</span>
-          </span>
+          {props.clientFacing
+            ? null
+            : <span className={css.ticketCardLine}>
+                <span className={css.quiet}>{item.clientName || 'Без клиента'}</span>
+                {item.masterName ? <><span className={css.quiet}>·</span><span className={css.quiet}>{item.masterName}</span></> : null}
+              </span>}
         </button>
         {props.desk && props.onStatus ? <div className={css.ticketCardMenu}><StatusMenu status={item.status} onPick={next => props.onStatus?.(item.id, next)} /></div> : null}
       </li>
-    })}</ul>
-    {!props.keepCards ? <div className={css.tableWrap}>
-      <table className={css.table} data-columns={6}>
+    ))}</ul>
+    {!props.keepCards && !props.clientFacing ? <div className={css.tableWrap}>
+      <table className={css.table} data-columns={7}>
         <caption className={css.quiet}>Список ремонтов</caption>
-        <thead><tr><th>Устройство</th><th>Клиент</th><th>Статус</th><th>Стоимость</th><th>Срок</th><th><span className={css.srOnly}>Действия</span></th></tr></thead>
+        <thead><tr><th>Устройство</th><th>Клиент</th><th>Мастер</th><th>Статус</th><th>Стоимость</th><th>Срок</th><th><span className={css.srOnly}>Действия</span></th></tr></thead>
         <tbody>
-          {props.items.map(item => {
-            const overdue = isOverdueRepair(item.status, item.deadline, props.now)
-            return <tr key={item.id}>
+          {props.items.map(item => (
+            <tr key={item.id}>
               <td><button type="button" className={css.rowButton} onClick={() => props.onOpen(item.id)}>
-                <span className={css.subject}>{item.device || 'Без названия'}</span>
+                <span className={`${css.subject} ${css.deviceOneLine}`}>{item.device || 'Без названия'}</span>
                 {item.number ? <span className={css.number}>{item.number}</span> : null}
               </button></td>
-              <td><span className={css.person}>{item.clientName || 'Без клиента'}{item.masterName ? <span>{item.masterName}</span> : null}</span></td>
-              <td><span className={css.cardFacts}><StatusBadge name={item.status} />{overdue ? <StatusBadge name="Просрочено" /> : null}</span></td>
+              <td><span className={css.person}>{item.clientName || 'Без клиента'}</span></td>
+              <td>{item.masterName
+                ? <span className={css.personInline}><PersonMark name={item.masterName} photo={item.masterPhoto} size={24} /><span>{item.masterName}</span></span>
+                : <span className={css.quiet}>Не назначен</span>}
+              </td>
+              <td><span className={css.cardFacts}><StatusBadge name={item.status} /><DeadlineBadge status={item.status} deadline={item.deadline} now={props.now} compact /></span></td>
               <td>{item.cost > 0 ? formatMoney(item.cost) : '—'}</td>
               <td><span className={css.quiet}>{item.deadline ? formatWhen(item.deadline, '') : '—'}</span></td>
               <td className={css.rowActions}>{props.desk && props.onStatus ? <StatusMenu status={item.status} onPick={next => props.onStatus?.(item.id, next)} /> : null}</td>
             </tr>
-          })}
+          ))}
         </tbody>
       </table>
     </div> : null}
   </>
+}
+
+function LinesTable({ lines, approval }: { lines: ReturnType<typeof parseServiceLines>; approval?: string }) {
+  if (!lines.length) return <p className={css.quiet}>Позиций сметы пока нет.</p>
+  const total = serviceLinesTotal(lines)
+  return <div className={css.linesWrap}>
+    <table className={css.linesTable}>
+      <thead><tr><th>Название</th><th>Кол-во</th><th>Цена</th><th>Сумма</th></tr></thead>
+      <tbody>
+        {lines.map((line, index) => (
+          <tr key={`${line.name}-${index}`}>
+            <td>{line.name}<span className={css.quiet}> · {line.kind === 'work' ? 'работа' : 'запчасть'}</span></td>
+            <td>{line.qty}</td>
+            <td>{formatMoney(line.price)}</td>
+            <td>{formatMoney(line.qty * line.price)}</td>
+          </tr>
+        ))}
+      </tbody>
+      <tfoot><tr><th colSpan={3}>Итого</th><th>{formatMoney(total)}</th></tr></tfoot>
+    </table>
+    {approval ? <p className={css.cardFacts} style={{ marginTop: 10 }}><StatusBadge name={approval} /></p> : null}
+  </div>
+}
+
+function ClientStepper({ status, diagnosis }: { status: string; diagnosis: string }) {
+  const active = serviceClientStepIndex(status, diagnosis)
+  return <ol className={css.stepper} aria-label="Прогресс ремонта">
+    {SERVICE_CLIENT_STEPS.map((label, index) => (
+      <li key={label} data-done={active >= 0 && index <= active || undefined} data-current={index === active || undefined}>
+        <span>{label}</span>
+      </li>
+    ))}
+  </ol>
 }
 
 function StatusMenu(props: { status: string; onPick: (next: string) => void }) {
@@ -461,6 +571,7 @@ function RepairCard(props: ScreenProps) {
   const repair = props.of(props.kit.repairsTableId).find(row => row.id === props.recordId) ?? props.record
   const [dialog, setDialog] = useState<ServiceOpen>(bundle?.open ?? null)
   const [message, setMessage] = useState('')
+  const [approvedLocal, setApprovedLocal] = useState(false)
   const threadRef = useRef<HTMLDivElement>(null)
   useEffect(() => { setDialog(bundle?.open ?? null) }, [bundle?.open])
   if (!repair) return <div className={css.root}><p className={css.quiet}>Ремонт не найден.</p></div>
@@ -468,11 +579,23 @@ function RepairCard(props: ScreenProps) {
   const status = serviceStatusName(props.kit, repair.values[fields.status])
   const masterId = firstId(repair.values[fields.master])
   const masterName = masterId ? nameOf(props, props.kit.mastersTableId, masterId, props.kit.master.name) : ''
-  const overdue = isOverdueRepair(status, repair.values[fields.deadline], props.now)
+  const deadlineRaw = textOf(repair.values[fields.deadline])
+  const deadlineParts = serviceDeadlineParts(deadlineRaw)
+  const [deadlineDate, setDeadlineDate] = useState(deadlineParts.date)
+  const [deadlineTime, setDeadlineTime] = useState(deadlineParts.time || '17:00')
+  useEffect(() => {
+    const next = serviceDeadlineParts(textOf(repair.values[fields.deadline]))
+    setDeadlineDate(next.date)
+    setDeadlineTime(next.time || '17:00')
+  }, [repair.id, repair.values[fields.deadline], fields.deadline])
   const replies = props.of(props.kit.repliesTableId).filter(row => firstId(row.values[props.kit.reply.repair]) === repair.id)
   const notes = desk ? props.of(props.kit.notesTableId).filter(row => firstId(row.values[props.kit.note.repair]) === repair.id) : []
   const clientName = textOf(repair.values[fields.clientName])
   const clientEmail = textOf(repair.values[fields.clientEmail])
+  const diagnosis = textOf(repair.values[fields.diagnosis])
+  const lines = fields.lines ? parseServiceLines(repair.values[fields.lines]) : []
+  const approval = choiceLabel(props, fields.approval, fields.approval ? repair.values[fields.approval] : '')
+  const needsApproval = !approvedLocal && approval === 'На согласовании'
   const timeline = [...replies.map(row => {
     const author = textOf(row.values[props.kit.reply.author])
     const authorEmail = textOf(row.values[props.kit.reply.authorEmail])
@@ -500,7 +623,7 @@ function RepairCard(props: ScreenProps) {
       recordId: repair.id,
       masterId: patch.masterId !== undefined ? patch.masterId : (masterId || null),
       statusId: patch.statusId,
-      deadline: patch.deadline !== undefined ? patch.deadline : (typeof repair.values[fields.deadline] === 'string' ? repair.values[fields.deadline] as string : null),
+      deadline: patch.deadline !== undefined ? patch.deadline : (deadlineRaw || null),
       diagnosis: patch.diagnosis,
       work: patch.work,
       parts: patch.parts,
@@ -508,6 +631,52 @@ function RepairCard(props: ScreenProps) {
     })
     setMessage(result.ok ? result.message : result.error)
   }
+  const saveDeadline = (date: string, time: string) => {
+    setDeadlineDate(date)
+    setDeadlineTime(time)
+    if (!date) return
+    void saveAssign({ deadline: serviceDeadlineInstant(date, time || '17:00') })
+  }
+  const conversation = <DetailSection title="Переписка">
+    <div ref={threadRef} data-service-thread>
+      {conversationShot ? (
+        <Suspense fallback={<p className={css.quiet} role="status">Загружаем переписку…</p>}>
+          <ServiceConversationShotPanel
+            desk={desk}
+            tableId={props.kit.repairsTableId}
+            repairId={repair.id}
+            shot={conversationShot}
+          />
+        </Suspense>
+      ) : <>
+        {props.error ? <p className={css.error} role="alert">{props.error}</p> : null}
+        {message ? <p role="status">{message}</p> : null}
+        {!timeline.length ? <div className={css.empty} data-compact><p>Сообщений пока нет. Ответ появится в этой ленте.</p></div> : null}
+        <ol className={css.timeline} aria-label="Хронология">
+          {timeline.map(entry => {
+            const authorKind = entry.internal ? 'note' as const : entry.kind === 'client' ? 'client' as const : 'operator' as const
+            return <li key={entry.id} className={css.message} data-internal={entry.internal || undefined} data-service-note={entry.internal || undefined} data-author-kind={authorKind}>
+              <header>
+                <PersonMark name={entry.author} />
+                <div className={css.messageHead}>
+                  <strong>{entry.author || 'Без имени'}</strong>
+                  <span className={css.quiet}>{formatWhen(entry.at, 'Время не указано')}</span>
+                  {entry.internal
+                    ? <span className={css.noteFlag}><ProtoIcon name="lock" size={12} />Внутренняя заметка</span>
+                    : <span className={css.quiet}>{entry.label}</span>}
+                </div>
+              </header>
+              <p>{entry.text}</p>
+            </li>
+          })}
+        </ol>
+        {canCompose ? <div className={css.composerFooter}>
+          <button type="button" className={css.primary} onClick={() => setDialog('reply')}>Ответить</button>
+          {desk ? <button type="button" className={css.mine} onClick={() => setDialog('note')}>Заметка</button> : null}
+        </div> : null}
+      </>}
+    </div>
+  </DetailSection>
   return <div className={css.root} data-service-root data-service-screen={desk ? 'repair' : 'client-repair'} data-service-status={status} data-ticket-tight>
     <DetailCardShell
       back={{ label: desk ? 'Ремонты' : 'Мои ремонты', onClick: () => props.onNavigate?.(back) }}
@@ -515,71 +684,34 @@ function RepairCard(props: ScreenProps) {
       subtitle={textOf(repair.values[fields.number])}
       badge={<span className={css.badges}>
         <StatusBadge name={status} />
-        {overdue ? <StatusBadge name="Просрочено" /> : null}
+        <DeadlineBadge status={status} deadline={deadlineRaw} now={props.now} />
       </span>}
       actions={canCompose && phone ? <div className={css.actions}>
         <button type="button" className={css.primary} onClick={focusComposer}>Ответить</button>
       </div> : undefined}
     >
-      {clientView ? <dl className={css.clientGrid} aria-label="Сведения о ремонте">
-        <div><dt>Мастер</dt><dd>{masterName ? <span className={css.personInline}><PersonMark name={masterName} /><span>{masterName}</span></span> : 'Не назначен'}</dd></div>
-        <div><dt>Срок</dt><dd>{formatWhen(repair.values[fields.deadline], 'Не указан')}</dd></div>
-        <div><dt>Стоимость</dt><dd>{formatMoney(numberOf(repair.values[fields.cost]))}</dd></div>
-        <div><dt>Принято</dt><dd>{formatWhen(repair.values[fields.acceptedAt ?? fields.createdAt], 'Дата не указана')}</dd></div>
-      </dl> : null}
-      <div className={css.ticketCols}>
+      {clientView ? <>
+        <ClientStepper status={status} diagnosis={diagnosis} />
+        <div className={css.pickupCard} aria-label="Выдача">
+          <p><strong>Ожидаемая готовность</strong><span>{formatWhen(deadlineRaw, 'Уточним в переписке')}</span></p>
+          <p><strong>Смета</strong><span>{formatMoney(numberOf(repair.values[fields.cost]))}{approval ? ` · ${approval}` : ''}</span></p>
+          {needsApproval ? <button type="button" className={css.primary} onClick={() => { setApprovedLocal(true); setMessage('Смету согласовали. Мастер продолжит ремонт.') }}>Согласовать стоимость</button> : null}
+          <p className={css.quiet}>{SERVICE_PICKUP.address}</p>
+          <p className={css.quiet}>{SERVICE_PICKUP.hours} · {SERVICE_PICKUP.phone}</p>
+        </div>
+        {message ? <p role="status">{message}</p> : null}
+        <DetailSection title="Неисправность"><p className={css.description}>{textOf(repair.values[fields.problem]) || 'Описания нет.'}</p></DetailSection>
+        {diagnosis ? <DetailSection title="Диагностика"><p className={css.description}>{diagnosis}</p></DetailSection> : null}
+        {lines.length ? <DetailSection title="Работы и запчасти"><LinesTable lines={lines} approval={approvedLocal ? 'Согласовано' : approval} /></DetailSection> : null}
+        {conversation}
+      </> : <div className={css.ticketCols}>
         <div className={shell.detailMainCol}>
           <DetailSection title="Неисправность"><p className={css.description}>{textOf(repair.values[fields.problem]) || 'Описания нет.'}</p></DetailSection>
-          {textOf(repair.values[fields.diagnosis]) || textOf(repair.values[fields.work]) || textOf(repair.values[fields.parts]) ? (
-            <DetailSection title="Что сделали">
-              {textOf(repair.values[fields.diagnosis]) ? <p className={css.description}><strong>Диагноз.</strong> {textOf(repair.values[fields.diagnosis])}</p> : null}
-              {textOf(repair.values[fields.work]) ? <p className={css.description}><strong>Работа.</strong> {textOf(repair.values[fields.work])}</p> : null}
-              {textOf(repair.values[fields.parts]) ? <p className={css.description}><strong>Запчасти.</strong> {textOf(repair.values[fields.parts])}</p> : null}
-            </DetailSection>
-          ) : null}
-          <DetailSection title="Переписка">
-            <div ref={threadRef} data-service-thread>
-              {conversationShot ? (
-                <Suspense fallback={<p className={css.quiet} role="status">Загружаем переписку…</p>}>
-                  <ServiceConversationShotPanel
-                    desk={desk}
-                    tableId={props.kit.repairsTableId}
-                    repairId={repair.id}
-                    shot={conversationShot}
-                    slaBadge={overdue ? 'Просрочено' : null}
-                  />
-                </Suspense>
-              ) : <>
-                {props.error ? <p className={css.error} role="alert">{props.error}</p> : null}
-                {message ? <p role="status">{message}</p> : null}
-                {!timeline.length ? <div className={css.empty} data-compact><p>Сообщений пока нет. Ответ появится в этой ленте.</p></div> : null}
-                <ol className={css.timeline} aria-label="Хронология">
-                  {timeline.map(entry => {
-                    const authorKind = entry.internal ? 'note' as const : entry.kind === 'client' ? 'client' as const : 'operator' as const
-                    return <li key={entry.id} className={css.message} data-internal={entry.internal || undefined} data-service-note={entry.internal || undefined} data-author-kind={authorKind}>
-                      <header>
-                        <PersonMark name={entry.author} />
-                        <div className={css.messageHead}>
-                          <strong>{entry.author || 'Без имени'}</strong>
-                          <span className={css.quiet}>{formatWhen(entry.at, 'Время не указано')}</span>
-                          {entry.internal
-                            ? <span className={css.noteFlag}><ProtoIcon name="lock" size={12} />Внутренняя заметка</span>
-                            : <span className={css.quiet}>{entry.label}</span>}
-                        </div>
-                      </header>
-                      <p>{entry.text}</p>
-                    </li>
-                  })}
-                </ol>
-                {canCompose ? <div className={css.composerFooter}>
-                  <button type="button" className={css.primary} onClick={() => setDialog('reply')}>Ответить</button>
-                  {desk ? <button type="button" className={css.mine} onClick={() => setDialog('note')}>Заметка</button> : null}
-                </div> : null}
-              </>}
-            </div>
-          </DetailSection>
+          {diagnosis ? <DetailSection title="Диагностика"><p className={css.description}>{diagnosis}</p></DetailSection> : null}
+          <DetailSection title="Работы и запчасти"><LinesTable lines={lines} approval={approval} /></DetailSection>
+          {conversation}
         </div>
-        {!clientView ? <aside className={`${shell.detailSideCol} ${css.factsCol}`}>
+        <aside className={`${shell.detailSideCol} ${css.factsCol}`}>
           <DetailSection title="Сведения">
             <dl className={css.facts} data-editable={desk || undefined}>
               <div><dt>Клиент</dt><dd>{clientName || 'Не указан'}</dd></div>
@@ -613,19 +745,21 @@ function RepairCard(props: ScreenProps) {
               <div>
                 <dt>Срок</dt>
                 <dd>{desk
-                  ? <button type="button" className={css.assigneeTrigger} onClick={() => setDialog('assign')}>{formatWhen(repair.values[fields.deadline], 'Не указан')}</button>
-                  : formatWhen(repair.values[fields.deadline], 'Не указан')}
+                  ? <div className={css.deadlineRow}>
+                      <DateMenu value={deadlineDate} onValue={value => saveDeadline(value, deadlineTime)} label="Дата срока" />
+                      <TimeMenu value={deadlineTime} onValue={value => saveDeadline(deadlineDate, value)} label="Время срока" />
+                    </div>
+                  : formatWhen(deadlineRaw, 'Не указан')}
                 </dd>
               </div>
               <div><dt>Стоимость</dt><dd>{formatMoney(numberOf(repair.values[fields.cost]))}</dd></div>
+              {approval ? <div><dt>Согласование</dt><dd><StatusBadge name={approval} /></dd></div> : null}
               <div><dt>Обновлено</dt><dd>{formatWhen(repair.values[fields.updatedAt], '—')}</dd></div>
             </dl>
-            {desk ? <div className={css.actions} style={{ marginTop: 12 }}>
-              <button type="button" className={css.mine} onClick={() => setDialog('assign')}>Изменить</button>
-            </div> : null}
+            {message ? <p role="status">{message}</p> : null}
           </DetailSection>
-        </aside> : null}
-      </div>
+        </aside>
+      </div>}
     </DetailCardShell>
     {dialog === 'reply' && canCompose ? <ReplyDialog {...props} repairId={repair.id} onClose={() => setDialog(null)} onMessage={setMessage} /> : null}
     {dialog === 'note' && desk ? <NoteDialog {...props} repairId={repair.id} onClose={() => setDialog(null)} onMessage={setMessage} /> : null}

@@ -110,8 +110,9 @@ describe('service template', () => {
       { id: '4', number: 'РМ-4', device: 'Микроволновка', serial: '', problem: '', clientName: 'Антон', masterName: 'Андрей', masterEmail: 'andrey@service-demo.ru', status: 'Выдано', cost: 3200, deadline: '2026-11-10T12:00:00.000Z', updatedAt: '2026-11-10T16:00:00.000Z' },
     ]
     expect(isOverdueRepair('Новые', items[0]!.deadline, now)).toBe(true)
+    expect(isOverdueRepair('Готово к выдаче', items[2]!.deadline, now)).toBe(false)
     expect(isOverdueRepair('Выдано', items[3]!.deadline, now)).toBe(false)
-    expect(serviceDashboard(items, now)).toMatchObject({ fresh: 1, progress: 1, ready: 1, done: 1, overdue: 2, open: 3 })
+    expect(serviceDashboard(items, now)).toMatchObject({ fresh: 1, progress: 1, ready: 1, done: 1, overdue: 1, open: 3 })
     expect(filterRepairs(items, { search: '', view: 'progress' }, now).map(item => item.id)).toEqual(['2'])
     expect(filterRepairs(items, { search: 'кофе', view: 'all' }, now).map(item => item.id)).toEqual(['3'])
     expect(staffTransitions('Новые')).toEqual(['В работе', 'Отменён'])

@@ -29,6 +29,9 @@ export function buildServiceV2App(built: BuiltTemplate, meta: { id: string; work
   }
   const repairs = table('Ремонты'), clients = table('Клиенты'), masters = table('Мастера')
   const replies = table('Ответы'), notes = table('Заметки')
+  const optionalColumn = (tableName: string, fieldName: string) => {
+    try { return column(tableName, fieldName).id } catch { return undefined }
+  }
   const repair = {
     number: column('Ремонты', 'Номер').id,
     device: column('Ремонты', 'Устройство').id,
@@ -48,6 +51,9 @@ export function buildServiceV2App(built: BuiltTemplate, meta: { id: string; work
     createdAt: column('Ремонты', 'Создано').id,
     updatedAt: column('Ремонты', 'Обновлено').id,
     acceptedAt: column('Ремонты', 'Принято').id,
+    lines: optionalColumn('Ремонты', 'Смета'),
+    approval: optionalColumn('Ремонты', 'Согласование'),
+    partsEta: optionalColumn('Ремонты', 'ETA запчасти'),
   }
   const client = {
     name: column('Клиенты', 'Клиент').id,
@@ -217,11 +223,16 @@ export function buildServiceV2App(built: BuiltTemplate, meta: { id: string; work
   const all = { kind: 'all' as const }
   const clientRepairRead = [
     repair.number, repair.device, repair.serial, repair.problem, repair.diagnosis, repair.work, repair.parts, repair.cost,
-    repair.client, repair.clientName, repair.clientEmail, repair.master, repair.status, repair.deadline, repair.createdAt, repair.updatedAt, repair.acceptedAt,
+    repair.client, repair.clientName, repair.clientEmail, repair.status, repair.deadline, repair.createdAt, repair.updatedAt, repair.acceptedAt,
+    ...(repair.lines ? [repair.lines] : []),
+    ...(repair.approval ? [repair.approval] : []),
   ]
   const deskRepairUpdate = [
     repair.master, repair.masterEmail, repair.status, repair.deadline, repair.diagnosis, repair.work, repair.parts, repair.cost,
     repair.device, repair.serial, repair.problem, repair.client, repair.clientName, repair.clientEmail, repair.updatedAt, repair.acceptedAt,
+    ...(repair.lines ? [repair.lines] : []),
+    ...(repair.approval ? [repair.approval] : []),
+    ...(repair.partsEta ? [repair.partsEta] : []),
   ]
   return {
     formatVersion: 2, id: meta.id, workspaceId: meta.workspaceId, name: meta.name, slug: meta.slug, purpose: 'business',

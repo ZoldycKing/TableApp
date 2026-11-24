@@ -46,12 +46,12 @@ function demoNowMs(at = new Date()) {
   return wallClockToInstant({ year, month, day, hour: 12, minute: 0, second: 0 }, 'Europe/Moscow').getTime()
 }
 
-function conversationShotFor(view: string, staff: boolean): SupportConversationShot | undefined {
-  if (!view.endsWith('-files') && !view.includes(':files')) return undefined
+/** Ticket pages always use ConversationPanel so attachments stay on the real composer. */
+function conversationShotFor(_view: string, staff: boolean): SupportConversationShot {
   return {
     preview: conversationShotPage(staff),
-    previewFiles: conversationShotDraftFiles,
-    previewAlert: conversationShotAlert,
+    previewFiles: staff ? conversationShotDraftFiles : [],
+    previewAlert: staff ? conversationShotAlert : null,
   }
 }
 
@@ -63,7 +63,7 @@ function goalFor(model: ReturnType<typeof supportTemplateDemoModel>, view: strin
   if (view === 'client' || view === 'create') return { ...base, who: 'irina' as const, screenId: kit.clientListScreenId, recordId: undefined, open: view === 'create' ? 'create' as const : null }
   if (view === 'client-preview') return { ...base, who: 'anna' as const, screenId: kit.clientListScreenId, recordId: undefined, open: null, previewClient: 'i.petrova@mail.ru', previewMenuOpen: true }
   if (bare === 'client-ticket' || view === 'client-ticket-files') return { ...base, who: 'petr' as const, screenId: kit.clientTicketScreenId, recordId: ticket('ОБР-1042')?.id, open: null, conversationShot: conversationShotFor(view, false) }
-  if (view === 'client-waiting') return { ...base, who: 'petr' as const, screenId: kit.clientTicketScreenId, recordId: ticket('ОБР-1033')?.id, open: null }
+  if (view === 'client-waiting') return { ...base, who: 'petr' as const, screenId: kit.clientTicketScreenId, recordId: ticket('ОБР-1033')?.id, open: null, conversationShot: conversationShotFor(view, false) }
   if (view === 'settings') return { ...base, who: 'marina' as const, screenId: kit.settingsScreenId, recordId: undefined, open: null }
   // Same desk actor on Главная / Команда / Клиенты so desktop nav tabs stay identical across pages.
   if (view === 'dashboard') return { ...base, who: 'marina' as const, screenId: kit.dashboardScreenId ?? kit.queueScreenId, recordId: undefined, open: null }

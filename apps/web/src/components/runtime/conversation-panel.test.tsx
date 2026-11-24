@@ -47,11 +47,15 @@ describe('conversation inside a record card', () => {
     expect(mocks.send.mock.calls[2]![3].requestId).not.toBe(mocks.send.mock.calls[0]![3].requestId)
     expect(mocks.send.mock.calls[2]!.slice(0, 3)).toEqual(['business', 'orders', 'own-order'])
   })
-  it('provides separate staff notes and keeps a closed discussion readable', async () => {
+  it('shows staff notes in the same timeline and keeps a closed discussion readable', async () => {
     mocks.read.mockResolvedValue({ ok: true, value: { ...empty, staff: true, canManage: true, conversationId: 'thread', notes: [{ id: 'note', body: 'Внутренняя подробность', author: 'Мастер', createdAt: '2026-10-12T10:00:00Z' }] } })
     mocks.send.mockResolvedValue({ ok: true, value: { id: 'note' } }); mocks.close.mockResolvedValue({ ok: true, value: { id: 'thread' } })
     const ui = render(<ConversationPanel {...props} />)
-    await ui.findByText('Внутренняя подробность'); fireEvent.click(ui.getByRole('radio', { name: 'Внутренняя заметка' }))
+    const note = await ui.findByText('Внутренняя подробность')
+    expect(note.closest('[data-internal]')).toBeTruthy()
+    expect(note.closest('[data-internal]')?.textContent).toMatch(/Внутренняя заметка/)
+    expect(ui.queryByText(/Внутренние заметки · клиенту не видны/)).toBeNull()
+    fireEvent.click(ui.getByRole('radio', { name: 'Внутренняя заметка' }))
     fireEvent.change(ui.getByLabelText('Заметка'), { target: { value: 'Служебное уточнение' } }); fireEvent.click(ui.getByRole('button', { name: 'Сохранить' }))
     await waitFor(() => expect(mocks.send).toHaveBeenCalledWith('business', 'orders', 'own-order', expect.objectContaining({ internal: true, fileIds: [] }), false))
     mocks.read.mockResolvedValue({ ok: true, value: { ...empty, closed: true, conversationId: 'thread', staff: true, canManage: true } })

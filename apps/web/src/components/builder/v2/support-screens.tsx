@@ -1,5 +1,5 @@
 'use client'
-import { createContext, lazy, Suspense, useContext, useEffect, useId, useRef, useState, type RefObject } from 'react'
+import { createContext, lazy, Suspense, useContext, useEffect, useId, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { instantToWallClock } from '@tableapp/schema'
 import type { AppV2, AppV2Node, AppV2Record } from '@tableapp/schema/app-v2'
 import { savePublishedSupportAction } from '@/app/support-actions'
@@ -7,7 +7,8 @@ import { deadlineTime, filterTickets, isOpenStatus, isOverdue, isSupportStatus, 
 import { applySupportChange, isSupportDesk, supportStatusName, type SupportChange } from '@/lib/support-persist'
 import { AppFrameDeviceContext } from './app-frame'
 import { AppDialog } from './app-dialog'
-import { supportQueueMatch, supportSlaLabel } from '@/lib/support-sla'
+import { supportQueueMatch, supportSlaCountdown, supportSlaDueAt, supportSlaNormLabel, type SupportSlaCountdown, type SupportSlaView } from '@/lib/support-sla'
+import { supportPolicyFromRows } from '@/lib/support-persist'
 import { SupportDashboard, SupportPerson, SupportSlaSettings, TicketStatusMenu, slaFacts, slaWhen } from './support-desk'
 import { SupportSelect, TeamScreen } from './support-team'
 import { DateMenu } from './booking-calendar'
@@ -214,14 +215,6 @@ function toggleInList(list: string[], value: string) {
   return list.includes(value) ? list.filter(item => item !== value) : [...list, value]
 }
 
-function transitionLabel(to: string) {
-  if (to === 'В работе') return 'В работу'
-  if (to === 'Ждём клиента') return 'Ждём клиента'
-  if (to === 'Решено') return 'Решено'
-  if (to === 'Закрыто') return 'Закрыть'
-  return to
-}
-
 function useDialogBehavior(onClose: () => void) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -237,19 +230,41 @@ function useDialogBehavior(onClose: () => void) {
 }
 
 function useSupportNow(demoNow: number | undefined, asOf: number | undefined) {
-  const [now, setNow] = useState(demoNow ?? asOf ?? 0)
+  const [now, setNow] = useState(() => demoNow ?? asOf ?? Date.now())
   useEffect(() => {
     if (demoNow != null) { setNow(demoNow); return }
-    if (asOf == null) { setNow(Date.now()); return }
-    const started = performance.now()
-    const tick = () => setNow(asOf + performance.now() - started)
-    tick()
-    const id = window.setInterval(tick, 30_000)
+    if (asOf != null) {
+      const started = performance.now()
+      const tick = () => setNow(asOf + performance.now() - started)
+      tick()
+      const id = window.setInterval(tick, 60_000)
+      return () => window.clearInterval(id)
+    }
+    setNow(Date.now())
+    const id = window.setInterval(() => setNow(Date.now()), 60_000)
     return () => window.clearInterval(id)
   }, [demoNow, asOf])
   if (demoNow != null) return demoNow
-  if (asOf == null) return Date.now()
-  return now || asOf
+  return now
+}
+
+const EMPTY_SLA: SupportSlaView = {
+  known: false, priority: null, status: '', paused: false, open: false,
+  first: { known: false, met: false, paused: false, overdue: false, risk: false, dueAt: null, remainingMs: null, budgetMs: null },
+  resolution: { known: false, met: false, paused: false, overdue: false, risk: false, dueAt: null, remainingMs: null, budgetMs: null },
+  breaches: [], firstCloses: [], resolutionCloses: [], currentOverdue: false, currentRisk: false, createdAt: null,
+}
+
+function SlaBadge({ countdown, compact = false }: { countdown: SupportSlaCountdown; compact?: boolean }) {
+  if (!countdown.known || !countdown.label) return null
+  const text = compact ? countdown.shortLabel || countdown.label : countdown.label
+  return <span className={css.slaBadge} data-tone={countdown.tone} data-compact={compact || undefined} data-sla-badge title={countdown.label}>{text}</span>
+}
+
+function ticketSortTime(item: SupportListItem) {
+  const due = item.sla?.known ? supportSlaDueAt(item.sla) : null
+  if (due != null) return due
+  return deadlineTime(item.deadline) ?? Number.MAX_SAFE_INTEGER
 }
 
 export function SupportScreen(props: AppV2RendererProps) {
@@ -593,7 +608,7 @@ function TicketList(props: ScreenProps) {
       return supportQueueMatch({
         status: ticket.status,
         assigneeEmail: ticket.assigneeEmail,
-        sla: sla ?? { known: false, priority: null, status: ticket.status, paused: false, open: isOpenStatus(ticket.status), first: { known: false, met: false, paused: false, overdue: false, risk: false, dueAt: null, remainingMs: null }, resolution: { known: false, met: false, paused: false, overdue: false, risk: false, dueAt: null, remainingMs: null }, breaches: [], firstCloses: [], resolutionCloses: [], currentOverdue: false, currentRisk: false, createdAt: null },
+        sla: sla ?? { ...EMPTY_SLA, status: ticket.status, open: isOpenStatus(ticket.status) },
         manualOverdue: isOverdue(ticket.status, ticket.deadline, props.now),
       }, item.scope, actorEmail)
     }).length
@@ -620,12 +635,10 @@ function TicketList(props: ScreenProps) {
   }
   const visible = filterTickets(items, filter, actorEmail, props.now)
     .sort((a, b) => {
-      if (view === 'hot') {
-        return (deadlineTime(a.deadline) ?? Number.MAX_SAFE_INTEGER) - (deadlineTime(b.deadline) ?? Number.MAX_SAFE_INTEGER)
-      }
+      if (view === 'hot') return ticketSortTime(a) - ticketSortTime(b)
       const openScore = Number(isOpenStatus(b.status)) - Number(isOpenStatus(a.status))
       if (openScore) return openScore
-      return (deadlineTime(a.deadline) ?? Number.MAX_SAFE_INTEGER) - (deadlineTime(b.deadline) ?? Number.MAX_SAFE_INTEGER)
+      return ticketSortTime(a) - ticketSortTime(b)
     })
   const openItems = clientView ? visible.filter(item => isOpenStatus(item.status)) : visible
   const doneItems = clientView ? visible.filter(item => !isOpenStatus(item.status)) : []
@@ -736,13 +749,16 @@ function TicketList(props: ScreenProps) {
             <thead><tr><th>Обращение</th><th>Клиент</th><th>Статус</th><th>Приоритет</th><th>Срок</th><th>Ответственный</th><th><span className={css.srOnly}>Действия</span></th></tr></thead>
             <tbody>
               {visible.map(item => {
-                const overdue = isOverdue(item.status, item.deadline, props.now)
+                const countdown = item.sla ? supportSlaCountdown(item.sla) : null
                 return <tr key={item.id}>
                   <td><button type="button" className={css.rowButton} onClick={() => openTicket(item.id)}><span className={css.subject}>{item.subject || 'Без темы'}</span>{item.number ? <span className={css.number}>{item.number}</span> : null}</button></td>
                   <td><span className={css.person}>{item.clientName || 'Клиент не указан'}{item.category ? <span>{item.category}</span> : null}</span></td>
                   <td><QueueStatus name={item.status} /></td>
                   <td><QueuePriority name={item.priority} /></td>
-                  <td><span className={css.deadline}>{item.sla?.known && (item.sla.first.dueAt || item.sla.resolution.dueAt) ? slaWhen(item.sla.first.dueAt && !item.sla.first.met ? item.sla.first.dueAt : item.sla.resolution.dueAt) : formatWhen(item.deadline)}{item.sla?.known && supportSlaLabel(item.sla) ? <span className={item.sla.currentOverdue ? css.late : css.quiet}>{supportSlaLabel(item.sla)}</span> : overdue ? <span className={css.late}>Просрочено</span> : null}</span></td>
+                  <td><span className={css.deadline}>
+                    {countdown?.label ? <SlaBadge countdown={countdown} compact /> : null}
+                    <span className={css.quiet}>{item.sla?.known && (item.sla.first.dueAt || item.sla.resolution.dueAt) ? slaWhen(item.sla.first.dueAt && !item.sla.first.met ? item.sla.first.dueAt : item.sla.resolution.dueAt) : formatWhen(item.deadline)}</span>
+                  </span></td>
                   <td>{item.assigneeName ? <span className={css.personInline}><SupportPerson name={item.assigneeName} size={24} /><span>{item.assigneeName}</span></span> : <span className={css.person} data-empty>Не назначен</span>}</td>
                   <td className={css.rowActions}>{isSupportStatus(item.status) ? <TicketStatusMenu status={item.status} onPick={next => void changeStatus(item.id, next)} /> : null}</td>
                 </tr>
@@ -810,9 +826,8 @@ function ClientTicketButton({ item, now, onOpen }: { item: SupportListItem; now:
 }
 
 function TicketButton({ item, now, onOpen, showAssignee = true, onStatus }: { item: SupportListItem; now: number; onOpen: () => void; showAssignee?: boolean; onStatus?: (status: string) => void }) {
-  const overdue = isOverdue(item.status, item.deadline, now)
+  const countdown = item.sla ? supportSlaCountdown(item.sla) : null
   const deadline = item.sla?.known && (item.sla.first.dueAt || item.sla.resolution.dueAt) ? slaWhen(item.sla.first.dueAt && !item.sla.first.met ? item.sla.first.dueAt : item.sla.resolution.dueAt) : formatWhen(item.deadline)
-  const slaNote = item.sla?.known ? supportSlaLabel(item.sla) : ''
   return <div className={css.ticketCard} data-ticket-card>
     <button type="button" className={css.card} onClick={onOpen}>
       <span className={css.ticketCardTop}>
@@ -820,36 +835,73 @@ function TicketButton({ item, now, onOpen, showAssignee = true, onStatus }: { it
         {showAssignee ? (item.assigneeName ? <SupportPerson name={item.assigneeName} size={28} /> : <span className={css.avatar} data-size="sm" data-client aria-hidden="true"><ProtoIcon name="user" size={14} /></span>) : null}
       </span>
       {item.number ? <span className={css.number}>{item.number}</span> : null}
-      <span className={css.cardFacts}><StatusBadge name={item.status} /><PriorityBadge name={item.priority} /></span>
+      <span className={css.cardFacts}>
+        <StatusBadge name={item.status} />
+        <PriorityBadge name={item.priority} />
+        {countdown?.label ? <SlaBadge countdown={countdown} compact /> : null}
+      </span>
       <span className={css.ticketCardLine}>
         <span className={css.quiet}>{item.clientName || 'Клиент не указан'}</span>
         <span className={css.quiet}>·</span>
-        <span className={css.deadline}>{deadline}{slaNote && !overdue ? <span className={css.quiet}> {slaNote}</span> : null}</span>
+        <span className={css.deadline}>{deadline}</span>
       </span>
-      {overdue ? <span className={css.lateLine}>{slaNote || 'Просрочено'}</span> : null}
     </button>
     {onStatus && isSupportStatus(item.status) ? <div className={css.ticketCardMenu}><TicketStatusMenu status={item.status} onPick={onStatus} /></div> : null}
   </div>
 }
 
+function FactMenu(props: {
+  label: string
+  valueLabel: ReactNode
+  options: { id: string; name: string; node?: ReactNode }[]
+  value: string
+  onChange: (id: string) => void
+  disabled?: boolean
+}) {
+  const [open, setOpen] = useState(false)
+  const root = useRef<HTMLDivElement>(null)
+  useMenuOpen(open, root, () => setOpen(false))
+  if (props.disabled) return <span className={css.factValue}>{props.valueLabel}</span>
+  return <div className={css.factMenu} ref={root} data-fact-menu={props.label}>
+    <button type="button" className={css.factTrigger} aria-label={props.label} aria-expanded={open} aria-haspopup="listbox" onClick={() => setOpen(value => !value)}>
+      <span className={css.factValue}>{props.valueLabel}</span>
+      <ProtoIcon name="down" size={14} />
+    </button>
+    {open ? <div className={css.factPanel} role="listbox" aria-label={props.label}>
+      {props.options.map(option => <button key={option.id || option.name} type="button" role="option" aria-selected={option.id === props.value} onClick={() => { props.onChange(option.id); setOpen(false) }}>
+        {option.node ?? option.name}
+      </button>)}
+    </div> : null}
+  </div>
+}
+
 function TicketCard(props: ScreenProps) {
+  const device = useContext(AppFrameDeviceContext)
+  const phone = device === 'phone'
   const clientView = props.screenId === props.kit.clientTicketScreenId
   const desk = isSupportDesk(props.actor) && !clientView
   const ticket = props.of(props.kit.ticketsTableId).find(row => row.id === props.recordId) ?? (props.record?.tableId === props.kit.ticketsTableId ? props.record : undefined)
   const bundle = useContext(SupportRowsContext)
   const [dialog, setDialog] = useState<SupportOpen>(bundle?.open ?? null)
   const [message, setMessage] = useState('')
+  const threadRef = useRef<HTMLDivElement>(null)
   const back = desk ? props.kit.queueScreenId : props.kit.clientListScreenId
   if (!ticket) return <div className={css.root} data-support-root data-support-screen="missing">{props.loading ? <p role="status">Загружаем обращение…</p> : <div className={css.empty}><p>Обращение не найдено или вам недоступно.</p><button type="button" onClick={() => props.onNavigate?.(back)}>К списку</button></div>}</div>
   const fields = props.kit.ticket
   const status = supportStatusName(props.kit, ticket.values[fields.status]) || choiceName(props, props.kit.ticketsTableId, fields.status, ticket.values[fields.status])
   const priority = choiceName(props, props.kit.ticketsTableId, fields.priority, ticket.values[fields.priority])
+  const priorityId = textOf(ticket.values[fields.priority])
   const categoryId = firstId(ticket.values[fields.category])
   const assigneeId = firstId(ticket.values[fields.assignee])
   const category = nameOf(props, props.kit.categoriesTableId, categoryId, props.kit.category.name)
   const assignee = nameOf(props, props.kit.operatorsTableId, assigneeId, props.kit.operator.name)
   const line = fields.line ? choiceName(props, props.kit.ticketsTableId, fields.line, ticket.values[fields.line]) : ''
+  const lineId = fields.line ? textOf(ticket.values[fields.line]) : ''
   const overdue = isOverdue(status, ticket.values[fields.deadline], props.now)
+  const sla = slaFacts(props.kit, props.rows, ticket.id, props.now)
+  const countdown = supportSlaCountdown(sla)
+  const policy = supportPolicyFromRows(props.kit, props.rows)
+  const normLabel = supportSlaNormLabel(sla, policy)
   const replies = props.of(props.kit.repliesTableId).filter(row => firstId(row.values[props.kit.reply.ticket]) === ticket.id)
   const notes = desk ? props.of(props.kit.notesTableId).filter(row => firstId(row.values[props.kit.note.ticket]) === ticket.id) : []
   const clientName = textOf(ticket.values[fields.clientName])
@@ -862,25 +914,47 @@ function TicketCard(props: ScreenProps) {
   }), ...notes.map(row => ({ id: row.id, at: textOf(row.values[props.kit.note.at]), author: textOf(row.values[props.kit.note.author]), authorEmail: textOf(row.values[props.kit.note.authorEmail]), text: textOf(row.values[props.kit.note.text]), internal: true, label: 'Внутренняя заметка', kind: 'operator' as const }))]
     .sort((a, b) => a.at.localeCompare(b.at) || a.id.localeCompare(b.id))
   const transitions = desk ? operatorTransitions(status) : []
-  const replyLabel = status === 'Решено' || status === 'Закрыто' ? 'Переоткрыть' : 'Ответить'
+  const reopen = status === 'Решено' || status === 'Закрыто'
+  const replyLabel = reopen ? 'Переоткрыть' : 'Ответить'
   const waiting = status === 'Ждём клиента'
-  return <div className={css.root} data-support-root data-support-screen={desk ? 'ticket' : 'client-ticket'} data-support-status={status}>
+  const canCompose = !(clientView && isSupportDesk(props.actor))
+  const conversationShot = bundle?.conversationShot
+  const operators = props.of(props.kit.operatorsTableId).filter(row => row.values[props.kit.operator.active] === props.kit.activeChoiceId || row.id === assigneeId)
+  const priorities = props.tables.find(table => table.id === props.kit.ticketsTableId)?.fields.find(field => field.id === fields.priority)?.choices ?? []
+  const focusComposer = () => {
+    if (conversationShot) {
+      const form = threadRef.current?.querySelector('form')
+      form?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+      form?.querySelector('textarea')?.focus()
+      return
+    }
+    setDialog('reply')
+  }
+  const saveAssign = async (patch: { assigneeId?: string | null; priorityId?: string; categoryId?: string; deadline?: string | null; lineId?: string | null }) => {
+    const result = await commit(props, {
+      kind: 'assign',
+      recordId: ticket.id,
+      assigneeId: patch.assigneeId !== undefined ? patch.assigneeId : (assigneeId || null),
+      priorityId: patch.priorityId ?? priorityId,
+      categoryId: patch.categoryId ?? categoryId,
+      deadline: patch.deadline !== undefined ? patch.deadline : (typeof ticket.values[fields.deadline] === 'string' ? ticket.values[fields.deadline] as string : null),
+      lineId: patch.lineId !== undefined ? patch.lineId : (lineId || null),
+    })
+    setMessage(result.ok ? result.message : result.error)
+  }
+  return <div className={css.root} data-support-root data-support-screen={desk ? 'ticket' : 'client-ticket'} data-support-status={status} data-ticket-tight>
     <DetailCardShell
       back={{ label: desk ? 'Тикеты' : 'Мои обращения', onClick: () => props.onNavigate?.(back) }}
       title={textOf(ticket.values[fields.subject]) || 'Без темы'}
       subtitle={textOf(ticket.values[fields.number])}
-      badge={<span className={css.badges}><StatusBadge name={status} />{overdue ? <StatusBadge name="Просрочено" /> : null}<PriorityBadge name={priority} /></span>}
-      actions={clientView && isSupportDesk(props.actor) ? undefined : <div className={css.actions}>
-        <button type="button" className={css.primary} onClick={() => setDialog('reply')}>{replyLabel}</button>
-        {transitions.length || desk ? <details className={css.moreActions}>
-          <summary>Статус и назначение</summary>
-          <div>
-            {desk && status !== 'Закрыто' ? <button type="button" onClick={() => setDialog('assign')}>Назначить</button> : null}
-            {transitions.map(next => <button key={next} type="button" onClick={() => void runStatus(props, ticket.id, statusId(props, next), setMessage)}>{transitionLabel(next)}</button>)}
-            {desk ? <button type="button" onClick={() => setDialog('note')}>Внутренняя заметка</button> : null}
-          </div>
-        </details> : null}
-      </div>}
+      badge={<span className={css.badges}>
+        <StatusBadge name={status} />
+        <PriorityBadge name={priority} />
+        {countdown.label ? <SlaBadge countdown={countdown} /> : overdue ? <StatusBadge name="Просрочено" /> : null}
+      </span>}
+      actions={canCompose && phone ? <div className={css.actions}>
+        <button type="button" className={css.primary} onClick={focusComposer}>{replyLabel}</button>
+      </div> : undefined}
     >
       {clientView && waiting ? <div className={css.waitBanner} role="status" data-support-wait-banner>Служба поддержки ждёт вашего ответа</div> : null}
       {clientView ? <dl className={css.clientGrid} aria-label="Сведения об обращении">
@@ -893,19 +967,20 @@ function TicketCard(props: ScreenProps) {
         <div className={shell.detailMainCol}>
           <DetailSection title="Описание"><p className={css.description}>{textOf(ticket.values[fields.description]) || 'Описания нет.'}</p></DetailSection>
           <DetailSection title="Переписка">
-            {bundle?.conversationShot ? (
+            <div ref={threadRef} data-support-thread>
+            {conversationShot ? (
               <Suspense fallback={<p className={css.quiet} role="status">Загружаем переписку…</p>}>
                 <SupportConversationShotPanel
                   desk={desk}
                   tableId={props.kit.ticketsTableId}
                   ticketId={ticket.id}
-                  shot={bundle.conversationShot}
+                  shot={conversationShot}
                 />
               </Suspense>
             ) : <>
             {props.error ? <p className={css.error} role="alert">{props.error}</p> : null}
             {message ? <p role="status">{message}</p> : null}
-            {!timeline.length ? <div className={css.empty}><p>Сообщений пока нет. Ответ появится в этой ленте.</p></div> : null}
+            {!timeline.length ? <div className={css.empty} data-compact><p>Сообщений пока нет. Ответ появится в этой ленте.</p></div> : null}
             <ol className={css.timeline} aria-label="Хронология">
               {timeline.map(entry => {
                 const authorKind = entry.internal ? 'note' as const : entry.kind === 'client' ? 'client' as const : 'operator' as const
@@ -915,32 +990,82 @@ function TicketCard(props: ScreenProps) {
                   <div className={css.messageHead}>
                     <strong>{entry.author || 'Без имени'}</strong>
                     <span className={css.quiet}>{formatWhen(entry.at, 'Время не указано')}</span>
-                    {entry.internal ? <span className={css.noteFlag}>Внутренняя заметка. Клиент это не видит.</span> : <span className={css.quiet}>{entry.label}</span>}
+                    {entry.internal
+                      ? <span className={css.noteFlag}><ProtoIcon name="lock" size={12} />Внутренняя заметка</span>
+                      : <span className={css.quiet}>{entry.label}</span>}
                   </div>
                 </header>
                 <p>{entry.text}</p>
               </li>
               })}
             </ol>
+            {canCompose ? <div className={css.composerFooter}>
+              <button type="button" className={css.primary} onClick={() => setDialog('reply')}>{replyLabel}</button>
+            </div> : null}
             </>}
+            </div>
           </DetailSection>
         </div>
         {!clientView ? <aside className={`${shell.detailSideCol} ${css.factsCol}`}>
           <DetailSection title="Сведения">
-            <dl className={css.facts}>
+            <dl className={css.facts} data-editable={desk || undefined}>
               <div><dt>Клиент</dt><dd>{clientName || 'Не указан'}</dd></div>
-              <div><dt>Ответственный</dt><dd>{assignee ? <span className={css.personInline}><SupportPerson name={assignee} size={24} /><span>{assignee}</span></span> : 'Не назначен'}</dd></div>
+              <div>
+                <dt>Статус</dt>
+                <dd>{desk && transitions.length
+                  ? <FactMenu
+                      label="Статус"
+                      value={status}
+                      valueLabel={<StatusBadge name={status} />}
+                      options={[{ id: status, name: status, node: <StatusBadge name={status} /> }, ...transitions.map(next => ({ id: next, name: next, node: <StatusBadge name={next} /> }))]}
+                      onChange={next => void runStatus(props, ticket.id, statusId(props, next), setMessage)}
+                    />
+                  : <StatusBadge name={status} />}
+                </dd>
+              </div>
+              <div>
+                <dt>Ответственный</dt>
+                <dd>{desk && status !== 'Закрыто'
+                  ? <FactMenu
+                      label="Ответственный"
+                      value={assigneeId}
+                      valueLabel={assignee ? <span className={css.personInline}><SupportPerson name={assignee} size={22} /><span>{assignee}</span></span> : 'Не назначен'}
+                      options={[{ id: '', name: 'Не назначен' }, ...operators.map(row => ({ id: row.id, name: textOf(row.values[props.kit.operator.name]) || 'Без имени', node: <span className={css.personInline}><SupportPerson name={textOf(row.values[props.kit.operator.name]) || 'Без имени'} size={22} /><span>{textOf(row.values[props.kit.operator.name]) || 'Без имени'}</span></span> }))]}
+                      onChange={id => void saveAssign({ assigneeId: id || null })}
+                    />
+                  : assignee ? <span className={css.personInline}><SupportPerson name={assignee} size={24} /><span>{assignee}</span></span> : 'Не назначен'}
+                </dd>
+              </div>
               {line ? <div><dt>Линия</dt><dd>{line}</dd></div> : null}
-              <div><dt>Приоритет</dt><dd><PriorityBadge name={priority} />{!priority ? 'Не указан' : null}</dd></div>
+              <div>
+                <dt>Приоритет</dt>
+                <dd>{desk && status !== 'Закрыто'
+                  ? <FactMenu
+                      label="Приоритет"
+                      value={priorityId}
+                      valueLabel={priority ? <PriorityBadge name={priority} /> : 'Не указан'}
+                      options={priorities.map(choice => ({ id: choice.id, name: choice.name, node: <PriorityBadge name={choice.name} /> }))}
+                      onChange={id => void saveAssign({ priorityId: id })}
+                    />
+                  : <><PriorityBadge name={priority} />{!priority ? 'Не указан' : null}</>}
+                </dd>
+              </div>
               <div><dt>Категория</dt><dd>{category || 'Без категории'}</dd></div>
-              <div><dt>Срок</dt><dd>{formatWhen(ticket.values[fields.deadline])}{overdue ? '. Просрочено' : ''}</dd></div>
-              <div><dt>Норматив</dt><dd>{slaFacts(props.kit, props.rows, ticket.id, props.now).known ? supportSlaLabel(slaFacts(props.kit, props.rows, ticket.id, props.now)) || 'В срок' : 'Нет данных'}</dd></div>
+              <div>
+                <dt>Срок</dt>
+                <dd>
+                  <button type="button" className={css.factLink} disabled={!desk || status === 'Закрыто'} onClick={() => desk && status !== 'Закрыто' && setDialog('assign')}>
+                    {formatWhen(ticket.values[fields.deadline])}{overdue ? '. Просрочено' : ''}
+                  </button>
+                </dd>
+              </div>
+              <div><dt>Норматив</dt><dd>{normLabel}</dd></div>
             </dl>
           </DetailSection>
         </aside> : null}
       </div>
     </DetailCardShell>
-    {dialog === 'reply' && !(clientView && isSupportDesk(props.actor)) ? <ReplyDialog {...props} ticketId={ticket.id} reopen={status === 'Решено' || status === 'Закрыто'} onClose={() => setDialog(null)} onMessage={setMessage} /> : null}
+    {dialog === 'reply' && canCompose ? <ReplyDialog {...props} ticketId={ticket.id} reopen={reopen} onClose={() => setDialog(null)} onMessage={setMessage} /> : null}
     {dialog === 'note' && desk ? <NoteDialog {...props} ticketId={ticket.id} onClose={() => setDialog(null)} onMessage={setMessage} /> : null}
     {dialog === 'assign' && desk ? <AssignDialog {...props} ticket={ticket} onClose={() => setDialog(null)} onMessage={setMessage} /> : null}
   </div>

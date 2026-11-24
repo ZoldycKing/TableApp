@@ -35,31 +35,52 @@ describe('support screens', () => {
     expect(screen.getByRole('button', { name: 'Ответственный' })).toBeTruthy()
     const openTicket = screen.getAllByRole('button', { name: /Не открывается кабинет/ })[0]
     expect(openTicket?.textContent).toMatch(/ОБР-1048/)
+    expect(document.querySelectorAll('[data-sla-badge][data-tone="overdue"]').length).toBeGreaterThan(0)
     expect(screen.getAllByText(/просроч/i).length).toBeGreaterThan(0)
     fireEvent.click(within(views).getByRole('tab', { name: /Горит по сроку/ }))
     expect(within(views).getByRole('tab', { name: /Горит по сроку/ }).getAttribute('aria-selected')).toBe('true')
     queue.unmount()
 
     const operator = render(<SupportDemo view="ticket" bare />)
-    expect(await screen.findByText(/в ответ клиенту это не писать/)).toBeTruthy()
-    expect(screen.getByText('Внутренняя заметка. Клиент это не видит.')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Ответить' })).toBeTruthy()
-    expect(screen.getByText('Статус и назначение')).toBeTruthy()
+    expect(await screen.findByText('Клиент ждёт ответ по акту.')).toBeTruthy()
+    const note = screen.getByText('Клиент ждёт ответ по акту.').closest('[data-internal]') as HTMLElement
+    expect(note).toBeTruthy()
+    expect(within(note).getByText('Внутренняя заметка')).toBeTruthy()
+    expect(screen.getByRole('radiogroup', { name: 'Режим ответа' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Отправить' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Прикрепить файл' })).toBeTruthy()
+    expect(screen.getAllByRole('button', { name: 'Убрать файл' }).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/акт-приёмки\.pdf/).length).toBeGreaterThan(0)
+    expect(screen.queryByText('Статус и назначение')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Статус' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Ответственный' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Приоритет' })).toBeTruthy()
+    expect(document.querySelector('[data-sla-badge]')).toBeTruthy()
+    expect(screen.getByText(/Ответ за|Решение за/)).toBeTruthy()
     operator.unmount()
 
     for (const phone of [false, true]) {
       const client = render(<SupportDemo view="client-ticket" bare phone={phone} />)
-      const thread = await screen.findByRole('list', { name: 'Хронология' })
-      const own = within(thread).getByText('Пётр Орлов').closest('li') as HTMLElement
-      const reply = within(thread).getByText('Анна Волкова').closest('li') as HTMLElement
-      expect(within(own).getByText('Клиент')).toBeTruthy()
-      expect(within(own).queryByText('Ответ клиенту')).toBeNull()
-      expect(within(reply).getByText('Ответ клиенту')).toBeTruthy()
-      expect(screen.queryByText(/в ответ клиенту это не писать/)).toBeNull()
-      expect(screen.queryByText('Внутренняя заметка. Клиент это не видит.')).toBeNull()
-      expect(screen.getByRole('heading', { name: 'Не сходится сумма в отчёте за октябрь' })).toBeTruthy()
+      expect(await screen.findByRole('heading', { name: 'Не сходится сумма в отчёте за октябрь' })).toBeTruthy()
+      expect(screen.getByText('Добрый день. Прикладываю акт и фото по заявке.')).toBeTruthy()
+      expect(screen.queryByText('Клиент ждёт ответ по акту.')).toBeNull()
+      expect(screen.queryByText('Внутренняя заметка')).toBeNull()
+      expect(screen.queryByRole('radio', { name: 'Внутренняя заметка' })).toBeNull()
       client.unmount()
     }
+  })
+
+  it('keeps the secure-upload composer with paperclip, pending chips and Отправить on the ticket page', async () => {
+    render(<SupportDemo view="ticket" bare />)
+    await screen.findByRole('heading', { name: 'Не сходится сумма в отчёте за октябрь' })
+    expect(screen.getByRole('button', { name: 'Прикрепить файл' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Отправить' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Ответить' })).toBeNull()
+    expect(screen.getAllByRole('button', { name: 'Убрать файл' }).length).toBeGreaterThan(0)
+    expect(screen.getByText(/комментарий\.docx/)).toBeTruthy()
+    expect(screen.getAllByText(/акт-приёмки\.pdf/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/фото-дефекта\.jpg|Проверяется/).length).toBeGreaterThan(0)
+    expect(document.querySelector('[data-support-composer]')).toBeNull()
   })
 
   it('edits and sets a deadline in Moscow time without shifting it on a second save', async () => {
@@ -89,8 +110,7 @@ describe('support screens', () => {
       const deadline = () => [...document.querySelectorAll('dt')].find(term => term.textContent?.trim() === 'Срок')?.nextElementSibling?.textContent?.trim() ?? ''
       expect(await screen.findByText((_, node) => node?.tagName === 'DD' && (node.textContent ?? '').startsWith(`${shown}, 09:05`))).toBeTruthy()
       const afterEdit = deadline()
-      fireEvent.click(screen.getByText('Статус и назначение'))
-      fireEvent.click(screen.getByRole('button', { name: 'Назначить' }))
+      fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${shown.replace('.', '\\.')}`) }))
       const again = await screen.findByRole('dialog', { name: 'Ответственный и срок' })
       expect(within(again).getByRole('button', { name: 'Дата срока' }).textContent?.trim()).toBe(shown)
       expect(within(again).getByRole('button', { name: 'Время срока' }).textContent?.trim()).toBe('09:05')
@@ -102,6 +122,30 @@ describe('support screens', () => {
       expect(screen.queryByText(/AM|PM/)).toBeNull()
       view.unmount()
     }
+  })
+
+  it('edits status inline in Сведения and keeps the reply composer without a duplicate header button on desktop', async () => {
+    const desktop = render(<SupportDemo view="ticket" bare />)
+    await screen.findByRole('heading', { name: 'Не сходится сумма в отчёте за октябрь' })
+    expect(screen.getByRole('button', { name: 'Отправить' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Ответить' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Статус' }))
+    const statusMenu = screen.getByRole('listbox', { name: 'Статус' })
+    expect(statusMenu.querySelector('select')).toBeNull()
+    fireEvent.click(within(statusMenu).getByRole('option', { name: 'Ждём клиента' }))
+    await waitFor(() => expect(screen.getAllByText('Ждём клиента').length).toBeGreaterThan(0))
+    desktop.unmount()
+
+    render(<SupportDemo view="ticket" bare phone />)
+    await screen.findByRole('heading', { name: 'Не сходится сумма в отчёте за октябрь' })
+    const modes = screen.getByRole('radiogroup', { name: 'Режим ответа' })
+    expect(modes.className).toMatch(/@container/)
+    expect(modes.textContent).toContain('Клиенту')
+    expect(modes.textContent).toContain('Заметка')
+    expect(screen.getByRole('radio', { name: 'Внутренняя заметка' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Прикрепить файл' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Отправить' })).toBeTruthy()
+    expect(document.querySelector('[data-support-composer]')).toBeNull()
   })
 
   it('opens the client form with the save action visible', async () => {

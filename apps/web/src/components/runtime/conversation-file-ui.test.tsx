@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { Attachment } from '@tableapp/schema'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ConversationAttachmentChip, ConversationPendingChip, formatAttachmentSize } from './conversation-file-ui'
+import { ComposerModeSegment, ConversationAttachmentChip, ConversationPendingChip, formatAttachmentSize } from './conversation-file-ui'
 
 afterEach(() => cleanup())
 
@@ -10,6 +10,20 @@ const pdf: Attachment = {
   id: 'att_pdf', key: 'demo/act.pdf', name: 'акт-приёмки.pdf', mime: 'application/pdf',
   size: 245760, width: null, height: null, scanStatus: 'clean',
 }
+
+describe('composer mode segment', () => {
+  it('keeps short Клиенту/Заметка labels for narrow containers and long labels for wide ones', () => {
+    render(<ComposerModeSegment internal={false} onChange={() => {}} />)
+    const group = screen.getByRole('radiogroup', { name: 'Режим ответа' })
+    expect(group.className).toMatch(/@container/)
+    expect(group.textContent).toContain('Клиенту')
+    expect(group.textContent).toContain('Заметка')
+    expect(group.textContent).toContain('Ответ клиенту')
+    expect(group.textContent).toContain('Внутренняя заметка')
+    expect(group.innerHTML).toMatch(/@min-\[480px\]:inline/)
+    expect(group.innerHTML).toMatch(/@min-\[480px\]:hidden/)
+  })
+})
 
 describe('conversation attachment chips', () => {
   it('formats sizes for draft chips and exposes a 32px remove control', () => {

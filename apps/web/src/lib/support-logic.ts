@@ -87,6 +87,7 @@ export type SupportListItem = {
   assigneeEmail: string
   assigneeName: string
   deadline: unknown
+  createdAt?: unknown
   updatedAt?: unknown
   sla?: SupportSlaView
 }
@@ -109,39 +110,101 @@ export function supportAgeBucket(ageMs: number): SupportAgeBucket {
   return 'gt3d'
 }
 
+/** Saved list views on the operator «Тикеты» page. Stable ids go into the URL. */
+export const SUPPORT_TICKET_VIEWS = [
+  { id: 'open', label: 'Все открытые', scope: 'open' as const },
+  { id: 'mine', label: 'Мои', scope: 'mine' as const },
+  { id: 'unassigned', label: 'Без ответственного', scope: 'unassigned' as const },
+  { id: 'hot', label: 'Горит по сроку', scope: 'hot' as const },
+  { id: 'waiting', label: 'Ждём клиента', scope: 'waiting' as const },
+  { id: 'closed', label: 'Закрытые', scope: 'closed' as const },
+] as const
+
+export type SupportTicketViewId = (typeof SUPPORT_TICKET_VIEWS)[number]['id']
+
+export function supportTicketViewId(value: string | null | undefined): SupportTicketViewId {
+  return SUPPORT_TICKET_VIEWS.some(view => view.id === value) ? value as SupportTicketViewId : 'open'
+}
+
+export function supportTicketViewScope(view: SupportTicketViewId): SupportQueueScope {
+  return SUPPORT_TICKET_VIEWS.find(item => item.id === view)?.scope ?? 'open'
+}
+
+/** Status chips that still make sense inside a saved view. */
+export function supportStatusesForView(view: SupportTicketViewId): string[] {
+  if (view === 'waiting') return ['Ждём клиента']
+  if (view === 'closed') return ['Решено', 'Закрыто']
+  if (view === 'open' || view === 'unassigned' || view === 'hot') return ['Новое', 'В работе', 'Ждём клиента']
+  return ['Новое', 'В работе', 'Ждём клиента', 'Решено', 'Закрыто']
+}
+
 export type SupportFilter = {
   search: string
-  status: string
-  priority?: string
+  /** Multi-select status names. Empty = any status allowed by the view. */
+  statuses: string[]
+  /** Multi-select priority names. Empty = any priority. */
+  priorities: string[]
   ageBucket?: SupportAgeBucket | ''
+  /** Empty = any assignee. `__none__` = unassigned. Otherwise operator email. */
+  assigneeEmail?: string
   mine: boolean
   scope: SupportQueueScope
+  view?: SupportTicketViewId
 }
 
 export type SupportQueueFocus = {
-  scope: SupportQueueScope
+  scope?: SupportQueueScope
+  view?: SupportTicketViewId
   priority?: string
   ageBucket?: SupportAgeBucket
+  assigneeEmail?: string
 }
 
 export function filterTickets(items: readonly SupportListItem[], filter: SupportFilter, actorEmail: string, now: number) {
   const query = filter.search.trim().toLocaleLowerCase('ru-RU')
   const mine = actorEmail.trim().toLowerCase()
+  const assignee = (filter.assigneeEmail ?? '').trim().toLowerCase()
   return items.filter(item => {
     const manualOverdue = isOverdue(item.status, item.deadline, now)
     const sla = item.sla ?? supportSlaView([], null, now)
     if (!supportQueueMatch({ status: item.status, assigneeEmail: item.assigneeEmail, sla, manualOverdue }, filter.scope, mine)) return false
-    if (filter.status && item.status !== filter.status) return false
-    if (filter.priority && item.priority !== filter.priority) return false
+    if (filter.statuses.length && !filter.statuses.includes(item.status)) return false
+    if (filter.priorities.length && !filter.priorities.includes(item.priority)) return false
     if (filter.ageBucket) {
       if (!sla.known || !sla.open || sla.createdAt == null) return false
       if (supportAgeBucket(Math.max(0, now - sla.createdAt)) !== filter.ageBucket) return false
     }
+    if (assignee === '__none__') {
+      if (item.assigneeEmail.trim()) return false
+    } else if (assignee && item.assigneeEmail.trim().toLowerCase() !== assignee) return false
     if (filter.mine && item.assigneeEmail.trim().toLowerCase() !== mine) return false
     if (!query) return true
     const haystack = [item.number, item.subject, item.description, item.clientName, item.assigneeName, item.category, item.status, item.priority].join('\n').toLocaleLowerCase('ru-RU')
     return haystack.includes(query)
   })
+}
+
+/** Map a dashboard KPI / heatmap click onto a tickets view (+ optional filters). */
+export function supportFocusToFilter(focus: SupportQueueFocus | SupportQueueScope): Pick<SupportFilter, 'scope' | 'view' | 'priorities' | 'ageBucket' | 'assigneeEmail' | 'mine'> {
+  const next = typeof focus === 'string' ? { scope: focus } : focus
+  const scope = next.scope ?? (next.view ? supportTicketViewScope(next.view) : 'open')
+  let view: SupportTicketViewId = next.view ?? 'open'
+  if (!next.view) {
+    if (scope === 'mine') view = 'mine'
+    else if (scope === 'unassigned') view = 'unassigned'
+    else if (scope === 'waiting') view = 'waiting'
+    else if (scope === 'closed') view = 'closed'
+    else if (scope === 'overdue' || scope === 'risk' || scope === 'hot') view = 'hot'
+    else if (scope === 'open' || scope === 'all') view = 'open'
+  }
+  return {
+    view,
+    scope: supportTicketViewScope(view),
+    priorities: next.priority ? [next.priority] : [],
+    ageBucket: next.ageBucket ?? '',
+    assigneeEmail: next.assigneeEmail ?? '',
+    mine: false,
+  }
 }
 
 export function supportSummary(items: readonly { status: string; deadline: unknown }[], now: number) {

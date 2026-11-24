@@ -55,43 +55,14 @@ const open = async (page: Page, view: string, scheme?: 'light' | 'dark', phone =
 
 const browser = await chromium.launch({ headless: true })
 
-type Shot = { view: string; name: string; scheme?: 'light' | 'dark'; phone?: boolean; openMenu?: boolean; fullPage?: boolean }
-
-const desktop: Shot[] = [
-  { view: 'dashboard', name: 'dash-desktop-1440.png', fullPage: true },
-  { view: 'dashboard', name: 'dash-dark-1440.png', scheme: 'dark', fullPage: true },
-  { view: 'queue', name: 'list-desktop-1440.png' },
-  { view: 'queue', name: 'list-dark-1440.png', scheme: 'dark' },
-  { view: 'board', name: 'board-desktop-1440.png' },
-  { view: 'ticket', name: 'ticket-desktop-1440.png' },
-  { view: 'client-preview', name: 'client-preview-desktop-1440.png' },
-  { view: 'client-waiting', name: 'client-waiting-desktop-1440.png' },
-]
-
-const phone: Shot[] = [
-  { view: 'dashboard', name: 'dash-phone-390.png', phone: true },
-  { view: 'dashboard', name: 'dash-phone-full-390.png', phone: true, fullPage: true },
-  { view: 'board', name: 'board-phone-390.png', phone: true },
-  { view: 'client', name: 'client-cabinet-phone-390.png', phone: true },
-  { view: 'client-waiting', name: 'client-waiting-phone-390.png', phone: true },
-  { view: 'client-preview', name: 'client-preview-phone-390.png', phone: true },
-]
-
 {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'ru-RU', timezoneId: 'Europe/Moscow', deviceScaleFactor: 1 })
   const page = await context.newPage()
   page.setDefaultTimeout(30000)
-  for (const shot of desktop) {
-    await open(page, shot.view, shot.scheme, false)
-    if (shot.view === 'board') {
-      const card = page.locator('[data-board-card]').nth(2)
-      await card.scrollIntoViewIfNeeded()
-      await card.getByLabel('Ещё').click({ force: true })
-      await page.waitForSelector('[role="menu"][aria-label="Сменить статус"]', { timeout: 5000 })
-      await page.waitForTimeout(200)
-    }
-    await save(page, shot.name, shot.fullPage)
-  }
+  await open(page, 'clients')
+  await save(page, 'clients-desktop-1440.png')
+  await open(page, 'client-card')
+  await save(page, 'client-page-desktop-1440.png', true)
   await context.close()
 }
 
@@ -99,17 +70,10 @@ const phone: Shot[] = [
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: 'ru-RU', timezoneId: 'Europe/Moscow', deviceScaleFactor: 2 })
   const page = await context.newPage()
   page.setDefaultTimeout(30000)
-  for (const shot of phone) {
-    await open(page, shot.view, shot.scheme, true)
-    if (shot.view === 'board') {
-      const card = page.locator('[data-board-card]').first()
-      await card.scrollIntoViewIfNeeded()
-      await card.getByLabel('Ещё').click({ force: true })
-      await page.waitForSelector('[role="menu"][aria-label="Сменить статус"]', { timeout: 5000 })
-      await page.waitForTimeout(200)
-    }
-    await save(page, shot.name, shot.fullPage)
-  }
+  await open(page, 'queue', undefined, true)
+  await save(page, 'tickets-phone-390.png')
+  await open(page, 'client-card', undefined, true)
+  await save(page, 'client-page-phone-390.png', true)
   await context.close()
 }
 

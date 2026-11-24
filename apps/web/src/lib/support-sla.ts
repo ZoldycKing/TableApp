@@ -221,7 +221,7 @@ export function supportSlaView(events: readonly SupportSlaEvent[], policy: Suppo
   }
 }
 
-export type SupportQueueScope = 'all' | 'open' | 'unassigned' | 'mine' | 'risk' | 'overdue' | 'waiting'
+export type SupportQueueScope = 'all' | 'open' | 'unassigned' | 'mine' | 'risk' | 'overdue' | 'hot' | 'waiting' | 'closed'
 
 export function supportQueueMatch(input: { status: string; assigneeEmail: string; sla: SupportSlaView; manualOverdue: boolean }, scope: SupportQueueScope, actorEmail: string) {
   const open = input.sla.known ? input.sla.open : input.status !== 'Решено' && input.status !== 'Закрыто'
@@ -230,7 +230,12 @@ export function supportQueueMatch(input: { status: string; assigneeEmail: string
   if (scope === 'unassigned') return open && !input.assigneeEmail.trim()
   if (scope === 'mine') return input.assigneeEmail.trim().toLowerCase() === actorEmail.trim().toLowerCase() && input.assigneeEmail.trim() !== ''
   if (scope === 'waiting') return input.status === 'Ждём клиента'
+  if (scope === 'closed') return input.status === 'Решено' || input.status === 'Закрыто'
   if (scope === 'overdue') return input.sla.known ? input.sla.currentOverdue : input.manualOverdue
+  if (scope === 'hot') {
+    if (input.sla.known) return input.sla.currentOverdue || input.sla.currentRisk
+    return input.manualOverdue
+  }
   return input.sla.known ? input.sla.currentRisk : false
 }
 

@@ -33,7 +33,7 @@ export const podderzhka: TemplateDef = {
       icon: 'users',
       primary: 'name',
       fields: [
-        { key: 'name', name: 'Клиент', type: 'text', help: 'Имя, как его видят в очереди. Имена из примера можно заменить своими.' },
+        { key: 'name', name: 'Клиент', type: 'text', help: 'Имя, как его видят в списке тикетов. Имена из примера можно заменить своими.' },
         { key: 'email', name: 'Почта', type: 'email', help: 'Почта, с которой клиент входит. Он видит только обращения с этой почтой.' },
         { key: 'phone', name: 'Телефон', type: 'phone', help: 'Телефон для звонка. Само приложение никуда не звонит и не пишет.' },
         { key: 'company', name: 'Организация', type: 'text', help: 'Компания или проект клиента.' },
@@ -45,6 +45,11 @@ export const podderzhka: TemplateDef = {
         { key: 'petr', values: { name: 'Пётр Орлов', email: 'p.orlov@yandex.ru', phone: '+7 903 100-20-02', company: 'ООО «Север и К»', note: 'Просит сверять отчёт по строкам.' } },
         { key: 'olga', values: { name: 'Ольга Семёнова', email: 'o.semenova@mail.ru', phone: '+7 903 100-20-03', company: 'Мастерская «Двор»', note: 'Документы прикладывает ответом в обращении.' } },
         { key: 'artem', values: { name: 'Артём Ким', email: 'a.kim@inbox.ru', phone: '+7 903 100-20-04', company: 'Студия «Ким»', note: 'Доступ коллегам выдаёт сам, оператор проверяет роль.' } },
+        { key: 'elena', values: { name: 'Елена Кузнецова', email: 'e.kuznetsova@mail.ru', phone: '+7 903 100-20-05', company: 'Ателье «Нить»', note: 'Часто уточняет сроки, отвечает быстро.' } },
+        { key: 'dmitry', values: { name: 'Дмитрий Новиков', email: 'd.novikov@yandex.ru', phone: '+7 903 100-20-06', company: 'ООО «Линия»', note: 'Пишет от лица бухгалтерии.' } },
+        { key: 'sofia', values: { name: 'София Лебедева', email: 's.lebedeva@inbox.ru', phone: '+7 903 100-20-07', company: 'Кафе «Угол»', note: 'Просит короткие ответы без жаргона.' } },
+        { key: 'nikita', values: { name: 'Никита Фролов', email: 'n.frolov@mail.ru', phone: '+7 903 100-20-08', company: 'ИП Фролов', note: 'Один раз путал почты сотрудников.' } },
+        { key: 'maria', values: { name: 'Мария Ершова', email: 'm.ershova@yandex.ru', phone: '+7 903 100-20-09', company: 'Школа «Север»', note: 'Обращения обычно по доступу ученикам.' } },
       ],
     },
     {
@@ -56,7 +61,7 @@ export const podderzhka: TemplateDef = {
         { key: 'name', name: 'Оператор', type: 'text', help: 'Имя в переписке и в списке обращений.' },
         { key: 'email', name: 'Почта', type: 'email', help: 'Почта входа. Доступ даётся приглашением в настройках приложения, это поле само доступ не открывает. Адреса-примеры замените настоящими.' },
         { key: 'phone', name: 'Телефон', type: 'phone', help: 'Телефон для коллег. Клиенту не показывается.' },
-        { key: 'photo', name: 'Фото', type: 'image', help: 'Портрет на главной, в очереди, на доске и в карточке обращения.' },
+        { key: 'photo', name: 'Фото', type: 'image', help: 'Портрет на главной, в тикетах и в карточке обращения.' },
         {
           key: 'role', name: 'Роль в службе', type: 'single_select',
           choices: [{ name: 'Руководитель', color: 'indigo' }, { name: 'Оператор', color: 'green' }],
@@ -84,7 +89,7 @@ export const podderzhka: TemplateDef = {
       icon: 'tag',
       primary: 'name',
       fields: [
-        { key: 'name', name: 'Категория', type: 'text', help: 'Как обращение группируется в очереди. Список меняется в настройках службы.' },
+        { key: 'name', name: 'Категория', type: 'text', help: 'Как обращение группируется в тикетах. Список меняется в настройках службы.' },
         { key: 'description', name: 'Пояснение', type: 'long_text', help: 'Короткая подсказка при выборе категории. Это не база знаний.' },
         { key: 'active', name: 'Доступна', type: 'checkbox', help: 'Снимите отметку, чтобы категорию нельзя было выбрать в новом обращении. Старые обращения сохраняют её.' },
       ],
@@ -121,7 +126,7 @@ export const podderzhka: TemplateDef = {
             { name: 'Срочный', color: 'red' },
           ],
           defaultChoice: 'Обычный',
-          help: 'Насколько обращение срочное для очереди. Само по себе уведомление не отправляет.',
+          help: 'Насколько обращение срочное для тикетов. Само по себе уведомление не отправляет.',
         },
         { key: 'category', name: 'Категория', type: 'relation', relationTable: 'categories', allowMultiple: false, help: 'Тема из справочника категорий.' },
         {
@@ -167,6 +172,12 @@ export const podderzhka: TemplateDef = {
         { key: 't-archive', values: { number: 'ОБР-1035', subject: 'Как найти закрытое обращение за сентябрь', description: 'Нужна переписка по старой поставке.', client: { rowKey: 'olga' }, clientName: 'Ольга Семёнова', clientEmail: 'o.semenova@mail.ru', assignee: { rowKey: 'igor' }, assigneeEmail: 'igor@example.invalid', priority: 'Низкий', category: { rowKey: 'question' }, status: 'Ждём клиента', deadline: inDays(2, 12), createdAt: inDays(-6, 11), updatedAt: inDays(-4, 15) } },
         { key: 't-resolved-y', values: { number: 'ОБР-1032', subject: 'Сброс фильтра по клиенту', description: 'Фильтр по клиенту не сбрасывался после выхода.', client: { rowKey: 'artem' }, clientName: 'Артём Ким', clientEmail: 'a.kim@inbox.ru', assignee: { rowKey: 'anna' }, assigneeEmail: 'anna@example.invalid', priority: 'Обычный', category: { rowKey: 'bug' }, status: 'Решено', deadline: inDays(-1, 18), createdAt: inDays(-1, 9), updatedAt: inDays(-1, 14) } },
         { key: 't-resolved-2', values: { number: 'ОБР-1031', subject: 'Подпись в ответе обрезается', description: 'Длинная подпись оператора не помещалась в карточку.', client: { rowKey: 'irina' }, clientName: 'Ирина Петрова', clientEmail: 'i.petrova@mail.ru', assignee: { rowKey: 'igor' }, assigneeEmail: 'igor@example.invalid', priority: 'Обычный', category: { rowKey: 'bug' }, status: 'Решено', deadline: inDays(0, 12), createdAt: inDays(0, 7), updatedAt: inDays(0, 10, 30) } },
+        { key: 't-elena', values: { number: 'ОБР-1052', subject: 'Как сменить адрес доставки', description: 'Нужно обновить адрес для следующих отгрузок.', client: { rowKey: 'elena' }, clientName: 'Елена Кузнецова', clientEmail: 'e.kuznetsova@mail.ru', assignee: { rowKey: 'anna' }, assigneeEmail: 'anna@example.invalid', priority: 'Обычный', category: { rowKey: 'question' }, status: 'В работе', deadline: inDays(2, 16), createdAt: inDays(0, 9), updatedAt: inDays(0, 9, 40) } },
+        { key: 't-dmitry', values: { number: 'ОБР-1053', subject: 'Нужен доступ к закрытому отчёту', description: 'Бухгалтерии нужен отчёт за прошлый квартал.', client: { rowKey: 'dmitry' }, clientName: 'Дмитрий Новиков', clientEmail: 'd.novikov@yandex.ru', assignee: { rowKey: 'marina' }, assigneeEmail: 'marina@example.invalid', priority: 'Высокий', category: { rowKey: 'access' }, status: 'Новое', deadline: inDays(1, 14), createdAt: inDays(0, 10), updatedAt: inDays(0, 10) } },
+        { key: 't-sofia', values: { number: 'ОБР-1054', subject: 'Не сохраняется меню на неделю', description: 'После сохранения недели позиции пропадают.', client: { rowKey: 'sofia' }, clientName: 'София Лебедева', clientEmail: 's.lebedeva@inbox.ru', assignee: { rowKey: 'igor' }, assigneeEmail: 'igor@example.invalid', priority: 'Высокий', category: { rowKey: 'bug' }, status: 'Ждём клиента', deadline: inDays(0, 19), createdAt: inDays(-1, 11), updatedAt: inDays(0, 8) } },
+        { key: 't-nikita', values: { number: 'ОБР-1055', subject: 'Как пригласить помощника', description: 'Хочу дать доступ помощнику только к обращениям.', client: { rowKey: 'nikita' }, clientName: 'Никита Фролов', clientEmail: 'n.frolov@mail.ru', priority: 'Низкий', category: { rowKey: 'question' }, status: 'Новое', deadline: inDays(5, 12), createdAt: inDays(0, 12), updatedAt: inDays(0, 12) } },
+        { key: 't-maria', values: { number: 'ОБР-1056', subject: 'Ученик не видит домашнее задание', description: 'После выдачи доступа задание в кабинете пустое.', client: { rowKey: 'maria' }, clientName: 'Мария Ершова', clientEmail: 'm.ershova@yandex.ru', assignee: { rowKey: 'anna' }, assigneeEmail: 'anna@example.invalid', priority: 'Срочный', category: { rowKey: 'access' }, status: 'В работе', deadline: inDays(-1, 15), createdAt: inDays(-1, 9), updatedAt: inDays(-1, 10) } },
+        { key: 't-maria-closed', values: { number: 'ОБР-1020', subject: 'Сброс пароля ученику', description: 'Нужно сбросить пароль одному ученику.', client: { rowKey: 'maria' }, clientName: 'Мария Ершова', clientEmail: 'm.ershova@yandex.ru', assignee: { rowKey: 'igor' }, assigneeEmail: 'igor@example.invalid', priority: 'Обычный', category: { rowKey: 'access' }, status: 'Закрыто', deadline: inDays(-8, 12), createdAt: inDays(-10, 10), updatedAt: inDays(-8, 14) } },
       ],
     },
     {

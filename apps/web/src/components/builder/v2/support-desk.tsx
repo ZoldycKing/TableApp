@@ -6,24 +6,10 @@ import { SUPPORT_AGE_BUCKETS, type SupportAgeBucket, type SupportQueueFocus, ope
 import { SUPPORT_HEAT_AGES, SUPPORT_SLA_STARTER, supportDashboard, supportSlaLabel, supportSlaPriorityName, supportSlaPriorityShort, supportSlaView, type SupportQueueScope, type SupportSlaPolicy, type SupportSlaPriority, type SupportSlaView } from '@/lib/support-sla'
 import { supportPortraitUrl } from '@/lib/templates/support-portraits'
 import { ProtoIcon } from '../prototype/icons'
-import { ListScreenShell } from './layout-shell'
 import css from './support.module.css'
 
-/** Phone-only advance verb on the board card. */
-export function boardAdvanceLabel(status: SupportStatusName): string | null {
-  if (status === 'Новое') return 'Взять в работу'
-  if (status === 'В работе') return 'Запросить у клиента'
-  if (status === 'Ждём клиента') return 'Вернуть в работу'
-  if (status === 'Решено') return 'Вернуть в работу'
-  if (status === 'Закрыто') return 'Вернуть в работу'
-  return null
-}
-
-export function boardNextStatus(status: SupportStatusName): SupportStatusName | null {
-  return operatorTransitions(status)[0] ?? null
-}
-
-function BoardStatusMenu(props: { status: SupportStatusName; onPick: (status: SupportStatusName) => void }) {
+/** Status menu for a ticket row or card. Outside click and Esc close it. */
+export function TicketStatusMenu(props: { status: SupportStatusName; onPick: (status: SupportStatusName) => void }) {
   const [open, setOpen] = useState(false)
   const [flip, setFlip] = useState(false)
   const root = useRef<HTMLDivElement>(null)
@@ -43,12 +29,12 @@ function BoardStatusMenu(props: { status: SupportStatusName; onPick: (status: Su
     const margin = 12
     setFlip(box.right > window.innerWidth - margin)
   }, [open])
-  return <div className={css.cardMenu} ref={root} data-board-menu data-flip={flip || undefined}>
-    <button type="button" className={css.cardMenuButton} aria-label="Ещё" aria-expanded={open} aria-haspopup="menu" onClick={() => setOpen(value => !value)}>⋯</button>
-    {open ? <div className={css.cardMenuPanel} ref={panel} role="menu" aria-label="Сменить статус" data-flip={flip || undefined}>
+  if (!next.length) return null
+  return <div className={css.cardMenu} ref={root} data-ticket-menu data-flip={flip || undefined}>
+    <button type="button" className={css.cardMenuButton} aria-label="Сменить статус" aria-expanded={open} aria-haspopup="menu" onClick={event => { event.stopPropagation(); setOpen(value => !value) }}>⋯</button>
+    {open ? <div className={css.cardMenuPanel} ref={panel} role="menu" aria-label="Сменить статус" data-flip={flip || undefined} onClick={event => event.stopPropagation()}>
       <p className={css.cardMenuTitle}>Сменить статус</p>
       {next.map(item => <button key={item} type="button" role="menuitem" onClick={() => { props.onPick(item); setOpen(false) }}>{item}</button>)}
-      {!next.length ? <button type="button" role="menuitem" disabled>{props.status}</button> : null}
     </div> : null}
   </div>
 }
@@ -64,7 +50,6 @@ type DeskProps = {
   onSaveSla: (minutes: Record<string, number>) => Promise<{ ok: boolean; error?: string }>
 }
 
-const STATUSES: SupportStatusName[] = ['Новое', 'В работе', 'Ждём клиента', 'Решено', 'Закрыто']
 const OVERLOAD = 5
 
 function clock(ms: number | null, compact = false) {
@@ -171,7 +156,7 @@ export function SupportDashboard(props: DeskProps) {
   const resolvedDelta = dash.resolvedToday - dash.resolvedYesterday
   const maxPriority = Math.max(1, ...dash.age.map(item => item.count))
   const openHeat = (priority: SupportSlaPriority, age?: SupportAgeBucket) => {
-    props.onOpenQueue({ scope: 'open', priority: supportSlaPriorityName(priority), ...(age ? { ageBucket: age } : {}) })
+    props.onOpenQueue({ view: 'open', scope: 'open', priority: supportSlaPriorityName(priority), ...(age ? { ageBucket: age } : {}) })
   }
   return <div className={css.root} data-support-root data-support-screen="dashboard">
     <div className={css.dashHero} data-support-hero>
@@ -186,13 +171,20 @@ export function SupportDashboard(props: DeskProps) {
           const email = String(row.values[props.kit.operator.email] ?? '').trim().toLowerCase()
           const shift = row.values[props.kit.operator.active] === activeId
           const open = dash.openByAssignee[email] ?? 0
+          const self = email && email === props.actorEmail.trim().toLowerCase()
           return <article key={row.id} className={css.teamCard} data-overload={open >= OVERLOAD || undefined} data-off={!shift || undefined}>
             <SupportPerson name={name} size={44} onShift={shift} />
             <div className={css.teamCopy}>
               <strong>{name}</strong>
               <span>{shift ? 'На смене' : 'Не на смене'}</span>
             </div>
-            <button type="button" className={css.teamLoad} data-overload={open >= OVERLOAD || undefined} onClick={() => props.onOpenQueue(shift ? 'mine' : 'open')} aria-label={`Открытых у ${name}: ${open}`}>
+            <button
+              type="button"
+              className={css.teamLoad}
+              data-overload={open >= OVERLOAD || undefined}
+              onClick={() => props.onOpenQueue(self ? { view: 'mine', scope: 'mine' } : { view: 'open', scope: 'open', assigneeEmail: email || undefined })}
+              aria-label={`Открытых у ${name}: ${open}`}
+            >
               <em>{open}</em>
               <span>открытых</span>
             </button>
@@ -203,12 +195,12 @@ export function SupportDashboard(props: DeskProps) {
 
     <div className={css.kpiGrid} aria-label="Показатели службы">
       {([
-        { key: 'open', value: dash.open, label: 'Открытые', icon: 'clipboard' as const, tone: 'neutral' as const, trend: trendLabel(openDelta, true), scope: 'open' as const },
-        { key: 'overdue', value: dash.overdue, label: 'Просрочено', icon: 'warning' as const, tone: 'terra' as const, trend: trendLabel(overdueDelta, true), scope: 'overdue' as const },
-        { key: 'resolved', value: known ? dash.resolvedToday : '—', label: 'Решено сегодня', icon: 'check' as const, tone: 'sage' as const, trend: trendLabel(resolvedDelta), scope: 'all' as const },
-        { key: 'first', value: dash.avgFirstResponseMs == null ? 'Нет данных' : clock(dash.avgFirstResponseMs), compact: dash.avgFirstResponseMs == null ? undefined : clock(dash.avgFirstResponseMs, true), label: 'Средний первый ответ', icon: 'send' as const, tone: 'neutral' as const, trend: trendMs(dash.avgFirstResponseMs, dash.avgFirstYesterdayMs), scope: 'all' as const },
-        { key: 'resolve', value: dash.avgResolutionMs == null ? 'Нет данных' : clock(dash.avgResolutionMs), compact: dash.avgResolutionMs == null ? undefined : clock(dash.avgResolutionMs, true), label: 'Среднее решение', icon: 'clock' as const, tone: 'neutral' as const, trend: trendMs(dash.avgResolutionMs, dash.avgResolutionYesterdayMs), scope: 'all' as const },
-      ]).map(card => <button key={card.key} type="button" className={css.kpiCard} data-tone={card.tone} onClick={() => props.onOpenQueue(card.scope)}>
+        { key: 'open', value: dash.open, label: 'Открытые', icon: 'clipboard' as const, tone: 'neutral' as const, trend: trendLabel(openDelta, true), focus: { view: 'open' as const, scope: 'open' as const } },
+        { key: 'overdue', value: dash.overdue, label: 'Просрочено', icon: 'warning' as const, tone: 'terra' as const, trend: trendLabel(overdueDelta, true), focus: { view: 'hot' as const, scope: 'hot' as const } },
+        { key: 'resolved', value: known ? dash.resolvedToday : '—', label: 'Решено сегодня', icon: 'check' as const, tone: 'sage' as const, trend: trendLabel(resolvedDelta), focus: { view: 'closed' as const, scope: 'closed' as const } },
+        { key: 'first', value: dash.avgFirstResponseMs == null ? 'Нет данных' : clock(dash.avgFirstResponseMs), compact: dash.avgFirstResponseMs == null ? undefined : clock(dash.avgFirstResponseMs, true), label: 'Средний первый ответ', icon: 'send' as const, tone: 'neutral' as const, trend: trendMs(dash.avgFirstResponseMs, dash.avgFirstYesterdayMs), focus: { view: 'open' as const, scope: 'open' as const } },
+        { key: 'resolve', value: dash.avgResolutionMs == null ? 'Нет данных' : clock(dash.avgResolutionMs), compact: dash.avgResolutionMs == null ? undefined : clock(dash.avgResolutionMs, true), label: 'Среднее решение', icon: 'clock' as const, tone: 'neutral' as const, trend: trendMs(dash.avgResolutionMs, dash.avgResolutionYesterdayMs), focus: { view: 'open' as const, scope: 'open' as const } },
+      ]).map(card => <button key={card.key} type="button" className={css.kpiCard} data-tone={card.tone} onClick={() => props.onOpenQueue(card.focus)}>
         <span className={css.kpiIcon} aria-hidden="true"><ProtoIcon name={card.icon} size={18} /></span>
         <strong data-compact={card.compact || undefined}>{card.compact ? <><span className={css.kpiFull}>{card.value}</span><span className={css.kpiShort}>{card.compact}</span></> : card.value}</strong>
         <span className={css.kpiLabel}>{card.label}</span>
@@ -235,7 +227,7 @@ export function SupportDashboard(props: DeskProps) {
       <section className={css.heatPanel} aria-label="Тепловая карта приоритет и возраст">
         <div className={css.heatHead}>
           <h2>Тепловая карта: приоритет × возраст</h2>
-          <p className={css.quiet}>Нажмите ячейку, чтобы открыть очередь с этим приоритетом и возрастом.</p>
+          <p className={css.quiet}>Нажмите ячейку, чтобы открыть тикеты с этим приоритетом и возрастом.</p>
         </div>
         <div className={css.heatScroll}>
           <table className={css.heatTable}>
@@ -281,50 +273,6 @@ export function SupportDashboard(props: DeskProps) {
         </ul>
       </section>
     </div>
-  </div>
-}
-
-export function SupportBoard(props: DeskProps & { phone: boolean }) {
-  const [column, setColumn] = useState<SupportStatusName>('В работе')
-  const [error, setError] = useState('')
-  const [dragId, setDragId] = useState('')
-  const statusName = (id: string) => {
-    const names: Record<string, SupportStatusName> = {
-      [props.kit.statuses.fresh]: 'Новое', [props.kit.statuses.progress]: 'В работе', [props.kit.statuses.waiting]: 'Ждём клиента',
-      [props.kit.statuses.resolved]: 'Решено', [props.kit.statuses.closed]: 'Закрыто',
-    }
-    return names[id] ?? 'Новое'
-  }
-  const cards = views(props).map(item => ({ ...item, statusName: statusName(item.status) }))
-  const columns = props.phone ? STATUSES.filter(status => status === column) : STATUSES
-  const move = async (id: string, status: SupportStatusName) => {
-    const result = await props.onStatus(id, status)
-    if (!result.ok) setError(result.error ?? 'Статус не изменён.')
-    else setError('')
-  }
-  return <div className={css.root} data-support-root data-support-screen="board">
-    <ListScreenShell title="Доска" meta="Обращения по статусам.">
-      {error ? <p className={css.error} role="alert">{error}</p> : null}
-      {props.phone ? <div className={css.chips} role="tablist" aria-label="Колонка">{STATUSES.map(status => <button key={status} type="button" className={css.chip} aria-pressed={column === status} onClick={() => setColumn(status)}>{status}</button>)}</div> : null}
-      <div className={css.board}>
-        {columns.map(status => <section key={status} aria-label={status} onDragOver={event => { if (!props.phone) event.preventDefault() }} onDrop={event => { event.preventDefault(); if (dragId) void move(dragId, status); setDragId('') }}>
-          <h3>{status}</h3>
-          {cards.filter(card => card.statusName === status).map(card => {
-            const advance = boardAdvanceLabel(card.statusName)
-            const next = boardNextStatus(card.statusName)
-            return <article key={card.id} draggable={!props.phone} onDragStart={() => setDragId(card.id)} data-board-card>
-              <button type="button" className={css.rowButton} onClick={() => props.onOpenTicket(card.id)}><span className={css.subject}>{card.subject}</span>{card.number ? <span className={css.number}>{card.number}</span> : null}</button>
-              {card.assigneeName ? <span className={css.personInline}><SupportPerson name={card.assigneeName} size={22} /><span>{card.assigneeName}</span></span> : <p className={css.quiet}>Не назначен</p>}
-              <p className={card.sla.currentOverdue ? css.late : css.quiet}>{supportSlaLabel(card.sla) || 'В срок'}</p>
-              <div className={css.cardActions}>
-                {props.phone && advance && next ? <button type="button" className={css.statusChip} data-board-advance onClick={() => void move(card.id, next)}>{advance}</button> : null}
-                <BoardStatusMenu status={card.statusName} onPick={nextStatus => void move(card.id, nextStatus)} />
-              </div>
-            </article>
-          })}
-        </section>)}
-      </div>
-    </ListScreenShell>
   </div>
 }
 

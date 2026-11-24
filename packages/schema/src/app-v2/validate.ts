@@ -473,6 +473,7 @@ export function validateAppV2(app: AppV2, catalog: AppV2Catalog, options: { mode
     }
     if (support.dashboardScreenId && !screens.has(support.dashboardScreenId)) issue('support_screen', path, 'Экран обращений удалён')
     if (support.boardScreenId && !screens.has(support.boardScreenId)) issue('support_screen', path, 'Экран обращений удалён')
+    if (support.clientScreenId && !screens.has(support.clientScreenId)) issue('support_screen', path, 'Экран обращений удалён')
     const statusIds = [support.statuses.fresh, support.statuses.progress, support.statuses.waiting, support.statuses.resolved, support.statuses.closed]
     if (new Set(statusIds).size !== statusIds.length) issue('support_status', path, 'Статусы обращения должны различаться')
     for (const screenId of [support.queueScreenId, support.ticketScreenId, support.clientListScreenId, support.clientTicketScreenId, support.clientsScreenId, support.settingsScreenId]) if (!screens.has(screenId)) issue('support_screen', path, 'Экран обращений удалён')

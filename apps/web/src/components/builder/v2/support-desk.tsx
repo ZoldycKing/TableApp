@@ -4,15 +4,16 @@ import { instantToWallClock } from '@tableapp/schema'
 import { supportPolicyFromRows, supportStoredEvents } from '@/lib/support-persist'
 import { SUPPORT_SLA_STARTER, supportDashboard, supportSlaLabel, supportSlaPriorityName, supportSlaView, type SupportQueueScope, type SupportSlaPolicy, type SupportSlaView } from '@/lib/support-sla'
 import { operatorTransitions, type SupportStatusName } from '@/lib/support-logic'
+import { ListScreenShell } from './layout-shell'
 import css from './support.module.css'
 
 /** Phone-only advance verb on the board card. */
 export function boardAdvanceLabel(status: SupportStatusName): string | null {
-  if (status === 'Новое') return 'В работу'
-  if (status === 'В работе') return 'Ждём клиента'
-  if (status === 'Ждём клиента') return 'В работу'
-  if (status === 'Решено') return 'В работу'
-  if (status === 'Закрыто') return 'В работу'
+  if (status === 'Новое') return 'Взять в работу'
+  if (status === 'В работе') return 'Запросить у клиента'
+  if (status === 'Ждём клиента') return 'Вернуть в работу'
+  if (status === 'Решено') return 'Вернуть в работу'
+  if (status === 'Закрыто') return 'Вернуть в работу'
   return null
 }
 
@@ -88,35 +89,34 @@ export function SupportDashboard(props: DeskProps) {
   const known = items.some(item => item.sla.known)
   const ratio = (met: number, total: number) => total ? `${Math.round(met / total * 100)}%` : 'Нет данных'
   return <div className={css.root} data-support-root data-support-screen="dashboard">
-    <header className={css.dashHead}>
-      <div>
-        <h2>Служба поддержки</h2>
-        <p>Календарные часы, круглосуточно. Период закрытых циклов — {days} дней.</p>
-      </div>
-      <div className={css.chips} role="group" aria-label="Период">
+    <ListScreenShell
+      title="Служба поддержки"
+      meta={`Показатели за ${days} дней.`}
+      actions={<div className={css.chips} role="group" aria-label="Период">
         <button type="button" className={css.chip} aria-pressed={days === 7} onClick={() => setDays(7)}>7 дней</button>
         <button type="button" className={css.chip} aria-pressed={days === 30} onClick={() => setDays(30)}>30 дней</button>
+      </div>}
+    >
+      <div className={css.statCards} aria-label="Сводка службы">
+        {([
+          ['open', dash.open, 'Открытые', 'sage'],
+          ['unassigned', dash.unassigned, 'Без ответственного', 'sage'],
+          ['risk', dash.risk, 'Скоро срок', 'sage'],
+          ['overdue', dash.overdue, 'Просрочены', 'rose'],
+        ] as const).map(([scope, value, label, tone]) => <button key={scope} type="button" className={css.statCard} data-tone={tone} onClick={() => props.onOpenQueue(scope)}><strong>{value}</strong><span>{label}</span></button>)}
       </div>
-    </header>
-    <div className={css.summary} aria-label="Сводка службы">
-      {([
-        ['open', dash.open, 'Открытые'],
-        ['unassigned', dash.unassigned, 'Без ответственного'],
-        ['risk', dash.risk, 'Скоро срок'],
-        ['overdue', dash.overdue, 'Просрочены'],
-      ] as const).map(([scope, value, label]) => <button key={scope} type="button" onClick={() => props.onOpenQueue(scope)}><strong>{value}</strong><span>{label}</span></button>)}
-    </div>
-    <div className={css.metrics}>
-      <p><span>Решено за период</span><strong>{known ? dash.resolvedInPeriod : 'Нет данных'}</strong></p>
-      <p><span>Средний первый ответ</span><strong>{dash.avgFirstResponseMs == null ? 'Нет данных' : clock(dash.avgFirstResponseMs)}</strong></p>
-      <p><span>Среднее решение</span><strong>{dash.avgResolutionMs == null ? 'Нет данных' : clock(dash.avgResolutionMs)}</strong></p>
-      <p><span>Первый ответ в срок</span><strong>{ratio(dash.firstMet, dash.firstClosed)}</strong></p>
-      <p><span>Решение в срок</span><strong>{ratio(dash.resolutionMet, dash.resolutionClosed)}</strong></p>
-    </div>
-    <section className={css.age} aria-label="Возраст открытых обращений">
-      <h3>Открытые по приоритету</h3>
-      {dash.age.length ? <ul>{dash.age.map(bucket => <li key={bucket.priority}><span>{supportSlaPriorityName(bucket.priority)}</span><strong>{bucket.count}</strong><span>самое старое {clock(bucket.oldestMs)}</span><span className={css.track}><i style={{ width: `${Math.max(8, Math.min(100, bucket.oldestMs / (48 * 3_600_000) * 100))}%` }} /></span></li>)}</ul> : <p>Нет данных</p>}
-    </section>
+      <div className={css.metrics}>
+        <p><span>Решено за период</span><strong>{known ? dash.resolvedInPeriod : 'Нет данных'}</strong></p>
+        <p><span>Средний первый ответ</span><strong>{dash.avgFirstResponseMs == null ? 'Нет данных' : clock(dash.avgFirstResponseMs)}</strong></p>
+        <p><span>Среднее решение</span><strong>{dash.avgResolutionMs == null ? 'Нет данных' : clock(dash.avgResolutionMs)}</strong></p>
+        <p><span>Первый ответ в срок</span><strong>{ratio(dash.firstMet, dash.firstClosed)}</strong></p>
+        <p><span>Решение в срок</span><strong>{ratio(dash.resolutionMet, dash.resolutionClosed)}</strong></p>
+      </div>
+      <section className={css.age} aria-label="Возраст открытых обращений">
+        <h3>Открытые по приоритету</h3>
+        {dash.age.length ? <ul>{dash.age.map(bucket => <li key={bucket.priority}><span>{supportSlaPriorityName(bucket.priority)}</span><strong>{bucket.count}</strong><span>самое старое {clock(bucket.oldestMs)}</span><span className={css.track}><i style={{ width: `${Math.max(8, Math.min(100, bucket.oldestMs / (48 * 3_600_000) * 100))}%` }} /></span></li>)}</ul> : <p>Нет данных</p>}
+      </section>
+    </ListScreenShell>
   </div>
 }
 
@@ -139,26 +139,27 @@ export function SupportBoard(props: DeskProps & { phone: boolean }) {
     else setError('')
   }
   return <div className={css.root} data-support-root data-support-screen="board">
-    <header className={css.dashHead}><h2>Доска</h2><p>Перетаскивание на компьютере. На телефоне — кнопка и меню статуса.</p></header>
-    {error ? <p className={css.error} role="alert">{error}</p> : null}
-    {props.phone ? <div className={css.chips} role="tablist" aria-label="Колонка">{STATUSES.map(status => <button key={status} type="button" className={css.chip} aria-pressed={column === status} onClick={() => setColumn(status)}>{status}</button>)}</div> : null}
-    <div className={css.board}>
-      {columns.map(status => <section key={status} aria-label={status} onDragOver={event => { if (!props.phone) event.preventDefault() }} onDrop={event => { event.preventDefault(); if (dragId) void move(dragId, status); setDragId('') }}>
-        <h3>{status}</h3>
-        {cards.filter(card => card.statusName === status).map(card => {
-          const advance = boardAdvanceLabel(card.statusName)
-          const next = boardNextStatus(card.statusName)
-          return <article key={card.id} draggable={!props.phone} onDragStart={() => setDragId(card.id)} data-board-card>
-            <button type="button" className={css.rowButton} onClick={() => props.onOpenTicket(card.id)}><span className={css.subject}>{card.subject}</span>{card.number ? <span className={css.number}>{card.number}</span> : null}</button>
-            <p className={card.sla.currentOverdue ? css.late : css.quiet}>{supportSlaLabel(card.sla) || 'Норматив в срок'}</p>
-            <div className={css.cardActions}>
-              {props.phone && advance && next ? <button type="button" className={css.statusChip} data-board-advance onClick={() => void move(card.id, next)}>{advance}</button> : null}
-              <BoardStatusMenu status={card.statusName} onPick={nextStatus => void move(card.id, nextStatus)} />
-            </div>
-          </article>
-        })}
-      </section>)}
-    </div>
+    <ListScreenShell title="Доска" meta="Обращения по статусам.">
+      {error ? <p className={css.error} role="alert">{error}</p> : null}
+      {props.phone ? <div className={css.chips} role="tablist" aria-label="Колонка">{STATUSES.map(status => <button key={status} type="button" className={css.chip} aria-pressed={column === status} onClick={() => setColumn(status)}>{status}</button>)}</div> : null}
+      <div className={css.board}>
+        {columns.map(status => <section key={status} aria-label={status} onDragOver={event => { if (!props.phone) event.preventDefault() }} onDrop={event => { event.preventDefault(); if (dragId) void move(dragId, status); setDragId('') }}>
+          <h3>{status}</h3>
+          {cards.filter(card => card.statusName === status).map(card => {
+            const advance = boardAdvanceLabel(card.statusName)
+            const next = boardNextStatus(card.statusName)
+            return <article key={card.id} draggable={!props.phone} onDragStart={() => setDragId(card.id)} data-board-card>
+              <button type="button" className={css.rowButton} onClick={() => props.onOpenTicket(card.id)}><span className={css.subject}>{card.subject}</span>{card.number ? <span className={css.number}>{card.number}</span> : null}</button>
+              <p className={card.sla.currentOverdue ? css.late : css.quiet}>{supportSlaLabel(card.sla) || 'В срок'}</p>
+              <div className={css.cardActions}>
+                {props.phone && advance && next ? <button type="button" className={css.statusChip} data-board-advance onClick={() => void move(card.id, next)}>{advance}</button> : null}
+                <BoardStatusMenu status={card.statusName} onPick={nextStatus => void move(card.id, nextStatus)} />
+              </div>
+            </article>
+          })}
+        </section>)}
+      </div>
+    </ListScreenShell>
   </div>
 }
 
@@ -177,7 +178,7 @@ export function SupportSlaSettings(props: DeskProps) {
   ]
   return <form className={css.sla} onSubmit={event => { event.preventDefault(); void props.onSaveSla(minutes).then(result => setMessage(result.ok ? 'Нормативы сохранены.' : result.error ?? 'Не сохранилось.')) }}>
     <h3>Нормативы</h3>
-    <p className={css.quiet}>Календарные часы, 24/7, без рабочего календаря и без писем наружу. Срок решения по умолчанию — пример Glide: 4 / 8 / 24 / 48 часов. Первый ответ — учебные 1 / 2 / 8 / 24 часа, это не рыночный стандарт. Назначенный руками срок остаётся отдельным полем.</p>
+    <p className={css.quiet}>Сроки первого ответа и решения в минутах. Часы идут круглосуточно.</p>
     <div className={css.slaGrid}>{fields.map(([key, label]) => <label key={key}><span>{label}, мин</span><input inputMode="numeric" value={minutes[key] ?? ''} onChange={event => setMinutes(current => ({ ...current, [key]: Number(event.target.value) }))} /></label>)}</div>
     <button type="submit" className={css.primary}>Сохранить нормативы</button>
     {message ? <p role="status">{message}</p> : null}

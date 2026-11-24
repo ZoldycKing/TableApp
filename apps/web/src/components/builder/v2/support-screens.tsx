@@ -1,5 +1,5 @@
 'use client'
-import { createContext, useContext, useEffect, useId, useState } from 'react'
+import { createContext, useContext, useEffect, useId, useRef, useState } from 'react'
 import { instantToWallClock } from '@tableapp/schema'
 import type { AppV2, AppV2Node, AppV2Record } from '@tableapp/schema/app-v2'
 import { savePublishedSupportAction } from '@/app/support-actions'
@@ -10,7 +10,6 @@ import { AppDialog } from './app-dialog'
 import { supportSlaLabel } from '@/lib/support-sla'
 import { SupportBoard, SupportDashboard, SupportSlaSettings, slaFacts, slaWhen } from './support-desk'
 import { DateMenu } from './booking-calendar'
-import { RuTimeInput } from './ru-fields'
 import { DetailCardShell, DetailSection, ListScreenShell, ShellSearchField } from './layout-shell'
 import shell from './layout-shell.module.css'
 import { ProtoIcon } from '../prototype/icons'
@@ -21,6 +20,40 @@ import css from './support.module.css'
 
 function ChoiceRow({ label, value, options, onChange }: { label: string; value: string; options: { id: string; name: string }[]; onChange: (id: string) => void }) {
   return <fieldset className={css.field}><legend>{label}</legend><div className={css.choiceRow} role="radiogroup" aria-label={label}>{options.map(option => <button key={option.id || option.name} type="button" aria-pressed={option.id === value} onClick={() => onChange(option.id)}>{option.name}</button>)}</div></fieldset>
+}
+
+function TimeMenu({ value, onValue, label }: { value: string; onValue: (value: string) => void; label: string }) {
+  const [open, setOpen] = useState(false)
+  const root = useRef<HTMLDivElement>(null)
+  const [hour, minute] = /^(\d{2}):(\d{2})$/.exec(value)?.slice(1) ?? ['', '']
+  useEffect(() => {
+    if (!open) return
+    const outside = (event: PointerEvent) => { if (event.target instanceof Node && !root.current?.contains(event.target)) setOpen(false) }
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') setOpen(false) }
+    document.addEventListener('pointerdown', outside)
+    document.addEventListener('keydown', escape)
+    return () => { document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape) }
+  }, [open])
+  const pick = (nextHour: string, nextMinute: string) => {
+    onValue(`${nextHour}:${nextMinute}`)
+    setOpen(false)
+  }
+  return <div className={css.timeMenu} ref={root}>
+    <button type="button" className={css.timeButton} aria-label={label} aria-expanded={open} aria-haspopup="dialog" onClick={() => setOpen(current => !current)}>
+      <ProtoIcon name="clock" size={16} /><span>{value || 'чч:мм'}</span>
+    </button>
+    {open ? <div className={css.timePanel} role="dialog" aria-label={label}>
+      <div className={css.timeCols}>
+        <div role="listbox" aria-label="Часы">{Array.from({ length: 24 }, (_, index) => {
+          const next = String(index).padStart(2, '0')
+          return <button key={next} type="button" role="option" aria-selected={next === hour} onClick={() => pick(next, minute || '00')}>{next}</button>
+        })}</div>
+        <div role="listbox" aria-label="Минуты">{['00', '05', '10', '15', '20', '25', '30', '35', '40', '45', '50', '55'].map(next => (
+          <button key={next} type="button" role="option" aria-selected={next === minute} onClick={() => pick(hour || '00', next)}>{next}</button>
+        ))}</div>
+      </div>
+    </div> : null}
+  </div>
 }
 
 export type SupportOpen = 'create' | 'reply' | 'note' | 'assign' | 'category' | null
@@ -49,18 +82,35 @@ function choiceName(props: Pick<AppV2RendererProps, 'tables'>, tableId: string, 
   return typeof value === 'string' ? field?.choices?.find(choice => choice.id === value)?.name ?? '' : ''
 }
 
-function toneOf(name: string) {
-  if (name === 'Срочный' || name === 'Просрочено') return 'red'
-  if (name === 'Высокий' || name === 'В работе') return 'amber'
+function statusTone(name: string) {
+  if (name === 'Просрочено') return 'red'
+  if (name === 'В работе') return 'green'
   if (name === 'Ждём клиента') return 'violet'
-  if (name === 'Решено' || name === 'Активен') return 'green'
-  if (name === 'Закрыто' || name === 'Низкий' || name === 'Неактивен') return 'gray'
+  if (name === 'Решено') return 'green'
+  if (name === 'Закрыто') return 'gray'
+  if (name === 'Новое') return 'blue'
   return 'blue'
+}
+
+function priorityTone(name: string) {
+  if (name === 'Срочный') return 'red'
+  return 'gray'
+}
+
+function StatusBadge({ name }: { name: string }) {
+  if (!name) return null
+  return <span className={css.badge} data-kind="status" data-tone={statusTone(name)}>{name}</span>
+}
+
+function PriorityBadge({ name }: { name: string }) {
+  if (!name) return null
+  return <span className={css.badge} data-kind="priority" data-tone={priorityTone(name)}>{name}</span>
 }
 
 function Badge({ name }: { name: string }) {
   if (!name) return null
-  return <span className={css.badge} data-tone={toneOf(name)}>{name}</span>
+  if (name === 'Срочный' || name === 'Высокий' || name === 'Обычный' || name === 'Низкий') return <PriorityBadge name={name} />
+  return <StatusBadge name={name} />
 }
 
 function statusState(name: string) {
@@ -262,7 +312,7 @@ function TicketList(props: ScreenProps) {
       actions={<button type="button" className={css.primary} onClick={() => setOpen('create')}>{desk ? 'Новое обращение' : 'Написать обращение'}</button>}
     >
       <div className={css.stack}>
-        {sample ? <p className={css.sample} role="note">Демоданные: вымышленные обращения, не настоящая переписка.</p> : null}
+        {sample ? <p className={css.sample} role="note">Пример очереди.</p> : null}
         <fieldset className={css.summary} aria-label="Сводка обращений">
           <legend className={css.quiet}>Сводка</legend>
           {([['open', counts.open, 'Открытые'], ['unassigned', counts.unassigned, 'Без ответственного'], ['risk', counts.risk, 'Скоро срок'], ['overdue', counts.overdue, 'Просрочены']] as const).map(([scope, value, label]) => <button key={scope} type="button" aria-pressed={filter.scope === scope} onClick={() => setFilter(current => ({ ...current, scope: current.scope === scope ? 'all' : scope }))}><strong>{value}</strong><span>{label}</span></button>)}
@@ -362,13 +412,12 @@ function TicketCard(props: ScreenProps) {
     .sort((a, b) => a.at.localeCompare(b.at) || a.id.localeCompare(b.id))
   const transitions = desk ? operatorTransitions(status) : []
   const replyLabel = status === 'Решено' || status === 'Закрыто' ? 'Переоткрыть' : 'Ответить'
-  const sample = bundle?.sample
   return <div className={css.root} data-support-root data-support-screen={desk ? 'ticket' : 'client-ticket'} data-support-status={status}>
     <DetailCardShell
       back={{ label: desk ? 'Очередь' : 'Мои обращения', onClick: () => props.onNavigate?.(back) }}
       title={textOf(ticket.values[fields.subject]) || 'Без темы'}
       subtitle={textOf(ticket.values[fields.number])}
-      badge={<span className={css.badges}><Badge name={status} />{overdue ? <Badge name="Просрочено" /> : null}<Badge name={priority} /></span>}
+      badge={<span className={css.badges}><StatusBadge name={status} />{overdue ? <StatusBadge name="Просрочено" /> : null}<PriorityBadge name={priority} /></span>}
       actions={<div className={css.actions}>
         <button type="button" className={css.primary} onClick={() => setDialog('reply')}>{replyLabel}</button>
         {transitions.length || desk ? <details className={css.moreActions}>
@@ -381,7 +430,6 @@ function TicketCard(props: ScreenProps) {
         </details> : null}
       </div>}
     >
-      {sample ? <p className={css.sample} role="note">Демоданные: вымышленные обращения, не настоящая переписка.</p> : null}
       <div className={css.ticketCols}>
         <div className={shell.detailMainCol}>
           <DetailSection title="Описание"><p className={css.description}>{textOf(ticket.values[fields.description]) || 'Описания нет.'}</p></DetailSection>
@@ -539,7 +587,7 @@ function AssignDialog(props: ScreenProps & { ticket: AppV2Record; onClose: () =>
       <ChoiceRow label="Категория" value={categoryId} options={categories.map(row => ({ id: row.id, name: textOf(row.values[props.kit.category.name]) || 'Без названия' }))} onChange={setCategoryId} />
       <div className={css.when}>
         <div className={css.field}><span>Дата срока</span><DateMenu label="Дата срока" value={date} onValue={setDate} /></div>
-        <label className={css.field}><span>Время</span><RuTimeInput value={time} onValue={setTime} aria-label="Время срока" /></label>
+        <div className={css.field}><span>Время</span><TimeMenu label="Время срока" value={time} onValue={setTime} /></div>
       </div>
       {error ? <p className={css.error} role="alert">{error}</p> : null}
     </form>
@@ -567,12 +615,32 @@ function SettingsScreen(props: ScreenProps) {
     setMessage(result.ok ? result.message : result.error)
   }
   return <div className={css.root} data-support-root data-support-screen="settings">
-    <ListScreenShell title="Настройки службы" meta="Категории выбирают в новых обращениях. Приглашение оператора — в доступе приложения, письмо отсюда не отправляется." actions={<button type="button" className={css.mine} onClick={() => setOpen(true)}>Добавить категорию</button>}>
+    <ListScreenShell title="Настройки службы" meta="Категории для новых обращений." actions={<button type="button" className={css.mine} onClick={() => setOpen(true)}>Добавить категорию</button>}>
       <div className={css.stack}>
         {message ? <p role="status">{message}</p> : null}
         {props.loading ? <p role="status">Загружаем настройки…</p> : null}
         {!categories.length && !props.loading ? <div className={css.empty}><p>Категорий пока нет.</p></div> : null}
-        <ul className={css.directory}>{categories.map(row => <li key={row.id}><strong>{textOf(row.values[props.kit.category.name])}</strong><span className={css.quiet}>{textOf(row.values[props.kit.category.description]) || 'Без пояснения'}</span><button type="button" className={css.chip} aria-pressed={row.values[props.kit.category.active] === true} onClick={() => void toggle(row)}>{row.values[props.kit.category.active] === true ? 'Доступна' : 'Скрыта'}</button></li>)}</ul>
+        <ul className={css.directory}>{categories.map(row => {
+          const active = row.values[props.kit.category.active] === true
+          return <li key={row.id} className={css.categoryRow}>
+            <div className={css.categoryCopy}>
+              <strong>{textOf(row.values[props.kit.category.name])}</strong>
+              <span className={css.quiet}>{textOf(row.values[props.kit.category.description]) || 'Без пояснения'}</span>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              className={css.rowSwitch}
+              aria-checked={active}
+              aria-label={active ? `${textOf(row.values[props.kit.category.name])}: доступна` : `${textOf(row.values[props.kit.category.name])}: скрыта`}
+              data-on={active || undefined}
+              onClick={() => void toggle(row)}
+            >
+              <span>{active ? 'Доступна' : 'Скрыта'}</span>
+              <i aria-hidden="true" />
+            </button>
+          </li>
+        })}</ul>
         <SupportSlaSettings kit={props.kit} rows={props.rows} now={props.now} actorEmail={props.actor.email ?? ''} onOpenQueue={() => {}} onOpenTicket={() => {}} onStatus={async () => ({ ok: false })} onSaveSla={async minutes => commit(props, { kind: 'sla', minutes })} />
         <h3>Операторы</h3>
         <ul className={css.directory}>{operators.map(row => <li key={row.id}><strong>{textOf(row.values[props.kit.operator.name])}</strong><span className={css.badges}><Badge name={choiceName(props, props.kit.operatorsTableId, props.kit.operator.role, row.values[props.kit.operator.role])} /><Badge name={choiceName(props, props.kit.operatorsTableId, props.kit.operator.active, row.values[props.kit.operator.active])} /></span></li>)}</ul>

@@ -104,11 +104,13 @@ describe('support template', () => {
     const created = authorizeAppV2Write(app, client, { operation: 'create', tableId: support.ticketsTableId, values: { [support.ticket.subject]: 'Тема', [support.ticket.description]: 'Текст', [support.ticket.category]: ['x'], [support.ticket.clientName]: 'Ирина', [support.ticket.status]: support.statuses.fresh, [support.ticket.priority]: support.priorities.normal, [support.ticket.createdAt]: '2026-11-22T09:00:00.000Z', [support.ticket.updatedAt]: '2026-11-22T09:00:00.000Z' } })
     expect(created.ok && created.ownerValues[support.ticket.clientEmail]).toBe('i.petrova@mail.ru')
     // Defaulting lineId:null (as support-actions used to) writes ticket.line, which clients cannot create.
+    const lineField = support.ticket.line
+    if (!lineField) throw new Error('expected ticket.line')
     const withLine = ticketCreateValues(support.ticket, {
       number: 'ОБР-2000', subject: 'Тема', description: 'Текст', categoryId: 'x', clientName: 'Ирина',
       statusId: support.statuses.fresh, priorityId: support.priorities.normal, createdAt: '2026-11-22T09:00:00.000Z',
     })
-    withLine[support.ticket.line!] = ''
+    withLine[lineField] = ''
     expect(authorizeAppV2Write(app, client, { operation: 'create', tableId: support.ticketsTableId, values: withLine })).toEqual({
       ok: false, error: 'Одно из полей недоступно для изменения',
     })
@@ -121,7 +123,7 @@ describe('support template', () => {
     if (stored.ok) {
       const row = stored.rows.find(item => item.values[support.ticket.subject] === 'Учебный вопрос')!
       expect(row.values[support.ticket.clientEmail]).toBe('i.petrova@mail.ru')
-      expect(row.values[support.ticket.line]).toBeUndefined()
+      expect(row.values[lineField]).toBeUndefined()
     }
   })
 

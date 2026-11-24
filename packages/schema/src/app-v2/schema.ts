@@ -257,7 +257,7 @@ export const appV2Schema = z.strictObject({
       assignee: id, assigneeEmail: id, priority: id, category: id, status: id, deadline: id, createdAt: id, updatedAt: id,
     }),
     client: z.strictObject({ name: id, email: id, phone: id, company: id, note: id }),
-    operator: z.strictObject({ name: id, email: id, phone: id, role: id, active: id }),
+    operator: z.strictObject({ name: id, email: id, phone: id, photo: id.optional(), role: id, active: id }),
     category: z.strictObject({ name: id, description: id, active: id }),
     reply: z.strictObject({ text: id, ticket: id, at: id, author: id, authorEmail: id, clientEmail: id }),
     note: z.strictObject({ text: id, ticket: id, at: id, author: id, authorEmail: id }),

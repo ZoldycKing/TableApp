@@ -142,9 +142,10 @@ describe('support screens', () => {
     expect(screen.getByRole('menu', { name: 'Сменить статус' })).toBeTruthy()
   })
 
-  it('keeps demo note on the queue only and shows conversation before facts on phone', async () => {
+  it('omits demo queue note and shows conversation before facts on phone', async () => {
     const queue = render(<SupportDemo view="queue" bare />)
-    expect(await screen.findByText('Пример очереди.')).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Очередь обращений' })).toBeTruthy()
+    expect(screen.queryByText(/Пример очереди|Демоданные/)).toBeNull()
     queue.unmount()
     render(<SupportDemo view="ticket" bare phone />)
     await screen.findByRole('heading', { name: 'Не сходится сумма в отчёте за октябрь' })
@@ -154,5 +155,41 @@ describe('support screens', () => {
     const facts = screen.getByRole('heading', { name: 'Сведения' })
     expect(description.compareDocumentPosition(thread) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(thread.compareDocumentPosition(facts) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('groups the client cabinet and hides SLA jargon', async () => {
+    render(<SupportDemo view="client" bare />)
+    expect(await screen.findByRole('heading', { name: /Открытые/ })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: /Завершённые/ })).toBeTruthy()
+    expect(screen.queryByText(/Норматив соблюдён|Ответ и решение просрочены|Просрочено/)).toBeNull()
+    expect(screen.getAllByText(/Обновлено/).length).toBeGreaterThan(0)
+  })
+
+  it('shows the waiting banner and details grid on the client ticket', async () => {
+    render(<SupportDemo view="client-waiting" bare phone />)
+    expect(await screen.findByText('Служба поддержки ждёт вашего ответа')).toBeTruthy()
+    expect(screen.getByText('Категория')).toBeTruthy()
+    expect(screen.getByText('Приоритет / срочность')).toBeTruthy()
+    expect(screen.getByText('Ответственный')).toBeTruthy()
+    expect(screen.getByText('Отправлено')).toBeTruthy()
+    expect(screen.queryByText(/в ответ клиенту это не писать/)).toBeNull()
+  })
+
+  it('lets an operator preview a client cabinet with a custom dropdown', async () => {
+    render(<SupportDemo view="client-preview" bare />)
+    expect(await screen.findByText('Посмотреть как клиент')).toBeTruthy()
+    expect(screen.getByRole('listbox', { name: 'Клиент для просмотра' })).toBeTruthy()
+    expect(screen.getAllByText('Ирина Петрова').length).toBeGreaterThan(0)
+    expect(screen.queryByRole('button', { name: 'Написать обращение' })).toBeNull()
+  })
+
+  it('fills the operator dashboard with team, KPIs and a heatmap', async () => {
+    render(<SupportDemo view="dashboard" bare />)
+    expect(await screen.findByRole('heading', { name: 'Служба поддержки' })).toBeTruthy()
+    expect(screen.getByText(/из .* на смене/)).toBeTruthy()
+    expect(screen.getByLabelText('Показатели службы')).toBeTruthy()
+    expect(screen.getByText('Просрочено')).toBeTruthy()
+    expect(screen.getByText('Тепловая карта: приоритет × возраст')).toBeTruthy()
+    expect(screen.getByText('Открытые по приоритету')).toBeTruthy()
   })
 })

@@ -20,12 +20,24 @@ const hide = async (page: Page) => {
   })
 }
 
-const save = async (page: Page, name: string) => {
+const save = async (page: Page, name: string, fullPage = false) => {
   await hide(page)
   await page.mouse.move(2, 2)
   await page.waitForTimeout(250)
   const path = resolve(outDir, name)
-  await page.screenshot({ path, fullPage: false })
+  if (fullPage) {
+    await page.addStyleTag({
+      content: `
+        [data-phone="true"] { height: auto !important; max-height: none !important; }
+        [data-phone="true"] .frame { height: auto !important; min-height: 0 !important; }
+        [data-phone="true"] [class*="body"] { overflow: visible !important; height: auto !important; max-height: none !important; }
+      `,
+    })
+    await page.waitForTimeout(200)
+    await page.screenshot({ path, fullPage: true })
+  } else {
+    await page.screenshot({ path, fullPage: false })
+  }
   console.log('saved', name)
 }
 
@@ -43,38 +55,26 @@ const open = async (page: Page, view: string, scheme?: 'light' | 'dark', phone =
 
 const browser = await chromium.launch({ headless: true })
 
-type Shot = { view: string; name: string; scheme?: 'light' | 'dark'; phone?: boolean; openMenu?: boolean }
+type Shot = { view: string; name: string; scheme?: 'light' | 'dark'; phone?: boolean; openMenu?: boolean; fullPage?: boolean }
 
 const desktop: Shot[] = [
-  { view: 'dashboard', name: 'dash-desktop-1440.png' },
+  { view: 'dashboard', name: 'dash-desktop-1440.png', fullPage: true },
+  { view: 'dashboard', name: 'dash-dark-1440.png', scheme: 'dark', fullPage: true },
   { view: 'queue', name: 'list-desktop-1440.png' },
   { view: 'queue', name: 'list-dark-1440.png', scheme: 'dark' },
   { view: 'board', name: 'board-desktop-1440.png' },
   { view: 'ticket', name: 'ticket-desktop-1440.png' },
-  { view: 'ticket', name: 'ticket-dark-1440.png', scheme: 'dark' },
-  { view: 'note', name: 'ticket-note-desktop-1440.png' },
-  { view: 'reply', name: 'form-reply-desktop-1440.png' },
-  { view: 'assign', name: 'form-assign-desktop-1440.png' },
-  { view: 'create', name: 'form-create-desktop-1440.png' },
-  { view: 'settings', name: 'sla-desktop-1440.png' },
-  { view: 'client', name: 'client-desktop-1440.png' },
-  { view: 'client-ticket', name: 'client-ticket-desktop-1440.png' },
+  { view: 'client-preview', name: 'client-preview-desktop-1440.png' },
+  { view: 'client-waiting', name: 'client-waiting-desktop-1440.png' },
 ]
 
 const phone: Shot[] = [
   { view: 'dashboard', name: 'dash-phone-390.png', phone: true },
-  { view: 'queue', name: 'list-phone-390.png', phone: true },
-  { view: 'queue', name: 'list-phone-dark-390.png', phone: true, scheme: 'dark' },
+  { view: 'dashboard', name: 'dash-phone-full-390.png', phone: true, fullPage: true },
   { view: 'board', name: 'board-phone-390.png', phone: true },
-  { view: 'ticket', name: 'ticket-phone-390.png', phone: true },
-  { view: 'ticket', name: 'ticket-phone-dark-390.png', phone: true, scheme: 'dark' },
-  { view: 'note', name: 'ticket-note-phone-390.png', phone: true },
-  { view: 'reply', name: 'form-reply-phone-390.png', phone: true },
-  { view: 'assign', name: 'form-assign-phone-390.png', phone: true },
-  { view: 'create', name: 'form-create-phone-390.png', phone: true },
-  { view: 'settings', name: 'sla-phone-390.png', phone: true },
-  { view: 'client', name: 'client-phone-390.png', phone: true },
-  { view: 'client-ticket', name: 'client-ticket-phone-390.png', phone: true },
+  { view: 'client', name: 'client-cabinet-phone-390.png', phone: true },
+  { view: 'client-waiting', name: 'client-waiting-phone-390.png', phone: true },
+  { view: 'client-preview', name: 'client-preview-phone-390.png', phone: true },
 ]
 
 {
@@ -90,7 +90,7 @@ const phone: Shot[] = [
       await page.waitForSelector('[role="menu"][aria-label="Сменить статус"]', { timeout: 5000 })
       await page.waitForTimeout(200)
     }
-    await save(page, shot.name)
+    await save(page, shot.name, shot.fullPage)
   }
   await context.close()
 }
@@ -108,7 +108,7 @@ const phone: Shot[] = [
       await page.waitForSelector('[role="menu"][aria-label="Сменить статус"]', { timeout: 5000 })
       await page.waitForTimeout(200)
     }
-    await save(page, shot.name)
+    await save(page, shot.name, shot.fullPage)
   }
   await context.close()
 }

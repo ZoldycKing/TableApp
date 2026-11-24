@@ -24,7 +24,7 @@ describe.skipIf(!process.env.DATABASE_URL)('published support authorization', ()
   const app = buildSupportV2App(built, { id: newId('app'), workspaceId, name: 'Обращения', slug: `podderzhka-${workspaceId.replace(/[^a-z0-9]/gi, '').slice(-8).toLowerCase()}`, email: 'owner@example.invalid' })
   app.authentication.members.push(
     { email: 'anna@example.invalid', roleIds: ['staff'], company: '' },
-    { email: 'irina@example.invalid', roleIds: ['client'], company: '' },
+    { email: 'i.petrova@mail.ru', roleIds: ['client'], company: '' },
   )
   const support = app.support!
   const revision = () => builderV2Revision(app)
@@ -49,7 +49,7 @@ describe.skipIf(!process.env.DATABASE_URL)('published support authorization', ()
   afterAll(async () => { if (db) { await db.db.delete(db.workspaces).where(eq(db.workspaces.id, workspaceId)); await db.db.delete(db.users).where(eq(db.users.id, userId)) } })
 
   it('keeps notes and foreign tickets off the client read path and rejects a forged role', async () => {
-    identity.email = 'irina@example.invalid'
+    identity.email = 'i.petrova@mail.ru'
     const own = await read.readPublishedV2RecordAction(app.slug, { revision: revision(), screenId: support.clientTicketScreenId, recordId: irinaTicket.id })
     expect(own.ok, JSON.stringify(own)).toBe(true)
     const foreign = await read.readPublishedV2RecordAction(app.slug, { revision: revision(), screenId: support.clientTicketScreenId, recordId: petrTicket.id })
@@ -60,7 +60,7 @@ describe.skipIf(!process.env.DATABASE_URL)('published support authorization', ()
     const list = await read.readPublishedV2DataAction(app.slug, { revision: revision(), screenId: support.clientListScreenId, nodeId: clientList.id })
     expect(list.ok, JSON.stringify(list)).toBe(true)
     if (!list.ok) return
-    expect(list.page.rows.every(row => row.values[support.ticket.clientEmail] === 'irina@example.invalid')).toBe(true)
+    expect(list.page.rows.every(row => row.values[support.ticket.clientEmail] === 'i.petrova@mail.ru')).toBe(true)
     expect(JSON.stringify(list.page)).not.toContain('Клиенту не показывать')
     const replies = app.nodes.find(node => node.type === 'collection' && app.screens.find(screen => screen.id === support.clientTicketScreenId)?.rootIds.includes(node.id) && app.sources.some(source => source.id === node.sourceId && source.tableId === support.repliesTableId))!
     const thread = await read.readPublishedV2DataAction(app.slug, { revision: revision(), screenId: support.clientTicketScreenId, nodeId: replies.id, recordId: irinaTicket.id })
@@ -74,15 +74,15 @@ describe.skipIf(!process.env.DATABASE_URL)('published support authorization', ()
   })
 
   it('stores a client ticket, blocks an illegal status jump and lets the operator answer', async () => {
-    identity.email = 'irina@example.invalid'
+    identity.email = 'i.petrova@mail.ru'
     const category = built.rows.find(row => row.tableId === support.categoriesTableId && row.data[support.category.name] === 'Вопрос по работе')!
-    const created = await action.savePublishedSupportAction(app.slug, { kind: 'create', revision: revision(), screenId: support.clientListScreenId, subject: 'Учебный вопрос про срок', description: 'Это учебная проверка сохранения.', categoryId: category.id, clientEmail: 'petr@example.invalid', statusId: support.statuses.closed, roleIds: ['staff'] })
+    const created = await action.savePublishedSupportAction(app.slug, { kind: 'create', revision: revision(), screenId: support.clientListScreenId, subject: 'Учебный вопрос про срок', description: 'Это учебная проверка сохранения.', categoryId: category.id, clientEmail: 'p.orlov@yandex.ru', statusId: support.statuses.closed, roleIds: ['staff'] })
     expect(created, JSON.stringify(created)).toEqual({ ok: true, message: 'Обращение создано.' })
     const stored = await db.db.select().from(db.rows).where(eq(db.rows.tableId, support.ticketsTableId))
     const row = stored.find(item => (item.data as Record<string, AppV2Json>)[support.ticket.subject] === 'Учебный вопрос про срок')
     expect(row).toBeTruthy()
     const data = row!.data as Record<string, AppV2Json>
-    expect(data[support.ticket.clientEmail]).toBe('irina@example.invalid')
+    expect(data[support.ticket.clientEmail]).toBe('i.petrova@mail.ru')
     expect(data[support.ticket.status]).toBe(support.statuses.fresh)
     expect(String(data[support.ticket.number])).toMatch(/^ОБР-\d+$/)
     const jumped = await action.savePublishedSupportAction(app.slug, { kind: 'status', revision: revision(), screenId: support.clientTicketScreenId, recordId: row!.id, statusId: support.statuses.resolved })
@@ -101,7 +101,7 @@ describe.skipIf(!process.env.DATABASE_URL)('published support authorization', ()
     const noteNode = app.nodes.find(node => node.type === 'collection' && app.screens.find(screen => screen.id === support.ticketScreenId)?.rootIds.includes(node.id) && app.sources.some(source => source.id === node.sourceId && source.tableId === support.notesTableId))!
     const operatorNotes = await read.readPublishedV2DataAction(app.slug, { revision: revision(), screenId: support.ticketScreenId, nodeId: noteNode.id, recordId: fresh.id })
     expect(JSON.stringify(operatorNotes)).toContain('Служебная пометка. Клиенту не показывать.')
-    identity.email = 'irina@example.invalid'
+    identity.email = 'i.petrova@mail.ru'
     const hidden = await read.readPublishedV2DataAction(app.slug, { revision: revision(), screenId: support.clientTicketScreenId, nodeId: app.nodes.find(node => node.type === 'collection' && app.screens.find(screen => screen.id === support.clientTicketScreenId)?.rootIds.includes(node.id) && app.sources.some(source => source.id === node.sourceId && source.tableId === support.repliesTableId))!.id, recordId: fresh.id })
     expect(JSON.stringify(hidden)).toContain('Учебный ответ оператора')
     expect(JSON.stringify(hidden)).not.toContain('Служебная пометка')

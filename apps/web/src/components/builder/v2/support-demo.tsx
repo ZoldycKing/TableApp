@@ -5,6 +5,7 @@ import { canOpenAppV2Screen, type AppV2Actor, type AppV2Record } from '@tableapp
 import type { BuilderV2Table } from '@/lib/builder-v2'
 import { projectSupportRows } from '@/lib/support-persist'
 import { templateExample } from '@/lib/templates/presentation'
+import { supportPortraitUrl } from '@/lib/templates/support-portraits'
 import { buildSupportV2App } from '@/lib/templates/support-v2'
 import { BuilderV2AppFrame, BuilderV2Theme } from './app-frame'
 import { SupportRowsContext, type SupportOpen } from './support-screens'
@@ -12,6 +13,7 @@ import { AppV2Renderer } from './view'
 
 export function supportTemplateDemoModel(example = templateExample('podderzhka')) {
   const app = buildSupportV2App(example.built, { id: example.app.id, workspaceId: example.app.workspaceId, name: 'Обращения и поддержка', slug: 'podderzhka-demo', email: 'marina@example.invalid' })
+  const kit = app.support!
   const tables: BuilderV2Table[] = example.built.tables.map(table => ({
     ...table, views: [], primaryFieldId: table.primaryFieldId,
     fields: example.built.fields.filter(field => field.tableId === table.id).map(field => ({
@@ -21,7 +23,14 @@ export function supportTemplateDemoModel(example = templateExample('podderzhka')
       ...(field.options.choices ? { choices: field.options.choices as { id: string; name: string; color?: string }[] } : {}),
     })),
   }))
-  const rows = example.rows.map(row => ({ id: row.id, tableId: row.tableId, values: { ...row.data } })) as AppV2Record[]
+  const rows = example.rows.map(row => {
+    const values = { ...row.data }
+    if (row.tableId === kit.operatorsTableId && kit.operator.photo) {
+      const url = supportPortraitUrl(values[kit.operator.name])
+      if (url) values[kit.operator.photo] = url
+    }
+    return { id: row.id, tableId: row.tableId, values } as AppV2Record
+  })
   return { app, tables, rows }
 }
 
@@ -37,9 +46,11 @@ function demoNowMs(at = new Date()) {
 function goalFor(model: ReturnType<typeof supportTemplateDemoModel>, view: string) {
   const kit = model.app.support!
   const ticket = (number: string) => model.rows.find(row => row.tableId === kit.ticketsTableId && row.values[kit.ticket.number] === number)
-  const base = { who: 'anna' as DemoWho, open: null as SupportOpen }
+  const base = { who: 'anna' as DemoWho, open: null as SupportOpen, previewClient: undefined as string | undefined, previewMenuOpen: false }
   if (view === 'client' || view === 'create') return { ...base, who: 'irina' as const, screenId: kit.clientListScreenId, recordId: undefined, open: view === 'create' ? 'create' as const : null }
+  if (view === 'client-preview') return { ...base, who: 'anna' as const, screenId: kit.clientListScreenId, recordId: undefined, open: null, previewClient: 'i.petrova@mail.ru', previewMenuOpen: true }
   if (view === 'client-ticket') return { ...base, who: 'petr' as const, screenId: kit.clientTicketScreenId, recordId: ticket('ОБР-1042')?.id, open: null }
+  if (view === 'client-waiting') return { ...base, who: 'petr' as const, screenId: kit.clientTicketScreenId, recordId: ticket('ОБР-1033')?.id, open: null }
   if (view === 'settings') return { ...base, who: 'marina' as const, screenId: kit.settingsScreenId, recordId: undefined, open: null }
   if (view === 'dashboard') return { ...base, who: 'anna' as const, screenId: kit.dashboardScreenId ?? kit.queueScreenId, recordId: undefined, open: null }
   if (view === 'board') return { ...base, screenId: kit.boardScreenId ?? kit.queueScreenId, recordId: undefined, open: null }
@@ -49,8 +60,8 @@ function goalFor(model: ReturnType<typeof supportTemplateDemoModel>, view: strin
 }
 
 function actorFor(who: DemoWho): AppV2Actor {
-  if (who === 'irina') return { authenticated: true, id: 'demo_irina', roleIds: ['client'], email: 'irina@example.invalid', name: 'Ирина Петрова', company: '' }
-  if (who === 'petr') return { authenticated: true, id: 'demo_petr', roleIds: ['client'], email: 'petr@example.invalid', name: 'Пётр Орлов', company: '' }
+  if (who === 'irina') return { authenticated: true, id: 'demo_irina', roleIds: ['client'], email: 'i.petrova@mail.ru', name: 'Ирина Петрова', company: '' }
+  if (who === 'petr') return { authenticated: true, id: 'demo_petr', roleIds: ['client'], email: 'p.orlov@yandex.ru', name: 'Пётр Орлов', company: '' }
   if (who === 'marina') return { authenticated: true, id: 'demo_marina', roleIds: ['owner'], email: 'marina@example.invalid', name: 'Марина Соколова', company: '' }
   return { authenticated: true, id: 'demo_anna', roleIds: ['staff'], email: 'anna@example.invalid', name: 'Анна Волкова', company: '' }
 }
@@ -62,7 +73,9 @@ export function SupportDemo({ view = 'queue', bare = false, scheme, phone = fals
   const [recordId, setRecordId] = useState<string | undefined>()
   const [who, setWho] = useState<DemoWho>('anna')
   const [open, setOpen] = useState<SupportOpen>(null)
-  const queueFocus = useRef<import('@/lib/support-logic').SupportQueueScope | null>(null)
+  const [previewClient, setPreviewClient] = useState<string | undefined>()
+  const [previewMenuOpen, setPreviewMenuOpen] = useState(false)
+  const queueFocus = useRef<import('@/lib/support-logic').SupportQueueFocus | null>(null)
   useEffect(() => { setModel(supportTemplateDemoModel()) }, [])
   useEffect(() => {
     if (!model) return
@@ -72,6 +85,8 @@ export function SupportDemo({ view = 'queue', bare = false, scheme, phone = fals
     setScreenId(goal.screenId)
     setRecordId(goal.recordId)
     setOpen(goal.open)
+    setPreviewClient(goal.previewClient)
+    setPreviewMenuOpen(goal.previewMenuOpen)
     setRows(goal.who === 'irina' || goal.who === 'petr' ? projectSupportRows(model.app, actor, model.rows) : model.rows)
   }, [model, view])
   if (!model?.app.support || !screenId) return <div data-support-root data-support-screen="loading" />
@@ -79,7 +94,7 @@ export function SupportDemo({ view = 'queue', bare = false, scheme, phone = fals
   const actor = actorFor(who)
   const visible = { ...themed, screens: themed.screens.filter(screen => canOpenAppV2Screen(themed, actor, screen.id)) }
   const navigate = (id: string, rowId?: string) => { setScreenId(id); setRecordId(rowId); setOpen(null) }
-  return <BuilderV2Theme app={themed}><SupportRowsContext value={{ rows, setRows, open, now: demoNowMs(), sample: true, queueFocus }}>
+  return <BuilderV2Theme app={themed}><SupportRowsContext value={{ rows, setRows, open, now: demoNowMs(), sample: true, queueFocus, previewClient, previewMenuOpen }}>
     <div data-support-root data-support-screen={view} data-preview-screen={screenId}>
       <BuilderV2AppFrame app={visible} screenId={screenId} title="" phone={phone} deviceMode={phone ? 'phone' : 'desktop'} fullScreen={bare} onNavigate={navigate}>
         <AppV2Renderer live app={visible} tables={model.tables} actor={actor} screenId={screenId} record={rows.find(row => row.id === recordId)} onNavigate={navigate} />

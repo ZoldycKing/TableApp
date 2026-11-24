@@ -3,12 +3,12 @@ import { createContext, useContext, useEffect, useId, useRef, useState } from 'r
 import { instantToWallClock } from '@tableapp/schema'
 import type { AppV2, AppV2Node, AppV2Record } from '@tableapp/schema/app-v2'
 import { savePublishedSupportAction } from '@/app/support-actions'
-import { deadlineTime, filterTickets, isOpenStatus, isOverdue, operatorTransitions, supportAuthorKind, supportAuthorLabel, supportDeadlineInstant, supportDeadlineParts, type SupportFilter, type SupportListItem, type SupportQueueScope } from '@/lib/support-logic'
+import { deadlineTime, filterTickets, isOpenStatus, isOverdue, operatorTransitions, supportAuthorKind, supportAuthorLabel, supportDeadlineInstant, supportDeadlineParts, type SupportFilter, type SupportListItem, type SupportQueueFocus } from '@/lib/support-logic'
 import { applySupportChange, isSupportDesk, supportStatusName, type SupportChange } from '@/lib/support-persist'
 import { AppFrameDeviceContext } from './app-frame'
 import { AppDialog } from './app-dialog'
 import { supportSlaLabel } from '@/lib/support-sla'
-import { SupportBoard, SupportDashboard, SupportSlaSettings, slaFacts, slaWhen } from './support-desk'
+import { SupportBoard, SupportDashboard, SupportPerson, SupportSlaSettings, slaFacts, slaWhen } from './support-desk'
 import { DateMenu } from './booking-calendar'
 import { DetailCardShell, DetailSection, ListScreenShell, ShellSearchField } from './layout-shell'
 import shell from './layout-shell.module.css'
@@ -57,14 +57,14 @@ function TimeMenu({ value, onValue, label }: { value: string; onValue: (value: s
 }
 
 export type SupportOpen = 'create' | 'reply' | 'note' | 'assign' | 'category' | null
-export type SupportBundle = { rows: AppV2Record[]; setRows?: (rows: AppV2Record[]) => void; open?: SupportOpen; now?: number; sample?: boolean; queueFocus?: { current: SupportQueueScope | null } }
+export type SupportBundle = { rows: AppV2Record[]; setRows?: (rows: AppV2Record[]) => void; open?: SupportOpen; now?: number; sample?: boolean; queueFocus?: { current: SupportQueueFocus | null }; previewClient?: string; previewMenuOpen?: boolean }
 export const SupportRowsContext = createContext<SupportBundle | null>(null)
 
 const PLACEHOLDER: AppV2Node = { id: 'support_placeholder', name: 'placeholder', type: 'heading', value: { kind: 'literal', value: '' }, size: 's', visibleTo: null, visibleWhen: null }
 const publishedHolder: { current: ReturnType<typeof usePublishedV2> } = { current: null }
 const textOf = (value: unknown) => Array.isArray(value) ? '' : value == null ? '' : String(value)
 const firstId = (value: unknown) => Array.isArray(value) ? value.find((item): item is string => typeof item === 'string') ?? '' : ''
-const EMPTY_FILTER: SupportFilter = { search: '', status: '', priority: '', mine: false, scope: 'all' }
+const EMPTY_FILTER: SupportFilter = { search: '', status: '', priority: '', ageBucket: '', mine: false, scope: 'all' }
 
 function collectionOn(app: AppV2, screenId: string, tableId: string) {
   const screen = app.screens.find(item => item.id === screenId)
@@ -83,18 +83,21 @@ function choiceName(props: Pick<AppV2RendererProps, 'tables'>, tableId: string, 
 }
 
 function statusTone(name: string) {
-  if (name === 'Просрочено') return 'red'
-  if (name === 'В работе') return 'green'
-  if (name === 'Ждём клиента') return 'violet'
-  if (name === 'Решено') return 'green'
-  if (name === 'Закрыто') return 'gray'
-  if (name === 'Новое') return 'blue'
-  return 'blue'
+  if (name === 'Просрочено') return 'overdue'
+  if (name === 'В работе') return 'progress'
+  if (name === 'Ждём клиента') return 'waiting'
+  if (name === 'Решено') return 'resolved'
+  if (name === 'Закрыто') return 'closed'
+  if (name === 'Новое') return 'fresh'
+  return 'fresh'
 }
 
 function priorityTone(name: string) {
-  if (name === 'Срочный') return 'red'
-  return 'gray'
+  if (name === 'Срочный') return 'urgent'
+  if (name === 'Высокий') return 'high'
+  if (name === 'Обычный') return 'normal'
+  if (name === 'Низкий') return 'low'
+  return 'normal'
 }
 
 function StatusBadge({ name }: { name: string }) {
@@ -113,22 +116,14 @@ function Badge({ name }: { name: string }) {
   return <StatusBadge name={name} />
 }
 
-function statusState(name: string) {
-  if (name === 'В работе') return 'work'
-  if (name === 'Ждём клиента') return 'wait'
-  if (name === 'Решено') return 'done'
-  if (name === 'Закрыто') return 'closed'
-  return 'fresh'
-}
-
 function QueueStatus({ name }: { name: string }) {
   if (!name) return null
-  return <span className={css.mark} data-state={statusState(name)}><span className={css.dot} aria-hidden="true" />{name}</span>
+  return <StatusBadge name={name} />
 }
 
 function QueuePriority({ name }: { name: string }) {
   if (!name) return null
-  return <span className={css.priority} data-urgent={name === 'Срочный' || undefined}>{name}</span>
+  return <PriorityBadge name={name} />
 }
 
 function QueueDeadline({ value, overdue }: { value: unknown; overdue: boolean }) {
@@ -219,7 +214,10 @@ export function SupportScreen(props: AppV2RendererProps) {
   const reload = () => { for (const page of pages) page.reload() }
   const queueFocus = demo?.queueFocus ?? { current: null }
   const shared = { ...props, kit, rows, of, replace: demo?.setRows, now, loading, error, reload, recordId }
-  const openQueue = (scope: SupportQueueScope) => { queueFocus.current = scope; props.onNavigate?.(kit.queueScreenId) }
+  const openQueue = (focus: SupportQueueFocus | import('@/lib/support-logic').SupportQueueScope) => {
+    queueFocus.current = typeof focus === 'string' ? { scope: focus } : focus
+    props.onNavigate?.(kit.queueScreenId)
+  }
   if (kit.dashboardScreenId && screenId === kit.dashboardScreenId) return <SupportDashboard {...shared} actorEmail={props.actor.email ?? ''} onOpenQueue={openQueue} onOpenTicket={id => props.onNavigate?.(kit.ticketScreenId, id)} onStatus={async () => ({ ok: false })} onSaveSla={async () => ({ ok: false })} />
   if (kit.boardScreenId && screenId === kit.boardScreenId) return <SupportBoard {...shared} phone={device === 'phone'} actorEmail={props.actor.email ?? ''} onOpenQueue={openQueue} onOpenTicket={id => props.onNavigate?.(kit.ticketScreenId, id)} onStatus={async (id, status) => commit(shared, { kind: 'status', recordId: id, statusId: statusId(shared, status) })} onSaveSla={async () => ({ ok: false })} />
   if (screenId === kit.queueScreenId || screenId === kit.clientListScreenId) return <TicketList {...shared} />
@@ -275,72 +273,177 @@ function ticketItems(props: ScreenProps): SupportListItem[] {
       assigneeEmail: textOf(row.values[ticket.assigneeEmail]),
       assigneeName: nameOf(props, props.kit.operatorsTableId, assigneeId, props.kit.operator.name),
       deadline: row.values[ticket.deadline],
+      updatedAt: row.values[ticket.updatedAt],
       sla: slaFacts(props.kit, props.rows, row.id, props.now),
     }
   })
 }
 
+function ClientPreviewMenu(props: { clients: { id: string; name: string; email: string; tickets: number }[]; value: string; open: boolean; onOpen: (open: boolean) => void; onChange: (email: string) => void }) {
+  const root = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!props.open) return
+    const outside = (event: PointerEvent) => { if (event.target instanceof Node && !root.current?.contains(event.target)) props.onOpen(false) }
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') props.onOpen(false) }
+    document.addEventListener('pointerdown', outside)
+    document.addEventListener('keydown', escape)
+    return () => { document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape) }
+  }, [props.open, props])
+  const selected = props.clients.find(item => item.email === props.value)
+  return <div className={css.previewMenu} ref={root} data-support-preview-menu>
+    <button type="button" className={css.previewTrigger} aria-expanded={props.open} aria-haspopup="listbox" onClick={() => props.onOpen(!props.open)}>
+      <span>{selected ? selected.name : 'Выберите клиента'}</span>
+      <ProtoIcon name="down" size={16} />
+    </button>
+    {props.open ? <div className={css.previewPanel} role="listbox" aria-label="Клиент для просмотра">
+      {props.clients.map(client => <button key={client.id} type="button" role="option" aria-selected={client.email === props.value} onClick={() => { props.onChange(client.email); props.onOpen(false) }}>{client.name}<span className={css.quiet}>{client.tickets} {ticketsWord(client.tickets)}</span></button>)}
+    </div> : null}
+  </div>
+}
+
+function ticketsWord(count: number) {
+  const mod10 = count % 10
+  const mod100 = count % 100
+  if (mod10 === 1 && mod100 !== 11) return 'обращение'
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return 'обращения'
+  return 'обращений'
+}
+
+function updatedAgo(value: unknown, now: number) {
+  const instant = deadlineTime(value)
+  if (instant == null) return 'Обновлено недавно'
+  const ms = Math.max(0, now - instant)
+  if (ms < 60_000) return 'Обновлено только что'
+  if (ms < 3_600_000) {
+    const minutes = Math.max(1, Math.round(ms / 60_000))
+    return `Обновлено ${minutes} мин назад`
+  }
+  if (ms < 48 * 3_600_000) {
+    const hours = Math.max(1, Math.round(ms / 3_600_000))
+    return `Обновлено ${hours} ч назад`
+  }
+  const days = Math.max(2, Math.round(ms / (24 * 3_600_000)))
+  const mod10 = days % 10
+  const mod100 = days % 100
+  const word = mod10 === 1 && mod100 !== 11 ? 'день' : mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20) ? 'дня' : 'дней'
+  return `Обновлено ${days} ${word} назад`
+}
+
+function ClientAvatar() {
+  return <span className={css.avatar} data-size="md" data-client aria-hidden="true"><ProtoIcon name="user" size={16} /></span>
+}
+
+function MessageAvatar({ kind, author }: { kind: 'operator' | 'client' | 'note'; author: string }) {
+  if (kind === 'client') return <ClientAvatar />
+  return <SupportPerson name={author} size={28} />
+}
+
 function TicketList(props: ScreenProps) {
   const desk = isSupportDesk(props.actor)
+  const clientCabinet = props.screenId === props.kit.clientListScreenId
+  const previewMode = desk && clientCabinet
   const device = useContext(AppFrameDeviceContext)
-  const focus = useContext(SupportRowsContext)?.queueFocus
+  const bundle = useContext(SupportRowsContext)
+  const focus = bundle?.queueFocus
   const [filter, setFilter] = useState<SupportFilter>(() => {
-    const scope = focus?.current ?? 'all'
+    const next = focus?.current
     if (focus) focus.current = null
-    return { ...EMPTY_FILTER, scope }
+    if (!next) return EMPTY_FILTER
+    return { ...EMPTY_FILTER, scope: next.scope, priority: next.priority ?? '', ageBucket: next.ageBucket ?? '' }
   })
-  const [open, setOpen] = useState<SupportOpen>(useContext(SupportRowsContext)?.open ?? null)
-  const items = ticketItems(props)
+  const [open, setOpen] = useState<SupportOpen>(bundle?.open ?? null)
+  const allTickets = ticketItems(props)
+  const clients = props.of(props.kit.clientsTableId).map(row => {
+    const email = textOf(row.values[props.kit.client.email]).trim().toLowerCase()
+    return {
+      id: row.id,
+      name: textOf(row.values[props.kit.client.name]) || 'Без имени',
+      email,
+      tickets: allTickets.filter(item => {
+        const ticket = props.of(props.kit.ticketsTableId).find(entry => entry.id === item.id)
+        return textOf(ticket?.values[props.kit.ticket.clientEmail]).trim().toLowerCase() === email
+      }).length,
+    }
+  }).filter(item => item.email)
+  const [previewEmail, setPreviewEmail] = useState(bundle?.previewClient ?? clients[0]?.email ?? '')
+  const [previewOpen, setPreviewOpen] = useState(Boolean(bundle?.previewMenuOpen))
+  const items = allTickets.filter(item => {
+    if (!previewMode) return true
+    if (!previewEmail) return false
+    const row = props.of(props.kit.ticketsTableId).find(entry => entry.id === item.id)
+    return textOf(row?.values[props.kit.ticket.clientEmail]).trim().toLowerCase() === previewEmail
+  })
+  const queueDesk = desk && !clientCabinet
+  const clientView = clientCabinet
   const counts = {
     open: items.filter(item => item.sla?.known ? item.sla.open : isOpenStatus(item.status)).length,
     unassigned: items.filter(item => (item.sla?.known ? item.sla.open : isOpenStatus(item.status)) && !item.assigneeEmail).length,
     risk: items.filter(item => item.sla?.currentRisk).length,
     overdue: items.filter(item => item.sla?.known ? item.sla.currentOverdue : isOverdue(item.status, item.deadline, props.now)).length,
   }
-  const sample = useContext(SupportRowsContext)?.sample
   const visible = filterTickets(items, filter, props.actor.email ?? '', props.now)
     .sort((a, b) => {
-      const open = Number(isOpenStatus(b.status)) - Number(isOpenStatus(a.status))
-      if (open) return open
+      const openScore = Number(isOpenStatus(b.status)) - Number(isOpenStatus(a.status))
+      if (openScore) return openScore
       return (deadlineTime(a.deadline) ?? Number.MAX_SAFE_INTEGER) - (deadlineTime(b.deadline) ?? Number.MAX_SAFE_INTEGER)
     })
-  const backTo = desk ? props.kit.queueScreenId : props.kit.clientListScreenId
-  return <div className={css.root} data-support-root data-support-screen={desk ? 'queue' : 'client'}>
+  const openItems = clientView ? visible.filter(item => isOpenStatus(item.status)) : visible
+  const doneItems = clientView ? visible.filter(item => !isOpenStatus(item.status)) : []
+  const backTo = queueDesk ? props.kit.queueScreenId : props.kit.clientListScreenId
+  const openTicket = (id: string) => props.onNavigate?.(queueDesk ? props.kit.ticketScreenId : props.kit.clientTicketScreenId, id)
+  const renderClientGroup = (title: string, list: SupportListItem[]) => list.length ? <section className={css.clientGroup} aria-label={title}>
+    <h2 className={css.clientGroupTitle}>{title} ({list.length})</h2>
+    <ul className={css.cards} data-client-cards>
+      {list.map(item => <li key={item.id}><ClientTicketButton item={item} now={props.now} onOpen={() => openTicket(item.id)} /></li>)}
+    </ul>
+  </section> : null
+  return <div className={css.root} data-support-root data-support-screen={queueDesk ? 'queue' : 'client'} data-preview={previewMode || undefined}>
     <ListScreenShell
-      title={desk ? 'Очередь обращений' : 'Мои обращения'}
-      meta={desk ? 'Очередь службы поддержки.' : 'Ваши обращения и ответы.'}
-      actions={<button type="button" className={css.primary} onClick={() => setOpen('create')}>{desk ? 'Новое обращение' : 'Написать обращение'}</button>}
+      title={queueDesk ? 'Очередь обращений' : 'Мои обращения'}
+      meta={queueDesk ? 'Очередь службы поддержки.' : previewMode ? 'Просмотр кабинета клиента. Только чтение.' : 'Ваши обращения и ответы.'}
+      actions={!previewMode ? <button type="button" className={css.primary} onClick={() => setOpen('create')}>{queueDesk ? 'Новое обращение' : 'Написать обращение'}</button> : undefined}
     >
       <div className={css.stack}>
-        {sample ? <p className={css.sample} role="note">Пример очереди.</p> : null}
-        <fieldset className={css.summary} aria-label="Сводка обращений">
+        {previewMode ? <div className={css.previewStrip} data-support-preview>
+          <div className={css.previewCopy}>
+            <strong>Посмотреть как клиент</strong>
+            <span className={css.quiet}>Кабинет ровно так, как его видит выбранный клиент. Внутренние заметки скрыты.</span>
+          </div>
+          <ClientPreviewMenu clients={clients} value={previewEmail} open={previewOpen} onOpen={setPreviewOpen} onChange={setPreviewEmail} />
+        </div> : null}
+        {queueDesk ? <fieldset className={css.summary} aria-label="Сводка обращений">
           <legend className={css.quiet}>Сводка</legend>
           {([['open', counts.open, 'Открытые'], ['unassigned', counts.unassigned, 'Без ответственного'], ['risk', counts.risk, 'Скоро срок'], ['overdue', counts.overdue, 'Просрочены']] as const).map(([scope, value, label]) => <button key={scope} type="button" aria-pressed={filter.scope === scope} onClick={() => setFilter(current => ({ ...current, scope: current.scope === scope ? 'all' : scope }))}><strong>{value}</strong><span>{label}</span></button>)}
-        </fieldset>
-        <details className={css.filterDrawer} open={device !== 'phone'}>
-          <summary>Фильтры{filter.scope !== 'all' || filter.status || filter.priority || filter.mine ? ` · ${[filter.scope !== 'all' ? filter.scope : '', filter.status, filter.priority, filter.mine ? 'мои' : ''].filter(Boolean).join(', ')}` : ''}</summary>
+        </fieldset> : null}
+        {queueDesk ? <details className={css.filterDrawer} open={device !== 'phone'}>
+          <summary>Фильтры{filter.scope !== 'all' || filter.status || filter.priority || filter.ageBucket || filter.mine ? ` · ${[filter.scope !== 'all' ? filter.scope : '', filter.status, filter.priority, filter.ageBucket, filter.mine ? 'мои' : ''].filter(Boolean).join(', ')}` : ''}</summary>
           <div>
         <div className={css.filters}>
           <ShellSearchField value={filter.search} onChange={search => setFilter(current => ({ ...current, search }))} label="Поиск обращений" placeholder="Тема, клиент или номер" />
-          {desk ? <button type="button" className={css.mine} aria-pressed={filter.mine} onClick={() => setFilter(current => ({ ...current, mine: !current.mine }))}>Мои</button> : null}
+          <button type="button" className={css.mine} aria-pressed={filter.mine} onClick={() => setFilter(current => ({ ...current, mine: !current.mine }))}>Мои</button>
         </div>
         <div className={css.chips} role="toolbar" aria-label="Статус">
           <button type="button" className={css.chip} aria-pressed={filter.status === ''} onClick={() => setFilter(current => ({ ...current, status: '' }))}>Все статусы</button>
           {['Новое', 'В работе', 'Ждём клиента', 'Решено', 'Закрыто'].map(status => <button key={status} type="button" className={css.chip} aria-pressed={filter.status === status} onClick={() => setFilter(current => ({ ...current, status: current.status === status ? '' : status }))}>{status}</button>)}
         </div>
         <div className={css.chips} role="toolbar" aria-label="Приоритет">
-          {['Срочный', 'Высокий', 'Обычный', 'Низкий'].map(priority => <button key={priority} type="button" className={css.chip} aria-pressed={filter.priority === priority} onClick={() => setFilter(current => ({ ...current, priority: current.priority === priority ? '' : priority }))}>{priority}</button>)}
+          {['Срочный', 'Высокий', 'Обычный', 'Низкий'].map(priority => <button key={priority} type="button" className={`${css.chip} ${css.priorityChip}`} data-tone={priorityTone(priority)} aria-pressed={filter.priority === priority} onClick={() => setFilter(current => ({ ...current, priority: current.priority === priority ? '' : priority }))}>{priority}</button>)}
         </div>
+        {filter.ageBucket ? <div className={css.chips} role="status"><button type="button" className={css.chip} aria-pressed onClick={() => setFilter(current => ({ ...current, ageBucket: '' }))}>Возраст: {filter.ageBucket} · сбросить</button></div> : null}
           </div>
-        </details>
+        </details> : null}
         {props.loading ? <p className={css.status} role="status">Загружаем обращения…</p> : null}
         {props.error ? <div className={css.status} role="alert"><p className={css.error}>{props.error}</p><button type="button" onClick={props.reload}>Повторить</button></div> : null}
-        {!props.loading && !props.error && !visible.length ? <div className={css.empty}><ProtoIcon name="clipboard" size={28} /><p>{items.length ? 'Нет обращений с такими условиями.' : desk ? 'Очередь пуста. Новое обращение появится здесь.' : 'У вас пока нет обращений.'}</p>{items.length ? <button type="button" onClick={() => setFilter(EMPTY_FILTER)}>Сбросить фильтры</button> : <button type="button" onClick={() => setOpen('create')}>{desk ? 'Создать обращение' : 'Написать обращение'}</button>}</div> : null}
-        {visible.length ? <><ul className={css.cards}>
-          {visible.map(item => <li key={item.id}><TicketButton item={item} now={props.now} onOpen={() => props.onNavigate?.(desk ? props.kit.ticketScreenId : props.kit.clientTicketScreenId, item.id)} /></li>)}
+        {!props.loading && !props.error && !visible.length ? <div className={css.empty}><ProtoIcon name="clipboard" size={28} /><p>{items.length ? 'Нет обращений с такими условиями.' : queueDesk ? 'Очередь пуста. Новое обращение появится здесь.' : previewMode ? 'У этого клиента пока нет обращений.' : 'У вас пока нет обращений.'}</p>{items.length && queueDesk ? <button type="button" onClick={() => setFilter(EMPTY_FILTER)}>Сбросить фильтры</button> : !previewMode ? <button type="button" onClick={() => setOpen('create')}>{queueDesk ? 'Создать обращение' : 'Написать обращение'}</button> : null}</div> : null}
+        {clientView && visible.length ? <>
+          {renderClientGroup('Открытые', openItems)}
+          {renderClientGroup('Завершённые', doneItems)}
+        </> : null}
+        {queueDesk && visible.length ? <><ul className={css.cards}>
+          {visible.map(item => <li key={item.id}><TicketButton item={item} now={props.now} showAssignee onOpen={() => openTicket(item.id)} /></li>)}
         </ul>
         <div className={css.tableWrap}>
-          <table className={css.table} data-columns={desk ? 6 : 5}>
+          <table className={css.table} data-columns={6}>
             <caption className={css.quiet}>Список обращений</caption>
             <colgroup>
               <col className={css.subjectCol} />
@@ -348,19 +451,19 @@ function TicketList(props: ScreenProps) {
               <col className={css.stateCol} />
               <col className={css.priorityCol} />
               <col className={css.whenCol} />
-              {desk ? <col className={css.ownerCol} /> : null}
+              <col className={css.ownerCol} />
             </colgroup>
-            <thead><tr><th>Обращение</th><th>Клиент</th><th>Статус</th><th>Приоритет</th><th>Срок</th>{desk ? <th>Ответственный</th> : null}</tr></thead>
+            <thead><tr><th>Обращение</th><th>Клиент</th><th>Статус</th><th>Приоритет</th><th>Срок</th><th>Ответственный</th></tr></thead>
             <tbody>
               {visible.map(item => {
                 const overdue = isOverdue(item.status, item.deadline, props.now)
                 return <tr key={item.id}>
-                  <td><button type="button" className={css.rowButton} onClick={() => props.onNavigate?.(desk ? props.kit.ticketScreenId : props.kit.clientTicketScreenId, item.id)}><span className={css.subject}>{item.subject || 'Без темы'}</span>{item.number ? <span className={css.number}>{item.number}</span> : null}</button></td>
+                  <td><button type="button" className={css.rowButton} onClick={() => openTicket(item.id)}><span className={css.subject}>{item.subject || 'Без темы'}</span>{item.number ? <span className={css.number}>{item.number}</span> : null}</button></td>
                   <td><span className={css.person}>{item.clientName || 'Клиент не указан'}{item.category ? <span>{item.category}</span> : null}</span></td>
                   <td><QueueStatus name={item.status} /></td>
                   <td><QueuePriority name={item.priority} /></td>
                   <td><span className={css.deadline}>{item.sla?.known && (item.sla.first.dueAt || item.sla.resolution.dueAt) ? slaWhen(item.sla.first.dueAt && !item.sla.first.met ? item.sla.first.dueAt : item.sla.resolution.dueAt) : formatWhen(item.deadline)}{item.sla?.known && supportSlaLabel(item.sla) ? <span className={item.sla.currentOverdue ? css.late : css.quiet}>{supportSlaLabel(item.sla)}</span> : overdue ? <span className={css.late}>Просрочено</span> : null}</span></td>
-                  {desk ? <td><span className={css.person} data-empty={!item.assigneeName || undefined}>{item.assigneeName || 'Не назначен'}</span></td> : null}
+                  <td>{item.assigneeName ? <span className={css.personInline}><SupportPerson name={item.assigneeName} size={24} /><span>{item.assigneeName}</span></span> : <span className={css.person} data-empty>Не назначен</span>}</td>
                 </tr>
               })}
             </tbody>
@@ -368,23 +471,45 @@ function TicketList(props: ScreenProps) {
         </div></> : null}
       </div>
     </ListScreenShell>
-    {open === 'create' ? <CreateDialog {...props} desk={desk} onClose={() => setOpen(null)} onDone={id => { setOpen(null); if (id) props.onNavigate?.(backTo, undefined) }} /> : null}
+    {open === 'create' && !previewMode ? <CreateDialog {...props} desk={queueDesk} onClose={() => setOpen(null)} onDone={id => { setOpen(null); if (id) props.onNavigate?.(backTo, undefined) }} /> : null}
   </div>
 }
 
-function TicketButton({ item, now, onOpen }: { item: SupportListItem; now: number; onOpen: () => void }) {
+function ClientTicketButton({ item, now, onOpen }: { item: SupportListItem; now: number; onOpen: () => void }) {
+  return <button type="button" className={`${css.card} ${css.clientTicketCard}`} onClick={onOpen}>
+    <span className={css.clientTicketMain}>
+      <span className={css.subject}>{item.subject || 'Без темы'}</span>
+      {item.number ? <span className={css.number}>{item.number}</span> : null}
+      <span className={css.clientTicketMeta}>
+        <span className={css.quiet}>{item.category || 'Без категории'}</span>
+        {item.assigneeName ? <span className={css.personInline}><SupportPerson name={item.assigneeName} size={20} /><span>{item.assigneeName}</span></span> : <span className={css.quiet}>Не назначен</span>}
+        <QueueStatus name={item.status} />
+        <span className={css.quiet}>{updatedAgo(item.updatedAt, now)}</span>
+      </span>
+    </span>
+    <ProtoIcon name="arrow" size={16} />
+  </button>
+}
+
+function TicketButton({ item, now, onOpen, showAssignee = true }: { item: SupportListItem; now: number; onOpen: () => void; showAssignee?: boolean }) {
   const overdue = isOverdue(item.status, item.deadline, now)
   return <button type="button" className={css.card} onClick={onOpen}>
     <span className={css.subject}>{item.subject || 'Без темы'}</span>
     {item.number ? <span className={css.number}>{item.number}</span> : null}
     <span className={css.quiet}>{item.clientName || 'Клиент не указан'}{item.category ? ` · ${item.category}` : ''}</span>
     <span className={css.cardFacts}><QueueStatus name={item.status} /><QueuePriority name={item.priority} /></span>
-    <span className={css.meta}>{item.assigneeName || 'Не назначен'} · {item.sla?.known && (item.sla.first.dueAt || item.sla.resolution.dueAt) ? slaWhen(item.sla.first.dueAt && !item.sla.first.met ? item.sla.first.dueAt : item.sla.resolution.dueAt) : formatWhen(item.deadline)}{item.sla?.known && supportSlaLabel(item.sla) ? <span className={item.sla.currentOverdue ? css.late : css.quiet}>{supportSlaLabel(item.sla)}</span> : overdue ? <span className={css.late}>Просрочено</span> : null}</span>
+    <span className={css.meta}>
+      {showAssignee ? (item.assigneeName ? <span className={css.personInline}><SupportPerson name={item.assigneeName} size={20} /><span>{item.assigneeName}</span></span> : 'Не назначен') : null}
+      {showAssignee ? ' · ' : null}
+      {item.sla?.known && (item.sla.first.dueAt || item.sla.resolution.dueAt) ? slaWhen(item.sla.first.dueAt && !item.sla.first.met ? item.sla.first.dueAt : item.sla.resolution.dueAt) : formatWhen(item.deadline)}
+      {item.sla?.known && supportSlaLabel(item.sla) ? <span className={item.sla.currentOverdue ? css.late : css.quiet}>{supportSlaLabel(item.sla)}</span> : overdue ? <span className={css.late}>Просрочено</span> : null}
+    </span>
   </button>
 }
 
 function TicketCard(props: ScreenProps) {
-  const desk = isSupportDesk(props.actor)
+  const clientView = props.screenId === props.kit.clientTicketScreenId
+  const desk = isSupportDesk(props.actor) && !clientView
   const ticket = props.of(props.kit.ticketsTableId).find(row => row.id === props.recordId) ?? (props.record?.tableId === props.kit.ticketsTableId ? props.record : undefined)
   const bundle = useContext(SupportRowsContext)
   const [dialog, setDialog] = useState<SupportOpen>(bundle?.open ?? null)
@@ -407,18 +532,19 @@ function TicketCard(props: ScreenProps) {
     const author = textOf(row.values[props.kit.reply.author])
     const authorEmail = textOf(row.values[props.kit.reply.authorEmail])
     const kind = supportAuthorKind({ author, authorEmail, clientName, clientEmail })
-    return { id: row.id, at: textOf(row.values[props.kit.reply.at]), author, text: textOf(row.values[props.kit.reply.text]), internal: false, label: supportAuthorLabel(kind) }
-  }), ...notes.map(row => ({ id: row.id, at: textOf(row.values[props.kit.note.at]), author: textOf(row.values[props.kit.note.author]), text: textOf(row.values[props.kit.note.text]), internal: true, label: 'Внутренняя заметка' }))]
+    return { id: row.id, at: textOf(row.values[props.kit.reply.at]), author, authorEmail, text: textOf(row.values[props.kit.reply.text]), internal: false, label: supportAuthorLabel(kind), kind }
+  }), ...notes.map(row => ({ id: row.id, at: textOf(row.values[props.kit.note.at]), author: textOf(row.values[props.kit.note.author]), authorEmail: textOf(row.values[props.kit.note.authorEmail]), text: textOf(row.values[props.kit.note.text]), internal: true, label: 'Внутренняя заметка', kind: 'operator' as const }))]
     .sort((a, b) => a.at.localeCompare(b.at) || a.id.localeCompare(b.id))
   const transitions = desk ? operatorTransitions(status) : []
   const replyLabel = status === 'Решено' || status === 'Закрыто' ? 'Переоткрыть' : 'Ответить'
+  const waiting = status === 'Ждём клиента'
   return <div className={css.root} data-support-root data-support-screen={desk ? 'ticket' : 'client-ticket'} data-support-status={status}>
     <DetailCardShell
       back={{ label: desk ? 'Очередь' : 'Мои обращения', onClick: () => props.onNavigate?.(back) }}
       title={textOf(ticket.values[fields.subject]) || 'Без темы'}
       subtitle={textOf(ticket.values[fields.number])}
       badge={<span className={css.badges}><StatusBadge name={status} />{overdue ? <StatusBadge name="Просрочено" /> : null}<PriorityBadge name={priority} /></span>}
-      actions={<div className={css.actions}>
+      actions={clientView && isSupportDesk(props.actor) ? undefined : <div className={css.actions}>
         <button type="button" className={css.primary} onClick={() => setDialog('reply')}>{replyLabel}</button>
         {transitions.length || desk ? <details className={css.moreActions}>
           <summary>Статус и назначение</summary>
@@ -430,6 +556,13 @@ function TicketCard(props: ScreenProps) {
         </details> : null}
       </div>}
     >
+      {clientView && waiting ? <div className={css.waitBanner} role="status" data-support-wait-banner>Служба поддержки ждёт вашего ответа</div> : null}
+      {clientView ? <dl className={css.clientGrid} aria-label="Сведения об обращении">
+        <div><dt>Категория</dt><dd>{category || 'Без категории'}</dd></div>
+        <div><dt>Приоритет / срочность</dt><dd><PriorityBadge name={priority} />{!priority ? 'Не указан' : null}</dd></div>
+        <div><dt>Ответственный</dt><dd>{assignee ? <span className={css.personInline}><SupportPerson name={assignee} size={24} /><span>{assignee}</span></span> : 'Не назначен'}</dd></div>
+        <div><dt>Отправлено</dt><dd>{formatWhen(ticket.values[fields.createdAt], 'Дата не указана')}</dd></div>
+      </dl> : null}
       <div className={css.ticketCols}>
         <div className={shell.detailMainCol}>
           <DetailSection title="Описание"><p className={css.description}>{textOf(ticket.values[fields.description]) || 'Описания нет.'}</p></DetailSection>
@@ -438,30 +571,40 @@ function TicketCard(props: ScreenProps) {
             {message ? <p role="status">{message}</p> : null}
             {!timeline.length ? <div className={css.empty}><p>Сообщений пока нет. Ответ появится в этой ленте.</p></div> : null}
             <ol className={css.timeline} aria-label="Хронология">
-              {timeline.map(entry => <li key={entry.id} className={css.message} data-internal={entry.internal || undefined} data-support-note={entry.internal || undefined} data-author-kind={entry.internal ? 'note' : entry.label === 'Клиент' ? 'client' : 'operator'}>
-                <header><strong>{entry.author || 'Без имени'}</strong><span className={css.quiet}>{formatWhen(entry.at, 'Время не указано')}</span>{entry.internal ? <span className={css.noteFlag}>Внутренняя заметка. Клиент это не видит.</span> : <span className={css.quiet}>{entry.label}</span>}</header>
+              {timeline.map(entry => {
+                const authorKind = entry.internal ? 'note' as const : entry.kind === 'client' ? 'client' as const : 'operator' as const
+                return <li key={entry.id} className={css.message} data-internal={entry.internal || undefined} data-support-note={entry.internal || undefined} data-author-kind={authorKind}>
+                <header>
+                  <MessageAvatar kind={authorKind === 'note' ? 'operator' : authorKind} author={entry.author} />
+                  <div className={css.messageHead}>
+                    <strong>{entry.author || 'Без имени'}</strong>
+                    <span className={css.quiet}>{formatWhen(entry.at, 'Время не указано')}</span>
+                    {entry.internal ? <span className={css.noteFlag}>Внутренняя заметка. Клиент это не видит.</span> : <span className={css.quiet}>{entry.label}</span>}
+                  </div>
+                </header>
                 <p>{entry.text}</p>
-              </li>)}
+              </li>
+              })}
             </ol>
           </DetailSection>
         </div>
-        <aside className={`${shell.detailSideCol} ${css.factsCol}`}>
+        {!clientView ? <aside className={`${shell.detailSideCol} ${css.factsCol}`}>
           <DetailSection title="Сведения">
             <dl className={css.facts}>
               <div><dt>Клиент</dt><dd>{clientName || 'Не указан'}</dd></div>
-              <div><dt>Ответственный</dt><dd>{assignee || 'Не назначен'}</dd></div>
-              <div><dt>Приоритет</dt><dd>{priority || 'Не указан'}</dd></div>
+              <div><dt>Ответственный</dt><dd>{assignee ? <span className={css.personInline}><SupportPerson name={assignee} size={24} /><span>{assignee}</span></span> : 'Не назначен'}</dd></div>
+              <div><dt>Приоритет</dt><dd><PriorityBadge name={priority} />{!priority ? 'Не указан' : null}</dd></div>
               <div><dt>Категория</dt><dd>{category || 'Без категории'}</dd></div>
               <div><dt>Срок</dt><dd>{formatWhen(ticket.values[fields.deadline])}{overdue ? '. Просрочено' : ''}</dd></div>
               <div><dt>Норматив</dt><dd>{slaFacts(props.kit, props.rows, ticket.id, props.now).known ? supportSlaLabel(slaFacts(props.kit, props.rows, ticket.id, props.now)) || 'В срок' : 'Нет данных'}</dd></div>
             </dl>
           </DetailSection>
-        </aside>
+        </aside> : null}
       </div>
     </DetailCardShell>
-    {dialog === 'reply' ? <ReplyDialog {...props} ticketId={ticket.id} reopen={status === 'Решено' || status === 'Закрыто'} onClose={() => setDialog(null)} onMessage={setMessage} /> : null}
-    {dialog === 'note' ? <NoteDialog {...props} ticketId={ticket.id} onClose={() => setDialog(null)} onMessage={setMessage} /> : null}
-    {dialog === 'assign' ? <AssignDialog {...props} ticket={ticket} onClose={() => setDialog(null)} onMessage={setMessage} /> : null}
+    {dialog === 'reply' && !(clientView && isSupportDesk(props.actor)) ? <ReplyDialog {...props} ticketId={ticket.id} reopen={status === 'Решено' || status === 'Закрыто'} onClose={() => setDialog(null)} onMessage={setMessage} /> : null}
+    {dialog === 'note' && desk ? <NoteDialog {...props} ticketId={ticket.id} onClose={() => setDialog(null)} onMessage={setMessage} /> : null}
+    {dialog === 'assign' && desk ? <AssignDialog {...props} ticket={ticket} onClose={() => setDialog(null)} onMessage={setMessage} /> : null}
   </div>
 }
 

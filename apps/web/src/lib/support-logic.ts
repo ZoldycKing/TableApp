@@ -87,15 +87,41 @@ export type SupportListItem = {
   assigneeEmail: string
   assigneeName: string
   deadline: unknown
+  updatedAt?: unknown
   sla?: SupportSlaView
+}
+
+export type SupportAgeBucket = 'lt4h' | '4to12h' | '12to24h' | '1to3d' | 'gt3d'
+
+export const SUPPORT_AGE_BUCKETS: { id: SupportAgeBucket; label: string }[] = [
+  { id: 'lt4h', label: 'до 4 ч' },
+  { id: '4to12h', label: '4–12 ч' },
+  { id: '12to24h', label: '12–24 ч' },
+  { id: '1to3d', label: '1–3 дня' },
+  { id: 'gt3d', label: 'больше 3 дней' },
+]
+
+export function supportAgeBucket(ageMs: number): SupportAgeBucket {
+  if (ageMs < 4 * 3_600_000) return 'lt4h'
+  if (ageMs < 12 * 3_600_000) return '4to12h'
+  if (ageMs < 24 * 3_600_000) return '12to24h'
+  if (ageMs < 3 * 24 * 3_600_000) return '1to3d'
+  return 'gt3d'
 }
 
 export type SupportFilter = {
   search: string
   status: string
   priority?: string
+  ageBucket?: SupportAgeBucket | ''
   mine: boolean
   scope: SupportQueueScope
+}
+
+export type SupportQueueFocus = {
+  scope: SupportQueueScope
+  priority?: string
+  ageBucket?: SupportAgeBucket
 }
 
 export function filterTickets(items: readonly SupportListItem[], filter: SupportFilter, actorEmail: string, now: number) {
@@ -103,9 +129,14 @@ export function filterTickets(items: readonly SupportListItem[], filter: Support
   const mine = actorEmail.trim().toLowerCase()
   return items.filter(item => {
     const manualOverdue = isOverdue(item.status, item.deadline, now)
-    if (!supportQueueMatch({ status: item.status, assigneeEmail: item.assigneeEmail, sla: item.sla ?? supportSlaView([], null, now), manualOverdue }, filter.scope, mine)) return false
+    const sla = item.sla ?? supportSlaView([], null, now)
+    if (!supportQueueMatch({ status: item.status, assigneeEmail: item.assigneeEmail, sla, manualOverdue }, filter.scope, mine)) return false
     if (filter.status && item.status !== filter.status) return false
     if (filter.priority && item.priority !== filter.priority) return false
+    if (filter.ageBucket) {
+      if (!sla.known || !sla.open || sla.createdAt == null) return false
+      if (supportAgeBucket(Math.max(0, now - sla.createdAt)) !== filter.ageBucket) return false
+    }
     if (filter.mine && item.assigneeEmail.trim().toLowerCase() !== mine) return false
     if (!query) return true
     const haystack = [item.number, item.subject, item.description, item.clientName, item.assigneeName, item.category, item.status, item.priority].join('\n').toLocaleLowerCase('ru-RU')

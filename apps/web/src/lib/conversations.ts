@@ -100,7 +100,11 @@ async function threadFor(access: Access, runner: Runner, create = false) {
   return thread ?? null
 }
 
-const fileDTO = (file: typeof attachments.$inferSelect): Attachment => ({ id: file.id, key: file.key, name: file.name, mime: file.mime, size: file.size, width: null, height: null })
+const fileDTO = (file: typeof attachments.$inferSelect): Attachment => ({
+  id: file.id, key: file.key, name: file.name, mime: file.mime, size: file.size,
+  width: file.width, height: file.height,
+  scanStatus: (file.scanStatus as Attachment['scanStatus']) || 'clean',
+})
 export async function readConversation(slug: string, tableId: string, rowId: string, before?: number, business = false): Promise<ConversationPage> {
   if (before !== undefined && (!Number.isSafeInteger(before) || before <= 0)) throw denied()
   const access = await conversationAccess(slug, tableId, rowId, db, business), thread = await threadFor(access, db)
@@ -153,7 +157,7 @@ export async function sendConversation(slug: string, tableId: string, rowId: str
       await tx.insert(notes).values(common)
     } else {
       const files = fileIds.length ? await tx.select().from(attachments).where(and(eq(attachments.workspaceId, access.app.workspaceId), inArray(attachments.id, fileIds))).for('update') : []
-      if (files.length !== fileIds.length || files.some(file => file.state !== 'ready' || file.uploadedBy !== access.uploadId || file.conversationId !== thread!.id || file.messageId || file.referenced || file.rowId || file.tableId || file.fieldId)) throw new RowWriteError('denied', 'Вложение недоступно. Загрузите файл заново.')
+      if (files.length !== fileIds.length || files.some(file => file.state !== 'ready' || file.scanStatus === 'infected' || file.scanStatus === 'pending' || file.uploadedBy !== access.uploadId || file.conversationId !== thread!.id || file.messageId || file.referenced || file.rowId || file.tableId || file.fieldId)) throw new RowWriteError('denied', 'Вложение недоступно. Загрузите файл заново.')
       await tx.insert(messages).values({ ...common, authorKind: access.authorKind })
       if (fileIds.length) await tx.update(attachments).set({ messageId: common.id, referenced: true }).where(inArray(attachments.id, fileIds))
     }

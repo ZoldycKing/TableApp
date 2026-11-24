@@ -1,6 +1,6 @@
 import { CreateBucketCommand, DeleteObjectCommand, GetObjectCommand, HeadBucketCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { randomBytes } from 'node:crypto'
-import { fileDeliveryHeaders, validateFileContent } from './file-policy'
+import { fileDeliveryHeaders, resolvedUploadMime, validateFileContent } from './file-policy'
 export { ALLOWED_MIME, isAllowed } from './file-policy'
 
 /**
@@ -70,27 +70,32 @@ export function fileKey(workspaceId: string, name: string): string {
 
 export async function putFile(
   workspaceId: string,
-  file: { name: string; type: string; bytes: Uint8Array },
+  file: { name: string; type: string; bytes: Uint8Array; width?: number | null; height?: number | null },
   reservedKey?: string,
 ): Promise<{ ok: true; stored: StoredFile } | { ok: false; error: string }> {
-  const validationError = validateFileContent(file)
+  const detected = resolvedUploadMime(file)
+  if ('error' in detected) return { ok: false, error: detected.error }
+  const mime = file.type && file.type === detected.mime ? file.type : detected.mime
+  // After image re-encoding the caller already set the correct MIME; trust it when content still matches.
+  const validationError = validateFileContent({ name: file.name, type: mime, bytes: file.bytes })
   if (validationError) return { ok: false, error: validationError }
 
   await ensureBucket()
   const key = reservedKey ?? fileKey(workspaceId, file.name)
   if (!key.startsWith(`${workspaceId}/`) || key.split('/').length !== 2) throw new Error('Invalid storage key')
+  const scrubbed = file.width != null && file.height != null
 
   await s3().send(
     new PutObjectCommand({
       Bucket: bucket,
       Key: key,
       Body: file.bytes,
-      ContentType: file.type,
-      ContentDisposition: fileDeliveryHeaders(file.name, file.type)['Content-Disposition'],
+      ContentType: mime,
+      ContentDisposition: fileDeliveryHeaders(file.name, mime, mime, { scrubbed })['Content-Disposition'],
     }),
   )
 
-  return { ok: true, stored: { key, name: file.name, mime: file.type, size: file.bytes.byteLength } }
+  return { ok: true, stored: { key, name: file.name, mime, size: file.bytes.byteLength } }
 }
 
 /** Idempotent removal of a tracked object; a missing key is already removed. */

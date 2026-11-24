@@ -692,8 +692,13 @@ export const attachments = pgTable('attachments', {
   width: integer('width'),
   height: integer('height'),
   uploadedBy: text('uploaded_by'),
-  /** Pending/deleting objects remain tracked and charged until removed. */
+  /**
+   * Pending/deleting/scanning/blocked objects remain tracked until cleaned up.
+   * ready — available; scanning — antivirus in progress; blocked — infected (object removed).
+   */
   state: text('state').notNull().default('ready'),
+  /** pending | clean | infected | skipped — antivirus outcome for the upload. */
+  scanStatus: text('scan_status').notNull().default('clean'),
   /**
    * Где файл используется. Заполняется при сохранении ячейки и нужно не для
    * учёта, а для прав: по ссылке из файла находится строка, и доступ к файлу

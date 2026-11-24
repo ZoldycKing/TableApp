@@ -2,6 +2,9 @@ import { z } from 'zod'
 import type { Field, FieldType } from './fields'
 import { dateInstant, fieldTimeZone } from './time'
 
+export const attachmentScanStatusSchema = z.enum(['pending', 'clean', 'infected', 'skipped'])
+export type AttachmentScanStatus = z.infer<typeof attachmentScanStatusSchema>
+
 export const attachmentSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -11,6 +14,8 @@ export const attachmentSchema = z.object({
   key: z.string(),
   width: z.number().int().positive().nullable().default(null),
   height: z.number().int().positive().nullable().default(null),
+  /** Antivirus outcome. Older stored values without the field are treated as clean. */
+  scanStatus: attachmentScanStatusSchema.optional(),
 })
 export type Attachment = z.infer<typeof attachmentSchema>
 

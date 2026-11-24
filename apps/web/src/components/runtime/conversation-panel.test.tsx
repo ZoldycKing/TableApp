@@ -7,7 +7,12 @@ import { GENERAL_CONVERSATION_TABLE, type ConversationPage } from '@/lib/convers
 const mocks = vi.hoisted(() => ({ read: vi.fn(), send: vi.fn(), edit: vi.fn(), close: vi.fn(), history: vi.fn(), mark: vi.fn().mockResolvedValue({ ok: true }) }))
 vi.mock('@/app/conversation-actions', () => ({ readConversationAction: mocks.read, sendConversationAction: mocks.send,
   changeConversationMessageAction: mocks.edit, closeConversationAction: mocks.close, conversationMessageHistoryAction: mocks.history, markConversationReadAction: mocks.mark }))
-vi.mock('@/components/file-upload', () => ({ FileUpload: () => <span>Загрузка документа</span>, fileUrl: (key: string, business = false) => `/api/files/${key}${business ? '?business=1' : ''}`, isImage: () => false }))
+vi.mock('@/components/file-upload', () => ({
+  FileUpload: () => <span>Загрузка документа</span>,
+  fileUrl: (key: string, business = false) => `/api/files/${key}${business ? '?business=1' : ''}`,
+  isImage: () => false,
+  isAttachmentAvailable: () => true,
+}))
 afterEach(() => { cleanup(); vi.clearAllMocks() })
 const empty: ConversationPage = { conversationId: null, enabled: true, closed: false, staff: false, canManage: false, messages: [], notes: [], nextBefore: null }
 const props = { slug: 'business', tableId: 'orders', rowId: 'own-order', configured: true }

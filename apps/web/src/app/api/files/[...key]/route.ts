@@ -19,13 +19,16 @@ export async function GET(_request: Request, { params }: { params: Promise<{ key
   const key = segments.join('/')
   if (isBuilderV2LogoKey(key)) return new NextResponse('Not found', { status: 404 })
   const [record] = await db.select().from(attachments).where(eq(attachments.key, key)).limit(1)
-  if (!record || record.state !== 'ready') return new NextResponse('Not found', { status: 404 })
+  if (!record || record.state !== 'ready' || record.scanStatus === 'infected') {
+    return new NextResponse('Not found', { status: 404 })
+  }
+  const scrubbed = record.width != null && record.height != null
   const v2App=new URL(_request.url).searchParams.get('v2App')
   if(v2App!==null){
     if(!await canReadBuilderV2File(v2App,record))return new NextResponse('Forbidden',{status:403})
     const file=await getFile(key)
     if(!file)return new NextResponse('Not found',{status:404})
-    return new NextResponse(file.body,{headers:fileDeliveryHeaders(record.name,file.mime,record.mime)})
+    return new NextResponse(file.body,{headers:fileDeliveryHeaders(record.name,file.mime,record.mime,{scrubbed})})
   }
   const member = await currentMember()
   let allowed = record.conversationId || record.messageId ? await canReadConversationFile(record, new URL(_request.url).searchParams.get('business') === '1') : Boolean(member?.workspaceId===record.workspaceId&&(!restrictedTables(member)||(record.tableId?tablePermission(member,record.tableId)!=='none':record.uploadedBy===member.userId)))
@@ -57,5 +60,5 @@ export async function GET(_request: Request, { params }: { params: Promise<{ key
   if (!allowed) return new NextResponse('Forbidden', { status: 403 })
   const file = await getFile(key)
   if (!file) return new NextResponse('Not found', { status: 404 })
-  return new NextResponse(file.body, { headers: fileDeliveryHeaders(record.name, file.mime, record.mime) })
+  return new NextResponse(file.body, { headers: fileDeliveryHeaders(record.name, file.mime, record.mime, { scrubbed }) })
 }

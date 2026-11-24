@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Attachment } from '@tableapp/schema'
-import { FileUpload, fileUrl, isImage } from '@/components/file-upload'
+import { FileUpload, fileUrl, isAttachmentAvailable, isImage } from '@/components/file-upload'
 import { changeConversationMessageAction, closeConversationAction, conversationMessageHistoryAction, markConversationReadAction, readConversationAction, sendConversationAction } from '@/app/conversation-actions'
 import { GENERAL_CONVERSATION_TABLE, type ConversationMessage, type ConversationPage } from '@/lib/conversation-types'
 
@@ -79,8 +79,16 @@ export function ConversationPanel({ slug, tableId, rowId, configured, business =
       <div className="space-y-3" aria-live="polite">{page.messages.map(message => <article key={message.id} className={`rounded-xl p-3 ${message.mine ? 'bg-sage-50' : 'bg-sand-50'}`}>
         <div className="mb-1 flex flex-wrap justify-between gap-2 text-xs text-ink-muted"><span>{message.mine ? 'Вы' : message.author}</span><time dateTime={message.createdAt}>{date(message.createdAt)}{message.edited && !message.deleted ? ' · изменено' : ''}</time></div>
         <p className="whitespace-pre-wrap break-words text-sm">{message.deleted ? 'Сообщение удалено' : message.body}</p>
-        {!message.deleted ? <><div className="flex flex-wrap gap-2">{message.files.filter(file => isImage(file.mime)).map(file => <img key={file.id} src={fileUrl(file.key, business)} alt={file.name} className="h-16 w-16 rounded-lg object-cover" />)}</div>
-          <div className="mt-2 flex flex-wrap gap-2">{message.files.map(file => <a key={file.id} href={fileUrl(file.key, business)} target="_blank" rel="noreferrer" className="max-w-full break-words rounded-lg border border-sand-200 bg-white px-2 py-1 text-xs text-sage-700 underline">{file.name}</a>)}</div></> : null}
+        {!message.deleted ? <><div className="flex flex-wrap gap-2">{message.files.filter(file => isAttachmentAvailable(file) && isImage(file.mime)).map(file => <img key={file.id} src={fileUrl(file.key, business)} alt={file.name} className="h-16 w-16 rounded-lg object-cover" />)}</div>
+          <div className="mt-2 flex flex-wrap gap-2">{message.files.map(file => {
+            if (file.scanStatus === 'infected') {
+              return <span key={file.id} className="max-w-full break-words rounded-lg border border-[#C4623A]/40 bg-[#C4623A]/10 px-2 py-1 text-xs text-[#C4623A]">Файл заблокирован · {file.name}</span>
+            }
+            if (file.scanStatus === 'pending') {
+              return <span key={file.id} className="max-w-full break-words rounded-lg border border-sage-200 bg-sage-50 px-2 py-1 text-xs text-sage-800">Проверяется · {file.name}</span>
+            }
+            return <a key={file.id} href={fileUrl(file.key, business)} target="_blank" rel="noreferrer" className="max-w-full break-words rounded-lg border border-sand-200 bg-white px-2 py-1 text-xs text-sage-700 underline">{file.name}</a>
+          })}</div></> : null}
         <div className="mt-2 flex flex-wrap gap-3 text-xs text-ink-muted">
           {message.canModerate && message.mine ? <button type="button" disabled={busy} onClick={() => { setEditing(message); setEditBody(message.body); setDeleting(null) }}>Изменить</button> : null}
           {message.canModerate ? <button type="button" disabled={busy} onClick={() => { setDeleting(message.id); setEditing(null) }}>Удалить</button> : null}
@@ -109,13 +117,13 @@ export function ConversationPanel({ slug, tableId, rowId, configured, business =
       {!clientGeneralDisabled && (!page.closed || general && !page.staff) ? <form className="space-y-3 border-t border-sand-200 pt-3" onSubmit={event => {
         event.preventDefault()
         if (sending.current || uploadInProgress.current) return
-        void mutate(() => sendConversationAction(slug, tableId, rowId, { body, requestId: request.current, fileIds: internal ? [] : files.map(file => file.id), internal }, business),
+        void mutate(() => sendConversationAction(slug, tableId, rowId, { body, requestId: request.current, fileIds: internal ? [] : files.filter(isAttachmentAvailable).map(file => file.id), internal }, business),
           () => { setBody(''); if (!internal) setFiles([]); request.current = crypto.randomUUID() })
       }}>
         {page.staff ? <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={internal} disabled={busy} onChange={event => { request.current = crypto.randomUUID(); setInternal(event.target.checked) }} />Внутренняя заметка — только сотрудникам</label> : null}
-        <label className="block text-sm">{internal ? 'Заметка' : 'Сообщение'}<textarea value={body} disabled={busy} onChange={event => { request.current = crypto.randomUUID(); setBody(event.target.value) }} rows={3} maxLength={4000} required={!files.length || internal} className="mt-1 w-full rounded-xl border border-sand-200 p-3 text-sm" /></label>
+        <label className="block text-sm">{internal ? 'Заметка' : 'Сообщение'}<textarea value={body} disabled={busy} onChange={event => { request.current = crypto.randomUUID(); setBody(event.target.value) }} rows={3} maxLength={4000} required={!files.filter(isAttachmentAvailable).length || internal} className="mt-1 w-full rounded-xl border border-sand-200 p-3 text-sm" /></label>
         {!internal ? <FileUpload value={files} maxCount={5} compact disabled={busy} conversation={{ slug, tableId, rowId, business }} onChange={value => { request.current = crypto.randomUUID(); setFiles(value) }} onBusyChange={value => { uploadInProgress.current = value; setUploading(value) }} /> : null}
-        <button type="submit" disabled={busy || uploading || !body.trim() && (!files.length || internal)} className="rounded-xl bg-sage-700 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-40">{busy ? 'Сохранение…' : internal ? 'Сохранить заметку' : 'Отправить сообщение'}</button>
+        <button type="submit" disabled={busy || uploading || !body.trim() && (!files.filter(isAttachmentAvailable).length || internal)} className="rounded-xl bg-sage-700 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-40">{busy ? 'Сохранение…' : internal ? 'Сохранить заметку' : 'Отправить сообщение'}</button>
       </form> : null}
     </>}
   </section>

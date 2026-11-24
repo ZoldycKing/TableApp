@@ -12,7 +12,8 @@ export function cleanupPredicate(now = new Date()) {
     and not exists (select 1 from ${appConfigVersions} where ${appConfigVersions.workspaceId} = ${attachments.workspaceId}
       and ${appConfigVersions.definition} #>> '{theme,logoKey}' = ${attachments.key})`)
   return or(eq(attachments.state, 'deleting'),
-    and(eq(attachments.state, 'uploading'), lt(attachments.createdAt, new Date(now.getTime() - 60 * 60 * 1000))),
+    and(or(eq(attachments.state, 'uploading'), eq(attachments.state, 'scanning')), lt(attachments.createdAt, new Date(now.getTime() - 60 * 60 * 1000))),
+    and(eq(attachments.state, 'blocked'), lt(attachments.createdAt, new Date(now.getTime() - 24 * 60 * 60 * 1000))),
     and(eq(attachments.state, 'ready'), eq(attachments.referenced, false), isNull(attachments.tableId),
       isNull(attachments.rowId), isNull(attachments.fieldId), isNull(attachments.messageId),
       lt(attachments.createdAt, new Date(now.getTime() - 24 * 60 * 60 * 1000)), noLogoReference))

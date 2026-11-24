@@ -257,6 +257,21 @@ describe.skipIf(!process.env.DATABASE_URL)('conversation persistence and access 
     await expect(database.db.insert(database.conversations).values({ id: `con_${randomUUID()}`, workspaceId: second.workspaceId, appId: second.app.id, moduleId: second.app.modules![0]!.id, tableId: first.tableId, rowId: first.rowId, customerId: profile!.id })).rejects.toThrow()
     await expect(database.db.insert(database.conversationMessages).values({ id: `msg_${randomUUID()}`, workspaceId: second.workspaceId, conversationId: page.conversationId!, authorId: profile!.id, authorKind: 'client', authorName: '', body: '', requestId: randomUUID() })).rejects.toThrow()
   })
+  it('discards an unsent staged attachment from the composer without leaving an orphan', async () => {
+    const first = await business(); await signIn(clientEmail); const attachment = await file(first)
+    expect((await download(attachment.key)).status).toBe(200)
+    const { DELETE } = await import('@/app/api/conversations/files/route')
+    const removed = await DELETE(new Request('http://localhost/api/conversations/files', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: first.app.slug, tableId: first.tableId, rowId: first.rowId, fileId: attachment.id }),
+    }))
+    expect(removed.status).toBe(200)
+    expect(await database.db.select().from(database.attachments).where(eq(database.attachments.id, attachment.id))).toEqual([])
+    expect(storage.deleteFile).toHaveBeenCalledWith(attachment.key)
+    expect((await download(attachment.key)).status).toBe(404)
+    await expectDenied(() => send(first, 'После удаления', randomUUID(), [attachment.id]))
+  })
   it('protects pending and attached files, denies reuse and hides deleted-message files', async () => {
     const first = await business(), other = await business(); await signIn(clientEmail); const attachment = await file(first)
     expect((await download(attachment.key)).status).toBe(200)

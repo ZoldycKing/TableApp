@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { prepareConversationUpload } from '@/lib/conversations'
+import { discardConversationUpload, prepareConversationUpload } from '@/lib/conversations'
 import { storeAttachment } from '@/lib/file-upload'
 import { MAX_FILE_BYTES, MAX_FILE_MB, validateFileContent, validateFileMetadata } from '@/lib/file-policy'
 import { RowWriteError } from '@/lib/row-mutations'
@@ -26,5 +26,29 @@ export async function POST(request: Request) {
     if (error instanceof RowWriteError) return NextResponse.json({ ok: false, error: error.message }, { status: error.code === 'invalid' ? 400 : 403 })
     if (isPlanLimitError(error)) return NextResponse.json({ ok: false, error: explainToCustomer() }, { status: 413 })
     return NextResponse.json({ ok: false, error: 'Не удалось сохранить файл. Попробуйте ещё раз' }, { status: 503 })
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const body = await request.json() as {
+      fileId?: unknown
+      slug?: unknown
+      tableId?: unknown
+      rowId?: unknown
+      business?: unknown
+    }
+    const { fileId, slug, tableId, rowId, business } = body
+    if (typeof fileId !== 'string' || typeof slug !== 'string' || typeof tableId !== 'string' || typeof rowId !== 'string') {
+      return NextResponse.json({ ok: false, error: 'Файл или обращение не указаны' }, { status: 400 })
+    }
+    if (business !== undefined && business !== true && business !== false) {
+      return NextResponse.json({ ok: false, error: 'Некорректный режим загрузки' }, { status: 400 })
+    }
+    await discardConversationUpload(slug, tableId, rowId, fileId, business === true)
+    return NextResponse.json({ ok: true }, { headers: { 'Cache-Control': 'private, no-store' } })
+  } catch (error) {
+    if (error instanceof RowWriteError) return NextResponse.json({ ok: false, error: error.message }, { status: error.code === 'invalid' ? 400 : 403 })
+    return NextResponse.json({ ok: false, error: 'Не удалось удалить файл. Попробуйте ещё раз' }, { status: 503 })
   }
 }

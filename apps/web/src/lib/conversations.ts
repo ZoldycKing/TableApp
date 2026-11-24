@@ -12,6 +12,7 @@ import { hasRole, moduleForTable, workflowRole } from './module-access'
 import { legacyAppModules } from './app-modules'
 import { conversationResource } from './conversation-resource'
 import { conversationContextTitle } from './conversation-context'
+import { removeTrackedAttachment } from './file-upload'
 import { RowWriteError, writeRows } from './row-mutations'
 import type { Transaction } from './db-transaction'
 import type { ConversationPage } from './conversation-types'
@@ -215,6 +216,32 @@ export async function prepareConversationUpload(slug: string, tableId: string, r
     await limits(access, thread!.id, tx)
     return { workspaceId: access.app.workspaceId, conversationId: thread!.id, uploadedBy: access.uploadId, origin: access.owner ? 'manual' as const : 'runtime' as const }
   })
+}
+
+/** Drop an unsent staged attachment from the composer so it does not linger until cleanup. */
+export async function discardConversationUpload(slug: string, tableId: string, rowId: string, fileId: string, business = false) {
+  if (!validReference(fileId)) throw denied()
+  const initial = await conversationAccess(slug, tableId, rowId, db, business)
+  const claimed = await writeRows(initial.app.workspaceId, async ({ tx }) => {
+    const access = await conversationAccess(slug, tableId, rowId, tx, business), thread = await threadFor(access, tx)
+    if (!thread) throw denied()
+    const [file] = await tx.select().from(attachments).where(and(
+      eq(attachments.id, fileId),
+      eq(attachments.workspaceId, access.app.workspaceId),
+      eq(attachments.conversationId, thread.id),
+      eq(attachments.uploadedBy, access.uploadId),
+      isNull(attachments.messageId),
+      eq(attachments.referenced, false),
+      isNull(attachments.tableId),
+      isNull(attachments.rowId),
+      isNull(attachments.fieldId),
+    )).for('update')
+    if (!file || file.state === 'deleting') throw denied()
+    await tx.update(attachments).set({ state: 'deleting' }).where(eq(attachments.id, file.id))
+    return { id: file.id, key: file.key, workspaceId: file.workspaceId }
+  })
+  await removeTrackedAttachment(claimed.id, claimed.workspaceId, claimed.key)
+  return { id: claimed.id }
 }
 /** Pending files belong only to their uploader; attached files follow current conversation permissions. */
 export async function canReadConversationFile(file: typeof attachments.$inferSelect, business = false) {

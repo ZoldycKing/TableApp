@@ -55,46 +55,14 @@ const open = async (page: Page, view: string, scheme?: 'light' | 'dark', phone =
 
 const browser = await chromium.launch({ headless: true })
 
-type Shot = {
-  view: string
-  name: string
-  scheme?: 'light' | 'dark'
-  phone?: boolean
-  openAssignee?: boolean
-  openStatus?: boolean
-  openPhoneFilters?: boolean
-  fullPage?: boolean
-}
-
-const desktop: Shot[] = [
-  { view: 'clients', name: 'clients-desktop-1440.png' },
-  { view: 'client-card', name: 'client-page-desktop-1440.png', fullPage: true },
-  { view: 'queue', name: 'tickets-desktop-1440.png' },
-  { view: 'queue', name: 'tickets-status-desktop-1440.png', openStatus: true },
-  { view: 'queue', name: 'tickets-dark-1440.png', scheme: 'dark' },
-]
-
-const phone: Shot[] = [
-  { view: 'clients', name: 'clients-phone-390.png', phone: true },
-  { view: 'client-card', name: 'client-page-phone-390.png', phone: true, fullPage: true },
-  { view: 'queue', name: 'tickets-phone-390.png', phone: true },
-  { view: 'queue', name: 'tickets-phone-filters-390.png', phone: true, openPhoneFilters: true },
-]
-
 {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'ru-RU', timezoneId: 'Europe/Moscow', deviceScaleFactor: 1 })
   const page = await context.newPage()
   page.setDefaultTimeout(30000)
-  for (const shot of desktop) {
-    await open(page, shot.view, shot.scheme, false)
-    if (shot.openStatus) {
-      await page.getByLabel('Статус', { exact: true }).click()
-      await page.waitForSelector('[role="listbox"][aria-label="Статус"]', { timeout: 5000 })
-      await page.locator('[role="listbox"][aria-label="Статус"]').getByRole('option', { name: 'В работе' }).click()
-      await page.waitForTimeout(200)
-    }
-    await save(page, shot.name, shot.fullPage)
-  }
+  await open(page, 'clients')
+  await save(page, 'clients-desktop-1440.png')
+  await open(page, 'client-card')
+  await save(page, 'client-page-desktop-1440.png', true)
   await context.close()
 }
 
@@ -102,15 +70,10 @@ const phone: Shot[] = [
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: 'ru-RU', timezoneId: 'Europe/Moscow', deviceScaleFactor: 2 })
   const page = await context.newPage()
   page.setDefaultTimeout(30000)
-  for (const shot of phone) {
-    await open(page, shot.view, shot.scheme, true)
-    if (shot.openPhoneFilters) {
-      await page.getByRole('button', { name: /Фильтры/ }).click()
-      await page.waitForSelector('[role="dialog"][aria-label="Фильтры"]', { timeout: 5000 })
-      await page.waitForTimeout(200)
-    }
-    await save(page, shot.name, shot.fullPage)
-  }
+  await open(page, 'queue', undefined, true)
+  await save(page, 'tickets-phone-390.png')
+  await open(page, 'client-card', undefined, true)
+  await save(page, 'client-page-phone-390.png', true)
   await context.close()
 }
 

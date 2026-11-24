@@ -447,6 +447,46 @@ function AssigneeFilter(props: {
   </div>
 }
 
+function TicketViewTabs(props: {
+  phone: boolean
+  view: SupportTicketViewId
+  counts: Record<SupportTicketViewId, number>
+  onView: (view: SupportTicketViewId) => void
+}) {
+  const scroller = useRef<HTMLDivElement>(null)
+  const [fadeLeft, setFadeLeft] = useState(false)
+  const [fadeRight, setFadeRight] = useState(true)
+  useEffect(() => {
+    const el = scroller.current
+    if (!el || !props.phone) return
+    const update = () => {
+      setFadeLeft(el.scrollLeft > 4)
+      setFadeRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4)
+    }
+    update()
+    el.addEventListener('scroll', update, { passive: true })
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(update) : null
+    ro?.observe(el)
+    return () => { el.removeEventListener('scroll', update); ro?.disconnect() }
+  }, [props.phone, props.counts])
+  return <div
+    className={css.viewTabsWrap}
+    data-view-tabs
+    data-phone={props.phone || undefined}
+    data-fade-left={props.phone && fadeLeft || undefined}
+    data-fade-right={props.phone && fadeRight || undefined}
+  >
+    <div className={css.viewTabs} ref={scroller} role="tablist" aria-label="Представления тикетов">
+      {SUPPORT_TICKET_VIEWS.map(item => (
+        <button key={item.id} type="button" role="tab" className={css.viewTab} aria-selected={props.view === item.id} aria-label={`${item.label}, ${props.counts[item.id] ?? 0}`} title={item.label} onClick={() => props.onView(item.id)}>
+          <span>{item.label}</span>
+          <em className={css.viewCount}>{props.counts[item.id] ?? 0}</em>
+        </button>
+      ))}
+    </div>
+  </div>
+}
+
 function MultiSelectFilter(props: {
   label: string
   values: string[]
@@ -628,16 +668,7 @@ function TicketList(props: ScreenProps) {
           </div>
           <ClientPreviewMenu clients={clients} value={previewEmail} open={previewOpen} onOpen={setPreviewOpen} onChange={setPreviewEmail} />
         </div> : null}
-        {queueDesk ? <div className={css.viewTabsWrap} data-view-tabs data-phone={device === 'phone' || undefined}>
-          <div className={css.viewTabs} role="tablist" aria-label="Представления тикетов">
-            {SUPPORT_TICKET_VIEWS.map(item => (
-              <button key={item.id} type="button" role="tab" className={css.viewTab} aria-selected={view === item.id} aria-label={`${item.label}, ${viewCounts[item.id] ?? 0}`} title={item.label} onClick={() => setView(item.id)}>
-                <span>{item.label}</span>
-                <em className={css.viewCount}>{viewCounts[item.id] ?? 0}</em>
-              </button>
-            ))}
-          </div>
-        </div> : null}
+        {queueDesk ? <TicketViewTabs phone={device === 'phone'} view={view} counts={viewCounts} onView={setView} /> : null}
         {queueDesk && device !== 'phone' ? <>
           <div className={css.toolbar} data-ticket-toolbar>
             <ShellSearchField value={filter.search} onChange={search => updateFilter({ search })} label="Поиск обращений" placeholder="Тема, клиент или номер" />
@@ -653,7 +684,7 @@ function TicketList(props: ScreenProps) {
             <span>Фильтры</span>
             {activeFilterCount > 0 ? <em className={css.filterCount}>{activeFilterCount}</em> : null}
           </button>
-          <ShellSearchField value={filter.search} onChange={search => updateFilter({ search })} label="Поиск обращений" placeholder="Тема, клиент или номер" />
+          <ShellSearchField value={filter.search} onChange={search => updateFilter({ search })} label="Поиск обращений" placeholder="Поиск" />
         </div> : null}
         {queueDesk && device === 'phone' && (filter.assigneeEmail || filter.statuses.length || filter.priorities.length || filter.ageBucket) ? <div className={css.activeChips} data-phone role="status">{activeChips}</div> : null}
         {props.loading ? <p className={css.status} role="status">Загружаем обращения…</p> : null}
@@ -1117,7 +1148,7 @@ function ClientDirectory(props: ScreenProps) {
           </li>)}
         </ul> : null}
         {sorted.length && device !== 'phone' ? <div className={css.tableWrap} data-clients-table>
-          <table className={css.table} data-columns={6}>
+          <table className={css.table} data-columns={7}>
             <caption className={css.quiet}>Список клиентов</caption>
             <thead><tr>
               <th>{sortButton('name', 'Клиент')}</th>
@@ -1126,23 +1157,35 @@ function ClientDirectory(props: ScreenProps) {
               <th>{sortButton('open', 'Открытые')}</th>
               <th>{sortButton('total', 'Всего обращений')}</th>
               <th>{sortButton('last', 'Последнее обращение')}</th>
+              <th><span className={css.srOnly}>Открыть</span></th>
             </tr></thead>
             <tbody>
-              {sorted.map(row => <tr key={row.id}>
+              {sorted.map(row => <tr
+                key={row.id}
+                className={css.clientTableRow}
+                tabIndex={0}
+                role="link"
+                aria-label={row.name}
+                onClick={() => openClient(row.id)}
+                onKeyDown={event => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault()
+                    openClient(row.id)
+                  }
+                }}
+              >
                 <td>
-                  <button type="button" className={`${css.rowButton} ${css.clientRowButton}`} onClick={() => openClient(row.id)}>
-                    <span className={css.clientIdentity}>
-                      <span className={css.avatar} data-size="sm" data-client aria-hidden="true"><ProtoIcon name="user" size={14} /></span>
-                      <span className={css.person}>{row.name}<span>{row.email || 'Почта не указана'}</span></span>
-                    </span>
-                    <ProtoIcon name="arrow" size={14} />
-                  </button>
+                  <span className={css.clientIdentity}>
+                    <span className={css.avatar} data-size="sm" data-client aria-hidden="true"><ProtoIcon name="user" size={14} /></span>
+                    <span className={css.person}>{row.name}<span>{row.email || 'Почта не указана'}</span></span>
+                  </span>
                 </td>
                 <td>{row.company || '—'}</td>
                 <td>{row.phone || '—'}</td>
                 <td><span className={css.openCount} data-overdue={row.overdueOpen > 0 || undefined}>{row.open}</span></td>
                 <td>{row.total}</td>
                 <td>{row.lastLabel}</td>
+                <td className={css.chevronCol}><span className={css.rowChevron} aria-hidden="true">›</span></td>
               </tr>)}
             </tbody>
           </table>
@@ -1194,41 +1237,50 @@ function ClientDetail(props: ScreenProps) {
     >
       <div className={css.clientDetail}>
         {message ? <p role="status">{message}</p> : null}
-        <DetailSection title="Контакты">
-          <dl className={css.clientFacts}>
-            <div><dt>Почта</dt><dd>{email || '—'}</dd></div>
-            <div><dt>Телефон</dt><dd>{phone || '—'}</dd></div>
-            <div><dt>Компания</dt><dd>{company || '—'}</dd></div>
-          </dl>
-        </DetailSection>
-        <DetailSection title="Заметка — видна только службе">
-          <div className={css.noteBlock}>
-            <p className={note ? css.clientNote : css.quiet}>{note || 'Заметки пока нет.'}</p>
-            <button type="button" className={css.mine} onClick={() => setNoteOpen(true)}>{note ? 'Изменить' : 'Добавить'}</button>
+        <div className={css.clientDetailMain}>
+          <aside className={css.clientSidebar}>
+            <DetailSection title="Контакты">
+              <dl className={css.clientFacts}>
+                <div><dt>Почта</dt><dd>{email || '—'}</dd></div>
+                <div><dt>Телефон</dt><dd>{phone || '—'}</dd></div>
+                <div><dt>Компания</dt><dd>{company || '—'}</dd></div>
+              </dl>
+            </DetailSection>
+            <DetailSection title="Заметка — видна только службе">
+              <div className={css.noteBlock}>
+                <p className={note ? css.clientNote : css.quiet}>{note || 'Заметки пока нет.'}</p>
+                <button type="button" className={css.mine} onClick={() => setNoteOpen(true)}>{note ? 'Изменить' : 'Добавить'}</button>
+              </div>
+            </DetailSection>
+            <DetailSection title="Сводка">
+              <div className={css.clientStats}>
+                <p><strong>{open.length}</strong><span>Открытые</span></p>
+                <p><strong>{tickets.length}</strong><span>Всего</span></p>
+                <p><strong>{formatDuration(avgMs)}</strong><span>Среднее решение</span></p>
+              </div>
+            </DetailSection>
+          </aside>
+          <div className={css.clientHistoryCol}>
+            <DetailSection title="История обращений">
+              {!tickets.length ? <p className={css.quiet}>Обращений пока нет.</p> : <ul className={css.clientHistory}>
+                {tickets.map(item => <li key={item.id}>
+                  <button type="button" className={css.historyRow} onClick={() => props.onNavigate?.(props.kit.ticketScreenId, item.id)}>
+                    <span className={css.historyMain}>
+                      <span className={css.subject}>{item.subject || 'Без темы'}</span>
+                      <span className={css.number}>{item.number}</span>
+                      <span className={css.cardFacts}><StatusBadge name={item.status} /><PriorityBadge name={item.priority} /></span>
+                      <span className={css.quiet}>{formatDate(item.updatedAt || item.createdAt)}</span>
+                    </span>
+                    <span className={css.historyAssignee}>
+                      {item.assigneeName ? <SupportPerson name={item.assigneeName} size={24} /> : <span className={css.avatar} data-size="sm" data-client aria-hidden="true"><ProtoIcon name="user" size={14} /></span>}
+                      <span>{item.assigneeName || 'Не назначен'}</span>
+                    </span>
+                  </button>
+                </li>)}
+              </ul>}
+            </DetailSection>
           </div>
-        </DetailSection>
-        <DetailSection title="Сводка">
-          <div className={css.clientStats}>
-            <p><strong>{open.length}</strong><span>Открытые</span></p>
-            <p><strong>{tickets.length}</strong><span>Всего</span></p>
-            <p><strong>{formatDuration(avgMs)}</strong><span>Среднее решение</span></p>
-          </div>
-        </DetailSection>
-        <DetailSection title="История обращений">
-          {!tickets.length ? <p className={css.quiet}>Обращений пока нет.</p> : <ul className={css.clientHistory}>
-            {tickets.map(item => <li key={item.id}>
-              <button type="button" className={css.historyRow} onClick={() => props.onNavigate?.(props.kit.ticketScreenId, item.id)}>
-                <span className={css.historyMain}>
-                  <span className={css.subject}>{item.subject || 'Без темы'}</span>
-                  <span className={css.number}>{item.number}</span>
-                  <span className={css.cardFacts}><StatusBadge name={item.status} /><PriorityBadge name={item.priority} /></span>
-                  <span className={css.quiet}>{formatDate(item.updatedAt || item.createdAt)}{item.assigneeName ? ` · ${item.assigneeName}` : ''}</span>
-                </span>
-                {item.assigneeName ? <SupportPerson name={item.assigneeName} size={28} /> : <span className={css.avatar} data-size="sm" data-client aria-hidden="true"><ProtoIcon name="user" size={14} /></span>}
-              </button>
-            </li>)}
-          </ul>}
-        </DetailSection>
+        </div>
       </div>
     </DetailCardShell>
     {noteOpen ? <ClientNoteDialog {...props} client={client} note={note} onClose={() => setNoteOpen(false)} onMessage={setMessage} /> : null}

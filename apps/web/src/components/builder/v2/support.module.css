@@ -194,7 +194,7 @@
 .priority { color: var(--v2-muted, var(--sc-text-2)); font-size: 14px; line-height: 1.3; overflow-wrap: anywhere; }
 .priority[data-urgent] { color: var(--v2-ink, var(--sc-text)); font-weight: 700; }
 .deadline { display: grid; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
-.late { color: var(--sc-st-overdue-text); font-size: 13px; font-weight: 650; line-height: 1.3; }
+.late { color: var(--sc-st-overdue-text, #A93232); font-size: 13px; font-weight: 650; line-height: 1.3; }
 .badges { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
 .badge {
   display: inline-flex; align-items: center; min-height: 26px; padding: 2px 10px; border-radius: 999px;
@@ -367,20 +367,30 @@
   border-radius: 0; background: transparent; color: inherit; font: inherit; cursor: pointer;
 }
 .clientCardMain { display: grid; gap: 8px; min-width: 0; flex: 1; }
-.clientRowButton { display: flex !important; flex-direction: row; align-items: center; justify-content: space-between; gap: 10px; }
 .clientIdentity { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .clientIdentity > span:last-child { display: grid; gap: 1px; min-width: 0; }
 .clientIdentity strong { font-size: 15px; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
 .clientCardCounts { display: flex; flex-wrap: wrap; gap: 8px 12px; font-size: 13px; font-variant-numeric: tabular-nums; }
-.clientCardCounts [data-overdue] { color: #C4623A; font-weight: 700; }
+.clientCardCounts [data-overdue] { color: var(--sc-st-overdue-text, #A93232); font-weight: 700; }
 .openCount { font-variant-numeric: tabular-nums; font-weight: 700; }
-.openCount[data-overdue] { color: #C4623A; }
+.openCount[data-overdue] { color: var(--sc-st-overdue-text, #A93232); }
+.clientTableRow { cursor: pointer; }
+.clientTableRow:hover, .clientTableRow:focus-visible {
+  background: color-mix(in srgb, var(--v2-ink, var(--sc-text)) 4%, transparent);
+}
+.clientTableRow:focus-visible { outline: 2px solid var(--sc-focus, var(--v2-accent)); outline-offset: -2px; }
+.chevronCol { width: 2.5rem; padding-inline: 8px 16px !important; text-align: right; vertical-align: middle !important; }
+.rowChevron {
+  display: inline-block; color: var(--v2-muted, var(--sc-text-2)); font-size: 1.35rem; font-weight: 400; line-height: 1;
+}
 .sortHead {
   display: inline-flex; align-items: center; gap: 4px; padding: 0; border: 0; background: transparent;
   color: inherit; font: inherit; font-size: inherit; font-weight: 700; cursor: pointer;
 }
 .sortHead[data-active] { color: var(--v2-accent, #3F6B5C); }
 .clientDetail { display: grid; gap: 0; min-width: 0; }
+.clientDetailMain { display: grid; gap: 0; min-width: 0; }
+.clientSidebar, .clientHistoryCol { display: grid; gap: 0; min-width: 0; align-content: start; }
 .clientFacts { display: grid; gap: 10px; margin: 0; }
 .clientFacts > div { display: grid; gap: 2px; min-width: 0; }
 .clientFacts dt { color: var(--v2-muted, var(--sc-text-2)); font-size: 12px; font-weight: 650; }
@@ -400,9 +410,23 @@
   color: inherit; font: inherit; text-align: left; cursor: pointer;
 }
 .historyMain { display: grid; gap: 4px; min-width: 0; flex: 1; }
+.historyAssignee {
+  display: inline-flex; align-items: center; gap: 8px; flex: none; min-width: 0; max-width: 11rem;
+  color: var(--v2-muted, var(--sc-text-2)); font-size: 13px; line-height: 1.3;
+}
+.historyAssignee > span:last-child { min-width: 0; overflow-wrap: anywhere; }
+@container builder-app (min-width: 900px) {
+  .clientDetailMain {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+    gap: 8px 24px;
+    align-items: start;
+  }
+  .clientSidebar .clientStats { grid-template-columns: 1fr; }
+}
 @container builder-app (max-width: 560px) {
   .clientStats { grid-template-columns: 1fr; }
   .toolbar, .activeChips { padding-inline: 16px; }
+  .historyAssignee { max-width: 8.5rem; }
 }
 @container builder-app (min-width: 800px) {
   .tableWrap { display: block; }
@@ -418,13 +442,26 @@
 }
 
 .viewTabsWrap[data-phone] {
-  padding: 0;
-  -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 36px), transparent 100%);
-  mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 36px), transparent 100%);
+  position: relative; padding: 0; overflow: hidden;
 }
+.viewTabsWrap[data-phone]::before,
+.viewTabsWrap[data-phone]::after {
+  content: ''; position: absolute; top: 0; bottom: 8px; width: 52px; z-index: 3;
+  pointer-events: none; opacity: 0; transition: opacity .15s ease;
+}
+.viewTabsWrap[data-phone]::before {
+  left: 0;
+  background: linear-gradient(to right, var(--shell-surface, var(--v2-surface, #fff)) 0%, var(--shell-surface, var(--v2-surface, #fff)) 35%, transparent 100%);
+}
+.viewTabsWrap[data-phone]::after {
+  right: 0;
+  background: linear-gradient(to left, var(--shell-surface, var(--v2-surface, #fff)) 0%, var(--shell-surface, var(--v2-surface, #fff)) 35%, transparent 100%);
+}
+.viewTabsWrap[data-phone][data-fade-left]::before { opacity: 1; }
+.viewTabsWrap[data-phone][data-fade-right]::after { opacity: 1; }
 .viewTabsWrap[data-phone] .viewTabs {
-  gap: 8px; scroll-snap-type: x mandatory; scroll-padding-inline: 16px 44px;
-  padding: 4px 44px 8px 16px;
+  gap: 8px; scroll-snap-type: x mandatory; scroll-padding-inline: 16px 48px;
+  padding: 4px 48px 8px 16px;
 }
 .viewTabsWrap[data-phone] .viewTab { font-size: 12px; padding: 6px 10px; scroll-snap-align: start; }
 
@@ -478,7 +515,7 @@
 .ticketCardTop .subject { flex: 1; min-width: 0; }
 .ticketCardCopy { display: grid; gap: 2px; min-width: 0; flex: 1; }
 .ticketCardLine { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: baseline; min-width: 0; }
-.lateLine { display: block; margin: 2px 0 0; color: #C4623A; font-size: 13px; font-weight: 650; line-height: 1.3; text-align: left; }
+.lateLine { display: block; margin: 2px 0 0; color: var(--sc-st-overdue-text, #A93232); font-size: 13px; font-weight: 650; line-height: 1.3; text-align: left; }
 .ticketCardMenu { position: absolute; right: 10px; top: 10px; z-index: 3; }
 .ticketCard .card { padding-right: 48px; }
 .rowActions { width: 3rem; padding-inline: 8px !important; vertical-align: middle !important; }

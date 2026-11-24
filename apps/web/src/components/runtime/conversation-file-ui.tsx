@@ -1,11 +1,12 @@
 'use client'
 
+import type { ReactNode } from 'react'
 import type { Attachment } from '@tableapp/schema'
 import { ProtoIcon } from '@/components/builder/prototype/icons'
 import { filesPublicOrigin, MAX_FILE_MB, isInlineImage } from '@/lib/file-policy'
 
 export function fileUrl(key: string, business = false): string {
-  if (key.startsWith('data:') || key.startsWith('blob:')) return key
+  if (key.startsWith('data:') || key.startsWith('blob:') || key.startsWith('/') || /^https?:/i.test(key)) return key
   const origin = filesPublicOrigin()
   return `${origin}/api/files/${key}?v=2${business ? '&business=1' : ''}`
 }
@@ -186,6 +187,51 @@ export function ConversationUploadAlert({ alert, onClose }: { alert: UploadAlert
   )
 }
 
+export function ComposerModeSegment({
+  internal,
+  disabled,
+  onChange,
+}: {
+  internal: boolean
+  disabled?: boolean
+  onChange: (internal: boolean) => void
+}) {
+  return (
+    <div
+      role="radiogroup"
+      aria-label="Режим ответа"
+      className="grid grid-cols-2 overflow-hidden rounded-[10px] border border-sand-200 bg-white"
+    >
+      <button
+        type="button"
+        role="radio"
+        aria-checked={!internal}
+        aria-pressed={!internal}
+        disabled={disabled}
+        onClick={() => onChange(false)}
+        className={`min-h-9 px-2 py-1.5 text-xs font-semibold leading-snug disabled:opacity-40 ${
+          !internal ? 'bg-sage-50 text-ink' : 'bg-transparent text-ink-muted'
+        }`}
+      >
+        Ответ клиенту
+      </button>
+      <button
+        type="button"
+        role="radio"
+        aria-checked={internal}
+        aria-pressed={internal}
+        disabled={disabled}
+        onClick={() => onChange(true)}
+        className={`min-h-9 border-l border-sand-200 px-2 py-1.5 text-xs font-semibold leading-snug disabled:opacity-40 ${
+          internal ? 'bg-[#C4623A]/12 text-[#8a3d28]' : 'bg-transparent text-ink-muted'
+        }`}
+      >
+        Внутренняя заметка
+      </button>
+    </div>
+  )
+}
+
 export function AutoGrowTextarea({
   value,
   onChange,
@@ -193,6 +239,8 @@ export function AutoGrowTextarea({
   required,
   label,
   maxLength = 4000,
+  footer,
+  tone = 'default',
 }: {
   value: string
   onChange: (value: string) => void
@@ -200,28 +248,36 @@ export function AutoGrowTextarea({
   required?: boolean
   label: string
   maxLength?: number
+  footer?: ReactNode
+  tone?: 'default' | 'internal'
 }) {
+  const shell = tone === 'internal'
+    ? 'border-[#C4623A]/35 bg-[#C4623A]/08 focus-within:border-[#C4623A]/55'
+    : 'border-sand-200 bg-white focus-within:border-sage-400'
   return (
-    <label className="block text-sm">{label}
-      <textarea
-        value={value}
-        disabled={disabled}
-        required={required}
-        maxLength={maxLength}
-        rows={1}
-        aria-label={label}
-        onChange={(event) => {
-          onChange(event.target.value)
-          event.target.style.height = 'auto'
-          event.target.style.height = `${Math.min(event.target.scrollHeight, 220)}px`
-        }}
-        ref={(node) => {
-          if (!node) return
-          node.style.height = 'auto'
-          node.style.height = `${Math.min(Math.max(node.scrollHeight, 72), 220)}px`
-        }}
-        className="mt-1 max-h-[220px] min-h-[72px] w-full resize-none overflow-y-auto rounded-xl border border-sand-200 p-3 text-sm leading-relaxed outline-none focus:border-sage-400"
-      />
-    </label>
+    <div className={`rounded-xl border ${shell}`}>
+      <label className="block px-3 pt-2 text-xs font-medium text-ink-muted">{label}
+        <textarea
+          value={value}
+          disabled={disabled}
+          required={required}
+          maxLength={maxLength}
+          rows={1}
+          aria-label={label}
+          onChange={(event) => {
+            onChange(event.target.value)
+            event.target.style.height = 'auto'
+            event.target.style.height = `${Math.min(event.target.scrollHeight, 220)}px`
+          }}
+          ref={(node) => {
+            if (!node) return
+            node.style.height = 'auto'
+            node.style.height = `${Math.min(Math.max(node.scrollHeight, 72), 220)}px`
+          }}
+          className="mt-1 max-h-[220px] min-h-[72px] w-full resize-none overflow-y-auto bg-transparent pb-2 text-sm leading-relaxed text-ink outline-none"
+        />
+      </label>
+      {footer}
+    </div>
   )
 }

@@ -86,7 +86,14 @@ export function ConversationInbox({ slug, business = false, operator = false, ap
       <p className="max-w-lg text-sm text-ink-muted">{business ? 'Вопросы клиентов и переписка по заказам во всех приложениях пространства.' : operator ? 'Вопросы клиентов и переписка по заказам и записям, к которым у вас есть доступ.' : 'Вопросы бизнесу и переписка по вашим заказам и записям.'}</p>
       <div className="flex flex-wrap items-center gap-3">
         {customer && onAskQuestion ? <button type="button" onClick={onAskQuestion} className="rounded-xl bg-sage-700 px-4 py-2.5 text-sm font-medium text-white">Задать вопрос</button> : null}
-        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={unreadOnly} onChange={event => setUnreadOnly(event.target.checked)} />Только непрочитанные</label>
+        <button
+          type="button"
+          aria-pressed={unreadOnly}
+          onClick={() => setUnreadOnly(current => !current)}
+          className={`rounded-xl border px-3 py-2 text-sm font-medium ${unreadOnly ? 'border-sage-300 bg-sage-50 text-sage-800' : 'border-sand-200 bg-white text-ink-muted hover:border-sage-300'}`}
+        >
+          Только непрочитанные
+        </button>
       </div>
     </div>
     {error ? <div className="space-y-2"><p role="alert" className="text-sm text-red-700">{error}</p><button type="button" onClick={() => void load()} className="text-sm text-sage-700 underline">Попробовать ещё раз</button></div> : null}

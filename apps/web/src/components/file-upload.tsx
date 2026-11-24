@@ -1,7 +1,7 @@
 'use client'
 
 import type { Attachment } from '@tableapp/schema'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type MutableRefObject } from 'react'
 import { ProtoIcon } from '@/components/builder/prototype/icons'
 import { isInlineImage } from '@/lib/file-policy'
 import {
@@ -49,6 +49,9 @@ type FileUploadProps = {
   onBusyChange?: (busy: boolean) => void
   /** When set (conversation composer), errors are reported here instead of inline red text. */
   onUploadAlert?: (alert: UploadAlertInfo | null) => void
+  /** Conversation composer: chips only; open the picker via `attachRef`. */
+  chipsOnly?: boolean
+  attachRef?: MutableRefObject<{ open: () => void; busy: boolean } | null>
 }
 
 export function FileUpload(props: FileUploadProps) {
@@ -108,6 +111,8 @@ function FileUploadInput({
   onChange,
   onBusyChange,
   onUploadAlert,
+  chipsOnly = false,
+  attachRef,
 }: FileUploadProps) {
   const conversationMode = Boolean(conversation)
   const [busy, setBusy] = useState(false)
@@ -117,6 +122,11 @@ function FileUploadInput({
   const current = useRef({ value, maxCount, disabled, onChange, onBusyChange, onUploadAlert })
   current.current = { value, maxCount, disabled, onChange, onBusyChange, onUploadAlert }
   const flight = useRef<AbortController | null>(null)
+  useEffect(() => {
+    if (!attachRef) return
+    attachRef.current = { open: () => inputRef.current?.click(), busy }
+    return () => { if (attachRef.current?.busy === busy) attachRef.current = null }
+  }, [attachRef, busy])
   useEffect(() => () => {
     if (!flight.current) return
     flight.current.abort(); flight.current = null
@@ -176,24 +186,36 @@ function FileUploadInput({
   }
 
   if (conversationMode) {
+    const chips = (value.length > 0 || pending.length > 0) ? (
+      <>
+        {value.map((item) => (
+          <ConversationAttachmentChip
+            key={item.key}
+            item={item}
+            business={Boolean(conversation?.business)}
+            removable
+            disabled={disabled}
+            onRemove={() => { if (!current.current.disabled) change(current.current.value.filter((candidate) => candidate.key !== item.key)) }}
+          />
+        ))}
+        {pending.map((item) => <ConversationPendingChip key={item.id} name={item.name} />)}
+      </>
+    ) : null
+    const fileInput = <input ref={inputRef} type="file" multiple={maxCount > 1} disabled={busy || disabled} className="hidden" onChange={(event) => void pick(event.target.files)} />
+    if (chipsOnly) {
+      if (!chips && !(error && !onUploadAlert)) return fileInput
+      return (
+        <div className="flex flex-wrap gap-2 border-t border-sand-200/70 px-3 py-2">
+          {error && !onUploadAlert ? <p className="w-full text-xs text-red-700" role="alert">{error}</p> : null}
+          {chips}
+          {fileInput}
+        </div>
+      )
+    }
     return (
       <div className="space-y-2">
         {error && !onUploadAlert ? <p className="text-xs text-red-700" role="alert">{error}</p> : null}
-        {(value.length > 0 || pending.length > 0) ? (
-          <div className="flex flex-wrap gap-2">
-            {value.map((item) => (
-              <ConversationAttachmentChip
-                key={item.key}
-                item={item}
-                business={Boolean(conversation?.business)}
-                removable
-                disabled={disabled}
-                onRemove={() => { if (!current.current.disabled) change(current.current.value.filter((candidate) => candidate.key !== item.key)) }}
-              />
-            ))}
-            {pending.map((item) => <ConversationPendingChip key={item.id} name={item.name} />)}
-          </div>
-        ) : null}
+        {chips ? <div className="flex flex-wrap gap-2">{chips}</div> : null}
         <div className="flex items-center gap-2">
           {!full ? (
             <button
@@ -207,7 +229,7 @@ function FileUploadInput({
               {busy ? <span className="motion-safe:animate-spin" aria-hidden><ProtoIcon name="spinner" size={18} /></span> : <ProtoIcon name="paperclip" size={18} />}
             </button>
           ) : null}
-          <input ref={inputRef} type="file" multiple={maxCount > 1} disabled={busy || disabled} className="hidden" onChange={(event) => void pick(event.target.files)} />
+          {fileInput}
         </div>
       </div>
     )

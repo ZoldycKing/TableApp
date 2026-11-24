@@ -4,9 +4,8 @@ import type { Attachment } from '@tableapp/schema'
 import type { ConversationPage } from '@/lib/conversation-types'
 import type { UploadAlertInfo } from './conversation-file-ui'
 
-/** Tiny sage-tinted PNG used as a clean image thumbnail in support ticket shots. */
-export const DEMO_THUMB_DATA_URL =
-  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAUElEQVR42u3PQQkAAAgEsGtmERvY/28E38JgBZaafi0CAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICApcFhy9g8cmCFGgAAAAASUVORK5CYII='
+/** Real demo photo for clean image thumbnails in support ticket shots. */
+export const DEMO_PHOTO_URL = '/template-media/dispatch/act-photo.jpg'
 
 const at = (hours: number, minutes = 0) => {
   const value = new Date(Date.UTC(2026, 10, 24, hours - 3, minutes, 0))
@@ -17,7 +16,7 @@ const pdf: Attachment = {
   id: 'att_pdf', key: 'demo/act.pdf', name: 'акт-приёмки.pdf', mime: 'application/pdf', size: 245760, width: null, height: null, scanStatus: 'clean',
 }
 const photo: Attachment = {
-  id: 'att_photo', key: DEMO_THUMB_DATA_URL, name: 'фото-дефекта.png', mime: 'image/png', size: 81920, width: 64, height: 64, scanStatus: 'clean',
+  id: 'att_photo', key: DEMO_PHOTO_URL, name: 'фото-дефекта.jpg', mime: 'image/jpeg', size: 280075, width: 1152, height: 864, scanStatus: 'clean',
 }
 const pending: Attachment = {
   id: 'att_pending', key: 'demo/pending.bin', name: 'схема.xlsx', mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', size: 12000, width: null, height: null, scanStatus: 'pending',

@@ -32,8 +32,8 @@ export function SupportConversationShotPanel({
 }) {
   const root = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    const node = root.current
-    if (!node) return
+    const node = root.current?.querySelector('form') ?? root.current
+    if (!(node instanceof HTMLElement)) return
     const id = window.requestAnimationFrame(() => scrollIntoNearestScroller(node))
     return () => window.cancelAnimationFrame(id)
   }, [shot])
@@ -46,9 +46,9 @@ export function SupportConversationShotPanel({
         configured
         business={desk}
         showContext={false}
-        preview={shot.preview}
-        previewFiles={shot.previewFiles}
-        previewAlert={shot.previewAlert ?? null}
+        fixture={shot.preview}
+        fixtureFiles={shot.previewFiles}
+        fixtureAlert={shot.previewAlert ?? null}
       />
     </div>
   )

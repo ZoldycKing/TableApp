@@ -57,7 +57,9 @@ const desktop: Shot[] = [
 
 const phone: Shot[] = [
   { view: 'dashboard', name: 'dash-phone-390.png', phone: true },
+  { view: 'dashboard', name: 'dash-phone-full-390.png', phone: true, fullPage: true },
   { view: 'board', name: 'board-phone-390.png', phone: true },
+  { view: 'client', name: 'client-cabinet-phone-390.png', phone: true },
   { view: 'client-waiting', name: 'client-waiting-phone-390.png', phone: true },
   { view: 'client-preview', name: 'client-preview-phone-390.png', phone: true },
 ]

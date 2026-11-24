@@ -290,7 +290,7 @@ export function buildSupportV2App(built: BuiltTemplate, meta: { id: string; work
       screen(ids.ticketScreenId, 'Обращение', undefined, 'clipboard', desk, tickets.id, [ticketReplies, ticketNotes, ticketOperators, ticketCategories, ticketClients, ticketEvents, ids.replyFormId, ids.noteFormId, ids.assignFormId], false),
       screen(ids.clientsScreenId, 'Клиенты', 'Клиенты', 'users', desk, null, [directory], true),
       screen(ids.settingsScreenId, 'Настройки', 'Настройки', 'settings', owner, null, [settingsCategories, settingsOperators, settingsNorms, ids.categoryFormId], true),
-      screen(ids.clientListScreenId, 'Мои обращения', 'Обращения', 'clipboard', { kind: 'roles', roleIds: ['owner', 'staff', 'client'] }, null, [clientTickets, clientCategories, ids.createFormId], true),
+      screen(ids.clientListScreenId, 'Мои обращения', 'Кабинет клиента', 'clipboard', { kind: 'roles', roleIds: ['owner', 'staff', 'client'] }, null, [clientTickets, clientCategories, ids.createFormId], true),
       screen(ids.clientTicketScreenId, 'Моё обращение', undefined, 'clipboard', clientRole, tickets.id, [clientReplies, clientOperators, clientTicketCategories], false),
     ],
     nodes, sources, workflows,

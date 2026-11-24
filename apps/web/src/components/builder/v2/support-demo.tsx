@@ -48,7 +48,7 @@ function goalFor(model: ReturnType<typeof supportTemplateDemoModel>, view: strin
   const ticket = (number: string) => model.rows.find(row => row.tableId === kit.ticketsTableId && row.values[kit.ticket.number] === number)
   const base = { who: 'anna' as DemoWho, open: null as SupportOpen, previewClient: undefined as string | undefined, previewMenuOpen: false }
   if (view === 'client' || view === 'create') return { ...base, who: 'irina' as const, screenId: kit.clientListScreenId, recordId: undefined, open: view === 'create' ? 'create' as const : null }
-  if (view === 'client-preview') return { ...base, who: 'anna' as const, screenId: kit.clientListScreenId, recordId: undefined, open: null, previewClient: 'irina@example.invalid', previewMenuOpen: true }
+  if (view === 'client-preview') return { ...base, who: 'anna' as const, screenId: kit.clientListScreenId, recordId: undefined, open: null, previewClient: 'i.petrova@mail.ru', previewMenuOpen: true }
   if (view === 'client-ticket') return { ...base, who: 'petr' as const, screenId: kit.clientTicketScreenId, recordId: ticket('ОБР-1042')?.id, open: null }
   if (view === 'client-waiting') return { ...base, who: 'petr' as const, screenId: kit.clientTicketScreenId, recordId: ticket('ОБР-1033')?.id, open: null }
   if (view === 'settings') return { ...base, who: 'marina' as const, screenId: kit.settingsScreenId, recordId: undefined, open: null }
@@ -60,8 +60,8 @@ function goalFor(model: ReturnType<typeof supportTemplateDemoModel>, view: strin
 }
 
 function actorFor(who: DemoWho): AppV2Actor {
-  if (who === 'irina') return { authenticated: true, id: 'demo_irina', roleIds: ['client'], email: 'irina@example.invalid', name: 'Ирина Петрова', company: '' }
-  if (who === 'petr') return { authenticated: true, id: 'demo_petr', roleIds: ['client'], email: 'petr@example.invalid', name: 'Пётр Орлов', company: '' }
+  if (who === 'irina') return { authenticated: true, id: 'demo_irina', roleIds: ['client'], email: 'i.petrova@mail.ru', name: 'Ирина Петрова', company: '' }
+  if (who === 'petr') return { authenticated: true, id: 'demo_petr', roleIds: ['client'], email: 'p.orlov@yandex.ru', name: 'Пётр Орлов', company: '' }
   if (who === 'marina') return { authenticated: true, id: 'demo_marina', roleIds: ['owner'], email: 'marina@example.invalid', name: 'Марина Соколова', company: '' }
   return { authenticated: true, id: 'demo_anna', roleIds: ['staff'], email: 'anna@example.invalid', name: 'Анна Волкова', company: '' }
 }

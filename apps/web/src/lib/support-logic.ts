@@ -87,6 +87,7 @@ export type SupportListItem = {
   assigneeEmail: string
   assigneeName: string
   deadline: unknown
+  updatedAt?: unknown
   sla?: SupportSlaView
 }
 

@@ -9,6 +9,7 @@ import { AppFrameDeviceContext } from './app-frame'
 import { AppDialog } from './app-dialog'
 import { supportQueueMatch, supportSlaLabel } from '@/lib/support-sla'
 import { SupportDashboard, SupportPerson, SupportSlaSettings, TicketStatusMenu, slaFacts, slaWhen } from './support-desk'
+import { SupportSelect, TeamScreen } from './support-team'
 import { DateMenu } from './booking-calendar'
 import { DetailCardShell, DetailSection, ListScreenShell, ShellSearchField } from './layout-shell'
 import shell from './layout-shell.module.css'
@@ -269,7 +270,7 @@ export function SupportScreen(props: AppV2RendererProps) {
   const categoriesPage = useBuilderV2NodeData(props.app, categoriesNode ?? PLACEHOLDER, live && Boolean(categoriesNode), '', scope)
   const eventsPage = useBuilderV2NodeData(props.app, eventsNode ?? PLACEHOLDER, live && Boolean(eventsNode), '', scope)
   const normsPage = useBuilderV2NodeData(props.app, normsNode ?? PLACEHOLDER, live && Boolean(normsNode), '', scope)
-  const screens = kit ? [kit.queueScreenId, kit.ticketScreenId, kit.clientListScreenId, kit.clientTicketScreenId, kit.clientsScreenId, kit.clientScreenId, kit.settingsScreenId, kit.dashboardScreenId].filter((id): id is string => Boolean(id)) : []
+  const screens = kit ? [kit.queueScreenId, kit.ticketScreenId, kit.clientListScreenId, kit.clientTicketScreenId, kit.clientsScreenId, kit.clientScreenId, kit.settingsScreenId, kit.dashboardScreenId, kit.teamScreenId].filter((id): id is string => Boolean(id)) : []
   if (!kit || !screens.includes(screenId)) return null
   const pages = [ticketsPage, repliesPage, notesPage, clientsPage, operatorsPage, categoriesPage, eventsPage, normsPage]
   const rows = demo?.rows ?? pages.flatMap(page => page.page?.rows ?? [])
@@ -283,7 +284,21 @@ export function SupportScreen(props: AppV2RendererProps) {
     queueFocus.current = typeof focus === 'string' ? { scope: focus } : focus
     props.onNavigate?.(kit.queueScreenId)
   }
-  if (kit.dashboardScreenId && screenId === kit.dashboardScreenId) return <SupportDashboard {...shared} actorEmail={props.actor.email ?? ''} onOpenQueue={openQueue} onOpenTicket={id => props.onNavigate?.(kit.ticketScreenId, id)} onStatus={async () => ({ ok: false })} onSaveSla={async () => ({ ok: false })} />
+  const lineLabel = (id: string) => choiceName(props, kit.operatorsTableId, kit.operator.line ?? '', id) || choiceName(props, kit.ticketsTableId, kit.ticket.line ?? '', id)
+  if (kit.dashboardScreenId && screenId === kit.dashboardScreenId) return <SupportDashboard {...shared} actorEmail={props.actor.email ?? ''} lineLabel={lineLabel} onOpenTeam={() => kit.teamScreenId && props.onNavigate?.(kit.teamScreenId)} onOpenQueue={openQueue} onOpenTicket={id => props.onNavigate?.(kit.ticketScreenId, id)} onStatus={async () => ({ ok: false })} onSaveSla={async () => ({ ok: false })} />
+  if (kit.teamScreenId && screenId === kit.teamScreenId) return <TeamScreen
+    app={props.app}
+    kit={kit}
+    tables={props.tables}
+    rows={rows}
+    of={of}
+    now={now}
+    loading={loading}
+    actor={props.actor}
+    onNavigate={props.onNavigate}
+    onOpenQueue={openQueue}
+    onSaveOperator={async change => commit(shared, { kind: 'operator', ...change })}
+  />
   if (screenId === kit.queueScreenId || screenId === kit.clientListScreenId) return <TicketList {...shared} />
   if (screenId === kit.ticketScreenId || screenId === kit.clientTicketScreenId) return <TicketCard {...shared} />
   if (screenId === kit.clientsScreenId) return <ClientDirectory {...shared} />
@@ -824,6 +839,7 @@ function TicketCard(props: ScreenProps) {
   const assigneeId = firstId(ticket.values[fields.assignee])
   const category = nameOf(props, props.kit.categoriesTableId, categoryId, props.kit.category.name)
   const assignee = nameOf(props, props.kit.operatorsTableId, assigneeId, props.kit.operator.name)
+  const line = fields.line ? choiceName(props, props.kit.ticketsTableId, fields.line, ticket.values[fields.line]) : ''
   const overdue = isOverdue(status, ticket.values[fields.deadline], props.now)
   const replies = props.of(props.kit.repliesTableId).filter(row => firstId(row.values[props.kit.reply.ticket]) === ticket.id)
   const notes = desk ? props.of(props.kit.notesTableId).filter(row => firstId(row.values[props.kit.note.ticket]) === ticket.id) : []
@@ -894,6 +910,7 @@ function TicketCard(props: ScreenProps) {
             <dl className={css.facts}>
               <div><dt>Клиент</dt><dd>{clientName || 'Не указан'}</dd></div>
               <div><dt>Ответственный</dt><dd>{assignee ? <span className={css.personInline}><SupportPerson name={assignee} size={24} /><span>{assignee}</span></span> : 'Не назначен'}</dd></div>
+              {line ? <div><dt>Линия</dt><dd>{line}</dd></div> : null}
               <div><dt>Приоритет</dt><dd><PriorityBadge name={priority} />{!priority ? 'Не указан' : null}</dd></div>
               <div><dt>Категория</dt><dd>{category || 'Без категории'}</dd></div>
               <div><dt>Срок</dt><dd>{formatWhen(ticket.values[fields.deadline])}{overdue ? '. Просрочено' : ''}</dd></div>
@@ -929,14 +946,16 @@ function CreateDialog(props: ScreenProps & { desk: boolean; onClose: () => void;
   const [description, setDescription] = useState('')
   const [categoryId, setCategoryId] = useState('')
   const [clientId, setClientId] = useState(props.initialClientId ?? '')
+  const [lineId, setLineId] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const categories = props.of(props.kit.categoriesTableId).filter(row => row.values[props.kit.category.active] === true)
   const clients = props.of(props.kit.clientsTableId)
+  const lines = props.kit.ticket.line ? (props.tables.find(table => table.id === props.kit.ticketsTableId)?.fields.find(field => field.id === props.kit.ticket.line)?.choices ?? []) : []
   const save = async () => {
     if (!subject.trim() || !description.trim() || !categoryId || (props.desk && !clientId)) { setError('Заполните тему, описание и категорию.'); return }
     setBusy(true)
-    const result = await commit(props, { kind: 'create', subject, description, categoryId, ...(props.desk ? { clientId } : {}) })
+    const result = await commit(props, { kind: 'create', subject, description, categoryId, lineId: lineId || null, ...(props.desk ? { clientId } : {}) })
     setBusy(false)
     if (!result.ok) { setError(result.error); return }
     props.onDone()
@@ -947,6 +966,7 @@ function CreateDialog(props: ScreenProps & { desk: boolean; onClose: () => void;
       <label className={css.field}><span>Тема</span><input value={subject} onChange={event => setSubject(event.target.value)} maxLength={200} required /></label>
       <label className={css.field}><span>Описание</span><textarea value={description} onChange={event => setDescription(event.target.value)} maxLength={4000} required /></label>
       <ChoiceRow label="Категория" value={categoryId} options={categories.map(row => ({ id: row.id, name: textOf(row.values[props.kit.category.name]) || 'Без названия' }))} onChange={setCategoryId} />
+      {props.desk && lines.length ? <SupportSelect field label="Линия" value={lineId} emptyLabel="Не указана" options={[{ id: '', name: 'Не указана' }, ...lines.map(choice => ({ id: choice.id, name: choice.name }))]} onChange={setLineId} /> : null}
       {error ? <p className={css.error} role="alert">{error}</p> : null}
     </form>
   </AppDialog>
@@ -1008,6 +1028,7 @@ function AssignDialog(props: ScreenProps & { ticket: AppV2Record; onClose: () =>
   const [assigneeId, setAssigneeId] = useState(firstId(props.ticket.values[fields.assignee]))
   const [priorityId, setPriorityId] = useState(textOf(props.ticket.values[fields.priority]))
   const [categoryId, setCategoryId] = useState(firstId(props.ticket.values[fields.category]))
+  const [lineId, setLineId] = useState(fields.line ? textOf(props.ticket.values[fields.line]) : '')
   const [date, setDate] = useState(initialDeadline.date)
   const [time, setTime] = useState(initialDeadline.time)
   const [error, setError] = useState('')
@@ -1015,10 +1036,11 @@ function AssignDialog(props: ScreenProps & { ticket: AppV2Record; onClose: () =>
   const operators = props.of(props.kit.operatorsTableId).filter(row => row.values[props.kit.operator.active] === props.kit.activeChoiceId || row.id === assigneeId)
   const categories = props.of(props.kit.categoriesTableId)
   const priorities = props.tables.find(table => table.id === props.kit.ticketsTableId)?.fields.find(field => field.id === fields.priority)?.choices ?? []
+  const lines = fields.line ? (props.tables.find(table => table.id === props.kit.ticketsTableId)?.fields.find(field => field.id === fields.line)?.choices ?? []) : []
   const save = async () => {
     if (!priorityId || !categoryId) { setError('Выберите приоритет и категорию.'); return }
     setBusy(true)
-    const result = await commit(props, { kind: 'assign', recordId: props.ticket.id, assigneeId: assigneeId || null, priorityId, categoryId, deadline: supportDeadlineInstant(date, time) })
+    const result = await commit(props, { kind: 'assign', recordId: props.ticket.id, assigneeId: assigneeId || null, priorityId, categoryId, deadline: supportDeadlineInstant(date, time), lineId: lineId || null })
     setBusy(false)
     if (!result.ok) { setError(result.error); return }
     props.onMessage(result.message)
@@ -1026,7 +1048,8 @@ function AssignDialog(props: ScreenProps & { ticket: AppV2Record; onClose: () =>
   }
   return <AppDialog title="Ответственный и срок" placement="center" onClose={props.onClose} footer={<button type="submit" form={formId} className={css.primary} disabled={busy}>{busy ? 'Сохраняем…' : 'Сохранить'}</button>}>
     <form id={formId} data-support-form="assign" onSubmit={event => { event.preventDefault(); void save() }}>
-      <ChoiceRow label="Ответственный" value={assigneeId} options={[{ id: '', name: 'Не назначен' }, ...operators.map(row => ({ id: row.id, name: textOf(row.values[props.kit.operator.name]) || 'Без имени' }))]} onChange={setAssigneeId} />
+      <SupportSelect field label="Ответственный" value={assigneeId} emptyLabel="Не назначен" options={[{ id: '', name: 'Не назначен' }, ...operators.map(row => ({ id: row.id, name: textOf(row.values[props.kit.operator.name]) || 'Без имени' }))]} onChange={setAssigneeId} />
+      {lines.length ? <SupportSelect field label="Линия" value={lineId} emptyLabel="Не указана" options={[{ id: '', name: 'Не указана' }, ...lines.map(choice => ({ id: choice.id, name: choice.name }))]} onChange={setLineId} /> : null}
       <ChoiceRow label="Приоритет" value={priorityId} options={priorities.map(choice => ({ id: choice.id, name: choice.name }))} onChange={setPriorityId} />
       <ChoiceRow label="Категория" value={categoryId} options={categories.map(row => ({ id: row.id, name: textOf(row.values[props.kit.category.name]) || 'Без названия' }))} onChange={setCategoryId} />
       <div className={css.when}>
@@ -1349,7 +1372,8 @@ function SettingsScreen(props: ScreenProps) {
         })}</ul>
         <SupportSlaSettings kit={props.kit} rows={props.rows} now={props.now} actorEmail={props.actor.email ?? ''} onOpenQueue={() => {}} onOpenTicket={() => {}} onStatus={async () => ({ ok: false })} onSaveSla={async minutes => commit(props, { kind: 'sla', minutes })} />
         <h3>Операторы</h3>
-        <ul className={css.directory}>{operators.map(row => <li key={row.id}><strong>{textOf(row.values[props.kit.operator.name])}</strong><span className={css.badges}><Badge name={choiceName(props, props.kit.operatorsTableId, props.kit.operator.role, row.values[props.kit.operator.role])} /><Badge name={choiceName(props, props.kit.operatorsTableId, props.kit.operator.active, row.values[props.kit.operator.active])} /></span></li>)}</ul>
+        <p className={css.quiet}>{props.kit.teamScreenId ? 'Полный список и правка — в разделе «Команда».' : 'Линия и статус правятся в карточке оператора.'}</p>
+        <ul className={css.directory}>{operators.map(row => <li key={row.id}><strong>{textOf(row.values[props.kit.operator.name])}</strong><span className={css.badges}><Badge name={choiceName(props, props.kit.operatorsTableId, props.kit.operator.role, row.values[props.kit.operator.role])} />{props.kit.operator.line ? <Badge name={choiceName(props, props.kit.operatorsTableId, props.kit.operator.line, row.values[props.kit.operator.line])} /> : null}<Badge name={choiceName(props, props.kit.operatorsTableId, props.kit.operator.active, row.values[props.kit.operator.active])} /></span></li>)}</ul>
       </div>
     </ListScreenShell>
     {open ? <CategoryDialog {...props} onClose={() => setOpen(false)} onMessage={setMessage} /> : null}

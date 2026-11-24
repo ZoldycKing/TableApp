@@ -70,6 +70,7 @@ export function ticketCreateValues(ticket: SupportApp['ticket'], input: {
 export function ticketPatchValues(ticket: SupportApp['ticket'], input: {
   assigneeId?: string | null
   assigneeEmail?: string | null
+  lineId?: string | null
   priorityId?: string
   categoryId?: string
   statusId?: string
@@ -79,10 +80,29 @@ export function ticketPatchValues(ticket: SupportApp['ticket'], input: {
   const values: Record<string, AppV2Json> = { [ticket.updatedAt]: input.updatedAt }
   if (input.assigneeId !== undefined) values[ticket.assignee] = input.assigneeId ? [input.assigneeId] : []
   if (input.assigneeEmail !== undefined) values[ticket.assigneeEmail] = input.assigneeEmail ?? ''
+  if (input.lineId !== undefined && ticket.line) values[ticket.line] = input.lineId ?? ''
   if (input.priorityId) values[ticket.priority] = input.priorityId
   if (input.categoryId) values[ticket.category] = [input.categoryId]
   if (input.statusId) values[ticket.status] = input.statusId
   if (input.deadline !== undefined) values[ticket.deadline] = input.deadline
+  return values
+}
+
+export function operatorValues(operator: SupportApp['operator'], input: {
+  name?: string
+  email?: string
+  phone?: string
+  roleId?: string
+  lineId?: string | null
+  activeId?: string
+}): Record<string, AppV2Json> {
+  const values: Record<string, AppV2Json> = {}
+  if (input.name !== undefined) values[operator.name] = input.name
+  if (input.email !== undefined) values[operator.email] = input.email
+  if (input.phone !== undefined) values[operator.phone] = input.phone
+  if (input.roleId !== undefined) values[operator.role] = input.roleId
+  if (input.lineId !== undefined && operator.line) values[operator.line] = input.lineId ?? ''
+  if (input.activeId !== undefined) values[operator.active] = input.activeId
   return values
 }
 
@@ -231,13 +251,14 @@ export function supportPolicyFromRows(support: SupportApp, rows: readonly AppV2R
 }
 
 export type SupportChange =
-  | { kind: 'create'; subject: string; description: string; categoryId: string; clientId?: string; priorityId?: string }
+  | { kind: 'create'; subject: string; description: string; categoryId: string; clientId?: string; priorityId?: string; lineId?: string | null }
   | { kind: 'reply'; recordId: string; text: string }
   | { kind: 'note'; recordId: string; text: string }
   | { kind: 'client_note'; recordId: string; note: string }
   | { kind: 'status'; recordId: string; statusId: string }
-  | { kind: 'assign'; recordId: string; assigneeId: string | null; priorityId: string; categoryId: string; deadline: string | null }
+  | { kind: 'assign'; recordId: string; assigneeId: string | null; priorityId: string; categoryId: string; deadline: string | null; lineId?: string | null }
   | { kind: 'category'; recordId?: string; name: string; description: string; active: boolean }
+  | { kind: 'operator'; recordId?: string; name: string; email: string; phone: string; roleId: string; lineId: string | null; activeId: string }
   | { kind: 'sla'; minutes: Record<string, number> }
 
 /** In-memory twin of the published action, so the gallery uses the same rules as the server. */
@@ -274,6 +295,28 @@ export function applySupportChange(app: AppV2, actor: AppV2Actor, rows: readonly
     if (!decision.ok) return decision
     return { ok: true, rows: [...rows, { id: newId('row'), tableId: support.categoriesTableId, values }], message: 'Категория сохранена.' }
   }
+  if (change.kind === 'operator') {
+    if (!actor.roleIds.includes('owner')) return { ok: false, error: 'Операторов меняет руководитель.' }
+    const name = change.name.trim()
+    const email = change.email.trim().toLowerCase()
+    const phone = change.phone.trim()
+    if (!name) return { ok: false, error: 'Укажите имя оператора.' }
+    if (!email || !email.includes('@')) return { ok: false, error: 'Укажите почту оператора.' }
+    if (!change.roleId || !change.activeId) return { ok: false, error: 'Выберите роль и статус.' }
+    const values = operatorValues(support.operator, {
+      name, email, phone, roleId: change.roleId, lineId: change.lineId, activeId: change.activeId,
+    })
+    if (change.recordId) {
+      const current = rows.find(row => row.id === change.recordId && row.tableId === support.operatorsTableId)
+      if (!current) return { ok: false, error: 'Оператор не найден.' }
+      const decision = guardSupportUpdate(app, actor, current, values)
+      if (!decision.ok) return decision
+      return { ok: true, rows: replace(current, values), message: 'Оператор сохранён.' }
+    }
+    const decision = guardSupportCreate(app, actor, support.operatorsTableId, values)
+    if (!decision.ok) return decision
+    return { ok: true, rows: [...rows, { id: newId('row'), tableId: support.operatorsTableId, values }], message: 'Оператор добавлен.' }
+  }
   if (change.kind === 'client_note') {
     const desk = assertDesk(actor)
     if (!desk.ok) return { ok: false, error: 'Заметку о клиенте меняет оператор.' }
@@ -303,14 +346,20 @@ export function applySupportChange(app: AppV2, actor: AppV2Actor, rows: readonly
       clientName = name
       clientEmail = email.toLowerCase()
     } else if (!isSupportClient(actor)) return { ok: false, error: 'Создать обращение может клиент или оператор.' }
-    const linked = !clientId ? rows.find(row => row.tableId === support.clientsTableId && sameEmail(row.values[support.client.email], supportActorEmail(actor))) : undefined
+    // Clients must not write ticket.client — ownership is stamped via clientEmail ownerValues.
+    const linked = !clientId && isSupportClient(actor)
+      ? rows.find(row => row.tableId === support.clientsTableId && sameEmail(row.values[support.client.email], supportActorEmail(actor)))
+      : undefined
     const values = ticketCreateValues(support.ticket, {
       number, subject: change.subject.trim(), description: change.description.trim(), categoryId: category.id,
-      clientId: clientId ?? linked?.id, clientName, clientEmail, statusId: support.statuses.fresh, priorityId, createdAt: now,
+      clientId: isSupportDesk(actor) ? clientId : undefined, clientName, clientEmail, statusId: support.statuses.fresh, priorityId, createdAt: now,
     })
+    // ticket.line is desk-only; clients have no create grant for it.
+    if (isSupportDesk(actor) && change.lineId !== undefined && support.ticket.line) values[support.ticket.line] = change.lineId ?? ''
     const decision = guardSupportCreate(app, actor, support.ticketsTableId, values)
     if (!decision.ok) return decision
     const stored = { ...values, ...decision.ownerValues }
+    if (linked && !stored[support.ticket.client]) stored[support.ticket.client] = [linked.id]
     const ticketId = newId('row')
     const event = supportEventRecord(support, { ticketId, kind: 'created', at: now, priority: supportPriorityName(support, priorityId), status: 'Новое', actorEmail: supportActorEmail(actor) })
     return { ok: true, rows: [...rows, { id: ticketId, tableId: support.ticketsTableId, values: stored }, ...(event ? [event] : [])], message: 'Обращение создано.' }
@@ -390,7 +439,10 @@ export function applySupportChange(app: AppV2, actor: AppV2Actor, rows: readonly
     if (!operator || operator.values[support.operator.active] !== support.activeChoiceId || !email) return { ok: false, error: 'Назначьте активного оператора.' }
     assigneeEmail = email.toLowerCase()
   }
-  const patch = ticketPatchValues(support.ticket, { assigneeId: change.assigneeId, assigneeEmail, priorityId: change.priorityId, categoryId: category.id, deadline: change.deadline, updatedAt: now })
+  const patch = ticketPatchValues(support.ticket, {
+    assigneeId: change.assigneeId, assigneeEmail, lineId: change.lineId, priorityId: change.priorityId,
+    categoryId: category.id, deadline: change.deadline, updatedAt: now,
+  })
   const decision = guardSupportUpdate(app, actor, ticket, patch)
   if (!decision.ok) return decision
   const previousPriority = textOf(ticket.values[support.ticket.priority])

@@ -136,21 +136,149 @@ function heatLevel(count: number, age: SupportAgeBucket | 'total') {
   return count >= 4 ? 'aging' : 'fresh'
 }
 
-export function SupportPerson({ name, size = 32, onShift }: { name: string; size?: number; onShift?: boolean }) {
-  const url = supportPortraitUrl(name)
+export function SupportPerson({ name, size = 32, onShift, photo }: { name: string; size?: number; onShift?: boolean; photo?: string }) {
+  const url = photo || supportPortraitUrl(name)
+  const icon = size <= 24 ? 12 : size >= 40 ? 20 : 14
   return <span className={css.avatar} data-size={size <= 24 ? 'sm' : size >= 40 ? 'lg' : 'md'} data-onshift={onShift || undefined}>
-    {url ? <img src={url} alt="" width={size} height={size} /> : null}
+    {url ? <img src={url} alt="" width={size} height={size} /> : <ProtoIcon name="user" size={icon} />}
     {onShift != null ? <i className={css.shiftDot} data-on={onShift || undefined} aria-hidden="true" /> : null}
   </span>
 }
 
-export function SupportDashboard(props: DeskProps) {
+export const SUPPORT_TEAM_CARD_LIMIT = 6
+
+function operatorPhoto(kit: DeskProps['kit'], row: DeskProps['rows'][number]) {
+  if (!kit.operator.photo) return undefined
+  const value = row.values[kit.operator.photo]
+  return typeof value === 'string' && value ? value : undefined
+}
+
+function openByAssigneeFromRows(kit: DeskProps['kit'], rows: DeskProps['rows']) {
+  const openStatuses = new Set([kit.statuses.fresh, kit.statuses.progress, kit.statuses.waiting])
+  const counts: Record<string, number> = {}
+  for (const row of rows) {
+    if (row.tableId !== kit.ticketsTableId) continue
+    if (!openStatuses.has(String(row.values[kit.ticket.status] ?? ''))) continue
+    const email = String(row.values[kit.ticket.assigneeEmail] ?? '').trim().toLowerCase()
+    if (!email) continue
+    counts[email] = (counts[email] ?? 0) + 1
+  }
+  return counts
+}
+
+type TeamOperator = {
+  id: string
+  name: string
+  email: string
+  photo?: string
+  shift: boolean
+  open: number
+  line: string
+  lineId: string
+}
+
+function teamOperators(props: DeskProps & { lineLabel?: (id: string) => string }): TeamOperator[] {
+  const activeId = props.kit.activeChoiceId
+  const loads = openByAssigneeFromRows(props.kit, props.rows)
+  return props.rows.filter(row => row.tableId === props.kit.operatorsTableId).map(row => {
+    const lineId = props.kit.operator.line ? String(row.values[props.kit.operator.line] ?? '') : ''
+    const email = String(row.values[props.kit.operator.email] ?? '').trim().toLowerCase()
+    return {
+      id: row.id,
+      name: String(row.values[props.kit.operator.name] ?? 'Без имени'),
+      email,
+      photo: operatorPhoto(props.kit, row),
+      shift: row.values[props.kit.operator.active] === activeId,
+      open: loads[email] ?? 0,
+      lineId,
+      line: lineId && props.lineLabel ? props.lineLabel(lineId) : '',
+    }
+  })
+}
+
+function CompactTeamBlock(props: {
+  operators: TeamOperator[]
+  onOpenTeam: () => void
+  onOpenQueue: DeskProps['onOpenQueue']
+  actorEmail: string
+}) {
+  const onShift = props.operators.filter(item => item.shift)
+  const overloaded = [...onShift].filter(item => item.open >= OVERLOAD).sort((a, b) => b.open - a.open)
+  const free = [...onShift].filter(item => item.open < OVERLOAD).sort((a, b) => a.open - b.open || a.name.localeCompare(b.name, 'ru'))
+  const avg = onShift.length ? Math.round((onShift.reduce((sum, item) => sum + item.open, 0) / onShift.length) * 10) / 10 : 0
+  const stack = onShift.slice(0, 8)
+  const extra = Math.max(0, onShift.length - stack.length)
+  const lines = (() => {
+    const map = new Map<string, { name: string; on: number; total: number; open: number }>()
+    for (const item of props.operators) {
+      const key = item.line || 'Без линии'
+      const entry = map.get(key) ?? { name: key, on: 0, total: 0, open: 0 }
+      entry.total += 1
+      if (item.shift) entry.on += 1
+      entry.open += item.open
+      map.set(key, entry)
+    }
+    return [...map.values()].sort((a, b) => a.name.localeCompare(b.name, 'ru'))
+  })()
+  return <div className={css.teamCompact} aria-label="Команда на смене">
+    <div className={css.teamCompactTop}>
+      <div className={css.avatarStack} aria-hidden="true">
+        {stack.map((item, index) => <span key={item.id} className={css.avatarStackItem} style={{ zIndex: stack.length - index }}>
+          <SupportPerson name={item.name} photo={item.photo} size={36} onShift={item.shift} />
+        </span>)}
+        {extra > 0 ? <span className={css.avatarStackMore}>+{extra}</span> : null}
+      </div>
+      <div className={css.teamCompactStats}>
+        <p><strong>{avg}</strong><span>средняя нагрузка</span></p>
+        <p data-terra={overloaded.length > 0 || undefined}><strong>{overloaded.length}</strong><span>перегружены</span></p>
+      </div>
+    </div>
+    <div className={css.teamCompactLists}>
+      <section className={css.teamMiniList} data-tone="terra" aria-label="Перегружены">
+        <h3>Перегружены</h3>
+        <ul>{(overloaded.length ? overloaded : []).slice(0, 3).map(item => {
+          const self = item.email && item.email === props.actorEmail.trim().toLowerCase()
+          return <li key={item.id}>
+            <button type="button" onClick={() => props.onOpenQueue(self ? { view: 'mine', scope: 'mine' } : { view: 'open', scope: 'open', assigneeEmail: item.email || undefined })}>
+              <SupportPerson name={item.name} photo={item.photo} size={28} onShift />
+              <span className={css.teamMiniCopy}><strong>{item.name}</strong><span>{item.line || 'Линия не указана'}</span></span>
+              <span className={css.teamMiniLoad}><em>{item.open}</em><span>откр.</span></span>
+            </button>
+          </li>
+        })}
+        {!overloaded.length ? <li className={css.quiet}>Никого нет</li> : null}
+        </ul>
+      </section>
+      <section className={css.teamMiniList} data-tone="sage" aria-label="Свободны">
+        <h3>Свободны</h3>
+        <ul>{free.slice(0, 3).map(item => {
+          const self = item.email && item.email === props.actorEmail.trim().toLowerCase()
+          return <li key={item.id}>
+            <button type="button" onClick={() => props.onOpenQueue(self ? { view: 'mine', scope: 'mine' } : { view: 'open', scope: 'open', assigneeEmail: item.email || undefined })}>
+              <SupportPerson name={item.name} photo={item.photo} size={28} onShift />
+              <span className={css.teamMiniCopy}><strong>{item.name}</strong><span>{item.line || 'Линия не указана'}</span></span>
+              <span className={css.teamMiniLoad}><em>{item.open}</em><span>откр.</span></span>
+            </button>
+          </li>
+        })}
+        {!free.length ? <li className={css.quiet}>Никого нет</li> : null}
+        </ul>
+      </section>
+    </div>
+    {lines.length > 1 ? <ul className={css.lineSummary} aria-label="Сводка по линиям">
+      {lines.map(line => <li key={line.name}><strong>{line.name}</strong><span>{line.on} из {line.total} на смене</span><span>{line.open} откр.</span></li>)}
+    </ul> : null}
+    <button type="button" className={css.teamAllLink} onClick={props.onOpenTeam}>Вся команда →</button>
+  </div>
+}
+
+export function SupportDashboard(props: DeskProps & { onOpenTeam?: () => void; lineLabel?: (id: string) => string }) {
   const items = views(props).map(item => ({ assigneeEmail: item.assignee, sla: item.sla }))
   const dash = supportDashboard(items, props.now, 7 * 24 * 60 * 60 * 1000)
   const known = items.some(item => item.sla.known)
-  const operators = props.rows.filter(row => row.tableId === props.kit.operatorsTableId)
-  const activeId = props.kit.activeChoiceId
-  const onShift = operators.filter(row => row.values[props.kit.operator.active] === activeId)
+  const operators = teamOperators(props)
+  const onShift = operators.filter(item => item.shift)
+  const compact = operators.length > SUPPORT_TEAM_CARD_LIMIT
   const openDelta = dash.open - dash.openYesterday
   const overdueDelta = dash.overdue - dash.overdueYesterday
   const resolvedDelta = dash.resolvedToday - dash.resolvedYesterday
@@ -158,39 +286,41 @@ export function SupportDashboard(props: DeskProps) {
   const openHeat = (priority: SupportSlaPriority, age?: SupportAgeBucket) => {
     props.onOpenQueue({ view: 'open', scope: 'open', priority: supportSlaPriorityName(priority), ...(age ? { ageBucket: age } : {}) })
   }
-  return <div className={css.root} data-support-root data-support-screen="dashboard">
+  return <div className={css.root} data-support-root data-support-screen="dashboard" data-team={compact ? 'compact' : 'cards'}>
     <div className={css.dashHero} data-support-hero>
       <div className={css.dashHeroCopy}>
         <p className={css.dashEyebrow}>{formatDateRu(props.now)}</p>
         <h1>Служба поддержки</h1>
         <p className={css.dashShiftMeta}>{onShift.length} из {operators.length} на смене</p>
       </div>
-      <div className={css.teamRow} aria-label="Команда на смене">
+      {compact ? <CompactTeamBlock
+        operators={operators}
+        actorEmail={props.actorEmail}
+        onOpenQueue={props.onOpenQueue}
+        onOpenTeam={() => props.onOpenTeam?.()}
+      /> : <div className={css.teamRow} aria-label="Команда на смене">
         {operators.map(row => {
-          const name = String(row.values[props.kit.operator.name] ?? 'Без имени')
-          const email = String(row.values[props.kit.operator.email] ?? '').trim().toLowerCase()
-          const shift = row.values[props.kit.operator.active] === activeId
-          const open = dash.openByAssignee[email] ?? 0
-          const self = email && email === props.actorEmail.trim().toLowerCase()
-          return <article key={row.id} className={css.teamCard} data-overload={open >= OVERLOAD || undefined} data-off={!shift || undefined}>
-            <SupportPerson name={name} size={44} onShift={shift} />
+          const self = row.email && row.email === props.actorEmail.trim().toLowerCase()
+          return <article key={row.id} className={css.teamCard} data-overload={row.open >= OVERLOAD || undefined} data-off={!row.shift || undefined}>
+            <SupportPerson name={row.name} photo={row.photo} size={44} onShift={row.shift} />
             <div className={css.teamCopy}>
-              <strong>{name}</strong>
-              <span>{shift ? 'На смене' : 'Не на смене'}</span>
+              <strong>{row.name}</strong>
+              <span>{row.line ? `${row.shift ? 'На смене' : 'Не на смене'} · ${row.line}` : (row.shift ? 'На смене' : 'Не на смене')}</span>
             </div>
             <button
               type="button"
               className={css.teamLoad}
-              data-overload={open >= OVERLOAD || undefined}
-              onClick={() => props.onOpenQueue(self ? { view: 'mine', scope: 'mine' } : { view: 'open', scope: 'open', assigneeEmail: email || undefined })}
-              aria-label={`Открытых у ${name}: ${open}`}
+              data-overload={row.open >= OVERLOAD || undefined}
+              onClick={() => props.onOpenQueue(self ? { view: 'mine', scope: 'mine' } : { view: 'open', scope: 'open', assigneeEmail: row.email || undefined })}
+              aria-label={`Открытых у ${row.name}: ${row.open}`}
             >
-              <em>{open}</em>
+              <em>{row.open}</em>
               <span>открытых</span>
             </button>
           </article>
         })}
-      </div>
+        {props.onOpenTeam ? <button type="button" className={css.teamAllLink} data-inline onClick={props.onOpenTeam}>Вся команда →</button> : null}
+      </div>}
     </div>
 
     <div className={css.kpiGrid} aria-label="Показатели службы">

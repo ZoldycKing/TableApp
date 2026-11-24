@@ -25,6 +25,12 @@ it('consolidates an older salon menu without rewriting its saved screens or hidi
  app.nodes=app.nodes.map(item=>item.id===node.id?{id:item.id,name:'Другая коллекция',visibleTo:null,visibleWhen:null,type:'collection' as const,sourceId:app.sources[0]!.id,layout:'cards' as const,titleFieldId:app.booking!.service.name,subtitleFieldId:null,itemIds:[],events:{itemPress:null}}:item)
  expect(builderV2Menu(app).some(screen=>screen.id===hours.id)).toBe(true)
 })
+it('shortens the support client-cabinet label on phone navigation',()=>{
+ const screen={...appV2Fixture().screens[0]!,id:'client-cabinet',name:'Кабинет клиента',menuLabel:'Кабинет клиента'}
+ const supportApp={support:{}} as { support: object }
+ expect(builderV2MenuLabel(screen,supportApp as never)).toBe('Кабинет клиента')
+ expect(builderV2MenuLabel(screen,supportApp as never,{phone:true})).toBe('Кабинет')
+})
 it('keeps record screens and hidden screens out of navigation and separates the menu label from the heading',()=>{
  const app=menuApp();expect(builderV2Menu(app)).toHaveLength(8);expect(builderV2MenuLabel(app.screens[6]!)).toBe('Финансы');expect(builderV2MenuLabel(app.screens[0]!)).toBe('Экран 1')
  const navigate=vi.fn();render(<BuilderV2AppFrame app={app} screenId="page_6" title="Подробный финансовый отчёт" onNavigate={navigate}><p>Данные</p></BuilderV2AppFrame>)

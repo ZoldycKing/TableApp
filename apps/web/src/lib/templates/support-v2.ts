@@ -40,6 +40,7 @@ export function buildSupportV2App(built: BuiltTemplate, meta: { id: string; work
     clientEmail: column('Обращения', 'Почта клиента').id,
     assignee: column('Обращения', 'Ответственный').id,
     assigneeEmail: column('Обращения', 'Почта ответственного').id,
+    line: column('Обращения', 'Линия').id,
     priority: column('Обращения', 'Приоритет').id,
     category: column('Обращения', 'Категория').id,
     status: column('Обращения', 'Статус').id,
@@ -60,6 +61,7 @@ export function buildSupportV2App(built: BuiltTemplate, meta: { id: string; work
     phone: column('Операторы', 'Телефон').id,
     photo: column('Операторы', 'Фото').id,
     role: column('Операторы', 'Роль в службе').id,
+    line: column('Операторы', 'Линия').id,
     active: column('Операторы', 'Статус').id,
   }
   const category = {
@@ -117,7 +119,7 @@ export function buildSupportV2App(built: BuiltTemplate, meta: { id: string; work
   const ids = {
     queueScreenId: newId('screen'), ticketScreenId: newId('screen'), clientListScreenId: newId('screen'),
     clientTicketScreenId: newId('screen'), clientsScreenId: newId('screen'), clientScreenId: newId('screen'), settingsScreenId: newId('screen'),
-    dashboardScreenId: newId('screen'),
+    dashboardScreenId: newId('screen'), teamScreenId: newId('screen'),
     createFormId: newId('component'), operatorCreateFormId: newId('component'), replyFormId: newId('component'),
     noteFormId: newId('component'), assignFormId: newId('component'), categoryFormId: newId('component'),
   }
@@ -144,7 +146,7 @@ export function buildSupportV2App(built: BuiltTemplate, meta: { id: string; work
   const operatorInputs = [input(ticket.client, 'Клиент', true), input(ticket.subject, 'Тема', true), input(ticket.description, 'Описание', true), input(ticket.category, 'Категория', true), input(ticket.priority, 'Приоритет', false, { kind: 'literal', value: priorities.normal })]
   const replyInputs = [input(reply.text, 'Ответ', true)]
   const noteInputs = [input(note.text, 'Заметка', true)]
-  const assignInputs = [input(ticket.assignee, 'Ответственный'), input(ticket.priority, 'Приоритет'), input(ticket.category, 'Категория'), input(ticket.deadline, 'Срок')]
+  const assignInputs = [input(ticket.assignee, 'Ответственный'), input(ticket.line, 'Линия'), input(ticket.priority, 'Приоритет'), input(ticket.category, 'Категория'), input(ticket.deadline, 'Срок')]
   const categoryInputs = [input(category.name, 'Категория', true), input(category.description, 'Пояснение'), input(category.active, 'Доступна')]
   nodes.push({
     id: ids.createFormId, name: 'Новое обращение', type: 'form', tableId: tickets.id, mode: 'create', childIds: createInputs,
@@ -204,6 +206,7 @@ export function buildSupportV2App(built: BuiltTemplate, meta: { id: string; work
     events: { submit: flow('Назначить обращение', ids.assignFormId, tickets.id, tickets.id, [{
       id: newId('action'), type: 'update_row', tableId: tickets.id, target: { kind: 'current' }, values: {
         [ticket.assignee]: bind(ids.assignFormId, ticket.assignee),
+        [ticket.line]: bind(ids.assignFormId, ticket.line),
         [ticket.priority]: bind(ids.assignFormId, ticket.priority),
         [ticket.category]: bind(ids.assignFormId, ticket.category),
         [ticket.deadline]: bind(ids.assignFormId, ticket.deadline),
@@ -251,11 +254,14 @@ export function buildSupportV2App(built: BuiltTemplate, meta: { id: string; work
   const clientCardCats = collection('Категории карточки клиента', categories.id, category.name, null, category.name)
   const settingsCategories = collection('Категории настроек', categories.id, category.name, null, category.name)
   const settingsOperators = collection('Операторы настроек', operators.id, operator.name, null, operator.name)
+  const teamOperators = collection('Команда', operators.id, operator.name, null, operator.name)
+  const teamTickets = collection('Обращения команды', tickets.id, ticket.subject, null, ticket.updatedAt)
   const queueEvents = collection('События тикетов', events.id, event.kind, null, event.at)
   const queueNorms = collection('Нормативы тикетов', norms.id, slaFields.riskMinutes, null, null)
   const dashEvents = collection('События главной', events.id, event.kind, null, event.at)
   const dashNorms = collection('Нормативы главной', norms.id, slaFields.riskMinutes, null, null)
   const dashTickets = collection('Обращения главной', tickets.id, ticket.subject, openTicket, ticket.updatedAt)
+  const dashOperators = collection('Операторы главной', operators.id, operator.name, null, operator.name)
   const settingsNorms = collection('Нормативы настроек', norms.id, slaFields.riskMinutes, null, null)
   const ticketEvents = collection('События карточки', events.id, event.kind, null, event.at, byTicket(event.ticket), tickets.id)
   const screen = (id: string, name: string, menuLabel: string | undefined, icon: string, audience: AppV2Audience, contextTableId: string | null, rootIds: string[], navigation: boolean) =>
@@ -265,10 +271,10 @@ export function buildSupportV2App(built: BuiltTemplate, meta: { id: string; work
   const grant = (audience: AppV2Audience, value: Omit<AppV2Grant, 'audience'>): AppV2Grant => ({ audience, ...value })
   const owned = (fieldId: string) => ({ kind: 'owned' as const, fieldId, property: 'email' as const })
   const all = { kind: 'all' as const }
-  const clientTicketRead = [ticket.number, ticket.subject, ticket.description, ticket.client, ticket.clientName, ticket.clientEmail, ticket.status, ticket.priority, ticket.category, ticket.assignee, ticket.deadline, ticket.createdAt, ticket.updatedAt]
+  const clientTicketRead = [ticket.number, ticket.subject, ticket.description, ticket.client, ticket.clientName, ticket.clientEmail, ticket.status, ticket.priority, ticket.category, ticket.assignee, ticket.line, ticket.deadline, ticket.createdAt, ticket.updatedAt]
   const clientTicketCreate = [ticket.number, ticket.subject, ticket.description, ticket.category, ticket.clientName, ticket.status, ticket.priority, ticket.createdAt, ticket.updatedAt]
   const clientTicketUpdate = [ticket.status, ticket.updatedAt]
-  const deskTicketUpdate = [ticket.assignee, ticket.assigneeEmail, ticket.priority, ticket.category, ticket.status, ticket.deadline, ticket.updatedAt, ticket.subject, ticket.description, ticket.client, ticket.clientName, ticket.clientEmail]
+  const deskTicketUpdate = [ticket.assignee, ticket.assigneeEmail, ticket.line, ticket.priority, ticket.category, ticket.status, ticket.deadline, ticket.updatedAt, ticket.subject, ticket.description, ticket.client, ticket.clientName, ticket.clientEmail]
   return {
     formatVersion: 2, id: meta.id, workspaceId: meta.workspaceId, name: meta.name, slug: meta.slug, purpose: 'business',
     appearance: { navigation: 'tabs', icon: 'clipboard', density: 'regular', corners: 'rounded' },
@@ -286,12 +292,13 @@ export function buildSupportV2App(built: BuiltTemplate, meta: { id: string; work
       inactiveChoiceId: choice('Операторы', 'Статус', 'Неактивен'),
     },
     screens: [
-      screen(ids.dashboardScreenId, 'Главная', 'Главная', 'home', desk, null, [dashTickets, dashEvents, dashNorms], true),
+      screen(ids.dashboardScreenId, 'Главная', 'Главная', 'home', desk, null, [dashTickets, dashOperators, dashEvents, dashNorms], true),
       screen(ids.queueScreenId, 'Тикеты', 'Тикеты', 'clipboard', desk, null, [queueTickets, queueClients, queueOperators, queueCategories, queueEvents, queueNorms, ids.operatorCreateFormId], true),
       screen(ids.ticketScreenId, 'Обращение', undefined, 'clipboard', desk, tickets.id, [ticketReplies, ticketNotes, ticketOperators, ticketCategories, ticketClients, ticketEvents, ids.replyFormId, ids.noteFormId, ids.assignFormId], false),
       screen(ids.clientsScreenId, 'Клиенты', 'Клиенты', 'users', desk, null, [directory, directoryTickets], true),
       screen(ids.clientScreenId, 'Клиент', undefined, 'users', desk, clients.id, [clientCardTickets, clientCardOps, clientCardCats], false),
       screen(ids.clientListScreenId, 'Мои обращения', 'Кабинет клиента', 'clipboard', { kind: 'roles', roleIds: ['owner', 'staff', 'client'] }, null, [clientTickets, clientCategories, ids.createFormId], true),
+      screen(ids.teamScreenId, 'Команда', 'Команда', 'users', desk, null, [teamOperators, teamTickets], true),
       screen(ids.settingsScreenId, 'Настройки', 'Настройки', 'settings', owner, null, [settingsCategories, settingsOperators, settingsNorms, ids.categoryFormId], true),
       screen(ids.clientTicketScreenId, 'Моё обращение', undefined, 'clipboard', clientRole, tickets.id, [clientReplies, clientOperators, clientTicketCategories], false),
     ],
@@ -321,7 +328,7 @@ export function buildSupportV2App(built: BuiltTemplate, meta: { id: string; work
         { tableId: operators.id, grants: [
           grant(owner, { read: { fieldIds: columnsOf(operators.id), rows: all }, create: { fieldIds: editable(operators.id) }, update: { fieldIds: editable(operators.id), rows: all } }),
           grant(staff, { read: { fieldIds: columnsOf(operators.id), rows: all } }),
-          grant(clientRole, { read: { fieldIds: [operator.name, operator.photo, operator.role], rows: all } }),
+          grant(clientRole, { read: { fieldIds: [operator.name, operator.photo, operator.role, ...(operator.line ? [operator.line] : [])], rows: all } }),
         ] },
         { tableId: events.id, grants: [
           grant(owner, { read: { fieldIds: columnsOf(events.id), rows: all }, create: { fieldIds: editable(events.id) } }),

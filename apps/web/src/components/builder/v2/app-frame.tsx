@@ -114,8 +114,8 @@ export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,childre
   },[more])
   const choose=(id:string)=>{setMore(false);onNavigate(id)}
   const navButton=(screen:AppV2['screens'][number],extra=false)=>{
-    const label=builderV2MenuLabel(screen,app)
-    return <button type="button" key={screen.id} title={label} aria-current={screen.id===sectionId?'page':undefined} className={extra?css.extraItem:undefined} onClick={()=>choose(screen.id)}><ProtoIcon name={screen.icon}/><span>{label}</span></button>
+    const label=builderV2MenuLabel(screen,app,{phone})
+    return <button type="button" key={screen.id} title={builderV2MenuLabel(screen,app)} aria-current={screen.id===sectionId?'page':undefined} className={extra?css.extraItem:undefined} onClick={()=>choose(screen.id)}><ProtoIcon name={screen.icon}/><span>{label}</span></button>
   }
   const limit=navigation==='sidebar'?screens.length:fit
   const rest=screens.slice(limit),overflow=rest.length>0,activeExtra=rest.some(screen=>screen.id===sectionId)

@@ -354,7 +354,8 @@ export function applySupportChange(app: AppV2, actor: AppV2Actor, rows: readonly
       number, subject: change.subject.trim(), description: change.description.trim(), categoryId: category.id,
       clientId: isSupportDesk(actor) ? clientId : undefined, clientName, clientEmail, statusId: support.statuses.fresh, priorityId, createdAt: now,
     })
-    if (change.lineId !== undefined && support.ticket.line) values[support.ticket.line] = change.lineId ?? ''
+    // ticket.line is desk-only; clients have no create grant for it.
+    if (isSupportDesk(actor) && change.lineId !== undefined && support.ticket.line) values[support.ticket.line] = change.lineId ?? ''
     const decision = guardSupportCreate(app, actor, support.ticketsTableId, values)
     if (!decision.ok) return decision
     const stored = { ...values, ...decision.ownerValues }

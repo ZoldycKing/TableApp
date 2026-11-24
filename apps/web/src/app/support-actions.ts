@@ -40,9 +40,11 @@ function readRequest(input: unknown): Request | null {
     if (value.clientId != null && value.clientId !== '' && !clientId) return null
     const priorityId = value.priorityId == null || value.priorityId === '' ? undefined : idValue(value.priorityId)
     if (value.priorityId != null && value.priorityId !== '' && !priorityId) return null
-    const lineId = value.lineId == null || value.lineId === '' ? null : idValue(value.lineId)
-    if (value.lineId != null && value.lineId !== '' && !lineId) return null
-    return { kind: 'create', revision: value.revision, screenId: value.screenId, subject, description, categoryId, lineId, ...(clientId ? { clientId } : {}), ...(priorityId ? { priorityId } : {}) }
+    // Only stamp line when the caller sent it — defaulting null writes ticket.line and
+    // fails client create («Одно из полей недоступно для изменения»).
+    const lineId = value.lineId === undefined ? undefined : value.lineId == null || value.lineId === '' ? null : idValue(value.lineId)
+    if (value.lineId !== undefined && value.lineId != null && value.lineId !== '' && !lineId) return null
+    return { kind: 'create', revision: value.revision, screenId: value.screenId, subject, description, categoryId, ...(clientId ? { clientId } : {}), ...(priorityId ? { priorityId } : {}), ...(lineId !== undefined ? { lineId } : {}) }
   }
   const recordId = idValue(value.recordId)
   if (value.kind === 'reply' || value.kind === 'note') {
@@ -160,7 +162,8 @@ export async function savePublishedSupportAction(slug: string, input: unknown): 
           number, subject: parsed.subject, description: parsed.description, categoryId: category.id,
           clientId, clientName, clientEmail, statusId: support.statuses.fresh, priorityId, createdAt: now,
         })
-        if (parsed.lineId !== undefined && support.ticket.line) values[support.ticket.line] = parsed.lineId ?? ''
+        // ticket.line is desk-only; clients have no create grant for it.
+        if (isSupportDesk(actor) && parsed.lineId !== undefined && support.ticket.line) values[support.ticket.line] = parsed.lineId ?? ''
         const decision = guardSupportCreate(app, actor, support.ticketsTableId, values)
         if (!decision.ok) throw new RowWriteError('denied', decision.error)
         const ticketId = newId('row')

@@ -416,11 +416,16 @@ export type SupportSlaCountdown = {
   dueAt: number | null
 }
 
-/** Whole minutes → «2 ч 15 мин» / «40 мин» / «1 ч». */
+/** Whole minutes → «40 мин» / «5 ч» / «2 дн 4 ч» / «3 дн». */
 export function supportSlaDurationLabel(ms: number) {
   const total = Math.max(0, Math.round(Math.abs(ms) / 60_000))
-  const hours = Math.floor(total / 60)
+  const days = Math.floor(total / (24 * 60))
+  const hours = Math.floor((total % (24 * 60)) / 60)
   const minutes = total % 60
+  if (days > 0) {
+    if (!hours) return `${days} дн`
+    return `${days} дн ${hours} ч`
+  }
   if (!hours) return `${minutes} мин`
   if (!minutes) return `${hours} ч`
   return `${hours} ч ${minutes} мин`
@@ -449,7 +454,8 @@ export function supportSlaCountdown(view: SupportSlaView): SupportSlaCountdown {
   const dueAt = clock.dueAt
   if (remainingMs <= 0 || clock.overdue) {
     const over = supportSlaDurationLabel(remainingMs)
-    return { known: true, label: `Просрочено на ${over}`, shortLabel: `Просроч. ${over}`, tone: 'overdue', remainingMs, dueAt }
+    const label = `Просрочено ${over}`
+    return { known: true, label, shortLabel: label, tone: 'overdue', remainingMs, dueAt }
   }
   const left = supportSlaDurationLabel(remainingMs)
   const budget = clock.budgetMs ?? 0
@@ -462,4 +468,13 @@ export function supportSlaCountdown(view: SupportSlaView): SupportSlaCountdown {
     remainingMs,
     dueAt,
   }
+}
+
+/** Policy text for «Сведения» — not a live countdown duplicate. */
+export function supportSlaNormLabel(view: SupportSlaView, policy: SupportSlaPolicy | null) {
+  if (!view.known || !view.priority || !policy) return 'Нет данных'
+  if (!view.first.met) {
+    return `Ответ за ${supportSlaDurationLabel(policy.firstResponseMinutes[view.priority] * 60_000)}`
+  }
+  return `Решение за ${supportSlaDurationLabel(policy.resolutionMinutes[view.priority] * 60_000)}`
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { SUPPORT_SLA_STARTER, supportDashboard, supportQueueMatch, supportSlaCountdown, supportSlaDurationLabel, supportSlaView, type SupportSlaEvent, type SupportSlaPolicy } from './support-sla'
+import { SUPPORT_SLA_STARTER, supportDashboard, supportQueueMatch, supportSlaCountdown, supportSlaDurationLabel, supportSlaNormLabel, supportSlaView, type SupportSlaEvent, type SupportSlaPolicy } from './support-sla'
 
 const policy: SupportSlaPolicy = SUPPORT_SLA_STARTER
 const t0 = Date.parse('2026-11-23T09:00:00.000Z')
@@ -114,6 +114,9 @@ describe('support SLA clocks', () => {
   it('formats a live countdown with sage, amber and overdue tones', () => {
     expect(supportSlaDurationLabel(2 * 3_600_000 + 15 * 60_000)).toBe('2 ч 15 мин')
     expect(supportSlaDurationLabel(40 * 60_000)).toBe('40 мин')
+    expect(supportSlaDurationLabel(95 * 3_600_000)).toBe('3 дн 23 ч')
+    expect(supportSlaDurationLabel(3 * 24 * 3_600_000)).toBe('3 дн')
+    expect(supportSlaDurationLabel(2 * 24 * 3_600_000 + 4 * 3_600_000)).toBe('2 дн 4 ч')
     const plenty = supportSlaCountdown(supportSlaView([created(t0, 'Низкий')], policy, t0 + min(30)))
     expect(plenty.label).toMatch(/^Осталось /)
     expect(plenty.tone).toBe('sage')
@@ -122,7 +125,11 @@ describe('support SLA clocks', () => {
     expect(soon.label).toMatch(/^Осталось /)
     const late = supportSlaCountdown(supportSlaView([created()], policy, t0 + min(100)))
     expect(late.tone).toBe('overdue')
-    expect(late.label).toMatch(/^Просрочено на /)
+    expect(late.label).toBe('Просрочено 40 мин')
+    expect(late.shortLabel).toBe('Просрочено 40 мин')
+    const daysLate = supportSlaCountdown(supportSlaView([created()], policy, t0 + min(60) + 3 * 24 * 3_600_000))
+    expect(daysLate.label).toMatch(/^Просрочено 3 дн/)
+    expect(daysLate.shortLabel).not.toMatch(/Просроч\./)
     const paused = supportSlaCountdown(supportSlaView([created(), { at: t0 + min(10), kind: 'status', status: 'Ждём клиента' }], policy, t0 + min(100)))
     expect(paused.label).toBe('На паузе')
     expect(paused.tone).toBe('paused')
@@ -132,6 +139,10 @@ describe('support SLA clocks', () => {
     const missed = supportSlaCountdown(supportSlaView([created(), { at: t0 + min(300), kind: 'status', status: 'Решено' }], policy, t0 + min(310)))
     expect(missed.label).toBe('Решено с просрочкой')
     expect(missed.tone).toBe('missed')
+    const open = supportSlaView([created(t0, 'Высокий')], policy, t0 + min(10))
+    expect(supportSlaNormLabel(open, policy)).toBe('Ответ за 2 ч')
+    const answered = supportSlaView([created(t0, 'Высокий'), { at: t0 + min(10), kind: 'public_reply' }], policy, t0 + min(20))
+    expect(supportSlaNormLabel(answered, policy)).toBe('Решение за 8 ч')
   })
 
   it('matches queues once when both clocks are late and excludes pause and closed work', () => {

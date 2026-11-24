@@ -15,7 +15,7 @@ function scrollIntoNearestScroller(node: HTMLElement) {
     }
     parent = parent.parentElement
   }
-  node.scrollIntoView({ block: 'start' })
+  if (typeof node.scrollIntoView === 'function') node.scrollIntoView({ block: 'start' })
 }
 
 /** Isolated so support-screens can lazy-load this without pulling conversation DB clients into every support unit test. */

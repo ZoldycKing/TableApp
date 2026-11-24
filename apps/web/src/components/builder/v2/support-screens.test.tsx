@@ -42,33 +42,45 @@ describe('support screens', () => {
     queue.unmount()
 
     const operator = render(<SupportDemo view="ticket" bare />)
-    expect(await screen.findByText(/в ответ клиенту это не писать/)).toBeTruthy()
-    const note = screen.getByText(/в ответ клиенту это не писать/).closest('li') as HTMLElement
-    expect(note.getAttribute('data-internal')).toBe('true')
+    expect(await screen.findByText('Клиент ждёт ответ по акту.')).toBeTruthy()
+    const note = screen.getByText('Клиент ждёт ответ по акту.').closest('[data-internal]') as HTMLElement
+    expect(note).toBeTruthy()
     expect(within(note).getByText('Внутренняя заметка')).toBeTruthy()
-    expect(screen.queryByText('Внутренняя заметка. Клиент это не видит.')).toBeNull()
     expect(screen.getByRole('radiogroup', { name: 'Режим ответа' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Ответить' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Отправить' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Прикрепить файл' })).toBeTruthy()
+    expect(screen.getAllByRole('button', { name: 'Убрать файл' }).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/акт-приёмки\.pdf/).length).toBeGreaterThan(0)
     expect(screen.queryByText('Статус и назначение')).toBeNull()
     expect(screen.getByRole('button', { name: 'Статус' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Ответственный' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Приоритет' })).toBeTruthy()
     expect(document.querySelector('[data-sla-badge]')).toBeTruthy()
+    expect(screen.getByText(/Ответ за|Решение за/)).toBeTruthy()
     operator.unmount()
 
     for (const phone of [false, true]) {
       const client = render(<SupportDemo view="client-ticket" bare phone={phone} />)
-      const thread = await screen.findByRole('list', { name: 'Хронология' })
-      const own = within(thread).getByText('Пётр Орлов').closest('li') as HTMLElement
-      const reply = within(thread).getByText('Анна Волкова').closest('li') as HTMLElement
-      expect(within(own).getByText('Клиент')).toBeTruthy()
-      expect(within(own).queryByText('Ответ клиенту')).toBeNull()
-      expect(within(reply).getByText('Ответ клиенту')).toBeTruthy()
-      expect(screen.queryByText(/в ответ клиенту это не писать/)).toBeNull()
+      expect(await screen.findByRole('heading', { name: 'Не сходится сумма в отчёте за октябрь' })).toBeTruthy()
+      expect(screen.getByText('Добрый день. Прикладываю акт и фото по заявке.')).toBeTruthy()
+      expect(screen.queryByText('Клиент ждёт ответ по акту.')).toBeNull()
       expect(screen.queryByText('Внутренняя заметка')).toBeNull()
-      expect(screen.getByRole('heading', { name: 'Не сходится сумма в отчёте за октябрь' })).toBeTruthy()
+      expect(screen.queryByRole('radio', { name: 'Внутренняя заметка' })).toBeNull()
       client.unmount()
     }
+  })
+
+  it('keeps the secure-upload composer with paperclip, pending chips and Отправить on the ticket page', async () => {
+    render(<SupportDemo view="ticket" bare />)
+    await screen.findByRole('heading', { name: 'Не сходится сумма в отчёте за октябрь' })
+    expect(screen.getByRole('button', { name: 'Прикрепить файл' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Отправить' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Ответить' })).toBeNull()
+    expect(screen.getAllByRole('button', { name: 'Убрать файл' }).length).toBeGreaterThan(0)
+    expect(screen.getByText(/комментарий\.docx/)).toBeTruthy()
+    expect(screen.getAllByText(/акт-приёмки\.pdf/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/фото-дефекта\.jpg|Проверяется/).length).toBeGreaterThan(0)
+    expect(document.querySelector('[data-support-composer]')).toBeNull()
   })
 
   it('edits and sets a deadline in Moscow time without shifting it on a second save', async () => {
@@ -115,9 +127,8 @@ describe('support screens', () => {
   it('edits status inline in Сведения and keeps the reply composer without a duplicate header button on desktop', async () => {
     const desktop = render(<SupportDemo view="ticket" bare />)
     await screen.findByRole('heading', { name: 'Не сходится сумма в отчёте за октябрь' })
-    const headerActions = document.querySelector('[data-support-screen="ticket"]')
-    expect(headerActions?.querySelector('.detailActions') ?? true).toBeTruthy()
-    expect(screen.getAllByRole('button', { name: 'Ответить' }).length).toBe(1)
+    expect(screen.getByRole('button', { name: 'Отправить' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Ответить' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Статус' }))
     const statusMenu = screen.getByRole('listbox', { name: 'Статус' })
     expect(statusMenu.querySelector('select')).toBeNull()
@@ -129,6 +140,8 @@ describe('support screens', () => {
     await screen.findByRole('heading', { name: 'Не сходится сумма в отчёте за октябрь' })
     expect(screen.getByRole('radiogroup', { name: 'Режим ответа' })).toBeTruthy()
     expect(screen.getByRole('radio', { name: 'Внутренняя заметка' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Прикрепить файл' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Отправить' })).toBeTruthy()
   })
 
   it('opens the client form with the save action visible', async () => {

@@ -7,7 +7,8 @@ import { deadlineTime, filterTickets, isOpenStatus, isOverdue, isSupportStatus, 
 import { applySupportChange, isSupportDesk, supportStatusName, type SupportChange } from '@/lib/support-persist'
 import { AppFrameDeviceContext } from './app-frame'
 import { AppDialog } from './app-dialog'
-import { supportQueueMatch, supportSlaCountdown, supportSlaDueAt, supportSlaLabel, type SupportSlaCountdown, type SupportSlaView } from '@/lib/support-sla'
+import { supportQueueMatch, supportSlaCountdown, supportSlaDueAt, supportSlaNormLabel, type SupportSlaCountdown, type SupportSlaView } from '@/lib/support-sla'
+import { supportPolicyFromRows } from '@/lib/support-persist'
 import { SupportDashboard, SupportPerson, SupportSlaSettings, TicketStatusMenu, slaFacts, slaWhen } from './support-desk'
 import { SupportSelect, TeamScreen } from './support-team'
 import { DateMenu } from './booking-calendar'
@@ -874,59 +875,6 @@ function FactMenu(props: {
   </div>
 }
 
-function TicketComposer(props: {
-  desk: boolean
-  reopen: boolean
-  phone: boolean
-  composerRef: RefObject<HTMLFormElement | null>
-  onSubmit: (mode: 'reply' | 'note', text: string) => Promise<{ ok: boolean; error?: string; message?: string }>
-  onMessage: (value: string) => void
-}) {
-  const [mode, setMode] = useState<'reply' | 'note'>('reply')
-  const [text, setText] = useState('')
-  const [error, setError] = useState('')
-  const [busy, setBusy] = useState(false)
-  const internal = props.desk && mode === 'note'
-  const save = async () => {
-    if (!text.trim()) { setError(internal ? 'Напишите заметку.' : 'Напишите ответ.'); return }
-    setBusy(true)
-    const result = await props.onSubmit(internal ? 'note' : 'reply', text.trim())
-    setBusy(false)
-    if (!result.ok) { setError(result.error ?? 'Не сохранилось.'); return }
-    props.onMessage(result.message ?? '')
-    setText('')
-    setError('')
-  }
-  return <form ref={props.composerRef} className={css.composer} data-support-composer data-internal={internal || undefined} onSubmit={event => { event.preventDefault(); void save() }}>
-    {props.desk ? <div className={css.composerModes} role="radiogroup" aria-label="Режим ответа">
-      <button type="button" role="radio" aria-label="Ответ клиенту" aria-checked={!internal} aria-pressed={!internal} disabled={busy} onClick={() => setMode('reply')}>
-        <span className={css.modeFull} aria-hidden="true">Ответ клиенту</span>
-        <span className={css.modeShort} aria-hidden="true">Клиенту</span>
-      </button>
-      <button type="button" role="radio" aria-label="Внутренняя заметка" aria-checked={internal} aria-pressed={internal} disabled={busy} onClick={() => setMode('note')}>
-        <span className={css.modeFull} aria-hidden="true">Внутренняя заметка</span>
-        <span className={css.modeShort} aria-hidden="true">Заметка</span>
-      </button>
-    </div> : null}
-    {internal ? <p className={css.noteFlag}><ProtoIcon name="lock" size={14} /> Только для операторов. Клиент не увидит.</p> : null}
-    <label className={css.field}>
-      <span className={css.srOnly}>{internal ? 'Заметка' : props.reopen ? 'Что изменилось' : 'Сообщение'}</span>
-      <textarea
-        value={text}
-        onChange={event => setText(event.target.value)}
-        maxLength={4000}
-        required
-        rows={props.phone ? 3 : 4}
-        placeholder={internal ? 'Внутренняя заметка…' : props.reopen ? 'Что изменилось…' : 'Ответ клиенту…'}
-      />
-    </label>
-    {error ? <p className={css.error} role="alert">{error}</p> : null}
-    <div className={css.composerFooter}>
-      <button type="submit" className={css.primary} disabled={busy}>{busy ? 'Сохраняем…' : internal ? 'Сохранить заметку' : props.reopen ? 'Переоткрыть' : 'Ответить'}</button>
-    </div>
-  </form>
-}
-
 function TicketCard(props: ScreenProps) {
   const device = useContext(AppFrameDeviceContext)
   const phone = device === 'phone'
@@ -936,7 +884,7 @@ function TicketCard(props: ScreenProps) {
   const bundle = useContext(SupportRowsContext)
   const [dialog, setDialog] = useState<SupportOpen>(bundle?.open ?? null)
   const [message, setMessage] = useState('')
-  const composerRef = useRef<HTMLFormElement>(null)
+  const threadRef = useRef<HTMLDivElement>(null)
   const back = desk ? props.kit.queueScreenId : props.kit.clientListScreenId
   if (!ticket) return <div className={css.root} data-support-root data-support-screen="missing">{props.loading ? <p role="status">Загружаем обращение…</p> : <div className={css.empty}><p>Обращение не найдено или вам недоступно.</p><button type="button" onClick={() => props.onNavigate?.(back)}>К списку</button></div>}</div>
   const fields = props.kit.ticket
@@ -952,6 +900,8 @@ function TicketCard(props: ScreenProps) {
   const overdue = isOverdue(status, ticket.values[fields.deadline], props.now)
   const sla = slaFacts(props.kit, props.rows, ticket.id, props.now)
   const countdown = supportSlaCountdown(sla)
+  const policy = supportPolicyFromRows(props.kit, props.rows)
+  const normLabel = supportSlaNormLabel(sla, policy)
   const replies = props.of(props.kit.repliesTableId).filter(row => firstId(row.values[props.kit.reply.ticket]) === ticket.id)
   const notes = desk ? props.of(props.kit.notesTableId).filter(row => firstId(row.values[props.kit.note.ticket]) === ticket.id) : []
   const clientName = textOf(ticket.values[fields.clientName])
@@ -968,13 +918,17 @@ function TicketCard(props: ScreenProps) {
   const replyLabel = reopen ? 'Переоткрыть' : 'Ответить'
   const waiting = status === 'Ждём клиента'
   const canCompose = !(clientView && isSupportDesk(props.actor))
+  const conversationShot = bundle?.conversationShot
   const operators = props.of(props.kit.operatorsTableId).filter(row => row.values[props.kit.operator.active] === props.kit.activeChoiceId || row.id === assigneeId)
   const priorities = props.tables.find(table => table.id === props.kit.ticketsTableId)?.fields.find(field => field.id === fields.priority)?.choices ?? []
   const focusComposer = () => {
-    const node = composerRef.current
-    if (!node) return
-    node.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-    node.querySelector('textarea')?.focus()
+    if (conversationShot) {
+      const form = threadRef.current?.querySelector('form')
+      form?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+      form?.querySelector('textarea')?.focus()
+      return
+    }
+    setDialog('reply')
   }
   const saveAssign = async (patch: { assigneeId?: string | null; priorityId?: string; categoryId?: string; deadline?: string | null; lineId?: string | null }) => {
     const result = await commit(props, {
@@ -1013,13 +967,14 @@ function TicketCard(props: ScreenProps) {
         <div className={shell.detailMainCol}>
           <DetailSection title="Описание"><p className={css.description}>{textOf(ticket.values[fields.description]) || 'Описания нет.'}</p></DetailSection>
           <DetailSection title="Переписка">
-            {bundle?.conversationShot ? (
+            <div ref={threadRef} data-support-thread>
+            {conversationShot ? (
               <Suspense fallback={<p className={css.quiet} role="status">Загружаем переписку…</p>}>
                 <SupportConversationShotPanel
                   desk={desk}
                   tableId={props.kit.ticketsTableId}
                   ticketId={ticket.id}
-                  shot={bundle.conversationShot}
+                  shot={conversationShot}
                 />
               </Suspense>
             ) : <>
@@ -1044,15 +999,11 @@ function TicketCard(props: ScreenProps) {
               </li>
               })}
             </ol>
-            {canCompose ? <TicketComposer
-              desk={desk}
-              reopen={reopen}
-              phone={phone}
-              composerRef={composerRef}
-              onMessage={setMessage}
-              onSubmit={async (mode, text) => commit(props, mode === 'note' ? { kind: 'note', recordId: ticket.id, text } : { kind: 'reply', recordId: ticket.id, text })}
-            /> : null}
+            {canCompose ? <div className={css.composerFooter}>
+              <button type="button" className={css.primary} onClick={() => setDialog('reply')}>{replyLabel}</button>
+            </div> : null}
             </>}
+            </div>
           </DetailSection>
         </div>
         {!clientView ? <aside className={`${shell.detailSideCol} ${css.factsCol}`}>
@@ -1108,7 +1059,7 @@ function TicketCard(props: ScreenProps) {
                   </button>
                 </dd>
               </div>
-              <div><dt>Норматив</dt><dd>{countdown.label || (sla.known ? supportSlaLabel(sla) || 'В срок' : 'Нет данных')}</dd></div>
+              <div><dt>Норматив</dt><dd>{normLabel}</dd></div>
             </dl>
           </DetailSection>
         </aside> : null}

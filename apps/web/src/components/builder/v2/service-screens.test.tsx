@@ -66,7 +66,9 @@ describe('service screens', () => {
       expect(screen.queryByRole('button', { name: 'Статус' })).toBeNull()
       expect(screen.getByLabelText('Прогресс ремонта')).toBeTruthy()
       expect(screen.getByRole('button', { name: 'Согласовать стоимость' })).toBeTruthy()
+      expect(screen.getByLabelText('Где забрать')).toBeTruthy()
       expect(screen.getByText(/ул\. Сервисная/)).toBeTruthy()
+      expect(screen.queryByRole('button', { name: 'Ответить' })).toBeNull()
       client.unmount()
     }
   })

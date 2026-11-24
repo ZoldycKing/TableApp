@@ -85,7 +85,7 @@ function TimeMenu({ value, onValue, label }: { value: string; onValue: (value: s
 }
 
 function statusTone(name: string) {
-  if (name === 'Новые') return 'fresh'
+  if (name === 'Новые' || name === 'Новый') return 'fresh'
   if (name === 'В работе') return 'progress'
   if (name === 'Ждём запчасти') return 'waiting'
   if (name === 'Готово к выдаче') return 'resolved'
@@ -96,9 +96,22 @@ function statusTone(name: string) {
   return 'normal'
 }
 
+/** Singular label on chips; filter tabs keep the plural «Новые». */
+function statusChipLabel(name: string) {
+  return name === 'Новые' ? 'Новый' : name
+}
+
 function StatusBadge({ name }: { name: string }) {
   if (!name) return null
-  return <span className={css.badge} data-kind="status" data-tone={statusTone(name)}>{name}</span>
+  return <span className={css.badge} data-kind="status" data-tone={statusTone(name)}>{statusChipLabel(name)}</span>
+}
+
+function formatDay(value: unknown) {
+  if (typeof value !== 'string' || !value) return ''
+  const wall = instantToWallClock(value, 'Europe/Moscow')
+  if (!wall) return ''
+  const [, month, day] = wall.date.split('-')
+  return `${day}.${month}`
 }
 
 function DeadlineBadge({ status, deadline, now, compact = false }: { status: string; deadline: unknown; now: number; compact?: boolean }) {
@@ -360,20 +373,23 @@ function DashboardScreen(props: ScreenProps) {
         </DetailSection>
         <DetailSection title="Выручка по неделям">
           <div className={css.revBars} role="img" aria-label="Выручка по неделям">
-            {stats.revenueByWeek.map(week => (
-              <div key={week.label} className={css.revBar}>
-                <span className={css.revFill} style={{ height: `${Math.max(8, (week.value / maxWeek) * 100)}%` }} />
+            {stats.revenueByWeek.map(week => {
+              const pct = week.value ? Math.max(10, Math.round((week.value / maxWeek) * 100)) : 0
+              return <div key={week.label} className={css.revBar}>
                 <strong>{week.value ? formatMoney(week.value) : '—'}</strong>
+                <div className={css.revChart}>
+                  <span className={css.revFill} style={{ height: `${pct}%` }} />
+                </div>
                 <span>{week.label}</span>
               </div>
-            ))}
+            })}
           </div>
         </DetailSection>
       </div>
       {stats.waitingParts.length ? <DetailSection title="Ждём запчасти">
         <ul className={css.cards} data-keep-cards>{stats.waitingParts.slice(0, 4).map(item => <li key={item.id}>
           <button type="button" className={css.card} onClick={() => props.onNavigate?.(props.kit.repairScreenId, item.id)}>
-            <span className={css.subject + ' ' + css.deviceOneLine}>{item.device}</span>
+            <span className={css.subject + ' ' + css.deviceWrap}>{item.device}</span>
             <span className={css.number}>{item.number} · ETA {item.partsEta ? formatWhen(item.partsEta, '—') : 'не указан'}</span>
             <span className={css.cardFacts}><StatusBadge name={item.status} /><PersonMark name={item.masterName} photo={item.masterPhoto} size={24} /></span>
           </button>
@@ -382,7 +398,7 @@ function DashboardScreen(props: ScreenProps) {
       {stats.needsApproval.length ? <DetailSection title="Нужно согласование клиента">
         <ul className={css.cards} data-keep-cards>{stats.needsApproval.slice(0, 4).map(item => <li key={item.id}>
           <button type="button" className={css.card} onClick={() => props.onNavigate?.(props.kit.repairScreenId, item.id)}>
-            <span className={css.subject + ' ' + css.deviceOneLine}>{item.device}</span>
+            <span className={css.subject + ' ' + css.deviceWrap}>{item.device}</span>
             <span className={css.number}>{item.number} · {formatMoney(item.cost)}</span>
             <span className={css.cardFacts}><StatusBadge name="На согласовании" /></span>
           </button>
@@ -391,7 +407,7 @@ function DashboardScreen(props: ScreenProps) {
       {overdue.length ? <DetailSection title="Просроченные">
         <ul className={css.cards} data-keep-cards>{overdue.map(item => <li key={item.id}>
           <button type="button" className={css.card} onClick={() => props.onNavigate?.(props.kit.repairScreenId, item.id)}>
-            <span className={css.subject + ' ' + css.deviceOneLine}>{item.device}</span>
+            <span className={css.subject + ' ' + css.deviceWrap}>{item.device}</span>
             <span className={css.number}>{item.number} · {item.clientName}</span>
             <span className={css.cardFacts}><StatusBadge name={item.status} /><DeadlineBadge status={item.status} deadline={item.deadline} now={props.now} compact /></span>
           </button>
@@ -400,7 +416,7 @@ function DashboardScreen(props: ScreenProps) {
       {ready.length ? <DetailSection title="Готово к выдаче">
         <ul className={css.cards} data-keep-cards>{ready.map(item => <li key={item.id}>
           <button type="button" className={css.card} onClick={() => props.onNavigate?.(props.kit.repairScreenId, item.id)}>
-            <span className={css.subject + ' ' + css.deviceOneLine}>{item.device}</span>
+            <span className={css.subject + ' ' + css.deviceWrap}>{item.device}</span>
             <span className={css.number}>{item.number} · {formatMoney(item.cost)}</span>
             <span className={css.cardFacts}><StatusBadge name={item.status} /><DeadlineBadge status={item.status} deadline={item.deadline} now={props.now} compact /></span>
           </button>
@@ -442,10 +458,14 @@ function RepairList(props: ScreenProps) {
         </div>
       </> : null}
       {clientView ? <>
-        <h3>Открытые · {open.length}</h3>
-        <RepairRows items={open} now={props.now} onOpen={openRepair} clientFacing />
-        <h3>Завершённые · {closed.length}</h3>
-        <RepairRows items={closed} now={props.now} onOpen={openRepair} clientFacing />
+        <div className={css.clientListSection}>
+          <h3>Открытые · {open.length}</h3>
+          <RepairRows items={open} now={props.now} onOpen={openRepair} clientFacing />
+        </div>
+        <div className={css.clientListSection}>
+          <h3>Завершённые · {closed.length}</h3>
+          <RepairRows items={closed} now={props.now} onOpen={openRepair} clientFacing />
+        </div>
       </> : <RepairRows items={filtered} now={props.now} onOpen={openRepair} desk={desk} onStatus={(id, name) => void runStatus(props, id, statusId(props, name), () => {})} />}
     </ListScreenShell>
     {createOpen && desk ? <CreateDialog {...props} onClose={() => setCreateOpen(false)} onDone={() => setCreateOpen(false)} /> : null}
@@ -457,17 +477,19 @@ function RepairRows(props: { items: ServiceListItem[]; now: number; onOpen: (id:
   const showMaster = !props.clientFacing
   return <>
     <ul className={css.cards} data-ticket-cards data-keep-cards={props.keepCards || undefined}>{props.items.map(item => (
-      <li key={item.id} className={css.ticketCard} data-ticket-card>
+      <li key={item.id} className={css.ticketCard} data-ticket-card data-client={props.clientFacing || undefined}>
         <button type="button" className={css.card} onClick={() => props.onOpen(item.id)}>
           <span className={css.ticketCardTop}>
-            <span className={`${css.subject} ${css.deviceOneLine}`}>{item.device || 'Без названия'}</span>
-            {showMaster && item.masterName ? <PersonMark name={item.masterName} photo={item.masterPhoto} size={28} /> : null}
+            <span className={`${css.subject} ${css.deviceWrap}`}>{item.device || 'Без названия'}</span>
+            {props.clientFacing
+              ? <span className={css.cardCost}>{item.cost > 0 ? formatMoney(item.cost) : '—'}</span>
+              : showMaster && item.masterName ? <PersonMark name={item.masterName} photo={item.masterPhoto} size={28} /> : null}
           </span>
           {item.number ? <span className={css.number}>{item.number}</span> : null}
           <span className={css.cardFacts}>
             <StatusBadge name={item.status} />
             <DeadlineBadge status={item.status} deadline={item.deadline} now={props.now} compact />
-            {item.cost > 0 ? <span className={css.quiet}>{formatMoney(item.cost)}</span> : null}
+            {!props.clientFacing && item.cost > 0 ? <span className={css.quiet}>{formatMoney(item.cost)}</span> : null}
           </span>
           {props.clientFacing
             ? null
@@ -482,12 +504,21 @@ function RepairRows(props: { items: ServiceListItem[]; now: number; onOpen: (id:
     {!props.keepCards && !props.clientFacing ? <div className={css.tableWrap}>
       <table className={css.table} data-columns={7}>
         <caption className={css.quiet}>Список ремонтов</caption>
+        <colgroup>
+          <col className={css.deviceCol} />
+          <col className={css.whoCol} />
+          <col className={css.whoCol} />
+          <col className={css.stateCol} />
+          <col className={css.costCol} />
+          <col className={css.whenCol} />
+          <col className={css.actionsCol} />
+        </colgroup>
         <thead><tr><th>Устройство</th><th>Клиент</th><th>Мастер</th><th>Статус</th><th>Стоимость</th><th>Срок</th><th><span className={css.srOnly}>Действия</span></th></tr></thead>
         <tbody>
           {props.items.map(item => (
             <tr key={item.id}>
               <td><button type="button" className={css.rowButton} onClick={() => props.onOpen(item.id)}>
-                <span className={`${css.subject} ${css.deviceOneLine}`}>{item.device || 'Без названия'}</span>
+                <span className={`${css.subject} ${css.deviceWrap}`}>{item.device || 'Без названия'}</span>
                 {item.number ? <span className={css.number}>{item.number}</span> : null}
               </button></td>
               <td><span className={css.person}>{item.clientName || 'Без клиента'}</span></td>
@@ -529,14 +560,28 @@ function LinesTable({ lines, approval }: { lines: ReturnType<typeof parseService
   </div>
 }
 
-function ClientStepper({ status, diagnosis }: { status: string; diagnosis: string }) {
+function ClientStepper({ status, diagnosis, acceptedAt, updatedAt }: { status: string; diagnosis: string; acceptedAt?: unknown; updatedAt?: unknown }) {
   const active = serviceClientStepIndex(status, diagnosis)
+  const dateFor = (index: number) => {
+    if (index > active) return ''
+    if (index === 0) return formatDay(acceptedAt) || formatDay(updatedAt)
+    return formatDay(updatedAt) || formatDay(acceptedAt)
+  }
   return <ol className={css.stepper} aria-label="Прогресс ремонта">
-    {SERVICE_CLIENT_STEPS.map((label, index) => (
-      <li key={label} data-done={active >= 0 && index <= active || undefined} data-current={index === active || undefined}>
-        <span>{label}</span>
+    {SERVICE_CLIENT_STEPS.map((label, index) => {
+      const done = active >= 0 && index < active
+      const current = index === active
+      const date = done || current ? dateFor(index) : ''
+      return <li key={label} data-done={done || undefined} data-current={current || undefined} data-todo={!done && !current || undefined}>
+        <span className={css.stepMark} aria-hidden="true">
+          {done ? <ProtoIcon name="check" size={14} /> : <span className={css.stepDot} />}
+        </span>
+        <span className={css.stepCopy}>
+          <span className={css.stepLabel}>{label}</span>
+          {date ? <span className={css.stepDate}>{date}</span> : null}
+        </span>
       </li>
-    ))}
+    })}
   </ol>
 }
 
@@ -686,18 +731,27 @@ function RepairCard(props: ScreenProps) {
         <StatusBadge name={status} />
         <DeadlineBadge status={status} deadline={deadlineRaw} now={props.now} />
       </span>}
-      actions={canCompose && phone ? <div className={css.actions}>
+      actions={canCompose && phone && desk ? <div className={css.actions}>
         <button type="button" className={css.primary} onClick={focusComposer}>Ответить</button>
       </div> : undefined}
     >
       {clientView ? <>
-        <ClientStepper status={status} diagnosis={diagnosis} />
+        <ClientStepper
+          status={status}
+          diagnosis={diagnosis}
+          acceptedAt={fields.acceptedAt ? repair.values[fields.acceptedAt] : undefined}
+          updatedAt={repair.values[fields.updatedAt]}
+        />
         <div className={css.pickupCard} aria-label="Выдача">
           <p><strong>Ожидаемая готовность</strong><span>{formatWhen(deadlineRaw, 'Уточним в переписке')}</span></p>
           <p><strong>Смета</strong><span>{formatMoney(numberOf(repair.values[fields.cost]))}{approval ? ` · ${approval}` : ''}</span></p>
           {needsApproval ? <button type="button" className={css.primary} onClick={() => { setApprovedLocal(true); setMessage('Смету согласовали. Мастер продолжит ремонт.') }}>Согласовать стоимость</button> : null}
-          <p className={css.quiet}>{SERVICE_PICKUP.address}</p>
-          <p className={css.quiet}>{SERVICE_PICKUP.hours} · {SERVICE_PICKUP.phone}</p>
+          <div className={css.pickupPlace} aria-label="Где забрать">
+            <strong>Где забрать</strong>
+            <p><ProtoIcon name="mapPin" size={16} /><span>{SERVICE_PICKUP.address}</span></p>
+            <p><ProtoIcon name="clock" size={16} /><span>{SERVICE_PICKUP.hours}</span></p>
+            <p><ProtoIcon name="call" size={16} /><span>{SERVICE_PICKUP.phone}</span></p>
+          </div>
         </div>
         {message ? <p role="status">{message}</p> : null}
         <DetailSection title="Неисправность"><p className={css.description}>{textOf(repair.values[fields.problem]) || 'Описания нет.'}</p></DetailSection>

@@ -34,8 +34,9 @@ export function withCustomerScenario(original: TemplateDef): TemplateDef {
   switch (template.id) {
     case 'service':
       main.fields.push({ key: 'approvedPrice', name: 'Согласованная стоимость', type: 'number', options: { format: 'currency', currency: 'RUB', precision: 2 }, help: 'Фиксируется сервером при согласии клиента. Изменение сметы требует нового согласования.' })
-      scenario = { ...common, table: 'repairs', title: 'Мои ремонты', submitLabel: 'Отправить заявку на ремонт', intro: 'Укажите устройство и неисправность. После приёмки и диагностики мастер предложит стоимость; вы сможете согласовать её в кабинете.',
-        formFields: ['selectedService', 'requestName', 'requestPhone', 'device', 'problem'], requiredFields: ['requestName', 'requestPhone', 'device', 'problem'],
+      // Reuse native App V2 fields (clientEmail / masterEmail / clientName) — do not re-insert «Почта клиента».
+      scenario = { ...common, email: 'clientEmail', assignment: 'masterEmail', table: 'repairs', title: 'Мои ремонты', submitLabel: 'Отправить заявку на ремонт', intro: 'Укажите устройство и неисправность. После приёмки и диагностики мастер предложит стоимость; вы сможете согласовать её в кабинете.',
+        formFields: ['selectedService', 'clientName', 'requestPhone', 'device', 'problem'], requiredFields: ['clientName', 'requestPhone', 'device', 'problem'],
         customerFields: ['number', 'status', 'problem', 'deadline', 'cost', 'approvedPrice', 'work', 'clientSummary'],
         workerFields: ['status', 'cost', 'deadline', 'diagnosis', 'work', 'parts', 'clientSummary'], workerName: 'Мастер',
         status: 'status', initial: 'Новые', terminal: ['Выдано', 'Отменён', 'Отказ от ремонта'], cancel: 'Отменён', cancellable: ['Новые'],
@@ -123,9 +124,9 @@ export function withCustomerScenario(original: TemplateDef): TemplateDef {
   }
   if (!main.fields.some(field => field.key === scenario.email)) main.fields.push({ ...email, key: scenario.email })
   if (scenario.assignment && !main.fields.some(field => field.key === scenario.assignment)) {
-    // The dispatch template already has an email field with this semantic name.
+    // Dispatch / service already have an email field with this semantic name.
     const existing = main.fields.find(field => field.type === 'email' && field.name === 'Почта мастера')
-    if (existing && template.id === 'zayavki') scenario.assignment = existing.key
+    if (existing && (template.id === 'zayavki' || template.id === 'service')) scenario.assignment = existing.key
     else main.fields.push({ ...assignment, key: scenario.assignment })
   }
   if (template.id === 'dostavka') {
@@ -133,10 +134,25 @@ export function withCustomerScenario(original: TemplateDef): TemplateDef {
     scenario.formFields = scenario.formFields.map(recipient)
     scenario.requiredFields = scenario.requiredFields.map(recipient)
   }
-  if (template.id !== 'crm') main.fields.push(...(template.id === 'dostavka' ? [] : structuredClone(contact)), structuredClone(summary))
-  main.fields.push({ key: 'requestDate', name: 'Создано', type: 'datetime', options: { timeZone: 'Europe/Moscow' }, help: 'Дата оформления. При онлайн-заявке фиксируется сервером и видна в истории клиента.' },
-    { key: 'submissionId', name: 'Ключ оформления', type: 'text', help: 'Служебный ключ, защищающий оформление от повторной отправки. Клиенту не показывается.' })
-  scenario.formFields.push('submissionId'); scenario.customerFields.push('requestDate')
+  if (template.id !== 'crm') {
+    const extras = template.id === 'dostavka' ? [] : structuredClone(contact)
+    // Skip contact fields whose key or display name already exists (service has clientName / clientEmail).
+    for (const field of extras) {
+      if (main.fields.some(item => item.key === field.key || item.name === field.name)) continue
+      main.fields.push(field)
+    }
+    if (!main.fields.some(item => item.key === 'clientSummary')) main.fields.push(structuredClone(summary))
+  }
+  if (!main.fields.some(field => field.key === 'requestDate' || field.name === 'Создано')) {
+    main.fields.push({ key: 'requestDate', name: 'Создано', type: 'datetime', options: { timeZone: 'Europe/Moscow' }, help: 'Дата оформления. При онлайн-заявке фиксируется сервером и видна в истории клиента.' })
+  }
+  if (!main.fields.some(field => field.key === 'submissionId')) {
+    main.fields.push({ key: 'submissionId', name: 'Ключ оформления', type: 'text', help: 'Служебный ключ, защищающий оформление от повторной отправки. Клиенту не показывается.' })
+  }
+  scenario.formFields.push('submissionId')
+  const createdField = main.fields.find(field => field.key === 'requestDate')?.key
+    ?? main.fields.find(field => field.name === 'Создано')?.key
+  if (createdField && !scenario.customerFields.includes(createdField)) scenario.customerFields.push(createdField)
   const status = main.fields.find(field => field.key === scenario.status)!
   if ('choices' in status && status.choices) for (const name of [...scenario.terminal, ...(scenario.approval ? [scenario.approval.waiting] : [])]) {
     if (!status.choices.some(choice => choice.name === name)) status.choices.push({ name, color: name.includes('От') ? 'gray' : 'amber' })
@@ -148,7 +164,11 @@ export function withCustomerScenario(original: TemplateDef): TemplateDef {
     ...(template.id === 'crm' ? {} : template.id === 'zayavki'
       ? { [scenario.email]: row.key === 'z1' || row.key === 'z8' ? 'irina@example.com' : `other${index}@example.invalid`, requestName: row.key === 'z1' || row.key === 'z8' ? 'Ирина' : 'Другой клиент', requestPhone: '+7 900 000-00-00' }
       : template.id === 'service'
-        ? { [scenario.email]: row.key === 'r-new' || row.key === 'r-done' ? 'irina@example.com' : `other${index}@example.invalid`, requestName: row.key === 'r-new' || row.key === 'r-done' ? 'Ирина' : 'Другой клиент', requestPhone: '+7 900 000-00-00' }
+        // Keep authored clientEmail/master emails for App V2 demos; only seed Irina on two sample rows.
+        ? {
+            ...(row.key === 'r-new' || row.key === 'r-done' ? { [scenario.email]: 'irina@example.com' } : {}),
+            ...(main.fields.some(field => field.key === 'requestPhone') ? { requestPhone: '+7 900 000-00-00' } : {}),
+          }
       : { [scenario.email]: index < 2 ? 'irina@example.com' : `other${index}@example.invalid`, requestName: index < 2 ? 'Ирина' : 'Другой клиент', requestPhone: '+7 900 000-00-00' }),
     requestDate: inDays(-index * 3),
     // Field service / native service-center keep authored schedule, priorities and statuses.

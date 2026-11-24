@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
-import { ConversationPanel } from '@/components/runtime/conversation-panel'
+import { CorrespondenceModule } from '@/components/runtime/correspondence-module'
 import type { SupportConversationShot } from './support-screens'
 
 function scrollIntoNearestScroller(node: HTMLElement) {
@@ -24,11 +24,13 @@ export function SupportConversationShotPanel({
   tableId,
   ticketId,
   shot,
+  slaBadge,
 }: {
   desk: boolean
   tableId: string
   ticketId: string
   shot: SupportConversationShot
+  slaBadge?: string | null
 }) {
   const root = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -39,13 +41,14 @@ export function SupportConversationShotPanel({
   }, [shot])
   return (
     <div ref={root} data-conversation-shot-panel="">
-      <ConversationPanel
+      <CorrespondenceModule
         slug="podderzhka-demo"
         tableId={tableId}
         rowId={ticketId}
         configured
         business={desk}
         showContext={false}
+        slaBadge={desk ? slaBadge : null}
         fixture={shot.preview}
         fixtureFiles={shot.previewFiles}
         fixtureAlert={shot.previewAlert ?? null}

@@ -19,7 +19,7 @@ function serviceCatalog(title: string): TemplateTable {
 
 /** The ready client scenario extends the working tables; it never exposes their private fields. */
 export function withCustomerScenario(original: TemplateDef): TemplateDef {
-  if (['salon', 'sklad', 'proizvodstvo', 'service', 'podderzhka'].includes(original.id)) return original
+  if (['salon', 'sklad', 'proizvodstvo', 'podderzhka'].includes(original.id)) return original
   const template = structuredClone(original)
   let main = template.tables.find(table => table.key === template.appTable)!
   const common = { email: 'customerEmail', assignment: 'assignedEmail', workerName: 'Исполнитель', managerName: 'Администратор',
@@ -32,6 +32,16 @@ export function withCustomerScenario(original: TemplateDef): TemplateDef {
     return { table: table.key, view: 'Опубликованные', fields: ['name', 'description'], active: 'active', selection: 'selectedService', title: 'Услуги' }
   }
   switch (template.id) {
+    case 'service':
+      main.fields.push({ key: 'approvedPrice', name: 'Согласованная стоимость', type: 'number', options: { format: 'currency', currency: 'RUB', precision: 2 }, help: 'Фиксируется сервером при согласии клиента. Изменение сметы требует нового согласования.' })
+      scenario = { ...common, table: 'repairs', title: 'Мои ремонты', submitLabel: 'Отправить заявку на ремонт', intro: 'Укажите устройство и неисправность. После приёмки и диагностики мастер предложит стоимость; вы сможете согласовать её в кабинете.',
+        formFields: ['selectedService', 'requestName', 'requestPhone', 'device', 'problem'], requiredFields: ['requestName', 'requestPhone', 'device', 'problem'],
+        customerFields: ['number', 'status', 'problem', 'deadline', 'cost', 'approvedPrice', 'work', 'clientSummary'],
+        workerFields: ['status', 'cost', 'deadline', 'diagnosis', 'work', 'parts', 'clientSummary'], workerName: 'Мастер',
+        status: 'status', initial: 'Новые', terminal: ['Выдано', 'Отменён', 'Отказ от ремонта'], cancel: 'Отменён', cancellable: ['Новые'],
+        catalog: catalog('Услуги сервиса'),
+        approval: { price: 'cost', agreed: 'approvedPrice', waiting: 'Ждём согласования', approved: 'В работе', declined: 'Отказ от ремонта', consentRequired: ['В работе', 'Готово к выдаче', 'Выдано'] } }
+      break
     case 'zakazy':
     case 'katalog': {
       if (template.id === 'zakazy') {

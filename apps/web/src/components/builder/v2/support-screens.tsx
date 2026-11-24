@@ -975,6 +975,7 @@ function TicketCard(props: ScreenProps) {
                   tableId={props.kit.ticketsTableId}
                   ticketId={ticket.id}
                   shot={conversationShot}
+                  slaBadge={countdown.label || (overdue ? 'Просрочено' : null)}
                 />
               </Suspense>
             ) : <>

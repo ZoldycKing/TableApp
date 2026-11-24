@@ -171,13 +171,23 @@ function collectionOn(app: AppV2, screenId: string, tableId: string) {
   return null
 }
 
-function useServiceNow(demoNow?: number, asOf?: string | null) {
-  if (demoNow) return demoNow
-  if (asOf) {
-    const at = Date.parse(asOf)
-    if (Number.isFinite(at)) return at
-  }
-  return Date.now()
+function useServiceNow(demoNow: number | undefined, asOf: number | undefined) {
+  const [now, setNow] = useState(() => demoNow ?? asOf ?? Date.now())
+  useEffect(() => {
+    if (demoNow != null) { setNow(demoNow); return }
+    if (asOf != null) {
+      const started = performance.now()
+      const tick = () => setNow(asOf + performance.now() - started)
+      tick()
+      const id = window.setInterval(tick, 60_000)
+      return () => window.clearInterval(id)
+    }
+    setNow(Date.now())
+    const id = window.setInterval(() => setNow(Date.now()), 60_000)
+    return () => window.clearInterval(id)
+  }, [demoNow, asOf])
+  if (demoNow != null) return demoNow
+  return now
 }
 
 function useDialogBehavior(onClose: () => void) {
@@ -506,6 +516,7 @@ function RepairCard(props: ScreenProps) {
                     tableId={props.kit.repairsTableId}
                     repairId={repair.id}
                     shot={conversationShot}
+                    slaBadge={overdue ? 'Просрочено' : null}
                   />
                 </Suspense>
               ) : <>
@@ -713,7 +724,7 @@ function AssignDialog(props: ScreenProps & { repair: AppV2Record; onClose: () =>
   return <AppDialog title="Мастер и срок" placement="center" onClose={props.onClose} footer={<button type="submit" form={formId} className={css.primary} disabled={busy}>{busy ? 'Сохраняем…' : 'Сохранить'}</button>}>
     <form id={formId} onSubmit={event => { event.preventDefault(); void save() }}>
       <ServiceSelect field label="Мастер" value={masterId} emptyLabel="Не назначен" options={[{ id: '', name: 'Не назначен' }, ...masters.map(row => ({ id: row.id, name: textOf(row.values[props.kit.master.name]) || 'Без имени' }))]} onChange={setMasterId} />
-      <ChoiceRow label="Статус" value={statusName} options={options.map(name => ({ id: name, name }))} onChange={setStatusName} />
+      <ChoiceRow label="Статус" value={statusName} options={options.map(name => ({ id: name, name }))} onChange={value => setStatusName(value as typeof statusName)} />
       <div className={css.field}><span>Срок</span><div className={css.deadlineRow}><DateMenu value={deadlineDate} onValue={setDeadlineDate} label="Дата срока" /><TimeMenu value={deadlineTime} onValue={setDeadlineTime} label="Время срока" /></div></div>
       <label className={css.field}><span>Диагноз</span><textarea value={diagnosis} onChange={event => setDiagnosis(event.target.value)} maxLength={4000} /></label>
       <label className={css.field}><span>Работа</span><textarea value={work} onChange={event => setWork(event.target.value)} maxLength={4000} /></label>

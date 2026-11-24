@@ -36,7 +36,7 @@ export function buildServiceV2App(built: BuiltTemplate, meta: { id: string; work
     number: column('Ремонты', 'Номер').id,
     device: column('Ремонты', 'Устройство').id,
     serial: column('Ремонты', 'Серийный / IMEI').id,
-    problem: column('Ремонты', 'Неисправность').id,
+    problem: column('Ремонты', 'Неисправность со слов клиента').id,
     diagnosis: column('Ремонты', 'Диагноз').id,
     work: column('Ремонты', 'Работа').id,
     parts: column('Ремонты', 'Запчасти').id,

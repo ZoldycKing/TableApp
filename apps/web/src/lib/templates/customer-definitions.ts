@@ -34,9 +34,10 @@ export function withCustomerScenario(original: TemplateDef): TemplateDef {
   switch (template.id) {
     case 'service':
       main.fields.push({ key: 'approvedPrice', name: 'Согласованная стоимость', type: 'number', options: { format: 'currency', currency: 'RUB', precision: 2 }, help: 'Фиксируется сервером при согласии клиента. Изменение сметы требует нового согласования.' })
-      // Reuse native App V2 fields (clientEmail / masterEmail / clientName) — do not re-insert «Почта клиента».
+      // Reuse native App V2 email/assignment fields — do not re-insert «Почта клиента».
+      // Keep separate requestName/requestPhone for the online form («Ваше имя» / «Ваш телефон»).
       scenario = { ...common, email: 'clientEmail', assignment: 'masterEmail', table: 'repairs', title: 'Мои ремонты', submitLabel: 'Отправить заявку на ремонт', intro: 'Укажите устройство и неисправность. После приёмки и диагностики мастер предложит стоимость; вы сможете согласовать её в кабинете.',
-        formFields: ['selectedService', 'clientName', 'requestPhone', 'device', 'problem'], requiredFields: ['clientName', 'requestPhone', 'device', 'problem'],
+        formFields: ['selectedService', 'requestName', 'requestPhone', 'device', 'problem'], requiredFields: ['requestName', 'requestPhone', 'device', 'problem'],
         customerFields: ['number', 'status', 'problem', 'deadline', 'cost', 'approvedPrice', 'work', 'clientSummary'],
         workerFields: ['status', 'cost', 'deadline', 'diagnosis', 'work', 'parts', 'clientSummary'], workerName: 'Мастер',
         status: 'status', initial: 'Новые', terminal: ['Выдано', 'Отменён', 'Отказ от ремонта'], cancel: 'Отменён', cancellable: ['Новые'],
@@ -136,9 +137,15 @@ export function withCustomerScenario(original: TemplateDef): TemplateDef {
   }
   if (template.id !== 'crm') {
     const extras = template.id === 'dostavka' ? [] : structuredClone(contact)
-    // Skip contact fields whose key or display name already exists (service has clientName / clientEmail).
     for (const field of extras) {
-      if (main.fields.some(item => item.key === field.key || item.name === field.name)) continue
+      if (main.fields.some(item => item.key === field.key)) continue
+      // Service already has desk field «Имя клиента» (clientName). Keep a separate online-form
+      // contact column so the request form still gets profile labels «Ваше имя» / «Ваш телефон».
+      if (main.fields.some(item => item.name === field.name)) {
+        if (field.key === 'requestName') main.fields.push({ ...field, name: 'Ваше имя' })
+        else if (field.key === 'requestPhone') main.fields.push({ ...field, name: 'Ваш телефон' })
+        continue
+      }
       main.fields.push(field)
     }
     if (!main.fields.some(item => item.key === 'clientSummary')) main.fields.push(structuredClone(summary))

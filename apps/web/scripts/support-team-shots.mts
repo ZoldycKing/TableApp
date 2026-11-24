@@ -54,15 +54,22 @@ const browser = await chromium.launch({ headless: true, executablePath: process.
   await open(page, 'dashboard', { team: 'large' })
   await save(page, 'dashboard_big_team_desktop_1440.png')
   await open(page, 'team', { team: 'large' })
-  // Scroll so two line groups sit in one viewport (header band + spacing).
+  // Scroll the app-frame body so the end of the first line group and the next header share the viewport.
   await page.evaluate(() => {
     const groups = [...document.querySelectorAll<HTMLElement>('[data-support-root] section[aria-label]')]
     const second = groups[1]
     if (!second) return
-    const top = second.getBoundingClientRect().top + window.scrollY
-    window.scrollTo(0, Math.max(0, top - 260))
+    let scroller: HTMLElement | null = second.parentElement
+    while (scroller) {
+      const style = getComputedStyle(scroller)
+      if ((style.overflowY === 'auto' || style.overflowY === 'scroll') && scroller.scrollHeight > scroller.clientHeight + 8) break
+      scroller = scroller.parentElement
+    }
+    if (!scroller) { second.scrollIntoView({ block: 'center' }); return }
+    const delta = second.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 300
+    scroller.scrollTop += delta
   })
-  await page.waitForTimeout(200)
+  await page.waitForTimeout(250)
   await save(page, 'team_desktop_1440.png')
   await open(page, 'dashboard', { team: 'large', scheme: 'dark' })
   await save(page, 'dashboard_big_team_dark_1440.png')

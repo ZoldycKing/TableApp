@@ -93,8 +93,46 @@ describe('support screens', () => {
 
   it('opens the client form with the save action visible', async () => {
     render(<SupportDemo view="create" bare />)
-    expect(await screen.findByRole('dialog', { name: 'Новое обращение' })).toBeTruthy()
+    const dialog = await screen.findByRole('dialog', { name: 'Новое обращение' })
     expect(screen.getByRole('button', { name: 'Отправить обращение' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Написать на почту' })).toBeNull()
+    expect(dialog.querySelector('select')).toBeNull()
+    expect(dialog.querySelector('input[type="checkbox"]')).toBeNull()
+    expect(dialog.querySelector('input[type="date"]')).toBeNull()
+    expect(within(dialog).getByRole('radiogroup', { name: 'Категория' })).toBeTruthy()
+  })
+
+  it('uses choice chips instead of native selects in assign', async () => {
+    render(<SupportDemo view="assign" bare />)
+    const dialog = await screen.findByRole('dialog', { name: 'Ответственный и срок' })
+    expect(dialog.querySelector('select')).toBeNull()
+    expect(dialog.querySelector('input[type="date"]')).toBeNull()
+    expect(within(dialog).getByRole('radiogroup', { name: 'Ответственный' })).toBeTruthy()
+    expect(within(dialog).getByRole('radiogroup', { name: 'Категория' })).toBeTruthy()
+    expect(within(dialog).getByRole('radiogroup', { name: 'Приоритет' })).toBeTruthy()
+  })
+
+  it('desktop board: drag cards and ⋯ status menu, no advance or arrows', async () => {
+    render(<SupportDemo view="board" bare />)
+    await screen.findByRole('heading', { name: 'Доска' })
+    expect(document.querySelector('[data-board-advance]')).toBeNull()
+    expect(screen.queryByText('▶ Статус')).toBeNull()
+    expect(screen.queryByText('→')).toBeNull()
+    const menuButtons = screen.getAllByLabelText('Ещё')
+    expect(menuButtons.length).toBeGreaterThan(0)
+    fireEvent.click(menuButtons[0]!)
+    const menu = screen.getByRole('menu', { name: 'Сменить статус' })
+    expect(within(menu).getByText('Сменить статус')).toBeTruthy()
+    expect(menu.querySelector('select')).toBeNull()
+  })
+
+  it('phone board: one advance verb plus ⋯ menu', async () => {
+    render(<SupportDemo view="board" bare phone />)
+    await screen.findByRole('heading', { name: 'Доска' })
+    expect(screen.queryByText('▶ Статус')).toBeNull()
+    expect((await screen.findAllByText('Ждём клиента')).some(node => node.closest('[data-board-advance]'))).toBe(true)
+    expect(document.querySelectorAll('[data-board-advance]').length).toBeGreaterThan(0)
+    fireEvent.click(screen.getAllByLabelText('Ещё')[0]!)
+    expect(screen.getByRole('menu', { name: 'Сменить статус' })).toBeTruthy()
   })
 })

@@ -19,6 +19,10 @@ import { useBuilderV2NodeData } from './use-data'
 import type { AppV2RendererProps } from './view'
 import css from './support.module.css'
 
+function ChoiceRow({ label, value, options, onChange }: { label: string; value: string; options: { id: string; name: string }[]; onChange: (id: string) => void }) {
+  return <fieldset className={css.field}><legend>{label}</legend><div className={css.choiceRow} role="radiogroup" aria-label={label}>{options.map(option => <button key={option.id || option.name} type="button" aria-pressed={option.id === value} onClick={() => onChange(option.id)}>{option.name}</button>)}</div></fieldset>
+}
+
 export type SupportOpen = 'create' | 'reply' | 'note' | 'assign' | 'category' | null
 export type SupportBundle = { rows: AppV2Record[]; setRows?: (rows: AppV2Record[]) => void; open?: SupportOpen; now?: number; sample?: boolean; queueFocus?: { current: SupportQueueScope | null } }
 export const SupportRowsContext = createContext<SupportBundle | null>(null)
@@ -445,12 +449,12 @@ function CreateDialog(props: ScreenProps & { desk: boolean; onClose: () => void;
     if (!result.ok) { setError(result.error); return }
     props.onDone()
   }
-  return <AppDialog title="Новое обращение" onClose={props.onClose} footer={<button type="submit" form={formId} className={css.primary} disabled={busy}>{busy ? 'Сохраняем…' : 'Отправить обращение'}</button>}>
+  return <AppDialog title="Новое обращение" placement="center" onClose={props.onClose} footer={<button type="submit" form={formId} className={css.primary} disabled={busy}>{busy ? 'Сохраняем…' : 'Отправить обращение'}</button>}>
     <form id={formId} data-support-form="create" onSubmit={event => { event.preventDefault(); void save() }}>
-      {props.desk ? <label className={css.field}><span>Клиент</span><select value={clientId} onChange={event => setClientId(event.target.value)} required><option value="">Выберите клиента</option>{clients.map(row => <option key={row.id} value={row.id}>{textOf(row.values[props.kit.client.name])}</option>)}</select></label> : null}
+      {props.desk ? <ChoiceRow label="Клиент" value={clientId} options={clients.map(row => ({ id: row.id, name: textOf(row.values[props.kit.client.name]) || 'Без имени' }))} onChange={setClientId} /> : null}
       <label className={css.field}><span>Тема</span><input value={subject} onChange={event => setSubject(event.target.value)} maxLength={200} required /></label>
       <label className={css.field}><span>Описание</span><textarea value={description} onChange={event => setDescription(event.target.value)} maxLength={4000} required /></label>
-      <label className={css.field}><span>Категория</span><select value={categoryId} onChange={event => setCategoryId(event.target.value)} required><option value="">Выберите категорию</option>{categories.map(row => <option key={row.id} value={row.id}>{textOf(row.values[props.kit.category.name])}</option>)}</select></label>
+      <ChoiceRow label="Категория" value={categoryId} options={categories.map(row => ({ id: row.id, name: textOf(row.values[props.kit.category.name]) || 'Без названия' }))} onChange={setCategoryId} />
       {error ? <p className={css.error} role="alert">{error}</p> : null}
     </form>
   </AppDialog>
@@ -471,7 +475,7 @@ function ReplyDialog(props: ScreenProps & { ticketId: string; reopen: boolean; o
     props.onMessage(result.message)
     props.onClose()
   }
-  return <AppDialog title={props.reopen ? 'Переоткрыть обращением' : 'Ответ'} onClose={props.onClose} footer={<button type="submit" form={formId} className={css.primary} disabled={busy}>{busy ? 'Сохраняем…' : props.reopen ? 'Переоткрыть' : 'Ответить'}</button>}>
+  return <AppDialog title={props.reopen ? 'Переоткрыть обращением' : 'Ответ'} placement="center" onClose={props.onClose} footer={<button type="submit" form={formId} className={css.primary} disabled={busy}>{busy ? 'Сохраняем…' : props.reopen ? 'Переоткрыть' : 'Ответить'}</button>}>
     <form id={formId} data-support-form="reply" onSubmit={event => { event.preventDefault(); void save() }}>
       <label className={css.field}><span>{props.reopen ? 'Что изменилось' : 'Сообщение'}</span><textarea value={text} onChange={event => setText(event.target.value)} maxLength={4000} required /></label>
       <p className={css.quiet}>Сообщение появится в переписке этого обращения.</p>
@@ -495,7 +499,7 @@ function NoteDialog(props: ScreenProps & { ticketId: string; onClose: () => void
     props.onMessage(result.message)
     props.onClose()
   }
-  return <AppDialog title="Внутренняя заметка" onClose={props.onClose} footer={<button type="submit" form={formId} className={css.primary} disabled={busy}>{busy ? 'Сохраняем…' : 'Сохранить заметку'}</button>}>
+  return <AppDialog title="Внутренняя заметка" placement="center" onClose={props.onClose} footer={<button type="submit" form={formId} className={css.primary} disabled={busy}>{busy ? 'Сохраняем…' : 'Сохранить заметку'}</button>}>
     <form id={formId} data-support-form="note" onSubmit={event => { event.preventDefault(); void save() }}>
       <p className={css.noteFlag}>Эту заметку видят только операторы. Клиент не получит её ни в кабинете, ни в данных.</p>
       <label className={css.field}><span>Заметка</span><textarea value={text} onChange={event => setText(event.target.value)} maxLength={4000} required /></label>
@@ -528,11 +532,11 @@ function AssignDialog(props: ScreenProps & { ticket: AppV2Record; onClose: () =>
     props.onMessage(result.message)
     props.onClose()
   }
-  return <AppDialog title="Ответственный и срок" onClose={props.onClose} footer={<button type="submit" form={formId} className={css.primary} disabled={busy}>{busy ? 'Сохраняем…' : 'Сохранить'}</button>}>
+  return <AppDialog title="Ответственный и срок" placement="center" onClose={props.onClose} footer={<button type="submit" form={formId} className={css.primary} disabled={busy}>{busy ? 'Сохраняем…' : 'Сохранить'}</button>}>
     <form id={formId} data-support-form="assign" onSubmit={event => { event.preventDefault(); void save() }}>
-      <label className={css.field}><span>Ответственный</span><select value={assigneeId} onChange={event => setAssigneeId(event.target.value)}><option value="">Не назначен</option>{operators.map(row => <option key={row.id} value={row.id}>{textOf(row.values[props.kit.operator.name])}</option>)}</select></label>
-      <fieldset className={css.field}><legend>Приоритет</legend><div className={css.choiceRow} role="radiogroup" aria-label="Приоритет">{priorities.map(choice => <button key={choice.id} type="button" aria-pressed={choice.id === priorityId} onClick={() => setPriorityId(choice.id)}>{choice.name}</button>)}</div></fieldset>
-      <label className={css.field}><span>Категория</span><select value={categoryId} onChange={event => setCategoryId(event.target.value)}>{categories.map(row => <option key={row.id} value={row.id}>{textOf(row.values[props.kit.category.name])}</option>)}</select></label>
+      <ChoiceRow label="Ответственный" value={assigneeId} options={[{ id: '', name: 'Не назначен' }, ...operators.map(row => ({ id: row.id, name: textOf(row.values[props.kit.operator.name]) || 'Без имени' }))]} onChange={setAssigneeId} />
+      <ChoiceRow label="Приоритет" value={priorityId} options={priorities.map(choice => ({ id: choice.id, name: choice.name }))} onChange={setPriorityId} />
+      <ChoiceRow label="Категория" value={categoryId} options={categories.map(row => ({ id: row.id, name: textOf(row.values[props.kit.category.name]) || 'Без названия' }))} onChange={setCategoryId} />
       <div className={css.when}>
         <div className={css.field}><span>Дата срока</span><DateMenu label="Дата срока" value={date} onValue={setDate} /></div>
         <label className={css.field}><span>Время</span><RuTimeInput value={time} onValue={setTime} aria-label="Время срока" /></label>
@@ -594,7 +598,7 @@ function CategoryDialog(props: ScreenProps & { onClose: () => void; onMessage: (
     props.onMessage(result.message)
     props.onClose()
   }
-  return <AppDialog title="Новая категория" onClose={props.onClose} footer={<button type="submit" form={formId} className={css.primary} disabled={busy}>{busy ? 'Сохраняем…' : 'Добавить категорию'}</button>}>
+  return <AppDialog title="Новая категория" placement="center" onClose={props.onClose} footer={<button type="submit" form={formId} className={css.primary} disabled={busy}>{busy ? 'Сохраняем…' : 'Добавить категорию'}</button>}>
     <form id={formId} onSubmit={event => { event.preventDefault(); void save() }}>
       <label className={css.field}><span>Название</span><input value={name} onChange={event => setName(event.target.value)} maxLength={80} required /></label>
       <label className={css.field}><span>Пояснение</span><textarea value={description} onChange={event => setDescription(event.target.value)} maxLength={500} /></label>

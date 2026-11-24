@@ -33,12 +33,35 @@
   .age li { grid-template-columns: 1fr auto; }
   .track { grid-column: 1 / -1; }
 }
-.board { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; padding: 0 12px 16px; }
-.board section { display: grid; align-content: start; gap: 8px; min-width: 0; }
+.board { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; padding: 0 12px 16px; overflow: visible; }
+.board section { display: grid; align-content: start; gap: 8px; min-width: 0; overflow: visible; }
 .board h3 { margin: 0; font-size: 13px; color: var(--v2-muted, var(--sc-text-2)); }
-.board article { display: grid; gap: 4px; padding: 10px; border-top: 1px solid var(--v2-line, var(--sc-border)); }
-.board details summary { cursor: pointer; }
-.board details div { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.board article { position: relative; display: grid; gap: 4px; padding: 10px; border-top: 1px solid var(--v2-line, var(--sc-border)); overflow: visible; }
+.board article .rowButton::after { display: none; }
+.board article:has([data-board-menu] [aria-expanded='true']) { z-index: 6; }
+.cardActions { position: relative; z-index: 2; display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; min-width: 0; }
+.statusChip {
+  flex: none; min-height: 28px; padding: 2px 10px; border: 1px solid var(--v2-line, var(--sc-border));
+  border-radius: 999px; background: var(--v2-soft, var(--sc-accent-soft)); color: var(--v2-ink, var(--sc-accent));
+  font: inherit; font-size: 12px; font-weight: 650; white-space: nowrap;
+}
+.cardMenu { position: relative; flex: none; }
+.cardMenuButton {
+  display: inline-grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 1px solid var(--v2-line, var(--sc-border));
+  border-radius: 8px; background: var(--v2-surface, var(--sc-bg-elevated)); color: var(--v2-ink, var(--sc-accent));
+  font: inherit; font-size: 16px; line-height: 1; font-weight: 700;
+}
+.cardMenuPanel {
+  position: absolute; left: 0; right: auto; top: calc(100% + 4px); z-index: 12; display: grid; gap: 2px; min-width: 168px; max-width: min(220px, 80vw); padding: 6px;
+  border: 1px solid var(--v2-line, var(--sc-border)); border-radius: 12px; background: var(--v2-surface, var(--sc-bg-elevated));
+}
+.cardMenuTitle { margin: 0; padding: 4px 8px 6px; color: var(--v2-muted, var(--sc-text-2)); font-size: 11px; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; white-space: nowrap; }
+.cardMenuPanel button {
+  display: block; width: 100%; min-height: 34px; padding: 6px 10px; border: 0; border-radius: 8px; background: transparent;
+  color: inherit; font: inherit; font-size: 13px; font-weight: 650; text-align: left; overflow-wrap: anywhere; white-space: normal;
+}
+.cardMenuPanel button:hover, .cardMenuPanel button:focus-visible { background: var(--v2-soft, var(--sc-accent-soft)); }
+.cardMenuPanel button:disabled { color: var(--v2-muted, var(--sc-text-2)); }
 .slaGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 8px; margin: 8px 0; }
 .sla label { display: grid; gap: 4px; font-size: 13px; }
 .sla input { min-height: 40px; padding: 8px 10px; border: 1px solid var(--v2-line, var(--sc-border)); border-radius: 10px; background: transparent; color: inherit; font: inherit; }
@@ -108,7 +131,7 @@
 }
 .rowButton::after { content: ''; position: absolute; inset: 0; }
 .rowButton:focus-visible { outline: none; }
-.chip:focus-visible, .mine:focus-visible, .summary button:focus-visible, .actions button:focus-visible, .field input:focus-visible, .field textarea:focus-visible, .field select:focus-visible {
+.chip:focus-visible, .mine:focus-visible, .summary button:focus-visible, .actions button:focus-visible, .field input:focus-visible, .field textarea:focus-visible, .choiceRow button:focus-visible, .cardMenuButton:focus-visible, .statusChip:focus-visible {
   outline: 2px solid var(--sc-focus, var(--v2-accent)); outline-offset: 2px;
 }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: start; min-width: 0; }
@@ -158,7 +181,7 @@
 .facts dd { margin: 0; font-size: 15px; line-height: 1.4; overflow-wrap: anywhere; }
 .field { display: grid; gap: 6px; min-width: 0; margin: 0; }
 .field span, .field legend { font-size: 14px; font-weight: 700; }
-.field input, .field textarea, .field select {
+.field input, .field textarea {
   width: 100%; min-width: 0; min-height: 44px; padding: 10px 12px; border: 1px solid var(--v2-line, var(--sc-border));
   border-radius: 12px; background: var(--v2-surface, var(--sc-bg-elevated)); color: inherit; font: inherit; font-size: 16px;
 }

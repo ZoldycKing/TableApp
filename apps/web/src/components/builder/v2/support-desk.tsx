@@ -1,10 +1,46 @@
 'use client'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { instantToWallClock } from '@tableapp/schema'
 import { supportPolicyFromRows, supportStoredEvents } from '@/lib/support-persist'
 import { SUPPORT_SLA_STARTER, supportDashboard, supportSlaLabel, supportSlaPriorityName, supportSlaView, type SupportQueueScope, type SupportSlaPolicy, type SupportSlaView } from '@/lib/support-sla'
 import { operatorTransitions, type SupportStatusName } from '@/lib/support-logic'
 import css from './support.module.css'
+
+/** Phone-only advance verb on the board card. */
+export function boardAdvanceLabel(status: SupportStatusName): string | null {
+  if (status === 'Новое') return 'В работу'
+  if (status === 'В работе') return 'Ждём клиента'
+  if (status === 'Ждём клиента') return 'В работу'
+  if (status === 'Решено') return 'В работу'
+  if (status === 'Закрыто') return 'В работу'
+  return null
+}
+
+export function boardNextStatus(status: SupportStatusName): SupportStatusName | null {
+  return operatorTransitions(status)[0] ?? null
+}
+
+function BoardStatusMenu(props: { status: SupportStatusName; onPick: (status: SupportStatusName) => void }) {
+  const [open, setOpen] = useState(false)
+  const root = useRef<HTMLDivElement>(null)
+  const next = operatorTransitions(props.status)
+  useEffect(() => {
+    if (!open) return
+    const outside = (event: PointerEvent) => { if (event.target instanceof Node && !root.current?.contains(event.target)) setOpen(false) }
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') setOpen(false) }
+    document.addEventListener('pointerdown', outside)
+    document.addEventListener('keydown', escape)
+    return () => { document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape) }
+  }, [open])
+  return <div className={css.cardMenu} ref={root} data-board-menu>
+    <button type="button" className={css.cardMenuButton} aria-label="Ещё" aria-expanded={open} aria-haspopup="menu" onClick={() => setOpen(value => !value)}>⋯</button>
+    {open ? <div className={css.cardMenuPanel} role="menu" aria-label="Сменить статус">
+      <p className={css.cardMenuTitle}>Сменить статус</p>
+      {next.map(item => <button key={item} type="button" role="menuitem" onClick={() => { props.onPick(item); setOpen(false) }}>{item}</button>)}
+      {!next.length ? <button type="button" role="menuitem" disabled>{props.status}</button> : null}
+    </div> : null}
+  </div>
+}
 
 type DeskProps = {
   kit: NonNullable<import('@tableapp/schema/app-v2').AppV2['support']>
@@ -103,20 +139,24 @@ export function SupportBoard(props: DeskProps & { phone: boolean }) {
     else setError('')
   }
   return <div className={css.root} data-support-root data-support-screen="board">
-    <header className={css.dashHead}><h2>Доска</h2><p>Перетаскивание на компьютере. На телефоне статус меняется кнопкой.</p></header>
+    <header className={css.dashHead}><h2>Доска</h2><p>Перетаскивание на компьютере. На телефоне — кнопка и меню статуса.</p></header>
     {error ? <p className={css.error} role="alert">{error}</p> : null}
     {props.phone ? <div className={css.chips} role="tablist" aria-label="Колонка">{STATUSES.map(status => <button key={status} type="button" className={css.chip} aria-pressed={column === status} onClick={() => setColumn(status)}>{status}</button>)}</div> : null}
     <div className={css.board}>
       {columns.map(status => <section key={status} aria-label={status} onDragOver={event => { if (!props.phone) event.preventDefault() }} onDrop={event => { event.preventDefault(); if (dragId) void move(dragId, status); setDragId('') }}>
         <h3>{status}</h3>
-        {cards.filter(card => card.statusName === status).map(card => <article key={card.id} draggable={!props.phone} onDragStart={() => setDragId(card.id)}>
-          <button type="button" className={css.rowButton} onClick={() => props.onOpenTicket(card.id)}><span className={css.subject}>{card.subject}</span>{card.number ? <span className={css.number}>{card.number}</span> : null}</button>
-          <p className={card.sla.currentOverdue ? css.late : css.quiet}>{supportSlaLabel(card.sla) || 'Норматив в срок'}</p>
-          <details>
-            <summary>Статус</summary>
-            <div>{operatorTransitions(card.statusName).map(next => <button key={next} type="button" onClick={() => void move(card.id, next)}>{next}</button>)}</div>
-          </details>
-        </article>)}
+        {cards.filter(card => card.statusName === status).map(card => {
+          const advance = boardAdvanceLabel(card.statusName)
+          const next = boardNextStatus(card.statusName)
+          return <article key={card.id} draggable={!props.phone} onDragStart={() => setDragId(card.id)} data-board-card>
+            <button type="button" className={css.rowButton} onClick={() => props.onOpenTicket(card.id)}><span className={css.subject}>{card.subject}</span>{card.number ? <span className={css.number}>{card.number}</span> : null}</button>
+            <p className={card.sla.currentOverdue ? css.late : css.quiet}>{supportSlaLabel(card.sla) || 'Норматив в срок'}</p>
+            <div className={css.cardActions}>
+              {props.phone && advance && next ? <button type="button" className={css.statusChip} data-board-advance onClick={() => void move(card.id, next)}>{advance}</button> : null}
+              <BoardStatusMenu status={card.statusName} onPick={nextStatus => void move(card.id, nextStatus)} />
+            </div>
+          </article>
+        })}
       </section>)}
     </div>
   </div>

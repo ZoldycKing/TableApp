@@ -4,9 +4,10 @@ import Link from 'next/link'
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { ArrowsOutIcon, ArrowCounterClockwiseIcon, DesktopIcon, DeviceMobileIcon, XIcon } from '@phosphor-icons/react/ssr'
 import type { Device } from '@/lib/demo-view'
+import { PhoneMockup, PHONE_MOCKUP } from '@/components/phone-mockup'
 import styles from './elaya/inner-pages.module.css'
 
-const FRAMES = { desktop: { width: 1280, height: 680, bezel: 0 }, mobile: { width: 390, height: 680, bezel: 8 } }
+const FRAMES = { desktop: { width: 1280, height: 680, bezel: 0 }, mobile: { width: 390, height: 680, bezel: PHONE_MOCKUP.bezel } }
 
 /** One application stays mounted while its frame changes. Roles still load on the server. */
 export function DemoStage({ roles, activeRole, initialDevice, deviceChosen, description, children, onRolePick, onReset, summary, note = 'Учебные данные · изменения не сохраняются' }: {
@@ -89,7 +90,12 @@ export function DemoStage({ roles, activeRole, initialDevice, deviceChosen, desc
 }
 
 export function DeviceFrame({ device, height, bezel, children }: { device: Device; height: number; bezel: number; children: ReactNode }) {
-  return <div className={styles.deviceFrame} data-device={device} data-bezel={bezel > 0} style={{ height: height + bezel * 2, ...(device === 'mobile' && bezel ? { padding: bezel } : {}) }}>
+  if (device === 'mobile' && bezel > 0) {
+    return <PhoneMockup height={height} style={{ maxWidth: 'none' }}>
+      <div className={`demo-frame ${styles.deviceContent}`} style={{ height: '100%', minHeight: 0 }}>{children}</div>
+    </PhoneMockup>
+  }
+  return <div className={styles.deviceFrame} data-device={device} data-bezel={bezel > 0} style={{ height: height + bezel * 2 }}>
     {device === 'desktop' && <div className={styles.browserChrome}><span aria-hidden><i /><i /><i /></span><span>Приложение Scatta</span><span>Пример</span></div>}
     <div className={`demo-frame ${styles.deviceContent}`} style={{ height }}>{children}</div>
   </div>

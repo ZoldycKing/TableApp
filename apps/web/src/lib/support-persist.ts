@@ -234,6 +234,7 @@ export type SupportChange =
   | { kind: 'create'; subject: string; description: string; categoryId: string; clientId?: string; priorityId?: string }
   | { kind: 'reply'; recordId: string; text: string }
   | { kind: 'note'; recordId: string; text: string }
+  | { kind: 'client_note'; recordId: string; note: string }
   | { kind: 'status'; recordId: string; statusId: string }
   | { kind: 'assign'; recordId: string; assigneeId: string | null; priorityId: string; categoryId: string; deadline: string | null }
   | { kind: 'category'; recordId?: string; name: string; description: string; active: boolean }
@@ -272,6 +273,18 @@ export function applySupportChange(app: AppV2, actor: AppV2Actor, rows: readonly
     const decision = guardSupportCreate(app, actor, support.categoriesTableId, values)
     if (!decision.ok) return decision
     return { ok: true, rows: [...rows, { id: newId('row'), tableId: support.categoriesTableId, values }], message: 'Категория сохранена.' }
+  }
+  if (change.kind === 'client_note') {
+    const desk = assertDesk(actor)
+    if (!desk.ok) return { ok: false, error: 'Заметку о клиенте меняет оператор.' }
+    const client = rows.find(row => row.id === change.recordId && row.tableId === support.clientsTableId)
+    if (!client) return { ok: false, error: 'Клиент не найден.' }
+    const note = change.note.trim()
+    if (note.length > 2000) return { ok: false, error: 'Заметка слишком длинная.' }
+    const values = { [support.client.note]: note }
+    const decision = guardSupportUpdate(app, actor, client, values)
+    if (!decision.ok) return decision
+    return { ok: true, rows: replace(client, values), message: 'Заметка о клиенте сохранена.' }
   }
   if (change.kind === 'create') {
     const category = rows.find(row => row.id === change.categoryId && row.tableId === support.categoriesTableId)

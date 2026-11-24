@@ -87,6 +87,7 @@ export type SupportListItem = {
   assigneeEmail: string
   assigneeName: string
   deadline: unknown
+  createdAt?: unknown
   updatedAt?: unknown
   sla?: SupportSlaView
 }
@@ -139,8 +140,10 @@ export function supportStatusesForView(view: SupportTicketViewId): string[] {
 
 export type SupportFilter = {
   search: string
-  status: string
-  priority?: string
+  /** Multi-select status names. Empty = any status allowed by the view. */
+  statuses: string[]
+  /** Multi-select priority names. Empty = any priority. */
+  priorities: string[]
   ageBucket?: SupportAgeBucket | ''
   /** Empty = any assignee. `__none__` = unassigned. Otherwise operator email. */
   assigneeEmail?: string
@@ -165,8 +168,8 @@ export function filterTickets(items: readonly SupportListItem[], filter: Support
     const manualOverdue = isOverdue(item.status, item.deadline, now)
     const sla = item.sla ?? supportSlaView([], null, now)
     if (!supportQueueMatch({ status: item.status, assigneeEmail: item.assigneeEmail, sla, manualOverdue }, filter.scope, mine)) return false
-    if (filter.status && item.status !== filter.status) return false
-    if (filter.priority && item.priority !== filter.priority) return false
+    if (filter.statuses.length && !filter.statuses.includes(item.status)) return false
+    if (filter.priorities.length && !filter.priorities.includes(item.priority)) return false
     if (filter.ageBucket) {
       if (!sla.known || !sla.open || sla.createdAt == null) return false
       if (supportAgeBucket(Math.max(0, now - sla.createdAt)) !== filter.ageBucket) return false
@@ -182,7 +185,7 @@ export function filterTickets(items: readonly SupportListItem[], filter: Support
 }
 
 /** Map a dashboard KPI / heatmap click onto a tickets view (+ optional filters). */
-export function supportFocusToFilter(focus: SupportQueueFocus | SupportQueueScope): Pick<SupportFilter, 'scope' | 'view' | 'priority' | 'ageBucket' | 'assigneeEmail' | 'mine'> {
+export function supportFocusToFilter(focus: SupportQueueFocus | SupportQueueScope): Pick<SupportFilter, 'scope' | 'view' | 'priorities' | 'ageBucket' | 'assigneeEmail' | 'mine'> {
   const next = typeof focus === 'string' ? { scope: focus } : focus
   const scope = next.scope ?? (next.view ? supportTicketViewScope(next.view) : 'open')
   let view: SupportTicketViewId = next.view ?? 'open'
@@ -197,7 +200,7 @@ export function supportFocusToFilter(focus: SupportQueueFocus | SupportQueueScop
   return {
     view,
     scope: supportTicketViewScope(view),
-    priority: next.priority ?? '',
+    priorities: next.priority ? [next.priority] : [],
     ageBucket: next.ageBucket ?? '',
     assigneeEmail: next.assigneeEmail ?? '',
     mine: false,

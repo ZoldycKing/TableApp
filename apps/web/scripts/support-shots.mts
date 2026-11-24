@@ -55,21 +55,30 @@ const open = async (page: Page, view: string, scheme?: 'light' | 'dark', phone =
 
 const browser = await chromium.launch({ headless: true })
 
-type Shot = { view: string; name: string; scheme?: 'light' | 'dark'; phone?: boolean; openAssignee?: boolean; fullPage?: boolean }
+type Shot = {
+  view: string
+  name: string
+  scheme?: 'light' | 'dark'
+  phone?: boolean
+  openAssignee?: boolean
+  openStatus?: boolean
+  openPhoneFilters?: boolean
+  fullPage?: boolean
+}
 
 const desktop: Shot[] = [
-  { view: 'dashboard', name: 'dash-desktop-1440.png', fullPage: true },
-  { view: 'queue', name: 'tickets-desktop-1440.png' },
-  { view: 'queue:hot', name: 'tickets-hot-desktop-1440.png' },
-  { view: 'queue', name: 'tickets-assignee-desktop-1440.png', openAssignee: true },
-  { view: 'queue', name: 'tickets-dark-1440.png', scheme: 'dark' },
   { view: 'clients', name: 'clients-desktop-1440.png' },
+  { view: 'client-card', name: 'client-page-desktop-1440.png', fullPage: true },
+  { view: 'queue', name: 'tickets-desktop-1440.png' },
+  { view: 'queue', name: 'tickets-status-desktop-1440.png', openStatus: true },
+  { view: 'queue', name: 'tickets-dark-1440.png', scheme: 'dark' },
 ]
 
 const phone: Shot[] = [
-  { view: 'dashboard', name: 'dash-phone-390.png', phone: true },
-  { view: 'queue', name: 'tickets-phone-390.png', phone: true },
   { view: 'clients', name: 'clients-phone-390.png', phone: true },
+  { view: 'client-card', name: 'client-page-phone-390.png', phone: true, fullPage: true },
+  { view: 'queue', name: 'tickets-phone-390.png', phone: true },
+  { view: 'queue', name: 'tickets-phone-filters-390.png', phone: true, openPhoneFilters: true },
 ]
 
 {
@@ -78,9 +87,10 @@ const phone: Shot[] = [
   page.setDefaultTimeout(30000)
   for (const shot of desktop) {
     await open(page, shot.view, shot.scheme, false)
-    if (shot.openAssignee) {
-      await page.getByRole('button', { name: 'Ответственный' }).click()
-      await page.waitForSelector('[role="listbox"][aria-label="Ответственный"]', { timeout: 5000 })
+    if (shot.openStatus) {
+      await page.getByLabel('Статус', { exact: true }).click()
+      await page.waitForSelector('[role="listbox"][aria-label="Статус"]', { timeout: 5000 })
+      await page.locator('[role="listbox"][aria-label="Статус"]').getByRole('option', { name: 'В работе' }).click()
       await page.waitForTimeout(200)
     }
     await save(page, shot.name, shot.fullPage)
@@ -94,6 +104,11 @@ const phone: Shot[] = [
   page.setDefaultTimeout(30000)
   for (const shot of phone) {
     await open(page, shot.view, shot.scheme, true)
+    if (shot.openPhoneFilters) {
+      await page.getByRole('button', { name: /Фильтры/ }).click()
+      await page.waitForSelector('[role="dialog"][aria-label="Фильтры"]', { timeout: 5000 })
+      await page.waitForTimeout(200)
+    }
     await save(page, shot.name, shot.fullPage)
   }
   await context.close()

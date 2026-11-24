@@ -19,8 +19,9 @@ type NoteRequest = { kind: 'note'; revision: string; screenId: string; recordId:
 type StatusRequest = { kind: 'status'; revision: string; screenId: string; recordId: string; statusId: string }
 type AssignRequest = { kind: 'assign'; revision: string; screenId: string; recordId: string; assigneeId: string | null; priorityId: string; categoryId: string; deadline: string | null }
 type CategoryRequest = { kind: 'category'; revision: string; screenId: string; recordId?: string; name: string; description: string; active: boolean }
+type ClientNoteRequest = { kind: 'client_note'; revision: string; screenId: string; recordId: string; note: string }
 type SlaRequest = { kind: 'sla'; revision: string; screenId: string; minutes: Record<string, number> }
-type Request = CreateRequest | ReplyRequest | NoteRequest | StatusRequest | AssignRequest | CategoryRequest | SlaRequest
+type Request = CreateRequest | ReplyRequest | NoteRequest | ClientNoteRequest | StatusRequest | AssignRequest | CategoryRequest | SlaRequest
 
 const text = (value: unknown, max: number) => typeof value === 'string' && value.trim().length > 0 && value.trim().length <= max ? value.trim() : null
 const optionalText = (value: unknown, max: number) => value == null || value === '' ? '' : typeof value === 'string' && value.trim().length <= max ? value.trim() : null
@@ -45,6 +46,11 @@ function readRequest(input: unknown): Request | null {
     const body = text(value.text, 4000)
     if (!recordId || !body) return null
     return { kind: value.kind, revision: value.revision, screenId: value.screenId, recordId, text: body }
+  }
+  if (value.kind === 'client_note') {
+    const note = optionalText(value.note, 2000)
+    if (!recordId || note == null) return null
+    return { kind: 'client_note', revision: value.revision, screenId: value.screenId, recordId, note }
   }
   if (value.kind === 'status') {
     const statusId = idValue(value.statusId)
@@ -177,6 +183,17 @@ export async function savePublishedSupportAction(slug: string, input: unknown): 
           await createRow(context, support.categoriesTableId, values, actorRef, { origin: 'runtime' })
         }
         return { ok: true as const, message: 'Категория сохранена.' }
+      }
+      if (parsed.kind === 'client_note') {
+        const desk = assertDesk(actor)
+        if (!desk.ok) throw new RowWriteError('denied', 'Заметку о клиенте меняет оператор.')
+        const client = await load(support.clientsTableId, parsed.recordId)
+        if (!client) throw new RowWriteError('missing', 'Клиент не найден.')
+        const values = { [support.client.note]: parsed.note }
+        const decision = guardSupportUpdate(app, actor, client, values)
+        if (!decision.ok) throw new RowWriteError('denied', decision.error)
+        await updateRow(context, support.clientsTableId, client.id, values, actorRef)
+        return { ok: true as const, message: 'Заметка о клиенте сохранена.' }
       }
       const ticket = await ticketOf(parsed.recordId)
       const ticketFields = await mutationFields(context, support.ticketsTableId)

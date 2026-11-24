@@ -1,5 +1,5 @@
 'use client'
-import { createContext, useContext, useEffect, useId, useRef, useState } from 'react'
+import { createContext, useContext, useEffect, useId, useRef, useState, type RefObject } from 'react'
 import { instantToWallClock } from '@tableapp/schema'
 import type { AppV2, AppV2Node, AppV2Record } from '@tableapp/schema/app-v2'
 import { savePublishedSupportAction } from '@/app/support-actions'
@@ -57,31 +57,43 @@ function TimeMenu({ value, onValue, label }: { value: string; onValue: (value: s
 }
 
 export type SupportOpen = 'create' | 'reply' | 'note' | 'assign' | 'category' | null
-export type SupportBundle = { rows: AppV2Record[]; setRows?: (rows: AppV2Record[]) => void; open?: SupportOpen; now?: number; sample?: boolean; queueFocus?: { current: SupportQueueFocus | null }; previewClient?: string; previewMenuOpen?: boolean }
+export type SupportBundle = {
+  rows: AppV2Record[]
+  setRows?: (rows: AppV2Record[]) => void
+  open?: SupportOpen
+  now?: number
+  sample?: boolean
+  queueFocus?: { current: SupportQueueFocus | null }
+  previewClient?: string
+  previewMenuOpen?: boolean
+  previewFocus?: { current: string | null }
+}
 export const SupportRowsContext = createContext<SupportBundle | null>(null)
 
 const PLACEHOLDER: AppV2Node = { id: 'support_placeholder', name: 'placeholder', type: 'heading', value: { kind: 'literal', value: '' }, size: 's', visibleTo: null, visibleWhen: null }
 const publishedHolder: { current: ReturnType<typeof usePublishedV2> } = { current: null }
 const textOf = (value: unknown) => Array.isArray(value) ? '' : value == null ? '' : String(value)
 const firstId = (value: unknown) => Array.isArray(value) ? value.find((item): item is string => typeof item === 'string') ?? '' : ''
-const EMPTY_FILTER: SupportFilter = { search: '', status: '', priority: '', ageBucket: '', assigneeEmail: '', mine: false, scope: 'open', view: 'open' }
+const EMPTY_FILTER: SupportFilter = { search: '', statuses: [], priorities: [], ageBucket: '', assigneeEmail: '', mine: false, scope: 'open', view: 'open' }
 
 const TICKETS_URL_PARAM = 'tickets'
+
+function splitCsv(value: string | null) {
+  return (value ?? '').split(',').map(item => item.trim()).filter(Boolean)
+}
 
 function readTicketsUrl(): Partial<SupportFilter> {
   if (typeof window === 'undefined') return {}
   const params = new URL(window.location.href).searchParams
   const view = supportTicketViewId(params.get(TICKETS_URL_PARAM))
   const assignee = params.get('assignee') ?? ''
-  const priority = params.get('priority') ?? ''
-  const status = params.get('status') ?? ''
   const ageBucket = params.get('age') ?? ''
   return {
     view,
     scope: supportTicketViewScope(view),
     assigneeEmail: assignee,
-    priority,
-    status,
+    priorities: splitCsv(params.get('priority')),
+    statuses: splitCsv(params.get('status')),
     ageBucket: ageBucket === 'lt4h' || ageBucket === '4to12h' || ageBucket === '12to24h' || ageBucket === '1to3d' || ageBucket === 'gt3d' ? ageBucket : '',
     mine: false,
   }
@@ -95,9 +107,9 @@ function writeTicketsUrl(filter: SupportFilter) {
   else url.searchParams.set(TICKETS_URL_PARAM, view)
   if (filter.assigneeEmail) url.searchParams.set('assignee', filter.assigneeEmail)
   else url.searchParams.delete('assignee')
-  if (filter.priority) url.searchParams.set('priority', filter.priority)
+  if (filter.priorities.length) url.searchParams.set('priority', filter.priorities.join(','))
   else url.searchParams.delete('priority')
-  if (filter.status) url.searchParams.set('status', filter.status)
+  if (filter.statuses.length) url.searchParams.set('status', filter.statuses.join(','))
   else url.searchParams.delete('status')
   if (filter.ageBucket) url.searchParams.set('age', filter.ageBucket)
   else url.searchParams.delete('age')
@@ -172,6 +184,26 @@ function formatWhen(value: unknown, empty = 'Срок не задан') {
   return `${day}.${month}.${year}, ${wall.time}`
 }
 
+function formatDate(value: unknown, empty = '—') {
+  if (typeof value !== 'string' || !value) return empty
+  const wall = instantToWallClock(value, 'Europe/Moscow')
+  if (!wall) return empty
+  const [year, month, day] = wall.date.split('-')
+  return `${day}.${month}.${year}`
+}
+
+function formatDuration(ms: number) {
+  if (!Number.isFinite(ms) || ms <= 0) return '—'
+  const hours = Math.round(ms / 3_600_000)
+  if (hours < 24) return `${Math.max(1, hours)} ч`
+  const days = Math.round(hours / 24)
+  return `${days} д`
+}
+
+function toggleInList(list: string[], value: string) {
+  return list.includes(value) ? list.filter(item => item !== value) : [...list, value]
+}
+
 function transitionLabel(to: string) {
   if (to === 'В работе') return 'В работу'
   if (to === 'Ждём клиента') return 'Ждём клиента'
@@ -237,7 +269,7 @@ export function SupportScreen(props: AppV2RendererProps) {
   const categoriesPage = useBuilderV2NodeData(props.app, categoriesNode ?? PLACEHOLDER, live && Boolean(categoriesNode), '', scope)
   const eventsPage = useBuilderV2NodeData(props.app, eventsNode ?? PLACEHOLDER, live && Boolean(eventsNode), '', scope)
   const normsPage = useBuilderV2NodeData(props.app, normsNode ?? PLACEHOLDER, live && Boolean(normsNode), '', scope)
-  const screens = kit ? [kit.queueScreenId, kit.ticketScreenId, kit.clientListScreenId, kit.clientTicketScreenId, kit.clientsScreenId, kit.settingsScreenId, kit.dashboardScreenId].filter((id): id is string => Boolean(id)) : []
+  const screens = kit ? [kit.queueScreenId, kit.ticketScreenId, kit.clientListScreenId, kit.clientTicketScreenId, kit.clientsScreenId, kit.clientScreenId, kit.settingsScreenId, kit.dashboardScreenId].filter((id): id is string => Boolean(id)) : []
   if (!kit || !screens.includes(screenId)) return null
   const pages = [ticketsPage, repliesPage, notesPage, clientsPage, operatorsPage, categoriesPage, eventsPage, normsPage]
   const rows = demo?.rows ?? pages.flatMap(page => page.page?.rows ?? [])
@@ -255,6 +287,7 @@ export function SupportScreen(props: AppV2RendererProps) {
   if (screenId === kit.queueScreenId || screenId === kit.clientListScreenId) return <TicketList {...shared} />
   if (screenId === kit.ticketScreenId || screenId === kit.clientTicketScreenId) return <TicketCard {...shared} />
   if (screenId === kit.clientsScreenId) return <ClientDirectory {...shared} />
+  if (kit.clientScreenId && screenId === kit.clientScreenId) return <ClientDetail {...shared} />
   return <SettingsScreen {...shared} />
 }
 
@@ -305,6 +338,7 @@ function ticketItems(props: ScreenProps): SupportListItem[] {
       assigneeEmail: textOf(row.values[ticket.assigneeEmail]),
       assigneeName: nameOf(props, props.kit.operatorsTableId, assigneeId, props.kit.operator.name),
       deadline: row.values[ticket.deadline],
+      createdAt: row.values[ticket.createdAt],
       updatedAt: row.values[ticket.updatedAt],
       sla: slaFacts(props.kit, props.rows, row.id, props.now),
     }
@@ -370,6 +404,17 @@ function MessageAvatar({ kind, author }: { kind: 'operator' | 'client' | 'note';
   return <SupportPerson name={author} size={28} />
 }
 
+function useMenuOpen(open: boolean, root: RefObject<HTMLElement | null>, onClose: () => void) {
+  useEffect(() => {
+    if (!open) return
+    const outside = (event: PointerEvent) => { if (event.target instanceof Node && !root.current?.contains(event.target)) onClose() }
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose() }
+    document.addEventListener('pointerdown', outside)
+    document.addEventListener('keydown', escape)
+    return () => { document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape) }
+  }, [open, root, onClose])
+}
+
 function AssigneeFilter(props: {
   value: string
   operators: { email: string; name: string }[]
@@ -377,20 +422,13 @@ function AssigneeFilter(props: {
 }) {
   const [open, setOpen] = useState(false)
   const root = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    if (!open) return
-    const outside = (event: PointerEvent) => { if (event.target instanceof Node && !root.current?.contains(event.target)) setOpen(false) }
-    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') setOpen(false) }
-    document.addEventListener('pointerdown', outside)
-    document.addEventListener('keydown', escape)
-    return () => { document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape) }
-  }, [open])
+  useMenuOpen(open, root, () => setOpen(false))
   const selected = props.value === '__none__'
     ? { name: 'Не назначен', email: '__none__' }
     : props.operators.find(item => item.email === props.value)
   const label = selected?.name ?? 'Ответственный'
   return <div className={css.assigneeFilter} ref={root} data-assignee-filter>
-    <button type="button" className={css.assigneeTrigger} aria-expanded={open} aria-haspopup="listbox" aria-label="Ответственный" onClick={() => setOpen(value => !value)}>
+    <button type="button" className={css.assigneeTrigger} data-active={Boolean(props.value) || undefined} aria-expanded={open} aria-haspopup="listbox" aria-label="Ответственный" onClick={() => setOpen(value => !value)}>
       {selected && selected.email !== '__none__' ? <SupportPerson name={selected.name} size={22} /> : <span className={css.avatar} data-size="sm" data-client aria-hidden="true"><ProtoIcon name="user" size={14} /></span>}
       <span>{label}</span>
       <ProtoIcon name="down" size={14} />
@@ -405,6 +443,34 @@ function AssigneeFilter(props: {
         <SupportPerson name={operator.name} size={22} />
         {operator.name}
       </button>)}
+    </div> : null}
+  </div>
+}
+
+function MultiSelectFilter(props: {
+  label: string
+  values: string[]
+  options: { id: string; name: string; tone?: string }[]
+  onChange: (values: string[]) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const root = useRef<HTMLDivElement>(null)
+  useMenuOpen(open, root, () => setOpen(false))
+  const count = props.values.length
+  const label = count === 0 ? props.label : count === 1 ? (props.options.find(item => item.id === props.values[0])?.name ?? props.label) : `${props.label} · ${count}`
+  return <div className={css.assigneeFilter} ref={root} data-multi-filter={props.label}>
+    <button type="button" className={css.assigneeTrigger} data-active={count > 0 || undefined} aria-expanded={open} aria-haspopup="listbox" aria-label={props.label} onClick={() => setOpen(value => !value)}>
+      <span>{label}</span>
+      <ProtoIcon name="down" size={14} />
+    </button>
+    {open ? <div className={css.assigneePanel} role="listbox" aria-multiselectable="true" aria-label={props.label}>
+      {props.options.map(option => {
+        const selected = props.values.includes(option.id)
+        return <button key={option.id} type="button" role="option" aria-selected={selected} data-tone={option.tone} onClick={() => props.onChange(toggleInList(props.values, option.id))}>
+          <span className={css.checkMark} data-on={selected || undefined} aria-hidden="true">{selected ? <ProtoIcon name="check" size={12} /> : null}</span>
+          {option.name}
+        </button>
+      })}
     </div> : null}
   </div>
 }
@@ -439,8 +505,14 @@ function TicketList(props: ScreenProps) {
       }).length,
     }
   }).filter(item => item.email)
-  const [previewEmail, setPreviewEmail] = useState(bundle?.previewClient ?? clients[0]?.email ?? '')
+  const [previewEmail, setPreviewEmail] = useState(() => {
+    const focused = bundle?.previewFocus?.current
+    if (bundle?.previewFocus) bundle.previewFocus.current = null
+    return focused ?? bundle?.previewClient ?? clients[0]?.email ?? ''
+  })
   const [previewOpen, setPreviewOpen] = useState(Boolean(bundle?.previewMenuOpen))
+  const [phoneFiltersOpen, setPhoneFiltersOpen] = useState(false)
+  const [draftFilter, setDraftFilter] = useState<SupportFilter | null>(null)
   const items = allTickets.filter(item => {
     if (!previewMode) return true
     if (!previewEmail) return false
@@ -471,13 +543,16 @@ function TicketList(props: ScreenProps) {
     setFilter(current => typeof patch === 'function' ? patch(current) : { ...current, ...patch })
   }
   const setView = (next: SupportTicketViewId) => {
-    updateFilter(current => ({
-      ...current,
-      view: next,
-      scope: supportTicketViewScope(next),
-      mine: false,
-      status: supportStatusesForView(next).includes(current.status) ? current.status : '',
-    }))
+    updateFilter(current => {
+      const allowed = supportStatusesForView(next)
+      return {
+        ...current,
+        view: next,
+        scope: supportTicketViewScope(next),
+        mine: false,
+        statuses: current.statuses.filter(status => allowed.includes(status)),
+      }
+    })
   }
   const visible = filterTickets(items, filter, actorEmail, props.now)
     .sort((a, b) => {
@@ -500,17 +575,45 @@ function TicketList(props: ScreenProps) {
     }))
     .filter(item => item.email)
   const statusOptions = supportStatusesForView(view)
+  const priorityOptions = ['Срочный', 'Высокий', 'Обычный', 'Низкий']
   const changeStatus = async (id: string, status: string) => {
     const result = await commit(props, { kind: 'status', recordId: id, statusId: statusId(props, status) })
     setStatusError(result.ok ? '' : result.error)
   }
-  const filterHint = [filter.status, filter.priority, filter.assigneeEmail === '__none__' ? 'не назначен' : filter.assigneeEmail ? operators.find(item => item.email === filter.assigneeEmail)?.name : '', filter.ageBucket].filter(Boolean).join(', ')
+  const activeFilterCount = [filter.assigneeEmail ? 1 : 0, filter.statuses.length, filter.priorities.length, filter.ageBucket ? 1 : 0].reduce((sum, n) => sum + n, 0)
+  const hasActiveFilters = activeFilterCount > 0 || Boolean(filter.search.trim())
+  const clearFilters = () => setFilter(current => ({ ...EMPTY_FILTER, view: current.view, scope: current.scope }))
+  const openPhoneFilters = () => {
+    setDraftFilter(filter)
+    setPhoneFiltersOpen(true)
+  }
+  const applyPhoneFilters = () => {
+    if (draftFilter) setFilter(draftFilter)
+    setPhoneFiltersOpen(false)
+    setDraftFilter(null)
+  }
+  const draft = draftFilter ?? filter
+  const draftVisibleCount = filterTickets(items, draft, actorEmail, props.now).length
   const renderClientGroup = (title: string, list: SupportListItem[]) => list.length ? <section className={css.clientGroup} aria-label={title}>
     <h2 className={css.clientGroupTitle}>{title} ({list.length})</h2>
     <ul className={css.cards} data-client-cards>
       {list.map(item => <li key={item.id}><ClientTicketButton item={item} now={props.now} onOpen={() => openTicket(item.id)} /></li>)}
     </ul>
   </section> : null
+  const activeChips = <>
+    {filter.assigneeEmail ? <button type="button" className={css.activeChip} onClick={() => updateFilter({ assigneeEmail: '' })}>
+      {filter.assigneeEmail === '__none__' ? 'Не назначен' : operators.find(item => item.email === filter.assigneeEmail)?.name ?? 'Ответственный'}
+      <ProtoIcon name="close" size={12} />
+    </button> : null}
+    {filter.statuses.map(status => <button key={status} type="button" className={css.activeChip} onClick={() => updateFilter(current => ({ ...current, statuses: current.statuses.filter(item => item !== status) }))}>
+      {status}<ProtoIcon name="close" size={12} />
+    </button>)}
+    {filter.priorities.map(priority => <button key={priority} type="button" className={css.activeChip} data-tone={priorityTone(priority)} onClick={() => updateFilter(current => ({ ...current, priorities: current.priorities.filter(item => item !== priority) }))}>
+      {priority}<ProtoIcon name="close" size={12} />
+    </button>)}
+    {filter.ageBucket ? <button type="button" className={css.activeChip} onClick={() => updateFilter({ ageBucket: '' })}>Возраст: {filter.ageBucket}<ProtoIcon name="close" size={12} /></button> : null}
+    {hasActiveFilters && (filter.assigneeEmail || filter.statuses.length || filter.priorities.length || filter.ageBucket) ? <button type="button" className={css.resetFilters} onClick={clearFilters}>Сбросить</button> : null}
+  </>
   return <div className={css.root} data-support-root data-support-screen={queueDesk ? 'queue' : 'client'} data-preview={previewMode || undefined} data-tickets-view={queueDesk ? view : undefined}>
     <ListScreenShell
       title={queueDesk ? 'Тикеты' : 'Мои обращения'}
@@ -527,36 +630,35 @@ function TicketList(props: ScreenProps) {
         </div> : null}
         {queueDesk ? <div className={css.viewTabsWrap} data-view-tabs data-phone={device === 'phone' || undefined}>
           <div className={css.viewTabs} role="tablist" aria-label="Представления тикетов">
-            {SUPPORT_TICKET_VIEWS.map(item => {
-              const short = device === 'phone' && (item.id === 'unassigned' ? 'Без отв.' : item.id === 'hot' ? 'Горит' : item.id === 'waiting' ? 'Ждём' : item.id === 'open' ? 'Открытые' : item.label)
-              const label = typeof short === 'string' ? short : item.label
-              return <button key={item.id} type="button" role="tab" className={css.viewTab} aria-selected={view === item.id} aria-label={`${item.label}, ${viewCounts[item.id] ?? 0}`} title={item.label} onClick={() => setView(item.id)}>
-                <span>{label}</span>
+            {SUPPORT_TICKET_VIEWS.map(item => (
+              <button key={item.id} type="button" role="tab" className={css.viewTab} aria-selected={view === item.id} aria-label={`${item.label}, ${viewCounts[item.id] ?? 0}`} title={item.label} onClick={() => setView(item.id)}>
+                <span>{item.label}</span>
                 <em className={css.viewCount}>{viewCounts[item.id] ?? 0}</em>
               </button>
-            })}
+            ))}
           </div>
         </div> : null}
-        {queueDesk ? <details className={css.filterDrawer} open={device !== 'phone'}>
-          <summary>Фильтры{filterHint ? ` · ${filterHint}` : ''}</summary>
-          <div>
-        <div className={css.filters}>
+        {queueDesk && device !== 'phone' ? <>
+          <div className={css.toolbar} data-ticket-toolbar>
+            <ShellSearchField value={filter.search} onChange={search => updateFilter({ search })} label="Поиск обращений" placeholder="Тема, клиент или номер" />
+            <AssigneeFilter value={filter.assigneeEmail ?? ''} operators={operators} onChange={assigneeEmail => updateFilter({ assigneeEmail })} />
+            {statusOptions.length > 1 ? <MultiSelectFilter label="Статус" values={filter.statuses} options={statusOptions.map(name => ({ id: name, name }))} onChange={statuses => updateFilter({ statuses })} /> : null}
+            <MultiSelectFilter label="Приоритет" values={filter.priorities} options={priorityOptions.map(name => ({ id: name, name, tone: priorityTone(name) }))} onChange={priorities => updateFilter({ priorities })} />
+          </div>
+          {(filter.assigneeEmail || filter.statuses.length || filter.priorities.length || filter.ageBucket) ? <div className={css.activeChips} role="status">{activeChips}</div> : null}
+        </> : null}
+        {queueDesk && device === 'phone' ? <div className={css.phoneFilterBar}>
+          <button type="button" className={css.filterButton} data-active={activeFilterCount > 0 || undefined} aria-expanded={phoneFiltersOpen} onClick={openPhoneFilters}>
+            <ProtoIcon name="filter" size={16} />
+            <span>Фильтры</span>
+            {activeFilterCount > 0 ? <em className={css.filterCount}>{activeFilterCount}</em> : null}
+          </button>
           <ShellSearchField value={filter.search} onChange={search => updateFilter({ search })} label="Поиск обращений" placeholder="Тема, клиент или номер" />
-          <AssigneeFilter value={filter.assigneeEmail ?? ''} operators={operators} onChange={assigneeEmail => updateFilter({ assigneeEmail })} />
-        </div>
-        {statusOptions.length > 1 ? <div className={css.chips} role="toolbar" aria-label="Статус">
-          <button type="button" className={css.chip} aria-pressed={filter.status === ''} onClick={() => updateFilter({ status: '' })}>Все статусы</button>
-          {statusOptions.map(status => <button key={status} type="button" className={css.chip} aria-pressed={filter.status === status} onClick={() => updateFilter(current => ({ ...current, status: current.status === status ? '' : status }))}>{status}</button>)}
         </div> : null}
-        <div className={css.chips} role="toolbar" aria-label="Приоритет">
-          {['Срочный', 'Высокий', 'Обычный', 'Низкий'].map(priority => <button key={priority} type="button" className={`${css.chip} ${css.priorityChip}`} data-tone={priorityTone(priority)} aria-pressed={filter.priority === priority} onClick={() => updateFilter(current => ({ ...current, priority: current.priority === priority ? '' : priority }))}>{priority}</button>)}
-        </div>
-        {filter.ageBucket ? <div className={css.chips} role="status"><button type="button" className={css.chip} aria-pressed onClick={() => updateFilter({ ageBucket: '' })}>Возраст: {filter.ageBucket} · сбросить</button></div> : null}
-          </div>
-        </details> : null}
+        {queueDesk && device === 'phone' && (filter.assigneeEmail || filter.statuses.length || filter.priorities.length || filter.ageBucket) ? <div className={css.activeChips} data-phone role="status">{activeChips}</div> : null}
         {props.loading ? <p className={css.status} role="status">Загружаем обращения…</p> : null}
         {props.error || statusError ? <div className={css.status} role="alert"><p className={css.error}>{props.error || statusError}</p>{props.error ? <button type="button" onClick={props.reload}>Повторить</button> : null}</div> : null}
-        {!props.loading && !props.error && !visible.length ? <div className={css.empty}><ProtoIcon name="clipboard" size={28} /><p>{items.length ? 'Нет обращений с такими условиями.' : queueDesk ? 'Тикетов пока нет. Новое обращение появится здесь.' : previewMode ? 'У этого клиента пока нет обращений.' : 'У вас пока нет обращений.'}</p>{items.length && queueDesk ? <button type="button" onClick={() => setFilter(EMPTY_FILTER)}>Сбросить фильтры</button> : !previewMode ? <button type="button" onClick={() => setOpen('create')}>{queueDesk ? 'Создать обращение' : 'Написать обращение'}</button> : null}</div> : null}
+        {!props.loading && !props.error && !visible.length ? <div className={css.empty}><ProtoIcon name="clipboard" size={28} /><p>{items.length ? 'Нет обращений с такими условиями.' : queueDesk ? 'Тикетов пока нет. Новое обращение появится здесь.' : previewMode ? 'У этого клиента пока нет обращений.' : 'У вас пока нет обращений.'}</p>{items.length && queueDesk ? <button type="button" onClick={clearFilters}>Сбросить фильтры</button> : !previewMode ? <button type="button" onClick={() => setOpen('create')}>{queueDesk ? 'Создать обращение' : 'Написать обращение'}</button> : null}</div> : null}
         {clientView && visible.length ? <>
           {renderClientGroup('Открытые', openItems)}
           {renderClientGroup('Завершённые', doneItems)}
@@ -596,6 +698,43 @@ function TicketList(props: ScreenProps) {
       </div>
     </ListScreenShell>
     {open === 'create' && !previewMode ? <CreateDialog {...props} desk={queueDesk} onClose={() => setOpen(null)} onDone={id => { setOpen(null); if (id) props.onNavigate?.(backTo, undefined) }} /> : null}
+    {phoneFiltersOpen && draftFilter ? <div className={css.sheetScrim} role="presentation" onClick={() => { setPhoneFiltersOpen(false); setDraftFilter(null) }}>
+      <div className={css.filterSheet} role="dialog" aria-label="Фильтры" onClick={event => event.stopPropagation()}>
+        <header className={css.sheetHeader}>
+          <strong>Фильтры</strong>
+          <button type="button" className={css.sheetClose} aria-label="Закрыть" onClick={() => { setPhoneFiltersOpen(false); setDraftFilter(null) }}><ProtoIcon name="close" size={18} /></button>
+        </header>
+        <div className={css.sheetBody}>
+          <p className={css.sheetLabel}>Ответственный</p>
+          <div className={css.sheetChoices}>
+            <button type="button" aria-pressed={!draft.assigneeEmail} onClick={() => setDraftFilter({ ...draft, assigneeEmail: '' })}>Все</button>
+            <button type="button" aria-pressed={draft.assigneeEmail === '__none__'} onClick={() => setDraftFilter({ ...draft, assigneeEmail: '__none__' })}>Не назначен</button>
+            {operators.map(operator => <button key={operator.email} type="button" aria-pressed={draft.assigneeEmail === operator.email} onClick={() => setDraftFilter({ ...draft, assigneeEmail: operator.email })}>
+              <SupportPerson name={operator.name} size={22} />{operator.name}
+            </button>)}
+          </div>
+          {statusOptions.length > 1 ? <>
+            <p className={css.sheetLabel}>Статус</p>
+            <div className={css.sheetChoices}>
+              {statusOptions.map(status => <button key={status} type="button" aria-pressed={draft.statuses.includes(status)} onClick={() => setDraftFilter({ ...draft, statuses: toggleInList(draft.statuses, status) })}>
+                <span className={css.checkMark} data-on={draft.statuses.includes(status) || undefined}>{draft.statuses.includes(status) ? <ProtoIcon name="check" size={12} /> : null}</span>
+                {status}
+              </button>)}
+            </div>
+          </> : null}
+          <p className={css.sheetLabel}>Приоритет</p>
+          <div className={css.sheetChoices}>
+            {priorityOptions.map(priority => <button key={priority} type="button" aria-pressed={draft.priorities.includes(priority)} onClick={() => setDraftFilter({ ...draft, priorities: toggleInList(draft.priorities, priority) })}>
+              <span className={css.checkMark} data-on={draft.priorities.includes(priority) || undefined}>{draft.priorities.includes(priority) ? <ProtoIcon name="check" size={12} /> : null}</span>
+              {priority}
+            </button>)}
+          </div>
+        </div>
+        <footer className={css.sheetFooter}>
+          <button type="button" className={css.primary} onClick={applyPhoneFilters}>Показать {draftVisibleCount}</button>
+        </footer>
+      </div>
+    </div> : null}
   </div>
 }
 
@@ -618,20 +757,21 @@ function ClientTicketButton({ item, now, onOpen }: { item: SupportListItem; now:
 function TicketButton({ item, now, onOpen, showAssignee = true, onStatus }: { item: SupportListItem; now: number; onOpen: () => void; showAssignee?: boolean; onStatus?: (status: string) => void }) {
   const overdue = isOverdue(item.status, item.deadline, now)
   const deadline = item.sla?.known && (item.sla.first.dueAt || item.sla.resolution.dueAt) ? slaWhen(item.sla.first.dueAt && !item.sla.first.met ? item.sla.first.dueAt : item.sla.resolution.dueAt) : formatWhen(item.deadline)
+  const slaNote = item.sla?.known ? supportSlaLabel(item.sla) : ''
   return <div className={css.ticketCard} data-ticket-card>
     <button type="button" className={css.card} onClick={onOpen}>
       <span className={css.ticketCardTop}>
-        <span className={css.ticketCardCopy}>
-          <span className={css.subject}>{item.subject || 'Без темы'}</span>
-          {item.number ? <span className={css.number}>{item.number}</span> : null}
-        </span>
-        {showAssignee ? (item.assigneeName ? <SupportPerson name={item.assigneeName} size={32} /> : <span className={css.avatar} data-size="md" data-client aria-hidden="true"><ProtoIcon name="user" size={16} /></span>) : null}
+        <span className={css.subject}>{item.subject || 'Без темы'}</span>
+        {showAssignee ? (item.assigneeName ? <SupportPerson name={item.assigneeName} size={28} /> : <span className={css.avatar} data-size="sm" data-client aria-hidden="true"><ProtoIcon name="user" size={14} /></span>) : null}
       </span>
+      {item.number ? <span className={css.number}>{item.number}</span> : null}
       <span className={css.cardFacts}><StatusBadge name={item.status} /><PriorityBadge name={item.priority} /></span>
-      <span className={css.meta}>
+      <span className={css.ticketCardLine}>
         <span className={css.quiet}>{item.clientName || 'Клиент не указан'}</span>
-        <span className={css.deadline} data-overdue={overdue || undefined}>{deadline}{item.sla?.known && supportSlaLabel(item.sla) ? <span className={item.sla.currentOverdue ? css.late : css.quiet}>{supportSlaLabel(item.sla)}</span> : overdue ? <span className={css.late}>Просрочено</span> : null}</span>
+        <span className={css.quiet}>·</span>
+        <span className={css.deadline}>{deadline}{slaNote && !overdue ? <span className={css.quiet}> {slaNote}</span> : null}</span>
       </span>
+      {overdue ? <span className={css.lateLine}>{slaNote || 'Просрочено'}</span> : null}
     </button>
     {onStatus && isSupportStatus(item.status) ? <div className={css.ticketCardMenu}><TicketStatusMenu status={item.status} onPick={onStatus} /></div> : null}
   </div>
@@ -751,13 +891,13 @@ async function runStatus(props: ScreenProps, recordId: string, statusIdValue: st
   setMessage(result.ok ? result.message : result.error)
 }
 
-function CreateDialog(props: ScreenProps & { desk: boolean; onClose: () => void; onDone: (id?: string) => void }) {
+function CreateDialog(props: ScreenProps & { desk: boolean; onClose: () => void; onDone: (id?: string) => void; initialClientId?: string }) {
   useDialogBehavior(props.onClose)
   const formId = useId()
   const [subject, setSubject] = useState('')
   const [description, setDescription] = useState('')
   const [categoryId, setCategoryId] = useState('')
-  const [clientId, setClientId] = useState('')
+  const [clientId, setClientId] = useState(props.initialClientId ?? '')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const categories = props.of(props.kit.categoriesTableId).filter(row => row.values[props.kit.category.active] === true)
@@ -867,15 +1007,256 @@ function AssignDialog(props: ScreenProps & { ticket: AppV2Record; onClose: () =>
   </AppDialog>
 }
 
+type ClientSortKey = 'name' | 'company' | 'phone' | 'open' | 'total' | 'last'
+
+type ClientListRow = {
+  id: string
+  name: string
+  email: string
+  phone: string
+  company: string
+  note: string
+  open: number
+  overdueOpen: number
+  total: number
+  lastAt: number | null
+  lastLabel: string
+}
+
+function clientRows(props: ScreenProps): ClientListRow[] {
+  const tickets = ticketItems(props)
+  return props.of(props.kit.clientsTableId).map(row => {
+    const email = textOf(row.values[props.kit.client.email]).trim().toLowerCase()
+    const related = tickets.filter(item => {
+      const ticket = props.of(props.kit.ticketsTableId).find(entry => entry.id === item.id)
+      return textOf(ticket?.values[props.kit.ticket.clientEmail]).trim().toLowerCase() === email
+    })
+    const open = related.filter(item => isOpenStatus(item.status))
+    const overdueOpen = open.filter(item => isOverdue(item.status, item.deadline, props.now)).length
+    const lastAt = related.reduce<number | null>((max, item) => {
+      const stamp = deadlineTime(item.updatedAt) ?? deadlineTime(item.createdAt)
+      if (stamp == null) return max
+      return max == null || stamp > max ? stamp : max
+    }, null)
+    return {
+      id: row.id,
+      name: textOf(row.values[props.kit.client.name]) || 'Без имени',
+      email,
+      phone: textOf(row.values[props.kit.client.phone]),
+      company: textOf(row.values[props.kit.client.company]),
+      note: textOf(row.values[props.kit.client.note]),
+      open: open.length,
+      overdueOpen,
+      total: related.length,
+      lastAt,
+      lastLabel: lastAt == null ? '—' : formatDate(new Date(lastAt).toISOString()),
+    }
+  }).filter(item => item.email || item.name)
+}
+
 function ClientDirectory(props: ScreenProps) {
-  const clients = props.of(props.kit.clientsTableId)
+  const device = useContext(AppFrameDeviceContext)
+  const [search, setSearch] = useState('')
+  const [sort, setSort] = useState<{ key: ClientSortKey; dir: 'asc' | 'desc' }>({ key: 'last', dir: 'desc' })
+  const rows = clientRows(props)
+  const query = search.trim().toLocaleLowerCase('ru-RU')
+  const filtered = rows.filter(row => {
+    if (!query) return true
+    return [row.name, row.company, row.phone, row.email].join('\n').toLocaleLowerCase('ru-RU').includes(query)
+  })
+  const sorted = [...filtered].sort((a, b) => {
+    const dir = sort.dir === 'asc' ? 1 : -1
+    const cmp = (left: string | number | null, right: string | number | null) => {
+      if (left == null && right == null) return 0
+      if (left == null) return 1
+      if (right == null) return -1
+      if (typeof left === 'number' && typeof right === 'number') return (left - right) * dir
+      return String(left).localeCompare(String(right), 'ru') * dir
+    }
+    if (sort.key === 'name') return cmp(a.name, b.name)
+    if (sort.key === 'company') return cmp(a.company, b.company)
+    if (sort.key === 'phone') return cmp(a.phone, b.phone)
+    if (sort.key === 'open') return cmp(a.open, b.open)
+    if (sort.key === 'total') return cmp(a.total, b.total)
+    return cmp(a.lastAt, b.lastAt)
+  })
+  const toggleSort = (key: ClientSortKey) => setSort(current => current.key === key ? { key, dir: current.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: key === 'name' || key === 'company' || key === 'phone' ? 'asc' : 'desc' })
+  const openClient = (id: string) => {
+    if (props.kit.clientScreenId) props.onNavigate?.(props.kit.clientScreenId, id)
+  }
+  const sortButton = (key: ClientSortKey, label: string) => <button type="button" className={css.sortHead} data-active={sort.key === key || undefined} aria-sort={sort.key === key ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'} onClick={() => toggleSort(key)}>
+    {label}
+    {sort.key === key ? <ProtoIcon name={sort.dir === 'asc' ? 'up' : 'down'} size={12} /> : <ProtoIcon name="sort" size={12} />}
+  </button>
   return <div className={css.root} data-support-root data-support-screen="clients">
-    <ListScreenShell title="Клиенты" meta="Заметка о клиенте видна только службе. Клиент её не открывает.">
-      {props.loading ? <p role="status">Загружаем клиентов…</p> : null}
-      {!props.loading && !clients.length ? <div className={css.empty}><p>Клиентов пока нет.</p></div> : null}
-      <ul className={css.directory}>{clients.map(row => <li key={row.id}><strong>{textOf(row.values[props.kit.client.name]) || 'Без имени'}</strong><span className={css.quiet}>{[textOf(row.values[props.kit.client.company]), textOf(row.values[props.kit.client.phone])].filter(Boolean).join(' · ') || 'Контакты не указаны'}</span></li>)}</ul>
+    <ListScreenShell title="Клиенты" meta="Все, кто обращался в поддержку.">
+      <div className={css.stack}>
+        <div className={css.toolbar} data-clients-toolbar>
+          <ShellSearchField value={search} onChange={setSearch} label="Поиск клиентов" placeholder="Имя, компания, телефон или почта" />
+        </div>
+        {props.loading ? <p className={css.status} role="status">Загружаем клиентов…</p> : null}
+        {!props.loading && !sorted.length ? <div className={css.empty}><p>{rows.length ? 'Нет клиентов по этому запросу.' : 'Клиентов пока нет.'}</p></div> : null}
+        {sorted.length && device === 'phone' ? <ul className={css.clientCards} data-client-cards>
+          {sorted.map(row => <li key={row.id}>
+            <button type="button" className={css.clientCard} onClick={() => openClient(row.id)}>
+              <span className={css.clientCardMain}>
+                <span className={css.clientIdentity}>
+                  <span className={css.avatar} data-size="md" data-client aria-hidden="true"><ProtoIcon name="user" size={16} /></span>
+                  <span>
+                    <strong>{row.name}</strong>
+                    <span className={css.quiet}>{row.company || 'Без компании'}</span>
+                  </span>
+                </span>
+                <span className={css.clientCardCounts}>
+                  <span data-overdue={row.overdueOpen > 0 || undefined}>{row.open} откр.</span>
+                  <span className={css.quiet}>{row.total} всего</span>
+                </span>
+              </span>
+              <ProtoIcon name="arrow" size={16} />
+            </button>
+          </li>)}
+        </ul> : null}
+        {sorted.length && device !== 'phone' ? <div className={css.tableWrap} data-clients-table>
+          <table className={css.table} data-columns={6}>
+            <caption className={css.quiet}>Список клиентов</caption>
+            <thead><tr>
+              <th>{sortButton('name', 'Клиент')}</th>
+              <th>{sortButton('company', 'Компания')}</th>
+              <th>{sortButton('phone', 'Телефон')}</th>
+              <th>{sortButton('open', 'Открытые')}</th>
+              <th>{sortButton('total', 'Всего обращений')}</th>
+              <th>{sortButton('last', 'Последнее обращение')}</th>
+            </tr></thead>
+            <tbody>
+              {sorted.map(row => <tr key={row.id}>
+                <td>
+                  <button type="button" className={`${css.rowButton} ${css.clientRowButton}`} onClick={() => openClient(row.id)}>
+                    <span className={css.clientIdentity}>
+                      <span className={css.avatar} data-size="sm" data-client aria-hidden="true"><ProtoIcon name="user" size={14} /></span>
+                      <span className={css.person}>{row.name}<span>{row.email || 'Почта не указана'}</span></span>
+                    </span>
+                    <ProtoIcon name="arrow" size={14} />
+                  </button>
+                </td>
+                <td>{row.company || '—'}</td>
+                <td>{row.phone || '—'}</td>
+                <td><span className={css.openCount} data-overdue={row.overdueOpen > 0 || undefined}>{row.open}</span></td>
+                <td>{row.total}</td>
+                <td>{row.lastLabel}</td>
+              </tr>)}
+            </tbody>
+          </table>
+        </div> : null}
+      </div>
     </ListScreenShell>
   </div>
+}
+
+function ClientDetail(props: ScreenProps) {
+  const bundle = useContext(SupportRowsContext)
+  const client = props.of(props.kit.clientsTableId).find(row => row.id === props.recordId) ?? (props.record?.tableId === props.kit.clientsTableId ? props.record : undefined)
+  const [noteOpen, setNoteOpen] = useState(false)
+  const [createOpen, setCreateOpen] = useState(false)
+  const [message, setMessage] = useState('')
+  if (!client) return <div className={css.root} data-support-root data-support-screen="client-missing">{props.loading ? <p role="status">Загружаем клиента…</p> : <div className={css.empty}><p>Клиент не найден.</p><button type="button" onClick={() => props.onNavigate?.(props.kit.clientsScreenId)}>К списку</button></div>}</div>
+  const email = textOf(client.values[props.kit.client.email]).trim().toLowerCase()
+  const name = textOf(client.values[props.kit.client.name]) || 'Без имени'
+  const company = textOf(client.values[props.kit.client.company])
+  const phone = textOf(client.values[props.kit.client.phone])
+  const note = textOf(client.values[props.kit.client.note])
+  const tickets = ticketItems(props).filter(item => {
+    const row = props.of(props.kit.ticketsTableId).find(entry => entry.id === item.id)
+    return textOf(row?.values[props.kit.ticket.clientEmail]).trim().toLowerCase() === email
+  }).sort((a, b) => (deadlineTime(b.updatedAt) ?? 0) - (deadlineTime(a.updatedAt) ?? 0))
+  const open = tickets.filter(item => isOpenStatus(item.status))
+  const closed = tickets.filter(item => !isOpenStatus(item.status))
+  const avgMs = closed.length
+    ? closed.reduce((sum, item) => {
+      const start = deadlineTime(item.createdAt)
+      const end = deadlineTime(item.updatedAt)
+      if (start == null || end == null || end < start) return sum
+      return sum + (end - start)
+    }, 0) / closed.length
+    : 0
+  const previewAsClient = () => {
+    if (bundle?.previewFocus) bundle.previewFocus.current = email
+    props.onNavigate?.(props.kit.clientListScreenId)
+  }
+  return <div className={css.root} data-support-root data-support-screen="client-card">
+    <DetailCardShell
+      title={name}
+      subtitle={company || email || undefined}
+      back={{ label: 'Клиенты', onClick: () => props.onNavigate?.(props.kit.clientsScreenId) }}
+      actions={<>
+        <button type="button" className={css.mine} onClick={previewAsClient}>Посмотреть как клиент</button>
+        <button type="button" className={css.primary} onClick={() => setCreateOpen(true)}>Новое обращение от клиента</button>
+      </>}
+    >
+      <div className={css.clientDetail}>
+        {message ? <p role="status">{message}</p> : null}
+        <DetailSection title="Контакты">
+          <dl className={css.clientFacts}>
+            <div><dt>Почта</dt><dd>{email || '—'}</dd></div>
+            <div><dt>Телефон</dt><dd>{phone || '—'}</dd></div>
+            <div><dt>Компания</dt><dd>{company || '—'}</dd></div>
+          </dl>
+        </DetailSection>
+        <DetailSection title="Заметка — видна только службе">
+          <div className={css.noteBlock}>
+            <p className={note ? css.clientNote : css.quiet}>{note || 'Заметки пока нет.'}</p>
+            <button type="button" className={css.mine} onClick={() => setNoteOpen(true)}>{note ? 'Изменить' : 'Добавить'}</button>
+          </div>
+        </DetailSection>
+        <DetailSection title="Сводка">
+          <div className={css.clientStats}>
+            <p><strong>{open.length}</strong><span>Открытые</span></p>
+            <p><strong>{tickets.length}</strong><span>Всего</span></p>
+            <p><strong>{formatDuration(avgMs)}</strong><span>Среднее решение</span></p>
+          </div>
+        </DetailSection>
+        <DetailSection title="История обращений">
+          {!tickets.length ? <p className={css.quiet}>Обращений пока нет.</p> : <ul className={css.clientHistory}>
+            {tickets.map(item => <li key={item.id}>
+              <button type="button" className={css.historyRow} onClick={() => props.onNavigate?.(props.kit.ticketScreenId, item.id)}>
+                <span className={css.historyMain}>
+                  <span className={css.subject}>{item.subject || 'Без темы'}</span>
+                  <span className={css.number}>{item.number}</span>
+                  <span className={css.cardFacts}><StatusBadge name={item.status} /><PriorityBadge name={item.priority} /></span>
+                  <span className={css.quiet}>{formatDate(item.updatedAt || item.createdAt)}{item.assigneeName ? ` · ${item.assigneeName}` : ''}</span>
+                </span>
+                {item.assigneeName ? <SupportPerson name={item.assigneeName} size={28} /> : <span className={css.avatar} data-size="sm" data-client aria-hidden="true"><ProtoIcon name="user" size={14} /></span>}
+              </button>
+            </li>)}
+          </ul>}
+        </DetailSection>
+      </div>
+    </DetailCardShell>
+    {noteOpen ? <ClientNoteDialog {...props} client={client} note={note} onClose={() => setNoteOpen(false)} onMessage={setMessage} /> : null}
+    {createOpen ? <CreateDialog {...props} desk initialClientId={client.id} onClose={() => setCreateOpen(false)} onDone={() => { setCreateOpen(false); setMessage('Обращение создано.') }} /> : null}
+  </div>
+}
+
+function ClientNoteDialog(props: ScreenProps & { client: AppV2Record; note: string; onClose: () => void; onMessage: (value: string) => void }) {
+  useDialogBehavior(props.onClose)
+  const formId = useId()
+  const [text, setText] = useState(props.note)
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const save = async () => {
+    setBusy(true)
+    const result = await commit(props, { kind: 'client_note', recordId: props.client.id, note: text })
+    setBusy(false)
+    if (!result.ok) { setError(result.error); return }
+    props.onMessage(result.message)
+    props.onClose()
+  }
+  return <AppDialog title="Заметка о клиенте" placement="center" onClose={props.onClose} footer={<button type="submit" form={formId} className={css.primary} disabled={busy}>{busy ? 'Сохраняем…' : 'Сохранить'}</button>}>
+    <form id={formId} data-support-form="client-note" onSubmit={event => { event.preventDefault(); void save() }}>
+      <p className={css.noteFlag}>Заметка — видна только службе. Клиент её не открывает.</p>
+      <label className={css.field}><span>Текст</span><textarea value={text} onChange={event => setText(event.target.value)} maxLength={2000} rows={5} /></label>
+      {error ? <p className={css.error} role="alert">{error}</p> : null}
+    </form>
+  </AppDialog>
 }
 
 function SettingsScreen(props: ScreenProps) {

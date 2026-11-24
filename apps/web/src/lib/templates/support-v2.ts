@@ -116,7 +116,7 @@ export function buildSupportV2App(built: BuiltTemplate, meta: { id: string; work
   }
   const ids = {
     queueScreenId: newId('screen'), ticketScreenId: newId('screen'), clientListScreenId: newId('screen'),
-    clientTicketScreenId: newId('screen'), clientsScreenId: newId('screen'), settingsScreenId: newId('screen'),
+    clientTicketScreenId: newId('screen'), clientsScreenId: newId('screen'), clientScreenId: newId('screen'), settingsScreenId: newId('screen'),
     dashboardScreenId: newId('screen'),
     createFormId: newId('component'), operatorCreateFormId: newId('component'), replyFormId: newId('component'),
     noteFormId: newId('component'), assignFormId: newId('component'), categoryFormId: newId('component'),
@@ -243,7 +243,12 @@ export function buildSupportV2App(built: BuiltTemplate, meta: { id: string; work
   const clientOperators = collection('Имена операторов', operators.id, operator.name, null, operator.name)
   const clientCategories = collection('Категории клиента', categories.id, category.name, null, category.name)
   const clientTicketCategories = collection('Категории карточки клиента', categories.id, category.name, null, category.name)
-  const directory = collection('Справочник клиентов', clients.id, client.name, null, client.name)
+  const openClient = flow('Открыть клиента', null, clients.id, null, [{ id: newId('action'), type: 'open_screen', screenId: ids.clientScreenId, record: { kind: 'current' } }], desk)
+  const directory = collection('Справочник клиентов', clients.id, client.name, openClient, client.name)
+  const directoryTickets = collection('Обращения справочника', tickets.id, ticket.subject, null, ticket.updatedAt)
+  const clientCardTickets = collection('Обращения клиента', tickets.id, ticket.subject, openTicket, ticket.updatedAt)
+  const clientCardOps = collection('Операторы карточки клиента', operators.id, operator.name, null, operator.name)
+  const clientCardCats = collection('Категории карточки клиента', categories.id, category.name, null, category.name)
   const settingsCategories = collection('Категории настроек', categories.id, category.name, null, category.name)
   const settingsOperators = collection('Операторы настроек', operators.id, operator.name, null, operator.name)
   const queueEvents = collection('События тикетов', events.id, event.kind, null, event.at)
@@ -284,7 +289,8 @@ export function buildSupportV2App(built: BuiltTemplate, meta: { id: string; work
       screen(ids.dashboardScreenId, 'Главная', 'Главная', 'home', desk, null, [dashTickets, dashEvents, dashNorms], true),
       screen(ids.queueScreenId, 'Тикеты', 'Тикеты', 'clipboard', desk, null, [queueTickets, queueClients, queueOperators, queueCategories, queueEvents, queueNorms, ids.operatorCreateFormId], true),
       screen(ids.ticketScreenId, 'Обращение', undefined, 'clipboard', desk, tickets.id, [ticketReplies, ticketNotes, ticketOperators, ticketCategories, ticketClients, ticketEvents, ids.replyFormId, ids.noteFormId, ids.assignFormId], false),
-      screen(ids.clientsScreenId, 'Клиенты', 'Клиенты', 'users', desk, null, [directory], true),
+      screen(ids.clientsScreenId, 'Клиенты', 'Клиенты', 'users', desk, null, [directory, directoryTickets], true),
+      screen(ids.clientScreenId, 'Клиент', undefined, 'users', desk, clients.id, [clientCardTickets, clientCardOps, clientCardCats], false),
       screen(ids.clientListScreenId, 'Мои обращения', 'Кабинет клиента', 'clipboard', { kind: 'roles', roleIds: ['owner', 'staff', 'client'] }, null, [clientTickets, clientCategories, ids.createFormId], true),
       screen(ids.settingsScreenId, 'Настройки', 'Настройки', 'settings', owner, null, [settingsCategories, settingsOperators, settingsNorms, ids.categoryFormId], true),
       screen(ids.clientTicketScreenId, 'Моё обращение', undefined, 'clipboard', clientRole, tickets.id, [clientReplies, clientOperators, clientTicketCategories], false),
@@ -309,7 +315,7 @@ export function buildSupportV2App(built: BuiltTemplate, meta: { id: string; work
         ] },
         { tableId: clients.id, grants: [
           grant(owner, { read: { fieldIds: columnsOf(clients.id), rows: all }, create: { fieldIds: editable(clients.id) }, update: { fieldIds: editable(clients.id), rows: all } }),
-          grant(staff, { read: { fieldIds: columnsOf(clients.id), rows: all } }),
+          grant(staff, { read: { fieldIds: columnsOf(clients.id), rows: all }, update: { fieldIds: [client.note], rows: all } }),
           grant(clientRole, { read: { fieldIds: [client.name, client.company], rows: owned(client.email) } }),
         ] },
         { tableId: operators.id, grants: [

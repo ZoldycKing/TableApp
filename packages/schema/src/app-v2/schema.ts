@@ -250,7 +250,7 @@ export const appV2Schema = z.strictObject({
     ticketsTableId: id, clientsTableId: id, operatorsTableId: id, categoriesTableId: id, repliesTableId: id, notesTableId: id,
     eventsTableId: id.optional(), slaTableId: id.optional(),
     queueScreenId: id, ticketScreenId: id, clientListScreenId: id, clientTicketScreenId: id, clientsScreenId: id, settingsScreenId: id,
-    dashboardScreenId: id.optional(), boardScreenId: id.optional(),
+    dashboardScreenId: id.optional(), boardScreenId: id.optional(), clientScreenId: id.optional(),
     createFormId: id, operatorCreateFormId: id, replyFormId: id, noteFormId: id, assignFormId: id, categoryFormId: id,
     ticket: z.strictObject({
       number: id, subject: id, description: id, client: id, clientName: id, clientEmail: id,

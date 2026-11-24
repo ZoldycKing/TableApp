@@ -346,15 +346,19 @@ export function applySupportChange(app: AppV2, actor: AppV2Actor, rows: readonly
       clientName = name
       clientEmail = email.toLowerCase()
     } else if (!isSupportClient(actor)) return { ok: false, error: 'Создать обращение может клиент или оператор.' }
-    const linked = !clientId ? rows.find(row => row.tableId === support.clientsTableId && sameEmail(row.values[support.client.email], supportActorEmail(actor))) : undefined
+    // Clients must not write ticket.client — ownership is stamped via clientEmail ownerValues.
+    const linked = !clientId && isSupportClient(actor)
+      ? rows.find(row => row.tableId === support.clientsTableId && sameEmail(row.values[support.client.email], supportActorEmail(actor)))
+      : undefined
     const values = ticketCreateValues(support.ticket, {
       number, subject: change.subject.trim(), description: change.description.trim(), categoryId: category.id,
-      clientId: clientId ?? linked?.id, clientName, clientEmail, statusId: support.statuses.fresh, priorityId, createdAt: now,
+      clientId: isSupportDesk(actor) ? clientId : undefined, clientName, clientEmail, statusId: support.statuses.fresh, priorityId, createdAt: now,
     })
     if (change.lineId !== undefined && support.ticket.line) values[support.ticket.line] = change.lineId ?? ''
     const decision = guardSupportCreate(app, actor, support.ticketsTableId, values)
     if (!decision.ok) return decision
     const stored = { ...values, ...decision.ownerValues }
+    if (linked && !stored[support.ticket.client]) stored[support.ticket.client] = [linked.id]
     const ticketId = newId('row')
     const event = supportEventRecord(support, { ticketId, kind: 'created', at: now, priority: supportPriorityName(support, priorityId), status: 'Новое', actorEmail: supportActorEmail(actor) })
     return { ok: true, rows: [...rows, { id: ticketId, tableId: support.ticketsTableId, values: stored }, ...(event ? [event] : [])], message: 'Обращение создано.' }

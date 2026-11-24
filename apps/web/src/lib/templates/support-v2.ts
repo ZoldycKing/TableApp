@@ -58,6 +58,7 @@ export function buildSupportV2App(built: BuiltTemplate, meta: { id: string; work
     name: column('Операторы', 'Оператор').id,
     email: column('Операторы', 'Почта').id,
     phone: column('Операторы', 'Телефон').id,
+    photo: column('Операторы', 'Фото').id,
     role: column('Операторы', 'Роль в службе').id,
     active: column('Операторы', 'Статус').id,
   }
@@ -289,7 +290,7 @@ export function buildSupportV2App(built: BuiltTemplate, meta: { id: string; work
       screen(ids.ticketScreenId, 'Обращение', undefined, 'clipboard', desk, tickets.id, [ticketReplies, ticketNotes, ticketOperators, ticketCategories, ticketClients, ticketEvents, ids.replyFormId, ids.noteFormId, ids.assignFormId], false),
       screen(ids.clientsScreenId, 'Клиенты', 'Клиенты', 'users', desk, null, [directory], true),
       screen(ids.settingsScreenId, 'Настройки', 'Настройки', 'settings', owner, null, [settingsCategories, settingsOperators, settingsNorms, ids.categoryFormId], true),
-      screen(ids.clientListScreenId, 'Мои обращения', 'Обращения', 'clipboard', clientRole, null, [clientTickets, clientCategories, ids.createFormId], true),
+      screen(ids.clientListScreenId, 'Мои обращения', 'Обращения', 'clipboard', { kind: 'roles', roleIds: ['owner', 'staff', 'client'] }, null, [clientTickets, clientCategories, ids.createFormId], true),
       screen(ids.clientTicketScreenId, 'Моё обращение', undefined, 'clipboard', clientRole, tickets.id, [clientReplies, clientOperators, clientTicketCategories], false),
     ],
     nodes, sources, workflows,
@@ -318,7 +319,7 @@ export function buildSupportV2App(built: BuiltTemplate, meta: { id: string; work
         { tableId: operators.id, grants: [
           grant(owner, { read: { fieldIds: columnsOf(operators.id), rows: all }, create: { fieldIds: editable(operators.id) }, update: { fieldIds: editable(operators.id), rows: all } }),
           grant(staff, { read: { fieldIds: columnsOf(operators.id), rows: all } }),
-          grant(clientRole, { read: { fieldIds: [operator.name, operator.role], rows: all } }),
+          grant(clientRole, { read: { fieldIds: [operator.name, operator.photo, operator.role], rows: all } }),
         ] },
         { tableId: events.id, grants: [
           grant(owner, { read: { fieldIds: columnsOf(events.id), rows: all }, create: { fieldIds: editable(events.id) } }),

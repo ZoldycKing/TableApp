@@ -34,6 +34,7 @@ import { buildProjectsV2App, isProjectsTemplate } from '@/lib/templates/projects
 import { buildSupportV2App, isSupportTemplate } from '@/lib/templates/support-v2'
 import { stageDispatchPortrait } from '@/lib/templates/dispatch-portrait-files'
 import { stageProjectsPortrait } from '@/lib/templates/projects-portrait-files'
+import { stageSupportPortrait } from '@/lib/templates/support-portrait-files'
 import { stageBookingSampleFile } from '@/lib/templates/booking-sample-files'
 import { stageSalonPortrait } from '@/lib/templates/salon-portraits'
 import { discardInventorySampleFiles, stageInventorySampleFile } from '@/lib/templates/inventory-sample-files'
@@ -150,6 +151,16 @@ export async function applyTemplateAction(
         for (const row of built.rows.filter(item => item.tableId === masters.id)) {
           const file = await stageDispatchPortrait(workspaceId, auth.member.userId, row.data[masters.primaryFieldId])
           if (file) { row.data[photo.id] = [file]; sampleFiles.push({ tableId: masters.id, rowId: row.id, fieldId: photo.id, file }) }
+        }
+      }
+    }
+    if (isSupportTemplate(template.id)) {
+      const operators = built.tables.find(table => table.name === 'Операторы')
+      const photo = operators && built.fields.find(field => field.tableId === operators.id && field.name === 'Фото')
+      if (operators?.primaryFieldId && photo) {
+        for (const row of built.rows.filter(item => item.tableId === operators.id)) {
+          const file = await stageSupportPortrait(workspaceId, auth.member.userId, row.data[operators.primaryFieldId])
+          if (file) { row.data[photo.id] = [file]; sampleFiles.push({ tableId: operators.id, rowId: row.id, fieldId: photo.id, file }) }
         }
       }
     }

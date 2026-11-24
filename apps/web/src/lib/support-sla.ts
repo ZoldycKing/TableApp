@@ -8,6 +8,7 @@
  * приоритета. Уже записанное нарушение остаётся. Пауза «Ждём клиента»
  * не расходует остаток. Первый ответ — только публичный ответ оператора.
  */
+import { instantToWallClock, wallClockToInstant } from '@tableapp/schema'
 import type { SupportStatusName } from './support-logic'
 
 export type SupportSlaPriority = 'urgent' | 'high' | 'normal' | 'low'
@@ -233,30 +234,81 @@ export function supportQueueMatch(input: { status: string; assigneeEmail: string
   return input.sla.known ? input.sla.currentRisk : false
 }
 
+export type SupportAgeBucket = 'lt4h' | '4to12h' | '12to24h' | '1to3d' | 'gt3d'
+
+export const SUPPORT_HEAT_AGES: { id: SupportAgeBucket; label: string }[] = [
+  { id: 'lt4h', label: 'до 4 ч' },
+  { id: '4to12h', label: '4–12 ч' },
+  { id: '12to24h', label: '12–24 ч' },
+  { id: '1to3d', label: '1–3 дня' },
+  { id: 'gt3d', label: 'больше 3 дней' },
+]
+
+export function supportHeatAgeBucket(ageMs: number): SupportAgeBucket {
+  if (ageMs < 4 * 3_600_000) return 'lt4h'
+  if (ageMs < 12 * 3_600_000) return '4to12h'
+  if (ageMs < 24 * 3_600_000) return '12to24h'
+  if (ageMs < 3 * 24 * 3_600_000) return '1to3d'
+  return 'gt3d'
+}
+
+export type SupportHeatCell = { count: number; breached: number }
+export type SupportHeatRow = { priority: SupportSlaPriority; cells: Record<SupportAgeBucket, SupportHeatCell>; total: SupportHeatCell }
+
 export type SupportDashboard = {
   open: number
   unassigned: number
   risk: number
   overdue: number
+  resolvedToday: number
+  resolvedYesterday: number
+  openYesterday: number
+  overdueYesterday: number
   resolvedInPeriod: number
   avgFirstResponseMs: number | null
   avgResolutionMs: number | null
+  avgFirstYesterdayMs: number | null
+  avgResolutionYesterdayMs: number | null
   firstMet: number
   firstClosed: number
   resolutionMet: number
   resolutionClosed: number
   age: { priority: SupportSlaPriority; count: number; oldestMs: number }[]
+  heat: SupportHeatRow[]
+  openByAssignee: Record<string, number>
+}
+
+function dayBounds(now: number) {
+  const wall = instantToWallClock(new Date(now), 'Europe/Moscow')
+  if (!wall) {
+    const dayMs = 24 * 60 * 60 * 1000
+    const todayStart = now - (now % dayMs)
+    return { todayStart, yesterdayStart: todayStart - dayMs }
+  }
+  const [year, month, day] = wall.date.split('-').map(Number) as [number, number, number]
+  const todayStart = wallClockToInstant({ year, month, day, hour: 0, minute: 0, second: 0 }, 'Europe/Moscow').getTime()
+  return { todayStart, yesterdayStart: todayStart - 24 * 60 * 60 * 1000 }
 }
 
 export function supportDashboard(items: readonly { assigneeEmail: string; sla: SupportSlaView }[], now: number, periodMs: number): SupportDashboard {
   const from = now - periodMs
+  const { todayStart, yesterdayStart } = dayBounds(now)
   const result: SupportDashboard = {
-    open: 0, unassigned: 0, risk: 0, overdue: 0, resolvedInPeriod: 0,
-    avgFirstResponseMs: null, avgResolutionMs: null,
-    firstMet: 0, firstClosed: 0, resolutionMet: 0, resolutionClosed: 0, age: [],
+    open: 0, unassigned: 0, risk: 0, overdue: 0, resolvedToday: 0, resolvedYesterday: 0,
+    openYesterday: 0, overdueYesterday: 0, resolvedInPeriod: 0,
+    avgFirstResponseMs: null, avgResolutionMs: null, avgFirstYesterdayMs: null, avgResolutionYesterdayMs: null,
+    firstMet: 0, firstClosed: 0, resolutionMet: 0, resolutionClosed: 0, age: [], heat: [], openByAssignee: {},
   }
   let firstSum = 0, firstCount = 0, resolveSum = 0, resolveCount = 0
+  let firstYSum = 0, firstYCount = 0, resolveYSum = 0, resolveYCount = 0
   const age = new Map<SupportSlaPriority, { count: number; oldestMs: number }>()
+  const heat = new Map<SupportSlaPriority, SupportHeatRow>()
+  const blankCell = (): SupportHeatCell => ({ count: 0, breached: 0 })
+  const blankRow = (priority: SupportSlaPriority): SupportHeatRow => ({
+    priority,
+    cells: { lt4h: blankCell(), '4to12h': blankCell(), '12to24h': blankCell(), '1to3d': blankCell(), gt3d: blankCell() },
+    total: blankCell(),
+  })
   const inside = (at: number) => at >= from && at <= now
   for (const item of items) {
     const sla = item.sla
@@ -264,16 +316,27 @@ export function supportDashboard(items: readonly { assigneeEmail: string; sla: S
     if (sla.open) {
       result.open += 1
       if (!item.assigneeEmail.trim()) result.unassigned += 1
+      else result.openByAssignee[item.assigneeEmail.trim().toLowerCase()] = (result.openByAssignee[item.assigneeEmail.trim().toLowerCase()] ?? 0) + 1
       if (sla.currentRisk) result.risk += 1
       if (sla.currentOverdue) result.overdue += 1
+      if (sla.createdAt != null && sla.createdAt < todayStart) result.openYesterday += 1
+      if (sla.currentOverdue && sla.createdAt != null && sla.createdAt < yesterdayStart) result.overdueYesterday += 1
       if (sla.priority && sla.createdAt != null) {
+        const ageMs = Math.max(0, now - sla.createdAt)
         const bucket = age.get(sla.priority) ?? { count: 0, oldestMs: 0 }
         bucket.count += 1
-        bucket.oldestMs = Math.max(bucket.oldestMs, Math.max(0, now - sla.createdAt))
+        bucket.oldestMs = Math.max(bucket.oldestMs, ageMs)
         age.set(sla.priority, bucket)
+        const row = heat.get(sla.priority) ?? blankRow(sla.priority)
+        const cell = row.cells[supportHeatAgeBucket(ageMs)]
+        cell.count += 1
+        row.total.count += 1
+        if (sla.currentOverdue) { cell.breached += 1; row.total.breached += 1 }
+        heat.set(sla.priority, row)
       }
     }
     for (const close of sla.firstCloses) {
+      if (close.at >= yesterdayStart && close.at < todayStart) { firstYSum += close.spentMs; firstYCount += 1 }
       if (!inside(close.at)) continue
       result.firstClosed += 1
       firstSum += close.spentMs
@@ -281,6 +344,8 @@ export function supportDashboard(items: readonly { assigneeEmail: string; sla: S
       if (close.met) result.firstMet += 1
     }
     for (const close of sla.resolutionCloses) {
+      if (close.at >= todayStart && close.at <= now) result.resolvedToday += 1
+      if (close.at >= yesterdayStart && close.at < todayStart) { result.resolvedYesterday += 1; resolveYSum += close.spentMs; resolveYCount += 1 }
       if (!inside(close.at)) continue
       result.resolutionClosed += 1
       result.resolvedInPeriod += 1
@@ -291,10 +356,13 @@ export function supportDashboard(items: readonly { assigneeEmail: string; sla: S
   }
   result.avgFirstResponseMs = firstCount ? firstSum / firstCount : null
   result.avgResolutionMs = resolveCount ? resolveSum / resolveCount : null
+  result.avgFirstYesterdayMs = firstYCount ? firstYSum / firstYCount : null
+  result.avgResolutionYesterdayMs = resolveYCount ? resolveYSum / resolveYCount : null
   result.age = (['urgent', 'high', 'normal', 'low'] as const).flatMap(priority => {
     const bucket = age.get(priority)
     return bucket ? [{ priority, ...bucket }] : []
   })
+  result.heat = (['urgent', 'high', 'normal', 'low'] as const).map(priority => heat.get(priority) ?? blankRow(priority))
   return result
 }
 

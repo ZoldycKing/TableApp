@@ -34,7 +34,7 @@ describe('support template', () => {
     expect(validateAppV2(app, catalog)).toEqual([])
     expect(validateAppV2(app, catalog, { mode: 'publish' })).toEqual([])
     expect(app.homeScreenId).toBe(support.dashboardScreenId)
-    expect(app.screens.find(screen => screen.id === support.clientListScreenId)?.audience).toMatchObject({ kind: 'roles', roleIds: ['client'] })
+    expect(app.screens.find(screen => screen.id === support.clientListScreenId)?.audience).toMatchObject({ kind: 'roles', roleIds: ['owner', 'staff', 'client'] })
     expect(app.screens.find(screen => screen.id === support.dashboardScreenId)?.audience).toMatchObject({ kind: 'roles', roleIds: ['owner', 'staff'] })
     expect(app.roles.map(role => role.name)).toEqual(['Руководитель', 'Оператор', 'Клиент'])
     expect(app.authentication.mode).toBe('verified_email')

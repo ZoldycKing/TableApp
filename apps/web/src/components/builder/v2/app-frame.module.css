@@ -153,8 +153,8 @@
 .account small { color: var(--v2-muted); }
 .account a, .signIn { min-height: 44px; display: inline-flex; align-items: center; color: var(--v2-accent); }
 .account summary:focus-visible { outline: 2px solid var(--v2-accent); outline-offset: 3px; }
-.appIcon { display: grid; place-items: center; width: 40px; height: 40px; flex-shrink: 0; color: var(--v2-accent); background: var(--v2-soft); border-radius: var(--v2-card-radius, 12px); overflow: hidden; }
-.appIcon[data-custom="true"] { background: transparent; }
+.appIcon { display: grid; place-items: center; width: 40px; height: 40px; flex-shrink: 0; color: var(--v2-on-primary, var(--sc-on-accent, #fff)); background: var(--v2-primary, var(--v2-accent, #3F6B5C)); border-radius: 12px; overflow: hidden; }
+.appIcon[data-custom="true"] { background: transparent; color: var(--v2-accent); }
 .appIcon img { display: block; width: 100%; height: 100%; object-fit: contain; }
 .body { position: relative; grid-area: body; min-width: 0; }
 /* No scrollbar-gutter here: it narrows body vs header/tabs and breaks the shared content track. */
@@ -179,7 +179,12 @@
 .navigation button svg { flex-shrink: 0; }
 .navigation button span { max-width: 100%; white-space: nowrap; overflow: visible; }
 .navigation button:hover { background: var(--v2-bg); color: var(--v2-accent); }
-.navigation button[aria-current] { background: var(--v2-soft); color: var(--v2-accent); }
+.navigation button[aria-current] {
+  background: color-mix(in srgb, var(--v2-primary, var(--v2-accent, #3F6B5C)) 16%, transparent);
+  color: var(--v2-primary, var(--v2-accent, #3F6B5C));
+  border-radius: 14px;
+  font-weight: 700;
+}
 .navigation button:active { transform: translateY(1px); }
 .overflowItem { display: none; }
 .more { position: relative; }
@@ -235,6 +240,11 @@
 }
 @container builder-app (max-width: 640px) {
   .navItems > div > button > span { max-width: 100%; white-space: nowrap; overflow: visible; text-overflow: clip; }
+  .navigation button[aria-current] {
+    background: var(--v2-primary, var(--v2-accent, #3F6B5C));
+    color: var(--v2-on-primary, var(--sc-on-accent, #fff));
+    border-radius: 14px;
+  }
   /* Mobile brand row: logo + app name + user (pills stay in the bottom bar). */
   .frame[data-shell-topnav] .header { min-height: 56px; padding-block: 8px; }
   .frame[data-shell-topnav] .header .catalogIdentity,

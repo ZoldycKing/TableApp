@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { SUPPORT_SLA_STARTER, supportDashboard, supportQueueMatch, supportSlaView, type SupportSlaEvent, type SupportSlaPolicy } from './support-sla'
+import { SUPPORT_SLA_STARTER, supportDashboard, supportQueueMatch, supportSlaCountdown, supportSlaDurationLabel, supportSlaView, type SupportSlaEvent, type SupportSlaPolicy } from './support-sla'
 
 const policy: SupportSlaPolicy = SUPPORT_SLA_STARTER
 const t0 = Date.parse('2026-11-23T09:00:00.000Z')
@@ -109,6 +109,29 @@ describe('support SLA clocks', () => {
     const outside = supportDashboard([{ assigneeEmail: 'a@podderzhka-demo.ru', sla: view }], t0 + min(90) + min(60 * 24) + 1, min(60))
     expect(outside.avgFirstResponseMs).toBeNull()
     expect(outside.firstClosed).toBe(0)
+  })
+
+  it('formats a live countdown with sage, amber and overdue tones', () => {
+    expect(supportSlaDurationLabel(2 * 3_600_000 + 15 * 60_000)).toBe('2 ч 15 мин')
+    expect(supportSlaDurationLabel(40 * 60_000)).toBe('40 мин')
+    const plenty = supportSlaCountdown(supportSlaView([created(t0, 'Низкий')], policy, t0 + min(30)))
+    expect(plenty.label).toMatch(/^Осталось /)
+    expect(plenty.tone).toBe('sage')
+    const soon = supportSlaCountdown(supportSlaView([created()], policy, t0 + min(50)))
+    expect(soon.tone).toBe('amber')
+    expect(soon.label).toMatch(/^Осталось /)
+    const late = supportSlaCountdown(supportSlaView([created()], policy, t0 + min(100)))
+    expect(late.tone).toBe('overdue')
+    expect(late.label).toMatch(/^Просрочено на /)
+    const paused = supportSlaCountdown(supportSlaView([created(), { at: t0 + min(10), kind: 'status', status: 'Ждём клиента' }], policy, t0 + min(100)))
+    expect(paused.label).toBe('На паузе')
+    expect(paused.tone).toBe('paused')
+    const met = supportSlaCountdown(supportSlaView([created(), { at: t0 + min(20), kind: 'status', status: 'Решено' }], policy, t0 + min(30)))
+    expect(met.label).toBe('Решено в срок')
+    expect(met.tone).toBe('met')
+    const missed = supportSlaCountdown(supportSlaView([created(), { at: t0 + min(300), kind: 'status', status: 'Решено' }], policy, t0 + min(310)))
+    expect(missed.label).toBe('Решено с просрочкой')
+    expect(missed.tone).toBe('missed')
   })
 
   it('matches queues once when both clocks are late and excludes pause and closed work', () => {

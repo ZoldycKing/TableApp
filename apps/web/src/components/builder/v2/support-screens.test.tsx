@@ -35,6 +35,7 @@ describe('support screens', () => {
     expect(screen.getByRole('button', { name: 'Ответственный' })).toBeTruthy()
     const openTicket = screen.getAllByRole('button', { name: /Не открывается кабинет/ })[0]
     expect(openTicket?.textContent).toMatch(/ОБР-1048/)
+    expect(document.querySelectorAll('[data-sla-badge][data-tone="overdue"]').length).toBeGreaterThan(0)
     expect(screen.getAllByText(/просроч/i).length).toBeGreaterThan(0)
     fireEvent.click(within(views).getByRole('tab', { name: /Горит по сроку/ }))
     expect(within(views).getByRole('tab', { name: /Горит по сроку/ }).getAttribute('aria-selected')).toBe('true')
@@ -42,9 +43,17 @@ describe('support screens', () => {
 
     const operator = render(<SupportDemo view="ticket" bare />)
     expect(await screen.findByText(/в ответ клиенту это не писать/)).toBeTruthy()
-    expect(screen.getByText('Внутренняя заметка. Клиент это не видит.')).toBeTruthy()
+    const note = screen.getByText(/в ответ клиенту это не писать/).closest('li') as HTMLElement
+    expect(note.getAttribute('data-internal')).toBe('true')
+    expect(within(note).getByText('Внутренняя заметка')).toBeTruthy()
+    expect(screen.queryByText('Внутренняя заметка. Клиент это не видит.')).toBeNull()
+    expect(screen.getByRole('radiogroup', { name: 'Режим ответа' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Ответить' })).toBeTruthy()
-    expect(screen.getByText('Статус и назначение')).toBeTruthy()
+    expect(screen.queryByText('Статус и назначение')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Статус' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Ответственный' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Приоритет' })).toBeTruthy()
+    expect(document.querySelector('[data-sla-badge]')).toBeTruthy()
     operator.unmount()
 
     for (const phone of [false, true]) {
@@ -56,7 +65,7 @@ describe('support screens', () => {
       expect(within(own).queryByText('Ответ клиенту')).toBeNull()
       expect(within(reply).getByText('Ответ клиенту')).toBeTruthy()
       expect(screen.queryByText(/в ответ клиенту это не писать/)).toBeNull()
-      expect(screen.queryByText('Внутренняя заметка. Клиент это не видит.')).toBeNull()
+      expect(screen.queryByText('Внутренняя заметка')).toBeNull()
       expect(screen.getByRole('heading', { name: 'Не сходится сумма в отчёте за октябрь' })).toBeTruthy()
       client.unmount()
     }
@@ -89,8 +98,7 @@ describe('support screens', () => {
       const deadline = () => [...document.querySelectorAll('dt')].find(term => term.textContent?.trim() === 'Срок')?.nextElementSibling?.textContent?.trim() ?? ''
       expect(await screen.findByText((_, node) => node?.tagName === 'DD' && (node.textContent ?? '').startsWith(`${shown}, 09:05`))).toBeTruthy()
       const afterEdit = deadline()
-      fireEvent.click(screen.getByText('Статус и назначение'))
-      fireEvent.click(screen.getByRole('button', { name: 'Назначить' }))
+      fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${shown.replace('.', '\\.')}`) }))
       const again = await screen.findByRole('dialog', { name: 'Ответственный и срок' })
       expect(within(again).getByRole('button', { name: 'Дата срока' }).textContent?.trim()).toBe(shown)
       expect(within(again).getByRole('button', { name: 'Время срока' }).textContent?.trim()).toBe('09:05')
@@ -102,6 +110,25 @@ describe('support screens', () => {
       expect(screen.queryByText(/AM|PM/)).toBeNull()
       view.unmount()
     }
+  })
+
+  it('edits status inline in Сведения and keeps the reply composer without a duplicate header button on desktop', async () => {
+    const desktop = render(<SupportDemo view="ticket" bare />)
+    await screen.findByRole('heading', { name: 'Не сходится сумма в отчёте за октябрь' })
+    const headerActions = document.querySelector('[data-support-screen="ticket"]')
+    expect(headerActions?.querySelector('.detailActions') ?? true).toBeTruthy()
+    expect(screen.getAllByRole('button', { name: 'Ответить' }).length).toBe(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Статус' }))
+    const statusMenu = screen.getByRole('listbox', { name: 'Статус' })
+    expect(statusMenu.querySelector('select')).toBeNull()
+    fireEvent.click(within(statusMenu).getByRole('option', { name: 'Ждём клиента' }))
+    await waitFor(() => expect(screen.getAllByText('Ждём клиента').length).toBeGreaterThan(0))
+    desktop.unmount()
+
+    render(<SupportDemo view="ticket" bare phone />)
+    await screen.findByRole('heading', { name: 'Не сходится сумма в отчёте за октябрь' })
+    expect(screen.getByRole('radiogroup', { name: 'Режим ответа' })).toBeTruthy()
+    expect(screen.getByRole('radio', { name: 'Внутренняя заметка' })).toBeTruthy()
   })
 
   it('opens the client form with the save action visible', async () => {

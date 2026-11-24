@@ -45,6 +45,8 @@ export type SupportSlaClock = {
   risk: boolean
   dueAt: number | null
   remainingMs: number | null
+  /** Full budget for the open clock; used for the ~25% amber threshold. */
+  budgetMs: number | null
 }
 
 export type SupportSlaView = {
@@ -76,7 +78,7 @@ export function supportSlaPriorityName(priority: SupportSlaPriority) {
   return 'Низкий'
 }
 
-const UNKNOWN: SupportSlaClock = { known: false, met: false, paused: false, overdue: false, risk: false, dueAt: null, remainingMs: null }
+const UNKNOWN: SupportSlaClock = { known: false, met: false, paused: false, overdue: false, risk: false, dueAt: null, remainingMs: null, budgetMs: null }
 
 type Clock = { met: boolean; stopped: boolean; paused: boolean; runningFrom: number | null; spentMs: number; budgetMs: number }
 
@@ -110,7 +112,7 @@ function show(clock: Clock | null, now: number, riskMs: number, active: boolean)
   const overdue = remainingMs != null && !clock.paused && remainingMs <= 0
   const risk = remainingMs != null && !clock.paused && remainingMs > 0 && remainingMs <= riskMs
   const dueAt = !live || clock.runningFrom == null ? null : clock.runningFrom + (clock.budgetMs - clock.spentMs)
-  return { known: true, met: clock.met, paused: live && clock.paused, overdue, risk, dueAt, remainingMs }
+  return { known: true, met: clock.met, paused: live && clock.paused, overdue, risk, dueAt, remainingMs, budgetMs: clock.budgetMs }
 }
 
 function isStatus(value: string | undefined): value is SupportStatusName {
@@ -387,4 +389,77 @@ export function supportSlaLabel(view: SupportSlaView) {
   if (view.resolution.overdue) return 'Решение просрочено'
   if (view.currentRisk) return 'Скоро срок'
   return ''
+}
+
+/** Live first-response clock while unanswered; otherwise the resolution clock. */
+export function supportSlaActiveClock(view: SupportSlaView): SupportSlaClock | null {
+  if (!view.known || !view.open) return null
+  if (view.first.known && !view.first.met) return view.first
+  if (view.resolution.known) return view.resolution
+  return null
+}
+
+/** Soonest relevant due instant for list sorting (may be in the past when overdue). */
+export function supportSlaDueAt(view: SupportSlaView): number | null {
+  return supportSlaActiveClock(view)?.dueAt ?? null
+}
+
+export type SupportSlaCountdownTone = 'sage' | 'amber' | 'overdue' | 'paused' | 'met' | 'missed' | 'neutral'
+
+export type SupportSlaCountdown = {
+  known: boolean
+  /** Empty label → hide the badge. */
+  label: string
+  shortLabel: string
+  tone: SupportSlaCountdownTone
+  remainingMs: number | null
+  dueAt: number | null
+}
+
+/** Whole minutes → «2 ч 15 мин» / «40 мин» / «1 ч». */
+export function supportSlaDurationLabel(ms: number) {
+  const total = Math.max(0, Math.round(Math.abs(ms) / 60_000))
+  const hours = Math.floor(total / 60)
+  const minutes = total % 60
+  if (!hours) return `${minutes} мин`
+  if (!minutes) return `${hours} ч`
+  return `${hours} ч ${minutes} мин`
+}
+
+/**
+ * Live countdown for headers and queue rows.
+ * Sage when plenty of time; amber under ~25% of budget or under 1 h;
+ * terracotta overdue; resolved tickets show met/missed copy instead of a timer.
+ */
+export function supportSlaCountdown(view: SupportSlaView): SupportSlaCountdown {
+  if (!view.known) return { known: false, label: '', shortLabel: '', tone: 'neutral', remainingMs: null, dueAt: null }
+  if (!view.open) {
+    if (view.resolution.met) return { known: true, label: 'Решено в срок', shortLabel: 'В срок', tone: 'met', remainingMs: null, dueAt: null }
+    if (view.resolutionCloses.length) return { known: true, label: 'Решено с просрочкой', shortLabel: 'С просрочкой', tone: 'missed', remainingMs: null, dueAt: null }
+    return { known: true, label: '', shortLabel: '', tone: 'neutral', remainingMs: null, dueAt: null }
+  }
+  if (view.paused) {
+    return { known: true, label: 'На паузе', shortLabel: 'Пауза', tone: 'paused', remainingMs: null, dueAt: null }
+  }
+  const clock = supportSlaActiveClock(view)
+  if (!clock || clock.remainingMs == null) {
+    return { known: true, label: '', shortLabel: '', tone: 'neutral', remainingMs: null, dueAt: null }
+  }
+  const remainingMs = clock.remainingMs
+  const dueAt = clock.dueAt
+  if (remainingMs <= 0 || clock.overdue) {
+    const over = supportSlaDurationLabel(remainingMs)
+    return { known: true, label: `Просрочено на ${over}`, shortLabel: `Просроч. ${over}`, tone: 'overdue', remainingMs, dueAt }
+  }
+  const left = supportSlaDurationLabel(remainingMs)
+  const budget = clock.budgetMs ?? 0
+  const amber = remainingMs < 3_600_000 || (budget > 0 && remainingMs <= budget * 0.25) || clock.risk
+  return {
+    known: true,
+    label: `Осталось ${left}`,
+    shortLabel: left,
+    tone: amber ? 'amber' : 'sage',
+    remainingMs,
+    dueAt,
+  }
 }

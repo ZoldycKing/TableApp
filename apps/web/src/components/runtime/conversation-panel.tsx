@@ -105,6 +105,17 @@ export function ConversationPanel({
   }
   const availableFiles = files.filter(isAttachmentAvailable)
   const embedded = Boolean(fixture) && !showContext
+  type TimelineItem =
+    | { kind: 'message'; message: ConversationMessage }
+    | { kind: 'note'; id: string; body: string; author: string; createdAt: string }
+  const timeline: TimelineItem[] = page ? [
+    ...page.messages.map(message => ({ kind: 'message' as const, message })),
+    ...(page.staff ? page.notes.map(note => ({ kind: 'note' as const, ...note })) : []),
+  ].sort((a, b) => {
+    const left = a.kind === 'message' ? a.message.createdAt : a.createdAt
+    const right = b.kind === 'message' ? b.message.createdAt : b.createdAt
+    return left.localeCompare(right) || (a.kind === 'note' ? a.id : a.message.id).localeCompare(b.kind === 'note' ? b.id : b.message.id)
+  }) : []
   return <section aria-label={general ? 'Вопрос бизнесу' : 'Переписка по обращению'} className={embedded
     ? 'min-w-0 w-full space-y-4 [overflow-wrap:anywhere]'
     : 'mx-auto mt-5 min-w-0 w-full max-w-xl space-y-4 rounded-2xl border border-sand-200 bg-white p-4 [overflow-wrap:anywhere]'}>
@@ -117,40 +128,52 @@ export function ConversationPanel({
     {error ? <p role="alert" className="text-sm text-red-700">{error}</p> : null}
     {!page ? <button type="button" className="text-sm text-sage-700 underline" onClick={() => void loadRef.current()}>Загрузить переписку</button> : <>
       {page.nextBefore && !fixture ? <button disabled={busy} type="button" className="text-xs text-sage-700 underline" onClick={() => void load(true)}>Показать предыдущие сообщения</button> : null}
-      <div className="space-y-3" aria-live="polite">{page.messages.map(message => <article key={message.id} className={`rounded-xl p-3 ${message.mine ? 'bg-sage-50' : 'bg-sand-50'}`}>
-        <div className="mb-1 flex flex-wrap justify-between gap-2 text-xs text-ink-muted"><span>{message.mine ? 'Вы' : message.author}</span><time dateTime={message.createdAt}>{formatConversationDate(message.createdAt)}{message.edited && !message.deleted ? ' · изменено' : ''}</time></div>
-        <p className="whitespace-pre-wrap break-words text-sm">{message.deleted ? 'Сообщение удалено' : message.body}</p>
-        {!message.deleted && message.files.length ? (
-          <div className="mt-2 flex flex-wrap gap-2">
-            {message.files.map(file => (
-              <ConversationAttachmentChip key={file.id} item={file} business={business} />
-            ))}
-          </div>
-        ) : null}
-        <div className="mt-2 flex flex-wrap gap-3 text-xs text-ink-muted">
-          {message.canModerate && message.mine && !fixture ? <button type="button" disabled={busy} onClick={() => { setEditing(message); setEditBody(message.body); setDeleting(null) }}>Изменить</button> : null}
-          {message.canModerate && !fixture ? <button type="button" disabled={busy} onClick={() => { setDeleting(message.id); setEditing(null) }}>Удалить</button> : null}
-          {message.canViewRevisions && message.version > 0 && !fixture ? <button type="button" disabled={busy} onClick={() => void mutate(async () => {
-            const result = await conversationMessageHistoryAction(slug, tableId, rowId, message.id, business)
-            if (result.ok) setHistory({ messageId: message.id, rows: result.value })
-            return result
-          })}>История правок</button> : null}
-        </div>
-        {deleting === message.id ? <div className="mt-2 space-y-2"><p className="text-xs">Удалить сообщение? В переписке останется отметка, а прежний текст сохранится в истории правок для автора и владельца бизнеса.</p>
-          <button type="button" disabled={busy} className="mr-3 text-xs text-red-700" onClick={() => void mutate(() => changeConversationMessageAction(slug, tableId, rowId, message.id, message.version, null, business), () => setDeleting(null))}>Да, удалить сообщение</button>
-          <button type="button" className="text-xs" onClick={() => setDeleting(null)}>Оставить</button></div> : null}
-        {editing?.id === message.id ? <div className="mt-2 space-y-2">
-          <AutoGrowTextarea label="Новый текст сообщения" value={editBody} onChange={setEditBody} disabled={busy} />
-          <button type="button" disabled={busy || !editBody.trim()} className="mr-3 text-xs text-sage-700" onClick={() => void mutate(() => changeConversationMessageAction(slug, tableId, rowId, message.id, message.version, editBody, business), () => setEditing(null))}>Сохранить правку</button>
-          <button type="button" className="text-xs" onClick={() => setEditing(null)}>Отмена</button></div> : null}
-        {message.canViewRevisions && history?.messageId === message.id ? <div className="mt-3 border-t border-sand-200 pt-2 text-xs"><p className="mb-2 font-medium">История правок — для автора и владельца бизнеса</p>
-          {history.rows.map(revision => <p key={revision.version} className="mb-2 whitespace-pre-wrap break-words">{formatConversationDate(revision.createdAt)} · {revision.operation === 'delete' ? 'Удаление' : 'Изменение'}<br />{revision.body}</p>)}
-          <button type="button" className="underline" onClick={() => setHistory(null)}>Скрыть историю</button></div> : null}
-      </article>)}</div>
-      {!page.messages.length ? <p className="text-sm text-ink-muted">{general ? business ? 'Здесь появится переписка с клиентом.' : 'Напишите вопрос о товарах, услугах или работе бизнеса.' : 'Задайте вопрос по этому обращению или приложите документ.'}</p> : null}
-      {page.staff ? <div className="space-y-2 border-t border-sand-200 pt-3"><p className="text-xs font-medium">Внутренние заметки · клиенту не видны</p>
-        {page.notes.map(note => <div key={note.id} className="rounded-lg bg-sand-50 p-2 text-xs"><span className="text-ink-muted">{note.author} · {formatConversationDate(note.createdAt)}</span><p className="whitespace-pre-wrap break-words">{note.body}</p></div>)}
-      </div> : null}
+      <div className="space-y-3" aria-live="polite" aria-label="Хронология">
+        {timeline.map(item => {
+          if (item.kind === 'note') {
+            return <article key={`note-${item.id}`} data-internal className="rounded-xl border border-[#C48A2A]/45 bg-[color-mix(in_srgb,#E8B86D_22%,white)] p-3">
+              <div className="mb-1 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs text-ink-muted">
+                <span>{item.author}</span>
+                <time dateTime={item.createdAt}>{formatConversationDate(item.createdAt)}</time>
+                <span className="inline-flex items-center gap-1 font-semibold text-[#8A5A18]"><ProtoIcon name="lock" size={12} />Внутренняя заметка</span>
+              </div>
+              <p className="whitespace-pre-wrap break-words text-sm">{item.body}</p>
+            </article>
+          }
+          const message = item.message
+          return <article key={message.id} className={`rounded-xl p-3 ${message.mine ? 'bg-sage-50' : 'bg-sand-50'}`}>
+            <div className="mb-1 flex flex-wrap justify-between gap-2 text-xs text-ink-muted"><span>{message.mine ? 'Вы' : message.author}</span><time dateTime={message.createdAt}>{formatConversationDate(message.createdAt)}{message.edited && !message.deleted ? ' · изменено' : ''}</time></div>
+            <p className="whitespace-pre-wrap break-words text-sm">{message.deleted ? 'Сообщение удалено' : message.body}</p>
+            {!message.deleted && message.files.length ? (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {message.files.map(file => (
+                  <ConversationAttachmentChip key={file.id} item={file} business={business} />
+                ))}
+              </div>
+            ) : null}
+            <div className="mt-2 flex flex-wrap gap-3 text-xs text-ink-muted">
+              {message.canModerate && message.mine && !fixture ? <button type="button" disabled={busy} onClick={() => { setEditing(message); setEditBody(message.body); setDeleting(null) }}>Изменить</button> : null}
+              {message.canModerate && !fixture ? <button type="button" disabled={busy} onClick={() => { setDeleting(message.id); setEditing(null) }}>Удалить</button> : null}
+              {message.canViewRevisions && message.version > 0 && !fixture ? <button type="button" disabled={busy} onClick={() => void mutate(async () => {
+                const result = await conversationMessageHistoryAction(slug, tableId, rowId, message.id, business)
+                if (result.ok) setHistory({ messageId: message.id, rows: result.value })
+                return result
+              })}>История правок</button> : null}
+            </div>
+            {deleting === message.id ? <div className="mt-2 space-y-2"><p className="text-xs">Удалить сообщение? В переписке останется отметка, а прежний текст сохранится в истории правок для автора и владельца бизнеса.</p>
+              <button type="button" disabled={busy} className="mr-3 text-xs text-red-700" onClick={() => void mutate(() => changeConversationMessageAction(slug, tableId, rowId, message.id, message.version, null, business), () => setDeleting(null))}>Да, удалить сообщение</button>
+              <button type="button" className="text-xs" onClick={() => setDeleting(null)}>Оставить</button></div> : null}
+            {editing?.id === message.id ? <div className="mt-2 space-y-2">
+              <AutoGrowTextarea label="Новый текст сообщения" value={editBody} onChange={setEditBody} disabled={busy} />
+              <button type="button" disabled={busy || !editBody.trim()} className="mr-3 text-xs text-sage-700" onClick={() => void mutate(() => changeConversationMessageAction(slug, tableId, rowId, message.id, message.version, editBody, business), () => setEditing(null))}>Сохранить правку</button>
+              <button type="button" className="text-xs" onClick={() => setEditing(null)}>Отмена</button></div> : null}
+            {message.canViewRevisions && history?.messageId === message.id ? <div className="mt-3 border-t border-sand-200 pt-2 text-xs"><p className="mb-2 font-medium">История правок — для автора и владельца бизнеса</p>
+              {history.rows.map(revision => <p key={revision.version} className="mb-2 whitespace-pre-wrap break-words">{formatConversationDate(revision.createdAt)} · {revision.operation === 'delete' ? 'Удаление' : 'Изменение'}<br />{revision.body}</p>)}
+              <button type="button" className="underline" onClick={() => setHistory(null)}>Скрыть историю</button></div> : null}
+          </article>
+        })}
+      </div>
+      {!page.messages.length && !(page.staff && page.notes.length) ? <p className="text-sm text-ink-muted">{general ? business ? 'Здесь появится переписка с клиентом.' : 'Напишите вопрос о товарах, услугах или работе бизнеса.' : 'Задайте вопрос по этому обращению или приложите документ.'}</p> : null}
       {clientGeneralDisabled ? <p className="text-sm text-ink-muted">Бизнес пока не принимает новые сообщения. История переписки сохранена.</p> : null}
       {page.closed && !clientGeneralDisabled ? <p className="text-sm text-ink-muted">{general && !page.staff && page.enabled ? 'Предыдущий вопрос закрыт. Новое сообщение возобновит переписку.' : 'Обсуждение завершено. Сообщения и документы сохранены в истории.'}</p> : null}
       {!clientGeneralDisabled && (!page.closed || general && !page.staff) ? <form className="space-y-3 border-t border-sand-200 pt-3" onSubmit={event => {

@@ -213,28 +213,32 @@ export function ComposerModeSegment({
       <button
         type="button"
         role="radio"
+        aria-label="Ответ клиенту"
         aria-checked={!internal}
         aria-pressed={!internal}
         disabled={disabled}
         onClick={() => onChange(false)}
-        className={`min-h-9 px-2 py-1.5 text-xs font-semibold leading-snug disabled:opacity-40 ${
+        className={`min-h-9 whitespace-nowrap px-2 py-1.5 text-xs font-semibold leading-none disabled:opacity-40 ${
           !internal ? 'bg-sage-50 text-ink' : 'bg-transparent text-ink-muted'
         }`}
       >
-        Ответ клиенту
+        <span className="hidden min-[380px]:inline" aria-hidden="true">Ответ клиенту</span>
+        <span className="inline min-[380px]:hidden" aria-hidden="true">Клиенту</span>
       </button>
       <button
         type="button"
         role="radio"
+        aria-label="Внутренняя заметка"
         aria-checked={internal}
         aria-pressed={internal}
         disabled={disabled}
         onClick={() => onChange(true)}
-        className={`min-h-9 border-l border-sand-200 px-2 py-1.5 text-xs font-semibold leading-snug disabled:opacity-40 ${
+        className={`min-h-9 whitespace-nowrap border-l border-sand-200 px-2 py-1.5 text-xs font-semibold leading-none disabled:opacity-40 ${
           internal ? 'bg-[#C4623A]/12 text-[#8a3d28]' : 'bg-transparent text-ink-muted'
         }`}
       >
-        Внутренняя заметка
+        <span className="hidden min-[380px]:inline" aria-hidden="true">Внутренняя заметка</span>
+        <span className="inline min-[380px]:hidden" aria-hidden="true">Заметка</span>
       </button>
     </div>
   )

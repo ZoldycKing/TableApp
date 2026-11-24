@@ -19,7 +19,7 @@ function serviceCatalog(title: string): TemplateTable {
 
 /** The ready client scenario extends the working tables; it never exposes their private fields. */
 export function withCustomerScenario(original: TemplateDef): TemplateDef {
-  if (['salon', 'sklad', 'proizvodstvo'].includes(original.id)) return original
+  if (['salon', 'sklad', 'proizvodstvo', 'podderzhka'].includes(original.id)) return original
   const template = structuredClone(original)
   let main = template.tables.find(table => table.key === template.appTable)!
   const common = { email: 'customerEmail', assignment: 'assignedEmail', workerName: 'Исполнитель', managerName: 'Администратор',
@@ -32,6 +32,18 @@ export function withCustomerScenario(original: TemplateDef): TemplateDef {
     return { table: table.key, view: 'Опубликованные', fields: ['name', 'description'], active: 'active', selection: 'selectedService', title: 'Услуги' }
   }
   switch (template.id) {
+    case 'service':
+      main.fields.push({ key: 'approvedPrice', name: 'Согласованная стоимость', type: 'number', options: { format: 'currency', currency: 'RUB', precision: 2 }, help: 'Фиксируется сервером при согласии клиента. Изменение сметы требует нового согласования.' })
+      // Reuse native App V2 email/assignment fields — do not re-insert «Почта клиента».
+      // Keep separate requestName/requestPhone for the online form («Ваше имя» / «Ваш телефон»).
+      scenario = { ...common, email: 'clientEmail', assignment: 'masterEmail', table: 'repairs', title: 'Мои ремонты', submitLabel: 'Отправить заявку на ремонт', intro: 'Укажите устройство и неисправность. После приёмки и диагностики мастер предложит стоимость; вы сможете согласовать её в кабинете.',
+        formFields: ['selectedService', 'requestName', 'requestPhone', 'device', 'problem'], requiredFields: ['requestName', 'requestPhone', 'device', 'problem'],
+        customerFields: ['number', 'status', 'problem', 'deadline', 'cost', 'approvedPrice', 'work', 'clientSummary'],
+        workerFields: ['status', 'cost', 'deadline', 'diagnosis', 'work', 'parts', 'clientSummary'], workerName: 'Мастер',
+        status: 'status', initial: 'Новые', terminal: ['Выдано', 'Отменён', 'Отказ от ремонта'], cancel: 'Отменён', cancellable: ['Новые'],
+        catalog: catalog('Услуги сервиса'),
+        approval: { price: 'cost', agreed: 'approvedPrice', waiting: 'Ждём согласования', approved: 'В работе', declined: 'Отказ от ремонта', consentRequired: ['В работе', 'Готово к выдаче', 'Выдано'] } }
+      break
     case 'zakazy':
     case 'katalog': {
       if (template.id === 'zakazy') {
@@ -71,13 +83,6 @@ export function withCustomerScenario(original: TemplateDef): TemplateDef {
       scenario = { ...common, table: 'deliveries', title: 'Мои доставки', submitLabel: 'Заказать доставку', intro: 'Укажите адрес, содержимое и желаемое время. Диспетчер согласует стоимость и интервал; после этого доставка появится у назначенного курьера.',
         formFields: ['selectedService', 'requestName', 'requestPhone', 'address', 'what', 'window', 'note'], customerFields: ['what', 'status', 'date', 'window', 'price', 'address', 'note', 'clientSummary'], workerFields: ['status', 'photo', 'clientSummary'], workerReadFields: ['pay', 'photo'], workerName: 'Курьер', managerName: 'Диспетчер',
         status: 'status', initial: 'Принята', terminal: ['Доставлена', 'Возврат', 'Отменена'], cancel: 'Отменена', cancellable: ['Принята'], catalog: catalog('Услуги доставки') }
-      break
-    case 'service':
-      main.fields.push({ key: 'approvedPrice', name: 'Согласованная стоимость', type: 'number', options: { format: 'currency', currency: 'RUB', precision: 2 }, help: 'Фиксируется сервером при согласии клиента. Изменение сметы требует нового согласования.' })
-      scenario = { ...common, table: 'repairs', title: 'Мои ремонты', submitLabel: 'Отправить заявку на ремонт', intro: 'Укажите устройство и неисправность. После приёмки и диагностики мастер предложит стоимость; вы сможете согласовать её в кабинете.',
-        formFields: ['selectedService', 'requestName', 'requestPhone', 'device', 'problem'], requiredFields: ['requestName', 'requestPhone', 'device', 'problem'], customerFields: ['ticket', 'status', 'problem', 'ready', 'price', 'approvedPrice', 'note', 'clientSummary'], workerFields: ['status', 'price', 'ready', 'note', 'clientSummary'], workerName: 'Мастер',
-        status: 'status', initial: 'Принято', terminal: ['Выполнено', 'Отменён', 'Отказ от ремонта'], cancel: 'Отменён', cancellable: ['Принято'], catalog: catalog('Услуги сервиса'),
-        approval: { price: 'price', agreed: 'approvedPrice', waiting: 'Ждём согласования', approved: 'В ремонте', declined: 'Отказ от ремонта', consentRequired: ['В ремонте', 'Готово', 'Выполнено'] } }
       break
     case 'nedvizhimost': {
       const objects = main
@@ -120,9 +125,9 @@ export function withCustomerScenario(original: TemplateDef): TemplateDef {
   }
   if (!main.fields.some(field => field.key === scenario.email)) main.fields.push({ ...email, key: scenario.email })
   if (scenario.assignment && !main.fields.some(field => field.key === scenario.assignment)) {
-    // The dispatch template already has an email field with this semantic name.
+    // Dispatch / service already have an email field with this semantic name.
     const existing = main.fields.find(field => field.type === 'email' && field.name === 'Почта мастера')
-    if (existing && template.id === 'zayavki') scenario.assignment = existing.key
+    if (existing && (template.id === 'zayavki' || template.id === 'service')) scenario.assignment = existing.key
     else main.fields.push({ ...assignment, key: scenario.assignment })
   }
   if (template.id === 'dostavka') {
@@ -130,23 +135,52 @@ export function withCustomerScenario(original: TemplateDef): TemplateDef {
     scenario.formFields = scenario.formFields.map(recipient)
     scenario.requiredFields = scenario.requiredFields.map(recipient)
   }
-  if (template.id !== 'crm') main.fields.push(...(template.id === 'dostavka' ? [] : structuredClone(contact)), structuredClone(summary))
-  main.fields.push({ key: 'requestDate', name: 'Создано', type: 'datetime', options: { timeZone: 'Europe/Moscow' }, help: 'Дата оформления. При онлайн-заявке фиксируется сервером и видна в истории клиента.' },
-    { key: 'submissionId', name: 'Ключ оформления', type: 'text', help: 'Служебный ключ, защищающий оформление от повторной отправки. Клиенту не показывается.' })
-  scenario.formFields.push('submissionId'); scenario.customerFields.push('requestDate')
+  if (template.id !== 'crm') {
+    const extras = template.id === 'dostavka' ? [] : structuredClone(contact)
+    for (const field of extras) {
+      if (main.fields.some(item => item.key === field.key)) continue
+      // Service already has desk field «Имя клиента» (clientName). Keep a separate online-form
+      // contact column so the request form still gets profile labels «Ваше имя» / «Ваш телефон».
+      if (main.fields.some(item => item.name === field.name)) {
+        if (field.key === 'requestName') main.fields.push({ ...field, name: 'Ваше имя' })
+        else if (field.key === 'requestPhone') main.fields.push({ ...field, name: 'Ваш телефон' })
+        continue
+      }
+      main.fields.push(field)
+    }
+    if (!main.fields.some(item => item.key === 'clientSummary')) main.fields.push(structuredClone(summary))
+  }
+  if (!main.fields.some(field => field.key === 'requestDate' || field.name === 'Создано')) {
+    main.fields.push({ key: 'requestDate', name: 'Создано', type: 'datetime', options: { timeZone: 'Europe/Moscow' }, help: 'Дата оформления. При онлайн-заявке фиксируется сервером и видна в истории клиента.' })
+  }
+  if (!main.fields.some(field => field.key === 'submissionId')) {
+    main.fields.push({ key: 'submissionId', name: 'Ключ оформления', type: 'text', help: 'Служебный ключ, защищающий оформление от повторной отправки. Клиенту не показывается.' })
+  }
+  scenario.formFields.push('submissionId')
+  const createdField = main.fields.find(field => field.key === 'requestDate')?.key
+    ?? main.fields.find(field => field.name === 'Создано')?.key
+  if (createdField && !scenario.customerFields.includes(createdField)) scenario.customerFields.push(createdField)
   const status = main.fields.find(field => field.key === scenario.status)!
   if ('choices' in status && status.choices) for (const name of [...scenario.terminal, ...(scenario.approval ? [scenario.approval.waiting] : [])]) {
     if (!status.choices.some(choice => choice.name === name)) status.choices.push({ name, color: name.includes('От') ? 'gray' : 'amber' })
   }
   // Demonstrate one fictional customer's active and historical records; others stay isolated.
+  // Service App V2 keeps authored statuses/masters; customerEmail is remapped for modular cabinet demos
+  // (Ирина gets a fresh + a terminal repair: r-new and r-done).
   main.rows = main.rows.map((row, index) => ({ ...row, values: { ...row.values,
     ...(template.id === 'crm' ? {} : template.id === 'zayavki'
       ? { [scenario.email]: row.key === 'z1' || row.key === 'z8' ? 'irina@example.com' : `other${index}@example.invalid`, requestName: row.key === 'z1' || row.key === 'z8' ? 'Ирина' : 'Другой клиент', requestPhone: '+7 900 000-00-00' }
+      : template.id === 'service'
+        // Keep authored clientEmail/master emails for App V2 demos; only seed Irina on two sample rows.
+        ? {
+            ...(row.key === 'r-new' || row.key === 'r-done' ? { [scenario.email]: 'irina@example.com' } : {}),
+            ...(main.fields.some(field => field.key === 'requestPhone') ? { requestPhone: '+7 900 000-00-00' } : {}),
+          }
       : { [scenario.email]: index < 2 ? 'irina@example.com' : `other${index}@example.invalid`, requestName: index < 2 ? 'Ирина' : 'Другой клиент', requestPhone: '+7 900 000-00-00' }),
     requestDate: inDays(-index * 3),
-    // Field service keeps the authored schedule, priorities and technician emails.
-    ...(index === 1 && template.id !== 'crm' && template.id !== 'zayavki' ? { [scenario.status]: scenario.terminal[0]! } : {}),
-    ...(scenario.assignment && template.id !== 'zayavki' ? { [scenario.assignment]: 'worker@example.invalid' } : {}),
+    // Field service / native service-center keep authored schedule, priorities and statuses.
+    ...(index === 1 && template.id !== 'crm' && template.id !== 'zayavki' && template.id !== 'service' ? { [scenario.status]: scenario.terminal[0]! } : {}),
+    ...(scenario.assignment && template.id !== 'zayavki' && template.id !== 'service' ? { [scenario.assignment]: 'worker@example.invalid' } : {}),
   } }))
   if (!main.rows.length) main.rows = [
     { key: 'request-active', values: { title: 'Заявка Ирины', [scenario.email]: 'irina@example.com', requestName: 'Ирина', requestPhone: '+7 900 000-00-00', [scenario.status]: scenario.initial, ...(template.id === 'nedvizhimost' ? { object: { rowKey: 'n2' }, preferred: 'Завтра после 18:00' } : {}), clientSummary: 'Заявка получена. Ответственный свяжется с вами.', ...(scenario.assignment ? { [scenario.assignment]: 'worker@example.invalid' } : {}) } },
@@ -176,7 +210,8 @@ export function withCustomerScenario(original: TemplateDef): TemplateDef {
     })
     items.rows = samples
   }
-  if (scenario.approval) {
+  // Service App V2 keeps authored statuses; modular repair connect still gets approval choices.
+  if (scenario.approval && template.id !== 'service') {
     const approval = scenario.approval
     main.rows = main.rows.map((row, index) => ({ ...row, values: { ...row.values,
       ...(index === 0 ? { [scenario.status]: approval.waiting } : {}),
@@ -217,11 +252,6 @@ export function withCustomerScenario(original: TemplateDef): TemplateDef {
   }
   for (const table of template.tables) for (const field of table.fields) if (!field.help) field.help = help[field.key] ?? 'Данные обращения; заполните при согласовании с клиентом.'
   template.gives.push('Клиент оформляет из карточки и видит только свои записи, статусы и историю в личном кабинете')
-  if (template.id === 'service') {
-    template.limits = template.limits?.map(limit => limit.startsWith('Сообщений о готовности') ? 'Автоматических сообщений о готовности нет: клиент проверяет статус в кабинете' : limit)
-    template.gives.push('Согласование стоимости ремонта в кабинете: новая смета требует нового согласия')
-    main.fields.find(field => field.key === 'master')!.help = 'Имя мастера для внутреннего учёта. Рабочий доступ определяется полем «Почта исполнителя».'
-  }
   if (template.id === 'katalog') template.gives = ['Открытый каталог с ценами и описанием товаров', 'Корзина из карточек товаров: количество и сумма перед оформлением', 'Заказы с отдельным составом и сохранённой ценой, статусы и история клиента', 'Сотрудник видит назначенные заказы; администратор управляет всеми']
   if (template.id === 'nedvizhimost') template.gives = ['Открытые карточки опубликованных объектов: фото, площадь и цена', 'Запрос просмотра из карточки; агент согласует и назначает время', 'Кабинет клиента: собственные просмотры, отмена и история', 'Внутренние контакты собственников видит только команда']
   if (template.id === 'portal') {

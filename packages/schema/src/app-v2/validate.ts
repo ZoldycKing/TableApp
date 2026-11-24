@@ -487,6 +487,41 @@ export function validateAppV2(app: AppV2, catalog: AppV2Catalog, options: { mode
     const eventOnClient = Boolean(support.eventsTableId && app.sources.some(source => source.tableId === support.eventsTableId && app.nodes.some(node => node.type === 'collection' && node.sourceId === source.id && (clientTicket?.rootIds.includes(node.id) || clientList?.rootIds.includes(node.id)))))
     if (eventOnClient) issue('support_client_events', path, 'Экран клиента не показывает служебные события')
   }
+  if (app.service) {
+    const service = app.service, path = 'service'
+    table(service.repairsTableId, path); table(service.clientsTableId, path); table(service.mastersTableId, path)
+    table(service.repliesTableId, path); table(service.notesTableId, path)
+    const group = (tableId: string, values: Record<string, string | undefined>) => {
+      for (const fieldId of Object.values(values)) if (fieldId) field(fieldId, tableId, path)
+    }
+    group(service.repairsTableId, service.repair)
+    group(service.clientsTableId, service.client)
+    group(service.mastersTableId, service.master)
+    group(service.repliesTableId, service.reply)
+    group(service.notesTableId, service.note)
+    const client = field(service.repair.client, service.repairsTableId, path)
+    if (client && client.relationTableId && client.relationTableId !== service.clientsTableId) issue('service_client', path, 'Ремонт должен ссылаться на клиентов')
+    const master = field(service.repair.master, service.repairsTableId, path)
+    if (master && master.relationTableId && master.relationTableId !== service.mastersTableId) issue('service_master', path, 'Мастер должен ссылаться на справочник мастеров')
+    const replyRepair = field(service.reply.repair, service.repliesTableId, path)
+    if (replyRepair && replyRepair.relationTableId && replyRepair.relationTableId !== service.repairsTableId) issue('service_reply', path, 'Ответ должен ссылаться на ремонт')
+    const noteRepair = field(service.note.repair, service.notesTableId, path)
+    if (noteRepair && noteRepair.relationTableId && noteRepair.relationTableId !== service.repairsTableId) issue('service_note', path, 'Заметка должна ссылаться на ремонт')
+    if (service.repliesTableId === service.notesTableId) issue('service_notes_table', path, 'Внутренние заметки хранятся отдельно от ответов клиенту')
+    const statusIds = [service.statuses.fresh, service.statuses.progress, service.statuses.waitingParts, service.statuses.ready, service.statuses.done, service.statuses.cancelled]
+    if (new Set(statusIds).size !== statusIds.length) issue('service_status', path, 'Статусы ремонта должны различаться')
+    for (const screenId of [service.dashboardScreenId, service.repairsScreenId, service.repairScreenId, service.clientsScreenId, service.clientScreenId, service.mastersScreenId, service.clientListScreenId, service.clientRepairScreenId]) {
+      if (!screens.has(screenId)) issue('service_screen', path, 'Экран сервиса удалён')
+    }
+    for (const formId of [service.createFormId, service.replyFormId, service.noteFormId, service.assignFormId]) {
+      if (nodes.get(formId)?.type !== 'form') issue('service_form', path, 'Форма сервиса удалена')
+    }
+    const clientRepair = screens.get(service.clientRepairScreenId)
+    const clientList = screens.get(service.clientListScreenId)
+    if (clientRepair?.audience.kind === 'public' || clientList?.audience.kind === 'public') issue('service_client_public', path, 'Кабинет сервиса не бывает публичным')
+    const noteOnClient = app.sources.some(source => source.tableId === service.notesTableId && app.nodes.some(node => node.type === 'collection' && node.sourceId === source.id && clientRepair?.rootIds.includes(node.id)))
+    if (noteOnClient) issue('service_client_notes', path, 'Экран клиента не показывает внутренние заметки')
+  }
   if (app.projects) {
     const projects = app.projects, path = 'projects'
     table(projects.projectsTableId, path); table(projects.tasksTableId, path); table(projects.peopleTableId, path)

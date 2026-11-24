@@ -2,6 +2,7 @@
 import { DispatchScreen } from './dispatch-screens'
 import { ProjectsScreen } from './projects-screens'
 import { SupportScreen } from './support-screens'
+import { ServiceScreen } from './service-screens'
 import {BuilderV2Gallery,BuilderV2Files,BuilderV2Picture} from './media'
 import {builderV2MediaItems} from './media-values'
 import Link from 'next/link'
@@ -1912,6 +1913,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
     props.app.projects.templatesScreenId, props.app.projects.clientScreenId,
   ].filter(Boolean).includes(screen.id)) return <ProjectsScreen key={screen.id} {...props} />
   if (props.app.support && screen && [props.app.support.queueScreenId, props.app.support.ticketScreenId, props.app.support.clientListScreenId, props.app.support.clientTicketScreenId, props.app.support.clientsScreenId, props.app.support.clientScreenId, props.app.support.settingsScreenId, props.app.support.dashboardScreenId, props.app.support.teamScreenId].filter(Boolean).includes(screen.id)) return <SupportScreen key={screen.id} {...props} />
+  if (props.app.service && screen && [props.app.service.dashboardScreenId, props.app.service.repairsScreenId, props.app.service.repairScreenId, props.app.service.clientsScreenId, props.app.service.clientScreenId, props.app.service.mastersScreenId, props.app.service.clientListScreenId, props.app.service.clientRepairScreenId].includes(screen.id)) return <ServiceScreen key={screen.id} {...props} />
   if (props.app.booking && screen && [props.app.booking.catalogScreenId, props.app.booking.serviceScreenId, props.app.booking.mastersScreenId, props.app.booking.masterScreenId, props.app.booking.visitScreenId, props.app.booking.clientScreenId, props.app.booking.listScreenId, props.app.booking.formScreenId, props.app.booking.rescheduleScreenId, props.app.booking.setupScreenId, props.app.booking.periodScreenId, props.app.booking.customersScreenId, props.app.booking.customerScreenId].includes(screen.id)) return <BookingScreen key={screen.id} {...props} renderNodes={ids => render(ids)} />
   if (!props.editing && shop && screen?.id === shop.catalogScreenId) {
     const catalogNode = rootIds.map(id => nodes.get(id)).find((node): node is Extract<AppV2Node, { type: 'collection' }> => node?.type === 'collection' && node.layout === 'catalog')

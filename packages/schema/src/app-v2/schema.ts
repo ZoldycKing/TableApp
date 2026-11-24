@@ -279,6 +279,27 @@ export const appV2Schema = z.strictObject({
     priorities: z.strictObject({ low: id, normal: id, high: id, urgent: id }),
     activeChoiceId: id, inactiveChoiceId: id,
   }).optional(),
+  /** Repair shop starter. Absent outside that install. Notes are a separate table with no client grant. */
+  service: z.strictObject({
+    repairsTableId: id, clientsTableId: id, mastersTableId: id, repliesTableId: id, notesTableId: id,
+    dashboardScreenId: id, repairsScreenId: id, repairScreenId: id, clientsScreenId: id, clientScreenId: id,
+    mastersScreenId: id, clientListScreenId: id, clientRepairScreenId: id,
+    createFormId: id, replyFormId: id, noteFormId: id, assignFormId: id,
+    repair: z.strictObject({
+      number: id, device: id, serial: id, problem: id, diagnosis: id, work: id, parts: id, cost: id,
+      client: id, clientName: id, clientEmail: id, master: id, masterEmail: id, status: id,
+      deadline: id, createdAt: id, updatedAt: id, acceptedAt: id.optional(),
+      lines: id.optional(), approval: id.optional(), partsEta: id.optional(),
+    }),
+    client: z.strictObject({ name: id, email: id, phone: id, note: id }),
+    master: z.strictObject({ name: id, email: id, phone: id, photo: id.optional(), active: id }),
+    reply: z.strictObject({ text: id, repair: id, at: id, author: id, authorEmail: id, clientEmail: id }),
+    note: z.strictObject({ text: id, repair: id, at: id, author: id, authorEmail: id }),
+    statuses: z.strictObject({
+      fresh: id, progress: id, waitingParts: id, ready: id, done: id, cancelled: id,
+    }),
+    activeChoiceId: id, inactiveChoiceId: id,
+  }).optional(),
   /** Internal warehouse starter (stock from movements). Absent outside that install. */
   inventory: z.strictObject({
     itemsTableId: id, movementsTableId: id, warehousesTableId: id,

@@ -1,0 +1,125 @@
+/* Shared phone chassis for builder preview, template demos, and shot harnesses. */
+.shell {
+  --phone-bezel: 11px;
+  --phone-radius: 44px;
+  --phone-screen-radius: calc(var(--phone-radius) - var(--phone-bezel));
+  /* Expose home clearance to nested app chrome (bottom nav). */
+  --phone-home-gap: 20px;
+  --phone-status: 36px;
+  position: relative;
+  width: 100%;
+  max-width: 390px;
+  height: min(100dvh, 760px);
+  margin-inline: auto;
+  margin-block: auto;
+  padding: var(--phone-bezel);
+  border-radius: var(--phone-radius);
+  background: linear-gradient(165deg, #2c3038 0%, #1b1e24 55%, #15171c 100%);
+  box-shadow:
+    0 0 0 1px rgb(255 255 255 / 0.08) inset,
+    0 1px 0 rgb(255 255 255 / 0.04) inset,
+    0 18px 44px -18px rgb(15 18 24 / 0.42);
+  box-sizing: border-box;
+}
+
+.shell[data-scheme='dark'] {
+  background: linear-gradient(165deg, #3a3e48 0%, #242830 50%, #1a1d24 100%);
+  box-shadow:
+    0 0 0 1px rgb(255 255 255 / 0.1) inset,
+    0 1px 0 rgb(255 255 255 / 0.05) inset,
+    0 20px 48px -16px rgb(0 0 0 / 0.55);
+}
+
+.screen {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  border-radius: var(--phone-screen-radius);
+  overflow: clip;
+  background: var(--v2-bg, var(--sc-bg-page, #fff));
+  color: var(--v2-ink, var(--sc-text, #1a1c1a));
+  isolation: isolate;
+}
+
+.status {
+  position: relative;
+  z-index: 3;
+  flex: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  height: var(--phone-status);
+  padding: 0 16px;
+  background: var(--v2-bg, var(--sc-bg-page, #fff));
+  color: var(--v2-ink, var(--sc-text, #1a1c1a));
+  font-family: var(--font-onest), Onest, sans-serif;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  pointer-events: none;
+  user-select: none;
+}
+
+.time {
+  justify-self: start;
+  padding-inline: 4px;
+}
+
+.island {
+  width: 82px;
+  height: 22px;
+  border-radius: 999px;
+  background: #0b0d11;
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.04) inset;
+}
+
+.icons {
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding-inline: 2px;
+  color: currentColor;
+}
+
+.icons svg {
+  display: block;
+  flex: none;
+}
+
+.body {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.body > * {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+}
+
+.home {
+  position: absolute;
+  z-index: 4;
+  left: 50%;
+  bottom: 7px;
+  width: 108px;
+  height: 4px;
+  border-radius: 999px;
+  transform: translateX(-50%);
+  background: color-mix(in srgb, var(--v2-ink, #1a1c1a) 38%, transparent);
+  pointer-events: none;
+}
+
+.shell[data-scheme='dark'] .home {
+  background: color-mix(in srgb, #fff 42%, transparent);
+}

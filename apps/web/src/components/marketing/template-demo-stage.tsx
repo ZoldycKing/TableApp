@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, type ReactNode } from 'react'
+import { PhoneMockup } from '@/components/phone-mockup'
 import styles from './template-demo-stage.module.css'
 
 /** Shared presentation frame for every interactive template example. */
@@ -24,9 +25,10 @@ export function TemplateDemoStage({ controls, phone, children, note, id }: {
     observer.observe(app, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-preview-screen'] })
     return () => observer.disconnect()
   }, [])
-  return <div className={styles.stage} id={id} data-phone={phone} data-template-demo>
+  const app = <div ref={example} className={`demo-frame ${styles.app}`} data-template-demo-app data-ui>{children}</div>
+  return <div className={styles.stage} id={id} data-phone={phone || undefined} data-template-demo>
     <div className={styles.controls}>{controls}</div>
-    <div className={styles.canvas}><div ref={example} className={`demo-frame ${styles.app}`} data-template-demo-app data-ui>{children}</div></div>
+    <div className={styles.canvas}>{phone ? <PhoneMockup height={680}>{app}</PhoneMockup> : app}</div>
     <p className={styles.note}>{note}</p>
   </div>
 }

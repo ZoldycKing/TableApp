@@ -499,6 +499,8 @@
 @container builder-app (min-width: 800px) {
   .tableWrap { display: block; }
   .cards { display: none; }
+  /* Dashboard / directory lists have no desktop table twin — keep cards. */
+  .cards[data-keep-cards] { display: grid; }
 }
 @container builder-app (max-width: 560px) {
   .stack > .sample, .filters, .chips, .card { padding-inline: 16px; }

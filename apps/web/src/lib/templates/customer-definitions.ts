@@ -142,14 +142,18 @@ export function withCustomerScenario(original: TemplateDef): TemplateDef {
     if (!status.choices.some(choice => choice.name === name)) status.choices.push({ name, color: name.includes('От') ? 'gray' : 'amber' })
   }
   // Demonstrate one fictional customer's active and historical records; others stay isolated.
+  // Service App V2 keeps authored statuses/masters; customerEmail is remapped for modular cabinet demos
+  // (Ирина gets a fresh + a terminal repair: r-new and r-done).
   main.rows = main.rows.map((row, index) => ({ ...row, values: { ...row.values,
     ...(template.id === 'crm' ? {} : template.id === 'zayavki'
       ? { [scenario.email]: row.key === 'z1' || row.key === 'z8' ? 'irina@example.com' : `other${index}@example.invalid`, requestName: row.key === 'z1' || row.key === 'z8' ? 'Ирина' : 'Другой клиент', requestPhone: '+7 900 000-00-00' }
+      : template.id === 'service'
+        ? { [scenario.email]: row.key === 'r-new' || row.key === 'r-done' ? 'irina@example.com' : `other${index}@example.invalid`, requestName: row.key === 'r-new' || row.key === 'r-done' ? 'Ирина' : 'Другой клиент', requestPhone: '+7 900 000-00-00' }
       : { [scenario.email]: index < 2 ? 'irina@example.com' : `other${index}@example.invalid`, requestName: index < 2 ? 'Ирина' : 'Другой клиент', requestPhone: '+7 900 000-00-00' }),
     requestDate: inDays(-index * 3),
-    // Field service keeps the authored schedule, priorities and technician emails.
-    ...(index === 1 && template.id !== 'crm' && template.id !== 'zayavki' ? { [scenario.status]: scenario.terminal[0]! } : {}),
-    ...(scenario.assignment && template.id !== 'zayavki' ? { [scenario.assignment]: 'worker@example.invalid' } : {}),
+    // Field service / native service-center keep authored schedule, priorities and statuses.
+    ...(index === 1 && template.id !== 'crm' && template.id !== 'zayavki' && template.id !== 'service' ? { [scenario.status]: scenario.terminal[0]! } : {}),
+    ...(scenario.assignment && template.id !== 'zayavki' && template.id !== 'service' ? { [scenario.assignment]: 'worker@example.invalid' } : {}),
   } }))
   if (!main.rows.length) main.rows = [
     { key: 'request-active', values: { title: 'Заявка Ирины', [scenario.email]: 'irina@example.com', requestName: 'Ирина', requestPhone: '+7 900 000-00-00', [scenario.status]: scenario.initial, ...(template.id === 'nedvizhimost' ? { object: { rowKey: 'n2' }, preferred: 'Завтра после 18:00' } : {}), clientSummary: 'Заявка получена. Ответственный свяжется с вами.', ...(scenario.assignment ? { [scenario.assignment]: 'worker@example.invalid' } : {}) } },
@@ -179,7 +183,8 @@ export function withCustomerScenario(original: TemplateDef): TemplateDef {
     })
     items.rows = samples
   }
-  if (scenario.approval) {
+  // Service App V2 keeps authored statuses; modular repair connect still gets approval choices.
+  if (scenario.approval && template.id !== 'service') {
     const approval = scenario.approval
     main.rows = main.rows.map((row, index) => ({ ...row, values: { ...row.values,
       ...(index === 0 ? { [scenario.status]: approval.waiting } : {}),

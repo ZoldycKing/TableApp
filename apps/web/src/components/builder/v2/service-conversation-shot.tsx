@@ -34,9 +34,14 @@ export function ServiceConversationShotPanel({
 }) {
   const root = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    const node = root.current?.querySelector('form') ?? root.current
+    // Prefer the repair card root so device, status and Переписка stay in the shot
+    // (scrolling to the composer alone clipped the order header on phone).
+    const node = root.current
     if (!(node instanceof HTMLElement)) return
-    const id = window.requestAnimationFrame(() => scrollIntoNearestScroller(node))
+    const id = window.requestAnimationFrame(() => {
+      const card = node.closest('[data-service-screen]') ?? node.closest('section') ?? node
+      scrollIntoNearestScroller(card instanceof HTMLElement ? card : node)
+    })
     return () => window.cancelAnimationFrame(id)
   }, [shot])
   return (

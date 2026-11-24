@@ -314,23 +314,23 @@ function DashboardScreen(props: ScreenProps) {
         <button type="button" onClick={() => props.onNavigate?.(props.kit.repairsScreenId)}><strong>{stats.fresh}</strong><span>Новые</span></button>
         <button type="button" onClick={() => props.onNavigate?.(props.kit.repairsScreenId)}><strong>{stats.progress}</strong><span>В работе</span></button>
         <button type="button" onClick={() => props.onNavigate?.(props.kit.repairsScreenId)}><strong>{stats.parts}</strong><span>Ждём запчасти</span></button>
-        <button type="button" onClick={() => props.onNavigate?.(props.kit.repairsScreenId)}><strong>{stats.done}</strong><span>Выдано</span></button>
+        <button type="button" onClick={() => props.onNavigate?.(props.kit.repairsScreenId)}><strong>{stats.ready}</strong><span>Готово к выдаче</span></button>
       </div>
       {overdue.length ? <DetailSection title="Просроченные">
-        <ul className={css.directory}>{overdue.map(item => <li key={item.id}>
-          <button type="button" className={css.ticket} onClick={() => props.onNavigate?.(props.kit.repairScreenId, item.id)}>
-            <strong>{item.device}</strong>
-            <span className={css.quiet}>{item.number} · {item.clientName}</span>
-            <span className={css.badges}><StatusBadge name={item.status} /><StatusBadge name="Просрочено" /></span>
+        <ul className={css.cards} data-keep-cards>{overdue.map(item => <li key={item.id}>
+          <button type="button" className={css.card} onClick={() => props.onNavigate?.(props.kit.repairScreenId, item.id)}>
+            <span className={css.subject}>{item.device}</span>
+            <span className={css.number}>{item.number} · {item.clientName}</span>
+            <span className={css.cardFacts}><StatusBadge name={item.status} /><StatusBadge name="Просрочено" /></span>
           </button>
         </li>)}</ul>
       </DetailSection> : null}
       {ready.length ? <DetailSection title="Готово к выдаче">
-        <ul className={css.directory}>{ready.map(item => <li key={item.id}>
-          <button type="button" className={css.ticket} onClick={() => props.onNavigate?.(props.kit.repairScreenId, item.id)}>
-            <strong>{item.device}</strong>
-            <span className={css.quiet}>{item.number} · {formatMoney(item.cost)}</span>
-            <StatusBadge name={item.status} />
+        <ul className={css.cards} data-keep-cards>{ready.map(item => <li key={item.id}>
+          <button type="button" className={css.card} onClick={() => props.onNavigate?.(props.kit.repairScreenId, item.id)}>
+            <span className={css.subject}>{item.device}</span>
+            <span className={css.number}>{item.number} · {formatMoney(item.cost)}</span>
+            <span className={css.cardFacts}><StatusBadge name={item.status} /></span>
           </button>
         </li>)}</ul>
       </DetailSection> : null}
@@ -380,24 +380,54 @@ function RepairList(props: ScreenProps) {
   </div>
 }
 
-function RepairRows(props: { items: ServiceListItem[]; now: number; onOpen: (id: string) => void; desk?: boolean; onStatus?: (id: string, status: string) => void }) {
+function RepairRows(props: { items: ServiceListItem[]; now: number; onOpen: (id: string) => void; desk?: boolean; onStatus?: (id: string, status: string) => void; keepCards?: boolean }) {
   if (!props.items.length) return <div className={css.empty}><p>Ремонтов в этом списке нет.</p></div>
-  return <ul className={css.directory}>{props.items.map(item => {
-    const overdue = isOverdueRepair(item.status, item.deadline, props.now)
-    return <li key={item.id}>
-      <button type="button" className={css.ticket} onClick={() => props.onOpen(item.id)}>
-        <strong>{item.device || 'Без названия'}</strong>
-        <span className={css.quiet}>{item.number} · {item.clientName || 'Без клиента'}{item.masterName ? ` · ${item.masterName}` : ''}</span>
-        <span className={css.cardFacts}>
-          <StatusBadge name={item.status} />
-          {overdue ? <StatusBadge name="Просрочено" /> : null}
-          {item.cost > 0 ? <span className={css.quiet}>{formatMoney(item.cost)}</span> : null}
-        </span>
-        <span className={css.quiet}>{item.deadline ? `Срок ${formatWhen(item.deadline, '')}` : 'Срок не задан'}</span>
-      </button>
-      {props.desk && props.onStatus ? <StatusMenu status={item.status} onPick={next => props.onStatus?.(item.id, next)} /> : null}
-    </li>
-  })}</ul>
+  return <>
+    <ul className={css.cards} data-ticket-cards data-keep-cards={props.keepCards || undefined}>{props.items.map(item => {
+      const overdue = isOverdueRepair(item.status, item.deadline, props.now)
+      return <li key={item.id} className={css.ticketCard} data-ticket-card>
+        <button type="button" className={css.card} onClick={() => props.onOpen(item.id)}>
+          <span className={css.ticketCardTop}>
+            <span className={css.subject}>{item.device || 'Без названия'}</span>
+          </span>
+          {item.number ? <span className={css.number}>{item.number}</span> : null}
+          <span className={css.cardFacts}>
+            <StatusBadge name={item.status} />
+            {overdue ? <StatusBadge name="Просрочено" /> : null}
+            {item.cost > 0 ? <span className={css.quiet}>{formatMoney(item.cost)}</span> : null}
+          </span>
+          <span className={css.ticketCardLine}>
+            <span className={css.quiet}>{item.clientName || 'Без клиента'}{item.masterName ? ` · ${item.masterName}` : ''}</span>
+            <span className={css.quiet}>·</span>
+            <span className={css.quiet}>{item.deadline ? `Срок ${formatWhen(item.deadline, '')}` : 'Срок не задан'}</span>
+          </span>
+        </button>
+        {props.desk && props.onStatus ? <div className={css.ticketCardMenu}><StatusMenu status={item.status} onPick={next => props.onStatus?.(item.id, next)} /></div> : null}
+      </li>
+    })}</ul>
+    {!props.keepCards ? <div className={css.tableWrap}>
+      <table className={css.table} data-columns={6}>
+        <caption className={css.quiet}>Список ремонтов</caption>
+        <thead><tr><th>Устройство</th><th>Клиент</th><th>Статус</th><th>Стоимость</th><th>Срок</th><th><span className={css.srOnly}>Действия</span></th></tr></thead>
+        <tbody>
+          {props.items.map(item => {
+            const overdue = isOverdueRepair(item.status, item.deadline, props.now)
+            return <tr key={item.id}>
+              <td><button type="button" className={css.rowButton} onClick={() => props.onOpen(item.id)}>
+                <span className={css.subject}>{item.device || 'Без названия'}</span>
+                {item.number ? <span className={css.number}>{item.number}</span> : null}
+              </button></td>
+              <td><span className={css.person}>{item.clientName || 'Без клиента'}{item.masterName ? <span>{item.masterName}</span> : null}</span></td>
+              <td><span className={css.cardFacts}><StatusBadge name={item.status} />{overdue ? <StatusBadge name="Просрочено" /> : null}</span></td>
+              <td>{item.cost > 0 ? formatMoney(item.cost) : '—'}</td>
+              <td><span className={css.quiet}>{item.deadline ? formatWhen(item.deadline, '') : '—'}</span></td>
+              <td className={css.rowActions}>{props.desk && props.onStatus ? <StatusMenu status={item.status} onPick={next => props.onStatus?.(item.id, next)} /> : null}</td>
+            </tr>
+          })}
+        </tbody>
+      </table>
+    </div> : null}
+  </>
 }
 
 function StatusMenu(props: { status: string; onPick: (next: string) => void }) {
@@ -745,13 +775,13 @@ function ClientDirectory(props: ScreenProps) {
   return <div className={css.root} data-service-root data-service-screen="clients">
     <ListScreenShell title="Клиенты" meta="Все, кто сдавал технику в ремонт.">
       <div className={css.toolbar}><ShellSearchField value={search} onChange={setSearch} placeholder="Поиск клиента" aria-label="Поиск клиентов" /></div>
-      <ul className={css.directory}>{clients.map(row => {
+      <ul className={css.cards} data-keep-cards>{clients.map(row => {
         const email = textOf(row.values[props.kit.client.email])
         const count = props.of(props.kit.repairsTableId).filter(item => textOf(item.values[props.kit.repair.clientEmail]).toLowerCase() === email.toLowerCase()).length
         return <li key={row.id}>
-          <button type="button" className={css.ticket} onClick={() => props.onNavigate?.(props.kit.clientScreenId, row.id)}>
-            <strong>{textOf(row.values[props.kit.client.name]) || 'Без имени'}</strong>
-            <span className={css.quiet}>{email} · {textOf(row.values[props.kit.client.phone])}</span>
+          <button type="button" className={css.card} onClick={() => props.onNavigate?.(props.kit.clientScreenId, row.id)}>
+            <span className={css.subject}>{textOf(row.values[props.kit.client.name]) || 'Без имени'}</span>
+            <span className={css.number}>{email} · {textOf(row.values[props.kit.client.phone])}</span>
             <span className={css.quiet}>{count} {count === 1 ? 'ремонт' : 'ремонта'}</span>
           </button>
         </li>
@@ -781,7 +811,7 @@ function ClientDetail(props: ScreenProps) {
         </dl>
       </DetailSection>
       <DetailSection title="История ремонтов">
-        <RepairRows items={items} now={props.now} onOpen={id => props.onNavigate?.(props.kit.repairScreenId, id)} />
+        <RepairRows items={items} now={props.now} onOpen={id => props.onNavigate?.(props.kit.repairScreenId, id)} keepCards />
       </DetailSection>
     </DetailCardShell>
   </div>
@@ -791,15 +821,15 @@ function MastersScreen(props: ScreenProps) {
   const masters = props.of(props.kit.mastersTableId)
   return <div className={css.root} data-service-root data-service-screen="masters">
     <ListScreenShell title="Мастера" meta="Кто принимает и ведёт ремонты.">
-      <ul className={css.directory}>{masters.map(row => {
+      <ul className={css.cards} data-keep-cards>{masters.map(row => {
         const email = textOf(row.values[props.kit.master.email]).toLowerCase()
         const open = props.of(props.kit.repairsTableId).filter(item => textOf(item.values[props.kit.repair.masterEmail]).toLowerCase() === email && serviceStatusName(props.kit, item.values[props.kit.repair.status]) !== 'Выдано' && serviceStatusName(props.kit, item.values[props.kit.repair.status]) !== 'Отменён').length
         const active = row.values[props.kit.master.active] === props.kit.activeChoiceId
         return <li key={row.id}>
-          <div className={css.ticket}>
-            <span className={css.personInline}><PersonMark name={textOf(row.values[props.kit.master.name])} /><strong>{textOf(row.values[props.kit.master.name]) || 'Без имени'}</strong></span>
+          <div className={css.card}>
+            <span className={css.mark}><PersonMark name={textOf(row.values[props.kit.master.name])} /><strong>{textOf(row.values[props.kit.master.name]) || 'Без имени'}</strong></span>
             <span className={css.quiet}>{textOf(row.values[props.kit.master.email])} · {textOf(row.values[props.kit.master.phone])}</span>
-            <span className={css.badges}>
+            <span className={css.cardFacts}>
               <StatusBadge name={active ? 'Активен' : 'Неактивен'} />
               <span className={css.quiet}>{open} в работе</span>
             </span>

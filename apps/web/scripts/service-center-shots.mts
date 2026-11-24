@@ -37,7 +37,10 @@ const open = async (page: Page, path: string, view: string, phone = false) => {
     const attr = screen?.getAttribute(root.includes('service') ? 'data-service-screen' : 'data-support-screen')
     return Boolean(screen && attr && attr !== 'loading')
   }, path.includes('service') ? '[data-service-screen]' : '[data-support-screen]', { timeout: 45000 })
-  await page.waitForTimeout(500)
+  if (view === 'repair' || view === 'client-repair' || view === 'ticket') {
+    await page.waitForSelector('[data-conversation-shot-panel], [data-support-thread], [data-service-thread]', { timeout: 45000 })
+  }
+  await page.waitForTimeout(700)
 }
 
 const browser = await chromium.launch({ headless: true })
@@ -61,9 +64,30 @@ const browser = await chromium.launch({ headless: true })
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: 'ru-RU', timezoneId: 'Europe/Moscow', deviceScaleFactor: 2 })
   const page = await context.newPage()
   page.setDefaultTimeout(45000)
+  const frameChat = async () => {
+    await page.evaluate(() => {
+      const heading = Array.from(document.querySelectorAll('h2, h3, [class*="sectionTitle"]'))
+        .find(node => /Переписка/.test(node.textContent ?? '')) as HTMLElement | undefined
+      const target = heading ?? document.querySelector('[data-conversation-shot-panel], [data-service-thread]') as HTMLElement | null
+      if (!target) return
+      let scroller: HTMLElement | null = target
+      while (scroller) {
+        const { overflowY } = getComputedStyle(scroller)
+        if ((overflowY === 'auto' || overflowY === 'scroll') && scroller.scrollHeight > scroller.clientHeight + 8) break
+        scroller = scroller.parentElement
+      }
+      if (!scroller) return
+      // Leave room above for device/status; show Переписка + first messages below.
+      const offset = target.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop - 160
+      scroller.scrollTop = Math.max(0, offset)
+    })
+    await page.waitForTimeout(400)
+  }
   await open(page, 'service-shot', 'repair', true)
+  await frameChat()
   await save(page, '04-service-repair-operator-phone-390.png')
   await open(page, 'service-shot', 'client-repair', true)
+  await frameChat()
   await save(page, '05-service-client-cabinet-phone-390.png')
   await context.close()
 }

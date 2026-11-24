@@ -146,7 +146,7 @@
 .badge[data-kind='priority'] {
   background: transparent; border: 1.5px solid currentColor; font-weight: 650;
 }
-.badge[data-kind='priority'][data-tone='urgent'] { color: #C0392B; border-color: #C0392B; background: color-mix(in srgb, #C0392B 8%, transparent); }
+.badge[data-kind='priority'][data-tone='urgent'] { color: #9B1C1C; border-color: #C0392B; background: color-mix(in srgb, #C0392B 14%, transparent); }
 .badge[data-kind='priority'][data-tone='high'] { color: #9A4A24; border-color: #D9784F; background: color-mix(in srgb, #D9784F 8%, transparent); }
 .badge[data-kind='priority'][data-tone='normal'] { color: #3D5A80; border-color: #8FA4BF; background: color-mix(in srgb, #3D5A80 5%, transparent); }
 .badge[data-kind='priority'][data-tone='low'] { color: #6B7280; border-color: #C4C8CE; background: color-mix(in srgb, var(--v2-ink, var(--sc-text)) 3%, transparent); }
@@ -161,8 +161,8 @@
 :global([data-scheme='dark']) .badge[data-kind='status'][data-tone='waiting'] { background: #2A2213; color: #EBC27C; }
 :global([data-scheme='dark']) .badge[data-kind='status'][data-tone='resolved'] { background: #12261B; color: #6FD39D; }
 :global([data-scheme='dark']) .badge[data-kind='status'][data-tone='overdue'] { background: #2C1616; color: #F28584; }
-:global([data-scheme='dark']) .badge[data-kind='priority'][data-tone='urgent'] { color: #F08A80; border-color: #E5605F; background: color-mix(in srgb, #C0392B 18%, transparent); }
-:global([data-scheme='dark']) .badge[data-kind='priority'][data-tone='high'] { color: #E8A06A; border-color: #D9784F; }
+:global([data-scheme='dark']) .badge[data-kind='priority'][data-tone='urgent'] { color: #FF8F86; border-color: #FF6B61; background: color-mix(in srgb, #C0392B 22%, transparent); }
+:global([data-scheme='dark']) .badge[data-kind='priority'][data-tone='high'] { color: #E8A06A; border-color: #D9784F; background: color-mix(in srgb, #D9784F 12%, transparent); }
 :global([data-scheme='dark']) .badge[data-kind='priority'][data-tone='normal'] { color: #9CBFE6; border-color: #7FA8D4; }
 :global([data-scheme='dark']) .badge[data-kind='priority'][data-tone='low'] { color: #A9A8AE; border-color: #6E6D74; }
 .tableWrap { display: none; min-width: 0; }
@@ -376,7 +376,9 @@
 .priorityTrack { display: block; height: 8px; border-radius: 99px; background: color-mix(in srgb, var(--v2-ink, var(--sc-text)) 8%, transparent); overflow: hidden; }
 .priorityTrack i { display: block; height: 100%; border-radius: inherit; }
 .priorityTrack[data-priority='urgent'] i, .priorityPill[data-priority='urgent'] { --p: #C0392B; }
+.priorityPill[data-priority='urgent'] { background: color-mix(in srgb, #C0392B 14%, transparent); color: #9B1C1C; }
 .priorityTrack[data-priority='high'] i, .priorityPill[data-priority='high'] { --p: #D9784F; }
+.priorityPill[data-priority='high'] { background: color-mix(in srgb, #D9784F 10%, transparent); color: #9A4A24; }
 .priorityTrack[data-priority='normal'] i, .priorityPill[data-priority='normal'] { --p: #5B7C99; }
 .priorityTrack[data-priority='low'] i, .priorityPill[data-priority='low'] { --p: #9AA0A6; }
 .priorityTrack i { background: var(--p, var(--v2-accent)); }
@@ -385,8 +387,10 @@
   border: 1.5px solid var(--p, currentColor); color: var(--p, inherit); background: color-mix(in srgb, var(--p, currentColor) 8%, transparent);
   font-size: 12px; font-weight: 700; white-space: nowrap;
 }
-.priorityChip[data-tone='urgent'][aria-pressed='true'] { border-color: #C0392B; color: #C0392B; }
-.priorityChip[data-tone='high'][aria-pressed='true'] { border-color: #D9784F; color: #9A4A24; }
+.priorityChip[data-tone='urgent'] { border-color: color-mix(in srgb, #C0392B 55%, var(--v2-line, #ccc)); color: #9B1C1C; }
+.priorityChip[data-tone='urgent'][aria-pressed='true'] { border-color: #C0392B; color: #9B1C1C; background: color-mix(in srgb, #C0392B 10%, transparent); }
+.priorityChip[data-tone='high'] { border-color: color-mix(in srgb, #D9784F 55%, var(--v2-line, #ccc)); color: #9A4A24; }
+.priorityChip[data-tone='high'][aria-pressed='true'] { border-color: #D9784F; color: #9A4A24; background: color-mix(in srgb, #D9784F 10%, transparent); }
 .priorityChip[data-tone='normal'][aria-pressed='true'] { border-color: #5B7C99; color: #3D5A80; }
 .priorityChip[data-tone='low'][aria-pressed='true'] { border-color: #9AA0A6; color: #6B7280; }
 :global([data-scheme='dark']) .priorityTrack[data-priority='urgent'] i, :global([data-scheme='dark']) .priorityPill[data-priority='urgent'] { --p: #F08A80; }

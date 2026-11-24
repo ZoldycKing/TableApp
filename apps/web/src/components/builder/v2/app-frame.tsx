@@ -10,6 +10,7 @@ import css from './app-frame.module.css'
 import presentation from '@/components/runtime/app-presentation.module.css'
 import { BuilderV2RecordAvatar } from './record-visuals'
 import { BookingJourneyProvider } from './booking-journey'
+import { PhoneMockup } from '@/components/phone-mockup'
 
 /** Desktop and phone toggles in the builder override width. Published apps measure themselves. */
 export const AppFrameDeviceContext = createContext<'auto' | 'desktop' | 'phone'>('auto')
@@ -122,9 +123,7 @@ export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,childre
   const sectionScreen = app.screens.find(screen => screen.id === sectionId)
   const mark = <BuilderV2AppMark logo={builderV2LogoUrl(app, draftLogo)} icon={app.appearance?.icon} />
   const account = headerAction ? <span className={css.headerAction}>{headerAction}</span> : null
-  return <BookingJourneyProvider key={app.id}><div className={`${css.stage} ${centered && !phone ? css.centeredStage : ''}`} data-frame-stage data-fullscreen={fullScreen || undefined}>
-    <div className={css.container} data-app-frame="" data-phone={phone} data-contained={contained || undefined} data-fullscreen={fullScreen || undefined}>
-    {phone && <span className={css.island} aria-hidden="true" />}
+  const frame = <div className={css.container} data-app-frame="" data-phone={phone || undefined} data-contained={contained || undefined} data-fullscreen={fullScreen && !phone || undefined}>
     <section className={`${styles.surface} ${css.frame}`} data-navigation={navigation} data-shell-topnav={shellTopNav || undefined} data-template={app.support ? 'support' : undefined}>
     {showChromeHeader ? <header className={`${styles.appHeader} ${css.header}`} data-brand-only={mobileBrandOnly || undefined}>
       <div className={`${css.chromeBar} ${presentation.contentWidth}`}>
@@ -146,5 +145,8 @@ export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,childre
         {shellTopNav ? account : null}
       </div>
     </nav>}
-  </section></div></div></BookingJourneyProvider>
+  </section></div>
+  return <BookingJourneyProvider key={app.id}><div className={`${css.stage} ${centered && !phone ? css.centeredStage : ''}`} data-frame-stage data-fullscreen={fullScreen && !phone || undefined}>
+    {phone ? <PhoneMockup scheme={app.theme.scheme === 'dark' ? 'dark' : 'light'}>{frame}</PhoneMockup> : frame}
+  </div></BookingJourneyProvider>
 }

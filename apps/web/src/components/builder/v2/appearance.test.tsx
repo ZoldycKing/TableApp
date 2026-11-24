@@ -46,7 +46,7 @@ it('closes the extra navigation on Escape, outside input and a screen change wit
 })
 it('does not render an empty navigation and applies phone width to the container rather than only to its contents',()=>{
  const app=menuApp();app.screens.forEach(screen=>screen.navigation=false)
- const view=render(<BuilderV2AppFrame app={app} phone screenId="page_0" title="Личное" onNavigate={vi.fn()}>Данные</BuilderV2AppFrame>);expect(screen.queryByRole('navigation')).toBeNull();expect(view.container.querySelector('[data-phone="true"]')).toBeTruthy();expect(view.container.querySelector('[data-navigation="bottom"]')).toBeTruthy()
+ const view=render(<BuilderV2AppFrame app={app} phone screenId="page_0" title="Личное" onNavigate={vi.fn()}>Данные</BuilderV2AppFrame>);expect(screen.queryByRole('navigation')).toBeNull();expect(view.container.querySelector('[data-phone-mockup]')).toBeTruthy();expect(view.container.querySelector('[data-phone="true"]')).toBeTruthy();expect(view.container.querySelector('[data-navigation="bottom"]')).toBeTruthy()
 })
 it('passes only the application presentation to a portaled dialog and preserves the editor outside the theme',()=>{
  const app=appV2Fixture();app.theme={...app.theme,scheme:'dark',accent:'violet'}

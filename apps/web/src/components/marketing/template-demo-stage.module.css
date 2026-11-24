@@ -69,10 +69,12 @@
   --color-ink-muted: #566477;
 }
 
-.stage[data-phone=true] .app { max-width: 390px; }
+.stage[data-phone=true] .app { max-width: none; height: 100%; min-height: 0; }
 .app > div { height: auto; min-height: 0; }
+.stage[data-phone=true] .app > div { height: 100%; min-height: 0; }
 /* Examples grow with their real screens; published apps keep their viewport scrolling. */
 .app [data-runtime-app] { height: auto; min-height: 640px; }
+.stage[data-phone=true] .app [data-runtime-app] { height: 100%; min-height: 0; }
 .app [data-runtime-column] { height: auto; }
 .app [data-runtime-body] { flex: 1 0 auto; overflow: visible; }
 .app [data-runtime-column] > header { position: static; }

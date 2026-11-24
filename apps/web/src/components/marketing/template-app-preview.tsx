@@ -1,7 +1,7 @@
 import { DeferredTemplatePreview } from './deferred-preview'
 import { templateAppPreview } from '@/lib/templates/app-preview'
 import type { templateExample } from '@/lib/templates/presentation'
-import { DeviceFrame } from './demo-stage'
+import { PhoneMockup } from '@/components/phone-mockup'
 import styles from './elaya/inner-pages.module.css'
 
 export function TemplateAppPreview({ example, role, email, name, title, note, tableId, screenId }: {
@@ -17,9 +17,9 @@ export function TemplateAppPreview({ example, role, email, name, title, note, ta
   return <figure className="m-0 min-w-0 max-w-full">
     <figcaption className="mb-4 text-sm font-medium text-ink">{title}</figcaption>
     <div className="mx-auto w-full max-w-[25rem]">
-      <DeviceFrame device="mobile" height={640} bezel={8}>
-        <div className={styles.runtimeTheme}><DeferredTemplatePreview initial={initialPreview} signedIn={signedIn} initialScreenId={initial} /></div>
-      </DeviceFrame>
+      <PhoneMockup height={640}>
+        <div className={styles.runtimeTheme} style={{ height: '100%', minHeight: 0 }}><DeferredTemplatePreview initial={initialPreview} signedIn={signedIn} initialScreenId={initial} /></div>
+      </PhoneMockup>
     </div>
     <p className="mt-3 text-xs leading-relaxed text-ink-muted">{note}</p>
     <p className="mt-1 text-xs text-ink-muted">Учебные данные. Разделы и карточки можно открыть; изменения не сохраняются.</p>

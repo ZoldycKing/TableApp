@@ -344,12 +344,12 @@ describe.skipIf(!process.env.DATABASE_URL)('conversation persistence and access 
     expect((await upload).status).toBe(503)
     expect(await database.db.select().from(database.attachments).where(eq(database.attachments.workspaceId, first.workspaceId))).toEqual([])
   })
-  it('serializes concurrent uploads at the actor limit, including empty files', async () => {
+  it('serializes concurrent uploads at the actor limit', async () => {
     const first = await business(); await signIn(clientEmail)
     const context = await service.prepareConversationUpload(first.app.slug, first.tableId, first.rowId)
-    await database.db.insert(database.attachments).values(Array.from({ length: 19 }, () => ({ id: newId('attachment'), workspaceId: first.workspaceId, key: `${first.workspaceId}/${randomUUID()}.txt`, name: 'pending.txt', mime: 'text/plain', size: 0, uploadedBy: context.uploadedBy, conversationId: context.conversationId })))
+    await database.db.insert(database.attachments).values(Array.from({ length: 19 }, () => ({ id: newId('attachment'), workspaceId: first.workspaceId, key: `${first.workspaceId}/${randomUUID()}.txt`, name: 'pending.txt', mime: 'text/plain', size: 1, uploadedBy: context.uploadedBy, conversationId: context.conversationId })))
     const { storeAttachment } = await import('./file-upload')
-    const upload = () => storeAttachment(context.workspaceId, context.uploadedBy, context.origin, { name: 'empty.txt', type: 'text/plain', bytes: new Uint8Array() }, context.conversationId)
+    const upload = () => storeAttachment(context.workspaceId, context.uploadedBy, context.origin, { name: 'note.txt', type: 'text/plain', bytes: Buffer.from('x') }, context.conversationId)
     const results = await Promise.allSettled([upload(), upload()])
     expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1)
     expect(results.filter(result => result.status === 'rejected')).toHaveLength(1)
@@ -359,6 +359,6 @@ describe.skipIf(!process.env.DATABASE_URL)('conversation persistence and access 
     await database.db.insert(database.rows).values({ id: nextRow, tableId: first.tableId, position: 'zzzz', data: parent!.data })
     await database.db.delete(database.rows).where(eq(database.rows.id, first.rowId))
     const next = await service.prepareConversationUpload(first.app.slug, first.tableId, nextRow)
-    await expect(storeAttachment(next.workspaceId, next.uploadedBy, next.origin, { name: 'new.txt', type: 'text/plain', bytes: new Uint8Array() }, next.conversationId)).rejects.toThrow('через минуту')
+    await expect(storeAttachment(next.workspaceId, next.uploadedBy, next.origin, { name: 'new.txt', type: 'text/plain', bytes: Buffer.from('y') }, next.conversationId)).rejects.toThrow('через минуту')
   })
 })

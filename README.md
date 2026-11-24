@@ -90,10 +90,13 @@ pnpm --filter @tableapp/web dev
 | http://localhost:8025 | Mailpit: письма для локального входа |
 | http://localhost:9001 | Консоль MinIO |
 | localhost:5433 | PostgreSQL |
+| localhost:3310 | ClamAV clamd (опционально, `docker compose up -d clamav`) |
 
 Значения в `.env.example` и Docker Compose предназначены для локальной разработки.
 MinIO [собирается из закреплённого релиза исходников](infra/minio/README.md);
 первая сборка контейнера может занять несколько минут.
+Правила загрузок, whitelist типов, лимиты и ClamAV —
+в [docs/secure-uploads.md](docs/secure-uploads.md).
 Для обычной работы откройте `/login` и получите письмо в Mailpit.
 Приложение читает корневой `.env`; этот файл не попадает в Git.
 

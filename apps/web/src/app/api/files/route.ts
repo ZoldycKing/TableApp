@@ -8,8 +8,9 @@ import { canEdit, currentMember } from '@/lib/session'
 import { isPlanLimitError, type Origin } from '@/lib/limits'
 import { explainToCustomer } from '@tableapp/schema'
 import { storeAttachment } from '@/lib/file-upload'
-import { validateFileContent, validateFileMetadata } from '@/lib/file-policy'
+import { MAX_FILE_BYTES, MAX_FILE_MB, validateFileContent, validateFileMetadata } from '@/lib/file-policy'
 import { validateAppReferences } from '@/lib/app-references'
+import { RowWriteError } from '@/lib/row-mutations'
 import { tablePermission } from '@/lib/table-permissions'
 
 /**
@@ -82,6 +83,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: 'Нужно войти' }, { status: 401 })
   }
 
+  const contentLength = Number(request.headers?.get?.('content-length'))
+  if (Number.isFinite(contentLength) && contentLength > MAX_FILE_BYTES + 65536) {
+    return NextResponse.json({ ok: false, error: `Файл больше ${MAX_FILE_MB} МБ` }, { status: 413 })
+  }
   const metadataError = validateFileMetadata(file)
   if (metadataError) return NextResponse.json({ ok: false, error: metadataError }, { status: 400 })
   const bytes = new Uint8Array(await file.arrayBuffer())
@@ -90,8 +95,14 @@ export async function POST(request: Request) {
 
   try {
     const attachment = await storeAttachment(workspaceId, uploadedBy, origin, { name: file.name, type: file.type, bytes })
+    if (attachment.scanStatus === 'infected') {
+      return NextResponse.json({ ok: true, attachment }, { headers: { 'Cache-Control': 'private, no-store' } })
+    }
     return NextResponse.json({ ok: true, attachment }, { headers: { 'Cache-Control': 'private, no-store' } })
   } catch (error) {
+    if (error instanceof RowWriteError) {
+      return NextResponse.json({ ok: false, error: error.message }, { status: 400 })
+    }
     if (isPlanLimitError(error)) return NextResponse.json({ ok: false,
       error: origin === 'runtime' ? explainToCustomer() : error.message }, { status: 413 })
     return NextResponse.json({ ok: false, error: 'Не удалось сохранить файл. Попробуйте ещё раз' }, { status: 503 })

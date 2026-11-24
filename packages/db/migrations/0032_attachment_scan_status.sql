@@ -1,0 +1,1 @@
+ALTER TABLE "attachments" ADD COLUMN "scan_status" text DEFAULT 'clean' NOT NULL;

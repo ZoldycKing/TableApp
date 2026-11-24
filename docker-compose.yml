@@ -32,6 +32,25 @@ services:
     volumes:
       - miniodata:/data
 
+  # Антивирус для проверки загрузок. Приложение ходит в clamd по TCP
+  # (CLAMAV_HOST=127.0.0.1:3310). Первый запуск долго качает базы сигнатур.
+  # Без этого сервиса загрузка работает, но сканирование пропускается с
+  # предупреждением в логах — см. docs/secure-uploads.md.
+  clamav:
+    image: clamav/clamav:1.4
+    container_name: tableapp-clamav
+    restart: unless-stopped
+    ports:
+      - "3310:3310"
+    volumes:
+      - clamavdata:/var/lib/clamav
+    healthcheck:
+      test: ["CMD-SHELL", "echo PING | nc -w 3 127.0.0.1 3310 | grep -q PONG"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+
   # Почтовый приёмник для разработки.
   #
   # Ловит письма и показывает их в браузере на localhost:8025, наружу
@@ -51,3 +70,4 @@ services:
 volumes:
   pgdata:
   miniodata:
+  clamavdata:

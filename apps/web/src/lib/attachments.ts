@@ -31,7 +31,7 @@ export const INVALID_ATTACHMENT = 'Файл не найден или недос�
 export const ATTACHMENT_IN_USE = 'Файл уже прикреплён к другой ячейке. Загрузите отдельную копию'
 
 function attachmentError(record: typeof attachments.$inferSelect, target: Target, author?: AttachmentAuthor): string | null {
-  if (record.state !== 'ready') return INVALID_ATTACHMENT
+  if (record.state !== 'ready' || record.scanStatus === 'infected' || record.scanStatus === 'pending') return INVALID_ATTACHMENT
   if (isBuilderV2LogoKey(record.key)) return INVALID_ATTACHMENT
   if (record.conversationId || record.messageId) return ATTACHMENT_IN_USE
   if (record.tableId || record.rowId || record.fieldId) {
@@ -84,7 +84,11 @@ export async function canonicalAttachments(fields: readonly Field[], data: Recor
     if (!(field.id in data)) continue
     clean[field.id] = keysOf(data[field.id]).map((key) => {
       const record = byKey.get(key)!
-      return { id: record.id, key, name: record.name, mime: record.mime, size: record.size, width: null, height: null }
+      return {
+        id: record.id, key, name: record.name, mime: record.mime, size: record.size,
+        width: record.width, height: record.height,
+        scanStatus: (record.scanStatus as 'pending' | 'clean' | 'infected' | 'skipped') || 'clean',
+      }
     })
   }
   return clean

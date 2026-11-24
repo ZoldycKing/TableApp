@@ -103,7 +103,9 @@ describe.skipIf(!process.env.DATABASE_URL)('file API security against Postgres',
     expect(record!.id).toBe(payload.attachment.id)
     expect(record!.workspaceId).toBe(workspaceId)
     expect(record!.mime).toBe('image/png')
-    expect(record!.size).toBe(png.length)
+    expect(record!.size).toBeGreaterThan(0)
+    expect(record!.width).toBeTruthy()
+    expect(record!.height).toBeTruthy()
     expect(storage.putFile).toHaveBeenCalledOnce()
     expect(storage.putFile.mock.calls[0]![0]).toBe(workspaceId)
   })
@@ -127,15 +129,25 @@ describe.skipIf(!process.env.DATABASE_URL)('file API security against Postgres',
     expect(response.headers.get('Content-Type')).toBe('application/octet-stream')
     expect(response.headers.get('Content-Disposition')).toMatch(/^attachment;/)
   })
-  it('keeps an authorized raster image inline', async () => {
+  it('keeps an authorized scrubbed raster image inline', async () => {
     const key = `${workspaceId}/${newId('attachment')}.png`
-    await database.db.insert(database.attachments).values({ id: newId('attachment'), workspaceId, key, name: 'photo.png', mime: 'image/png', size: 1 })
+    await database.db.insert(database.attachments).values({
+      id: newId('attachment'), workspaceId, key, name: 'photo.png', mime: 'image/png', size: 1, width: 1, height: 1,
+    })
     storedFile('image/png')
     const response = await sendDownload(key)
     expect(response.status).toBe(200)
     expect(response.headers.get('Content-Type')).toBe('image/png')
     expect(response.headers.get('Content-Disposition')).toMatch(/^inline;/)
     expect(response.headers.get('X-Content-Type-Options')).toBe('nosniff')
+  })
+  it('forces attachment disposition for legacy images without scrubbing metadata', async () => {
+    const key = `${workspaceId}/${newId('attachment')}.png`
+    await database.db.insert(database.attachments).values({ id: newId('attachment'), workspaceId, key, name: 'photo.png', mime: 'image/png', size: 1 })
+    storedFile('image/png')
+    const response = await sendDownload(key)
+    expect(response.status).toBe(200)
+    expect(response.headers.get('Content-Disposition')).toMatch(/^attachment;/)
   })
   it('still requires access before fetching a legacy SVG', async () => {
     identity.member = null

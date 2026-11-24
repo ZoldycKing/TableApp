@@ -1,5 +1,5 @@
 'use client'
-import { createContext, useContext, useEffect, useId, useRef, useState, type RefObject } from 'react'
+import { createContext, lazy, Suspense, useContext, useEffect, useId, useRef, useState, type RefObject } from 'react'
 import { instantToWallClock } from '@tableapp/schema'
 import type { AppV2, AppV2Node, AppV2Record } from '@tableapp/schema/app-v2'
 import { savePublishedSupportAction } from '@/app/support-actions'
@@ -15,6 +15,8 @@ import { DetailCardShell, DetailSection, ListScreenShell, ShellSearchField } fro
 import shell from './layout-shell.module.css'
 import { ProtoIcon } from '../prototype/icons'
 import { usePublishedV2 } from './published-context'
+
+const SupportConversationShotPanel = lazy(() => import('./support-conversation-shot').then(module => ({ default: module.SupportConversationShotPanel })))
 import { useBuilderV2NodeData } from './use-data'
 import type { AppV2RendererProps } from './view'
 import css from './support.module.css'
@@ -58,6 +60,11 @@ function TimeMenu({ value, onValue, label }: { value: string; onValue: (value: s
 }
 
 export type SupportOpen = 'create' | 'reply' | 'note' | 'assign' | 'category' | null
+export type SupportConversationShot = {
+  preview: import('@/lib/conversation-types').ConversationPage
+  previewFiles?: import('@tableapp/schema').Attachment[]
+  previewAlert?: import('@/components/runtime/conversation-file-ui').UploadAlertInfo | null
+}
 export type SupportBundle = {
   rows: AppV2Record[]
   setRows?: (rows: AppV2Record[]) => void
@@ -68,6 +75,8 @@ export type SupportBundle = {
   previewClient?: string
   previewMenuOpen?: boolean
   previewFocus?: { current: string | null }
+  /** When set (support-shot file states), TicketCard shows ConversationPanel fixtures. */
+  conversationShot?: SupportConversationShot | null
 }
 export const SupportRowsContext = createContext<SupportBundle | null>(null)
 
@@ -884,6 +893,16 @@ function TicketCard(props: ScreenProps) {
         <div className={shell.detailMainCol}>
           <DetailSection title="Описание"><p className={css.description}>{textOf(ticket.values[fields.description]) || 'Описания нет.'}</p></DetailSection>
           <DetailSection title="Переписка">
+            {bundle?.conversationShot ? (
+              <Suspense fallback={<p className={css.quiet} role="status">Загружаем переписку…</p>}>
+                <SupportConversationShotPanel
+                  desk={desk}
+                  tableId={props.kit.ticketsTableId}
+                  ticketId={ticket.id}
+                  shot={bundle.conversationShot}
+                />
+              </Suspense>
+            ) : <>
             {props.error ? <p className={css.error} role="alert">{props.error}</p> : null}
             {message ? <p role="status">{message}</p> : null}
             {!timeline.length ? <div className={css.empty}><p>Сообщений пока нет. Ответ появится в этой ленте.</p></div> : null}
@@ -903,6 +922,7 @@ function TicketCard(props: ScreenProps) {
               </li>
               })}
             </ol>
+            </>}
           </DetailSection>
         </div>
         {!clientView ? <aside className={`${shell.detailSideCol} ${css.factsCol}`}>

@@ -52,9 +52,10 @@ describe.skipIf(!process.env.DATABASE_URL)('builder logo lifecycle', () => {
     }
     const app = makeApp(), other = makeApp()
     await data.db.insert(data.apps).values([app, other].map(draft => ({ id: draft.id, workspaceId, name: draft.name, slug: draft.slug, draft, theme: draft.theme })))
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a5V8AAAAASUVORK5CYII=', 'base64')
     const makeForm = (valid: boolean) => {
       const form = new FormData()
-      form.set('file', new File([new Uint8Array(valid ? [137, 80, 78, 71, 13, 10, 26, 10] : [1, 2, 3])], 'mark.png', { type: 'image/png' }))
+      form.set('file', new File([valid ? png : new Uint8Array([1, 2, 3])], 'mark.png', { type: 'image/png' }))
       return form
     }
     identity.member = member

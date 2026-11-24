@@ -24,7 +24,7 @@ describe('business and client inbox', () => {
     const ui = render(<ConversationInbox business />)
     await ui.findByRole('button', { name: /Анна/ })
     expect(list).toHaveBeenCalledWith(expect.objectContaining({ unreadOnly: false }), true)
-    fireEvent.click(ui.getByLabelText('Только непрочитанные'))
+    fireEvent.click(ui.getByRole('button', { name: 'Только непрочитанные' }))
     await waitFor(() => expect(list).toHaveBeenCalledWith(expect.objectContaining({ unreadOnly: true }), true))
   })
   it('clears formerly loaded conversation metadata after access is revoked', async () => {

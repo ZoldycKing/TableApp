@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
+vi.hoisted(() => { process.env.DATABASE_URL ??= 'postgres://tableapp:tableapp@127.0.0.1:5433/tableapp' })
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/app/support-actions', () => ({ savePublishedSupportAction: vi.fn() }))
+vi.mock('@/app/service-actions', () => ({ savePublishedServiceAction: vi.fn() }))
 vi.mock('@/app/projects-actions', () => ({ savePublishedProjectsAction: vi.fn() }))
 vi.mock('@/app/dispatch-actions', () => ({ savePublishedDispatchAction: vi.fn(), savePublishedDispatchActAction: vi.fn() }))
 vi.mock('@/app/builder-v2-data-actions', () => ({ readBuilderV2DataAction: vi.fn(), readBuilderV2RecordAction: vi.fn() }))

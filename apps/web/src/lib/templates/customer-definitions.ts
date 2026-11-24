@@ -19,7 +19,7 @@ function serviceCatalog(title: string): TemplateTable {
 
 /** The ready client scenario extends the working tables; it never exposes their private fields. */
 export function withCustomerScenario(original: TemplateDef): TemplateDef {
-  if (['salon', 'sklad', 'proizvodstvo'].includes(original.id)) return original
+  if (['salon', 'sklad', 'proizvodstvo', 'service', 'podderzhka'].includes(original.id)) return original
   const template = structuredClone(original)
   let main = template.tables.find(table => table.key === template.appTable)!
   const common = { email: 'customerEmail', assignment: 'assignedEmail', workerName: 'Исполнитель', managerName: 'Администратор',
@@ -71,13 +71,6 @@ export function withCustomerScenario(original: TemplateDef): TemplateDef {
       scenario = { ...common, table: 'deliveries', title: 'Мои доставки', submitLabel: 'Заказать доставку', intro: 'Укажите адрес, содержимое и желаемое время. Диспетчер согласует стоимость и интервал; после этого доставка появится у назначенного курьера.',
         formFields: ['selectedService', 'requestName', 'requestPhone', 'address', 'what', 'window', 'note'], customerFields: ['what', 'status', 'date', 'window', 'price', 'address', 'note', 'clientSummary'], workerFields: ['status', 'photo', 'clientSummary'], workerReadFields: ['pay', 'photo'], workerName: 'Курьер', managerName: 'Диспетчер',
         status: 'status', initial: 'Принята', terminal: ['Доставлена', 'Возврат', 'Отменена'], cancel: 'Отменена', cancellable: ['Принята'], catalog: catalog('Услуги доставки') }
-      break
-    case 'service':
-      main.fields.push({ key: 'approvedPrice', name: 'Согласованная стоимость', type: 'number', options: { format: 'currency', currency: 'RUB', precision: 2 }, help: 'Фиксируется сервером при согласии клиента. Изменение сметы требует нового согласования.' })
-      scenario = { ...common, table: 'repairs', title: 'Мои ремонты', submitLabel: 'Отправить заявку на ремонт', intro: 'Укажите устройство и неисправность. После приёмки и диагностики мастер предложит стоимость; вы сможете согласовать её в кабинете.',
-        formFields: ['selectedService', 'requestName', 'requestPhone', 'device', 'problem'], requiredFields: ['requestName', 'requestPhone', 'device', 'problem'], customerFields: ['ticket', 'status', 'problem', 'ready', 'price', 'approvedPrice', 'note', 'clientSummary'], workerFields: ['status', 'price', 'ready', 'note', 'clientSummary'], workerName: 'Мастер',
-        status: 'status', initial: 'Принято', terminal: ['Выполнено', 'Отменён', 'Отказ от ремонта'], cancel: 'Отменён', cancellable: ['Принято'], catalog: catalog('Услуги сервиса'),
-        approval: { price: 'price', agreed: 'approvedPrice', waiting: 'Ждём согласования', approved: 'В ремонте', declined: 'Отказ от ремонта', consentRequired: ['В ремонте', 'Готово', 'Выполнено'] } }
       break
     case 'nedvizhimost': {
       const objects = main
@@ -217,11 +210,6 @@ export function withCustomerScenario(original: TemplateDef): TemplateDef {
   }
   for (const table of template.tables) for (const field of table.fields) if (!field.help) field.help = help[field.key] ?? 'Данные обращения; заполните при согласовании с клиентом.'
   template.gives.push('Клиент оформляет из карточки и видит только свои записи, статусы и историю в личном кабинете')
-  if (template.id === 'service') {
-    template.limits = template.limits?.map(limit => limit.startsWith('Сообщений о готовности') ? 'Автоматических сообщений о готовности нет: клиент проверяет статус в кабинете' : limit)
-    template.gives.push('Согласование стоимости ремонта в кабинете: новая смета требует нового согласия')
-    main.fields.find(field => field.key === 'master')!.help = 'Имя мастера для внутреннего учёта. Рабочий доступ определяется полем «Почта исполнителя».'
-  }
   if (template.id === 'katalog') template.gives = ['Открытый каталог с ценами и описанием товаров', 'Корзина из карточек товаров: количество и сумма перед оформлением', 'Заказы с отдельным составом и сохранённой ценой, статусы и история клиента', 'Сотрудник видит назначенные заказы; администратор управляет всеми']
   if (template.id === 'nedvizhimost') template.gives = ['Открытые карточки опубликованных объектов: фото, площадь и цена', 'Запрос просмотра из карточки; агент согласует и назначает время', 'Кабинет клиента: собственные просмотры, отмена и история', 'Внутренние контакты собственников видит только команда']
   if (template.id === 'portal') {

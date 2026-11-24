@@ -25,7 +25,19 @@ const save = async (page: Page, name: string, fullPage = false) => {
   await page.mouse.move(2, 2)
   await page.waitForTimeout(250)
   const path = resolve(outDir, name)
-  await page.screenshot({ path, fullPage })
+  if (fullPage) {
+    await page.addStyleTag({
+      content: `
+        [data-phone="true"] { height: auto !important; max-height: none !important; }
+        [data-phone="true"] .frame { height: auto !important; min-height: 0 !important; }
+        [data-phone="true"] [class*="body"] { overflow: visible !important; height: auto !important; max-height: none !important; }
+      `,
+    })
+    await page.waitForTimeout(200)
+    await page.screenshot({ path, fullPage: true })
+  } else {
+    await page.screenshot({ path, fullPage: false })
+  }
   console.log('saved', name)
 }
 

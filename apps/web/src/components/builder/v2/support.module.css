@@ -302,20 +302,25 @@
   .summary button { min-height: 44px; padding: 6px; }
   .summary span { font-size: 12px; }
   .when { grid-template-columns: 1fr; }
-  .viewTabsWrap { padding-inline: 0; }
   .filters { gap: 10px; }
+  .viewTabsWrap {
+    padding: 0;
+    -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 40px), transparent 100%);
+    mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 40px), transparent 100%);
+  }
+  .viewTabs {
+    gap: 8px; scroll-snap-type: x mandatory; scroll-padding-inline: 16px 48px;
+    padding: 4px 48px 8px 16px;
+  }
+  .viewTab { font-size: 12px; padding: 6px 10px; scroll-snap-align: start; }
 }
 
 .viewTabsWrap {
   position: relative; min-width: 0; margin: 4px 0 0; padding: 0 20px;
 }
-.viewTabsWrap::after {
-  content: ''; position: absolute; top: 0; right: 0; bottom: 0; width: 28px; pointer-events: none;
-  background: linear-gradient(to right, transparent, var(--v2-bg, var(--sc-bg, #fff)));
-}
 .viewTabs {
   display: flex; flex-wrap: nowrap; gap: 6px; min-width: 0; overflow-x: auto; overscroll-behavior-x: contain;
-  padding: 4px 20px 8px 0; scrollbar-width: none; -webkit-overflow-scrolling: touch;
+  padding: 4px 0 8px; scrollbar-width: none; -webkit-overflow-scrolling: touch;
 }
 .viewTabs::-webkit-scrollbar { display: none; }
 .viewTab {
@@ -363,9 +368,6 @@
 .rowActions { width: 3rem; padding-inline: 8px !important; vertical-align: middle !important; }
 .actionsCol { width: 3rem; }
 .srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
-:global([data-scheme='dark']) .viewTabsWrap::after {
-  background: linear-gradient(to right, transparent, var(--v2-bg, #151517));
-}
 
 /* —— Dashboard redesign —— */
 .dashHero {

@@ -525,12 +525,16 @@ function TicketList(props: ScreenProps) {
           </div>
           <ClientPreviewMenu clients={clients} value={previewEmail} open={previewOpen} onOpen={setPreviewOpen} onChange={setPreviewEmail} />
         </div> : null}
-        {queueDesk ? <div className={css.viewTabsWrap} data-view-tabs>
+        {queueDesk ? <div className={css.viewTabsWrap} data-view-tabs data-phone={device === 'phone' || undefined}>
           <div className={css.viewTabs} role="tablist" aria-label="Представления тикетов">
-            {SUPPORT_TICKET_VIEWS.map(item => <button key={item.id} type="button" role="tab" className={css.viewTab} aria-selected={view === item.id} onClick={() => setView(item.id)}>
-              <span>{item.label}</span>
-              <em className={css.viewCount}>{viewCounts[item.id] ?? 0}</em>
-            </button>)}
+            {SUPPORT_TICKET_VIEWS.map(item => {
+              const short = device === 'phone' && (item.id === 'unassigned' ? 'Без отв.' : item.id === 'hot' ? 'Горит' : item.id === 'waiting' ? 'Ждём' : item.id === 'open' ? 'Открытые' : item.label)
+              const label = typeof short === 'string' ? short : item.label
+              return <button key={item.id} type="button" role="tab" className={css.viewTab} aria-selected={view === item.id} aria-label={`${item.label}, ${viewCounts[item.id] ?? 0}`} title={item.label} onClick={() => setView(item.id)}>
+                <span>{label}</span>
+                <em className={css.viewCount}>{viewCounts[item.id] ?? 0}</em>
+              </button>
+            })}
           </div>
         </div> : null}
         {queueDesk ? <details className={css.filterDrawer} open={device !== 'phone'}>

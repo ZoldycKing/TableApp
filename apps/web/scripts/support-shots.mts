@@ -55,26 +55,21 @@ const open = async (page: Page, view: string, scheme?: 'light' | 'dark', phone =
 
 const browser = await chromium.launch({ headless: true })
 
-type Shot = { view: string; name: string; scheme?: 'light' | 'dark'; phone?: boolean; openMenu?: boolean; fullPage?: boolean }
+type Shot = { view: string; name: string; scheme?: 'light' | 'dark'; phone?: boolean; openAssignee?: boolean; fullPage?: boolean }
 
 const desktop: Shot[] = [
   { view: 'dashboard', name: 'dash-desktop-1440.png', fullPage: true },
-  { view: 'dashboard', name: 'dash-dark-1440.png', scheme: 'dark', fullPage: true },
-  { view: 'queue', name: 'list-desktop-1440.png' },
-  { view: 'queue', name: 'list-dark-1440.png', scheme: 'dark' },
-  { view: 'board', name: 'board-desktop-1440.png' },
-  { view: 'ticket', name: 'ticket-desktop-1440.png' },
-  { view: 'client-preview', name: 'client-preview-desktop-1440.png' },
-  { view: 'client-waiting', name: 'client-waiting-desktop-1440.png' },
+  { view: 'queue', name: 'tickets-desktop-1440.png' },
+  { view: 'queue:hot', name: 'tickets-hot-desktop-1440.png' },
+  { view: 'queue', name: 'tickets-assignee-desktop-1440.png', openAssignee: true },
+  { view: 'queue', name: 'tickets-dark-1440.png', scheme: 'dark' },
+  { view: 'clients', name: 'clients-desktop-1440.png' },
 ]
 
 const phone: Shot[] = [
   { view: 'dashboard', name: 'dash-phone-390.png', phone: true },
-  { view: 'dashboard', name: 'dash-phone-full-390.png', phone: true, fullPage: true },
-  { view: 'board', name: 'board-phone-390.png', phone: true },
-  { view: 'client', name: 'client-cabinet-phone-390.png', phone: true },
-  { view: 'client-waiting', name: 'client-waiting-phone-390.png', phone: true },
-  { view: 'client-preview', name: 'client-preview-phone-390.png', phone: true },
+  { view: 'queue', name: 'tickets-phone-390.png', phone: true },
+  { view: 'clients', name: 'clients-phone-390.png', phone: true },
 ]
 
 {
@@ -83,11 +78,9 @@ const phone: Shot[] = [
   page.setDefaultTimeout(30000)
   for (const shot of desktop) {
     await open(page, shot.view, shot.scheme, false)
-    if (shot.view === 'board') {
-      const card = page.locator('[data-board-card]').nth(2)
-      await card.scrollIntoViewIfNeeded()
-      await card.getByLabel('Ещё').click({ force: true })
-      await page.waitForSelector('[role="menu"][aria-label="Сменить статус"]', { timeout: 5000 })
+    if (shot.openAssignee) {
+      await page.getByRole('button', { name: 'Ответственный' }).click()
+      await page.waitForSelector('[role="listbox"][aria-label="Ответственный"]', { timeout: 5000 })
       await page.waitForTimeout(200)
     }
     await save(page, shot.name, shot.fullPage)
@@ -101,13 +94,6 @@ const phone: Shot[] = [
   page.setDefaultTimeout(30000)
   for (const shot of phone) {
     await open(page, shot.view, shot.scheme, true)
-    if (shot.view === 'board') {
-      const card = page.locator('[data-board-card]').first()
-      await card.scrollIntoViewIfNeeded()
-      await card.getByLabel('Ещё').click({ force: true })
-      await page.waitForSelector('[role="menu"][aria-label="Сменить статус"]', { timeout: 5000 })
-      await page.waitForTimeout(200)
-    }
     await save(page, shot.name, shot.fullPage)
   }
   await context.close()

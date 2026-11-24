@@ -53,7 +53,6 @@ function goalFor(model: ReturnType<typeof supportTemplateDemoModel>, view: strin
   if (view === 'client-waiting') return { ...base, who: 'petr' as const, screenId: kit.clientTicketScreenId, recordId: ticket('ОБР-1033')?.id, open: null }
   if (view === 'settings') return { ...base, who: 'marina' as const, screenId: kit.settingsScreenId, recordId: undefined, open: null }
   if (view === 'dashboard') return { ...base, who: 'anna' as const, screenId: kit.dashboardScreenId ?? kit.queueScreenId, recordId: undefined, open: null }
-  if (view === 'board') return { ...base, screenId: kit.boardScreenId ?? kit.queueScreenId, recordId: undefined, open: null }
   if (view === 'clients') return { ...base, screenId: kit.clientsScreenId, recordId: undefined, open: null }
   if (view === 'ticket' || view === 'note' || view === 'assign' || view === 'reply') return { ...base, screenId: kit.ticketScreenId, recordId: ticket('ОБР-1042')?.id, open: view === 'assign' ? 'assign' as const : view === 'reply' ? 'reply' as const : view === 'note' ? 'note' as const : null }
   return { ...base, screenId: kit.queueScreenId, recordId: undefined, open: null }
@@ -79,7 +78,8 @@ export function SupportDemo({ view = 'queue', bare = false, scheme, phone = fals
   useEffect(() => { setModel(supportTemplateDemoModel()) }, [])
   useEffect(() => {
     if (!model) return
-    const goal = goalFor(model, view)
+    const [baseView, ticketsView] = view.split(':')
+    const goal = goalFor(model, baseView || view)
     const actor = actorFor(goal.who)
     setWho(goal.who)
     setScreenId(goal.screenId)
@@ -87,6 +87,11 @@ export function SupportDemo({ view = 'queue', bare = false, scheme, phone = fals
     setOpen(goal.open)
     setPreviewClient(goal.previewClient)
     setPreviewMenuOpen(goal.previewMenuOpen)
+    if (ticketsView === 'hot' || ticketsView === 'mine' || ticketsView === 'unassigned' || ticketsView === 'waiting' || ticketsView === 'closed' || ticketsView === 'open') {
+      queueFocus.current = { view: ticketsView }
+    } else if ((baseView || view) === 'queue') {
+      queueFocus.current = { view: 'open' }
+    }
     setRows(goal.who === 'irina' || goal.who === 'petr' ? projectSupportRows(model.app, actor, model.rows) : model.rows)
   }, [model, view])
   if (!model?.app.support || !screenId) return <div data-support-root data-support-screen="loading" />

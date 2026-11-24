@@ -117,7 +117,7 @@ export function buildSupportV2App(built: BuiltTemplate, meta: { id: string; work
   const ids = {
     queueScreenId: newId('screen'), ticketScreenId: newId('screen'), clientListScreenId: newId('screen'),
     clientTicketScreenId: newId('screen'), clientsScreenId: newId('screen'), settingsScreenId: newId('screen'),
-    dashboardScreenId: newId('screen'), boardScreenId: newId('screen'),
+    dashboardScreenId: newId('screen'),
     createFormId: newId('component'), operatorCreateFormId: newId('component'), replyFormId: newId('component'),
     noteFormId: newId('component'), assignFormId: newId('component'), categoryFormId: newId('component'),
   }
@@ -229,10 +229,10 @@ export function buildSupportV2App(built: BuiltTemplate, meta: { id: string; work
     nodes.push({ id, name, type: 'collection', sourceId, layout: 'list', titleFieldId, subtitleFieldId: null, itemIds: [], visibleTo: null, visibleWhen: null, events: { itemPress } })
     return id
   }
-  const queueTickets = collection('Очередь', tickets.id, ticket.subject, openTicket, ticket.updatedAt)
-  const queueClients = collection('Клиенты очереди', clients.id, client.name, null, client.name)
-  const queueOperators = collection('Операторы очереди', operators.id, operator.name, null, operator.name)
-  const queueCategories = collection('Категории очереди', categories.id, category.name, null, category.name)
+  const queueTickets = collection('Тикеты', tickets.id, ticket.subject, openTicket, ticket.updatedAt)
+  const queueClients = collection('Клиенты тикетов', clients.id, client.name, null, client.name)
+  const queueOperators = collection('Операторы тикетов', operators.id, operator.name, null, operator.name)
+  const queueCategories = collection('Категории тикетов', categories.id, category.name, null, category.name)
   const ticketReplies = collection('Ответы обращения', replies.id, reply.text, null, reply.at, byTicket(reply.ticket), tickets.id)
   const ticketNotes = collection('Заметки обращения', notes.id, note.text, null, note.at, byTicket(note.ticket), tickets.id)
   const ticketOperators = collection('Операторы карточки', operators.id, operator.name, null, operator.name)
@@ -246,11 +246,8 @@ export function buildSupportV2App(built: BuiltTemplate, meta: { id: string; work
   const directory = collection('Справочник клиентов', clients.id, client.name, null, client.name)
   const settingsCategories = collection('Категории настроек', categories.id, category.name, null, category.name)
   const settingsOperators = collection('Операторы настроек', operators.id, operator.name, null, operator.name)
-  const queueEvents = collection('События очереди', events.id, event.kind, null, event.at)
-  const queueNorms = collection('Нормативы очереди', norms.id, slaFields.riskMinutes, null, null)
-  const boardTickets = collection('Обращения доски', tickets.id, ticket.subject, openTicket, ticket.updatedAt)
-  const boardEvents = collection('События доски', events.id, event.kind, null, event.at)
-  const boardNorms = collection('Нормативы доски', norms.id, slaFields.riskMinutes, null, null)
+  const queueEvents = collection('События тикетов', events.id, event.kind, null, event.at)
+  const queueNorms = collection('Нормативы тикетов', norms.id, slaFields.riskMinutes, null, null)
   const dashEvents = collection('События главной', events.id, event.kind, null, event.at)
   const dashNorms = collection('Нормативы главной', norms.id, slaFields.riskMinutes, null, null)
   const dashTickets = collection('Обращения главной', tickets.id, ticket.subject, openTicket, ticket.updatedAt)
@@ -285,12 +282,11 @@ export function buildSupportV2App(built: BuiltTemplate, meta: { id: string; work
     },
     screens: [
       screen(ids.dashboardScreenId, 'Главная', 'Главная', 'home', desk, null, [dashTickets, dashEvents, dashNorms], true),
-      screen(ids.queueScreenId, 'Очередь', 'Очередь', 'clipboard', desk, null, [queueTickets, queueClients, queueOperators, queueCategories, queueEvents, queueNorms, ids.operatorCreateFormId], true),
-      screen(ids.boardScreenId, 'Доска', 'Доска', 'apps', desk, null, [boardTickets, boardEvents, boardNorms], true),
+      screen(ids.queueScreenId, 'Тикеты', 'Тикеты', 'clipboard', desk, null, [queueTickets, queueClients, queueOperators, queueCategories, queueEvents, queueNorms, ids.operatorCreateFormId], true),
       screen(ids.ticketScreenId, 'Обращение', undefined, 'clipboard', desk, tickets.id, [ticketReplies, ticketNotes, ticketOperators, ticketCategories, ticketClients, ticketEvents, ids.replyFormId, ids.noteFormId, ids.assignFormId], false),
       screen(ids.clientsScreenId, 'Клиенты', 'Клиенты', 'users', desk, null, [directory], true),
-      screen(ids.settingsScreenId, 'Настройки', 'Настройки', 'settings', owner, null, [settingsCategories, settingsOperators, settingsNorms, ids.categoryFormId], true),
       screen(ids.clientListScreenId, 'Мои обращения', 'Кабинет клиента', 'clipboard', { kind: 'roles', roleIds: ['owner', 'staff', 'client'] }, null, [clientTickets, clientCategories, ids.createFormId], true),
+      screen(ids.settingsScreenId, 'Настройки', 'Настройки', 'settings', owner, null, [settingsCategories, settingsOperators, settingsNorms, ids.categoryFormId], true),
       screen(ids.clientTicketScreenId, 'Моё обращение', undefined, 'clipboard', clientRole, tickets.id, [clientReplies, clientOperators, clientTicketCategories], false),
     ],
     nodes, sources, workflows,

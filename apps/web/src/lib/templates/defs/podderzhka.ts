@@ -33,7 +33,7 @@ export const podderzhka: TemplateDef = {
       icon: 'users',
       primary: 'name',
       fields: [
-        { key: 'name', name: 'Клиент', type: 'text', help: 'Имя, как его видят в очереди. Имена из примера можно заменить своими.' },
+        { key: 'name', name: 'Клиент', type: 'text', help: 'Имя, как его видят в списке тикетов. Имена из примера можно заменить своими.' },
         { key: 'email', name: 'Почта', type: 'email', help: 'Почта, с которой клиент входит. Он видит только обращения с этой почтой.' },
         { key: 'phone', name: 'Телефон', type: 'phone', help: 'Телефон для звонка. Само приложение никуда не звонит и не пишет.' },
         { key: 'company', name: 'Организация', type: 'text', help: 'Компания или проект клиента.' },
@@ -56,7 +56,7 @@ export const podderzhka: TemplateDef = {
         { key: 'name', name: 'Оператор', type: 'text', help: 'Имя в переписке и в списке обращений.' },
         { key: 'email', name: 'Почта', type: 'email', help: 'Почта входа. Доступ даётся приглашением в настройках приложения, это поле само доступ не открывает. Адреса-примеры замените настоящими.' },
         { key: 'phone', name: 'Телефон', type: 'phone', help: 'Телефон для коллег. Клиенту не показывается.' },
-        { key: 'photo', name: 'Фото', type: 'image', help: 'Портрет на главной, в очереди, на доске и в карточке обращения.' },
+        { key: 'photo', name: 'Фото', type: 'image', help: 'Портрет на главной, в тикетах и в карточке обращения.' },
         {
           key: 'role', name: 'Роль в службе', type: 'single_select',
           choices: [{ name: 'Руководитель', color: 'indigo' }, { name: 'Оператор', color: 'green' }],
@@ -84,7 +84,7 @@ export const podderzhka: TemplateDef = {
       icon: 'tag',
       primary: 'name',
       fields: [
-        { key: 'name', name: 'Категория', type: 'text', help: 'Как обращение группируется в очереди. Список меняется в настройках службы.' },
+        { key: 'name', name: 'Категория', type: 'text', help: 'Как обращение группируется в тикетах. Список меняется в настройках службы.' },
         { key: 'description', name: 'Пояснение', type: 'long_text', help: 'Короткая подсказка при выборе категории. Это не база знаний.' },
         { key: 'active', name: 'Доступна', type: 'checkbox', help: 'Снимите отметку, чтобы категорию нельзя было выбрать в новом обращении. Старые обращения сохраняют её.' },
       ],
@@ -121,7 +121,7 @@ export const podderzhka: TemplateDef = {
             { name: 'Срочный', color: 'red' },
           ],
           defaultChoice: 'Обычный',
-          help: 'Насколько обращение срочное для очереди. Само по себе уведомление не отправляет.',
+          help: 'Насколько обращение срочное для тикетов. Само по себе уведомление не отправляет.',
         },
         { key: 'category', name: 'Категория', type: 'relation', relationTable: 'categories', allowMultiple: false, help: 'Тема из справочника категорий.' },
         {

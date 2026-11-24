@@ -3,12 +3,12 @@ import { createContext, useContext, useEffect, useId, useRef, useState } from 'r
 import { instantToWallClock } from '@tableapp/schema'
 import type { AppV2, AppV2Node, AppV2Record } from '@tableapp/schema/app-v2'
 import { savePublishedSupportAction } from '@/app/support-actions'
-import { deadlineTime, filterTickets, isOpenStatus, isOverdue, operatorTransitions, supportAuthorKind, supportAuthorLabel, supportDeadlineInstant, supportDeadlineParts, type SupportFilter, type SupportListItem, type SupportQueueFocus } from '@/lib/support-logic'
+import { deadlineTime, filterTickets, isOpenStatus, isOverdue, isSupportStatus, operatorTransitions, supportAuthorKind, supportAuthorLabel, supportDeadlineInstant, supportDeadlineParts, supportFocusToFilter, supportStatusesForView, supportTicketViewId, supportTicketViewScope, SUPPORT_TICKET_VIEWS, type SupportFilter, type SupportListItem, type SupportQueueFocus, type SupportTicketViewId } from '@/lib/support-logic'
 import { applySupportChange, isSupportDesk, supportStatusName, type SupportChange } from '@/lib/support-persist'
 import { AppFrameDeviceContext } from './app-frame'
 import { AppDialog } from './app-dialog'
-import { supportSlaLabel } from '@/lib/support-sla'
-import { SupportBoard, SupportDashboard, SupportPerson, SupportSlaSettings, slaFacts, slaWhen } from './support-desk'
+import { supportQueueMatch, supportSlaLabel } from '@/lib/support-sla'
+import { SupportDashboard, SupportPerson, SupportSlaSettings, TicketStatusMenu, slaFacts, slaWhen } from './support-desk'
 import { DateMenu } from './booking-calendar'
 import { DetailCardShell, DetailSection, ListScreenShell, ShellSearchField } from './layout-shell'
 import shell from './layout-shell.module.css'
@@ -64,7 +64,45 @@ const PLACEHOLDER: AppV2Node = { id: 'support_placeholder', name: 'placeholder',
 const publishedHolder: { current: ReturnType<typeof usePublishedV2> } = { current: null }
 const textOf = (value: unknown) => Array.isArray(value) ? '' : value == null ? '' : String(value)
 const firstId = (value: unknown) => Array.isArray(value) ? value.find((item): item is string => typeof item === 'string') ?? '' : ''
-const EMPTY_FILTER: SupportFilter = { search: '', status: '', priority: '', ageBucket: '', mine: false, scope: 'all' }
+const EMPTY_FILTER: SupportFilter = { search: '', status: '', priority: '', ageBucket: '', assigneeEmail: '', mine: false, scope: 'open', view: 'open' }
+
+const TICKETS_URL_PARAM = 'tickets'
+
+function readTicketsUrl(): Partial<SupportFilter> {
+  if (typeof window === 'undefined') return {}
+  const params = new URL(window.location.href).searchParams
+  const view = supportTicketViewId(params.get(TICKETS_URL_PARAM))
+  const assignee = params.get('assignee') ?? ''
+  const priority = params.get('priority') ?? ''
+  const status = params.get('status') ?? ''
+  const ageBucket = params.get('age') ?? ''
+  return {
+    view,
+    scope: supportTicketViewScope(view),
+    assigneeEmail: assignee,
+    priority,
+    status,
+    ageBucket: ageBucket === 'lt4h' || ageBucket === '4to12h' || ageBucket === '12to24h' || ageBucket === '1to3d' || ageBucket === 'gt3d' ? ageBucket : '',
+    mine: false,
+  }
+}
+
+function writeTicketsUrl(filter: SupportFilter) {
+  if (typeof window === 'undefined') return
+  const url = new URL(window.location.href)
+  const view = filter.view ?? 'open'
+  if (view === 'open') url.searchParams.delete(TICKETS_URL_PARAM)
+  else url.searchParams.set(TICKETS_URL_PARAM, view)
+  if (filter.assigneeEmail) url.searchParams.set('assignee', filter.assigneeEmail)
+  else url.searchParams.delete('assignee')
+  if (filter.priority) url.searchParams.set('priority', filter.priority)
+  else url.searchParams.delete('priority')
+  if (filter.status) url.searchParams.set('status', filter.status)
+  else url.searchParams.delete('status')
+  if (filter.ageBucket) url.searchParams.set('age', filter.ageBucket)
+  else url.searchParams.delete('age')
+  window.history.replaceState(window.history.state, '', url)
+}
 
 function collectionOn(app: AppV2, screenId: string, tableId: string) {
   const screen = app.screens.find(item => item.id === screenId)
@@ -126,10 +164,6 @@ function QueuePriority({ name }: { name: string }) {
   return <PriorityBadge name={name} />
 }
 
-function QueueDeadline({ value, overdue }: { value: unknown; overdue: boolean }) {
-  return <span className={css.deadline} data-overdue={overdue || undefined}>{formatWhen(value)}{overdue ? <span className={css.late}>Просрочено</span> : null}</span>
-}
-
 function formatWhen(value: unknown, empty = 'Срок не задан') {
   if (typeof value !== 'string' || !value) return empty
   const wall = instantToWallClock(value, 'Europe/Moscow')
@@ -179,7 +213,6 @@ function useSupportNow(demoNow: number | undefined, asOf: number | undefined) {
 export function SupportScreen(props: AppV2RendererProps) {
   const kit = props.app.support
   const demo = useContext(SupportRowsContext)
-  const device = useContext(AppFrameDeviceContext)
   const published = usePublishedV2()
   const now = useSupportNow(demo?.now, published?.asOf)
   publishedHolder.current = published
@@ -204,7 +237,7 @@ export function SupportScreen(props: AppV2RendererProps) {
   const categoriesPage = useBuilderV2NodeData(props.app, categoriesNode ?? PLACEHOLDER, live && Boolean(categoriesNode), '', scope)
   const eventsPage = useBuilderV2NodeData(props.app, eventsNode ?? PLACEHOLDER, live && Boolean(eventsNode), '', scope)
   const normsPage = useBuilderV2NodeData(props.app, normsNode ?? PLACEHOLDER, live && Boolean(normsNode), '', scope)
-  const screens = kit ? [kit.queueScreenId, kit.ticketScreenId, kit.clientListScreenId, kit.clientTicketScreenId, kit.clientsScreenId, kit.settingsScreenId, kit.dashboardScreenId, kit.boardScreenId].filter((id): id is string => Boolean(id)) : []
+  const screens = kit ? [kit.queueScreenId, kit.ticketScreenId, kit.clientListScreenId, kit.clientTicketScreenId, kit.clientsScreenId, kit.settingsScreenId, kit.dashboardScreenId].filter((id): id is string => Boolean(id)) : []
   if (!kit || !screens.includes(screenId)) return null
   const pages = [ticketsPage, repliesPage, notesPage, clientsPage, operatorsPage, categoriesPage, eventsPage, normsPage]
   const rows = demo?.rows ?? pages.flatMap(page => page.page?.rows ?? [])
@@ -219,7 +252,6 @@ export function SupportScreen(props: AppV2RendererProps) {
     props.onNavigate?.(kit.queueScreenId)
   }
   if (kit.dashboardScreenId && screenId === kit.dashboardScreenId) return <SupportDashboard {...shared} actorEmail={props.actor.email ?? ''} onOpenQueue={openQueue} onOpenTicket={id => props.onNavigate?.(kit.ticketScreenId, id)} onStatus={async () => ({ ok: false })} onSaveSla={async () => ({ ok: false })} />
-  if (kit.boardScreenId && screenId === kit.boardScreenId) return <SupportBoard {...shared} phone={device === 'phone'} actorEmail={props.actor.email ?? ''} onOpenQueue={openQueue} onOpenTicket={id => props.onNavigate?.(kit.ticketScreenId, id)} onStatus={async (id, status) => commit(shared, { kind: 'status', recordId: id, statusId: statusId(shared, status) })} onSaveSla={async () => ({ ok: false })} />
   if (screenId === kit.queueScreenId || screenId === kit.clientListScreenId) return <TicketList {...shared} />
   if (screenId === kit.ticketScreenId || screenId === kit.clientTicketScreenId) return <TicketCard {...shared} />
   if (screenId === kit.clientsScreenId) return <ClientDirectory {...shared} />
@@ -338,6 +370,45 @@ function MessageAvatar({ kind, author }: { kind: 'operator' | 'client' | 'note';
   return <SupportPerson name={author} size={28} />
 }
 
+function AssigneeFilter(props: {
+  value: string
+  operators: { email: string; name: string }[]
+  onChange: (email: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const root = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const outside = (event: PointerEvent) => { if (event.target instanceof Node && !root.current?.contains(event.target)) setOpen(false) }
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') setOpen(false) }
+    document.addEventListener('pointerdown', outside)
+    document.addEventListener('keydown', escape)
+    return () => { document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape) }
+  }, [open])
+  const selected = props.value === '__none__'
+    ? { name: 'Не назначен', email: '__none__' }
+    : props.operators.find(item => item.email === props.value)
+  const label = selected?.name ?? 'Ответственный'
+  return <div className={css.assigneeFilter} ref={root} data-assignee-filter>
+    <button type="button" className={css.assigneeTrigger} aria-expanded={open} aria-haspopup="listbox" aria-label="Ответственный" onClick={() => setOpen(value => !value)}>
+      {selected && selected.email !== '__none__' ? <SupportPerson name={selected.name} size={22} /> : <span className={css.avatar} data-size="sm" data-client aria-hidden="true"><ProtoIcon name="user" size={14} /></span>}
+      <span>{label}</span>
+      <ProtoIcon name="down" size={14} />
+    </button>
+    {open ? <div className={css.assigneePanel} role="listbox" aria-label="Ответственный">
+      <button type="button" role="option" aria-selected={!props.value} onClick={() => { props.onChange(''); setOpen(false) }}>Все ответственные</button>
+      <button type="button" role="option" aria-selected={props.value === '__none__'} onClick={() => { props.onChange('__none__'); setOpen(false) }}>
+        <span className={css.avatar} data-size="sm" data-client aria-hidden="true"><ProtoIcon name="user" size={14} /></span>
+        Не назначен
+      </button>
+      {props.operators.map(operator => <button key={operator.email} type="button" role="option" aria-selected={operator.email === props.value} onClick={() => { props.onChange(operator.email); setOpen(false) }}>
+        <SupportPerson name={operator.name} size={22} />
+        {operator.name}
+      </button>)}
+    </div> : null}
+  </div>
+}
+
 function TicketList(props: ScreenProps) {
   const desk = isSupportDesk(props.actor)
   const clientCabinet = props.screenId === props.kit.clientListScreenId
@@ -346,12 +417,15 @@ function TicketList(props: ScreenProps) {
   const bundle = useContext(SupportRowsContext)
   const focus = bundle?.queueFocus
   const [filter, setFilter] = useState<SupportFilter>(() => {
+    const clientList = props.screenId === props.kit.clientListScreenId
     const next = focus?.current
     if (focus) focus.current = null
-    if (!next) return EMPTY_FILTER
-    return { ...EMPTY_FILTER, scope: next.scope, priority: next.priority ?? '', ageBucket: next.ageBucket ?? '' }
+    if (clientList) return { ...EMPTY_FILTER, scope: 'all', view: undefined }
+    if (next) return { ...EMPTY_FILTER, ...supportFocusToFilter(next) }
+    return { ...EMPTY_FILTER, ...readTicketsUrl() }
   })
   const [open, setOpen] = useState<SupportOpen>(bundle?.open ?? null)
+  const [statusError, setStatusError] = useState('')
   const allTickets = ticketItems(props)
   const clients = props.of(props.kit.clientsTableId).map(row => {
     const email = textOf(row.values[props.kit.client.email]).trim().toLowerCase()
@@ -375,14 +449,41 @@ function TicketList(props: ScreenProps) {
   })
   const queueDesk = desk && !clientCabinet
   const clientView = clientCabinet
-  const counts = {
-    open: items.filter(item => item.sla?.known ? item.sla.open : isOpenStatus(item.status)).length,
-    unassigned: items.filter(item => (item.sla?.known ? item.sla.open : isOpenStatus(item.status)) && !item.assigneeEmail).length,
-    risk: items.filter(item => item.sla?.currentRisk).length,
-    overdue: items.filter(item => item.sla?.known ? item.sla.currentOverdue : isOverdue(item.status, item.deadline, props.now)).length,
+  const view = (filter.view ?? 'open') as SupportTicketViewId
+  const actorEmail = props.actor.email ?? ''
+  const viewCounts = Object.fromEntries(SUPPORT_TICKET_VIEWS.map(item => {
+    const count = items.filter(ticket => {
+      const sla = ticket.sla
+      return supportQueueMatch({
+        status: ticket.status,
+        assigneeEmail: ticket.assigneeEmail,
+        sla: sla ?? { known: false, priority: null, status: ticket.status, paused: false, open: isOpenStatus(ticket.status), first: { known: false, met: false, paused: false, overdue: false, risk: false, dueAt: null, remainingMs: null }, resolution: { known: false, met: false, paused: false, overdue: false, risk: false, dueAt: null, remainingMs: null }, breaches: [], firstCloses: [], resolutionCloses: [], currentOverdue: false, currentRisk: false, createdAt: null },
+        manualOverdue: isOverdue(ticket.status, ticket.deadline, props.now),
+      }, item.scope, actorEmail)
+    }).length
+    return [item.id, count]
+  })) as Record<SupportTicketViewId, number>
+  useEffect(() => {
+    if (!queueDesk) return
+    writeTicketsUrl(filter)
+  }, [queueDesk, filter])
+  const updateFilter = (patch: Partial<SupportFilter> | ((current: SupportFilter) => SupportFilter)) => {
+    setFilter(current => typeof patch === 'function' ? patch(current) : { ...current, ...patch })
   }
-  const visible = filterTickets(items, filter, props.actor.email ?? '', props.now)
+  const setView = (next: SupportTicketViewId) => {
+    updateFilter(current => ({
+      ...current,
+      view: next,
+      scope: supportTicketViewScope(next),
+      mine: false,
+      status: supportStatusesForView(next).includes(current.status) ? current.status : '',
+    }))
+  }
+  const visible = filterTickets(items, filter, actorEmail, props.now)
     .sort((a, b) => {
+      if (view === 'hot') {
+        return (deadlineTime(a.deadline) ?? Number.MAX_SAFE_INTEGER) - (deadlineTime(b.deadline) ?? Number.MAX_SAFE_INTEGER)
+      }
       const openScore = Number(isOpenStatus(b.status)) - Number(isOpenStatus(a.status))
       if (openScore) return openScore
       return (deadlineTime(a.deadline) ?? Number.MAX_SAFE_INTEGER) - (deadlineTime(b.deadline) ?? Number.MAX_SAFE_INTEGER)
@@ -391,16 +492,29 @@ function TicketList(props: ScreenProps) {
   const doneItems = clientView ? visible.filter(item => !isOpenStatus(item.status)) : []
   const backTo = queueDesk ? props.kit.queueScreenId : props.kit.clientListScreenId
   const openTicket = (id: string) => props.onNavigate?.(queueDesk ? props.kit.ticketScreenId : props.kit.clientTicketScreenId, id)
+  const operators = props.of(props.kit.operatorsTableId)
+    .filter(row => row.values[props.kit.operator.active] === props.kit.activeChoiceId)
+    .map(row => ({
+      email: textOf(row.values[props.kit.operator.email]).trim().toLowerCase(),
+      name: textOf(row.values[props.kit.operator.name]) || 'Без имени',
+    }))
+    .filter(item => item.email)
+  const statusOptions = supportStatusesForView(view)
+  const changeStatus = async (id: string, status: string) => {
+    const result = await commit(props, { kind: 'status', recordId: id, statusId: statusId(props, status) })
+    setStatusError(result.ok ? '' : result.error)
+  }
+  const filterHint = [filter.status, filter.priority, filter.assigneeEmail === '__none__' ? 'не назначен' : filter.assigneeEmail ? operators.find(item => item.email === filter.assigneeEmail)?.name : '', filter.ageBucket].filter(Boolean).join(', ')
   const renderClientGroup = (title: string, list: SupportListItem[]) => list.length ? <section className={css.clientGroup} aria-label={title}>
     <h2 className={css.clientGroupTitle}>{title} ({list.length})</h2>
     <ul className={css.cards} data-client-cards>
       {list.map(item => <li key={item.id}><ClientTicketButton item={item} now={props.now} onOpen={() => openTicket(item.id)} /></li>)}
     </ul>
   </section> : null
-  return <div className={css.root} data-support-root data-support-screen={queueDesk ? 'queue' : 'client'} data-preview={previewMode || undefined}>
+  return <div className={css.root} data-support-root data-support-screen={queueDesk ? 'queue' : 'client'} data-preview={previewMode || undefined} data-tickets-view={queueDesk ? view : undefined}>
     <ListScreenShell
-      title={queueDesk ? 'Очередь обращений' : 'Мои обращения'}
-      meta={queueDesk ? 'Очередь службы поддержки.' : previewMode ? 'Просмотр кабинета клиента. Только чтение.' : 'Ваши обращения и ответы.'}
+      title={queueDesk ? 'Тикеты' : 'Мои обращения'}
+      meta={queueDesk ? 'Все обращения службы поддержки.' : previewMode ? 'Просмотр кабинета клиента. Только чтение.' : 'Ваши обращения и ответы.'}
       actions={!previewMode ? <button type="button" className={css.primary} onClick={() => setOpen('create')}>{queueDesk ? 'Новое обращение' : 'Написать обращение'}</button> : undefined}
     >
       <div className={css.stack}>
@@ -411,39 +525,43 @@ function TicketList(props: ScreenProps) {
           </div>
           <ClientPreviewMenu clients={clients} value={previewEmail} open={previewOpen} onOpen={setPreviewOpen} onChange={setPreviewEmail} />
         </div> : null}
-        {queueDesk ? <fieldset className={css.summary} aria-label="Сводка обращений">
-          <legend className={css.quiet}>Сводка</legend>
-          {([['open', counts.open, 'Открытые'], ['unassigned', counts.unassigned, 'Без ответственного'], ['risk', counts.risk, 'Скоро срок'], ['overdue', counts.overdue, 'Просрочены']] as const).map(([scope, value, label]) => <button key={scope} type="button" aria-pressed={filter.scope === scope} onClick={() => setFilter(current => ({ ...current, scope: current.scope === scope ? 'all' : scope }))}><strong>{value}</strong><span>{label}</span></button>)}
-        </fieldset> : null}
+        {queueDesk ? <div className={css.viewTabsWrap} data-view-tabs>
+          <div className={css.viewTabs} role="tablist" aria-label="Представления тикетов">
+            {SUPPORT_TICKET_VIEWS.map(item => <button key={item.id} type="button" role="tab" className={css.viewTab} aria-selected={view === item.id} onClick={() => setView(item.id)}>
+              <span>{item.label}</span>
+              <em className={css.viewCount}>{viewCounts[item.id] ?? 0}</em>
+            </button>)}
+          </div>
+        </div> : null}
         {queueDesk ? <details className={css.filterDrawer} open={device !== 'phone'}>
-          <summary>Фильтры{filter.scope !== 'all' || filter.status || filter.priority || filter.ageBucket || filter.mine ? ` · ${[filter.scope !== 'all' ? filter.scope : '', filter.status, filter.priority, filter.ageBucket, filter.mine ? 'мои' : ''].filter(Boolean).join(', ')}` : ''}</summary>
+          <summary>Фильтры{filterHint ? ` · ${filterHint}` : ''}</summary>
           <div>
         <div className={css.filters}>
-          <ShellSearchField value={filter.search} onChange={search => setFilter(current => ({ ...current, search }))} label="Поиск обращений" placeholder="Тема, клиент или номер" />
-          <button type="button" className={css.mine} aria-pressed={filter.mine} onClick={() => setFilter(current => ({ ...current, mine: !current.mine }))}>Мои</button>
+          <ShellSearchField value={filter.search} onChange={search => updateFilter({ search })} label="Поиск обращений" placeholder="Тема, клиент или номер" />
+          <AssigneeFilter value={filter.assigneeEmail ?? ''} operators={operators} onChange={assigneeEmail => updateFilter({ assigneeEmail })} />
         </div>
-        <div className={css.chips} role="toolbar" aria-label="Статус">
-          <button type="button" className={css.chip} aria-pressed={filter.status === ''} onClick={() => setFilter(current => ({ ...current, status: '' }))}>Все статусы</button>
-          {['Новое', 'В работе', 'Ждём клиента', 'Решено', 'Закрыто'].map(status => <button key={status} type="button" className={css.chip} aria-pressed={filter.status === status} onClick={() => setFilter(current => ({ ...current, status: current.status === status ? '' : status }))}>{status}</button>)}
-        </div>
+        {statusOptions.length > 1 ? <div className={css.chips} role="toolbar" aria-label="Статус">
+          <button type="button" className={css.chip} aria-pressed={filter.status === ''} onClick={() => updateFilter({ status: '' })}>Все статусы</button>
+          {statusOptions.map(status => <button key={status} type="button" className={css.chip} aria-pressed={filter.status === status} onClick={() => updateFilter(current => ({ ...current, status: current.status === status ? '' : status }))}>{status}</button>)}
+        </div> : null}
         <div className={css.chips} role="toolbar" aria-label="Приоритет">
-          {['Срочный', 'Высокий', 'Обычный', 'Низкий'].map(priority => <button key={priority} type="button" className={`${css.chip} ${css.priorityChip}`} data-tone={priorityTone(priority)} aria-pressed={filter.priority === priority} onClick={() => setFilter(current => ({ ...current, priority: current.priority === priority ? '' : priority }))}>{priority}</button>)}
+          {['Срочный', 'Высокий', 'Обычный', 'Низкий'].map(priority => <button key={priority} type="button" className={`${css.chip} ${css.priorityChip}`} data-tone={priorityTone(priority)} aria-pressed={filter.priority === priority} onClick={() => updateFilter(current => ({ ...current, priority: current.priority === priority ? '' : priority }))}>{priority}</button>)}
         </div>
-        {filter.ageBucket ? <div className={css.chips} role="status"><button type="button" className={css.chip} aria-pressed onClick={() => setFilter(current => ({ ...current, ageBucket: '' }))}>Возраст: {filter.ageBucket} · сбросить</button></div> : null}
+        {filter.ageBucket ? <div className={css.chips} role="status"><button type="button" className={css.chip} aria-pressed onClick={() => updateFilter({ ageBucket: '' })}>Возраст: {filter.ageBucket} · сбросить</button></div> : null}
           </div>
         </details> : null}
         {props.loading ? <p className={css.status} role="status">Загружаем обращения…</p> : null}
-        {props.error ? <div className={css.status} role="alert"><p className={css.error}>{props.error}</p><button type="button" onClick={props.reload}>Повторить</button></div> : null}
-        {!props.loading && !props.error && !visible.length ? <div className={css.empty}><ProtoIcon name="clipboard" size={28} /><p>{items.length ? 'Нет обращений с такими условиями.' : queueDesk ? 'Очередь пуста. Новое обращение появится здесь.' : previewMode ? 'У этого клиента пока нет обращений.' : 'У вас пока нет обращений.'}</p>{items.length && queueDesk ? <button type="button" onClick={() => setFilter(EMPTY_FILTER)}>Сбросить фильтры</button> : !previewMode ? <button type="button" onClick={() => setOpen('create')}>{queueDesk ? 'Создать обращение' : 'Написать обращение'}</button> : null}</div> : null}
+        {props.error || statusError ? <div className={css.status} role="alert"><p className={css.error}>{props.error || statusError}</p>{props.error ? <button type="button" onClick={props.reload}>Повторить</button> : null}</div> : null}
+        {!props.loading && !props.error && !visible.length ? <div className={css.empty}><ProtoIcon name="clipboard" size={28} /><p>{items.length ? 'Нет обращений с такими условиями.' : queueDesk ? 'Тикетов пока нет. Новое обращение появится здесь.' : previewMode ? 'У этого клиента пока нет обращений.' : 'У вас пока нет обращений.'}</p>{items.length && queueDesk ? <button type="button" onClick={() => setFilter(EMPTY_FILTER)}>Сбросить фильтры</button> : !previewMode ? <button type="button" onClick={() => setOpen('create')}>{queueDesk ? 'Создать обращение' : 'Написать обращение'}</button> : null}</div> : null}
         {clientView && visible.length ? <>
           {renderClientGroup('Открытые', openItems)}
           {renderClientGroup('Завершённые', doneItems)}
         </> : null}
-        {queueDesk && visible.length ? <><ul className={css.cards}>
-          {visible.map(item => <li key={item.id}><TicketButton item={item} now={props.now} showAssignee onOpen={() => openTicket(item.id)} /></li>)}
+        {queueDesk && visible.length ? <><ul className={css.cards} data-ticket-cards>
+          {visible.map(item => <li key={item.id}><TicketButton item={item} now={props.now} showAssignee onOpen={() => openTicket(item.id)} onStatus={next => void changeStatus(item.id, next)} /></li>)}
         </ul>
         <div className={css.tableWrap}>
-          <table className={css.table} data-columns={6}>
+          <table className={css.table} data-columns={7}>
             <caption className={css.quiet}>Список обращений</caption>
             <colgroup>
               <col className={css.subjectCol} />
@@ -452,8 +570,9 @@ function TicketList(props: ScreenProps) {
               <col className={css.priorityCol} />
               <col className={css.whenCol} />
               <col className={css.ownerCol} />
+              <col className={css.actionsCol} />
             </colgroup>
-            <thead><tr><th>Обращение</th><th>Клиент</th><th>Статус</th><th>Приоритет</th><th>Срок</th><th>Ответственный</th></tr></thead>
+            <thead><tr><th>Обращение</th><th>Клиент</th><th>Статус</th><th>Приоритет</th><th>Срок</th><th>Ответственный</th><th><span className={css.srOnly}>Действия</span></th></tr></thead>
             <tbody>
               {visible.map(item => {
                 const overdue = isOverdue(item.status, item.deadline, props.now)
@@ -464,6 +583,7 @@ function TicketList(props: ScreenProps) {
                   <td><QueuePriority name={item.priority} /></td>
                   <td><span className={css.deadline}>{item.sla?.known && (item.sla.first.dueAt || item.sla.resolution.dueAt) ? slaWhen(item.sla.first.dueAt && !item.sla.first.met ? item.sla.first.dueAt : item.sla.resolution.dueAt) : formatWhen(item.deadline)}{item.sla?.known && supportSlaLabel(item.sla) ? <span className={item.sla.currentOverdue ? css.late : css.quiet}>{supportSlaLabel(item.sla)}</span> : overdue ? <span className={css.late}>Просрочено</span> : null}</span></td>
                   <td>{item.assigneeName ? <span className={css.personInline}><SupportPerson name={item.assigneeName} size={24} /><span>{item.assigneeName}</span></span> : <span className={css.person} data-empty>Не назначен</span>}</td>
+                  <td className={css.rowActions}>{isSupportStatus(item.status) ? <TicketStatusMenu status={item.status} onPick={next => void changeStatus(item.id, next)} /> : null}</td>
                 </tr>
               })}
             </tbody>
@@ -491,20 +611,26 @@ function ClientTicketButton({ item, now, onOpen }: { item: SupportListItem; now:
   </button>
 }
 
-function TicketButton({ item, now, onOpen, showAssignee = true }: { item: SupportListItem; now: number; onOpen: () => void; showAssignee?: boolean }) {
+function TicketButton({ item, now, onOpen, showAssignee = true, onStatus }: { item: SupportListItem; now: number; onOpen: () => void; showAssignee?: boolean; onStatus?: (status: string) => void }) {
   const overdue = isOverdue(item.status, item.deadline, now)
-  return <button type="button" className={css.card} onClick={onOpen}>
-    <span className={css.subject}>{item.subject || 'Без темы'}</span>
-    {item.number ? <span className={css.number}>{item.number}</span> : null}
-    <span className={css.quiet}>{item.clientName || 'Клиент не указан'}{item.category ? ` · ${item.category}` : ''}</span>
-    <span className={css.cardFacts}><QueueStatus name={item.status} /><QueuePriority name={item.priority} /></span>
-    <span className={css.meta}>
-      {showAssignee ? (item.assigneeName ? <span className={css.personInline}><SupportPerson name={item.assigneeName} size={20} /><span>{item.assigneeName}</span></span> : 'Не назначен') : null}
-      {showAssignee ? ' · ' : null}
-      {item.sla?.known && (item.sla.first.dueAt || item.sla.resolution.dueAt) ? slaWhen(item.sla.first.dueAt && !item.sla.first.met ? item.sla.first.dueAt : item.sla.resolution.dueAt) : formatWhen(item.deadline)}
-      {item.sla?.known && supportSlaLabel(item.sla) ? <span className={item.sla.currentOverdue ? css.late : css.quiet}>{supportSlaLabel(item.sla)}</span> : overdue ? <span className={css.late}>Просрочено</span> : null}
-    </span>
-  </button>
+  const deadline = item.sla?.known && (item.sla.first.dueAt || item.sla.resolution.dueAt) ? slaWhen(item.sla.first.dueAt && !item.sla.first.met ? item.sla.first.dueAt : item.sla.resolution.dueAt) : formatWhen(item.deadline)
+  return <div className={css.ticketCard} data-ticket-card>
+    <button type="button" className={css.card} onClick={onOpen}>
+      <span className={css.ticketCardTop}>
+        <span className={css.ticketCardCopy}>
+          <span className={css.subject}>{item.subject || 'Без темы'}</span>
+          {item.number ? <span className={css.number}>{item.number}</span> : null}
+        </span>
+        {showAssignee ? (item.assigneeName ? <SupportPerson name={item.assigneeName} size={32} /> : <span className={css.avatar} data-size="md" data-client aria-hidden="true"><ProtoIcon name="user" size={16} /></span>) : null}
+      </span>
+      <span className={css.cardFacts}><StatusBadge name={item.status} /><PriorityBadge name={item.priority} /></span>
+      <span className={css.meta}>
+        <span className={css.quiet}>{item.clientName || 'Клиент не указан'}</span>
+        <span className={css.deadline} data-overdue={overdue || undefined}>{deadline}{item.sla?.known && supportSlaLabel(item.sla) ? <span className={item.sla.currentOverdue ? css.late : css.quiet}>{supportSlaLabel(item.sla)}</span> : overdue ? <span className={css.late}>Просрочено</span> : null}</span>
+      </span>
+    </button>
+    {onStatus && isSupportStatus(item.status) ? <div className={css.ticketCardMenu}><TicketStatusMenu status={item.status} onPick={onStatus} /></div> : null}
+  </div>
 }
 
 function TicketCard(props: ScreenProps) {
@@ -540,7 +666,7 @@ function TicketCard(props: ScreenProps) {
   const waiting = status === 'Ждём клиента'
   return <div className={css.root} data-support-root data-support-screen={desk ? 'ticket' : 'client-ticket'} data-support-status={status}>
     <DetailCardShell
-      back={{ label: desk ? 'Очередь' : 'Мои обращения', onClick: () => props.onNavigate?.(back) }}
+      back={{ label: desk ? 'Тикеты' : 'Мои обращения', onClick: () => props.onNavigate?.(back) }}
       title={textOf(ticket.values[fields.subject]) || 'Без темы'}
       subtitle={textOf(ticket.values[fields.number])}
       badge={<span className={css.badges}><StatusBadge name={status} />{overdue ? <StatusBadge name="Просрочено" /> : null}<PriorityBadge name={priority} /></span>}

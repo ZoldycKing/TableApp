@@ -22,15 +22,22 @@ import { SupportDemo } from './support-demo'
 afterEach(() => cleanup())
 
 describe('support screens', () => {
-  it('shows the operator queue with overdue work and hides internal notes from the client', async () => {
+  it('shows operator tickets with saved views and hides internal notes from the client', async () => {
     const queue = render(<SupportDemo view="queue" bare />)
-    const summary = await screen.findByRole('group', { name: 'Сводка обращений' })
-    expect(within(summary).getByRole('button', { name: /Просрочены/ }).textContent).toMatch(/\d/)
-    expect(screen.getByRole('button', { name: 'Ждём клиента' })).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Тикеты' })).toBeTruthy()
+    expect(screen.getByText('Все обращения службы поддержки.')).toBeTruthy()
+    const views = await screen.findByRole('tablist', { name: 'Представления тикетов' })
+    expect(within(views).getByRole('tab', { name: /Все открытые/ }).getAttribute('aria-selected')).toBe('true')
+    expect(within(views).getByRole('tab', { name: /Горит по сроку/ })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Мои' })).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'Доска' })).toBeNull()
+    expect(screen.getByRole('navigation', { name: 'Разделы приложения' }).textContent).not.toMatch(/Очередь|Доска/)
+    expect(screen.getByRole('button', { name: 'Ответственный' })).toBeTruthy()
     const openTicket = screen.getAllByRole('button', { name: /Не открывается кабинет/ })[0]
     expect(openTicket?.textContent).toMatch(/ОБР-1048/)
-    expect(openTicket?.textContent?.trim().startsWith('Не открывается кабинет')).toBe(true)
     expect(screen.getAllByText(/просроч/i).length).toBeGreaterThan(0)
+    fireEvent.click(within(views).getByRole('tab', { name: /Горит по сроку/ }))
+    expect(within(views).getByRole('tab', { name: /Горит по сроку/ }).getAttribute('aria-selected')).toBe('true')
     queue.unmount()
 
     const operator = render(<SupportDemo view="ticket" bare />)
@@ -118,37 +125,28 @@ describe('support screens', () => {
     expect(within(dialog).getByRole('radiogroup', { name: 'Приоритет' })).toBeTruthy()
   })
 
-  it('desktop board: drag cards and ⋯ status menu, no advance or arrows', async () => {
-    render(<SupportDemo view="board" bare />)
-    await screen.findByRole('heading', { name: 'Доска' })
-    expect(document.querySelector('[data-board-advance]')).toBeNull()
-    expect(screen.queryByText('▶ Статус')).toBeNull()
-    expect(screen.queryByText('→')).toBeNull()
-    const menuButtons = screen.getAllByLabelText('Ещё')
+  it('keeps status change on the tickets list after the board is removed', async () => {
+    render(<SupportDemo view="queue" bare />)
+    await screen.findByRole('heading', { name: 'Тикеты' })
+    const menuButtons = screen.getAllByLabelText('Сменить статус')
     expect(menuButtons.length).toBeGreaterThan(0)
     fireEvent.click(menuButtons[0]!)
     const menu = screen.getByRole('menu', { name: 'Сменить статус' })
     expect(within(menu).getByText('Сменить статус')).toBeTruthy()
     expect(menu.querySelector('select')).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'Доска' })).toBeNull()
+    expect(document.querySelector('[data-board-card]')).toBeNull()
   })
 
-  it('phone board: one advance verb plus ⋯ menu', async () => {
-    render(<SupportDemo view="board" bare phone />)
-    await screen.findByRole('heading', { name: 'Доска' })
-    expect(screen.queryByText('▶ Статус')).toBeNull()
-    expect((await screen.findAllByText('Запросить у клиента')).some(node => node.closest('[data-board-advance]'))).toBe(true)
-    expect(document.querySelectorAll('[data-board-advance]').length).toBeGreaterThan(0)
-    fireEvent.click(screen.getAllByLabelText('Ещё')[0]!)
-    expect(screen.getByRole('menu', { name: 'Сменить статус' })).toBeTruthy()
-  })
-
-  it('omits demo queue note and shows conversation before facts on phone', async () => {
+  it('omits demo notes and shows conversation before facts on phone', async () => {
     const queue = render(<SupportDemo view="queue" bare />)
-    expect(await screen.findByRole('heading', { name: 'Очередь обращений' })).toBeTruthy()
-    expect(screen.queryByText(/Пример очереди|Демоданные/)).toBeNull()
+    expect(await screen.findByRole('heading', { name: 'Тикеты' })).toBeTruthy()
+    expect(screen.queryByText(/Пример очереди|Демоданные|Очередь/)).toBeNull()
+    expect(screen.getByRole('navigation', { name: 'Разделы приложения' }).textContent).not.toMatch(/Доска/)
     queue.unmount()
     render(<SupportDemo view="ticket" bare phone />)
     await screen.findByRole('heading', { name: 'Не сходится сумма в отчёте за октябрь' })
+    expect(screen.getByRole('button', { name: '← Тикеты' })).toBeTruthy()
     expect(screen.queryByText(/Пример очереди|Демоданные/)).toBeNull()
     const description = screen.getByRole('heading', { name: 'Описание' })
     const thread = screen.getByRole('heading', { name: 'Переписка' })

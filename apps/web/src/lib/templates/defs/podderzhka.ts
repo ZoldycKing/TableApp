@@ -69,6 +69,16 @@ export const podderzhka: TemplateDef = {
           help: 'Подпись в справочнике. Кто что видит, задаёт роль при входе, а не это поле.',
         },
         {
+          key: 'line', name: 'Линия', type: 'single_select',
+          choices: [
+            { name: '1-я линия', color: 'green' },
+            { name: '2-я линия', color: 'blue' },
+            { name: 'Биллинг', color: 'amber' },
+          ],
+          defaultChoice: '1-я линия',
+          help: 'Линия поддержки: первичная, эскалация или биллинг. Показывается на главной и в команде.',
+        },
+        {
           key: 'active', name: 'Статус', type: 'single_select',
           choices: [{ name: 'Активен', color: 'green' }, { name: 'Неактивен', color: 'gray' }],
           defaultChoice: 'Активен',
@@ -77,10 +87,10 @@ export const podderzhka: TemplateDef = {
       ],
       views: [{ name: 'Все операторы', type: 'grid' }],
       rows: [
-        { key: 'marina', values: { name: 'Марина Соколова', email: 'marina@example.invalid', phone: '+7 903 410-30-01', role: 'Руководитель', active: 'Активен' } },
-        { key: 'anna', values: { name: 'Анна Волкова', email: 'anna@example.invalid', phone: '+7 903 410-30-02', role: 'Оператор', active: 'Активен' } },
-        { key: 'igor', values: { name: 'Игорь Белов', email: 'igor@example.invalid', phone: '+7 903 410-30-03', role: 'Оператор', active: 'Активен' } },
-        { key: 'pavel', values: { name: 'Павел Смирнов', email: 'pavel@example.invalid', phone: '+7 903 410-30-04', role: 'Оператор', active: 'Неактивен' } },
+        { key: 'marina', values: { name: 'Марина Соколова', email: 'marina@example.invalid', phone: '+7 903 410-30-01', role: 'Руководитель', line: '2-я линия', active: 'Активен' } },
+        { key: 'anna', values: { name: 'Анна Волкова', email: 'anna@example.invalid', phone: '+7 903 410-30-02', role: 'Оператор', line: '1-я линия', active: 'Активен' } },
+        { key: 'igor', values: { name: 'Игорь Белов', email: 'igor@example.invalid', phone: '+7 903 410-30-03', role: 'Оператор', line: '1-я линия', active: 'Активен' } },
+        { key: 'pavel', values: { name: 'Павел Смирнов', email: 'pavel@example.invalid', phone: '+7 903 410-30-04', role: 'Оператор', line: 'Биллинг', active: 'Неактивен' } },
       ],
     },
     {
@@ -117,6 +127,15 @@ export const podderzhka: TemplateDef = {
         { key: 'clientEmail', name: 'Почта клиента', type: 'email', help: 'Подтверждённая почта владельца. Сервер подставляет её при создании, клиент чужую почту не записывает.' },
         { key: 'assignee', name: 'Ответственный', type: 'relation', relationTable: 'operators', allowMultiple: false, help: 'Кто ведёт обращение. Неактивного оператора назначить нельзя.' },
         { key: 'assigneeEmail', name: 'Почта ответственного', type: 'email', help: 'Почта назначенного оператора. По ней работает фильтр «Мои». Клиенту это поле не отдаётся.' },
+        {
+          key: 'line', name: 'Линия', type: 'single_select',
+          choices: [
+            { name: '1-я линия', color: 'green' },
+            { name: '2-я линия', color: 'blue' },
+            { name: 'Биллинг', color: 'amber' },
+          ],
+          help: 'Линия, на которой ведётся обращение. Можно не указывать.',
+        },
         {
           key: 'priority', name: 'Приоритет', type: 'single_select',
           choices: [

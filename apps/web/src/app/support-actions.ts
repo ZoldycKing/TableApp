@@ -8,20 +8,21 @@ import { publishedV2Context, publishedV2Definition, publishedV2Screen } from '@/
 import { nextTicketNumber } from '@/lib/support-logic'
 import {
   assertClientReply, assertDesk, assertOperatorStatus, assertTicketAccess, categoryValues, isSupportClient, isSupportDesk,
-  noteValues, replyValues, supportActorEmail,   ticketCreateValues, ticketPatchValues, supportEventRecord, supportPriorityName,
+  noteValues, operatorValues, replyValues, supportActorEmail, ticketCreateValues, ticketPatchValues, supportEventRecord, supportPriorityName,
   guardSupportCreate, guardSupportUpdate, type SupportApp,
 } from '@/lib/support-persist'
 import { RowWriteError, createRow, mutationFields, updateRow, writeRows } from '@/lib/row-mutations'
 
-type CreateRequest = { kind: 'create'; revision: string; screenId: string; subject: string; description: string; categoryId: string; clientId?: string; priorityId?: string }
+type CreateRequest = { kind: 'create'; revision: string; screenId: string; subject: string; description: string; categoryId: string; clientId?: string; priorityId?: string; lineId?: string | null }
 type ReplyRequest = { kind: 'reply'; revision: string; screenId: string; recordId: string; text: string }
 type NoteRequest = { kind: 'note'; revision: string; screenId: string; recordId: string; text: string }
 type StatusRequest = { kind: 'status'; revision: string; screenId: string; recordId: string; statusId: string }
-type AssignRequest = { kind: 'assign'; revision: string; screenId: string; recordId: string; assigneeId: string | null; priorityId: string; categoryId: string; deadline: string | null }
+type AssignRequest = { kind: 'assign'; revision: string; screenId: string; recordId: string; assigneeId: string | null; priorityId: string; categoryId: string; deadline: string | null; lineId?: string | null }
 type CategoryRequest = { kind: 'category'; revision: string; screenId: string; recordId?: string; name: string; description: string; active: boolean }
+type OperatorRequest = { kind: 'operator'; revision: string; screenId: string; recordId?: string; name: string; email: string; phone: string; roleId: string; lineId: string | null; activeId: string }
 type ClientNoteRequest = { kind: 'client_note'; revision: string; screenId: string; recordId: string; note: string }
 type SlaRequest = { kind: 'sla'; revision: string; screenId: string; minutes: Record<string, number> }
-type Request = CreateRequest | ReplyRequest | NoteRequest | ClientNoteRequest | StatusRequest | AssignRequest | CategoryRequest | SlaRequest
+type Request = CreateRequest | ReplyRequest | NoteRequest | ClientNoteRequest | StatusRequest | AssignRequest | CategoryRequest | OperatorRequest | SlaRequest
 
 const text = (value: unknown, max: number) => typeof value === 'string' && value.trim().length > 0 && value.trim().length <= max ? value.trim() : null
 const optionalText = (value: unknown, max: number) => value == null || value === '' ? '' : typeof value === 'string' && value.trim().length <= max ? value.trim() : null
@@ -39,7 +40,9 @@ function readRequest(input: unknown): Request | null {
     if (value.clientId != null && value.clientId !== '' && !clientId) return null
     const priorityId = value.priorityId == null || value.priorityId === '' ? undefined : idValue(value.priorityId)
     if (value.priorityId != null && value.priorityId !== '' && !priorityId) return null
-    return { kind: 'create', revision: value.revision, screenId: value.screenId, subject, description, categoryId, ...(clientId ? { clientId } : {}), ...(priorityId ? { priorityId } : {}) }
+    const lineId = value.lineId == null || value.lineId === '' ? null : idValue(value.lineId)
+    if (value.lineId != null && value.lineId !== '' && !lineId) return null
+    return { kind: 'create', revision: value.revision, screenId: value.screenId, subject, description, categoryId, lineId, ...(clientId ? { clientId } : {}), ...(priorityId ? { priorityId } : {}) }
   }
   const recordId = idValue(value.recordId)
   if (value.kind === 'reply' || value.kind === 'note') {
@@ -61,8 +64,20 @@ function readRequest(input: unknown): Request | null {
     const priorityId = idValue(value.priorityId), categoryId = idValue(value.categoryId)
     const deadline = instant(value.deadline)
     const assigneeId = value.assigneeId == null || value.assigneeId === '' ? null : idValue(value.assigneeId)
+    const lineId = value.lineId == null || value.lineId === '' ? null : idValue(value.lineId)
     if (!recordId || !priorityId || !categoryId || deadline === undefined || (value.assigneeId != null && value.assigneeId !== '' && !assigneeId)) return null
-    return { kind: 'assign', revision: value.revision, screenId: value.screenId, recordId, assigneeId, priorityId, categoryId, deadline }
+    if (value.lineId != null && value.lineId !== '' && !lineId) return null
+    return { kind: 'assign', revision: value.revision, screenId: value.screenId, recordId, assigneeId, priorityId, categoryId, deadline, lineId }
+  }
+  if (value.kind === 'operator') {
+    const name = text(value.name, 80), email = text(value.email, 120), phone = optionalText(value.phone, 40)
+    const roleId = idValue(value.roleId), activeId = idValue(value.activeId)
+    const lineId = value.lineId == null || value.lineId === '' ? null : idValue(value.lineId)
+    if (!name || !email || phone == null || !roleId || !activeId) return null
+    if (value.lineId != null && value.lineId !== '' && !lineId) return null
+    const operatorId = value.recordId == null || value.recordId === '' ? undefined : idValue(value.recordId)
+    if (value.recordId != null && value.recordId !== '' && !operatorId) return null
+    return { kind: 'operator', revision: value.revision, screenId: value.screenId, ...(operatorId ? { recordId: operatorId } : {}), name, email, phone, roleId, lineId, activeId }
   }
   if (value.kind === 'sla') {
     if (!value.minutes || typeof value.minutes !== 'object') return null
@@ -145,6 +160,7 @@ export async function savePublishedSupportAction(slug: string, input: unknown): 
           number, subject: parsed.subject, description: parsed.description, categoryId: category.id,
           clientId, clientName, clientEmail, statusId: support.statuses.fresh, priorityId, createdAt: now,
         })
+        if (parsed.lineId !== undefined && support.ticket.line) values[support.ticket.line] = parsed.lineId ?? ''
         const decision = guardSupportCreate(app, actor, support.ticketsTableId, values)
         if (!decision.ok) throw new RowWriteError('denied', decision.error)
         const ticketId = newId('row')
@@ -183,6 +199,25 @@ export async function savePublishedSupportAction(slug: string, input: unknown): 
           await createRow(context, support.categoriesTableId, values, actorRef, { origin: 'runtime' })
         }
         return { ok: true as const, message: 'Категория сохранена.' }
+      }
+      if (parsed.kind === 'operator') {
+        if (!actor.roleIds.includes('owner')) throw new RowWriteError('denied', 'Операторов меняет руководитель.')
+        const values = operatorValues(support.operator, {
+          name: parsed.name, email: parsed.email.trim().toLowerCase(), phone: parsed.phone,
+          roleId: parsed.roleId, lineId: parsed.lineId, activeId: parsed.activeId,
+        })
+        if (parsed.recordId) {
+          const current = await load(support.operatorsTableId, parsed.recordId)
+          if (!current) throw new RowWriteError('missing', 'Оператор не найден.')
+          const decision = guardSupportUpdate(app, actor, current, values)
+          if (!decision.ok) throw new RowWriteError('denied', decision.error)
+          await updateRow(context, support.operatorsTableId, current.id, values, actorRef)
+          return { ok: true as const, message: 'Оператор сохранён.' }
+        }
+        const decision = guardSupportCreate(app, actor, support.operatorsTableId, values)
+        if (!decision.ok) throw new RowWriteError('denied', decision.error)
+        await createRow(context, support.operatorsTableId, values, actorRef, { origin: 'runtime' })
+        return { ok: true as const, message: 'Оператор добавлен.' }
       }
       if (parsed.kind === 'client_note') {
         const desk = assertDesk(actor)
@@ -263,7 +298,7 @@ export async function savePublishedSupportAction(slug: string, input: unknown): 
         assigneeEmail = email.trim().toLowerCase()
       }
       const patch = ticketPatchValues(support.ticket, {
-        assigneeId: parsed.assigneeId, assigneeEmail, priorityId: parsed.priorityId, categoryId: category.id, deadline: parsed.deadline, updatedAt: now,
+        assigneeId: parsed.assigneeId, assigneeEmail, lineId: parsed.lineId, priorityId: parsed.priorityId, categoryId: category.id, deadline: parsed.deadline, updatedAt: now,
       })
       const decision = guardSupportUpdate(app, actor, ticket, patch)
       if (!decision.ok) throw new RowWriteError('denied', decision.error)

@@ -115,12 +115,13 @@ describe('support screens', () => {
     expect(within(dialog).getByRole('radiogroup', { name: 'Категория' })).toBeTruthy()
   })
 
-  it('uses choice chips instead of native selects in assign', async () => {
+  it('uses custom dropdowns and choice chips instead of native selects in assign', async () => {
     render(<SupportDemo view="assign" bare />)
     const dialog = await screen.findByRole('dialog', { name: 'Ответственный и срок' })
     expect(dialog.querySelector('select')).toBeNull()
     expect(dialog.querySelector('input[type="date"]')).toBeNull()
-    expect(within(dialog).getByRole('radiogroup', { name: 'Ответственный' })).toBeTruthy()
+    expect(within(dialog).getByRole('button', { name: 'Ответственный' })).toBeTruthy()
+    expect(within(dialog).getByRole('button', { name: 'Линия' })).toBeTruthy()
     expect(within(dialog).getByRole('radiogroup', { name: 'Категория' })).toBeTruthy()
     expect(within(dialog).getByRole('radiogroup', { name: 'Приоритет' })).toBeTruthy()
   })

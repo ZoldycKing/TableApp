@@ -32,8 +32,10 @@ export function builderV2Menu(app:AppV2) {
   const unified = calendar?.rootIds.some(id => app.nodes.some(node => node.id === id && (node.type === 'team_calendar' || node.type === 'collection' && node.layout === 'calendar')))
   return app.screens.filter(screen=>screen.navigation&&!screen.contextTableId&&!(unified && screen.id === app.booking?.setupScreenId))
 }
-export function builderV2MenuLabel(screen:AppV2['screens'][number], app?: Pick<AppV2, 'inventory'|'booking'>) {
+export function builderV2MenuLabel(screen:AppV2['screens'][number], app?: Pick<AppV2, 'inventory'|'booking'|'support'>, opts?: { phone?: boolean }) {
   if (app?.inventory?.movementsScreenId === screen.id) return 'История склада'
   if (app?.booking?.listScreenId === screen.id && (!screen.menuLabel?.trim() || screen.menuLabel === 'Записи')) return 'Расписание'
-  return screen.menuLabel?.trim()||screen.name
+  const label = screen.menuLabel?.trim()||screen.name
+  if (opts?.phone && app?.support && label === 'Кабинет клиента') return 'Кабинет'
+  return label
 }

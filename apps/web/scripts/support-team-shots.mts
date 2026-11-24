@@ -54,7 +54,16 @@ const browser = await chromium.launch({ headless: true, executablePath: process.
   await open(page, 'dashboard', { team: 'large' })
   await save(page, 'dashboard_big_team_desktop_1440.png')
   await open(page, 'team', { team: 'large' })
-  await save(page, 'team_desktop_1440.png', true)
+  // Scroll so two line groups sit in one viewport (header band + spacing).
+  await page.evaluate(() => {
+    const groups = [...document.querySelectorAll<HTMLElement>('[data-support-root] section[aria-label]')]
+    const second = groups[1]
+    if (!second) return
+    const top = second.getBoundingClientRect().top + window.scrollY
+    window.scrollTo(0, Math.max(0, top - 260))
+  })
+  await page.waitForTimeout(200)
+  await save(page, 'team_desktop_1440.png')
   await open(page, 'dashboard', { team: 'large', scheme: 'dark' })
   await save(page, 'dashboard_big_team_dark_1440.png')
   await context.close()
@@ -69,7 +78,7 @@ const browser = await chromium.launch({ headless: true, executablePath: process.
   await open(page, 'dashboard', { team: 'small', phone: true })
   await save(page, 'dashboard_small_team_phone_390.png')
   await open(page, 'team', { team: 'large', phone: true })
-  await save(page, 'team_phone_390.png', true)
+  await save(page, 'team_phone_390.png')
   await context.close()
 }
 

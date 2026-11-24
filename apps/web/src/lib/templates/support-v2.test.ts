@@ -12,7 +12,7 @@ const actor = (roleIds: string[], email: string, name = 'Учебный'): AppV2
 
 function fixture() {
   const built = buildTemplate({ template: findTemplate('podderzhka')!, workspaceId: 'wsp_support' })
-  const app = buildSupportV2App(built, { id: 'app_support', workspaceId: 'wsp_support', name: 'Обращения', slug: 'podderzhka', email: 'owner@example.invalid' })
+  const app = buildSupportV2App(built, { id: 'app_support', workspaceId: 'wsp_support', name: 'Обращения', slug: 'podderzhka', email: 'owner@podderzhka-demo.ru' })
   const catalog: AppV2Catalog = {
     workspaceId: 'wsp_support',
     tables: new Map(built.tables.map(table => [table.id, { workspaceId: 'wsp_support' }])),
@@ -46,7 +46,7 @@ describe('support template', () => {
 
     const client = actor(['client'], 'i.petrova@mail.ru', 'Ирина Петрова')
     const other = actor(['client'], 'p.orlov@yandex.ru', 'Пётр Орлов')
-    const operator = actor(['staff'], 'anna@example.invalid', 'Анна Волкова')
+    const operator = actor(['staff'], 'anna@podderzhka-demo.ru', 'Анна Волкова')
     const forged = actor(['client'], 'i.petrova@mail.ru')
     expect(isSupportDesk(operator)).toBe(true)
     expect(isSupportClient(client)).toBe(true)
@@ -97,8 +97,8 @@ describe('support template', () => {
     expect(authorizeAppV2Write(app, client, { operation: 'update', row: record(norms[0]!), values: {} }).ok).toBe(false)
 
     expect(authorizeAppV2Write(app, client, { operation: 'create', tableId: support.notesTableId, values: { [support.note.text]: 'тайком' } }).ok).toBe(false)
-    expect(authorizeAppV2Write(app, operator, { operation: 'create', tableId: support.notesTableId, values: { [support.note.text]: 'заметка', [support.note.ticket]: [own.id], [support.note.at]: '2026-11-22T09:00:00.000Z', [support.note.author]: 'Анна', [support.note.authorEmail]: 'anna@example.invalid' } }).ok).toBe(true)
-    const spoofedStatus = authorizeAppV2Write(app, client, { operation: 'update', row: record(own), values: { [support.ticket.status]: support.statuses.closed, [support.ticket.assigneeEmail]: 'anna@example.invalid' } })
+    expect(authorizeAppV2Write(app, operator, { operation: 'create', tableId: support.notesTableId, values: { [support.note.text]: 'заметка', [support.note.ticket]: [own.id], [support.note.at]: '2026-11-22T09:00:00.000Z', [support.note.author]: 'Анна', [support.note.authorEmail]: 'anna@podderzhka-demo.ru' } }).ok).toBe(true)
+    const spoofedStatus = authorizeAppV2Write(app, client, { operation: 'update', row: record(own), values: { [support.ticket.status]: support.statuses.closed, [support.ticket.assigneeEmail]: 'anna@podderzhka-demo.ru' } })
     expect(spoofedStatus.ok).toBe(false)
     expect(authorizeAppV2Write(app, client, { operation: 'create', tableId: support.ticketsTableId, values: { [support.ticket.subject]: 'Тема', [support.ticket.description]: 'Текст', [support.ticket.category]: ['x'], [support.ticket.clientName]: 'Ирина', [support.ticket.status]: support.statuses.fresh, [support.ticket.priority]: support.priorities.normal, [support.ticket.createdAt]: '2026-11-22T09:00:00.000Z', [support.ticket.updatedAt]: '2026-11-22T09:00:00.000Z', [support.ticket.clientEmail]: 'p.orlov@yandex.ru' } }).ok).toBe(false)
     const created = authorizeAppV2Write(app, client, { operation: 'create', tableId: support.ticketsTableId, values: { [support.ticket.subject]: 'Тема', [support.ticket.description]: 'Текст', [support.ticket.category]: ['x'], [support.ticket.clientName]: 'Ирина', [support.ticket.status]: support.statuses.fresh, [support.ticket.priority]: support.priorities.normal, [support.ticket.createdAt]: '2026-11-22T09:00:00.000Z', [support.ticket.updatedAt]: '2026-11-22T09:00:00.000Z' } })
@@ -109,15 +109,15 @@ describe('support template', () => {
     const now = Date.parse('2026-11-22T09:00:00.000Z')
     const items = [
       { id: '1', number: 'ОБР-1', subject: 'Кабинет', description: '', clientName: 'Ирина', status: 'Новое', priority: 'Срочный', category: 'Доступ', assigneeEmail: '', assigneeName: '', deadline: '2026-11-21T06:00:00.000Z' },
-      { id: '2', number: 'ОБР-2', subject: 'Отчёт', description: 'демо', clientName: 'Пётр', status: 'В работе', priority: 'Высокий', category: 'Ошибка', assigneeEmail: 'anna@example.invalid', assigneeName: 'Анна', deadline: '2026-11-23T13:00:00.000Z' },
-      { id: '3', number: 'ОБР-3', subject: 'Список', description: '', clientName: 'Ирина', status: 'Решено', priority: 'Низкий', category: 'Вопрос', assigneeEmail: 'anna@example.invalid', assigneeName: 'Анна', deadline: '2026-11-20T12:00:00.000Z' },
-      { id: '4', number: 'ОБР-4', subject: 'Документы', description: '', clientName: 'Ольга', status: 'Ждём клиента', priority: 'Обычный', category: 'Документы', assigneeEmail: 'igor@example.invalid', assigneeName: 'Игорь', deadline: '2026-11-25T09:00:00.000Z' },
+      { id: '2', number: 'ОБР-2', subject: 'Отчёт', description: 'демо', clientName: 'Пётр', status: 'В работе', priority: 'Высокий', category: 'Ошибка', assigneeEmail: 'anna@podderzhka-demo.ru', assigneeName: 'Анна', deadline: '2026-11-23T13:00:00.000Z' },
+      { id: '3', number: 'ОБР-3', subject: 'Список', description: '', clientName: 'Ирина', status: 'Решено', priority: 'Низкий', category: 'Вопрос', assigneeEmail: 'anna@podderzhka-demo.ru', assigneeName: 'Анна', deadline: '2026-11-20T12:00:00.000Z' },
+      { id: '4', number: 'ОБР-4', subject: 'Документы', description: '', clientName: 'Ольга', status: 'Ждём клиента', priority: 'Обычный', category: 'Документы', assigneeEmail: 'igor@podderzhka-demo.ru', assigneeName: 'Игорь', deadline: '2026-11-25T09:00:00.000Z' },
     ]
     expect(isOverdue('Новое', items[0]!.deadline, now)).toBe(true)
     expect(isOverdue('Решено', items[2]!.deadline, now)).toBe(false)
     expect(supportSummary(items, now)).toEqual({ open: 3, overdue: 1, waiting: 1 })
-    expect(filterTickets(items, { search: '', statuses: [], priorities: [], mine: true, scope: 'all' }, 'anna@example.invalid', now).map(item => item.id)).toEqual(['2', '3'])
-    expect(filterTickets(items, { search: 'отчёт', statuses: [], priorities: [], mine: false, scope: 'all' }, 'anna@example.invalid', now).map(item => item.id)).toEqual(['2'])
+    expect(filterTickets(items, { search: '', statuses: [], priorities: [], mine: true, scope: 'all' }, 'anna@podderzhka-demo.ru', now).map(item => item.id)).toEqual(['2', '3'])
+    expect(filterTickets(items, { search: 'отчёт', statuses: [], priorities: [], mine: false, scope: 'all' }, 'anna@podderzhka-demo.ru', now).map(item => item.id)).toEqual(['2'])
     expect(filterTickets(items, { search: '', statuses: ['Ждём клиента'], priorities: [], mine: false, scope: 'overdue' }, '', now)).toEqual([])
     expect(filterTickets(items, { search: '', statuses: [], priorities: [], mine: false, scope: 'open' }, '', now).map(item => item.id)).toEqual(['1', '2', '4'])
     expect(filterTickets(items, { search: '', statuses: [], priorities: [], mine: false, scope: 'hot' }, '', now).map(item => item.id)).toEqual(['1'])
@@ -131,7 +131,7 @@ describe('support template', () => {
     expect(nextTicketNumber(['ОБР-1048', 'черновик', 'ОБР-1033'])).toBe('ОБР-1049')
     const byEmail = supportAuthorKind({ author: 'Кто угодно', authorEmail: 'p.orlov@yandex.ru', clientName: 'Пётр Орлов', clientEmail: 'p.orlov@yandex.ru' })
     const byName = supportAuthorKind({ author: 'Пётр Орлов', clientName: 'Пётр Орлов' })
-    const desk = supportAuthorKind({ author: 'Анна Волкова', authorEmail: 'anna@example.invalid', clientName: 'Пётр Орлов', clientEmail: 'p.orlov@yandex.ru' })
+    const desk = supportAuthorKind({ author: 'Анна Волкова', authorEmail: 'anna@podderzhka-demo.ru', clientName: 'Пётр Орлов', clientEmail: 'p.orlov@yandex.ru' })
     expect(supportAuthorLabel(byEmail)).toBe('Клиент')
     expect(supportAuthorLabel(byName)).toBe('Клиент')
     expect(supportAuthorLabel(desk)).toBe('Ответ клиенту')

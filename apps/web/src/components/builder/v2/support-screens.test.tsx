@@ -207,5 +207,8 @@ describe('support screens', () => {
     expect(screen.getAllByRole('button', { name: 'Линия' }).length).toBeGreaterThan(0)
     expect(screen.getAllByRole('button', { name: 'Статус' }).length).toBeGreaterThan(0)
     expect(screen.getAllByText('1-я линия').length).toBeGreaterThan(0)
+    expect(screen.queryByRole('columnheader', { name: 'Линия' })).toBeNull()
+    expect(screen.getAllByRole('button', { name: 'Действия' }).length).toBeGreaterThan(0)
+    expect(screen.queryByRole('button', { name: 'Изменить' })).toBeNull()
   })
 })

@@ -88,7 +88,7 @@ describe('support SLA clocks', () => {
     expect(view.currentOverdue).toBe(false)
     const dash = supportDashboard([
       { assigneeEmail: '', sla: view },
-      { assigneeEmail: 'a@example.invalid', sla: view },
+      { assigneeEmail: 'a@podderzhka-demo.ru', sla: view },
     ], t0 + min(1000), min(60 * 24))
     expect(dash.overdue).toBe(0)
     expect(dash.risk).toBe(0)
@@ -100,13 +100,13 @@ describe('support SLA clocks', () => {
   it('includes a late public reply in the average and not in the met share', () => {
     const events: SupportSlaEvent[] = [created(), { at: t0 + min(90), kind: 'public_reply' }]
     const view = supportSlaView(events, policy, t0 + min(90))
-    const dash = supportDashboard([{ assigneeEmail: 'a@example.invalid', sla: view }], t0 + min(90), min(60 * 24))
+    const dash = supportDashboard([{ assigneeEmail: 'a@podderzhka-demo.ru', sla: view }], t0 + min(90), min(60 * 24))
     expect(view.first.met).toBe(false)
     expect(dash.firstClosed).toBe(1)
     expect(dash.firstMet).toBe(0)
     expect(dash.avgFirstResponseMs).toBe(min(90))
     expect(dash.overdue).toBe(0)
-    const outside = supportDashboard([{ assigneeEmail: 'a@example.invalid', sla: view }], t0 + min(90) + min(60 * 24) + 1, min(60))
+    const outside = supportDashboard([{ assigneeEmail: 'a@podderzhka-demo.ru', sla: view }], t0 + min(90) + min(60 * 24) + 1, min(60))
     expect(outside.avgFirstResponseMs).toBeNull()
     expect(outside.firstClosed).toBe(0)
   })
@@ -117,8 +117,8 @@ describe('support SLA clocks', () => {
     expect(supportQueueMatch({ status: 'Новое', assigneeEmail: '', sla: late, manualOverdue: false }, 'overdue', '')).toBe(true)
     expect(supportQueueMatch({ status: 'Новое', assigneeEmail: '', sla: late, manualOverdue: false }, 'unassigned', '')).toBe(true)
     const paused = supportSlaView([created(), { at: t0 + min(10), kind: 'status', status: 'Ждём клиента' }], policy, t0 + min(300))
-    expect(supportQueueMatch({ status: 'Ждём клиента', assigneeEmail: 'a@example.invalid', sla: paused, manualOverdue: true }, 'overdue', '')).toBe(false)
-    expect(supportQueueMatch({ status: 'Ждём клиента', assigneeEmail: 'a@example.invalid', sla: paused, manualOverdue: true }, 'risk', '')).toBe(false)
+    expect(supportQueueMatch({ status: 'Ждём клиента', assigneeEmail: 'a@podderzhka-demo.ru', sla: paused, manualOverdue: true }, 'overdue', '')).toBe(false)
+    expect(supportQueueMatch({ status: 'Ждём клиента', assigneeEmail: 'a@podderzhka-demo.ru', sla: paused, manualOverdue: true }, 'risk', '')).toBe(false)
     const closed = supportSlaView([created(), { at: t0 + min(10), kind: 'status', status: 'Закрыто' }], policy, t0 + min(300))
     expect(supportQueueMatch({ status: 'Закрыто', assigneeEmail: '', sla: closed, manualOverdue: true }, 'overdue', '')).toBe(false)
     expect(supportQueueMatch({ status: 'Закрыто', assigneeEmail: '', sla: closed, manualOverdue: true }, 'open', '')).toBe(false)

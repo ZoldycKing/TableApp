@@ -75,6 +75,23 @@ export function SupportSelect(props: {
   return <div className={css.dropdownField}><span>{props.label}</span>{body}</div>
 }
 
+function OperatorRowMenu(props: {
+  owner: boolean
+  onEdit?: () => void
+  onOpenTickets: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const root = useRef<HTMLDivElement>(null)
+  useMenuOpen(open, root, () => setOpen(false))
+  return <div className={css.cardMenu} ref={root} data-team-menu onClick={event => event.stopPropagation()}>
+    <button type="button" className={css.cardMenuButton} aria-label="Действия" aria-expanded={open} aria-haspopup="menu" onClick={event => { event.stopPropagation(); setOpen(value => !value) }}>⋯</button>
+    {open ? <div className={css.cardMenuPanel} role="menu" aria-label="Действия" onClick={event => event.stopPropagation()}>
+      <button type="button" role="menuitem" onClick={() => { props.onOpenTickets(); setOpen(false) }}>Открыть тикеты</button>
+      {props.owner && props.onEdit ? <button type="button" role="menuitem" onClick={() => { props.onEdit?.(); setOpen(false) }}>Изменить</button> : null}
+    </div> : null}
+  </div>
+}
+
 function choiceName(tables: TeamTables, tableId: string, fieldId: string | undefined, value: unknown) {
   if (!fieldId || typeof value !== 'string' || !value) return ''
   const field = tables.find(table => table.id === tableId)?.fields.find(item => item.id === fieldId)
@@ -151,12 +168,13 @@ export function TeamScreen(props: TeamScreenProps) {
   const [search, setSearch] = useState('')
   const [lineFilter, setLineFilter] = useState('')
   const [shiftFilter, setShiftFilter] = useState('')
-  const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'line', dir: 'asc' })
+  const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'name', dir: 'asc' })
   const [edit, setEdit] = useState<OperatorRow | null | 'new'>(null)
   const [message, setMessage] = useState('')
   const owner = props.actor.roleIds.includes('owner')
   const rows = operatorRows(props)
   const lineOptions = choicesOf(props.tables, props.kit.operatorsTableId, props.kit.operator.line)
+  const grouping = !lineFilter
   const query = search.trim().toLocaleLowerCase('ru-RU')
   const filtered = rows.filter(row => {
     if (lineFilter && row.lineId !== lineFilter) return false
@@ -173,24 +191,90 @@ export function TeamScreen(props: TeamScreenProps) {
     if (sort.key === 'line') return a.line.localeCompare(b.line, 'ru') * dir || a.name.localeCompare(b.name, 'ru')
     return a.name.localeCompare(b.name, 'ru') * dir
   })
-  const groups = (() => {
-    const map = new Map<string, OperatorRow[]>()
-    for (const row of sorted) {
-      const list = map.get(row.line) ?? []
-      list.push(row)
-      map.set(row.line, list)
-    }
-    return [...map.entries()]
-  })()
+  const groups = grouping
+    ? (() => {
+      const map = new Map<string, OperatorRow[]>()
+      for (const row of sorted) {
+        const list = map.get(row.line) ?? []
+        list.push(row)
+        map.set(row.line, list)
+      }
+      return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0], 'ru'))
+    })()
+    : [['', sorted] as [string, OperatorRow[]]]
   const toggleSort = (key: SortKey) => setSort(current => current.key === key ? { key, dir: current.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: key === 'name' || key === 'line' ? 'asc' : 'desc' })
   const openOperator = (row: OperatorRow) => {
     const self = row.email && row.email === (props.actor.email ?? '').trim().toLowerCase()
     props.onOpenQueue(self ? { view: 'mine', scope: 'mine' } : { view: 'open', scope: 'open', assigneeEmail: row.email || undefined })
   }
-  const sortButton = (key: SortKey, label: string) => <button type="button" className={css.sortHead} data-active={sort.key === key || undefined} aria-sort={sort.key === key ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'} onClick={() => toggleSort(key)}>
+  const sortButton = (key: SortKey, label: string) => <button type="button" className={css.sortHead} data-active={sort.key === key || undefined} aria-sort={sort.key === key ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'} onClick={event => { event.stopPropagation(); toggleSort(key) }}>
     {label}
     {sort.key === key ? <ProtoIcon name={sort.dir === 'asc' ? 'up' : 'down'} size={12} /> : <ProtoIcon name="sort" size={12} />}
   </button>
+  const renderPeople = (people: OperatorRow[]) => <>
+    {device === 'phone' ? <ul className={css.operatorCards}>
+      {people.map(row => <li key={row.id}>
+        <div className={css.operatorCard} data-overload={row.open >= OVERLOAD || undefined} data-off={!row.shift || undefined}>
+          <button type="button" className={css.operatorCardHit} onClick={() => openOperator(row)} aria-label={`Тикеты: ${row.name}`}>
+            <SupportPerson name={row.name} photo={row.photo} size={36} onShift={row.shift} />
+            <span className={css.operatorCardMain}>
+              <strong>{row.name}</strong>
+              <span>{row.line} · {row.shift ? 'на смене' : 'не на смене'}</span>
+            </span>
+            <span className={css.operatorCardCounts}>
+              <em data-overload={row.open >= OVERLOAD || undefined}>{row.open}</em>
+              <span>откр.</span>
+            </span>
+          </button>
+          <OperatorRowMenu owner={owner} onEdit={owner ? () => setEdit(row) : undefined} onOpenTickets={() => openOperator(row)} />
+        </div>
+      </li>)}
+    </ul> : null}
+    {device !== 'phone' ? <div className={css.tableWrap} data-team-table>
+      <table className={css.table} data-columns={grouping ? 5 : 6}>
+        <caption className={css.srOnly}>Операторы</caption>
+        <thead><tr>
+          <th>{sortButton('name', 'Оператор')}</th>
+          {!grouping ? <th>{sortButton('line', 'Линия')}</th> : null}
+          <th>{sortButton('shift', 'Статус')}</th>
+          <th>{sortButton('open', 'Открытые')}</th>
+          <th>{sortButton('resolved', 'Решено сегодня')}</th>
+          <th><span className={css.srOnly}>Действия</span></th>
+        </tr></thead>
+        <tbody>
+          {people.map(row => <tr
+            key={row.id}
+            className={css.teamTableRow}
+            data-overload={row.open >= OVERLOAD || undefined}
+            tabIndex={0}
+            role="link"
+            aria-label={row.name}
+            onClick={() => openOperator(row)}
+            onKeyDown={event => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault()
+                openOperator(row)
+              }
+            }}
+          >
+            <td>
+              <span className={css.personInline}>
+                <SupportPerson name={row.name} photo={row.photo} size={28} onShift={row.shift} />
+                <span className={css.person}>{row.name}<span>{row.email || 'Почта не указана'}</span></span>
+              </span>
+            </td>
+            {!grouping ? <td>{row.line}</td> : null}
+            <td>{row.shift ? 'На смене' : 'Не на смене'}</td>
+            <td><span className={css.openCount} data-overdue={row.open >= OVERLOAD || undefined}>{row.open}</span></td>
+            <td>{row.resolvedToday}</td>
+            <td className={css.chevronCol} onClick={event => event.stopPropagation()}>
+              <OperatorRowMenu owner={owner} onEdit={owner ? () => setEdit(row) : undefined} onOpenTickets={() => openOperator(row)} />
+            </td>
+          </tr>)}
+        </tbody>
+      </table>
+    </div> : null}
+  </>
   return <div className={css.root} data-support-root data-support-screen="team">
     <ListScreenShell title="Команда" meta={`${rows.filter(item => item.shift).length} из ${rows.length} на смене`} actions={owner ? <button type="button" className={css.mine} onClick={() => setEdit('new')}>Добавить оператора</button> : undefined}>
       <div className={css.stack}>
@@ -202,70 +286,10 @@ export function TeamScreen(props: TeamScreenProps) {
         </div>
         {props.loading ? <p className={css.status} role="status">Загружаем команду…</p> : null}
         {!props.loading && !sorted.length ? <div className={css.empty}><p>{rows.length ? 'Нет операторов по этому запросу.' : 'Операторов пока нет.'}</p></div> : null}
-        {groups.map(([line, people]) => <section key={line} className={css.clientGroup} aria-label={line}>
-          <div className={css.groupHeader}><strong>{line}</strong><span>{people.filter(item => item.shift).length} на смене · {people.length}</span></div>
-          {device === 'phone' ? <ul className={css.operatorCards}>
-            {people.map(row => <li key={row.id}>
-              <div className={css.operatorCard} data-overload={row.open >= OVERLOAD || undefined} data-off={!row.shift || undefined}>
-                <button type="button" className={css.operatorCardHit} onClick={() => openOperator(row)} aria-label={`Тикеты: ${row.name}`}>
-                  <SupportPerson name={row.name} photo={row.photo} size={40} onShift={row.shift} />
-                  <span className={css.operatorCardMain}>
-                    <strong>{row.name}</strong>
-                    <span>{row.shift ? 'На смене' : 'Не на смене'}</span>
-                  </span>
-                  <span className={css.operatorCardCounts}>
-                    <em data-overload={row.open >= OVERLOAD || undefined}>{row.open}</em>
-                    <span>открытых</span>
-                    <span>{row.resolvedToday} решено</span>
-                  </span>
-                </button>
-                {owner ? <button type="button" className={css.mine} onClick={() => setEdit(row)}>Изменить</button> : null}
-              </div>
-            </li>)}
-          </ul> : null}
-          {device !== 'phone' ? <div className={css.tableWrap} data-team-table>
-            <table className={css.table} data-columns={6}>
-              <caption className={css.quiet}>{line}</caption>
-              <thead><tr>
-                <th>{sortButton('name', 'Оператор')}</th>
-                <th>{sortButton('line', 'Линия')}</th>
-                <th>{sortButton('shift', 'Статус')}</th>
-                <th>{sortButton('open', 'Открытые')}</th>
-                <th>{sortButton('resolved', 'Решено сегодня')}</th>
-                {owner ? <th><span className={css.srOnly}>Изменить</span></th> : null}
-              </tr></thead>
-              <tbody>
-                {people.map(row => <tr
-                  key={row.id}
-                  className={css.teamTableRow}
-                  data-overload={row.open >= OVERLOAD || undefined}
-                  tabIndex={0}
-                  role="link"
-                  aria-label={row.name}
-                  onClick={() => openOperator(row)}
-                  onKeyDown={event => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault()
-                      openOperator(row)
-                    }
-                  }}
-                >
-                  <td>
-                    <span className={css.personInline}>
-                      <SupportPerson name={row.name} photo={row.photo} size={28} onShift={row.shift} />
-                      <span className={css.person}>{row.name}<span>{row.email || 'Почта не указана'}</span></span>
-                    </span>
-                  </td>
-                  <td>{row.line}</td>
-                  <td>{row.shift ? 'На смене' : 'Не на смене'}</td>
-                  <td><span className={css.openCount} data-overdue={row.open >= OVERLOAD || undefined}>{row.open}</span></td>
-                  <td>{row.resolvedToday}</td>
-                  {owner ? <td className={css.chevronCol}><button type="button" className={css.mine} onClick={event => { event.stopPropagation(); setEdit(row) }}>Изменить</button></td> : null}
-                </tr>)}
-              </tbody>
-            </table>
-          </div> : null}
-        </section>)}
+        {groups.map(([line, people]) => people.length ? <section key={line || 'all'} className={css.teamGroup} aria-label={line || 'Операторы'}>
+          {grouping && line ? <div className={css.groupHeader}><strong>{line}</strong><span>{people.filter(item => item.shift).length} на смене · {people.length}</span></div> : null}
+          {renderPeople(people)}
+        </section> : null)}
       </div>
     </ListScreenShell>
     {edit ? <OperatorDialog

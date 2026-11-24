@@ -13,7 +13,7 @@ import { SupportRowsContext, type SupportOpen } from './support-screens'
 import { AppV2Renderer } from './view'
 
 export function supportTemplateDemoModel(example = templateExample('podderzhka'), team: 'small' | 'large' = 'small') {
-  const app = buildSupportV2App(example.built, { id: example.app.id, workspaceId: example.app.workspaceId, name: 'Обращения и поддержка', slug: 'podderzhka-demo', email: 'marina@example.invalid' })
+  const app = buildSupportV2App(example.built, { id: example.app.id, workspaceId: example.app.workspaceId, name: 'Обращения и поддержка', slug: 'podderzhka-demo', email: 'marina@podderzhka-demo.ru' })
   const kit = app.support!
   const tables: BuilderV2Table[] = example.built.tables.map(table => ({
     ...table, views: [], primaryFieldId: table.primaryFieldId,
@@ -54,9 +54,10 @@ function goalFor(model: ReturnType<typeof supportTemplateDemoModel>, view: strin
   if (view === 'client-ticket') return { ...base, who: 'petr' as const, screenId: kit.clientTicketScreenId, recordId: ticket('ОБР-1042')?.id, open: null }
   if (view === 'client-waiting') return { ...base, who: 'petr' as const, screenId: kit.clientTicketScreenId, recordId: ticket('ОБР-1033')?.id, open: null }
   if (view === 'settings') return { ...base, who: 'marina' as const, screenId: kit.settingsScreenId, recordId: undefined, open: null }
-  if (view === 'dashboard') return { ...base, who: 'anna' as const, screenId: kit.dashboardScreenId ?? kit.queueScreenId, recordId: undefined, open: null }
+  // Same desk actor on Главная / Команда / Клиенты so desktop nav tabs stay identical across pages.
+  if (view === 'dashboard') return { ...base, who: 'marina' as const, screenId: kit.dashboardScreenId ?? kit.queueScreenId, recordId: undefined, open: null }
   if (view === 'team') return { ...base, who: 'marina' as const, screenId: kit.teamScreenId ?? kit.dashboardScreenId ?? kit.queueScreenId, recordId: undefined, open: null }
-  if (view === 'clients') return { ...base, screenId: kit.clientsScreenId, recordId: undefined, open: null }
+  if (view === 'clients') return { ...base, who: 'marina' as const, screenId: kit.clientsScreenId, recordId: undefined, open: null }
   if (view === 'client-card') {
     const client = model.rows.find(row => row.tableId === kit.clientsTableId && row.values[kit.client.email] === 'i.petrova@mail.ru')
     return { ...base, screenId: kit.clientScreenId ?? kit.clientsScreenId, recordId: client?.id, open: null }
@@ -68,8 +69,8 @@ function goalFor(model: ReturnType<typeof supportTemplateDemoModel>, view: strin
 function actorFor(who: DemoWho): AppV2Actor {
   if (who === 'irina') return { authenticated: true, id: 'demo_irina', roleIds: ['client'], email: 'i.petrova@mail.ru', name: 'Ирина Петрова', company: '' }
   if (who === 'petr') return { authenticated: true, id: 'demo_petr', roleIds: ['client'], email: 'p.orlov@yandex.ru', name: 'Пётр Орлов', company: '' }
-  if (who === 'marina') return { authenticated: true, id: 'demo_marina', roleIds: ['owner'], email: 'marina@example.invalid', name: 'Марина Соколова', company: '' }
-  return { authenticated: true, id: 'demo_anna', roleIds: ['staff'], email: 'anna@example.invalid', name: 'Анна Волкова', company: '' }
+  if (who === 'marina') return { authenticated: true, id: 'demo_marina', roleIds: ['owner'], email: 'marina@podderzhka-demo.ru', name: 'Марина Соколова', company: '' }
+  return { authenticated: true, id: 'demo_anna', roleIds: ['staff'], email: 'anna@podderzhka-demo.ru', name: 'Анна Волкова', company: '' }
 }
 
 export function SupportDemo({ view = 'queue', bare = false, scheme, phone = false, team = 'small' }: { view?: string; bare?: boolean; scheme?: 'light' | 'dark'; phone?: boolean; team?: 'small' | 'large' }) {

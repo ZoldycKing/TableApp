@@ -242,7 +242,7 @@ function CompactTeamBlock(props: {
             <button type="button" onClick={() => props.onOpenQueue(self ? { view: 'mine', scope: 'mine' } : { view: 'open', scope: 'open', assigneeEmail: item.email || undefined })}>
               <SupportPerson name={item.name} photo={item.photo} size={28} onShift />
               <span className={css.teamMiniCopy}><strong>{item.name}</strong><span>{item.line || 'Линия не указана'}</span></span>
-              <em>{item.open}</em>
+              <span className={css.teamMiniLoad}><em>{item.open}</em><span>откр.</span></span>
             </button>
           </li>
         })}
@@ -257,7 +257,7 @@ function CompactTeamBlock(props: {
             <button type="button" onClick={() => props.onOpenQueue(self ? { view: 'mine', scope: 'mine' } : { view: 'open', scope: 'open', assigneeEmail: item.email || undefined })}>
               <SupportPerson name={item.name} photo={item.photo} size={28} onShift />
               <span className={css.teamMiniCopy}><strong>{item.name}</strong><span>{item.line || 'Линия не указана'}</span></span>
-              <em>{item.open}</em>
+              <span className={css.teamMiniLoad}><em>{item.open}</em><span>откр.</span></span>
             </button>
           </li>
         })}

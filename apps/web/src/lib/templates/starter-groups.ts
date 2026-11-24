@@ -3,7 +3,7 @@ export const STARTER_GROUPS = [
   {
     id: 'client-apps', name: 'Приложение для клиентов',
     description: 'Клиент выбирает товар, услугу или объект, оформляет обращение и следит за ним в кабинете вашего бизнеса.',
-    templateIds: ['zakazy', 'salon', 'service', 'zayavki', 'nedvizhimost', 'dostavka'],
+    templateIds: ['zakazy', 'salon', 'service', 'zayavki', 'podderzhka', 'nedvizhimost', 'dostavka'],
   },
   {
     id: 'internal-tools', name: 'Внутренний учёт',

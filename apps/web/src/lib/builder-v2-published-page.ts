@@ -140,6 +140,6 @@ export async function loadPublishedV2Page(slug:string,request:{screen?:string;ro
     const titleFieldId = screen.catalog?.titleFieldId ?? screen.recordTitleFieldId ?? current.tables.find(table=>table.id===screen.contextTableId)?.primaryFieldId
     const purchaseSection = builderV2InventoryPurchaseSection(app, screen.id)
     const sectionId = parent?.screenId ?? purchaseSection
-    return {login:false as const,...(enter?{enter}:{}),app:safe,tables,actor,revision,screenId:screen.id,...(sectionId?{sectionId}:{}),...(statusFormId?{statusFormId}:{}),...(openCreate?{openCreate:true as const}:{}),recordId:request.row,record:selected?.record,title:selected?(titleFieldId&&selected.record.display[titleFieldId]||'Запись'):screen.name,buttons,rowActions,...(Object.keys(businessLinks).length ? { businessLinks } : {})}
+    return {login:false as const,asOf:Date.now(),...(enter?{enter}:{}),app:safe,tables,actor,revision,screenId:screen.id,...(sectionId?{sectionId}:{}),...(statusFormId?{statusFormId}:{}),...(openCreate?{openCreate:true as const}:{}),recordId:request.row,record:selected?.record,title:selected?(titleFieldId&&selected.record.display[titleFieldId]||'Запись'):screen.name,buttons,rowActions,...(Object.keys(businessLinks).length ? { businessLinks } : {})}
   })
 }

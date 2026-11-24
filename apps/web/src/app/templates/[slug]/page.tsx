@@ -8,6 +8,7 @@ import { ShopTemplateDemo } from '@/components/marketing/shop-template-demo'
 import { BookingTemplateDemo } from '@/components/marketing/booking-template-demo'
 import { DispatchDemo } from '@/components/builder/v2/dispatch-demo'
 import { ProjectsDemo } from '@/components/builder/v2/projects-demo'
+import { SupportDemo } from '@/components/builder/v2/support-demo'
 import { TemplateIcon } from '@/components/template-icon'
 import { pageMetadata } from '@/lib/seo'
 import { currentMember } from '@/lib/session'
@@ -81,14 +82,16 @@ export default async function TemplatePage({ params, searchParams }: { params: P
   const salon = template.id === 'salon'
   const dispatch = template.id === 'zayavki'
   const projects = template.id === 'proekty'
+  const support = template.id === 'podderzhka'
   return <MarketingShell signedIn={Boolean(member)}>
     <PageHero trail={[{href:'/',label:'Scatta'},{href:'/templates',label:'Шаблоны'},{label:template.name}]} icon={<TemplateIcon id={template.id} className="size-12" />} title={template.name} lead={copy.description} note={template.audience} actions={<><PrimaryLink href={start}>Начать с этого шаблона</PrimaryLink><SecondaryLink href="#primer">Посмотреть экраны</SecondaryLink></>} />
     {shop && <Section id="primer" title="Попробуйте магазин"><ShopTemplateDemo path="/templates/zakazy" view={view} device={device} /></Section>}
     {salon && <Section id="primer" title="Попробуйте салон"><BookingTemplateDemo view={view} phone={device === 'phone'} /></Section>}
     {dispatch && <Section id="primer" title="Попробуйте заявки"><DispatchDemo view={view} phone={device === 'phone'} /></Section>}
     {projects && <Section id="primer" title="Попробуйте проекты"><ProjectsDemo view={view} /></Section>}
+    {support && <Section id="primer" title="Попробуйте обращения"><SupportDemo view={view} phone={device === 'phone'} /></Section>}
     <Section title="Что уже подготовлено"><CardGrid columns={3} items={copy.features.map(item => ({title:item.name || template.name,text:item.description.charAt(0).toUpperCase()+item.description.slice(1)}))} /></Section>
-    {!shop && !salon && !dispatch && !projects && <Section id="primer" title="Экраны этого шаблона" lead="Открывайте разделы и карточки на учебных данных. Изменения не сохраняются."><TemplateDemo id={template.id} /></Section>}
+    {!shop && !salon && !dispatch && !projects && !support && <Section id="primer" title="Экраны этого шаблона" lead="Открывайте разделы и карточки на учебных данных. Изменения не сохраняются."><TemplateDemo id={template.id} /></Section>}
     <Section title="Что заполнить перед запуском">
       <WorkSteps steps={templateStartSteps(template)} />
       <div className={styles.templateRoles} aria-label="Подготовленные роли">{roles.map(role => <span key={role}>{role}</span>)}</div>

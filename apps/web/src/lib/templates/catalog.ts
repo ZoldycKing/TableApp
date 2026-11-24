@@ -9,6 +9,7 @@ import { salon } from './defs/salon'
 import { service } from './defs/service'
 import { sklad } from './defs/sklad'
 import { zakazy } from './defs/zakazy'
+import { podderzhka } from './defs/podderzhka'
 import { proekty } from './defs/proekty'
 import { zayavki } from './defs/zayavki'
 import { withCustomerScenario } from './customer-definitions'
@@ -30,6 +31,7 @@ export { STARTER_GROUPS } from './starter-groups'
  */
 const LEGACY_TEMPLATES: readonly TemplateDef[] = [
   zayavki,
+  podderzhka,
   proekty,
   zakazy,
   crm,

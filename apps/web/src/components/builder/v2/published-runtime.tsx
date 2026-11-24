@@ -15,7 +15,8 @@ import ui from './view.module.css'
 import { builderV2InventoryPurchaseSection, builderV2RecordParent } from './collection-navigation'
 import { BuilderV2OrderWorkbench } from './order-workbench'
 import { builderV2HeaderProfile } from './record-presentation'
-type Data=Extract<Awaited<ReturnType<typeof loadPublishedV2Page>>,{login:false}> & { openCreate?: boolean }
+type Page=Extract<Awaited<ReturnType<typeof loadPublishedV2Page>>,{login:false}>
+type Data=Omit<Page,'asOf'> & { asOf?: number; openCreate?: boolean }
 export function PublishedV2Runtime({data}:{data:Data}){
   const router=useRouter(),{app,actor,revision,screenId,recordId,record,title,buttons,tables,rowActions,enter,openCreate}=data,slug=app.slug,page=app.screens.find(screen=>screen.id===screenId)!
   const [dataVersion,setDataVersion]=useState(0),[notice,setNotice]=useState(''),[headerAccessory,setHeaderAccessoryState]=useState<ReactNode>(null)
@@ -36,7 +37,7 @@ export function PublishedV2Runtime({data}:{data:Data}){
     else if(options?.replace)router.replace(url)
     else router.push(url)
   }
-  const transport:PublishedV2Transport={slug,revision,dataVersion,inventory:app.inventory,rowAction:id=>rowActions[id],invalidate:message=>{setNotice(message);setDataVersion(value=>value+1)},readData:request=>readPublishedV2DataAction(slug,{...request,revision}),readRecord:request=>readPublishedV2RecordAction(slug,{...request,revision}),inspectForm:request=>inspectPublishedV2FormAction(slug,{...request,revision}),submitForm:request=>submitPublishedV2FormAction(slug,request),inspectButton:request=>inspectPublishedV2ButtonAction(slug,{...request,revision}),submitButton:request=>submitPublishedV2ButtonAction(slug,request),inspectDelete:request=>inspectPublishedV2DeleteAction(slug,{...request,revision}),submitDelete:request=>submitPublishedV2DeleteAction(slug,request),navigate,back:(fallback,options)=>{enterNavigation.current.prepare(Boolean(options?.automatic));history.back(fallback)},refresh,tableName:tableId=>tables.find(table=>table.id===tableId)?.name??'Таблица',buttonState:id=>buttons[id],setHeaderAccessory}
+  const transport:PublishedV2Transport={slug,revision,asOf:data.asOf,dataVersion,inventory:app.inventory,rowAction:id=>rowActions[id],invalidate:message=>{setNotice(message);setDataVersion(value=>value+1)},readData:request=>readPublishedV2DataAction(slug,{...request,revision}),readRecord:request=>readPublishedV2RecordAction(slug,{...request,revision}),inspectForm:request=>inspectPublishedV2FormAction(slug,{...request,revision}),submitForm:request=>submitPublishedV2FormAction(slug,request),inspectButton:request=>inspectPublishedV2ButtonAction(slug,{...request,revision}),submitButton:request=>submitPublishedV2ButtonAction(slug,request),inspectDelete:request=>inspectPublishedV2DeleteAction(slug,{...request,revision}),submitDelete:request=>submitPublishedV2DeleteAction(slug,request),navigate,back:(fallback,options)=>{enterNavigation.current.prepare(Boolean(options?.automatic));history.back(fallback)},refresh,tableName:tableId=>tables.find(table=>table.id===tableId)?.name??'Таблица',buttonState:id=>buttons[id],setHeaderAccessory}
   const home=(app.homeScreenId?app.screens.find(screen=>screen.id===app.homeScreenId&&!screen.contextTableId)?.id:undefined)??app.screens.find(screen=>!screen.contextTableId)?.id
   const parent = builderV2RecordParent(app, screenId)
   const inventory = app.inventory

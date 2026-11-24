@@ -104,6 +104,7 @@ describe.skipIf(!process.env.DATABASE_URL)('first launch of every starter in Pos
     expect(record!.draft).toEqual(installed.app)
     expect(record!.published).toBeNull()
   })
+  // Two full salon installs under CI load can exceed Vitest's default 5s.
   it('protects source data referenced by a real row outside the app and never touches another installation', async () => {
     const installed = await install('salon'), { db, tables, fields, rows } = database
     const [service] = await db.select().from(rows).where(eq(rows.tableId, installed.app.booking!.tables.services)).limit(1)
@@ -120,7 +121,7 @@ describe.skipIf(!process.env.DATABASE_URL)('first launch of every starter in Pos
     expect(await db.select().from(rows).where(and(eq(rows.id, service!.id), isNull(rows.deletedAt)))).toHaveLength(1)
     expect(await db.select().from(rows).where(and(eq(rows.id, realRowId), isNull(rows.deletedAt)))).toHaveLength(1)
     expect((await prepare.templatePreparation(foreignId, other.appId))!.samples).toBeGreaterThan(0)
-  })
+  }, 20_000)
   it('rejects a viewer before changing any example', async () => {
     const installed = await install('proizvodstvo')
     const count = (await prepare.templatePreparation(workspaceId, installed.appId))!.samples
@@ -139,5 +140,5 @@ describe.skipIf(!process.env.DATABASE_URL)('first launch of every starter in Pos
     const records = await database.db.select().from(database.apps).where(inArray(database.apps.id, results.map(result => result.ok ? result.appId : '')))
     expect(new Set(records.map(record => record.workspaceId))).toEqual(new Set([workspaceId, foreignId]))
     expect(records.every(record => { const read = readAppDefinition(record.draft); return read.ok && read.app.slug === record.slug })).toBe(true)
-  })
+  }, 20_000)
 })

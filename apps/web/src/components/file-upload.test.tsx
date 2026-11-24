@@ -27,18 +27,45 @@ describe('attachment upload lifecycle', () => {
 
   it('does not restore a removed file when another upload finishes', async () => {
     let finish!: (value: Response) => void
-    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(resolve => { finish = resolve })))
+    const fetch = vi.fn((_url: string, options?: RequestInit) => {
+      if (options?.method === 'DELETE') return Promise.resolve({ json: async () => ({ ok: true }) } as Response)
+      return new Promise<Response>(resolve => { finish = resolve })
+    })
+    vi.stubGlobal('fetch', fetch)
     function Form() {
       const [files, setFiles] = useState([file('a')])
       return <FileUpload value={files} maxCount={5} compact conversation={conversation} onChange={setFiles} />
     }
     const ui = render(<Form />)
     pick(ui.container, 'b.txt')
-    fireEvent.click(ui.getByTitle('Убрать файл'))
+    await ui.findByText('Проверяется…')
+    const removeUploaded = ui.getByRole('link', { name: /a\.txt/ }).parentElement!.querySelector('button[aria-label="Убрать файл"]')!
+    fireEvent.click(removeUploaded)
     expect(ui.queryByRole('link', { name: /a\.txt/ })).toBeNull()
+    expect(fetch.mock.calls.some(call => call[1]?.method === 'DELETE')).toBe(true)
     await act(async () => { finish(response(file('b'))) })
     expect(ui.getByRole('link', { name: /b\.txt/ })).toBeTruthy()
     expect(ui.queryByRole('link', { name: /a\.txt/ })).toBeNull()
+  })
+
+  it('aborts an in-flight upload when the pending chip is removed', async () => {
+    let finish!: (value: Response) => void
+    const fetch = vi.fn((_url: string, options?: RequestInit) => new Promise<Response>((resolve, reject) => {
+      const signal = options?.signal
+      if (signal) signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))
+      finish = resolve
+    }))
+    vi.stubGlobal('fetch', fetch)
+    const change = vi.fn(), busy = vi.fn()
+    const ui = render(<FileUpload value={[]} maxCount={5} compact conversation={conversation} onChange={change} onBusyChange={busy} />)
+    pick(ui.container, 'pending.txt')
+    expect(await ui.findByText('Проверяется…')).toBeTruthy()
+    fireEvent.click(ui.getByRole('button', { name: 'Убрать файл' }))
+    await waitFor(() => expect(busy).toHaveBeenLastCalledWith(false))
+    expect(ui.queryByText('Проверяется…')).toBeNull()
+    expect(change).not.toHaveBeenCalled()
+    await act(async () => { finish(response(file('pending'))) })
+    expect(change).not.toHaveBeenCalled()
   })
 
   it('ignores an upload that finishes after switching to another conversation', async () => {

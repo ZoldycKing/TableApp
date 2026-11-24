@@ -31,7 +31,12 @@ export const conversationShotAlert: UploadAlertInfo = {
   message: 'Файл «invoice.exe» не загружен: такой тип не поддерживается.',
 }
 
-export const conversationShotDraftFiles: Attachment[] = [pdf]
+const draftDoc: Attachment = {
+  id: 'att_draft_doc', key: 'demo/comment.docx', name: 'комментарий.docx',
+  mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', size: 18432, width: null, height: null, scanStatus: 'clean',
+}
+
+export const conversationShotDraftFiles: Attachment[] = [pdf, draftDoc]
 
 export function conversationShotPage(staff: boolean): ConversationPage {
   return {

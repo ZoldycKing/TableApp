@@ -29,7 +29,7 @@ describe('conversation attachment and message coordination', () => {
     fireEvent.click(ui.getByRole('button', { name: 'Отправить' }))
     await waitFor(() => expect(mocks.send).toHaveBeenCalledOnce())
     expect(ui.getByRole('button', { name: 'Прикрепить файл' }).hasAttribute('disabled')).toBe(true)
-    expect(ui.getByTitle('Убрать файл').hasAttribute('disabled')).toBe(true)
+    expect(ui.getByRole('button', { name: 'Убрать файл' }).hasAttribute('disabled')).toBe(true)
     pick(ui.container, 'during-send')
     expect(fetch).toHaveBeenCalledOnce()
     await act(async () => { finish({ ok: true }) })

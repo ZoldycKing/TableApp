@@ -81,6 +81,21 @@ type ChipProps = {
   onRemove?: () => void
 }
 
+function ChipRemoveButton({ disabled, onRemove }: { disabled?: boolean; onRemove?: () => void }) {
+  return (
+    <button
+      type="button"
+      title="Убрать файл"
+      aria-label="Убрать файл"
+      disabled={disabled}
+      onClick={(event) => { event.preventDefault(); event.stopPropagation(); onRemove?.() }}
+      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sage-700 hover:bg-sage-100 disabled:opacity-40"
+    >
+      <ProtoIcon name="close" size={14} />
+    </button>
+  )
+}
+
 /** Attachment chip for message history and the composer draft list. */
 export function ConversationAttachmentChip({ item, business = false, removable = false, disabled = false, onRemove }: ChipProps) {
   const pending = item.scanStatus === 'pending'
@@ -112,23 +127,24 @@ export function ConversationAttachmentChip({ item, business = false, removable =
     </>
   )
 
-  const baseClass = `group relative inline-flex max-w-full min-w-0 items-center gap-2 rounded-xl border px-2.5 py-1.5 text-xs ${
+  const shellClass = `inline-flex max-w-full min-w-0 items-center gap-0.5 rounded-xl border pl-2.5 pr-0.5 py-0.5 text-xs ${
     blocked
       ? 'border-[#C4623A]/35 bg-[#C4623A]/10 text-[#C4623A]'
       : pending
         ? 'border-sage-200 bg-sage-50 text-sage-800'
-        : 'border-sand-200 bg-white text-sage-800 hover:border-sage-300'
+        : 'border-sand-200 bg-white text-sage-800'
   }`
+  const mainClass = `inline-flex min-w-0 flex-1 items-center gap-2 py-1 ${available && !blocked && !pending ? 'hover:text-sage-900' : ''}`
 
   return (
-    <span className="relative inline-flex max-w-full min-w-0">
+    <span className={shellClass}>
       {available ? (
         <a
           href={fileUrl(item.key, business)}
           target="_blank"
           rel="noreferrer"
           download={item.key.startsWith('data:') ? item.name : undefined}
-          className={`${baseClass} no-underline`}
+          className={`${mainClass} no-underline`}
           title={label}
           aria-label={label}
         >
@@ -136,7 +152,7 @@ export function ConversationAttachmentChip({ item, business = false, removable =
         </a>
       ) : (
         <span
-          className={baseClass}
+          className={mainClass}
           role="status"
           title={blocked ? 'Найдена угроза, файл удалён' : undefined}
           aria-label={blocked ? `Файл заблокирован: ${item.name}. Найдена угроза, файл удалён` : `Файл ${item.name}: проверяется`}
@@ -144,28 +160,20 @@ export function ConversationAttachmentChip({ item, business = false, removable =
           {body}
         </span>
       )}
-      {removable ? (
-        <button
-          type="button"
-          title="Убрать файл"
-          aria-label={`Убрать файл ${item.name}`}
-          disabled={disabled}
-          onClick={(event) => { event.preventDefault(); event.stopPropagation(); onRemove?.() }}
-          className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-sand-700 text-[10px] leading-none text-white disabled:opacity-40"
-        >
-          ×
-        </button>
-      ) : null}
+      {removable ? <ChipRemoveButton disabled={disabled} onRemove={onRemove} /> : null}
     </span>
   )
 }
 
-export function ConversationPendingChip({ name }: { name: string }) {
+export function ConversationPendingChip({ name, disabled, onRemove }: { name: string; disabled?: boolean; onRemove?: () => void }) {
   return (
-    <span className="inline-flex max-w-full min-w-0 items-center gap-2 rounded-xl border border-sage-200 bg-sage-50 px-2.5 py-1.5 text-xs text-sage-800" role="status">
-      <span className="inline-flex shrink-0 motion-safe:animate-spin" aria-hidden><ProtoIcon name="spinner" size={16} /></span>
-      <span className="min-w-0 truncate">Проверяется…</span>
-      <span className="sr-only">{name}</span>
+    <span className="inline-flex max-w-full min-w-0 items-center gap-0.5 rounded-xl border border-sage-200 bg-sage-50 py-0.5 pl-2.5 pr-0.5 text-xs text-sage-800">
+      <span className="inline-flex min-w-0 flex-1 items-center gap-2 py-1" role="status">
+        <span className="inline-flex shrink-0 motion-safe:animate-spin" aria-hidden><ProtoIcon name="spinner" size={16} /></span>
+        <span className="min-w-0 truncate">Проверяется…</span>
+        <span className="sr-only">{name}</span>
+      </span>
+      {onRemove ? <ChipRemoveButton disabled={disabled} onRemove={onRemove} /> : null}
     </span>
   )
 }

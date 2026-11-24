@@ -32,6 +32,18 @@ async function upload(file: File, appId?: string, conversation?: { slug: string;
   return payload
 }
 
+/** Best-effort delete of an unsent staged conversation attachment (cleanup reclaim if this fails). */
+function discardStagedConversationFile(
+  conversation: { slug: string; tableId: string; rowId: string; business?: boolean },
+  fileId: string,
+) {
+  void fetch('/api/conversations/files', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...conversation, fileId }),
+  }).catch(() => { /* orphan cleanup job reclaims unsent files */ })
+}
+
 type PendingChip = { id: string; name: string }
 
 /**
@@ -175,14 +187,27 @@ function FileUploadInput({
           if (active()) setPending((currentPending) => currentPending.filter((item) => item.id !== chipId))
         }
       }
-    } catch { if (active()) reportError(batch[0]?.name ?? 'файл', 'Не удалось загрузить файл. Попробуйте ещё раз') }
+    } catch {
+      if (active() && !controller.signal.aborted) reportError(batch[0]?.name ?? 'файл', 'Не удалось загрузить файл. Попробуйте ещё раз')
+    }
     finally {
-      if (active() && added.length > 0) change([...current.current.value, ...added].slice(0, current.current.maxCount))
       if (flight.current === controller) {
+        if (added.length > 0 && !current.current.disabled) change([...current.current.value, ...added].slice(0, current.current.maxCount))
         flight.current = null; setBusy(false); setPending([]); current.current.onBusyChange?.(false)
         if (inputRef.current) inputRef.current.value = ''
       }
     }
+  }
+
+  const cancelInFlight = () => {
+    if (!flight.current) return
+    flight.current.abort()
+  }
+
+  const removeUploaded = (item: Attachment) => {
+    if (current.current.disabled) return
+    change(current.current.value.filter((candidate) => candidate.key !== item.key))
+    if (conversation) discardStagedConversationFile(conversation, item.id)
   }
 
   if (conversationMode) {
@@ -195,10 +220,17 @@ function FileUploadInput({
             business={Boolean(conversation?.business)}
             removable
             disabled={disabled}
-            onRemove={() => { if (!current.current.disabled) change(current.current.value.filter((candidate) => candidate.key !== item.key)) }}
+            onRemove={() => removeUploaded(item)}
           />
         ))}
-        {pending.map((item) => <ConversationPendingChip key={item.id} name={item.name} />)}
+        {pending.map((item) => (
+          <ConversationPendingChip
+            key={item.id}
+            name={item.name}
+            disabled={disabled}
+            onRemove={cancelInFlight}
+          />
+        ))}
       </>
     ) : null
     const fileInput = <input ref={inputRef} type="file" multiple={maxCount > 1} disabled={busy || disabled} className="hidden" onChange={(event) => void pick(event.target.files)} />

@@ -61,6 +61,7 @@ const desktop: Shot[] = [
   { view: 'dashboard', name: 'dash-desktop-1440.png', fullPage: true },
   { view: 'dashboard', name: 'dash-dark-1440.png', scheme: 'dark', fullPage: true },
   { view: 'queue', name: 'list-desktop-1440.png' },
+  { view: 'queue', name: 'list-dark-1440.png', scheme: 'dark' },
   { view: 'board', name: 'board-desktop-1440.png' },
   { view: 'ticket', name: 'ticket-desktop-1440.png' },
   { view: 'client-preview', name: 'client-preview-desktop-1440.png' },

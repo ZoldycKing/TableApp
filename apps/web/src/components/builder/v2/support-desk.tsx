@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { instantToWallClock } from '@tableapp/schema'
 import { supportPolicyFromRows, supportStoredEvents } from '@/lib/support-persist'
 import { SUPPORT_AGE_BUCKETS, type SupportAgeBucket, type SupportQueueFocus, operatorTransitions, type SupportStatusName } from '@/lib/support-logic'
-import { SUPPORT_HEAT_AGES, SUPPORT_SLA_STARTER, supportDashboard, supportSlaLabel, supportSlaPriorityName, supportSlaView, type SupportQueueScope, type SupportSlaPolicy, type SupportSlaPriority, type SupportSlaView } from '@/lib/support-sla'
+import { SUPPORT_HEAT_AGES, SUPPORT_SLA_STARTER, supportDashboard, supportSlaLabel, supportSlaPriorityName, supportSlaPriorityShort, supportSlaView, type SupportQueueScope, type SupportSlaPolicy, type SupportSlaPriority, type SupportSlaView } from '@/lib/support-sla'
 import { supportPortraitUrl } from '@/lib/templates/support-portraits'
 import { ProtoIcon } from '../prototype/icons'
 import { ListScreenShell } from './layout-shell'
@@ -241,14 +241,20 @@ export function SupportDashboard(props: DeskProps) {
           <table className={css.heatTable}>
             <thead>
               <tr>
-                <th scope="col">Приоритет</th>
-                {SUPPORT_HEAT_AGES.map(age => <th key={age.id} scope="col">{age.label}</th>)}
+                <th scope="col" className={css.heatPriorityHead}><span className={css.heatLabelFull}>Приоритет</span><span className={css.heatLabelShort}>Прио.</span></th>
+                {SUPPORT_HEAT_AGES.map(age => <th key={age.id} scope="col"><span className={css.heatLabelFull}>{age.label}</span><span className={css.heatLabelShort}>{age.shortLabel}</span></th>)}
                 <th scope="col" className={css.heatTotalHead}>Всего</th>
               </tr>
             </thead>
             <tbody>
               {dash.heat.map(row => <tr key={row.priority}>
-                <th scope="row"><span className={css.priorityPill} data-priority={priorityTone(row.priority)}>{supportSlaPriorityName(row.priority)}</span></th>
+                <th scope="row">
+                  <span className={css.priorityPill} data-priority={priorityTone(row.priority)} data-heat-priority>
+                    <i className={css.priorityDot} aria-hidden="true" />
+                    <span className={css.priorityFull}>{supportSlaPriorityName(row.priority)}</span>
+                    <span className={css.priorityShort}>{supportSlaPriorityShort(row.priority)}</span>
+                  </span>
+                </th>
                 {SUPPORT_AGE_BUCKETS.map(age => {
                   const cell = row.cells[age.id]
                   return <td key={age.id}>

@@ -236,13 +236,20 @@ export function supportQueueMatch(input: { status: string; assigneeEmail: string
 
 export type SupportAgeBucket = 'lt4h' | '4to12h' | '12to24h' | '1to3d' | 'gt3d'
 
-export const SUPPORT_HEAT_AGES: { id: SupportAgeBucket; label: string }[] = [
-  { id: 'lt4h', label: 'до 4 ч' },
-  { id: '4to12h', label: '4–12 ч' },
-  { id: '12to24h', label: '12–24 ч' },
-  { id: '1to3d', label: '1–3 дня' },
-  { id: 'gt3d', label: 'больше 3 дней' },
+export const SUPPORT_HEAT_AGES: { id: SupportAgeBucket; label: string; shortLabel: string }[] = [
+  { id: 'lt4h', label: 'до 4 ч', shortLabel: '<4 ч' },
+  { id: '4to12h', label: '4–12 ч', shortLabel: '4–12' },
+  { id: '12to24h', label: '12–24 ч', shortLabel: '12–24' },
+  { id: '1to3d', label: '1–3 дня', shortLabel: '1–3 д' },
+  { id: 'gt3d', label: 'больше 3 дней', shortLabel: '>3 д' },
 ]
+
+export function supportSlaPriorityShort(priority: SupportSlaPriority) {
+  if (priority === 'urgent') return 'Сроч.'
+  if (priority === 'high') return 'Высок.'
+  if (priority === 'normal') return 'Обычн.'
+  return 'Низк.'
+}
 
 export function supportHeatAgeBucket(ageMs: number): SupportAgeBucket {
   if (ageMs < 4 * 3_600_000) return 'lt4h'

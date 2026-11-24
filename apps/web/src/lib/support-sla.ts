@@ -431,6 +431,16 @@ export function supportSlaDurationLabel(ms: number) {
   return `${hours} ч ${minutes} мин`
 }
 
+/** Largest unit only — list chips that must never clip: «3 дн» / «5 ч» / «40 мин». */
+export function supportSlaDurationCompactLabel(ms: number) {
+  const total = Math.max(0, Math.round(Math.abs(ms) / 60_000))
+  const days = Math.floor(total / (24 * 60))
+  if (days > 0) return `${days} дн`
+  const hours = Math.floor(total / 60)
+  if (hours > 0) return `${hours} ч`
+  return `${total} мин`
+}
+
 /**
  * Live countdown for headers and queue rows.
  * Sage when plenty of time; amber under ~25% of budget or under 1 h;
@@ -454,16 +464,18 @@ export function supportSlaCountdown(view: SupportSlaView): SupportSlaCountdown {
   const dueAt = clock.dueAt
   if (remainingMs <= 0 || clock.overdue) {
     const over = supportSlaDurationLabel(remainingMs)
+    const compact = supportSlaDurationCompactLabel(remainingMs)
     const label = `Просрочено ${over}`
-    return { known: true, label, shortLabel: label, tone: 'overdue', remainingMs, dueAt }
+    return { known: true, label, shortLabel: `Просрочено ${compact}`, tone: 'overdue', remainingMs, dueAt }
   }
   const left = supportSlaDurationLabel(remainingMs)
+  const compact = supportSlaDurationCompactLabel(remainingMs)
   const budget = clock.budgetMs ?? 0
   const amber = remainingMs < 3_600_000 || (budget > 0 && remainingMs <= budget * 0.25) || clock.risk
   return {
     known: true,
     label: `Осталось ${left}`,
-    shortLabel: left,
+    shortLabel: compact,
     tone: amber ? 'amber' : 'sage',
     remainingMs,
     dueAt,

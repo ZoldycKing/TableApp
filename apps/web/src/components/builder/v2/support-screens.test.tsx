@@ -138,10 +138,14 @@ describe('support screens', () => {
 
     render(<SupportDemo view="ticket" bare phone />)
     await screen.findByRole('heading', { name: 'Не сходится сумма в отчёте за октябрь' })
-    expect(screen.getByRole('radiogroup', { name: 'Режим ответа' })).toBeTruthy()
+    const modes = screen.getByRole('radiogroup', { name: 'Режим ответа' })
+    expect(modes.className).toMatch(/@container/)
+    expect(modes.textContent).toContain('Клиенту')
+    expect(modes.textContent).toContain('Заметка')
     expect(screen.getByRole('radio', { name: 'Внутренняя заметка' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Прикрепить файл' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Отправить' })).toBeTruthy()
+    expect(document.querySelector('[data-support-composer]')).toBeNull()
   })
 
   it('opens the client form with the save action visible', async () => {

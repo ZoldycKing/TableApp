@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { SUPPORT_SLA_STARTER, supportDashboard, supportQueueMatch, supportSlaCountdown, supportSlaDurationLabel, supportSlaNormLabel, supportSlaView, type SupportSlaEvent, type SupportSlaPolicy } from './support-sla'
+import { SUPPORT_SLA_STARTER, supportDashboard, supportQueueMatch, supportSlaCountdown, supportSlaDurationCompactLabel, supportSlaDurationLabel, supportSlaNormLabel, supportSlaView, type SupportSlaEvent, type SupportSlaPolicy } from './support-sla'
 
 const policy: SupportSlaPolicy = SUPPORT_SLA_STARTER
 const t0 = Date.parse('2026-11-23T09:00:00.000Z')
@@ -117,6 +117,10 @@ describe('support SLA clocks', () => {
     expect(supportSlaDurationLabel(95 * 3_600_000)).toBe('3 дн 23 ч')
     expect(supportSlaDurationLabel(3 * 24 * 3_600_000)).toBe('3 дн')
     expect(supportSlaDurationLabel(2 * 24 * 3_600_000 + 4 * 3_600_000)).toBe('2 дн 4 ч')
+    expect(supportSlaDurationCompactLabel(95 * 3_600_000)).toBe('3 дн')
+    expect(supportSlaDurationCompactLabel(2 * 24 * 3_600_000 + 4 * 3_600_000)).toBe('2 дн')
+    expect(supportSlaDurationCompactLabel(5 * 3_600_000 + 30 * 60_000)).toBe('5 ч')
+    expect(supportSlaDurationCompactLabel(40 * 60_000)).toBe('40 мин')
     const plenty = supportSlaCountdown(supportSlaView([created(t0, 'Низкий')], policy, t0 + min(30)))
     expect(plenty.label).toMatch(/^Осталось /)
     expect(plenty.tone).toBe('sage')
@@ -129,6 +133,8 @@ describe('support SLA clocks', () => {
     expect(late.shortLabel).toBe('Просрочено 40 мин')
     const daysLate = supportSlaCountdown(supportSlaView([created()], policy, t0 + min(60) + 3 * 24 * 3_600_000))
     expect(daysLate.label).toMatch(/^Просрочено 3 дн/)
+    expect(daysLate.shortLabel).toBe('Просрочено 3 дн')
+    expect(daysLate.shortLabel).not.toMatch(/\d+ дн \d+ ч/)
     expect(daysLate.shortLabel).not.toMatch(/Просроч\./)
     const paused = supportSlaCountdown(supportSlaView([created(), { at: t0 + min(10), kind: 'status', status: 'Ждём клиента' }], policy, t0 + min(100)))
     expect(paused.label).toBe('На паузе')

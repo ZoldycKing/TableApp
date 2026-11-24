@@ -198,9 +198,11 @@
 .slaBadge {
   display: inline-flex; align-items: center; min-height: 26px; max-width: 100%; padding: 3px 10px; border-radius: 999px;
   font-size: 12px; font-weight: 750; line-height: 1.2; white-space: nowrap; font-variant-numeric: tabular-nums;
-  overflow: hidden; text-overflow: ellipsis;
 }
-.slaBadge[data-compact] { min-height: 22px; padding: 2px 8px; font-size: 11px; }
+.slaBadge[data-compact] {
+  min-height: 22px; padding: 2px 8px; font-size: 11px;
+  white-space: normal; overflow: visible; text-overflow: unset; overflow-wrap: anywhere;
+}
 .slaBadge[data-tone='sage'] { background: color-mix(in srgb, #3F6B5C 20%, transparent); color: #2F5346; }
 .slaBadge[data-tone='amber'] { background: #F6E8D2; color: #8A5A18; }
 .slaBadge[data-tone='overdue'],
@@ -311,23 +313,7 @@
   background: color-mix(in srgb, #E8B86D 14%, var(--v2-surface, #fff));
   border-color: color-mix(in srgb, #C48A2A 30%, var(--v2-line, var(--sc-border)));
 }
-.composerModes {
-  display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; border: 1px solid var(--v2-line, var(--sc-border));
-  border-radius: 10px; background: var(--v2-surface, var(--sc-bg-elevated));
-}
-.composerModes button {
-  min-height: 36px; padding: 6px 8px; border: 0; border-right: 1px solid var(--v2-line, var(--sc-border));
-  background: transparent; color: var(--v2-muted, var(--sc-text-2)); font: inherit; font-size: 13px; font-weight: 700;
-  line-height: 1.2; white-space: nowrap; cursor: pointer;
-}
-.composerModes button:last-child { border-right: 0; }
-.composerModes button[aria-checked='true'] { background: color-mix(in srgb, #3F6B5C 12%, transparent); color: #2F5346; }
-.composerModes button:last-child[aria-checked='true'] { background: color-mix(in srgb, #C4623A 12%, transparent); color: #8a3d28; }
-.modeFull { display: inline; }
-.modeShort { display: none; }
 .composerFooter { display: flex; justify-content: flex-end; }
-.composer .field { gap: 0; }
-.composer .field textarea { min-height: 88px; }
 .empty[data-compact] { padding: 12px; }
 .ticketCols { display: grid; gap: 12px; min-width: 0; align-items: start; }
 .factsCol { order: 1; }
@@ -338,13 +324,9 @@
   .facts dd { font-size: 14px; line-height: 1.25; }
   .factsCol :global(section) { padding-block: 8px; }
   .statCards { grid-template-columns: repeat(2, minmax(0, 1fr)); padding-inline: 16px; }
-  .modeFull { display: none; }
-  .modeShort { display: inline; }
-  .composerModes button { font-size: 12px; padding-inline: 6px; }
   .root[data-ticket-tight] .ticketCols { gap: 10px; }
   .root[data-ticket-tight] .timeline { gap: 8px; }
   .root[data-ticket-tight] .message { padding: 10px; }
-  .root[data-ticket-tight] .composer { margin-top: 8px; padding: 10px; gap: 8px; }
 }
 @container builder-app (min-width: 800px) {
   .ticketCols { grid-template-columns: minmax(0, 1.7fr) minmax(15rem, 0.72fr); }

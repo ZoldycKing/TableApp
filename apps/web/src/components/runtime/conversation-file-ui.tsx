@@ -204,11 +204,13 @@ export function ComposerModeSegment({
   disabled?: boolean
   onChange: (internal: boolean) => void
 }) {
+  // Container width — not viewport — so phone frames (~390) and narrow ticket
+  // columns share the same ConversationPanel labels («Клиенту» / «Заметка»).
   return (
     <div
       role="radiogroup"
       aria-label="Режим ответа"
-      className="grid grid-cols-2 overflow-hidden rounded-[10px] border border-sand-200 bg-white"
+      className="@container grid grid-cols-2 overflow-hidden rounded-[10px] border border-sand-200 bg-white"
     >
       <button
         type="button"
@@ -222,8 +224,8 @@ export function ComposerModeSegment({
           !internal ? 'bg-sage-50 text-ink' : 'bg-transparent text-ink-muted'
         }`}
       >
-        <span className="hidden min-[380px]:inline" aria-hidden="true">Ответ клиенту</span>
-        <span className="inline min-[380px]:hidden" aria-hidden="true">Клиенту</span>
+        <span className="hidden @min-[480px]:inline" aria-hidden="true">Ответ клиенту</span>
+        <span className="inline @min-[480px]:hidden" aria-hidden="true">Клиенту</span>
       </button>
       <button
         type="button"
@@ -237,8 +239,8 @@ export function ComposerModeSegment({
           internal ? 'bg-[#C4623A]/12 text-[#8a3d28]' : 'bg-transparent text-ink-muted'
         }`}
       >
-        <span className="hidden min-[380px]:inline" aria-hidden="true">Внутренняя заметка</span>
-        <span className="inline min-[380px]:hidden" aria-hidden="true">Заметка</span>
+        <span className="hidden @min-[480px]:inline" aria-hidden="true">Внутренняя заметка</span>
+        <span className="inline @min-[480px]:hidden" aria-hidden="true">Заметка</span>
       </button>
     </div>
   )

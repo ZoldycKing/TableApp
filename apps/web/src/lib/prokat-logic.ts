@@ -194,15 +194,120 @@ export function computeRentalPrice(input: { tariff: string; rate: number; from: 
   return calendarDaysInclusive(fromMs, toMs) * rate
 }
 
-export function computeLateFee(input: { tariff: string; rate: number; to: string | number; now: string | number }) {
+export const PROKAT_LATE_FEE_MODES = ['Нет', 'Сумма за час', 'Сумма за сутки', 'Процент от тарифа за сутки'] as const
+export type ProkatLateFeeMode = typeof PROKAT_LATE_FEE_MODES[number]
+
+export function isProkatLateFeeMode(value: string): value is ProkatLateFeeMode {
+  return (PROKAT_LATE_FEE_MODES as readonly string[]).includes(value)
+}
+
+export type ProkatLateFeeInput = {
+  mode: string
+  /** Rub/hour, rub/day, or percent depending on mode. */
+  value: number
+  /** Hours after planned return before fees start. Default 1. */
+  graceHours?: number
+  /** Daily ceiling for hourly fees (usually the item day tariff). */
+  capPerDay?: number
+  /** Item rental rate — used for percent-of-tariff mode. */
+  rate: number
+  to: string | number
+  now: string | number
+}
+
+function lateFeeBillableMs(toMs: number, nowMs: number, graceHours: number) {
+  const graceMs = Math.max(0, graceHours) * 3_600_000
+  return nowMs - (toMs + graceMs)
+}
+
+/**
+ * Server-side late fee. Grace first, then:
+ * - Нет → 0
+ * - Сумма за час → started hours × value, capped by capPerDay × started days
+ * - Сумма за сутки → started days × value
+ * - Процент от тарифа за сутки → started days × rate × (value / 100)
+ */
+export function computeLateFee(input: ProkatLateFeeInput) {
+  const mode = isProkatLateFeeMode(input.mode) ? input.mode : 'Нет'
+  if (mode === 'Нет') return 0
+  const value = Number(input.value)
   const rate = Number(input.rate)
-  if (!Number.isFinite(rate) || rate < 0) return 0
+  const graceHours = Number.isFinite(input.graceHours) ? Math.max(0, Number(input.graceHours)) : 1
   const toMs = typeof input.to === 'number' ? input.to : Date.parse(input.to)
   const nowMs = typeof input.now === 'number' ? input.now : Date.parse(input.now)
-  if (!Number.isFinite(toMs) || !Number.isFinite(nowMs) || nowMs <= toMs) return 0
-  if (input.tariff === 'За час') return ceilHours(toMs, nowMs) * rate
-  // day / weekend: ceil days overdue * rate
-  return Math.max(1, Math.ceil((nowMs - toMs) / 86_400_000)) * rate
+  if (!Number.isFinite(toMs) || !Number.isFinite(nowMs)) return 0
+  const billable = lateFeeBillableMs(toMs, nowMs, graceHours)
+  if (billable <= 0) return 0
+  const hours = Math.max(1, Math.ceil(billable / 3_600_000))
+  const days = Math.max(1, Math.ceil(billable / 86_400_000))
+  if (mode === 'Сумма за час') {
+    if (!Number.isFinite(value) || value < 0) return 0
+    const raw = hours * value
+    const cap = Number(input.capPerDay)
+    if (Number.isFinite(cap) && cap > 0) return Math.min(raw, days * cap)
+    return raw
+  }
+  if (mode === 'Сумма за сутки') {
+    if (!Number.isFinite(value) || value < 0) return 0
+    return days * value
+  }
+  // Процент от тарифа за сутки
+  if (!Number.isFinite(rate) || rate < 0 || !Number.isFinite(value) || value < 0) return 0
+  return Math.round(days * rate * (value / 100))
+}
+
+/** Plain-Russian formula for staff overdue cards and item settings. */
+export function describeLateFee(input: {
+  mode: string
+  value: number
+  graceHours?: number
+  capPerDay?: number
+  rate?: number
+}) {
+  const mode = isProkatLateFeeMode(input.mode) ? input.mode : 'Нет'
+  const grace = Number.isFinite(input.graceHours) ? Math.max(0, Number(input.graceHours)) : 1
+  const graceLabel = grace === 0 ? 'без льготного времени' : grace === 1 ? '1 час льготы' : `${grace} ч льготы`
+  if (mode === 'Нет') return 'Штраф не начисляется'
+  if (mode === 'Сумма за час') {
+    const cap = Number(input.capPerDay)
+    const base = `${graceLabel}, затем ${formatMoney(input.value)}/час`
+    if (Number.isFinite(cap) && cap > 0) return `${base}, не больше ${formatMoney(cap)} в сутки`
+    return base
+  }
+  if (mode === 'Сумма за сутки') return `${graceLabel}, затем ${formatMoney(input.value)} за сутки просрочки`
+  const rate = Number(input.rate)
+  const percent = Number(input.value)
+  const ofTariff = Number.isFinite(rate) && rate > 0
+    ? `${percent}% от тарифа (${formatMoney(rate)}) за сутки`
+    : `${percent}% от тарифа за сутки`
+  return `${graceLabel}, затем ${ofTariff}`
+}
+
+/** «Елена Волкова» → «Елена В.»; single token stays as-is. */
+export function shortClientName(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (!parts.length) return 'Без имени'
+  if (parts.length === 1) return parts[0]!
+  const last = parts[parts.length - 1]!
+  const initial = [...last][0] ?? ''
+  return initial ? `${parts[0]} ${initial}.` : parts[0]!
+}
+
+export function timelineBarLabel(number: string, clientName: string) {
+  const short = shortClientName(clientName)
+  if (number && short) return `${number} · ${short}`
+  return number || short
+}
+
+/** @deprecated Prefer computeLateFee with explicit mode; kept for older call sites during migration. */
+export function computeLateFeeFromTariff(input: { tariff: string; rate: number; to: string | number; now: string | number }) {
+  const rate = Number(input.rate)
+  if (!Number.isFinite(rate) || rate < 0) return 0
+  // Legacy fallback: day/weekend → 100%/day of rate; hourly → rate/hour. No grace.
+  if (input.tariff === 'За час') {
+    return computeLateFee({ mode: 'Сумма за час', value: rate, graceHours: 0, rate, to: input.to, now: input.now })
+  }
+  return computeLateFee({ mode: 'Процент от тарифа за сутки', value: 100, graceHours: 0, rate, to: input.to, now: input.now })
 }
 
 export type ProkatBookingConflict = {
@@ -293,8 +398,52 @@ export type ProkatCatalogItem = {
   condition: string
   status: string
   photo?: string
+  /** When false, the item stays in staff inventory but is hidden from the client catalogue. */
+  showInCatalog?: boolean
+  lateFeeMode?: string
+  lateFeeValue?: number
+  lateFeeGraceHours?: number
+  lateFeeCapPerDay?: number
   /** Public «занят до» for client catalogue without exposing foreign bookings. */
   busyUntil?: string
+}
+
+export function itemLateFeeConfig(item: Pick<ProkatCatalogItem, 'lateFeeMode' | 'lateFeeValue' | 'lateFeeGraceHours' | 'lateFeeCapPerDay' | 'rate' | 'category'>) {
+  const mode = item.lateFeeMode && isProkatLateFeeMode(item.lateFeeMode)
+    ? item.lateFeeMode
+    : defaultLateFeeModeForCategory(item.category)
+  const value = Number.isFinite(item.lateFeeValue) ? Number(item.lateFeeValue) : defaultLateFeeValueForCategory(item.category)
+  const graceHours = Number.isFinite(item.lateFeeGraceHours) ? Number(item.lateFeeGraceHours) : 1
+  const cap = Number(item.lateFeeCapPerDay)
+  return {
+    mode,
+    value,
+    graceHours,
+    capPerDay: Number.isFinite(cap) && cap > 0 ? cap : undefined,
+    rate: item.rate,
+  }
+}
+
+export function defaultLateFeeModeForCategory(category: string): ProkatLateFeeMode {
+  if (category === 'SUP') return 'Сумма за час'
+  if (category === 'Велосипеды' || category === 'Инструменты' || category === 'Фототехника') return 'Процент от тарифа за сутки'
+  return 'Нет'
+}
+
+export function defaultLateFeeValueForCategory(category: string) {
+  if (category === 'SUP') return 500
+  if (category === 'Велосипеды') return 20
+  if (category === 'Инструменты' || category === 'Фототехника') return 100
+  return 0
+}
+
+export function computeItemLateFee(
+  item: Pick<ProkatCatalogItem, 'lateFeeMode' | 'lateFeeValue' | 'lateFeeGraceHours' | 'lateFeeCapPerDay' | 'rate' | 'category'>,
+  to: string | number,
+  now: string | number,
+) {
+  const config = itemLateFeeConfig(item)
+  return computeLateFee({ ...config, to, now })
 }
 
 /** Busy end for [from, to]: booking span first, else public item.busyUntil / service hold. */

@@ -81,6 +81,11 @@ export function buildProkatV2App(built: BuiltTemplate, meta: { id: string; works
     condition: column('Предметы', 'Состояние').id,
     status: column('Предметы', 'Статус').id,
     busyUntil: column('Предметы', 'Занят до').id,
+    showInCatalog: column('Предметы', 'Показывать клиентам').id,
+    lateFeeMode: column('Предметы', 'Штраф за просрочку').id,
+    lateFeeValue: column('Предметы', 'Ставка штрафа').id,
+    lateFeeGraceHours: column('Предметы', 'Льготные часы').id,
+    lateFeeCapPerDay: column('Предметы', 'Потолок штрафа в сутки').id,
   }
   const statuses = {
     request: choice('Брони', 'Статус', 'Заявка'),
@@ -269,7 +274,7 @@ export function buildProkatV2App(built: BuiltTemplate, meta: { id: string; works
   ]
   const clientItemRead = [
     item.name, item.photo, item.category, item.serial, item.tariff, item.rate, item.deposit, item.condition, item.status,
-    item.busyUntil,
+    item.busyUntil, item.showInCatalog,
   ]
   const deskBookingUpdate = [
     booking.title, booking.client, booking.clientName, booking.clientEmail, booking.items,
@@ -295,16 +300,19 @@ export function buildProkatV2App(built: BuiltTemplate, meta: { id: string; works
       inactiveChoiceId: choice('Сотрудники', 'Статус', 'Неактивен'),
     },
     screens: [
+      // Desk nav order (≤6 with Сообщения): Главная, Брони, Занятость, Предметы, Клиенты.
+      // Phone primary 4 after messages insert: Главная, Брони, Занятость, Сообщения.
       screen(ids.dashboardScreenId, 'Главная', 'Главная', 'home', desk, null, [dashBookings, dashItems], true),
       screen(ids.bookingsScreenId, 'Брони', 'Брони', 'calendar', desk, null, [listBookings, ids.createFormId], true),
-      screen(ids.bookingScreenId, 'Бронь', undefined, 'calendar', desk, bookings.id, [bookingItems, bookingStaff, bookingClients, ids.issueFormId, ids.returnFormId], false),
-      screen(ids.itemsScreenId, 'Предметы', 'Предметы', 'box', desk, null, [listItems], true),
-      screen(ids.itemScreenId, 'Предмет', undefined, 'box', { kind: 'roles', roleIds: ['owner', 'staff', 'client'] }, items.id, [itemBookings], false),
       screen(ids.timelineScreenId, 'Занятость', 'Занятость', 'list', desk, null, [timelineBookings, timelineItems], true),
+      screen(ids.itemsScreenId, 'Предметы', 'Предметы', 'box', desk, null, [listItems], true),
       screen(ids.clientsScreenId, 'Клиенты', 'Клиенты', 'users', desk, null, [listClients], true),
+      screen(ids.bookingScreenId, 'Бронь', undefined, 'calendar', desk, bookings.id, [bookingItems, bookingStaff, bookingClients, ids.issueFormId, ids.returnFormId], false),
+      screen(ids.itemScreenId, 'Предмет', undefined, 'box', { kind: 'roles', roleIds: ['owner', 'staff', 'client'] }, items.id, [itemBookings], false),
       screen(ids.clientScreenId, 'Клиент', undefined, 'users', desk, clients.id, [clientBookings], false),
-      screen(ids.catalogScreenId, 'Каталог', 'Каталог', 'tag', { kind: 'roles', roleIds: ['owner', 'staff', 'client'] }, null, [catalogItems, catalogBookings, ids.clientRequestFormId], true),
-      screen(ids.clientListScreenId, 'Мои брони', 'Кабинет', 'clipboard', { kind: 'roles', roleIds: ['owner', 'staff', 'client'] }, null, [myBookings], true),
+      // Client-only showcase — staff use «Предметы» + «Показывать клиентам» on the item card.
+      screen(ids.catalogScreenId, 'Каталог', 'Каталог', 'tag', clientRole, null, [catalogItems, catalogBookings, ids.clientRequestFormId], true),
+      screen(ids.clientListScreenId, 'Мои брони', 'Кабинет', 'clipboard', clientRole, null, [myBookings], true),
       screen(ids.clientBookingScreenId, 'Моя бронь', undefined, 'calendar', clientRole, bookings.id, [clientBookingItems], false),
     ],
     nodes, sources, workflows,

@@ -116,6 +116,24 @@ export const prokat: TemplateDef = {
           help: 'Свободен / в прокате / на обслуживании / списан.',
         },
         {
+          key: 'showInCatalog', name: 'Показывать клиентам', type: 'checkbox',
+          help: 'Если выключено, предмет остаётся на складе, но не виден в клиентском каталоге.',
+        },
+        {
+          key: 'lateFeeMode', name: 'Штраф за просрочку', type: 'single_select',
+          choices: [
+            { name: 'Нет', color: 'gray' },
+            { name: 'Сумма за час', color: 'amber' },
+            { name: 'Сумма за сутки', color: 'amber' },
+            { name: 'Процент от тарифа за сутки', color: 'red' },
+          ],
+          defaultChoice: 'Нет',
+          help: 'Как считать штраф, если клиент вернул позже срока.',
+        },
+        { key: 'lateFeeValue', name: 'Ставка штрафа', type: 'number', options: { format: 'decimal', precision: 0 }, help: 'Рубли за час/сутки или процент от тарифа — зависит от способа.' },
+        { key: 'lateFeeGraceHours', name: 'Льготные часы', type: 'number', options: { format: 'decimal', precision: 0 }, help: 'Сколько часов после срока возврата штраф ещё не начисляется. Обычно 1.' },
+        { key: 'lateFeeCapPerDay', name: 'Потолок штрафа в сутки', type: 'number', options: { format: 'currency', precision: 0, currency: 'RUB' }, help: 'Для штрафа «за час»: максимум за сутки просрочки. Часто равен дневному тарифу.' },
+        {
           key: 'busyUntil', name: 'Занят до', type: 'datetime', options: moscow,
           help: 'Публичная дата, до которой предмет занят. Клиент видит её в заявке без чужих броней.',
         },
@@ -125,16 +143,18 @@ export const prokat: TemplateDef = {
         { name: 'Каталог', type: 'gallery', coverBy: 'photo', filter: { field: 'status', op: 'is_not', value: 'Списан' } },
       ],
       rows: [
-        { key: 'bike-mtb', values: { name: 'Горный велосипед Trek Marlin 7', category: 'Велосипеды', serial: 'ВЕЛ-1001', tariff: 'За сутки', rate: 1500, deposit: 5000, condition: 'Хорошее, новые колодки', status: 'Свободен' } },
-        { key: 'bike-city', values: { name: 'Городской велосипед Electra', category: 'Велосипеды', serial: 'ВЕЛ-1002', tariff: 'За сутки', rate: 900, deposit: 3000, condition: 'Нормальное', status: 'В прокате', busyUntil: inDays(0, 20) } },
-        { key: 'bike-road', values: { name: 'Шоссейный велосипед Giant Contend', category: 'Велосипеды', serial: 'ВЕЛ-1003', tariff: 'За сутки', rate: 1800, deposit: 7000, condition: 'Отличное', status: 'Свободен' } },
-        { key: 'bike-kids', values: { name: 'Детский велосипед 20"', category: 'Велосипеды', serial: 'ВЕЛ-1004', tariff: 'За час', rate: 200, deposit: 1500, condition: 'Хорошее', status: 'Свободен' } },
-        { key: 'sup-red', values: { name: 'SUP Red Paddle 10\'6"', category: 'SUP', serial: 'СУП-2001', tariff: 'Выходные', rate: 3500, deposit: 8000, condition: 'Без проколов', status: 'В прокате', busyUntil: inDays(1, 12) } },
-        { key: 'sup-blue', values: { name: 'SUP Aqua Marina Magma', category: 'SUP', serial: 'СУП-2002', tariff: 'За сутки', rate: 1800, deposit: 6000, condition: 'Хорошее', status: 'Свободен' } },
-        { key: 'sup-kids', values: { name: 'SUP детский 8\'', category: 'SUP', serial: 'СУП-2003', tariff: 'За час', rate: 400, deposit: 3000, condition: 'Нормальное', status: 'На обслуживании' } },
-        { key: 'drill', values: { name: 'Перфоратор Bosch GBH 2-26', category: 'Инструменты', serial: 'ИНСТ-3001', tariff: 'За сутки', rate: 800, deposit: 4000, condition: 'Рабочий, комплект буров', status: 'В прокате', busyUntil: inDays(1, 18) } },
-        { key: 'saw', values: { name: 'Циркулярная пила Makita', category: 'Инструменты', serial: 'ИНСТ-3002', tariff: 'За сутки', rate: 700, deposit: 3500, condition: 'Хорошее', status: 'Свободен' } },
-        { key: 'laser', values: { name: 'Лазерный уровень Bosch GLL', category: 'Инструменты', serial: 'ИНСТ-3003', tariff: 'За час', rate: 150, deposit: 2500, condition: 'Отличное', status: 'Свободен' } },
+        // Bikes: 20%/day after 1h grace. SUP: 500 ₽/h after 1h, capped at day tariff. Tools: 100%/day.
+        { key: 'bike-mtb', values: { name: 'Горный велосипед Trek Marlin 7', category: 'Велосипеды', serial: 'ВЕЛ-1001', tariff: 'За сутки', rate: 1500, deposit: 5000, condition: 'Хорошее, новые колодки', status: 'Свободен', showInCatalog: true, lateFeeMode: 'Процент от тарифа за сутки', lateFeeValue: 20, lateFeeGraceHours: 1 } },
+        { key: 'bike-city', values: { name: 'Городской велосипед Electra', category: 'Велосипеды', serial: 'ВЕЛ-1002', tariff: 'За сутки', rate: 900, deposit: 3000, condition: 'Нормальное', status: 'В прокате', busyUntil: inDays(0, 20), showInCatalog: true, lateFeeMode: 'Процент от тарифа за сутки', lateFeeValue: 20, lateFeeGraceHours: 1 } },
+        { key: 'bike-road', values: { name: 'Шоссейный велосипед Giant Contend', category: 'Велосипеды', serial: 'ВЕЛ-1003', tariff: 'За сутки', rate: 1800, deposit: 7000, condition: 'Отличное', status: 'Свободен', showInCatalog: true, lateFeeMode: 'Процент от тарифа за сутки', lateFeeValue: 20, lateFeeGraceHours: 1 } },
+        { key: 'bike-kids', values: { name: 'Детский велосипед 20"', category: 'Велосипеды', serial: 'ВЕЛ-1004', tariff: 'За час', rate: 200, deposit: 1500, condition: 'Хорошее', status: 'Свободен', showInCatalog: true, lateFeeMode: 'Процент от тарифа за сутки', lateFeeValue: 20, lateFeeGraceHours: 1 } },
+        { key: 'sup-red', values: { name: 'SUP Red Paddle 10\'6"', category: 'SUP', serial: 'СУП-2001', tariff: 'Выходные', rate: 3500, deposit: 8000, condition: 'Без проколов', status: 'В прокате', busyUntil: inDays(1, 12), showInCatalog: true, lateFeeMode: 'Сумма за час', lateFeeValue: 500, lateFeeGraceHours: 1, lateFeeCapPerDay: 3500 } },
+        { key: 'sup-blue', values: { name: 'SUP Aqua Marina Magma', category: 'SUP', serial: 'СУП-2002', tariff: 'За сутки', rate: 1800, deposit: 6000, condition: 'Хорошее', status: 'Свободен', showInCatalog: true, lateFeeMode: 'Сумма за час', lateFeeValue: 500, lateFeeGraceHours: 1, lateFeeCapPerDay: 1800 } },
+        { key: 'sup-kids', values: { name: 'SUP детский 8\'', category: 'SUP', serial: 'СУП-2003', tariff: 'За час', rate: 400, deposit: 3000, condition: 'Нормальное', status: 'На обслуживании', showInCatalog: false, lateFeeMode: 'Сумма за час', lateFeeValue: 500, lateFeeGraceHours: 1, lateFeeCapPerDay: 400 } },
+        { key: 'drill', values: { name: 'Перфоратор Bosch GBH 2-26', category: 'Инструменты', serial: 'ИНСТ-3001', tariff: 'За сутки', rate: 800, deposit: 4000, condition: 'Рабочий, комплект буров', status: 'В прокате', busyUntil: inDays(1, 18), showInCatalog: true, lateFeeMode: 'Процент от тарифа за сутки', lateFeeValue: 100, lateFeeGraceHours: 1 } },
+        { key: 'saw', values: { name: 'Циркулярная пила Makita', category: 'Инструменты', serial: 'ИНСТ-3002', tariff: 'За сутки', rate: 700, deposit: 3500, condition: 'Хорошее', status: 'Свободен', showInCatalog: true, lateFeeMode: 'Процент от тарифа за сутки', lateFeeValue: 100, lateFeeGraceHours: 1 } },
+        // No seed photo — UI falls back to a category icon.
+        { key: 'laser', values: { name: 'Лазерный уровень Bosch GLL', category: 'Инструменты', serial: 'ИНСТ-3003', tariff: 'За час', rate: 150, deposit: 2500, condition: 'Отличное', status: 'Свободен', showInCatalog: true, lateFeeMode: 'Процент от тарифа за сутки', lateFeeValue: 100, lateFeeGraceHours: 1 } },
       ],
     },
     {

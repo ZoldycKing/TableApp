@@ -22,7 +22,8 @@ type ReturnRequest = {
   lateFee?: number; depositReturned?: number; depositWithheld?: number; depositReason?: string
 }
 type StatusRequest = { kind: 'status'; revision: string; screenId: string; recordId: string; statusId: string }
-type Request = CreateRequest | ClientRequest | ConfirmRequest | CancelRequest | IssueRequest | ReturnRequest | StatusRequest
+type ItemPatchRequest = { kind: 'itemPatch'; revision: string; screenId: string; recordId: string; values: Record<string, AppV2Json> }
+type Request = CreateRequest | ClientRequest | ConfirmRequest | CancelRequest | IssueRequest | ReturnRequest | StatusRequest | ItemPatchRequest
 
 const text = (value: unknown, max: number) => typeof value === 'string' && value.trim().length > 0 && value.trim().length <= max ? value.trim() : null
 const optionalText = (value: unknown, max: number) => value == null || value === '' ? '' : typeof value === 'string' && value.trim().length <= max ? value.trim() : null
@@ -54,6 +55,20 @@ function readRequest(input: unknown): Request | null {
   }
   const recordId = idValue(value.recordId)
   if (!recordId) return null
+  if (value.kind === 'itemPatch') {
+    if (!value.values || typeof value.values !== 'object' || Array.isArray(value.values)) return null
+    const values: Record<string, AppV2Json> = {}
+    for (const [key, entry] of Object.entries(value.values as Record<string, unknown>)) {
+      if (!idValue(key)) return null
+      if (typeof entry === 'boolean' || typeof entry === 'number' || typeof entry === 'string' || entry === null) {
+        values[key] = entry as AppV2Json
+        continue
+      }
+      return null
+    }
+    if (!Object.keys(values).length) return null
+    return { kind: 'itemPatch', revision: value.revision, screenId: value.screenId, recordId, values }
+  }
   if (value.kind === 'confirm' || value.kind === 'cancel') return { kind: value.kind, revision: value.revision, screenId: value.screenId, recordId }
   if (value.kind === 'status') {
     const statusId = idValue(value.statusId)
@@ -148,6 +163,26 @@ export async function savePublishedProkatAction(slug: string, input: unknown): P
           if (name) names.push(name)
         }
         return names.join(', ') || 'Прокат'
+      }
+
+      if (parsed.kind === 'itemPatch') {
+        const desk = assertDesk(actor)
+        if (!desk.ok) throw new RowWriteError('denied', desk.error)
+        const item = await load(prokat.itemsTableId, parsed.recordId)
+        if (!item) throw new RowWriteError('missing', 'Предмет не найден.')
+        const allowed = new Set([
+          prokat.item.showInCatalog, prokat.item.lateFeeMode, prokat.item.lateFeeValue,
+          prokat.item.lateFeeGraceHours, prokat.item.lateFeeCapPerDay, prokat.item.condition, prokat.item.status,
+        ].filter((id): id is string => Boolean(id)))
+        const patch: Record<string, AppV2Json> = {}
+        for (const [key, entry] of Object.entries(parsed.values)) {
+          if (!allowed.has(key)) throw new RowWriteError('denied', 'Это поле предмета нельзя менять здесь.')
+          patch[key] = entry
+        }
+        const decision = guardProkatUpdate(app, actor, item, patch)
+        if (!decision.ok) throw new RowWriteError('denied', decision.error)
+        await updateRow(context, prokat.itemsTableId, item.id, patch, actorRef)
+        return { ok: true as const, message: 'Параметры предмета сохранены.' }
       }
 
       if (parsed.kind === 'create' || parsed.kind === 'clientRequest') {

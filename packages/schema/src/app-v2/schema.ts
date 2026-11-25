@@ -324,6 +324,9 @@ export const appV2Schema = z.strictObject({
     item: z.strictObject({
       name: id, photo: id.optional(), category: id, serial: id, tariff: id,
       rate: id, deposit: id, condition: id, status: id, busyUntil: id.optional(),
+      showInCatalog: id.optional(),
+      lateFeeMode: id.optional(), lateFeeValue: id.optional(),
+      lateFeeGraceHours: id.optional(), lateFeeCapPerDay: id.optional(),
     }),
     statuses: z.strictObject({
       request: id, confirmed: id, issued: id, returned: id, overdue: id, cancelled: id,

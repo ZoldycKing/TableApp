@@ -1,5 +1,5 @@
 import { compareRows, customerWorkflows, dateInstant, evalFilter, fieldTimeZone, indexFields, type App, type Field, type ScreenOf, type View } from '@tableapp/schema'
-import { canOpenScreen, fieldPolicy, onlyReadable, type Visitor } from './app-roles'
+import { canOpenScreen, fieldPolicy, isCustomerRole, onlyReadable, type Visitor } from './app-roles'
 import { bookingVisitSection } from './booking-lifecycle'
 import { readingVisitor } from './customer-read-access'
 import { formatCell } from './format'
@@ -26,7 +26,9 @@ export function runtimeCollectionPlan(app: App, visitor: Visitor, screen: Collec
   const index = indexFields(fields), reading = readingVisitor(app, view.tableId, visitor)
   const policy = fieldPolicy(app, view.tableId, reading, views)
   const rules = rulesFor(app, view.tableId, visitor)
-  const viewer = visitor.email ? { email: visitor.email, company: visitor.company, enrolled: visitor.enrolled } : null
+  const viewer = visitor.email
+    ? { email: visitor.email, company: visitor.company, enrolled: visitor.enrolled, customer: visitor.enrolled || isCustomerRole(app, visitor.roleId) }
+    : null
   const customer = customerWorkflows(app).find(config => config.listScreenId === screen.id && config.tableId === view.tableId)
   const booking = app.booking && view.tableId === app.booking.tables.visits && screen.id === (app.booking.listScreenId ?? app.homeScreenId) ? app.booking : null
   const query = runtimeQuery({ query: request.query, choiceId: request.choiceId,

@@ -362,8 +362,10 @@ async function routeAfterVerification(token: AuthToken): Promise<LoginOutcome> {
   }
 
   if (intent === 'staff') {
-    const mine = await (await import('@/lib/customer-apps')).listAccessibleApps(token.email)
-    if (mine.length > 0) {
+    const directory = await import('@/lib/customer-apps')
+    const mine = await directory.listAccessibleApps(token.email)
+    const clientBusinesses = mine.length === 0 ? await directory.listClientBusinesses(token.email) : []
+    if (mine.length > 0 || clientBusinesses.length > 0) {
       const done = await completeStaffLogin(token)
       return done.ok ? { ok: true, go: 'apps' } : { ok: false, error: done.error ?? 'Не удалось войти' }
     }
@@ -390,6 +392,13 @@ export async function appsForStaff(email: string) {
   const current = await (await import('@/lib/app-session')).currentStaffEmail()
   if (!current || normalizeEmail(current) !== normalizeEmail(email)) return []
   return (await import('@/lib/customer-apps')).listAccessibleApps(current)
+}
+
+/** Session-gated client-business directory for platform /my. Never returns orders or messages. */
+export async function businessesForClient(email: string) {
+  const current = await (await import('@/lib/app-session')).currentStaffEmail()
+  if (!current || normalizeEmail(current) !== normalizeEmail(email)) return []
+  return (await import('@/lib/customer-apps')).listClientBusinesses(current)
 }
 
 /**

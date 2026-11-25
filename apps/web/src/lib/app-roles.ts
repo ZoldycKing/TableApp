@@ -84,6 +84,21 @@ export function defaultRole(app: Pick<App, 'roles'>): RoleId | null {
   return app.roles.find((role) => role.isDefault)?.id ?? null
 }
 
+const WORKING_ROLE_IDS = new Set(['owner', 'staff', 'manager'])
+
+/**
+ * Customer-facing visitor (invite-list client, custom patient default, etc.).
+ * Working defaults (warehouse staff, etc.) are NOT customers — only roles that
+ * are not owner/staff/manager, and either literally `client` or the app default
+ * when a distinct non-default (working) role also exists.
+ */
+export function isCustomerRole(app: Pick<App, 'roles'>, roleId: RoleId | null): boolean {
+  if (!roleId || WORKING_ROLE_IDS.has(roleId)) return false
+  if (roleId === 'client') return true
+  const def = defaultRole(app)
+  return roleId === def && app.roles.some(role => !role.isDefault)
+}
+
 /** Название роли для показа. У не вошедшего роли нет — так и подписываем. */
 export function roleName(app: Pick<App, 'roles'>, roleId: RoleId | null): string {
   if (roleId === null) return ANONYMOUS_NAME
@@ -608,7 +623,10 @@ export function permits(app: App, tableId: string, action: AppAction, visitor: V
   // Не вошедший не пишет ни при каких настройках экрана: заказ с витрины
   // проходит через подтверждение почты, а не через это право.
   if (!visitor.authenticated || visitor.roleId === null) return false
-  if (visitor.enrolled && !app.rowAccessRules.some(rule => rule.tableId === tableId && rule.appliesTo.includes(visitor.roleId!))) return false
+  // Storefront / client roles never write without ownership rules.
+  // Working defaults (e.g. warehouse staff) keep allow-all when rules are absent.
+  if ((visitor.enrolled || isCustomerRole(app, visitor.roleId)) &&
+      !app.rowAccessRules.some(rule => rule.tableId === tableId && rule.appliesTo.includes(visitor.roleId!))) return false
 
   if (action === 'delete') {
     return app.screens.some(

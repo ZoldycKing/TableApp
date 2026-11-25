@@ -152,7 +152,7 @@ describe.skipIf(!process.env.DATABASE_URL)('file API security against Postgres',
   it('still requires access before fetching a legacy SVG', async () => {
     identity.member = null
     const response = await sendDownload(legacyKey)
-    expect(response.status).toBe(403)
+    expect(response.status).toBe(404)
     expect(storage.getFile).not.toHaveBeenCalled()
   })
   it('requires an editing session before upload', async () => {

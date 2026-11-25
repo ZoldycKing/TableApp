@@ -8,7 +8,6 @@ import { currentAppAccess } from '@/lib/app-session'
 import { canOpenScreen, canSeePart } from '@/lib/app-roles'
 import { loadApp } from '@/lib/app-write-access'
 import { loadPublishedApp } from '@/lib/app-runtime'
-import { canAccessRow, rulesFor } from '@/lib/row-access'
 import { assertCurrentModuleState, createRow, updateRow, lockedRow, RowWriteError, writeRows } from '@/lib/row-mutations'
 import { isPlanLimitError } from '@/lib/limits'
 import { INVENTORY_COPY, inventoryScreen } from '@/lib/inventory'
@@ -40,16 +39,19 @@ export async function saveStockOperationAction(slug: string, operation: Inventor
   if (input.note && !writable.has(config.movement.note)) return { ok: false, error: 'Комментарий вам недоступен' }
   if (copy.reason && !input.note.trim()) return { ok: false, error: 'Укажите причину операции' }
   if (operation === 'stocktake' && (!Number.isSafeInteger(input.baseVersion) || input.baseVersion! < 0)) return { ok: false, error: 'Откройте инвентаризацию из карточки товара заново' }
+  // Screen permission already gates this action. Load the referenced product
+  // through the actor's projection so invisible catalog rows stay unavailable,
+  // then apply the journal link as a trusted workflow write (not a generic
+  // client update that would require owning the product row).
   const runtime = await loadPublishedApp(slug, visitor)
   const item = runtime?.tables[config.tables.items]?.rows.find(row => row.id === input.itemId)
   if (!item) return { ok: false, error: 'Товар недоступен' }
   const name = String(item.data[config.item.name] ?? 'Товар'), actor = { id: viewer.id, kind: 'app_user' }
-  const rules = rulesFor(app, config.tables.items, visitor)
   try {
     const saved = await writeRows(app.workspaceId, async context => {
       await assertCurrentModuleState(context, app)
       const current = await lockedRow(context, config.tables.items, input.itemId)
-      if (!current || current.deletedAt || !canAccessRow(rules, viewer, current.data as Record<string, unknown>)) throw new RowWriteError('denied', 'Товар недоступен')
+      if (!current || current.deletedAt) throw new RowWriteError('denied', 'Товар недоступен')
       const currentData = current.data as Record<string, unknown>, links = currentData[config.item.movements]
       const ids = Array.isArray(links) ? links.filter((id): id is string => typeof id === 'string') : []
       const journal = await context.tx.select({ id: rows.id, data: rows.data }).from(rows)
@@ -84,10 +86,10 @@ export async function saveStockOperationAction(slug: string, operation: Inventor
         [config.movement.author]: viewer.email,
         ...(ops ? { [ops.fields.kind]: ops.kinds[operation], [ops.fields.before]: before, [ops.fields.after]: after } : {}),
       }
-      if (!canAccessRow(rulesFor(app, config.tables.movements, visitor), viewer, movement)) throw new RowWriteError('denied', 'Запись движения вам недоступна')
+      // Workflow write: movement + item journal link are server-authored side
+      // effects of an authorized stock operation — not generic client row edits.
       await createRow(context, config.tables.movements, movement, actor, { id: input.id, origin: 'runtime' })
-      await updateRow(context, config.tables.items, input.itemId, { [config.item.movements]: [...new Set([...ids, input.id])] }, actor,
-        { guard: data => canAccessRow(rules, viewer, data) })
+      await updateRow(context, config.tables.items, input.itemId, { [config.item.movements]: [...new Set([...ids, input.id])] }, actor)
       return { before, after, repeated: false }
     })
     revalidatePath(`/a/${slug}`)

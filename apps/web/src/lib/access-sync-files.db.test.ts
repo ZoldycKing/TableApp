@@ -329,7 +329,7 @@ describe.skipIf(!process.env.DATABASE_URL)('sync access, cursors and file lifecy
     const value = await attach(key)
     await updateFile(value, ids.hidden)
     const response = await getFile(key)
-    expect(response.status).toBe(403)
+    expect(response.status).toBe(404)
     expect(storage.getFile).not.toHaveBeenCalled()
   })
   it('downloads a file only from its readable visible cell', async () => {
@@ -343,7 +343,7 @@ describe.skipIf(!process.env.DATABASE_URL)('sync access, cursors and file lifecy
     await attach(key)
     expect((await getFile(key)).status).toBe(200)
     identity.viewerId = ids.otherViewer
-    expect((await getFile(key)).status).toBe(403)
+    expect((await getFile(key)).status).toBe(404)
   })
   it('rejects attaching another app user’s unbound upload and pending objects', async () => {
     await expect(updateFile(await attach(`${ids.workspace}/other.txt`, ids.otherViewer))).rejects.toMatchObject({ code: 'invalid' })

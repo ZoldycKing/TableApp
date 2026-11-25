@@ -13,7 +13,8 @@ import { explainToCustomer } from '@tableapp/schema'
 import { isPlanLimitError } from '@/lib/limits'
 import { assertCurrentModuleState, deleteRow, updateRow, writeRows, RowWriteError } from '@/lib/row-mutations'
 import { insertRow, loadTableFields } from '@/lib/row-write'
-import { canAccessRow, dropOwnerChange, ownRowsDeclared, rulesFor } from '@/lib/row-access'
+import { canAccessRow, dropOwnerChange, rulesFor } from '@/lib/row-access'
+import { accessViewerFor, customerRequiresOwnRows } from '@/lib/record-access'
 import type { ActionResult } from './actions'
 import { canCreateWithValues } from '@/lib/form-required'
 
@@ -35,7 +36,7 @@ async function allow(
   if (tableError) return { ok: false, error: tableError }
 
   const { visitor, viewer } = await currentAppAccess(app)
-  if (visitor.enrolled && !ownRowsDeclared(app, tableId, visitor.roleId)) {
+  if (customerRequiresOwnRows(app, tableId, visitor)) {
     return { ok: false, error: 'Приём заявок сейчас недоступен. Свяжитесь с организацией.' }
   }
   if (!permits(app, tableId, action, visitor)) {
@@ -121,6 +122,7 @@ export async function appUpdateRowAction(
   if (!access.ok) return access
   const { app, viewer, visitor } = access
   const rules = rulesFor(app, tableId, visitor)
+  const accessViewer = accessViewerFor(app, visitor, viewer)
   const customer = customerWorkflows(app).find(config => config.tableId === tableId)
   if (customer && !Number.isSafeInteger(baseVersion)) return { ok: false, error: 'Обновите карточку перед изменением.' }
   if (app.booking?.tables.visits === tableId && visitor.enrolled && !Number.isInteger(baseVersion)) return { ok: false, error: 'Обновите запись перед переносом.' }
@@ -135,7 +137,7 @@ export async function appUpdateRowAction(
         return patch
       },
       { id: viewer?.id ?? null, kind: 'app_user' },
-      { baseVersion, guard: (data) => canAccessRow(rules, viewer, data) && (!app.booking || tableId !== app.booking.tables.visits || !visitor.enrolled ||
+      { baseVersion, guard: (data) => canAccessRow(rules, accessViewer, data) && (!app.booking || tableId !== app.booking.tables.visits || !visitor.enrolled ||
         data[app.booking.visit.status] === app.booking.statuses.booked && (dateInstant(data[app.booking.visit.start]) ?? 0) > Date.now()) })
     })
   } catch (error) {
@@ -153,12 +155,13 @@ export async function appDeleteRowAction(
   if (!access.ok) return access
   const { app, viewer, visitor } = access
   const rules = rulesFor(app, tableId, visitor)
+  const accessViewer = accessViewerFor(app, visitor, viewer)
   try {
     await writeRows(app.workspaceId, async (context) => {
       await assertCurrentModuleState(context, app)
       return deleteRow(context, tableId, rowId,
       { id: viewer?.id ?? null, kind: 'app_user' },
-      { baseVersion, guard: (data) => canAccessRow(rules, viewer, data) })
+      { baseVersion, guard: (data) => canAccessRow(rules, accessViewer, data) })
     })
   } catch (error) {
     if (error instanceof RowWriteError) return { ok: false, error: error.message }

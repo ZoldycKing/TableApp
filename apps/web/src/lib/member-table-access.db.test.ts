@@ -115,7 +115,7 @@ describe.skipIf(!process.env.DATABASE_URL)('member table permissions against Pos
     const hiddenKey=`${ids.workspace}/hidden.txt`,pendingKey=`${ids.workspace}/pending.txt`
     await data.db.insert(data.attachments).values([{id:newId('attachment'),key:hiddenKey,workspaceId:ids.workspace,uploadedBy:ids.owner,name:'Секрет.txt',mime:'text/plain',size:4,state:'ready',tableId:ids.secret,rowId:ids.secretRow,fieldId:ids.secretName},{id:newId('attachment'),key:pendingKey,workspaceId:ids.workspace,uploadedBy:ids.owner,name:'Pending.txt',mime:'text/plain',size:4,state:'ready'}])
     const {GET}=await import('@/app/api/files/[...key]/route')
-    for(const key of [hiddenKey,pendingKey])expect((await GET(new Request(`http://localhost/api/files/${key}`),{params:Promise.resolve({key:key.split('/')})})).status).toBe(403)
+    for(const key of [hiddenKey,pendingKey])expect((await GET(new Request(`http://localhost/api/files/${key}`),{params:Promise.resolve({key:key.split('/')})})).status).toBe(404)
     expect(identity.file).not.toHaveBeenCalled()
     const value=[{id:'claimed',key:pendingKey,name:'Pending.txt',mime:'text/plain',size:4,width:null,height:null}]
     const {saveTableRowsAction}=await import('@/app/table-editor-actions')

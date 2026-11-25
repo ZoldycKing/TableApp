@@ -143,6 +143,8 @@ export async function listConversationInbox(input: InboxInput = {}, business = f
   if (!scopes.length && !generalApps.length) return { items: [], next: null }
   generalApps.sort((a, b) => Number(b.slug === input.slug) - Number(a.slug === input.slug))
   const actorId = person(workspaceId, actorEmail)
+  // Clients must not page through other customers' threads in SQL — filter before projection.
+  const seesAllCustomers = owner || Boolean(operator) || scopes.some(scope => scope.staff || scope.owner)
   const lastSequence = sql<number>`coalesce((select max(m.sequence) from conversation_messages m where m.conversation_id=${conversations.id}),0)`
   const unread = sql<number>`(select count(*) from conversation_messages m where m.conversation_id=${conversations.id} and m.deleted_at is null and m.author_id<>${actorId} and m.sequence>coalesce((select r.sequence from conversation_reads r where r.workspace_id=${workspaceId} and r.conversation_id=${conversations.id} and r.actor_id=${actorId}),0))`
   const found = await db.select({ thread: conversations, row: rows, primary: tables.primaryFieldId, customer: businessCustomers.name, email: businessCustomers.email, lastSequence, unread,
@@ -156,6 +158,7 @@ export async function listConversationInbox(input: InboxInput = {}, business = f
       and(eq(conversations.kind, 'record'), isNotNull(rows.id), isNull(rows.deletedAt), eq(tables.workspaceId, workspaceId), inArray(conversations.tableId, scopes.map(scope => scope.tableId))),
       generalApps.length ? and(eq(conversations.kind, 'general'), operator ? undefined : eq(businessCustomers.email, actorEmail.trim().toLowerCase())) : sql`false`),
       customerContext ? eq(businessCustomers.email, customerContext.email) : undefined,
+      seesAllCustomers ? undefined : eq(businessCustomers.email, actorEmail.trim().toLowerCase()),
       input.unreadOnly ? sql`${unread}>0` : undefined,
       cursor ? or(lt(lastSequence, Number(cursor[0])), and(eq(lastSequence, Number(cursor[0])), lt(conversations.id, cursor[1]!))) : undefined))
     .orderBy(desc(lastSequence), sql`(select m.created_at from conversation_messages m where m.conversation_id=${conversations.id} order by m.sequence desc limit 1) desc nulls last`, desc(conversations.id)).limit(51)

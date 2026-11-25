@@ -75,7 +75,8 @@ try {
   assert.equal(record!.state, 'ready')
   const download = await fetch(`${base}/api/files/${uploaded!.key}`, { headers: { cookie } })
   assert.equal(download.status, 200); assert.equal(await download.text(), 'Stage4 real MinIO smoke')
-  assert.equal((await fetch(`${base}/api/files/${uploaded!.key}`)).status, 403)
+  // File GET denials are 404 to avoid confirming the key exists.
+  assert.equal((await fetch(`${base}/api/files/${uploaded!.key}`)).status, 404)
   await db.update(workspaceMembers).set({ role: 'viewer' }).where(eq(workspaceMembers.workspaceId, id.workspace))
   const revoked = await (await sync({ since: changed.cursor, mutations: [{ ...mutation, id: 'denied-edit', base: 'Changed', next: 'Forbidden' }] })).json()
   assert.equal(revoked.reset, true); assert.equal(revoked.rejected[0].status, 'dropped')

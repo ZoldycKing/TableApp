@@ -122,7 +122,7 @@ describe.skipIf(!process.env.DATABASE_URL)('upload antivirus and access flow', (
     const response = await download.GET(new Request(`http://localhost/api/files/${attachment.key}`), {
       params: Promise.resolve({ key: attachment.key.split('/') }),
     })
-    expect(response.status).toBe(403)
+    expect(response.status).toBe(404)
     expect(storage.getFile).not.toHaveBeenCalled()
   })
 })

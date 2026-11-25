@@ -109,7 +109,7 @@ describe.skipIf(!process.env.DATABASE_URL)('runtime file uploads with independen
     expect((await getFile(attachment.key)).status).toBe(200)
 
     identity.viewerId = ids.otherViewer; identity.email = otherEmail
-    expect((await getFile(attachment.key)).status).toBe(403)
+    expect((await getFile(attachment.key)).status).toBe(404)
     expect((await runtimeActions.appUpdateRowAction(slug, ids.table, ids.otherRow, { [ids.photo]: [attachment] }, 0)).ok).toBe(false)
   })
   it.each(['guest', 'read-only'])('does not fall back to the owner session for a %s app visitor', async kind => {
@@ -139,7 +139,7 @@ describe.skipIf(!process.env.DATABASE_URL)('runtime file uploads with independen
     expect(response.status).toBe(200)
     const { attachment } = await response.json()
     identity.member = null; identity.viewerId = ids.otherViewer; identity.email = otherEmail
-    expect((await getFile(attachment.key)).status).toBe(403)
+    expect((await getFile(attachment.key)).status).toBe(404)
     const result = await runtimeActions.appUpdateRowAction(slug, ids.table, ids.otherRow, { [ids.photo]: [attachment] }, 0)
     expect(result).toMatchObject({ ok: false, error: 'Файл не найден или недоступен в этом рабочем пространстве' })
     const [record] = await database.db.select().from(database.attachments).where(eq(database.attachments.key, attachment.key))

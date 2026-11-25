@@ -1,6 +1,6 @@
 import { compileTableFormulas, computeDerivedRow, relatedIndexFrom } from '@tableapp/formula'
 import { byPosition, systemRowData, type App, type Field, type View, type RowMetadata } from '@tableapp/schema'
-import { ANONYMOUS, canOpenScreen, fieldPolicy, formFields, onlyReadable, rowReach, type Visitor } from './app-roles'
+import { ANONYMOUS, canOpenScreen, fieldPolicy, formFields, isCustomerRole, onlyReadable, rowReach, type Visitor } from './app-roles'
 import { applyView } from './apply-view'
 import { computeDashboards } from './dashboard-data'
 import { formatCell } from './format'
@@ -46,7 +46,7 @@ export function projectRuntime(app: App, visitor: Visitor, views: Record<string,
     const formulas = compileTableFormulas(fields)
     const rules = rulesFor(app, table.id, visitor)
     const viewer = visitor.email
-      ? { email: visitor.email, company: visitor.company, enrolled: visitor.enrolled }
+      ? { email: visitor.email, company: visitor.company, enrolled: visitor.enrolled, customer: visitor.enrolled || isCustomerRole(app, visitor.roleId) }
       : null
 
     /*
@@ -219,6 +219,7 @@ export function buildTitles(
         email: access.visitor.email,
         company: access.visitor.company,
         enrolled: access.visitor.enrolled,
+        customer: access.visitor.enrolled || isCustomerRole(access.app, access.visitor.roleId),
       }
     : null
 

@@ -26,9 +26,9 @@ export const PROKAT_BLOCKING_STATUSES = ['Заявка', 'Подтвержден
 
 export const PROKAT_BOOKING_VIEWS = [
   { id: 'all', label: 'Все' },
-  { id: 'todayIssue', label: 'Выдача сегодня' },
-  { id: 'todayReturn', label: 'Возврат сегодня' },
-  { id: 'overdue', label: 'Просрочено' },
+  { id: 'todayIssue', label: 'Сегодня выдача' },
+  { id: 'todayReturn', label: 'Сегодня возврат' },
+  { id: 'overdue', label: 'Просрочены' },
   { id: 'request', label: 'Заявки' },
   { id: 'confirmed', label: 'Подтверждены' },
   { id: 'issued', label: 'Выдано' },

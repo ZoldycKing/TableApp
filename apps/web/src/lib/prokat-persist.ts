@@ -186,6 +186,28 @@ export type ProkatChange =
   | { kind: 'return'; recordId: string; condition: string; damages: string; photos?: string; lateFee?: number; depositReturned?: number; depositWithheld?: number; depositReason?: string }
   | { kind: 'status'; recordId: string; statusId: string }
 
+/** Mark catalog items free/rented after issue or return. Staff policy allows item updates. */
+export function syncItemStatuses(
+  app: AppV2,
+  actor: AppV2Actor,
+  rows: readonly AppV2Record[],
+  itemIds: readonly string[],
+  statusId: string,
+): { ok: true; rows: AppV2Record[] } | { ok: false; error: string } {
+  const prokat = app.prokat
+  if (!prokat) return { ok: false, error: 'Это не приложение проката.' }
+  let next = [...rows]
+  for (const itemId of itemIds) {
+    const item = next.find(row => row.id === itemId && row.tableId === prokat.itemsTableId)
+    if (!item) continue
+    const patch: Record<string, AppV2Json> = { [prokat.item.status]: statusId }
+    const decision = guardProkatUpdate(app, actor, item, patch)
+    if (!decision.ok) return decision
+    next = next.map(row => row.id === item.id ? { ...row, values: { ...row.values, ...patch } } : row)
+  }
+  return { ok: true, rows: next }
+}
+
 /** In-memory twin of the published action for gallery demos. */
 export function applyProkatChange(
   app: AppV2,
@@ -238,7 +260,6 @@ export function applyProkatChange(
           tableId: prokat.clientsTableId,
           values: {
             [prokat.client.name]: clientName,
-            [prokat.client.email]: clientEmail,
             [prokat.client.phone]: '',
           },
         }
@@ -250,13 +271,14 @@ export function applyProkatChange(
           itemIds, from: change.from, to: change.to, price: change.price, deposit: change.deposit,
           statusId, createdAt: now,
         })
-        const decision = guardProkatCreate(app, actor, prokat.bookingsTableId, values)
+        const authorizeValues = Object.fromEntries(Object.entries(values).filter(([key]) => key !== prokat.booking.clientEmail))
+        const decision = guardProkatCreate(app, actor, prokat.bookingsTableId, authorizeValues)
         if (!decision.ok) return decision
         return {
           ok: true,
           rows: [
             ...rows,
-            { ...createdClient, values: { ...createdClient.values, ...clientCreate.ownerValues } },
+            { ...createdClient, values: { ...createdClient.values, [prokat.client.email]: clientEmail, ...clientCreate.ownerValues } },
             { id: newId('row'), tableId: prokat.bookingsTableId, values: { ...values, ...decision.ownerValues } },
           ],
           message: 'Заявка отправлена.',
@@ -270,7 +292,11 @@ export function applyProkatChange(
       itemIds, from: change.from, to: change.to, price: change.price, deposit: change.deposit,
       statusId, createdAt: now,
     })
-    const decision = guardProkatCreate(app, actor, prokat.bookingsTableId, values)
+    // Owner-stamped clientEmail must not appear in the authorize payload for clients.
+    const authorizeValues = change.kind === 'clientRequest'
+      ? Object.fromEntries(Object.entries(values).filter(([key]) => key !== prokat.booking.clientEmail))
+      : values
+    const decision = guardProkatCreate(app, actor, prokat.bookingsTableId, authorizeValues)
     if (!decision.ok) return decision
     return {
       ok: true,
@@ -342,7 +368,9 @@ export function applyProkatChange(
     })
     const decision = guardProkatUpdate(app, actor, booking, patch)
     if (!decision.ok) return decision
-    return { ok: true, rows: replace(booking, patch), message: 'Акт выдачи сохранён.' }
+    const itemStatus = syncItemStatuses(app, actor, replace(booking, patch), itemIds, prokat.itemStatuses.rented)
+    if (!itemStatus.ok) return itemStatus
+    return { ok: true, rows: itemStatus.rows, message: 'Акт выдачи сохранён.' }
   }
 
   if (change.kind === 'return') {
@@ -350,6 +378,7 @@ export function applyProkatChange(
     if (!desk.ok) return desk
     const allowed = assertStaffStatus(statusName, 'Возвращено')
     if (!allowed.ok) return allowed
+    const itemIds = idsOf(booking.values[prokat.booking.items])
     const patch = bookingReturnValues(prokat.booking, {
       condition: change.condition.trim(),
       damages: change.damages.trim(),
@@ -364,7 +393,9 @@ export function applyProkatChange(
     })
     const decision = guardProkatUpdate(app, actor, booking, patch)
     if (!decision.ok) return decision
-    return { ok: true, rows: replace(booking, patch), message: 'Акт возврата сохранён.' }
+    const itemStatus = syncItemStatuses(app, actor, replace(booking, patch), itemIds, prokat.itemStatuses.free)
+    if (!itemStatus.ok) return itemStatus
+    return { ok: true, rows: itemStatus.rows, message: 'Акт возврата сохранён.' }
   }
 
   const desk = assertDesk(actor)

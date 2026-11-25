@@ -179,12 +179,15 @@ export async function savePublishedProkatAction(slug: string, input: unknown): P
           } else {
             const createdValues: Record<string, AppV2Json> = {
               [prokat.client.name]: clientName,
-              [prokat.client.email]: clientEmail,
               [prokat.client.phone]: '',
             }
             const clientCreate = guardProkatCreate(app, actor, prokat.clientsTableId, createdValues)
             if (!clientCreate.ok) throw new RowWriteError('denied', clientCreate.error)
-            const created = await createRow(context, prokat.clientsTableId, { ...createdValues, ...clientCreate.ownerValues }, actorRef, { origin: 'runtime' })
+            const created = await createRow(context, prokat.clientsTableId, {
+              ...createdValues,
+              [prokat.client.email]: clientEmail,
+              ...clientCreate.ownerValues,
+            }, actorRef, { origin: 'runtime' })
             clientId = created.id
           }
         }
@@ -197,7 +200,11 @@ export async function savePublishedProkatAction(slug: string, input: unknown): P
           itemIds: parsed.itemIds, from: parsed.from, to: parsed.to, price: parsed.price, deposit: parsed.deposit,
           statusId, createdAt: now,
         })
-        const decision = guardProkatCreate(app, actor, prokat.bookingsTableId, values)
+        // Owner-stamped clientEmail must not appear in the authorize payload for clients.
+        const authorizeValues = parsed.kind === 'clientRequest'
+          ? Object.fromEntries(Object.entries(values).filter(([key]) => key !== prokat.booking.clientEmail))
+          : values
+        const decision = guardProkatCreate(app, actor, prokat.bookingsTableId, authorizeValues)
         if (!decision.ok) throw new RowWriteError('denied', decision.error)
         await createRow(context, prokat.bookingsTableId, { ...values, ...(decision.ownerValues ?? {}) }, actorRef, { origin: 'runtime' })
         return { ok: true as const, message: parsed.kind === 'create' ? 'Бронь создана.' : 'Заявка отправлена.' }
@@ -257,6 +264,14 @@ export async function savePublishedProkatAction(slug: string, input: unknown): P
         const decision = guardProkatUpdate(app, actor, booking, patch)
         if (!decision.ok) throw new RowWriteError('denied', decision.error)
         await updateRow(context, prokat.bookingsTableId, booking.id, patch, actorRef)
+        for (const itemId of itemIds) {
+          const item = await load(prokat.itemsTableId, itemId)
+          if (!item) continue
+          const itemPatch: Record<string, AppV2Json> = { [prokat.item.status]: prokat.itemStatuses.rented }
+          const itemDecision = guardProkatUpdate(app, actor, item, itemPatch)
+          if (!itemDecision.ok) throw new RowWriteError('denied', itemDecision.error)
+          await updateRow(context, prokat.itemsTableId, item.id, itemPatch, actorRef)
+        }
         return { ok: true as const, message: 'Акт выдачи сохранён.' }
       }
 
@@ -265,6 +280,7 @@ export async function savePublishedProkatAction(slug: string, input: unknown): P
         if (!desk.ok) throw new RowWriteError('denied', desk.error)
         const allowed = assertStaffStatus(statusName, 'Возвращено')
         if (!allowed.ok) throw new RowWriteError('invalid', allowed.error)
+        const itemIds = idsOf(booking.values[prokat.booking.items])
         const patch = bookingReturnValues(prokat.booking, {
           condition: parsed.condition, damages: parsed.damages, photos: parsed.photos,
           returnAt: now, lateFee: parsed.lateFee, depositReturned: parsed.depositReturned,
@@ -274,6 +290,14 @@ export async function savePublishedProkatAction(slug: string, input: unknown): P
         const decision = guardProkatUpdate(app, actor, booking, patch)
         if (!decision.ok) throw new RowWriteError('denied', decision.error)
         await updateRow(context, prokat.bookingsTableId, booking.id, patch, actorRef)
+        for (const itemId of itemIds) {
+          const item = await load(prokat.itemsTableId, itemId)
+          if (!item) continue
+          const itemPatch: Record<string, AppV2Json> = { [prokat.item.status]: prokat.itemStatuses.free }
+          const itemDecision = guardProkatUpdate(app, actor, item, itemPatch)
+          if (!itemDecision.ok) throw new RowWriteError('denied', itemDecision.error)
+          await updateRow(context, prokat.itemsTableId, item.id, itemPatch, actorRef)
+        }
         return { ok: true as const, message: 'Акт возврата сохранён.' }
       }
 

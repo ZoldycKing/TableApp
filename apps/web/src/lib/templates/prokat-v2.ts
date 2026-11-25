@@ -311,7 +311,11 @@ export function buildProkatV2App(built: BuiltTemplate, meta: { id: string; works
           grant(clientRole, {
             read: { fieldIds: clientBookingRead, rows: owned(booking.clientEmail) },
             create: {
-              fieldIds: [booking.items, booking.from, booking.to, booking.title, booking.clientName, booking.status, booking.price, booking.deposit, booking.createdAt, booking.updatedAt, booking.issuePhotos, booking.returnPhotos, booking.lateFee, booking.number],
+              fieldIds: [
+                booking.number, booking.title, booking.client, booking.clientName, booking.items,
+                booking.from, booking.to, booking.price, booking.deposit, booking.lateFee, booking.status,
+                booking.issuePhotos, booking.returnPhotos, booking.createdAt, booking.updatedAt,
+              ],
               owner: { fieldId: booking.clientEmail, property: 'email' },
             },
             update: { fieldIds: [booking.status, booking.updatedAt], rows: owned(booking.clientEmail) },

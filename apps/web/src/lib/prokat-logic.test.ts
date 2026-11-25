@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest'
 import { wallClockToInstant } from '@tableapp/schema'
 import {
   computeLateFee, computeItemLateFee, computeRentalPrice, describeLateFee, findItemBookingConflict,
-  formatMoney, formatMoneyOrZero, catalogItemBusyUntil, formatProkatDateTime, isOverdueReturn,
+  buildTimelineWindow, catalogItemFreeLabel, catalogItemBusyUntil, clientInitials,
+  formatMoney, formatMoneyOrZero, formatProkatDateTime, isOverdueReturn,
   itemBusyUntil, nextBookingNumber, prokatDashboard, prokatRangesOverlap, shortClientName,
-  staffTransitions, timelineBarLabel, weekendDaysInRange, type ProkatCatalogItem, type ProkatListItem,
+  staffTransitions, timelineBarLabel, timelineBookingSegments, timelineSegmentPct,
+  timelineStartForToday, weekendDaysInRange, type ProkatCatalogItem, type ProkatListItem,
 } from './prokat-logic'
 
 const moscow = (year: number, month: number, day: number, hour = 12, minute = 0) =>
@@ -145,7 +147,8 @@ describe('computeLateFee', () => {
     expect(describeLateFee({ mode: 'Процент от тарифа за сутки', value: 20, graceHours: 1, rate: 1500 }))
       .toMatch(/20%.*тарифа/i)
     expect(shortClientName('Елена Волкова')).toBe('Елена В.')
-    expect(timelineBarLabel('ПР-1007', 'Елена Волкова')).toBe('ПР-1007 · Елена В.')
+    expect(timelineBarLabel('ПР-1007', 'Елена Волкова')).toBe('Елена В.')
+    expect(clientInitials('Мария Петрова')).toBe('МП')
     expect(computeItemLateFee({
       category: 'SUP', lateFeeMode: 'Сумма за час', lateFeeValue: 500, lateFeeGraceHours: 1,
       lateFeeCapPerDay: 3500, rate: 3500,
@@ -194,5 +197,78 @@ describe('isOverdueReturn and dashboard', () => {
     expect(nextBookingNumber(['ПР-1008', 'черновик'])).toBe('ПР-1009')
     expect(staffTransitions('Заявка')).toEqual(['Подтверждена', 'Отменена'])
     expect(staffTransitions('Выдано')).toContain('Просрочен возврат')
+  })
+})
+
+describe('timeline bar geometry', () => {
+  const rangeStart = Date.parse('2026-11-22T00:00:00+03:00')
+  const rangeEnd = Date.parse('2026-11-28T23:59:59.999+03:00')
+  const now = Date.parse('2026-11-25T12:00:00+03:00')
+
+  it('places bars by exact rental hours without a one-day floor', () => {
+    // 12:00–18:00 on day 0 of a 7-day window → 6h / 7d ≈ 3.57%
+    const pct = timelineSegmentPct(
+      Date.parse('2026-11-22T12:00:00+03:00'),
+      Date.parse('2026-11-22T18:00:00+03:00'),
+      rangeStart,
+      rangeEnd,
+    )
+    expect(pct).not.toBeNull()
+    expect(pct!.left).toBeCloseTo((12 / 24) * (100 / 7), 1)
+    expect(pct!.width).toBeCloseTo((6 / 24) * (100 / 7), 1)
+    expect(pct!.clippedStart).toBe(false)
+    expect(pct!.clippedEnd).toBe(false)
+  })
+
+  it('clips multi-day bars at the visible edge', () => {
+    const pct = timelineSegmentPct(
+      Date.parse('2026-11-20T10:00:00+03:00'),
+      Date.parse('2026-11-24T18:00:00+03:00'),
+      rangeStart,
+      rangeEnd,
+    )
+    expect(pct!.clippedStart).toBe(true)
+    expect(pct!.clippedEnd).toBe(false)
+    expect(pct!.left).toBe(0)
+  })
+
+  it('draws an overdue hatched tail from planned end to now', () => {
+    const { booking, overdueTail } = timelineBookingSegments({
+      from: moscow(2026, 11, 22, 10),
+      to: moscow(2026, 11, 23, 18),
+      status: 'Просрочен возврат',
+      now,
+      rangeStart,
+      rangeEnd,
+    })
+    expect(booking?.tone).toBe('overdue')
+    expect(booking?.kind).toBe('booking')
+    expect(overdueTail?.tone).toBe('overdue')
+    expect(overdueTail?.kind).toBe('overdue-tail')
+    // Tail starts at planned end (23rd 18:00) and ends at now (25th 12:00).
+    const expectedLeft = ((Date.parse(moscow(2026, 11, 23, 18)) - rangeStart) / (rangeEnd - rangeStart)) * 100
+    expect(overdueTail!.left).toBeCloseTo(expectedLeft, 1)
+  })
+
+  it('builds a day window as 08:00–22:00 hours', () => {
+    const window = buildTimelineWindow({ mode: 'day', startDate: '2026-11-25', now })
+    expect(window.columns).toHaveLength(14)
+    expect(window.rangeStart).toBe(Date.parse('2026-11-25T08:00:00+03:00'))
+    expect(window.rangeEnd).toBe(Date.parse('2026-11-25T22:00:00+03:00'))
+    expect(window.nowPct).toBeCloseTo(((12 - 8) / 14) * 100, 1)
+  })
+
+  it('anchors «Сегодня» with a short lookback for fortnight', () => {
+    expect(timelineStartForToday('fortnight', now)).toBe('2026-11-22')
+    expect(timelineStartForToday('day', now)).toBe('2026-11-25')
+  })
+
+  it('labels catalogue free-from dates', () => {
+    const spans = [{
+      id: 'b1', itemIds: ['bike'], from: moscow(2026, 11, 24, 10), to: moscow(2026, 11, 27, 18), status: 'Выдано',
+    }]
+    expect(catalogItemFreeLabel({ id: 'free', status: 'Свободен' }, [], now)).toBe('Свободен сейчас')
+    expect(catalogItemFreeLabel({ id: 'bike', status: 'В прокате', busyUntil: moscow(2026, 11, 27, 18) }, spans, now))
+      .toBe('Свободен с 27.11')
   })
 })

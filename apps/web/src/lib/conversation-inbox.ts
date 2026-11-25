@@ -97,13 +97,14 @@ export async function listConversationInbox(input: InboxInput = {}, business = f
             })()
           : await publishedV2Actor(app)
       if (!owner && (!actor.authenticated || !actor.email)) continue
-      for (const tableId of [app.service?.repairsTableId, app.support?.ticketsTableId].filter((id): id is string => Boolean(id))) {
+      for (const tableId of [app.service?.repairsTableId, app.prokat?.bookingsTableId, app.support?.ticketsTableId].filter((id): id is string => Boolean(id))) {
         const resource = conversationResourceV2(app, tableId)
         if (!resource) continue
         const staff = owner || conversationStaffV2(app, tableId, actor.roleIds)
         const manager = owner || conversationManagerV2(app, tableId, actor.roleIds)
         if (!owner && (business ? !staff : !staff && !actor.roleIds.includes('client'))) continue
         const statusFieldId = app.service?.repairsTableId === tableId ? app.service.repair.status
+          : app.prokat?.bookingsTableId === tableId ? app.prokat.booking.status
           : app.support?.ticketsTableId === tableId ? app.support.ticket.status
           : undefined
         scopes.push({

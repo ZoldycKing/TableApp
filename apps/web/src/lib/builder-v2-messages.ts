@@ -3,9 +3,9 @@ import type { AppV2, AppV2Actor } from '@tableapp/schema/app-v2'
 
 export { MESSAGES_SCREEN }
 
-/** Inbox tab for App V2 service/support kits with an authenticated visitor. */
-export function v2MessagesAvailable(app: Pick<AppV2, 'service' | 'support'>, actor: Pick<AppV2Actor, 'authenticated'>) {
-  return Boolean(actor.authenticated && (app.service || app.support))
+/** Inbox tab for App V2 service/support/prokat kits with an authenticated visitor. */
+export function v2MessagesAvailable(app: Pick<AppV2, 'service' | 'support' | 'prokat'>, actor: Pick<AppV2Actor, 'authenticated'>) {
+  return Boolean(actor.authenticated && (app.service || app.support || app.prokat))
 }
 
 export function v2MessagesOperator(actor: Pick<AppV2Actor, 'roleIds'>) {

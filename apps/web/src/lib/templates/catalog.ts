@@ -7,6 +7,7 @@ import { portal } from './defs/portal'
 import { proizvodstvo } from './defs/proizvodstvo'
 import { salon } from './defs/salon'
 import { service } from './defs/service'
+import { prokat } from './defs/prokat'
 import { sklad } from './defs/sklad'
 import { zakazy } from './defs/zakazy'
 import { podderzhka } from './defs/podderzhka'
@@ -39,6 +40,7 @@ const LEGACY_TEMPLATES: readonly TemplateDef[] = [
   proizvodstvo,
   sklad,
   service,
+  prokat,
   salon,
   nedvizhimost,
   dostavka,

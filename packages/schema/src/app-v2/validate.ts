@@ -522,6 +522,39 @@ export function validateAppV2(app: AppV2, catalog: AppV2Catalog, options: { mode
     const noteOnClient = app.sources.some(source => source.tableId === service.notesTableId && app.nodes.some(node => node.type === 'collection' && node.sourceId === source.id && clientRepair?.rootIds.includes(node.id)))
     if (noteOnClient) issue('service_client_notes', path, 'Экран клиента не показывает внутренние заметки')
   }
+  if (app.prokat) {
+    const prokat = app.prokat, path = 'prokat'
+    table(prokat.bookingsTableId, path); table(prokat.clientsTableId, path); table(prokat.staffTableId, path); table(prokat.itemsTableId, path)
+    const group = (tableId: string, values: Record<string, string | undefined>) => {
+      for (const fieldId of Object.values(values)) if (fieldId) field(fieldId, tableId, path)
+    }
+    group(prokat.bookingsTableId, prokat.booking)
+    group(prokat.clientsTableId, prokat.client)
+    group(prokat.staffTableId, prokat.staff)
+    group(prokat.itemsTableId, prokat.item)
+    const client = field(prokat.booking.client, prokat.bookingsTableId, path)
+    if (client && client.relationTableId && client.relationTableId !== prokat.clientsTableId) issue('prokat_client', path, 'Бронь должна ссылаться на клиентов')
+    const staffRel = field(prokat.booking.staff, prokat.bookingsTableId, path)
+    if (staffRel && staffRel.relationTableId && staffRel.relationTableId !== prokat.staffTableId) issue('prokat_staff', path, 'Сотрудник должен ссылаться на справочник сотрудников')
+    const itemsRel = field(prokat.booking.items, prokat.bookingsTableId, path)
+    if (itemsRel && itemsRel.relationTableId && itemsRel.relationTableId !== prokat.itemsTableId) issue('prokat_items', path, 'Предметы брони должны ссылаться на каталог предметов')
+    const statusIds = [prokat.statuses.request, prokat.statuses.confirmed, prokat.statuses.issued, prokat.statuses.returned, prokat.statuses.overdue, prokat.statuses.cancelled]
+    if (new Set(statusIds).size !== statusIds.length) issue('prokat_status', path, 'Статусы брони должны различаться')
+    const itemStatusIds = [prokat.itemStatuses.free, prokat.itemStatuses.rented, prokat.itemStatuses.service, prokat.itemStatuses.writtenOff]
+    if (new Set(itemStatusIds).size !== itemStatusIds.length) issue('prokat_item_status', path, 'Статусы предметов должны различаться')
+    for (const screenId of [prokat.dashboardScreenId, prokat.bookingsScreenId, prokat.bookingScreenId, prokat.itemsScreenId, prokat.itemScreenId, prokat.timelineScreenId, prokat.clientsScreenId, prokat.clientScreenId, prokat.catalogScreenId, prokat.clientListScreenId, prokat.clientBookingScreenId]) {
+      if (!screens.has(screenId)) issue('prokat_screen', path, 'Экран проката удалён')
+    }
+    for (const formId of [prokat.createFormId, prokat.issueFormId, prokat.returnFormId, prokat.clientRequestFormId]) {
+      if (nodes.get(formId)?.type !== 'form') issue('prokat_form', path, 'Форма проката удалена')
+    }
+    const clientBooking = screens.get(prokat.clientBookingScreenId)
+    const clientList = screens.get(prokat.clientListScreenId)
+    const catalog = screens.get(prokat.catalogScreenId)
+    if (clientBooking?.audience.kind === 'public' || clientList?.audience.kind === 'public' || catalog?.audience.kind === 'public') {
+      issue('prokat_client_public', path, 'Кабинет проката не бывает публичным')
+    }
+  }
   if (app.projects) {
     const projects = app.projects, path = 'projects'
     table(projects.projectsTableId, path); table(projects.tasksTableId, path); table(projects.peopleTableId, path)

@@ -22,6 +22,18 @@ export function conversationResourceV2(app: AppV2, tableId: string): Conversatio
       titleFieldId: app.service.repair.device,
     }
   }
+  if (app.prokat?.bookingsTableId === tableId) {
+    const hasClientCard = app.screens.some(screen => screen.id === app.prokat!.clientBookingScreenId && screen.contextTableId === tableId
+      && screen.audience.kind === 'roles' && screen.audience.roleIds.includes('client'))
+    if (!hasClientCard) return null
+    return {
+      emailFieldId: app.prokat.booking.clientEmail,
+      moduleId: `mod_prokat_${tableId}`,
+      staffDetailScreenId: app.prokat.bookingScreenId,
+      clientDetailScreenId: app.prokat.clientBookingScreenId,
+      titleFieldId: app.prokat.booking.title,
+    }
+  }
   if (app.support?.ticketsTableId === tableId) {
     const hasClientCard = app.screens.some(screen => screen.id === app.support!.clientTicketScreenId && screen.contextTableId === tableId
       && screen.audience.kind === 'roles' && screen.audience.roleIds.includes('client'))
@@ -44,11 +56,12 @@ export function conversationDetailScreenV2(resource: ConversationResourceV2, sta
 /** Desk roles that may see internal notes and reply as staff. */
 export function conversationStaffV2(app: AppV2, tableId: string, roleIds: readonly string[]) {
   if (app.service?.repairsTableId === tableId) return roleIds.includes('owner') || roleIds.includes('staff')
+  if (app.prokat?.bookingsTableId === tableId) return roleIds.includes('owner') || roleIds.includes('staff')
   if (app.support?.ticketsTableId === tableId) return roleIds.includes('owner') || roleIds.includes('staff')
   return false
 }
 
 export function conversationManagerV2(app: AppV2, tableId: string, roleIds: readonly string[]) {
-  if (app.service?.repairsTableId === tableId || app.support?.ticketsTableId === tableId) return roleIds.includes('owner')
+  if (app.service?.repairsTableId === tableId || app.prokat?.bookingsTableId === tableId || app.support?.ticketsTableId === tableId) return roleIds.includes('owner')
   return false
 }

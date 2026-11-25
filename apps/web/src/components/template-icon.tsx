@@ -1,5 +1,5 @@
 const ICONS: Record<string, string> = {
-  zakazy: 'shop', katalog: 'shop', salon: 'salon', service: 'service', zayavki: 'field', podderzhka: 'service',
+  zakazy: 'shop', katalog: 'shop', salon: 'salon', service: 'service', prokat: 'prokat', zayavki: 'field', podderzhka: 'service',
   nedvizhimost: 'estate', dostavka: 'delivery', crm: 'crm', proekty: 'projects', sklad: 'warehouse', proizvodstvo: 'production', portal: 'crm',
 }
 

@@ -19,7 +19,7 @@ function serviceCatalog(title: string): TemplateTable {
 
 /** The ready client scenario extends the working tables; it never exposes their private fields. */
 export function withCustomerScenario(original: TemplateDef): TemplateDef {
-  if (['salon', 'sklad', 'proizvodstvo', 'podderzhka'].includes(original.id)) return original
+  if (['salon', 'sklad', 'proizvodstvo', 'podderzhka', 'prokat'].includes(original.id)) return original
   const template = structuredClone(original)
   let main = template.tables.find(table => table.key === template.appTable)!
   const common = { email: 'customerEmail', assignment: 'assignedEmail', workerName: 'Исполнитель', managerName: 'Администратор',

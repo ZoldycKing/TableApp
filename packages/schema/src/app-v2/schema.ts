@@ -302,6 +302,37 @@ export const appV2Schema = z.strictObject({
     }),
     activeChoiceId: id, inactiveChoiceId: id,
   }).optional(),
+  /** Equipment rental starter. Absent outside that install. Chat uses CorrespondenceModule. */
+  prokat: z.strictObject({
+    bookingsTableId: id, clientsTableId: id, staffTableId: id, itemsTableId: id,
+    dashboardScreenId: id, bookingsScreenId: id, bookingScreenId: id,
+    itemsScreenId: id, itemScreenId: id, timelineScreenId: id,
+    clientsScreenId: id, clientScreenId: id, catalogScreenId: id,
+    clientListScreenId: id, clientBookingScreenId: id,
+    createFormId: id, issueFormId: id, returnFormId: id, clientRequestFormId: id,
+    booking: z.strictObject({
+      number: id, title: id, client: id, clientName: id, clientEmail: id, items: id,
+      from: id, to: id, price: id, deposit: id, lateFee: id, status: id,
+      staff: id, staffEmail: id,
+      issueCondition: id, issueDamages: id, issuePhotos: id, issueAt: id,
+      returnCondition: id, returnDamages: id, returnPhotos: id, returnAt: id,
+      depositReturned: id, depositWithheld: id, depositReason: id,
+      createdAt: id, updatedAt: id,
+    }),
+    client: z.strictObject({ name: id, email: id, phone: id, note: id }),
+    staff: z.strictObject({ name: id, email: id, phone: id, photo: id.optional(), active: id }),
+    item: z.strictObject({
+      name: id, photo: id.optional(), category: id, serial: id, tariff: id,
+      rate: id, deposit: id, condition: id, status: id, busyUntil: id.optional(),
+    }),
+    statuses: z.strictObject({
+      request: id, confirmed: id, issued: id, returned: id, overdue: id, cancelled: id,
+    }),
+    itemStatuses: z.strictObject({
+      free: id, rented: id, service: id, writtenOff: id,
+    }),
+    activeChoiceId: id, inactiveChoiceId: id,
+  }).optional(),
   /** Internal warehouse starter (stock from movements). Absent outside that install. */
   inventory: z.strictObject({
     itemsTableId: id, movementsTableId: id, warehousesTableId: id,

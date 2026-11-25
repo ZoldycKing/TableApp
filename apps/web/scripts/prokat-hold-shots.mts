@@ -144,6 +144,8 @@ await phoneContext.addCookies(staffCookies)
 await phone.goto(fixture.urls.staffHoldBooking, { waitUntil: 'networkidle' })
 await waitProkat(phone, 'booking')
 await phone.waitForSelector('[data-prokat-hold-until]', { timeout: 15000 })
+await phone.getByRole('button', { name: 'Отметить: не забрали' }).scrollIntoViewIfNeeded()
+await phone.waitForTimeout(300)
 await save(phone, 'hold-until-booking-phone.png')
 
 await phone.goto(fixture.urls.staffNotPickedUpBooking, { waitUntil: 'networkidle' })

@@ -972,7 +972,10 @@ function BookingCard(props: ScreenProps) {
       actions={desk && phone ? <div className={css.actions}>
         {status === 'Подтверждена' || status === 'Заявка' ? <button type="button" className={css.primary} onClick={() => setDialog('issue')}>Выдать</button> : null}
         {status === 'Выдано' || status === 'Просрочен возврат' ? <button type="button" className={css.primary} onClick={() => setDialog('return')}>Принять возврат</button> : null}
-        {holdOpen ? <button type="button" className={css.mine} onClick={() => void commit(props, { kind: 'extendHold', recordId: booking.id }).then(result => setMessage(result.ok ? result.message : result.error))}>Продлить на час</button> : null}
+        {holdOpen ? <>
+          <button type="button" className={css.mine} onClick={() => void commit(props, { kind: 'extendHold', recordId: booking.id }).then(result => setMessage(result.ok ? result.message : result.error))}>Продлить на час</button>
+          <button type="button" className={css.dangerGhost} onClick={() => void commit(props, { kind: 'markNotPickedUp', recordId: booking.id }).then(result => setMessage(result.ok ? result.message : result.error))}>Отметить: не забрали</button>
+        </> : null}
       </div> : undefined}
     >
       {clientView ? <>

@@ -129,17 +129,44 @@ function categoryIcon(category: string) {
   return 'box'
 }
 
+/** Compact day headers so phone week/fortnight never clip «22.11» to «22.1». */
+function timelineDayCaption(
+  label: string,
+  input: { mode: ProkatTimelineRangeId; index: number; today: boolean; prevLabel?: string; dense: boolean },
+) {
+  const [day, month] = label.split('.')
+  if (!day) return { text: label, sparse: false }
+  if (input.mode === 'month') {
+    const show = input.today || input.index % 5 === 0
+    return { text: show ? day : '', sparse: show }
+  }
+  if (input.dense && (input.mode === 'week' || input.mode === 'fortnight')) {
+    // Phone week/fortnight: day number only; show «ДД.ММ» on the first column and month change.
+    const prevMonth = input.prevLabel?.split('.')[1]
+    const monthChange = input.index > 0 && Boolean(month) && month !== prevMonth
+    if (input.index === 0 || monthChange) return { text: month ? `${Number(day)}.${month}` : day, sparse: false }
+    return { text: String(Number(day)), sparse: false }
+  }
+  return { text: label, sparse: false }
+}
+
 function itemPhotoSrc(item: Pick<ProkatCatalogItem, 'photo' | 'serial' | 'name'>) {
+  // Prefer bundled sample files — attachment /api/files URLs often 404 in local/demo.
+  const sample = prokatSamplePublicPath(item.serial) ?? prokatSamplePublicPath(item.name)
+  if (sample) return sample
   const raw = item.photo?.trim()
   if (raw && (raw.startsWith('/') || raw.startsWith('http') || raw.startsWith('data:'))) return raw
-  return prokatSamplePublicPath(item.serial) ?? prokatSamplePublicPath(item.name) ?? null
+  return null
 }
 
 function ItemTile({ item, size = 40 }: { item: Pick<ProkatCatalogItem, 'photo' | 'category' | 'name' | 'serial'>; size?: number }) {
   const src = itemPhotoSrc(item)
-  return <span className={css.itemTile} data-empty={!src || undefined} style={{ width: size, height: size }} aria-hidden="true">
-    {src
-      ? <img src={src} alt="" width={size} height={size} />
+  const [broken, setBroken] = useState(false)
+  useEffect(() => { setBroken(false) }, [src])
+  const showImg = Boolean(src) && !broken
+  return <span className={css.itemTile} data-empty={!showImg || undefined} style={{ width: size, height: size }} aria-hidden="true">
+    {showImg
+      ? <img src={src!} alt="" width={size} height={size} onError={() => setBroken(true)} />
       : <ProtoIcon name={categoryIcon(item.category)} size={Math.round(size * 0.42)} />}
   </span>
 }
@@ -433,7 +460,8 @@ function bookingItems(props: ScreenProps): ProkatListItem[] {
     return {
       id: row.id,
       number: textOf(row.values[fields.number]),
-      title: textOf(row.values[fields.title]) || itemNames.join(', '),
+      // Linked items win over a stale denormalized title (seed / rename drift).
+      title: itemNames.join(', ') || textOf(row.values[fields.title]),
       clientName: textOf(row.values[fields.clientName]),
       clientEmail: textOf(row.values[fields.clientEmail]),
       staffName,
@@ -635,9 +663,7 @@ function DashboardScreen(props: ScreenProps) {
   const weekRevenue = stats.revenueByWeek[stats.revenueByWeek.length - 1]?.value ?? 0
   const maxWeek = Math.max(1, ...stats.revenueByWeek.map(week => week.value))
   const [act, setAct] = useState<{ kind: 'issue' | 'return'; bookingId: string } | null>(null)
-  const [holdMinutes, setHoldMinutes] = useState<ProkatHoldAfterStartMinutes>(() => prokatHoldMinutes(props.kit))
   const actBooking = act ? props.of(props.kit.bookingsTableId).find(row => row.id === act.bookingId) : null
-  const owner = props.actor.roleIds.includes('owner')
   return <div className={css.root} data-prokat-root data-prokat-screen="dashboard">
     <ListScreenShell title="Главная" meta="Что сделать сегодня — и как загружен парк.">
       <div className={css.dashStack}>
@@ -697,9 +723,6 @@ function DashboardScreen(props: ScreenProps) {
           </TodayGroup>
         </div>
       </DetailSection>
-      {owner ? <DetailSection title="Бронь">
-        <HoldSettingControl {...props} value={holdMinutes} onSaved={setHoldMinutes} />
-      </DetailSection> : null}
       <div className={css.kpiRow} role="group" aria-label="Показатели">
         <button type="button" className={css.kpiPill} onClick={() => props.onNavigate?.(props.kit.timelineScreenId)}>
           <strong>{stats.utilisation}%</strong><span>Загрузка парка</span>
@@ -822,6 +845,8 @@ function BookingRows(props: {
   clientFacing?: boolean
   /** Item card history: client + number + badge + dates (no repeated item title). */
   itemScoped?: boolean
+  /** Client card history: hide the repeated client name under each booking. */
+  clientScoped?: boolean
   catalog?: readonly ProkatCatalogItem[]
 }) {
   if (!props.items.length) return <div className={css.empty}><p>Броней в этом списке нет.</p></div>
@@ -853,7 +878,7 @@ function BookingRows(props: {
               <span className={css.quiet}>{formatProkatDateTime(item.from)} — {formatProkatDateTime(item.to)}</span>
             </span>
             {overdue && item.status !== 'Просрочен возврат' ? <span className={css.lateLine}>Просрочен возврат</span> : null}
-            {props.clientFacing
+            {props.clientFacing || props.clientScoped
               ? null
               : <span className={css.ticketCardLine}>
                   <span className={css.quiet}>{item.clientName || 'Без клиента'}</span>
@@ -966,7 +991,7 @@ function BookingCard(props: ScreenProps) {
   return <div className={css.root} data-prokat-root data-prokat-screen={desk ? 'booking' : 'client-booking'} data-prokat-status={status} data-ticket-tight>
     <DetailCardShell
       back={{ label: desk ? 'Брони' : 'Мои брони', onClick: () => props.onNavigate?.(back) }}
-      title={textOf(booking.values[fields.title]) || items.map(item => item.name).join(', ') || 'Бронь'}
+      title={items.map(item => item.name).join(', ') || textOf(booking.values[fields.title]) || 'Бронь'}
       subtitle={textOf(booking.values[fields.number])}
       badge={<span className={css.badges}><StatusBadge name={status} /></span>}
       actions={desk && phone ? <div className={css.actions}>
@@ -1056,7 +1081,6 @@ function BookingCard(props: ScreenProps) {
                 </dd>
               </div>
               {status === 'Не забрали' && statusReason ? <div><dt>Причина</dt><dd>{statusReason}</dd></div> : null}
-              {holdOpen ? <div data-prokat-hold-until><dt>Держится до</dt><dd>{formatProkatDateTime(holdUntil)}</dd></div> : null}
               <div><dt>С</dt><dd>{formatProkatDateTime(from)}</dd></div>
               <div><dt>По</dt><dd>{formatProkatDateTime(to)}</dd></div>
               <div><dt>Стоимость</dt><dd>{formatMoney(price)}</dd></div>
@@ -1363,11 +1387,13 @@ function ItemsList(props: ScreenProps) {
 function ItemDetail(props: ScreenProps) {
   const item = props.of(props.kit.itemsTableId).find(row => row.id === props.recordId) ?? props.record
   const [message, setMessage] = useState('')
+  const [holdMinutes, setHoldMinutes] = useState<ProkatHoldAfterStartMinutes>(() => prokatHoldMinutes(props.kit))
   if (!item) return <div className={css.root}><p className={css.quiet}>Предмет не найден.</p></div>
   const fields = props.kit.item
   const catalog = catalogItems(props).find(entry => entry.id === item.id)
   const history = bookingItems(props).filter(booking => booking.itemIds.includes(item.id))
   const desk = isProkatDesk(props.actor)
+  const owner = props.actor.roleIds.includes('owner')
   const lateConfig = catalog ? itemLateFeeConfig(catalog) : null
   const modeOptions = PROKAT_LATE_FEE_MODES.map(name => {
     const field = props.tables.find(table => table.id === props.kit.itemsTableId)?.fields.find(entry => entry.id === fields.lateFeeMode)
@@ -1418,6 +1444,9 @@ function ItemDetail(props: ScreenProps) {
           </button>
         </div>
         <p className={css.quietHint}>Выключенный предмет остаётся на складе, но не виден в каталоге клиента.</p>
+      </DetailSection> : null}
+      {owner ? <DetailSection title="Бронь">
+        <HoldSettingControl {...props} value={holdMinutes} onSaved={setHoldMinutes} />
       </DetailSection> : null}
       {desk && fields.lateFeeMode ? <DetailSection title="Штраф за просрочку">
         <fieldset className={css.lateFeeMode}>
@@ -1599,7 +1628,10 @@ function TimelineBar(props: {
 
 function TimelineScreen(props: ScreenProps) {
   const desk = isProkatDesk(props.actor)
-  const phone = useContext(AppFrameDeviceContext) === 'phone'
+  const frameDevice = useContext(AppFrameDeviceContext)
+  const [narrow, setNarrow] = useState(false)
+  // Published runtime keeps deviceMode='auto'; detect real phone width ourselves.
+  const phone = frameDevice === 'phone' || (frameDevice === 'auto' && narrow)
   const initialMode: ProkatTimelineRangeId = phone ? 'week' : 'fortnight'
   const [mode, setMode] = useState<ProkatTimelineRangeId>(initialMode)
   const [startDate, setStartDate] = useState(() => timelineStartForToday(initialMode, props.now))
@@ -1613,6 +1645,15 @@ function TimelineScreen(props: ScreenProps) {
   const board = buildTimelineWindow({ mode, startDate, now: props.now })
   const columns = board.columns
   const columnCount = Math.max(1, columns.length)
+  useEffect(() => {
+    const root = boardRef.current
+    if (!root || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(entries => {
+      setNarrow((entries[0]?.contentRect.width ?? 0) < 760)
+    })
+    observer.observe(root)
+    return () => observer.disconnect()
+  }, [])
   const onTimelinePaneScroll = (event: { currentTarget: HTMLElement }) => {
     if (!phone || scrollSyncing.current) return
     const root = boardRef.current
@@ -1873,18 +1914,20 @@ function TimelineScreen(props: ScreenProps) {
                       <span className={css.timelineTodayTag} style={{ left: `${board.nowPct}%` }}>Сегодня</span>
                     ) : null}
                     {columns.map((column, index) => {
-                      // Month on phone: keep today + every 5th day so labels do not collide.
-                      const show = mode !== 'month' || column.today || index % 5 === 0
-                      const label = mode === 'month' && show
-                        ? (column.label.split('.')[0] || column.label)
-                        : column.label
+                      const day = timelineDayCaption(column.label, {
+                        mode,
+                        index,
+                        today: Boolean(column.today),
+                        prevLabel: columns[index - 1]?.label,
+                        dense: true,
+                      })
                       return <span
                         key={column.key}
                         className={css.timelineDay}
                         data-today={column.today || undefined}
                         data-weekend={column.weekend || undefined}
-                        data-sparse={show && mode === 'month' ? true : undefined}
-                      >{show ? label : ''}</span>
+                        data-sparse={day.sparse || undefined}
+                      >{day.text}</span>
                     })}
                   </div>
                 </div>
@@ -1920,17 +1963,20 @@ function TimelineScreen(props: ScreenProps) {
                   <span className={css.timelineTodayTag} style={{ left: `${board.nowPct}%` }}>Сегодня</span>
                 ) : null}
                 {columns.map((column, index) => {
-                  const show = mode !== 'month' || column.today || index % 5 === 0
-                  const label = mode === 'month' && show
-                    ? (column.label.split('.')[0] || column.label)
-                    : column.label
+                  const day = timelineDayCaption(column.label, {
+                    mode,
+                    index,
+                    today: Boolean(column.today),
+                    prevLabel: columns[index - 1]?.label,
+                    dense: false,
+                  })
                   return <span
                     key={column.key}
                     className={css.timelineDay}
                     data-today={column.today || undefined}
                     data-weekend={column.weekend || undefined}
-                    data-sparse={show && mode === 'month' ? true : undefined}
-                  >{show ? label : ''}</span>
+                    data-sparse={day.sparse || undefined}
+                  >{day.text}</span>
                 })}
               </div>
             </div>
@@ -2018,7 +2064,7 @@ function ClientDetail(props: ScreenProps) {
         </dl>
       </DetailSection>
       <DetailSection title="История броней">
-        <BookingRows items={history} now={props.now} onOpen={id => props.onNavigate?.(props.kit.bookingScreenId, id)} keepCards />
+        <BookingRows items={history} now={props.now} onOpen={id => props.onNavigate?.(props.kit.bookingScreenId, id)} keepCards clientScoped />
       </DetailSection>
     </DetailCardShell>
   </div>

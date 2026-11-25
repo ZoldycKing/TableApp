@@ -1654,7 +1654,11 @@
   position: relative; min-width: 28rem; width: max(28rem, 100%);
   padding-right: 3.5rem; box-sizing: content-box;
 }
-.root[data-phone] .timelineDays { padding-top: 2px; }
+.root[data-phone] .timelineDays { padding-top: 2px; font-size: 10px; }
+.root[data-phone] .timelineBoard[data-mode='week'] .timelineDay,
+.root[data-phone] .timelineBoard[data-mode='fortnight'] .timelineDay {
+  font-size: 10px; font-weight: 650; letter-spacing: 0;
+}
 .root[data-phone] .timelineTodayTag {
   top: -14px; z-index: 3;
 }

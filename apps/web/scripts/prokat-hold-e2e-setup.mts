@@ -51,8 +51,14 @@ const clientEmail = String((client.data as Record<string, unknown>)[kit.client.e
 const clientName = String((client.data as Record<string, unknown>)[kit.client.name] ?? 'Клиент')
 
 const items = await db.select().from(rows).where(and(eq(rows.tableId, kit.itemsTableId), isNull(rows.deletedAt)))
-const free = items.find(row => (row.data as Record<string, unknown>)[kit.item.status] === kit.itemStatuses.free)
-  ?? items[0]!
+const itemByName = (name: string) => {
+  const hit = items.find(row => String((row.data as Record<string, unknown>)[kit.item.name] ?? '') === name)
+  if (!hit) throw new Error(`Item not found: ${name}`)
+  return hit
+}
+const trek = itemByName('Горный велосипед Trek Marlin 7')
+const aqua = itemByName('SUP Aqua Marina Magma')
+const kids = itemByName('Детский велосипед 20"')
 
 const pastFrom = new Date(Date.now() - 3 * 3_600_000).toISOString()
 const pastTo = new Date(Date.now() + 20 * 3_600_000).toISOString()
@@ -63,6 +69,7 @@ const openFrom = new Date(Date.now() - 30 * 60_000).toISOString()
 const bookingValues = (input: {
   number: string
   title: string
+  itemId: string
   statusId: string
   from: string
   to: string
@@ -75,7 +82,7 @@ const bookingValues = (input: {
     [kit.booking.client]: [client.id],
     [kit.booking.clientName]: clientName,
     [kit.booking.clientEmail]: clientEmail,
-    [kit.booking.items]: [free.id],
+    [kit.booking.items]: [input.itemId],
     [kit.booking.from]: input.from,
     [kit.booking.to]: input.to,
     [kit.booking.price]: 1500,
@@ -90,6 +97,14 @@ const bookingValues = (input: {
   if (kit.booking.holdUntil && input.holdUntil) values[kit.booking.holdUntil] = input.holdUntil
   if (kit.booking.statusReason && input.reason) values[kit.booking.statusReason] = input.reason
   return values
+}
+
+// Drop prior HOLD* demo rows so re-runs stay consistent (title/item match).
+const existingBookings = await db.select().from(rows).where(and(eq(rows.tableId, kit.bookingsTableId), isNull(rows.deletedAt)))
+for (const row of existingBookings) {
+  const number = String((row.data as Record<string, unknown>)[kit.booking.number] ?? '')
+  if (!/^ПР-HOLD/.test(number)) continue
+  await db.update(rows).set({ deletedAt: new Date() }).where(eq(rows.id, row.id))
 }
 
 const insertBooking = async (values: Record<string, unknown>) => {
@@ -107,6 +122,7 @@ const insertBooking = async (values: Record<string, unknown>) => {
 const holdOpenId = await insertBooking(bookingValues({
   number: 'ПР-HOLD1',
   title: 'Горный велосипед Trek Marlin 7',
+  itemId: trek.id,
   statusId: kit.statuses.confirmed,
   from: openFrom,
   to: pastTo,
@@ -117,6 +133,7 @@ const holdOpenId = await insertBooking(bookingValues({
 const expireId = await insertBooking(bookingValues({
   number: 'ПР-HOLD2',
   title: 'SUP Aqua Marina Magma',
+  itemId: aqua.id,
   statusId: kit.statuses.confirmed,
   from: pastFrom,
   to: pastTo,
@@ -127,6 +144,7 @@ const expireId = await insertBooking(bookingValues({
 const priorNoShowId = await insertBooking(bookingValues({
   number: 'ПР-HOLD0',
   title: 'Детский велосипед 20"',
+  itemId: kids.id,
   statusId: kit.statuses.notPickedUp!,
   from: new Date(Date.now() - 7 * 86_400_000).toISOString(),
   to: new Date(Date.now() - 6 * 86_400_000).toISOString(),
@@ -178,6 +196,7 @@ const nextFixture = {
     clientScreenId: kit.clientScreenId,
     clientsScreenId: kit.clientsScreenId,
     catalogScreenId: kit.catalogScreenId,
+    itemScreenId: kit.itemScreenId,
   },
   rows: {
     ...(fixture.rows ?? {}),
@@ -185,6 +204,7 @@ const nextFixture = {
     notPickedUpBookingId: expireId,
     priorNoShowBookingId: priorNoShowId,
     clientId: client.id,
+    settingsItemId: trek.id,
   },
   urls: {
     ...fixture.urls,
@@ -193,7 +213,8 @@ const nextFixture = {
     staffNotPickedUpBooking: `${fixture.urls.staffBooking.split('?')[0]}?screen=${kit.bookingScreenId}&row=${expireId}`,
     staffClientCard: `${fixture.urls.staffBookings.split('?')[0]}?screen=${kit.clientScreenId}&row=${client.id}`,
     staffTimeline: `${fixture.urls.staffTimeline.split('?')[0]}?screen=${kit.timelineScreenId}`,
-    staffCatalog: `${fixture.urls.clientCatalog.replace('/a/', '/a/')}`,
+    staffCatalog: fixture.urls.clientCatalog,
+    staffItemSettings: `${fixture.urls.staffBookings.split('?')[0]}?screen=${kit.itemScreenId}&row=${trek.id}`,
   },
   hold: { tick, cancelled, expiredStatus, expectedNotPickedUp: kit.statuses.notPickedUp },
 }
@@ -205,9 +226,12 @@ console.log(JSON.stringify({
   cancelled,
   holdOpenId,
   expireId,
+  expireTitle: 'SUP Aqua Marina Magma',
+  expireItem: 'SUP Aqua Marina Magma',
   clientId: client.id,
   chatHint: PROKAT_NOT_PICKED_UP_CHAT.slice(0, 40),
 }, null, 2))
 
 const { sql } = await import('@tableapp/db')
 await sql.end()
+process.exit(0)

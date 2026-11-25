@@ -65,9 +65,11 @@ const ownerContext = await browser.newContext({
 await ownerContext.addCookies(ownerCookies)
 const owner = await ownerContext.newPage()
 
-// 1. Hold setting on dashboard (owner only)
-await owner.goto(fixture.urls.staffDashboard, { waitUntil: 'networkidle' })
-await waitProkat(owner, 'dashboard')
+// 1. Hold setting on item card (owner) — not on dashboard
+const settingsUrl = fixture.urls.staffItemSettings
+if (!settingsUrl) throw new Error('Missing staffItemSettings url — re-run e2e setup')
+await owner.goto(settingsUrl, { waitUntil: 'networkidle' })
+await waitProkat(owner, 'item')
 await owner.locator('[data-prokat-hold-setting]').scrollIntoViewIfNeeded()
 await owner.getByRole('button', { name: /Держать бронь после начала/ }).click()
 const holdList = owner.locator('[role="listbox"][aria-label="Держать бронь после начала"]')
@@ -102,9 +104,12 @@ await waitProkat(staff, 'client-card')
 await staff.waitForSelector('[data-prokat-noshow]', { timeout: 15000 })
 await save(staff, 'client-noshow-desktop.png')
 
-// 5. Notification in Сегодня
+// 5. Notification in Сегодня (no hold setting here)
 await staff.goto(fixture.urls.staffDashboard, { waitUntil: 'networkidle' })
 await waitProkat(staff, 'dashboard')
+if (await staff.locator('[data-prokat-hold-setting]').count()) {
+  throw new Error('Hold setting must not appear on dashboard')
+}
 const notPickedSection = staff.getByRole('region', { name: 'Не забрали' }).or(staff.locator('[aria-label="Не забрали"]'))
 await notPickedSection.first().scrollIntoViewIfNeeded().catch(() => {})
 await save(staff, 'today-not-picked-up-desktop.png')
@@ -127,8 +132,8 @@ const phoneContext = await browser.newContext({
 await phoneContext.addCookies(ownerCookies)
 const phone = await phoneContext.newPage()
 
-await phone.goto(fixture.urls.staffDashboard, { waitUntil: 'networkidle' })
-await waitProkat(phone, 'dashboard')
+await phone.goto(settingsUrl, { waitUntil: 'networkidle' })
+await waitProkat(phone, 'item')
 await phone.locator('[data-prokat-hold-setting]').scrollIntoViewIfNeeded()
 await phone.getByRole('button', { name: /Держать бронь после начала/ }).click()
 const phoneHoldList = phone.locator('[role="listbox"][aria-label="Держать бронь после начала"]')
@@ -160,10 +165,15 @@ await save(phone, 'client-noshow-phone.png')
 
 await phone.goto(fixture.urls.staffDashboard, { waitUntil: 'networkidle' })
 await waitProkat(phone, 'dashboard')
+if (await phone.locator('[data-prokat-hold-setting]').count()) {
+  throw new Error('Hold setting must not appear on phone dashboard')
+}
 await save(phone, 'today-not-picked-up-phone.png')
 
 await phone.goto(fixture.urls.staffTimeline, { waitUntil: 'networkidle' })
 await waitProkat(phone, 'timeline')
+await phone.locator('[data-prokat-screen="timeline"]').getByRole('button', { name: /^(2Н|2 недели)$/ }).click()
+await phone.waitForSelector('[data-prokat-screen="timeline"] [data-mode="fortnight"]', { timeout: 5000 })
 await phone.waitForTimeout(800)
 await save(phone, 'timeline-today-line-phone.png')
 await phone.locator('[data-prokat-screen="timeline"]').getByRole('button', { name: /^(М|Месяц)$/ }).click()

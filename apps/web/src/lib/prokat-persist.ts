@@ -4,8 +4,8 @@ import { authorizeAppV2Write, projectAppV2Row } from '@tableapp/schema/app-v2'
 import {
   canStaffTransition, clientCanRequestCancel, extendHoldUntil, findItemBookingConflict,
   holdUntilFromStart, isHoldEligibleStatus, isProkatBookingStatus, isProkatHoldMinutes,
-  nextBookingNumber, PROKAT_NOT_PICKED_UP_REASON_MANUAL, resolveBookingHoldUntil,
-  resolveHoldAfterStartMinutes, sameEmail,
+  nextBookingNumber, parseItemHoldOverride, PROKAT_NOT_PICKED_UP_REASON_MANUAL,
+  resolveBookingHoldMinutes, resolveBookingHoldUntil, resolveHoldAfterStartMinutes, sameEmail,
   type ProkatBookingStatus, type ProkatBookingSpan, type ProkatHoldAfterStartMinutes,
 } from './prokat-logic'
 
@@ -86,6 +86,19 @@ export function prokatStatusId(prokat: ProkatApp, name: string) {
 
 export function prokatHoldMinutes(prokat: ProkatApp): ProkatHoldAfterStartMinutes {
   return resolveHoldAfterStartMinutes(prokat.holdAfterStartMinutes)
+}
+
+export function holdMinutesForItemValues(
+  prokat: ProkatApp,
+  itemValues: ReadonlyArray<Record<string, unknown>>,
+): ProkatHoldAfterStartMinutes {
+  const business = prokatHoldMinutes(prokat)
+  if (!prokat.item.holdAfterStartMinutes) return business
+  const fieldId = prokat.item.holdAfterStartMinutes
+  return resolveBookingHoldMinutes(
+    business,
+    itemValues.map(values => parseItemHoldOverride(values[fieldId])),
+  )
 }
 
 const textOf = (value: unknown) => typeof value === 'string' ? value : ''
@@ -256,6 +269,7 @@ export function applyProkatChange(
     if (!change.from || !change.to) return { ok: false, error: 'Укажите срок аренды.' }
     const conflict = findItemBookingConflict(spans(), itemIds, change.from, change.to)
     if (conflict) return { ok: false, error: `Предмет уже занят в брони ${conflict.number}.` }
+    const itemValues = itemIds.map(id => rows.find(row => row.id === id && row.tableId === prokat.itemsTableId)?.values ?? {})
 
     let clientId = ''
     let clientName = ''
@@ -296,7 +310,7 @@ export function applyProkatChange(
         const values = bookingCreateValues(prokat.booking, {
           number, title: change.title.trim(), clientId: createdClient.id, clientName, clientEmail,
           itemIds, from: change.from, to: change.to, price: change.price, deposit: change.deposit,
-          statusId, createdAt: now, holdUntil: holdUntilFromStart(change.from, prokatHoldMinutes(prokat)),
+          statusId, createdAt: now, holdUntil: holdUntilFromStart(change.from, holdMinutesForItemValues(prokat, itemValues)),
         })
         const authorizeValues = Object.fromEntries(Object.entries(values).filter(([key]) => key !== prokat.booking.clientEmail))
         const decision = guardProkatCreate(app, actor, prokat.bookingsTableId, authorizeValues)
@@ -317,7 +331,7 @@ export function applyProkatChange(
     const values = bookingCreateValues(prokat.booking, {
       number, title: change.title.trim(), clientId, clientName, clientEmail,
       itemIds, from: change.from, to: change.to, price: change.price, deposit: change.deposit,
-      statusId, createdAt: now, holdUntil: holdUntilFromStart(change.from, prokatHoldMinutes(prokat)),
+      statusId, createdAt: now, holdUntil: holdUntilFromStart(change.from, holdMinutesForItemValues(prokat, itemValues)),
     })
     // Owner-stamped clientEmail must not appear in the authorize payload for clients.
     const authorizeValues = change.kind === 'clientRequest'
@@ -340,10 +354,14 @@ export function applyProkatChange(
     const allowed = new Set([
       prokat.item.showInCatalog, prokat.item.lateFeeMode, prokat.item.lateFeeValue,
       prokat.item.lateFeeGraceHours, prokat.item.lateFeeCapPerDay, prokat.item.condition, prokat.item.status,
+      prokat.item.holdAfterStartMinutes,
     ].filter((id): id is string => Boolean(id)))
     const patch: Record<string, AppV2Json> = {}
     for (const [key, value] of Object.entries(change.values)) {
       if (!allowed.has(key)) return { ok: false, error: 'Это поле предмета нельзя менять здесь.' }
+      if (key === prokat.item.holdAfterStartMinutes && !actor.roleIds.includes('owner')) {
+        return { ok: false, error: 'Переопределение окна брони меняет руководитель.' }
+      }
       patch[key] = value
     }
     if (!Object.keys(patch).length) return { ok: false, error: 'Нет изменений.' }
@@ -374,10 +392,11 @@ export function applyProkatChange(
     const to = textOf(booking.values[prokat.booking.to])
     const conflict = findItemBookingConflict(spans(), itemIds, from, to, booking.id)
     if (conflict) return { ok: false, error: `Предмет уже занят в брони ${conflict.number}.` }
+    const confirmItems = itemIds.map(id => rows.find(row => row.id === id && row.tableId === prokat.itemsTableId)?.values ?? {})
     const patch: Record<string, AppV2Json> = {
       [prokat.booking.status]: prokat.statuses.confirmed,
       [prokat.booking.updatedAt]: now,
-      ...stampBookingHoldUntil(prokat.booking, from, prokatHoldMinutes(prokat)),
+      ...stampBookingHoldUntil(prokat.booking, from, holdMinutesForItemValues(prokat, confirmItems)),
     }
     const decision = guardProkatUpdate(app, actor, booking, patch)
     if (!decision.ok) return decision
@@ -389,12 +408,15 @@ export function applyProkatChange(
     if (!desk.ok) return desk
     if (!isHoldEligibleStatus(statusName)) return { ok: false, error: 'Продлить можно только заявку или подтверждённую бронь.' }
     if (!prokat.booking.holdUntil) return { ok: false, error: 'В этом приложении нет поля срока удержания.' }
-    if (prokatHoldMinutes(prokat) == null) return { ok: false, error: 'Автоотмена отключена — продлевать нечего.' }
+    const extendItemIds = idsOf(booking.values[prokat.booking.items])
+    const extendItems = extendItemIds.map(id => rows.find(row => row.id === id && row.tableId === prokat.itemsTableId)?.values ?? {})
+    const extendHoldMinutes = holdMinutesForItemValues(prokat, extendItems)
+    if (extendHoldMinutes == null) return { ok: false, error: 'Автоотмена отключена — продлевать нечего.' }
     const from = textOf(booking.values[prokat.booking.from])
     const current = resolveBookingHoldUntil({
       from,
       holdUntil: textOf(booking.values[prokat.booking.holdUntil]) || null,
-      holdAfterStartMinutes: prokatHoldMinutes(prokat),
+      holdAfterStartMinutes: extendHoldMinutes,
     })
     const next = extendHoldUntil(current, Date.parse(now))
     const patch: Record<string, AppV2Json> = {

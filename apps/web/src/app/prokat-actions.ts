@@ -13,7 +13,8 @@ import {
 import {
   assertBookingAccess, assertClient, assertDesk, assertStaffStatus, bookingCreateValues,
   bookingIssueValues, bookingReturnValues, bookingSpansFromRows, guardProkatCreate, guardProkatUpdate,
-  isProkatClient, prokatActorEmail, prokatHoldMinutes, prokatStatusName, stampBookingHoldUntil,
+  holdMinutesForItemValues, isProkatClient, prokatActorEmail, prokatHoldMinutes, prokatStatusName,
+  stampBookingHoldUntil,
 } from '@/lib/prokat-persist'
 import { RowWriteError, createRow, lockedRow, checkRow, mutationFields, updateRow, writeRows } from '@/lib/row-mutations'
 import { conversations, conversationMessages } from '@tableapp/db'
@@ -142,6 +143,26 @@ function choiceName(fields: readonly Field[], fieldId: string, value: unknown) {
 const textOf = (value: unknown) => typeof value === 'string' ? value : ''
 const idsOf = (value: unknown) => Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : []
 
+/** Desk lazy catch-up: cancel expired holds when opening list/timeline if the worker slept. */
+export async function catchUpPublishedProkatHolds(
+  slug: string,
+): Promise<{ ok: true; cancelled: number } | { ok: false; error: string }> {
+  try {
+    const { app, actor } = await publishedV2Context(slug)
+    if (!app.prokat) return { ok: false, error: 'Это не приложение проката.' }
+    if (!actor.authenticated) return { ok: false, error: 'Для обновления нужно войти' }
+    const desk = assertDesk(actor)
+    if (!desk.ok) return { ok: false, error: desk.error }
+    const { tickProkatHoldForApp } = await import('@/lib/prokat-hold-worker')
+    const totals = await tickProkatHoldForApp(app, app.workspaceId)
+    return { ok: true, cancelled: totals.cancelled }
+  } catch (error) {
+    if (error instanceof RowWriteError) return { ok: false, error: error.message }
+    console.error('prokat hold catch-up failed', error instanceof Error ? error.name : '')
+    return { ok: false, error: 'Не удалось обновить статусы броней.' }
+  }
+}
+
 export async function savePublishedProkatAction(slug: string, input: unknown): Promise<{ ok: true; message: string } | { ok: false; error: string }> {
   const parsed = readRequest(input)
   if (!parsed) return { ok: false, error: 'Проверьте данные брони.' }
@@ -212,10 +233,14 @@ export async function savePublishedProkatAction(slug: string, input: unknown): P
         const allowed = new Set([
           prokat.item.showInCatalog, prokat.item.lateFeeMode, prokat.item.lateFeeValue,
           prokat.item.lateFeeGraceHours, prokat.item.lateFeeCapPerDay, prokat.item.condition, prokat.item.status,
+          prokat.item.holdAfterStartMinutes,
         ].filter((id): id is string => Boolean(id)))
         const patch: Record<string, AppV2Json> = {}
         for (const [key, entry] of Object.entries(parsed.values)) {
           if (!allowed.has(key)) throw new RowWriteError('denied', 'Это поле предмета нельзя менять здесь.')
+          if (key === prokat.item.holdAfterStartMinutes && !actor.roleIds.includes('owner')) {
+            throw new RowWriteError('denied', 'Переопределение окна брони меняет руководитель.')
+          }
           patch[key] = entry
         }
         const decision = guardProkatUpdate(app, actor, item, patch)
@@ -273,10 +298,12 @@ export async function savePublishedProkatAction(slug: string, input: unknown): P
         const existing = await context.tx.select({ data: rows.data }).from(rows).where(and(eq(rows.tableId, prokat.bookingsTableId), isNull(rows.deletedAt)))
         const number = nextBookingNumber(existing.map(row => String((row.data as Record<string, unknown>)[prokat.booking.number] ?? '')))
         const title = parsed.title.trim() || await itemTitle(parsed.itemIds)
+        const holdItems = await Promise.all(parsed.itemIds.map(async id => (await load(prokat.itemsTableId, id))?.values ?? {}))
+        const holdMinutes = holdMinutesForItemValues(prokat, holdItems)
         const values = bookingCreateValues(prokat.booking, {
           number, title, clientId, clientName, clientEmail,
           itemIds: parsed.itemIds, from: parsed.from, to: parsed.to, price: parsed.price, deposit: parsed.deposit,
-          statusId, createdAt: now, holdUntil: holdUntilFromStart(parsed.from, prokatHoldMinutes(prokat)),
+          statusId, createdAt: now, holdUntil: holdUntilFromStart(parsed.from, holdMinutes),
         })
         // Owner-stamped clientEmail must not appear in the authorize payload for clients.
         const authorizeValues = parsed.kind === 'clientRequest'
@@ -302,10 +329,11 @@ export async function savePublishedProkatAction(slug: string, input: unknown): P
         const to = textOf(booking.values[prokat.booking.to])
         const conflict = findItemBookingConflict(await loadSpans(), itemIds, from, to, booking.id)
         if (conflict) throw new RowWriteError('invalid', `Предмет уже занят в брони ${conflict.number}.`)
+        const confirmItems = await Promise.all(itemIds.map(async id => (await load(prokat.itemsTableId, id))?.values ?? {}))
         const patch: Record<string, AppV2Json> = {
           [prokat.booking.status]: prokat.statuses.confirmed,
           [prokat.booking.updatedAt]: now,
-          ...stampBookingHoldUntil(prokat.booking, from, prokatHoldMinutes(prokat)),
+          ...stampBookingHoldUntil(prokat.booking, from, holdMinutesForItemValues(prokat, confirmItems)),
         }
         const decision = guardProkatUpdate(app, actor, booking, patch)
         if (!decision.ok) throw new RowWriteError('denied', decision.error)
@@ -318,7 +346,10 @@ export async function savePublishedProkatAction(slug: string, input: unknown): P
         if (!desk.ok) throw new RowWriteError('denied', desk.error)
         if (!isHoldEligibleStatus(statusName)) throw new RowWriteError('invalid', 'Продлить можно только заявку или подтверждённую бронь.')
         if (!prokat.booking.holdUntil) throw new RowWriteError('invalid', 'В этом приложении нет поля срока удержания.')
-        if (prokatHoldMinutes(prokat) == null) throw new RowWriteError('invalid', 'Автоотмена отключена — продлевать нечего.')
+        const extendItemIds = idsOf(booking.values[prokat.booking.items])
+        const extendItems = await Promise.all(extendItemIds.map(async id => (await load(prokat.itemsTableId, id))?.values ?? {}))
+        const extendHoldMinutes = holdMinutesForItemValues(prokat, extendItems)
+        if (extendHoldMinutes == null) throw new RowWriteError('invalid', 'Автоотмена отключена — продлевать нечего.')
         // Re-lock so a concurrent auto-cancel cannot interleave after we decided to extend.
         const locked = await lockedRow(context, prokat.bookingsTableId, booking.id)
         checkRow(locked)
@@ -329,7 +360,7 @@ export async function savePublishedProkatAction(slug: string, input: unknown): P
         const current = resolveBookingHoldUntil({
           from,
           holdUntil: textOf((locked.data as Record<string, unknown>)[prokat.booking.holdUntil!]) || null,
-          holdAfterStartMinutes: prokatHoldMinutes(prokat),
+          holdAfterStartMinutes: extendHoldMinutes,
         })
         const next = extendHoldUntil(current, nowMs)
         const patch: Record<string, AppV2Json> = {

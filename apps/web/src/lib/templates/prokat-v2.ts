@@ -88,6 +88,7 @@ export function buildProkatV2App(built: BuiltTemplate, meta: { id: string; works
     lateFeeValue: column('Предметы', 'Ставка штрафа').id,
     lateFeeGraceHours: column('Предметы', 'Льготные часы').id,
     lateFeeCapPerDay: column('Предметы', 'Потолок штрафа в сутки').id,
+    holdAfterStartMinutes: column('Предметы', 'Держать бронь после начала').id,
   }
   const statuses = {
     request: choice('Брони', 'Статус', 'Заявка'),
@@ -116,6 +117,7 @@ export function buildProkatV2App(built: BuiltTemplate, meta: { id: string; works
     catalogScreenId: newId('screen'),
     clientListScreenId: newId('screen'),
     clientBookingScreenId: newId('screen'),
+    settingsScreenId: newId('screen'),
     createFormId: newId('component'),
     issueFormId: newId('component'),
     returnFormId: newId('component'),
@@ -312,6 +314,8 @@ export function buildProkatV2App(built: BuiltTemplate, meta: { id: string; works
       screen(ids.timelineScreenId, 'Занятость', 'Занятость', 'list', desk, null, [timelineBookings, timelineItems], true),
       screen(ids.itemsScreenId, 'Предметы', 'Предметы', 'box', desk, null, [listItems], true),
       screen(ids.clientsScreenId, 'Клиенты', 'Клиенты', 'users', desk, null, [listClients], true),
+      // Owner settings — lands in «Ещё» on phone (desk already has 5 primary tabs).
+      screen(ids.settingsScreenId, 'Настройки проката', 'Настройки', 'settings', owner, null, [], true),
       screen(ids.bookingScreenId, 'Бронь', undefined, 'calendar', desk, bookings.id, [bookingItems, bookingStaff, bookingClients, ids.issueFormId, ids.returnFormId], false),
       screen(ids.itemScreenId, 'Предмет', undefined, 'box', { kind: 'roles', roleIds: ['owner', 'staff', 'client'] }, items.id, [itemBookings], false),
       screen(ids.clientScreenId, 'Клиент', undefined, 'users', desk, clients.id, [clientBookings], false),

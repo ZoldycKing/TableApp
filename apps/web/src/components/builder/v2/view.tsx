@@ -1920,6 +1920,7 @@ export function AppV2Renderer(props: AppV2RendererProps) {
     props.app.prokat.itemsScreenId, props.app.prokat.itemScreenId, props.app.prokat.timelineScreenId,
     props.app.prokat.clientsScreenId, props.app.prokat.clientScreenId, props.app.prokat.catalogScreenId,
     props.app.prokat.clientListScreenId, props.app.prokat.clientBookingScreenId,
+    ...(props.app.prokat.settingsScreenId ? [props.app.prokat.settingsScreenId] : []),
   ].includes(screen.id)) return <ProkatScreen key={screen.id} {...props} />
   if (props.app.booking && screen && [props.app.booking.catalogScreenId, props.app.booking.serviceScreenId, props.app.booking.mastersScreenId, props.app.booking.masterScreenId, props.app.booking.visitScreenId, props.app.booking.clientScreenId, props.app.booking.listScreenId, props.app.booking.formScreenId, props.app.booking.rescheduleScreenId, props.app.booking.setupScreenId, props.app.booking.periodScreenId, props.app.booking.customersScreenId, props.app.booking.customerScreenId].includes(screen.id)) return <BookingScreen key={screen.id} {...props} renderNodes={ids => render(ids)} />
   if (!props.editing && shop && screen?.id === shop.catalogScreenId) {

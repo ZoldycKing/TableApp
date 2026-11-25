@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { wallClockToInstant } from '@tableapp/schema'
 import {
-  clientNotPickedUpCount, extendHoldUntil, formatNotPickedUpCount, holdUntilFromStart,
-  isHoldEligibleStatus, isHoldExpired, isHoldWindowOpen, isOpenBooking,
-  PROKAT_BLOCKING_STATUSES, PROKAT_DEFAULT_HOLD_AFTER_START_MINUTES, resolveBookingHoldUntil,
-  resolveHoldAfterStartMinutes, staffTransitions,
+  clientNotPickedUpCount, encodeItemHoldOverride, extendHoldUntil, formatNotPickedUpCount,
+  holdUntilFromStart, isHoldEligibleStatus, isHoldExpired, isHoldWindowOpen, isOpenBooking,
+  parseItemHoldOverride, PROKAT_BLOCKING_STATUSES, PROKAT_DEFAULT_HOLD_AFTER_START_MINUTES,
+  resolveBookingHoldMinutes, resolveBookingHoldUntil, resolveHoldAfterStartMinutes, staffTransitions,
 } from './prokat-logic'
 
 const moscow = (year: number, month: number, day: number, hour = 12, minute = 0) =>
@@ -60,5 +60,23 @@ describe('prokat hold window', () => {
     expect(formatNotPickedUpCount(2)).toBe('Не забрал: 2 раза')
     expect(formatNotPickedUpCount(5)).toBe('Не забрал: 5 раз')
     expect(formatNotPickedUpCount(0)).toBe('')
+  })
+
+  it('item override inherits business by default and can force never or shorter window', () => {
+    expect(parseItemHoldOverride(undefined)).toBeUndefined()
+    expect(parseItemHoldOverride('')).toBeUndefined()
+    expect(parseItemHoldOverride(30)).toBe(30)
+    expect(parseItemHoldOverride(-1)).toBeNull()
+    expect(encodeItemHoldOverride(undefined)).toBeNull()
+    expect(encodeItemHoldOverride(null)).toBe(-1)
+    expect(encodeItemHoldOverride(120)).toBe(120)
+
+    expect(resolveBookingHoldMinutes(120, [])).toBe(120)
+    expect(resolveBookingHoldMinutes(120, [undefined])).toBe(120)
+    expect(resolveBookingHoldMinutes(120, [30])).toBe(30)
+    expect(resolveBookingHoldMinutes(30, [undefined, 240])).toBe(240)
+    expect(resolveBookingHoldMinutes(120, [30, null])).toBeNull()
+    expect(resolveBookingHoldMinutes(null, [undefined])).toBeNull()
+    expect(resolveBookingHoldMinutes(null, [60])).toBe(60)
   })
 })

@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module'
-import { mkdirSync, readFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import type { Page } from 'playwright'
 
@@ -13,6 +13,8 @@ const { chromium } = playwright
 const fixture = JSON.parse(readFileSync('/tmp/prokat-hold-e2e.json', 'utf8')) as {
   urls: Record<string, string>
   cookies: Record<string, string>
+  rows?: Record<string, string>
+  hold?: { expectedNotPickedUp?: string; expectedConfirmed?: string; manualTick?: boolean }
 }
 
 const outDir = resolve('/opt/cursor/artifacts')
@@ -65,11 +67,11 @@ const ownerContext = await browser.newContext({
 await ownerContext.addCookies(ownerCookies)
 const owner = await ownerContext.newPage()
 
-// 1. Hold setting on item card (owner) — not on dashboard
-const settingsUrl = fixture.urls.staffItemSettings
-if (!settingsUrl) throw new Error('Missing staffItemSettings url — re-run e2e setup')
+// 1. Business hold setting on «Настройки проката» (owner) — not on item/dashboard
+const settingsUrl = fixture.urls.staffSettings
+if (!settingsUrl) throw new Error('Missing staffSettings url — re-run e2e setup')
 await owner.goto(settingsUrl, { waitUntil: 'networkidle' })
-await waitProkat(owner, 'item')
+await waitProkat(owner, 'settings')
 await owner.locator('[data-prokat-hold-setting]').scrollIntoViewIfNeeded()
 await owner.getByRole('button', { name: /Держать бронь после начала/ }).click()
 const holdList = owner.locator('[role="listbox"][aria-label="Держать бронь после начала"]')
@@ -79,12 +81,40 @@ await owner.waitForTimeout(300)
 await save(owner, 'hold-setting-desktop.png')
 await owner.keyboard.press('Escape')
 
+// 1b. Item override defaults to «Как в настройках»
+const overrideUrl = fixture.urls.staffItemOverride
+if (overrideUrl) {
+  await owner.goto(overrideUrl, { waitUntil: 'networkidle' })
+  await waitProkat(owner, 'item')
+  await owner.locator('[data-prokat-hold-override]').scrollIntoViewIfNeeded()
+  await owner.getByRole('button', { name: /Держать бронь после начала/ }).click()
+  await owner.locator('[role="listbox"][aria-label="Держать бронь после начала"]').waitFor({ state: 'visible', timeout: 5000 })
+  await owner.waitForTimeout(300)
+  await save(owner, 'hold-item-override-desktop.png')
+  await owner.keyboard.press('Escape')
+}
+
 const staffContext = await browser.newContext({
   viewport: { width: 1280, height: 900 },
   locale: 'ru-RU',
 })
 await staffContext.addCookies(staffCookies)
 const staff = await staffContext.newPage()
+
+// Lazy catch-up: open bookings list (no manual tick) → pending expire becomes «Не забрали»
+const bookingsUrl = fixture.urls.staffBookings
+if (!bookingsUrl) throw new Error('Missing staffBookings url')
+await staff.goto(bookingsUrl, { waitUntil: 'networkidle' })
+await waitProkat(staff, 'bookings')
+await staff.waitForTimeout(2500)
+await staff.goto(fixture.urls.staffNotPickedUpBooking, { waitUntil: 'networkidle' })
+await waitProkat(staff, 'booking')
+await staff.waitForSelector('[data-prokat-status="Не забрали"]', { timeout: 30000 })
+writeFileSync('/tmp/prokat-hold-lazy-ok.json', JSON.stringify({
+  ok: true,
+  via: 'lazy-catch-up-on-bookings',
+  manualTick: fixture.hold?.manualTick === true,
+}, null, 2))
 
 // 2. Booking card with «держится до»
 await staff.goto(fixture.urls.staffHoldBooking, { waitUntil: 'networkidle' })
@@ -133,7 +163,7 @@ await phoneContext.addCookies(ownerCookies)
 const phone = await phoneContext.newPage()
 
 await phone.goto(settingsUrl, { waitUntil: 'networkidle' })
-await waitProkat(phone, 'item')
+await waitProkat(phone, 'settings')
 await phone.locator('[data-prokat-hold-setting]').scrollIntoViewIfNeeded()
 await phone.getByRole('button', { name: /Держать бронь после начала/ }).click()
 const phoneHoldList = phone.locator('[role="listbox"][aria-label="Держать бронь после начала"]')
@@ -142,6 +172,17 @@ await phoneHoldList.scrollIntoViewIfNeeded()
 await phone.waitForTimeout(300)
 await save(phone, 'hold-setting-phone.png')
 await phone.keyboard.press('Escape')
+
+if (overrideUrl) {
+  await phone.goto(overrideUrl, { waitUntil: 'networkidle' })
+  await waitProkat(phone, 'item')
+  await phone.locator('[data-prokat-hold-override]').scrollIntoViewIfNeeded()
+  await phone.getByRole('button', { name: /Держать бронь после начала/ }).click()
+  await phone.locator('[role="listbox"][aria-label="Держать бронь после начала"]').waitFor({ state: 'visible', timeout: 5000 })
+  await phone.waitForTimeout(300)
+  await save(phone, 'hold-item-override-phone.png')
+  await phone.keyboard.press('Escape')
+}
 
 await phoneContext.clearCookies()
 await phoneContext.addCookies(staffCookies)

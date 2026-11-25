@@ -175,10 +175,10 @@ describe.skipIf(!process.env.DATABASE_URL)('prokat hold auto-cancel', () => {
     throw new Error(`no free item for ${from}–${to}; last status names: ${spans.map(s => prokatStatusName(kit, s.status) || s.status).join(',')}`)
   }
 
-  async function createHoldBooking(input: { from: string; to: string; holdUntil?: string; title?: string }) {
+  async function createHoldBooking(input: { from: string; to: string; holdUntil?: string; title?: string; itemId?: string }) {
     state.jar.set('tableapp_staff', staffSessionId)
     await reloadApp()
-    const itemId = await pickFreeItem(input.from, input.to)
+    const itemId = input.itemId ?? await pickFreeItem(input.from, input.to)
     const title = input.title ?? `Hold ${Date.now()}-${Math.random().toString(16).slice(2, 6)}`
     const created = await prokatActions.savePublishedProkatAction(slug, {
       kind: 'create',
@@ -341,6 +341,75 @@ describe.skipIf(!process.env.DATABASE_URL)('prokat hold auto-cancel', () => {
         && data[kit.booking.status] === kit.statuses.notPickedUp
     }).length
     expect(count).toBeGreaterThanOrEqual(2)
+  }, 180_000)
+
+  it('worker uses business default when item has no override, and item override otherwise', async () => {
+    await reloadApp()
+    expect(kit.item.holdAfterStartMinutes).toBeTruthy()
+    const holdField = kit.item.holdAfterStartMinutes!
+    const pastTo = new Date(Date.now() + 24 * 3_600_000).toISOString()
+    const expiredHold = new Date(Date.now() - 60_000).toISOString()
+
+    state.jar.set('tableapp_staff', ownerSessionId)
+    state.member = {
+      userId, workspaceId, workspaceName: 'Prokat Hold', email: ownerEmail, name: 'Владелец', role: 'owner',
+    }
+    const business = await prokatActions.savePublishedProkatAction(slug, {
+      kind: 'holdSetting',
+      revision,
+      screenId: kit.settingsScreenId ?? bookingScreenId,
+      holdAfterStartMinutes: 120,
+    })
+    expect(business).toMatchObject({ ok: true })
+    await reloadApp()
+
+    // Clear item override → inherit 2h; booking already past holdUntil must cancel.
+    const [itemRow] = await database.db.select().from(database.rows).where(eq(database.rows.id, freeItemId))
+    const itemData = { ...(itemRow!.data as Record<string, unknown>) }
+    delete itemData[holdField]
+    await database.db.update(database.rows).set({ data: itemData }).where(eq(database.rows.id, freeItemId))
+
+    const inheritId = await createHoldBooking({
+      from: new Date(Date.now() - 3 * 3_600_000).toISOString(),
+      to: pastTo,
+      holdUntil: expiredHold,
+      itemId: freeItemId,
+    })
+    const inheritTick = await worker.tickProkatHoldForApp(app, workspaceId)
+    expect(inheritTick.cancelled).toBeGreaterThanOrEqual(1)
+    expect((await bookingStatus(inheritId)).statusId).toBe(kit.statuses.notPickedUp)
+
+    // Item override «never» → even with expired stamp, worker skips.
+    await database.db.update(database.rows).set({
+      data: { ...itemData, [holdField]: -1 },
+    }).where(eq(database.rows.id, freeItemId))
+    await reloadApp()
+    const neverOverrideId = await createHoldBooking({
+      from: new Date(Date.now() - 5 * 3_600_000).toISOString(),
+      to: pastTo,
+      holdUntil: expiredHold,
+      itemId: freeItemId,
+    })
+    await worker.tickProkatHoldForApp(app, workspaceId)
+    expect((await bookingStatus(neverOverrideId)).statusId).toBe(kit.statuses.confirmed)
+
+    // Shorter item override (30) with stamp already past → cancels.
+    await database.db.update(database.rows).set({
+      data: { ...itemData, [holdField]: 30 },
+    }).where(eq(database.rows.id, freeItemId))
+    await reloadApp()
+    const shortId = await createHoldBooking({
+      from: new Date(Date.now() - 2 * 3_600_000).toISOString(),
+      to: pastTo,
+      holdUntil: expiredHold,
+      itemId: freeItemId,
+    })
+    const shortTick = await worker.tickProkatHoldForApp(app, workspaceId)
+    expect(shortTick.cancelled).toBeGreaterThanOrEqual(1)
+    expect((await bookingStatus(shortId)).statusId).toBe(kit.statuses.notPickedUp)
+
+    // Restore clean item field for later tests.
+    await database.db.update(database.rows).set({ data: itemData }).where(eq(database.rows.id, freeItemId))
   }, 180_000)
 
   it('rejects client IDOR on extendHold and markNotPickedUp', async () => {

@@ -134,6 +134,11 @@ export const prokat: TemplateDef = {
         { key: 'lateFeeGraceHours', name: 'Льготные часы', type: 'number', options: { format: 'decimal', precision: 0 }, help: 'Сколько часов после срока возврата штраф ещё не начисляется. Обычно 1.' },
         { key: 'lateFeeCapPerDay', name: 'Потолок штрафа в сутки', type: 'number', options: { format: 'currency', precision: 0, currency: 'RUB' }, help: 'Для штрафа «за час»: максимум за сутки просрочки. Часто равен дневному тарифу.' },
         {
+          key: 'holdAfterStartMinutes', name: 'Держать бронь после начала', type: 'number',
+          options: { format: 'decimal', precision: 0 },
+          help: 'Переопределение окна автоотмены для этого предмета. Пусто — как в настройках проката. −1 — не отменять.',
+        },
+        {
           key: 'busyUntil', name: 'Занят до', type: 'datetime', options: moscow,
           help: 'Публичная дата, до которой предмет занят. Клиент видит её в заявке без чужих броней.',
         },

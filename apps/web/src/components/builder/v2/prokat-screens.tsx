@@ -3,7 +3,7 @@ import { createContext, lazy, Suspense, useContext, useEffect, useId, useLayoutE
 import { createPortal } from 'react-dom'
 import { attachmentSchema, instantToWallClock, type Attachment } from '@tableapp/schema'
 import type { AppV2, AppV2Json, AppV2Node, AppV2Record } from '@tableapp/schema/app-v2'
-import { savePublishedProkatAction } from '@/app/prokat-actions'
+import { catchUpPublishedProkatHolds, savePublishedProkatAction } from '@/app/prokat-actions'
 import type { ConversationPage } from '@/lib/conversation-types'
 import { BuilderV2AttachmentInput } from './attachment-input'
 import {
@@ -11,16 +11,20 @@ import {
   PROKAT_TIMELINE_RANGES, PROKAT_ZONE,
   buildTimelineWindow, catalogItemFreeLabel, clientCanRequestCancel, clientNotPickedUpCount,
   computeItemLateFee, catalogItemBusyUntil, computeRentalPrice, describeLateFee,
-  filterBookings, formatMoney, formatMoneyOrZero, formatNotPickedUpCount, formatProkatDate, formatProkatDateTime,
-  isHoldEligibleStatus, isHoldWindowOpen, isOpenBooking, isOverdueReturn, itemLateFeeConfig,
-  prokatClientStepIndex, prokatDashboard, prokatWallInstant, resolveBookingHoldUntil, resolveHoldAfterStartMinutes,
+  encodeItemHoldOverride, filterBookings, formatMoney, formatMoneyOrZero, formatNotPickedUpCount,
+  formatProkatDate, formatProkatDateTime, holdOptionLabel, isHoldEligibleStatus, isHoldWindowOpen,
+  isOpenBooking, isOverdueReturn, itemLateFeeConfig, parseItemHoldOverride, prokatClientStepIndex,
+  prokatDashboard, prokatWallInstant, resolveBookingHoldUntil,
   shiftTimelineStart, staffTransitions, timelineBarCaptionPlacement,
   timelineBarLabel, timelineBookingSegments, timelineStartForToday, type ProkatBookingViewId,
   type ProkatCatalogItem, type ProkatHoldAfterStartMinutes, type ProkatListItem, type ProkatLateFeeMode,
   type ProkatTimelineRangeId, type TimelineBarSegment,
 } from '@/lib/prokat-logic'
 import { prokatSamplePublicPath } from '@/lib/templates/prokat-samples'
-import { applyProkatChange, bookingSpansFromRows, isProkatDesk, prokatHoldMinutes, prokatStatusName, type ProkatChange } from '@/lib/prokat-persist'
+import {
+  applyProkatChange, bookingSpansFromRows, holdMinutesForItemValues, isProkatDesk, prokatHoldMinutes,
+  prokatStatusName, type ProkatChange,
+} from '@/lib/prokat-persist'
 import { AppFrameDeviceContext } from './app-frame'
 import { AppDialog } from './app-dialog'
 import { DateMenu } from './booking-calendar'
@@ -379,6 +383,7 @@ export function ProkatScreen(props: AppV2RendererProps) {
   const screens = kit ? [
     kit.dashboardScreenId, kit.bookingsScreenId, kit.bookingScreenId, kit.itemsScreenId, kit.itemScreenId,
     kit.timelineScreenId, kit.clientsScreenId, kit.clientScreenId, kit.catalogScreenId, kit.clientListScreenId, kit.clientBookingScreenId,
+    ...(kit.settingsScreenId ? [kit.settingsScreenId] : []),
   ] : []
   if (!kit || !screens.includes(screenId)) return null
   const pages = [bookingsPage, itemsPage, clientsPage, staffPage]
@@ -397,6 +402,7 @@ export function ProkatScreen(props: AppV2RendererProps) {
   if (screenId === kit.timelineScreenId) return <TimelineScreen {...shared} />
   if (screenId === kit.clientsScreenId) return <ClientDirectory {...shared} />
   if (screenId === kit.clientScreenId) return <ClientDetail {...shared} />
+  if (kit.settingsScreenId && screenId === kit.settingsScreenId) return <SettingsScreen {...shared} />
   return <CatalogScreen {...shared} />
 }
 
@@ -606,6 +612,21 @@ function TodayGroup(props: {
   </section>
 }
 
+/** Desk screens: cancel expired holds if the in-process worker has not run yet. */
+function useProkatHoldCatchUp(props: ScreenProps) {
+  useEffect(() => {
+    const published = publishedHolder.current
+    if (!published || published.revision === 'demo') return
+    if (!isProkatDesk(props.actor)) return
+    let cancelled = false
+    void catchUpPublishedProkatHolds(published.slug).then(result => {
+      if (cancelled) return
+      if (result.ok && result.cancelled > 0) published.refresh()
+    })
+    return () => { cancelled = true }
+  }, [props.screenId, props.actor])
+}
+
 function HoldSettingControl(props: ScreenProps & { value: ProkatHoldAfterStartMinutes; onSaved: (next: ProkatHoldAfterStartMinutes) => void }) {
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -651,12 +672,81 @@ function HoldSettingControl(props: ScreenProps & { value: ProkatHoldAfterStartMi
         ))}
       </div> : null}
     </div>
-    <p className={css.holdSettingLead}>Сколько ждать клиента после начала брони, прежде чем снять её как «Не забрали».</p>
+    <p className={css.holdSettingLead}>Общее правило для всего проката: сколько ждать клиента после начала брони, прежде чем снять её как «Не забрали». На карточке предмета можно переопределить.</p>
     {message ? <p role="status" className={css.quiet}>{message}</p> : null}
   </div>
 }
 
+function ItemHoldOverrideControl(props: ScreenProps & {
+  fieldId: string
+  value: ProkatHoldAfterStartMinutes | undefined
+  onSaved: (next: ProkatHoldAfterStartMinutes | undefined) => void
+  patchItem: (values: Record<string, AppV2Json>) => Promise<void>
+}) {
+  const [open, setOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const root = useRef<HTMLDivElement>(null)
+  useMenuOpen(open, root, () => setOpen(false))
+  const business = prokatHoldMinutes(props.kit)
+  const businessLabel = holdOptionLabel(business) ?? '2 ч'
+  const inheritLabel = `Как в настройках (${businessLabel})`
+  const currentLabel = props.value === undefined
+    ? inheritLabel
+    : (PROKAT_HOLD_AFTER_START_OPTIONS.find(option => option.minutes === props.value)?.label ?? inheritLabel)
+  const save = async (next: ProkatHoldAfterStartMinutes | undefined) => {
+    setBusy(true)
+    await props.patchItem({ [props.fieldId]: encodeItemHoldOverride(next) })
+    setBusy(false)
+    props.onSaved(next)
+    setOpen(false)
+  }
+  return <div className={css.holdSetting} data-prokat-hold-override>
+    <div className={`${css.assigneeFilter} ${css.singleFilter}`} ref={root}>
+      <button
+        type="button"
+        className={css.assigneeTrigger}
+        data-active
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        aria-label="Держать бронь после начала"
+        disabled={busy}
+        onClick={() => setOpen(value => !value)}
+      >
+        <span>Держать бронь после начала · <strong>{currentLabel}</strong></span>
+        <ProtoIcon name="down" size={14} />
+      </button>
+      {open ? <div className={css.assigneePanel} role="listbox" aria-label="Держать бронь после начала">
+        <button type="button" role="option" aria-selected={props.value === undefined} onClick={() => void save(undefined)}>{inheritLabel}</button>
+        {PROKAT_HOLD_AFTER_START_OPTIONS.map(option => (
+          <button
+            key={String(option.minutes)}
+            type="button"
+            role="option"
+            aria-selected={option.minutes === props.value}
+            onClick={() => void save(option.minutes)}
+          >{option.label}</button>
+        ))}
+      </div> : null}
+    </div>
+    <p className={css.holdSettingLead}>Необязательное правило только для этого предмета. По умолчанию — как в «Настройках проката».</p>
+  </div>
+}
+
+function SettingsScreen(props: ScreenProps) {
+  const owner = props.actor.roleIds.includes('owner')
+  const [holdMinutes, setHoldMinutes] = useState<ProkatHoldAfterStartMinutes>(() => prokatHoldMinutes(props.kit))
+  useEffect(() => { setHoldMinutes(prokatHoldMinutes(props.kit)) }, [props.kit.holdAfterStartMinutes])
+  return <div className={css.root} data-prokat-root data-prokat-screen="settings">
+    <ListScreenShell title="Настройки проката" meta="Общие правила удержания брони.">
+      {owner ? <DetailSection title="Бронь">
+        <HoldSettingControl {...props} value={holdMinutes} onSaved={setHoldMinutes} />
+      </DetailSection> : <p className={css.quiet}>Настройки меняет руководитель.</p>}
+    </ListScreenShell>
+  </div>
+}
+
 function DashboardScreen(props: ScreenProps) {
+  useProkatHoldCatchUp(props)
   const bookings = bookingItems(props)
   const items = catalogItems(props)
   const stats = prokatDashboard(items, bookings, props.now)
@@ -767,6 +857,7 @@ function DashboardScreen(props: ScreenProps) {
 }
 
 function BookingList(props: ScreenProps) {
+  useProkatHoldCatchUp(props)
   const desk = isProkatDesk(props.actor)
   const bundle = useContext(ProkatRowsContext)
   const [search, setSearch] = useState('')
@@ -961,7 +1052,8 @@ function BookingCard(props: ScreenProps) {
   const transitions = desk ? staffTransitions(status) : []
   const back = clientView ? props.kit.clientListScreenId : props.kit.bookingsScreenId
   const canCancel = clientView && clientCanRequestCancel(status)
-  const holdMinutes = resolveHoldAfterStartMinutes(props.kit.holdAfterStartMinutes)
+  const holdItemValues = itemIds.map(id => props.of(props.kit.itemsTableId).find(row => row.id === id)?.values ?? {})
+  const holdMinutes = holdMinutesForItemValues(props.kit, holdItemValues)
   const holdUntil = resolveBookingHoldUntil({
     from,
     holdUntil: props.kit.booking.holdUntil ? textOf(booking.values[props.kit.booking.holdUntil]) || null : null,
@@ -1387,7 +1479,13 @@ function ItemsList(props: ScreenProps) {
 function ItemDetail(props: ScreenProps) {
   const item = props.of(props.kit.itemsTableId).find(row => row.id === props.recordId) ?? props.record
   const [message, setMessage] = useState('')
-  const [holdMinutes, setHoldMinutes] = useState<ProkatHoldAfterStartMinutes>(() => prokatHoldMinutes(props.kit))
+  const holdFieldId = props.kit.item.holdAfterStartMinutes
+  const [holdOverride, setHoldOverride] = useState<ProkatHoldAfterStartMinutes | undefined>(() =>
+    holdFieldId && item ? parseItemHoldOverride(item.values[holdFieldId]) : undefined)
+  useEffect(() => {
+    if (!holdFieldId || !item) return
+    setHoldOverride(parseItemHoldOverride(item.values[holdFieldId]))
+  }, [holdFieldId, item?.id, item?.values])
   if (!item) return <div className={css.root}><p className={css.quiet}>Предмет не найден.</p></div>
   const fields = props.kit.item
   const catalog = catalogItems(props).find(entry => entry.id === item.id)
@@ -1445,8 +1543,14 @@ function ItemDetail(props: ScreenProps) {
         </div>
         <p className={css.quietHint}>Выключенный предмет остаётся на складе, но не виден в каталоге клиента.</p>
       </DetailSection> : null}
-      {owner ? <DetailSection title="Бронь">
-        <HoldSettingControl {...props} value={holdMinutes} onSaved={setHoldMinutes} />
+      {owner && fields.holdAfterStartMinutes ? <DetailSection title="Бронь">
+        <ItemHoldOverrideControl
+          {...props}
+          fieldId={fields.holdAfterStartMinutes}
+          value={holdOverride}
+          onSaved={setHoldOverride}
+          patchItem={patchItem}
+        />
       </DetailSection> : null}
       {desk && fields.lateFeeMode ? <DetailSection title="Штраф за просрочку">
         <fieldset className={css.lateFeeMode}>
@@ -1627,6 +1731,7 @@ function TimelineBar(props: {
 }
 
 function TimelineScreen(props: ScreenProps) {
+  useProkatHoldCatchUp(props)
   const desk = isProkatDesk(props.actor)
   const frameDevice = useContext(AppFrameDeviceContext)
   const [narrow, setNarrow] = useState(false)

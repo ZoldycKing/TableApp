@@ -24,7 +24,6 @@ const fixture = JSON.parse(readFileSync(fixturePath, 'utf8')) as {
 
 const { db, apps, rows, conversations, conversationMessages, businessCustomers } = await import('@tableapp/db')
 const { ensureProkatHoldKit } = await import('../src/lib/prokat-hold-ensure')
-const { tickProkatHoldForApp, cancelExpiredProkatHold } = await import('../src/lib/prokat-hold-worker')
 const { newId } = await import('@tableapp/schema')
 const { createHash, randomUUID } = await import('node:crypto')
 const { PROKAT_NOT_PICKED_UP_CHAT, PROKAT_NOT_PICKED_UP_REASON_AUTO } = await import('../src/lib/prokat-logic')
@@ -59,6 +58,13 @@ const itemByName = (name: string) => {
 const trek = itemByName('Горный велосипед Trek Marlin 7')
 const aqua = itemByName('SUP Aqua Marina Magma')
 const kids = itemByName('Детский велосипед 20"')
+
+// Item override cleared → inherit business default (2 ч) for settings/override screenshots.
+if (kit.item.holdAfterStartMinutes) {
+  const trekData = { ...(trek.data as Record<string, unknown>) }
+  delete trekData[kit.item.holdAfterStartMinutes]
+  await db.update(rows).set({ data: trekData }).where(eq(rows.id, trek.id))
+}
 
 const pastFrom = new Date(Date.now() - 3 * 3_600_000).toISOString()
 const pastTo = new Date(Date.now() + 20 * 3_600_000).toISOString()
@@ -129,7 +135,7 @@ const holdOpenId = await insertBooking(bookingValues({
   holdUntil: openHoldUntil,
 }))
 
-// Expired confirmed booking — worker will cancel.
+// Expired confirmed booking — stays confirmed until in-app scheduler / lazy catch-up.
 const expireId = await insertBooking(bookingValues({
   number: 'ПР-HOLD2',
   title: 'SUP Aqua Marina Magma',
@@ -140,7 +146,7 @@ const expireId = await insertBooking(bookingValues({
   holdUntil,
 }))
 
-// Extra historical no-show so client counter shows «2 раза».
+// Extra historical no-show so after auto-cancel the client counter shows «2 раза».
 const priorNoShowId = await insertBooking(bookingValues({
   number: 'ПР-HOLD0',
   title: 'Детский велосипед 20"',
@@ -181,26 +187,28 @@ await db.insert(conversationMessages).values({
   body: 'Скоро буду забирать.',
 }).onConflictDoNothing()
 
-const tick = await tickProkatHoldForApp(app, app.workspaceId)
-const cancelled = await cancelExpiredProkatHold(app.workspaceId, app, expireId)
-const [expiredRow] = await db.select().from(rows).where(eq(rows.id, expireId))
-const expiredStatus = (expiredRow!.data as Record<string, unknown>)[kit.booking.status]
+const [pendingRow] = await db.select().from(rows).where(eq(rows.id, expireId))
+const pendingStatus = (pendingRow!.data as Record<string, unknown>)[kit.booking.status]
+const baseStaff = String(fixture.urls.staffBookings ?? fixture.urls.staffDashboard).split('?')[0]
 
 const nextFixture = {
   ...fixture,
   screens: {
     ...(fixture.screens ?? {}),
     dashboardScreenId: kit.dashboardScreenId,
+    bookingsScreenId: kit.bookingsScreenId,
     bookingScreenId: kit.bookingScreenId,
     timelineScreenId: kit.timelineScreenId,
     clientScreenId: kit.clientScreenId,
     clientsScreenId: kit.clientsScreenId,
     catalogScreenId: kit.catalogScreenId,
     itemScreenId: kit.itemScreenId,
+    settingsScreenId: kit.settingsScreenId,
   },
   rows: {
     ...(fixture.rows ?? {}),
     holdOpenBookingId: holdOpenId,
+    pendingExpireBookingId: expireId,
     notPickedUpBookingId: expireId,
     priorNoShowBookingId: priorNoShowId,
     clientId: client.id,
@@ -208,28 +216,38 @@ const nextFixture = {
   },
   urls: {
     ...fixture.urls,
-    staffDashboard: `${String(fixture.urls.staffDashboard).split('?')[0]}?screen=${kit.dashboardScreenId}`,
-    staffHoldBooking: `${String(fixture.urls.staffBooking).split('?')[0]}?screen=${kit.bookingScreenId}&row=${holdOpenId}`,
-    staffNotPickedUpBooking: `${String(fixture.urls.staffBooking).split('?')[0]}?screen=${kit.bookingScreenId}&row=${expireId}`,
-    staffClientCard: `${String(fixture.urls.staffBookings).split('?')[0]}?screen=${kit.clientScreenId}&row=${client.id}`,
-    staffTimeline: `${String(fixture.urls.staffTimeline).split('?')[0]}?screen=${kit.timelineScreenId}`,
+    staffDashboard: `${baseStaff}?screen=${kit.dashboardScreenId}`,
+    staffBookings: `${baseStaff}?screen=${kit.bookingsScreenId}`,
+    staffHoldBooking: `${baseStaff}?screen=${kit.bookingScreenId}&row=${holdOpenId}`,
+    staffNotPickedUpBooking: `${baseStaff}?screen=${kit.bookingScreenId}&row=${expireId}`,
+    staffClientCard: `${baseStaff}?screen=${kit.clientScreenId}&row=${client.id}`,
+    staffTimeline: `${baseStaff}?screen=${kit.timelineScreenId}`,
     staffCatalog: String(fixture.urls.clientCatalog),
-    staffItemSettings: `${String(fixture.urls.staffBookings).split('?')[0]}?screen=${kit.itemScreenId}&row=${trek.id}`,
+    staffItemOverride: `${baseStaff}?screen=${kit.itemScreenId}&row=${trek.id}`,
+    staffSettings: kit.settingsScreenId
+      ? `${baseStaff}?screen=${kit.settingsScreenId}`
+      : `${baseStaff}?screen=${kit.itemScreenId}&row=${trek.id}`,
   },
-  hold: { tick, cancelled, expiredStatus, expectedNotPickedUp: kit.statuses.notPickedUp },
+  hold: {
+    pendingStatus,
+    expectedNotPickedUp: kit.statuses.notPickedUp,
+    expectedConfirmed: kit.statuses.confirmed,
+    manualTick: false,
+  },
 }
 
 writeFileSync('/tmp/prokat-hold-e2e.json', JSON.stringify(nextFixture, null, 2))
 console.log(JSON.stringify({
-  ok: expiredStatus === kit.statuses.notPickedUp,
-  tick,
-  cancelled,
+  ok: pendingStatus === kit.statuses.confirmed,
+  pendingExpireId: expireId,
+  pendingStatus,
   holdOpenId,
-  expireId,
   expireTitle: 'SUP Aqua Marina Magma',
   expireItem: 'SUP Aqua Marina Magma',
   clientId: client.id,
+  settingsScreenId: kit.settingsScreenId,
   chatHint: PROKAT_NOT_PICKED_UP_CHAT.slice(0, 40),
+  note: 'No manual tick — open bookings/timeline or wait for in-process scheduler',
 }, null, 2))
 
 const { sql } = await import('@tableapp/db')

@@ -309,6 +309,8 @@ export const appV2Schema = z.strictObject({
     itemsScreenId: id, itemScreenId: id, timelineScreenId: id,
     clientsScreenId: id, clientScreenId: id, catalogScreenId: id,
     clientListScreenId: id, clientBookingScreenId: id,
+    /** Owner «Настройки проката». Optional until ensureProkatHoldKit adds it. */
+    settingsScreenId: id.optional(),
     createFormId: id, issueFormId: id, returnFormId: id, clientRequestFormId: id,
     booking: z.strictObject({
       number: id, title: id, client: id, clientName: id, clientEmail: id, items: id,
@@ -331,6 +333,11 @@ export const appV2Schema = z.strictObject({
       showInCatalog: id.optional(),
       lateFeeMode: id.optional(), lateFeeValue: id.optional(),
       lateFeeGraceHours: id.optional(), lateFeeCapPerDay: id.optional(),
+      /**
+       * Optional per-item hold override (minutes). Empty = inherit business setting.
+       * Sentinel -1 = never auto-cancel for this item.
+       */
+      holdAfterStartMinutes: id.optional(),
     }),
     statuses: z.strictObject({
       request: id, confirmed: id, issued: id, returned: id, overdue: id, cancelled: id,

@@ -4,14 +4,15 @@ import {
 import { newId } from '@tableapp/schema'
 import { readAppDefinition } from '@tableapp/schema/app-definition'
 import type { AppV2, AppV2Json } from '@tableapp/schema/app-v2'
-import { and, eq, isNotNull, isNull } from 'drizzle-orm'
+import { and, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
 import { createHash, randomUUID } from 'node:crypto'
 import { ensureProkatHoldKit } from './prokat-hold-ensure'
 import {
-  isHoldEligibleStatus, isHoldExpired, PROKAT_NOT_PICKED_UP_CHAT,
-  PROKAT_NOT_PICKED_UP_REASON_AUTO, resolveBookingHoldUntil,
+  isHoldEligibleStatus, isHoldExpired, parseItemHoldOverride, PROKAT_NOT_PICKED_UP_CHAT,
+  PROKAT_NOT_PICKED_UP_REASON_AUTO, resolveBookingHoldMinutes, resolveBookingHoldUntil,
+  resolveHoldAfterStartMinutes, type ProkatHoldAfterStartMinutes,
 } from './prokat-logic'
-import { prokatHoldMinutes, prokatStatusName } from './prokat-persist'
+import { prokatStatusName } from './prokat-persist'
 import { lockedRow, checkRow, RowWriteError, updateRow, writeRows } from './row-mutations'
 
 const batchApps = 20
@@ -19,6 +20,7 @@ const batchBookings = 40
 const SYSTEM_ACTOR = { id: 'system:prokat-hold', kind: 'system' as const }
 
 const textOf = (value: unknown) => typeof value === 'string' ? value : ''
+const idsOf = (raw: unknown) => Array.isArray(raw) ? raw.map(String).filter(Boolean) : []
 
 async function postHoldChatIfAny(
   tx: Parameters<Parameters<typeof writeRows>[1]>[0]['tx'],
@@ -49,6 +51,29 @@ async function postHoldChatIfAny(
   return true
 }
 
+function itemHoldOverrides(
+  kit: NonNullable<AppV2['prokat']>,
+  itemRows: Map<string, Record<string, unknown>>,
+  itemIds: readonly string[],
+): Array<ProkatHoldAfterStartMinutes | undefined> {
+  if (!kit.item.holdAfterStartMinutes) return itemIds.map(() => undefined)
+  return itemIds.map(id => {
+    const data = itemRows.get(id)
+    if (!data) return undefined
+    return parseItemHoldOverride(data[kit.item.holdAfterStartMinutes!])
+  })
+}
+
+function bookingHoldMinutes(
+  kit: NonNullable<AppV2['prokat']>,
+  itemRows: Map<string, Record<string, unknown>>,
+  bookingData: Record<string, unknown>,
+): ProkatHoldAfterStartMinutes {
+  const business = resolveHoldAfterStartMinutes(kit.holdAfterStartMinutes)
+  const itemIds = idsOf(bookingData[kit.booking.items])
+  return resolveBookingHoldMinutes(business, itemHoldOverrides(kit, itemRows, itemIds))
+}
+
 /** Cancel one expired hold. Issue winning the row lock leaves status as issued — we skip. */
 export async function cancelExpiredProkatHold(
   workspaceId: string,
@@ -63,7 +88,6 @@ export async function cancelExpiredProkatHold(
       const ensured = await ensureProkatHoldKit(context.tx, app)
       const kit = ensured.prokat!
       if (!kit.statuses.notPickedUp) return 'skipped' as const
-      if (prokatHoldMinutes(kit) == null) return 'skipped' as const
 
       const stored = await lockedRow(context, kit.bookingsTableId, bookingId)
       checkRow(stored)
@@ -71,11 +95,21 @@ export async function cancelExpiredProkatHold(
       const statusName = prokatStatusName(kit, data[kit.booking.status])
       if (!isHoldEligibleStatus(statusName)) return 'skipped' as const
 
+      const itemIds = idsOf(data[kit.booking.items])
+      const itemRows = new Map<string, Record<string, unknown>>()
+      if (itemIds.length) {
+        const found = await context.tx.select({ id: rows.id, data: rows.data }).from(rows)
+          .where(and(eq(rows.tableId, kit.itemsTableId), inArray(rows.id, [...itemIds]), isNull(rows.deletedAt)))
+        for (const row of found) itemRows.set(row.id, row.data as Record<string, unknown>)
+      }
+      const holdMinutes = bookingHoldMinutes(kit, itemRows, data)
+      if (holdMinutes == null) return 'skipped' as const
+
       const from = textOf(data[kit.booking.from])
       const holdUntil = resolveBookingHoldUntil({
         from,
         holdUntil: kit.booking.holdUntil ? textOf(data[kit.booking.holdUntil]) || null : null,
-        holdAfterStartMinutes: prokatHoldMinutes(kit),
+        holdAfterStartMinutes: holdMinutes,
       })
       if (!isHoldExpired(holdUntil, now.getTime())) return 'skipped' as const
 
@@ -124,13 +158,23 @@ async function listProkatApps() {
 
 async function expiredBookingIds(app: AppV2, now: Date) {
   const prokat = app.prokat!
-  const holdMinutes = prokatHoldMinutes(prokat)
-  if (holdMinutes == null || !prokat.statuses.notPickedUp) return [] as string[]
+  if (!prokat.statuses.notPickedUp) return [] as string[]
 
   const eligible = [prokat.statuses.request, prokat.statuses.confirmed]
   const stored = await db.select({ id: rows.id, data: rows.data }).from(rows)
     .where(and(eq(rows.tableId, prokat.bookingsTableId), isNull(rows.deletedAt)))
     .limit(500)
+
+  const allItemIds = new Set<string>()
+  for (const row of stored) {
+    for (const id of idsOf((row.data as Record<string, unknown>)[prokat.booking.items])) allItemIds.add(id)
+  }
+  const itemRows = new Map<string, Record<string, unknown>>()
+  if (allItemIds.size) {
+    const found = await db.select({ id: rows.id, data: rows.data }).from(rows)
+      .where(and(eq(rows.tableId, prokat.itemsTableId), inArray(rows.id, [...allItemIds]), isNull(rows.deletedAt)))
+    for (const row of found) itemRows.set(row.id, row.data as Record<string, unknown>)
+  }
 
   const nowMs = now.getTime()
   const hits: string[] = []
@@ -138,6 +182,8 @@ async function expiredBookingIds(app: AppV2, now: Date) {
     const data = row.data as Record<string, unknown>
     const status = data[prokat.booking.status]
     if (!eligible.includes(String(status))) continue
+    const holdMinutes = bookingHoldMinutes(prokat, itemRows, data)
+    if (holdMinutes == null) continue
     const from = textOf(data[prokat.booking.from])
     const holdUntil = resolveBookingHoldUntil({
       from,
@@ -165,7 +211,6 @@ export async function tickProkatHoldCancellations(now = new Date()) {
       totals.failed += 1
       continue
     }
-    if (prokatHoldMinutes(app.prokat!) == null) continue
     const ids = await expiredBookingIds(app, now)
     for (const bookingId of ids) {
       const result = await cancelExpiredProkatHold(entry.workspaceId, app, bookingId, now)
@@ -175,7 +220,7 @@ export async function tickProkatHoldCancellations(now = new Date()) {
   return totals
 }
 
-/** Test helper: force-scan one app without listing all publications. */
+/** Test helper / lazy catch-up: force-scan one app without listing all publications. */
 export async function tickProkatHoldForApp(app: AppV2, workspaceId: string, now = new Date()) {
   const ensured = await db.transaction(async tx => ensureProkatHoldKit(tx, app))
   const ids = await expiredBookingIds(ensured, now)

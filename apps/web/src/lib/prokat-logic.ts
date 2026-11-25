@@ -122,6 +122,50 @@ export function resolveHoldAfterStartMinutes(value: unknown): ProkatHoldAfterSta
   return PROKAT_DEFAULT_HOLD_AFTER_START_MINUTES
 }
 
+/** Sentinel stored on the item number field for «Не отменять». Empty field = inherit business. */
+export const PROKAT_ITEM_HOLD_NEVER_SENTINEL = -1
+
+/**
+ * Per-item override: `undefined` = inherit business setting;
+ * `null` = never auto-cancel for this item; otherwise minutes.
+ */
+export function parseItemHoldOverride(raw: unknown): ProkatHoldAfterStartMinutes | undefined {
+  if (raw === '' || raw == null) return undefined
+  if (raw === PROKAT_ITEM_HOLD_NEVER_SENTINEL || raw === String(PROKAT_ITEM_HOLD_NEVER_SENTINEL)) return null
+  if (typeof raw === 'number' && isProkatHoldMinutes(raw)) return raw
+  if (typeof raw === 'string' && raw.trim() !== '') {
+    const next = Number(raw)
+    if (next === PROKAT_ITEM_HOLD_NEVER_SENTINEL) return null
+    if (isProkatHoldMinutes(next)) return next
+  }
+  return undefined
+}
+
+export function encodeItemHoldOverride(value: ProkatHoldAfterStartMinutes | undefined): number | null {
+  if (value === undefined) return null
+  if (value === null) return PROKAT_ITEM_HOLD_NEVER_SENTINEL
+  return value
+}
+
+/**
+ * Effective hold for a booking: each item uses override ?? business;
+ * if any resolves to «never» → never; else the longest window among items.
+ */
+export function resolveBookingHoldMinutes(
+  business: ProkatHoldAfterStartMinutes,
+  itemOverrides: ReadonlyArray<ProkatHoldAfterStartMinutes | undefined>,
+): ProkatHoldAfterStartMinutes {
+  if (!itemOverrides.length) return business
+  const resolved = itemOverrides.map(entry => (entry === undefined ? business : entry))
+  if (resolved.some(minutes => minutes === null)) return null
+  return Math.max(...(resolved as number[])) as Exclude<ProkatHoldAfterStartMinutes, null>
+}
+
+export function holdOptionLabel(minutes: ProkatHoldAfterStartMinutes) {
+  return PROKAT_HOLD_AFTER_START_OPTIONS.find(option => option.minutes === minutes)?.label
+    ?? (minutes == null ? 'Не отменять' : `${minutes} мин`)
+}
+
 export function holdUntilFromStart(from: string | number, holdMinutes: ProkatHoldAfterStartMinutes): string | null {
   if (holdMinutes == null) return null
   const fromMs = typeof from === 'number' ? from : Date.parse(from)

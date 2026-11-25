@@ -1502,9 +1502,22 @@ function TimelineScreen(props: ScreenProps) {
   const [searchOpen, setSearchOpen] = useState(false)
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const [create, setCreate] = useState<{ itemId: string; date: string } | null>(null)
+  const boardRef = useRef<HTMLDivElement>(null)
+  const scrollSyncing = useRef(false)
   const board = buildTimelineWindow({ mode, startDate, now: props.now })
   const columns = board.columns
   const columnCount = Math.max(1, columns.length)
+  const onTimelinePaneScroll = (event: { currentTarget: HTMLElement }) => {
+    if (!phone || scrollSyncing.current) return
+    const root = boardRef.current
+    if (!root) return
+    scrollSyncing.current = true
+    const left = event.currentTarget.scrollLeft
+    root.querySelectorAll<HTMLElement>('[data-timeline-scroll]').forEach(pane => {
+      if (pane !== event.currentTarget) pane.scrollLeft = left
+    })
+    scrollSyncing.current = false
+  }
   const items = catalogItems(props).filter(item => item.status !== 'Списан')
   const bookings = bookingItems(props)
   const needle = search.trim().toLowerCase()
@@ -1586,11 +1599,50 @@ function TimelineScreen(props: ScreenProps) {
     }).filter(entry => entry.segment || entry.overdueTail)
       .sort((a, b) => a.left - b.left || a.booking.id.localeCompare(b.booking.id))
 
-    return <div key={item.id} className={css.timelineRow}>
-      <button type="button" className={css.timelineLabel} onClick={() => props.onNavigate?.(props.kit.itemScreenId, item.id)}>
-        <strong>{item.name}</strong>
-        <span>{item.serial}</span>
-      </button>
+    const charPct = phone
+      ? (mode === 'day' ? 1.85 : mode === 'month' ? 2.8 : 2.4)
+      : (mode === 'day' ? 1.1 : mode === 'month' ? 1.8 : 1.35)
+    const barNodes = laid.map((entry, index) => {
+      const nextLeft = laid[index + 1]?.left ?? 100
+      const open = () => props.onNavigate?.(props.kit.bookingScreenId, entry.booking.id)
+      const nodes: ReactNode[] = []
+      if (entry.segment) {
+        const caption = timelineBarCaptionPlacement({
+          label: entry.short,
+          barLeft: entry.segment.left,
+          barWidth: entry.segment.width,
+          occupiedRight: entry.occupiedRight,
+          nextLeft,
+          charPct,
+          // Phone shows ~half the week track at rest; outside past that looks clipped.
+          maxOutsideEnd: phone ? 52 : 96,
+        })
+        nodes.push(
+          <TimelineBar
+            key={`${entry.booking.id}-bar`}
+            segment={entry.segment}
+            label={caption.inside}
+            externalLabel={caption.outside ?? undefined}
+            externalAt={entry.occupiedRight}
+            tip={entry.tip}
+            onOpen={open}
+          />,
+        )
+      }
+      if (entry.overdueTail) {
+        nodes.push(
+          <TimelineBar
+            key={`${entry.booking.id}-tail`}
+            segment={entry.overdueTail}
+            label=""
+            tip={entry.tip}
+            onOpen={open}
+          />,
+        )
+      }
+      return nodes
+    })
+    const track = (
       <div
         className={css.timelineTrack}
         aria-label={`Занятость ${item.name}`}
@@ -1600,47 +1652,37 @@ function TimelineScreen(props: ScreenProps) {
           if ((event.target as HTMLElement).closest(`.${css.timelineBar}`)) return
           setCreate({ itemId: item.id, date: civilDateForClick(event.clientX, event.currentTarget) })
         }}
+      >{barNodes}</div>
+    )
+    const label = (
+      <button
+        type="button"
+        className={css.timelineLabel}
+        title={item.name}
+        onClick={() => props.onNavigate?.(props.kit.itemScreenId, item.id)}
       >
-        {laid.map((entry, index) => {
-          const nextLeft = laid[index + 1]?.left ?? 100
-          const open = () => props.onNavigate?.(props.kit.bookingScreenId, entry.booking.id)
-          const nodes: ReactNode[] = []
-          if (entry.segment) {
-            const caption = timelineBarCaptionPlacement({
-              label: entry.short,
-              barLeft: entry.segment.left,
-              barWidth: entry.segment.width,
-              occupiedRight: entry.occupiedRight,
-              nextLeft,
-              charPct: mode === 'day' ? 1.1 : mode === 'month' ? 1.8 : 1.35,
-            })
-            nodes.push(
-              <TimelineBar
-                key={`${entry.booking.id}-bar`}
-                segment={entry.segment}
-                label={caption.inside}
-                externalLabel={caption.outside ?? undefined}
-                externalAt={entry.occupiedRight}
-                tip={entry.tip}
-                onOpen={open}
-              />,
-            )
-          }
-          if (entry.overdueTail) {
-            nodes.push(
-              <TimelineBar
-                key={`${entry.booking.id}-tail`}
-                segment={entry.overdueTail}
-                label=""
-                tip={entry.tip}
-                onOpen={open}
-              />,
-            )
-          }
-          return nodes
-        })}
+        <strong style={phone ? {
+          display: '-webkit-box',
+          WebkitBoxOrient: 'vertical',
+          WebkitLineClamp: 2,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+        } : undefined}>{item.name}</strong>
+        <span>{item.serial}</span>
+      </button>
+    )
+    if (phone) {
+      return <div key={item.id} className={css.timelineRow}>
+        {label}
+        <div className={css.timelinePane} data-timeline-scroll onScroll={onTimelinePaneScroll}>
+          <div className={css.timelinePaneInner}>
+            {board.nowPct != null ? <div className={css.timelineTodayLine} aria-hidden="true" /> : null}
+            {track}
+          </div>
+        </div>
       </div>
-    </div>
+    }
+    return <div key={item.id} className={css.timelineRow}>{label}{track}</div>
   }
   return <div className={css.root} data-prokat-root data-prokat-screen="timeline" data-phone={phone || undefined}>
     <ListScreenShell
@@ -1691,53 +1733,100 @@ function TimelineScreen(props: ScreenProps) {
         ))}
       </ul>
       <div
+        ref={boardRef}
         className={css.timelineBoard}
         data-mode={mode}
+        data-phone-board={phone || undefined}
         style={{
           ['--prokat-days' as string]: columnCount,
           ['--prokat-today-pct' as string]: board.nowPct == null ? '-1' : String(board.nowPct),
         }}
       >
-        <div className={css.timelineScale}>
-          <div className={css.timelineHead}>
-            <span className={css.quiet}>Предмет</span>
-            <div className={css.timelineDays}>
-              {board.nowPct != null ? (
-                <span className={css.timelineTodayTag} style={{ left: `${board.nowPct}%` }}>Сегодня</span>
-              ) : null}
-              {columns.map(column => (
-                <span
-                  key={column.key}
-                  className={css.timelineDay}
-                  data-today={column.today || undefined}
-                  data-weekend={column.weekend || undefined}
-                >{column.label}</span>
-              ))}
+        {phone ? (
+          <>
+            <div className={css.timelineHead}>
+              <span className={css.timelineHeadLabel}>Предмет</span>
+              <div className={css.timelinePane} data-timeline-scroll onScroll={onTimelinePaneScroll}>
+                <div className={css.timelinePaneInner}>
+                  <div className={css.timelineDays}>
+                    {board.nowPct != null ? (
+                      <span className={css.timelineTodayTag} style={{ left: `${board.nowPct}%` }}>Сегодня</span>
+                    ) : null}
+                    {columns.map(column => (
+                      <span
+                        key={column.key}
+                        className={css.timelineDay}
+                        data-today={column.today || undefined}
+                        data-weekend={column.weekend || undefined}
+                      >{column.label}</span>
+                    ))}
+                  </div>
+                </div>
+              </div>
             </div>
+            {!filtered.length ? <p className={css.quiet} style={{ padding: '12px' }}>Нет предметов по этому запросу.</p> : null}
+            {groups.map(([category, groupItems]) => {
+              const free = groupItems.filter(item => item.status === 'Свободен' && !occupiedNow.has(item.id)).length
+              const open = !collapsed[category]
+              return <section key={category} className={css.timelineGroup}>
+                <button
+                  type="button"
+                  className={css.timelineGroupHead}
+                  aria-expanded={open}
+                  onClick={() => setCollapsed(current => ({ ...current, [category]: !current[category] }))}
+                >
+                  <span className={css.timelineGroupLead}>
+                    <ProtoIcon name={open ? 'up' : 'down'} size={14} />
+                    <strong>{category}</strong>
+                  </span>
+                  <span className={css.timelineGroupCount}>{free} из {groupItems.length} свободно</span>
+                </button>
+                {open ? groupItems.map(renderItemRow) : null}
+              </section>
+            })}
+          </>
+        ) : (
+          <div className={css.timelineScale}>
+            <div className={css.timelineHead}>
+              <span className={css.quiet}>Предмет</span>
+              <div className={css.timelineDays}>
+                {board.nowPct != null ? (
+                  <span className={css.timelineTodayTag} style={{ left: `${board.nowPct}%` }}>Сегодня</span>
+                ) : null}
+                {columns.map(column => (
+                  <span
+                    key={column.key}
+                    className={css.timelineDay}
+                    data-today={column.today || undefined}
+                    data-weekend={column.weekend || undefined}
+                  >{column.label}</span>
+                ))}
+              </div>
+            </div>
+            {board.nowPct != null ? <div className={css.timelineTodayLine} aria-hidden="true" /> : null}
+            {board.nowPct != null ? <div className={css.timelineTodayWash} aria-hidden="true" /> : null}
+            {!filtered.length ? <p className={css.quiet} style={{ padding: '12px 0' }}>Нет предметов по этому запросу.</p> : null}
+            {groups.map(([category, groupItems]) => {
+              const free = groupItems.filter(item => item.status === 'Свободен' && !occupiedNow.has(item.id)).length
+              const open = !collapsed[category]
+              return <section key={category} className={css.timelineGroup}>
+                <button
+                  type="button"
+                  className={css.timelineGroupHead}
+                  aria-expanded={open}
+                  onClick={() => setCollapsed(current => ({ ...current, [category]: !current[category] }))}
+                >
+                  <span className={css.timelineGroupLead}>
+                    <ProtoIcon name={open ? 'up' : 'down'} size={14} />
+                    <strong>{category}</strong>
+                  </span>
+                  <span className={css.timelineGroupCount}>свободно сейчас {free} из {groupItems.length}</span>
+                </button>
+                {open ? groupItems.map(renderItemRow) : null}
+              </section>
+            })}
           </div>
-          {board.nowPct != null ? <div className={css.timelineTodayLine} aria-hidden="true" /> : null}
-          {board.nowPct != null ? <div className={css.timelineTodayWash} aria-hidden="true" /> : null}
-          {!filtered.length ? <p className={css.quiet} style={{ padding: '12px 0' }}>Нет предметов по этому запросу.</p> : null}
-          {groups.map(([category, groupItems]) => {
-            const free = groupItems.filter(item => item.status === 'Свободен' && !occupiedNow.has(item.id)).length
-            const open = !collapsed[category]
-            return <section key={category} className={css.timelineGroup}>
-              <button
-                type="button"
-                className={css.timelineGroupHead}
-                aria-expanded={open}
-                onClick={() => setCollapsed(current => ({ ...current, [category]: !current[category] }))}
-              >
-                <span className={css.timelineGroupLead}>
-                  <ProtoIcon name={open ? 'up' : 'down'} size={14} />
-                  <strong>{category}</strong>
-                </span>
-                <span className={css.timelineGroupCount}>свободно сейчас {free} из {groupItems.length}</span>
-              </button>
-              {open ? groupItems.map(renderItemRow) : null}
-            </section>
-          })}
-        </div>
+        )}
       </div>
     </ListScreenShell>
     {create && desk ? (

@@ -312,14 +312,21 @@ export function timelineBarCaptionPlacement(input: {
   nextLeft: number
   /** Approximate % of the track per character at current zoom. */
   charPct?: number
+  /**
+   * Outside caption is allowed only when occupiedRight + need stays under this %.
+   * Phone week view shows ~half the track at rest — keep this lower to avoid clipped text.
+   */
+  maxOutsideEnd?: number
 }): { inside: string; outside: string | null } {
   const label = input.label.trim()
   if (!label) return { inside: '', outside: null }
   const charPct = input.charPct ?? 1.35
   const need = label.length * charPct + 1.2
-  if (need <= input.barWidth - 1.2) return { inside: label, outside: null }
+  // Leave room for bar padding so the last glyph (e.g. «.») is not clipped.
+  if (need <= input.barWidth - 2.6) return { inside: label, outside: null }
   const gap = Math.max(0, input.nextLeft - input.occupiedRight - 0.8)
-  if (need <= gap) return { inside: '', outside: label }
+  const maxEnd = input.maxOutsideEnd ?? 96
+  if (need <= gap && input.occupiedRight + need <= maxEnd) return { inside: '', outside: label }
   return { inside: '', outside: null }
 }
 

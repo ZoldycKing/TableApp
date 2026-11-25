@@ -1554,7 +1554,7 @@
   background: var(--v2-primary, var(--sc-accent)); color: var(--v2-on-primary, var(--sc-on-accent));
   font: inherit; font-size: 14px; font-weight: 650; cursor: pointer;
 }
-/* Phone frame sets data-phone on the prokat root — more reliable than container width. */
+/* Phone: frozen label column + synced scale panes (no sticky-over-scroll gaps). */
 .root[data-phone] :global([class*='headerBlock']),
 .root[data-phone] :global([class*='pageHeader']) {
   padding-block: 10px 6px;
@@ -1582,42 +1582,106 @@
 .root[data-phone] .timelineToolbar[data-search-open] .timelineSearch { flex: 1 1 100%; order: 5; }
 .root[data-phone] .timelineSearchToggle { width: 30px; height: 30px; }
 .root[data-phone] .timelineLegend {
-  flex-wrap: nowrap; gap: 8px 10px; padding: 4px 12px 0;
-  font-size: 11px; overflow-x: auto; -webkit-overflow-scrolling: touch;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px;
+  margin: 0; padding: 8px 12px 10px; overflow: visible;
+  font-size: 11px; font-weight: 650; line-height: 1.25;
 }
 .root[data-phone] .timelineLegend i[data-sample] { width: 14px; height: 8px; }
-.root[data-phone] .timelineBoard {
-  --prokat-label-w: 7rem; /* ~112px */
-  padding: 0 12px 16px 0; overflow-x: auto; -webkit-overflow-scrolling: touch;
+.root[data-phone] .timelineBoard,
+.root[data-phone] .timelineBoard[data-phone-board] {
+  --prokat-label-w: 112px;
+  position: relative;
+  display: grid; gap: 0;
+  padding: 0 0 16px; overflow: hidden;
+  background: var(--v2-surface, var(--sc-bg-elevated, #fff));
 }
-.root[data-phone] .timelineScale { min-width: max(28rem, 100%); }
-.root[data-phone] .timelineHead { padding-top: 12px; gap: 8px; }
-.root[data-phone] .timelineHead > .quiet,
-.root[data-phone] .timelineLabel {
-  position: sticky; left: 0; z-index: 5;
-  padding-inline: 10px 4px;
-  box-shadow: 4px 0 8px color-mix(in srgb, #122018 6%, transparent);
+/* Continuous opaque rail so today-line/bars never show through label gaps. */
+.root[data-phone] .timelineBoard[data-phone-board]::before {
+  content: '';
+  position: absolute;
+  top: 0; bottom: 0; left: 0;
+  width: var(--prokat-label-w);
+  z-index: 5;
+  pointer-events: none;
+  background: var(--v2-surface, var(--sc-bg-elevated, #fff));
+  border-right: 1px solid color-mix(in srgb, var(--v2-ink, #122018) 12%, transparent);
+  box-shadow: 4px 0 10px color-mix(in srgb, #122018 8%, transparent);
 }
-.root[data-phone] .timelineLabel strong {
-  font-size: 13px; line-height: 1.25;
-  display: block; max-height: 2.5em; /* 2 lines */
-  overflow: hidden; white-space: normal;
+.root[data-phone] .timelineHead {
+  display: grid; grid-template-columns: var(--prokat-label-w) minmax(0, 1fr); gap: 0;
+  align-items: stretch; min-width: 0; padding: 18px 0 6px;
+  position: sticky; top: 0; z-index: 8;
+  border-bottom: 1px solid var(--v2-line, var(--sc-border));
+  background: var(--v2-surface, var(--sc-bg-elevated, #fff));
 }
-.root[data-phone] .timelineLabel span { font-size: 10px; }
-.root[data-phone] .timelineRow { gap: 8px; min-height: 36px; }
+.root[data-phone] .timelineHeadLabel {
+  display: flex; align-items: flex-end; box-sizing: border-box;
+  width: var(--prokat-label-w); min-height: 100%; padding: 0 8px 2px;
+  color: var(--v2-muted, var(--sc-text-2)); font-size: 11px; font-weight: 650;
+  background: var(--v2-surface, var(--sc-bg-elevated, #fff));
+  border-right: 1px solid color-mix(in srgb, var(--v2-ink, #122018) 12%, transparent);
+  z-index: 7;
+}
+.root[data-phone] .timelinePane {
+  min-width: 0; overflow-x: auto; -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+.root[data-phone] .timelinePaneInner {
+  position: relative; min-width: 28rem; width: max(28rem, 100%);
+  padding-right: 3.5rem; box-sizing: content-box;
+}
+.root[data-phone] .timelineDays { padding-top: 2px; }
+.root[data-phone] .timelineTodayTag {
+  top: -14px; z-index: 3;
+}
+.root[data-phone] .timelineTodayLine {
+  left: calc(var(--prokat-today-pct, -1) * 1%);
+  top: 0; bottom: 0; z-index: 2;
+  width: 2px; margin-left: -1px;
+}
+.root[data-phone] .timelineTodayWash { display: none; }
+.root[data-phone] .timelineGroup {
+  margin-top: 0;
+}
 .root[data-phone] .timelineGroupHead {
-  position: sticky; left: 0; z-index: 4;
-  width: 100cqw; max-width: 100%;
-  padding: 6px 10px; font-size: 11px; box-sizing: border-box;
+  position: relative; left: auto; z-index: 6;
+  display: flex; flex-wrap: nowrap; align-items: center; justify-content: space-between;
+  width: 100%; max-width: none; box-sizing: border-box;
+  margin: 0; padding: 8px 10px; border-radius: 0;
+  font-size: 11px;
+  background: color-mix(in srgb, var(--v2-accent, #3F6B5C) 9%, var(--v2-surface, #fff));
 }
 .root[data-phone] .timelineGroupLead strong { font-size: 13px; }
 .root[data-phone] .timelineGroupCount {
-  overflow: hidden; text-overflow: ellipsis; max-width: 11rem;
+  max-width: none; overflow: visible; text-overflow: unset; white-space: nowrap;
 }
-.root[data-phone] .timelineTodayLine {
-  left: calc(var(--prokat-label-w) + 8px + (100% - var(--prokat-label-w) - 8px) * var(--prokat-today-pct, -1) / 100);
+.root[data-phone] .timelineRow {
+  display: grid; grid-template-columns: var(--prokat-label-w) minmax(0, 1fr); gap: 0;
+  align-items: stretch; min-height: 40px; margin: 0;
+  background: var(--v2-surface, var(--sc-bg-elevated, #fff));
 }
-.root[data-phone] .timelineTodayWash { display: none; }
+.root[data-phone] .timelineLabel {
+  position: relative; left: auto; z-index: 6;
+  width: var(--prokat-label-w); min-height: 100%; box-sizing: border-box;
+  align-content: center; padding: 6px 8px;
+  margin: 0; border-radius: 0;
+  background: var(--v2-surface, var(--sc-bg-elevated, #fff));
+  border-right: 1px solid color-mix(in srgb, var(--v2-ink, #122018) 12%, transparent);
+  box-shadow: none;
+}
+.root[data-phone] .timelineLabel strong {
+  font-size: 12.5px; font-weight: 700; line-height: 1.25;
+  overflow-wrap: anywhere; word-break: break-word; white-space: normal;
+}
+.root[data-phone] .timelineLabel span {
+  font-size: 11px; line-height: 1.2;
+}
+.root[data-phone] .timelineTrack {
+  z-index: 1;
+}
+.root[data-phone] .timelineBarExternal {
+  z-index: 1;
+}
 .root[data-phone] .timelineToolbar + .timelineLegend { margin-top: 0; }
 
 @container builder-app (max-width: 799px) {

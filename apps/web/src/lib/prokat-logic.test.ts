@@ -285,5 +285,14 @@ describe('timeline bar geometry', () => {
     expect(timelineBarCaptionPlacement({
       label: 'Дмитрий С.', barLeft: 10, barWidth: 4, occupiedRight: 40, nextLeft: 45,
     })).toEqual({ inside: '', outside: null })
+    expect(timelineBarCaptionPlacement({
+      label: 'Игорь О.', barLeft: 80, barWidth: 4, occupiedRight: 90, nextLeft: 100,
+    })).toEqual({ inside: '', outside: null })
+    expect(timelineBarCaptionPlacement({
+      label: 'Игорь О.', barLeft: 20, barWidth: 4, occupiedRight: 45, nextLeft: 100, maxOutsideEnd: 52,
+    })).toEqual({ inside: '', outside: null })
+    expect(timelineBarCaptionPlacement({
+      label: 'Мария П.', barLeft: 10, barWidth: 4, occupiedRight: 20, nextLeft: 80, maxOutsideEnd: 52,
+    })).toEqual({ inside: '', outside: 'Мария П.' })
   })
 })

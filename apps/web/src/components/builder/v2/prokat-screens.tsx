@@ -3,22 +3,28 @@ import { createContext, lazy, Suspense, useContext, useEffect, useId, useLayoutE
 import { createPortal } from 'react-dom'
 import { attachmentSchema, instantToWallClock, type Attachment } from '@tableapp/schema'
 import type { AppV2, AppV2Json, AppV2Node, AppV2Record } from '@tableapp/schema/app-v2'
-import { savePublishedProkatAction } from '@/app/prokat-actions'
+import { catchUpPublishedProkatHolds, savePublishedProkatAction } from '@/app/prokat-actions'
 import type { ConversationPage } from '@/lib/conversation-types'
 import { BuilderV2AttachmentInput } from './attachment-input'
 import {
-  PROKAT_BOOKING_VIEWS, PROKAT_CLIENT_STEPS, PROKAT_LATE_FEE_MODES, PROKAT_TIMELINE_RANGES, PROKAT_ZONE,
-  buildTimelineWindow, catalogItemFreeLabel, clientCanRequestCancel,
+  PROKAT_BOOKING_VIEWS, PROKAT_CLIENT_STEPS, PROKAT_HOLD_AFTER_START_OPTIONS, PROKAT_LATE_FEE_MODES,
+  PROKAT_TIMELINE_RANGES, PROKAT_ZONE,
+  buildTimelineWindow, catalogItemFreeLabel, clientCanRequestCancel, clientNotPickedUpCount,
   computeItemLateFee, catalogItemBusyUntil, computeRentalPrice, describeLateFee,
-  filterBookings, formatMoney, formatMoneyOrZero, formatProkatDate, formatProkatDateTime,
-  isOpenBooking, isOverdueReturn, itemLateFeeConfig, prokatClientStepIndex, prokatDashboard,
-  prokatWallInstant, shiftTimelineStart, staffTransitions, timelineBarCaptionPlacement,
+  encodeItemHoldOverride, filterBookings, formatMoney, formatMoneyOrZero, formatNotPickedUpCount,
+  formatProkatDate, formatProkatDateTime, holdOptionLabel, isHoldEligibleStatus, isHoldWindowOpen,
+  isOpenBooking, isOverdueReturn, itemLateFeeConfig, parseItemHoldOverride, prokatClientStepIndex,
+  prokatDashboard, prokatWallInstant, resolveBookingHoldUntil,
+  shiftTimelineStart, staffTransitions, timelineBarCaptionPlacement,
   timelineBarLabel, timelineBookingSegments, timelineStartForToday, type ProkatBookingViewId,
-  type ProkatCatalogItem, type ProkatListItem, type ProkatLateFeeMode, type ProkatTimelineRangeId,
-  type TimelineBarSegment,
+  type ProkatCatalogItem, type ProkatHoldAfterStartMinutes, type ProkatListItem, type ProkatLateFeeMode,
+  type ProkatTimelineRangeId, type TimelineBarSegment,
 } from '@/lib/prokat-logic'
 import { prokatSamplePublicPath } from '@/lib/templates/prokat-samples'
-import { applyProkatChange, bookingSpansFromRows, isProkatDesk, prokatStatusName, type ProkatChange } from '@/lib/prokat-persist'
+import {
+  applyProkatChange, bookingSpansFromRows, holdMinutesForItemValues, isProkatDesk, prokatHoldMinutes,
+  prokatStatusName, type ProkatChange,
+} from '@/lib/prokat-persist'
 import { AppFrameDeviceContext } from './app-frame'
 import { AppDialog } from './app-dialog'
 import { DateMenu } from './booking-calendar'
@@ -127,17 +133,44 @@ function categoryIcon(category: string) {
   return 'box'
 }
 
+/** Compact day headers so phone week/fortnight never clip «22.11» to «22.1». */
+function timelineDayCaption(
+  label: string,
+  input: { mode: ProkatTimelineRangeId; index: number; today: boolean; prevLabel?: string; dense: boolean },
+) {
+  const [day, month] = label.split('.')
+  if (!day) return { text: label, sparse: false }
+  if (input.mode === 'month') {
+    const show = input.today || input.index % 5 === 0
+    return { text: show ? day : '', sparse: show }
+  }
+  if (input.dense && (input.mode === 'week' || input.mode === 'fortnight')) {
+    // Phone week/fortnight: day number only; show «ДД.ММ» on the first column and month change.
+    const prevMonth = input.prevLabel?.split('.')[1]
+    const monthChange = input.index > 0 && Boolean(month) && month !== prevMonth
+    if (input.index === 0 || monthChange) return { text: month ? `${Number(day)}.${month}` : day, sparse: false }
+    return { text: String(Number(day)), sparse: false }
+  }
+  return { text: label, sparse: false }
+}
+
 function itemPhotoSrc(item: Pick<ProkatCatalogItem, 'photo' | 'serial' | 'name'>) {
+  // Prefer bundled sample files — attachment /api/files URLs often 404 in local/demo.
+  const sample = prokatSamplePublicPath(item.serial) ?? prokatSamplePublicPath(item.name)
+  if (sample) return sample
   const raw = item.photo?.trim()
   if (raw && (raw.startsWith('/') || raw.startsWith('http') || raw.startsWith('data:'))) return raw
-  return prokatSamplePublicPath(item.serial) ?? prokatSamplePublicPath(item.name) ?? null
+  return null
 }
 
 function ItemTile({ item, size = 40 }: { item: Pick<ProkatCatalogItem, 'photo' | 'category' | 'name' | 'serial'>; size?: number }) {
   const src = itemPhotoSrc(item)
-  return <span className={css.itemTile} data-empty={!src || undefined} style={{ width: size, height: size }} aria-hidden="true">
-    {src
-      ? <img src={src} alt="" width={size} height={size} />
+  const [broken, setBroken] = useState(false)
+  useEffect(() => { setBroken(false) }, [src])
+  const showImg = Boolean(src) && !broken
+  return <span className={css.itemTile} data-empty={!showImg || undefined} style={{ width: size, height: size }} aria-hidden="true">
+    {showImg
+      ? <img src={src!} alt="" width={size} height={size} onError={() => setBroken(true)} />
       : <ProtoIcon name={categoryIcon(item.category)} size={Math.round(size * 0.42)} />}
   </span>
 }
@@ -218,6 +251,7 @@ function statusTone(name: string) {
   if (name === 'Возвращено') return 'closed'
   if (name === 'Просрочен возврат') return 'overdue'
   if (name === 'Отменена') return 'closed'
+  if (name === 'Не забрали') return 'noshow'
   if (name === 'Свободен') return 'resolved'
   if (name === 'В прокате') return 'progress'
   if (name === 'На обслуживании') return 'waiting'
@@ -349,6 +383,7 @@ export function ProkatScreen(props: AppV2RendererProps) {
   const screens = kit ? [
     kit.dashboardScreenId, kit.bookingsScreenId, kit.bookingScreenId, kit.itemsScreenId, kit.itemScreenId,
     kit.timelineScreenId, kit.clientsScreenId, kit.clientScreenId, kit.catalogScreenId, kit.clientListScreenId, kit.clientBookingScreenId,
+    ...(kit.settingsScreenId ? [kit.settingsScreenId] : []),
   ] : []
   if (!kit || !screens.includes(screenId)) return null
   const pages = [bookingsPage, itemsPage, clientsPage, staffPage]
@@ -367,6 +402,7 @@ export function ProkatScreen(props: AppV2RendererProps) {
   if (screenId === kit.timelineScreenId) return <TimelineScreen {...shared} />
   if (screenId === kit.clientsScreenId) return <ClientDirectory {...shared} />
   if (screenId === kit.clientScreenId) return <ClientDetail {...shared} />
+  if (kit.settingsScreenId && screenId === kit.settingsScreenId) return <SettingsScreen {...shared} />
   return <CatalogScreen {...shared} />
 }
 
@@ -415,6 +451,7 @@ function statusId(props: ScreenProps, name: string) {
     Возвращено: props.kit.statuses.returned,
     'Просрочен возврат': props.kit.statuses.overdue,
     Отменена: props.kit.statuses.cancelled,
+    'Не забрали': props.kit.statuses.notPickedUp ?? '',
   }
   return map[name] ?? ''
 }
@@ -429,7 +466,8 @@ function bookingItems(props: ScreenProps): ProkatListItem[] {
     return {
       id: row.id,
       number: textOf(row.values[fields.number]),
-      title: textOf(row.values[fields.title]) || itemNames.join(', '),
+      // Linked items win over a stale denormalized title (seed / rename drift).
+      title: itemNames.join(', ') || textOf(row.values[fields.title]),
       clientName: textOf(row.values[fields.clientName]),
       clientEmail: textOf(row.values[fields.clientEmail]),
       staffName,
@@ -443,37 +481,46 @@ function bookingItems(props: ScreenProps): ProkatListItem[] {
       itemIds,
       itemNames,
       updatedAt: textOf(row.values[fields.updatedAt]),
+      holdUntil: fields.holdUntil ? textOf(row.values[fields.holdUntil]) || undefined : undefined,
+      statusReason: fields.statusReason ? textOf(row.values[fields.statusReason]) || undefined : undefined,
     }
   })
 }
 
-function catalogItems(props: ScreenProps): ProkatCatalogItem[] {
+function catalogItemFromRow(props: ScreenProps, row: AppV2Record): ProkatCatalogItem {
   const fields = props.kit.item
   const published = publishedHolder.current
-  return props.of(props.kit.itemsTableId).map(row => {
-    const media = fields.photo
-      ? builderV2MediaItems(row.values[fields.photo], published?.slug).find(item => item.image)?.url
-      : undefined
-    const showRaw = fields.showInCatalog ? row.values[fields.showInCatalog] : true
-    return {
-      id: row.id,
-      name: textOf(row.values[fields.name]),
-      category: choiceLabel(props, props.kit.itemsTableId, fields.category, row.values[fields.category]),
-      serial: textOf(row.values[fields.serial]),
-      tariff: choiceLabel(props, props.kit.itemsTableId, fields.tariff, row.values[fields.tariff]),
-      rate: numberOf(row.values[fields.rate]),
-      deposit: numberOf(row.values[fields.deposit]),
-      condition: textOf(row.values[fields.condition]),
-      status: choiceLabel(props, props.kit.itemsTableId, fields.status, row.values[fields.status]),
-      photo: media || (fields.photo ? textOf(row.values[fields.photo]) || undefined : undefined),
-      showInCatalog: showRaw !== false && showRaw !== 0 && showRaw !== 'false',
-      lateFeeMode: fields.lateFeeMode ? choiceLabel(props, props.kit.itemsTableId, fields.lateFeeMode, row.values[fields.lateFeeMode]) : undefined,
-      lateFeeValue: fields.lateFeeValue ? numberOf(row.values[fields.lateFeeValue]) : undefined,
-      lateFeeGraceHours: fields.lateFeeGraceHours ? numberOf(row.values[fields.lateFeeGraceHours]) : undefined,
-      lateFeeCapPerDay: fields.lateFeeCapPerDay ? numberOf(row.values[fields.lateFeeCapPerDay]) : undefined,
-      busyUntil: fields.busyUntil ? textOf(row.values[fields.busyUntil]) || undefined : undefined,
-    }
-  })
+  const media = fields.photo
+    ? builderV2MediaItems(row.values[fields.photo], published?.slug).find(item => item.image)?.url
+    : undefined
+  const showRaw = fields.showInCatalog ? row.values[fields.showInCatalog] : true
+  return {
+    id: row.id,
+    name: textOf(row.values[fields.name]),
+    category: choiceLabel(props, props.kit.itemsTableId, fields.category, row.values[fields.category]),
+    serial: textOf(row.values[fields.serial]),
+    tariff: choiceLabel(props, props.kit.itemsTableId, fields.tariff, row.values[fields.tariff]),
+    rate: numberOf(row.values[fields.rate]),
+    deposit: numberOf(row.values[fields.deposit]),
+    condition: textOf(row.values[fields.condition]),
+    status: choiceLabel(props, props.kit.itemsTableId, fields.status, row.values[fields.status]),
+    photo: media || (fields.photo ? textOf(row.values[fields.photo]) || undefined : undefined),
+    showInCatalog: showRaw !== false && showRaw !== 0 && showRaw !== 'false',
+    lateFeeMode: fields.lateFeeMode ? choiceLabel(props, props.kit.itemsTableId, fields.lateFeeMode, row.values[fields.lateFeeMode]) : undefined,
+    lateFeeValue: fields.lateFeeValue ? numberOf(row.values[fields.lateFeeValue]) : undefined,
+    lateFeeGraceHours: fields.lateFeeGraceHours ? numberOf(row.values[fields.lateFeeGraceHours]) : undefined,
+    lateFeeCapPerDay: fields.lateFeeCapPerDay ? numberOf(row.values[fields.lateFeeCapPerDay]) : undefined,
+    busyUntil: fields.busyUntil ? textOf(row.values[fields.busyUntil]) || undefined : undefined,
+  }
+}
+
+function catalogItems(props: ScreenProps): ProkatCatalogItem[] {
+  // Item detail screen only mounts booking collections — include context record so
+  // «О предмете» still resolves category/tariff/deposit from the opened row.
+  const loaded = props.of(props.kit.itemsTableId)
+  const context = props.record?.tableId === props.kit.itemsTableId ? props.record : null
+  const rows = context && !loaded.some(row => row.id === context.id) ? [...loaded, context] : loaded
+  return rows.map(row => catalogItemFromRow(props, row))
 }
 
 function formatDay(value: unknown) {
@@ -572,7 +619,206 @@ function TodayGroup(props: {
   </section>
 }
 
+/** Desk screens: cancel expired holds if the in-process worker has not run yet. */
+function useProkatHoldCatchUp(props: ScreenProps) {
+  useEffect(() => {
+    const published = publishedHolder.current
+    if (!published || published.revision === 'demo') return
+    if (!isProkatDesk(props.actor)) return
+    let cancelled = false
+    void catchUpPublishedProkatHolds(published.slug).then(result => {
+      if (cancelled) return
+      if (result.ok && result.cancelled > 0) published.refresh()
+    })
+    return () => { cancelled = true }
+  }, [props.screenId, props.actor])
+}
+
+function useHoldMenuPlace(open: boolean, trigger: RefObject<HTMLElement | null>) {
+  const [place, setPlace] = useState<{ top: number; left: number; width: number } | null>(null)
+  useLayoutEffect(() => {
+    if (!open || !trigger.current) { setPlace(null); return }
+    const update = () => {
+      const rect = trigger.current!.getBoundingClientRect()
+      setPlace({ top: rect.bottom + 6, left: rect.left, width: Math.max(rect.width, 220) })
+    }
+    update()
+    window.addEventListener('resize', update)
+    window.addEventListener('scroll', update, true)
+    return () => {
+      window.removeEventListener('resize', update)
+      window.removeEventListener('scroll', update, true)
+    }
+  }, [open, trigger])
+  return place
+}
+
+/** Outside-click that also keeps a portaled hold menu open. */
+function useHoldMenuOpen(open: boolean, root: RefObject<HTMLElement | null>, onClose: () => void) {
+  useEffect(() => {
+    if (!open) return
+    const outside = (event: PointerEvent) => {
+      if (!(event.target instanceof Node)) return
+      if (root.current?.contains(event.target)) return
+      if (event.target instanceof Element && event.target.closest('[data-prokat-hold-menu]')) return
+      onClose()
+    }
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose() }
+    document.addEventListener('pointerdown', outside)
+    document.addEventListener('keydown', escape)
+    return () => {
+      document.removeEventListener('pointerdown', outside)
+      document.removeEventListener('keydown', escape)
+    }
+  }, [open, root, onClose])
+}
+
+function HoldSettingControl(props: ScreenProps & { value: ProkatHoldAfterStartMinutes; onSaved: (next: ProkatHoldAfterStartMinutes) => void }) {
+  const [open, setOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState('')
+  const root = useRef<HTMLDivElement>(null)
+  const trigger = useRef<HTMLButtonElement>(null)
+  const place = useHoldMenuPlace(open, trigger)
+  useHoldMenuOpen(open, root, () => setOpen(false))
+  const current = PROKAT_HOLD_AFTER_START_OPTIONS.find(option => option.minutes === props.value)
+    ?? PROKAT_HOLD_AFTER_START_OPTIONS.find(option => option.minutes === 120)!
+  const save = async (minutes: ProkatHoldAfterStartMinutes) => {
+    setBusy(true)
+    const result = await commit(props, { kind: 'holdSetting', holdAfterStartMinutes: minutes })
+    setBusy(false)
+    setMessage(result.ok ? result.message : result.error)
+    if (result.ok) {
+      props.onSaved(minutes)
+      setOpen(false)
+    }
+  }
+  const panel = open && place && typeof document !== 'undefined' ? createPortal(
+    <div
+      className={css.assigneePanel}
+      role="listbox"
+      aria-label="Держать бронь после начала"
+      data-prokat-hold-menu
+      style={{ position: 'fixed', top: place.top, left: place.left, width: place.width, zIndex: 80 }}
+    >
+      {PROKAT_HOLD_AFTER_START_OPTIONS.map(option => (
+        <button
+          key={String(option.minutes)}
+          type="button"
+          role="option"
+          aria-selected={option.minutes === props.value}
+          onClick={() => void save(option.minutes)}
+        >{option.label}</button>
+      ))}
+    </div>,
+    document.body,
+  ) : null
+  return <div className={css.holdSetting} data-prokat-hold-setting ref={root}>
+    <div className={`${css.assigneeFilter} ${css.singleFilter}`}>
+      <button
+        type="button"
+        ref={trigger}
+        className={css.assigneeTrigger}
+        data-active
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        aria-label="Держать бронь после начала"
+        disabled={busy}
+        onClick={() => setOpen(value => !value)}
+      >
+        <span>Держать бронь после начала · <strong>{current.label}</strong></span>
+        <ProtoIcon name="down" size={14} />
+      </button>
+      {panel}
+    </div>
+    <p className={css.holdSettingLead}>Общее правило для всего проката: сколько ждать клиента после начала брони, прежде чем снять её как «Не забрали». На карточке предмета можно переопределить.</p>
+    {message ? <p role="status" className={css.quiet}>{message}</p> : null}
+  </div>
+}
+
+function ItemHoldOverrideControl(props: ScreenProps & {
+  fieldId: string
+  value: ProkatHoldAfterStartMinutes | undefined
+  onSaved: (next: ProkatHoldAfterStartMinutes | undefined) => void
+  patchItem: (values: Record<string, AppV2Json>) => Promise<void>
+}) {
+  const [open, setOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const root = useRef<HTMLDivElement>(null)
+  const trigger = useRef<HTMLButtonElement>(null)
+  const place = useHoldMenuPlace(open, trigger)
+  useHoldMenuOpen(open, root, () => setOpen(false))
+  const business = prokatHoldMinutes(props.kit)
+  const businessLabel = holdOptionLabel(business) ?? '2 ч'
+  const inheritLabel = `Как в настройках (${businessLabel})`
+  const currentLabel = props.value === undefined
+    ? inheritLabel
+    : (PROKAT_HOLD_AFTER_START_OPTIONS.find(option => option.minutes === props.value)?.label ?? inheritLabel)
+  const save = async (next: ProkatHoldAfterStartMinutes | undefined) => {
+    setBusy(true)
+    await props.patchItem({ [props.fieldId]: encodeItemHoldOverride(next) })
+    setBusy(false)
+    props.onSaved(next)
+    setOpen(false)
+  }
+  const panel = open && place && typeof document !== 'undefined' ? createPortal(
+    <div
+      className={css.assigneePanel}
+      role="listbox"
+      aria-label="Держать бронь после начала"
+      data-prokat-hold-menu
+      style={{ position: 'fixed', top: place.top, left: place.left, width: place.width, zIndex: 80 }}
+    >
+      <button type="button" role="option" aria-selected={props.value === undefined} onClick={() => void save(undefined)}>{inheritLabel}</button>
+      {PROKAT_HOLD_AFTER_START_OPTIONS.map(option => (
+        <button
+          key={String(option.minutes)}
+          type="button"
+          role="option"
+          aria-selected={option.minutes === props.value}
+          onClick={() => void save(option.minutes)}
+        >{option.label}</button>
+      ))}
+    </div>,
+    document.body,
+  ) : null
+  return <div className={css.holdSetting} data-prokat-hold-override ref={root}>
+    <div className={`${css.assigneeFilter} ${css.singleFilter}`}>
+      <button
+        type="button"
+        ref={trigger}
+        className={css.assigneeTrigger}
+        data-active
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        aria-label="Держать бронь после начала"
+        disabled={busy}
+        onClick={() => setOpen(value => !value)}
+      >
+        <span>Держать бронь после начала · <strong>{currentLabel}</strong></span>
+        <ProtoIcon name="down" size={14} />
+      </button>
+      {panel}
+    </div>
+    <p className={css.holdSettingLead}>Необязательное правило только для этого предмета. По умолчанию — как в «Настройках проката».</p>
+  </div>
+}
+
+function SettingsScreen(props: ScreenProps) {
+  const owner = props.actor.roleIds.includes('owner')
+  const [holdMinutes, setHoldMinutes] = useState<ProkatHoldAfterStartMinutes>(() => prokatHoldMinutes(props.kit))
+  useEffect(() => { setHoldMinutes(prokatHoldMinutes(props.kit)) }, [props.kit.holdAfterStartMinutes])
+  return <div className={css.root} data-prokat-root data-prokat-screen="settings">
+    <ListScreenShell title="Настройки проката" meta="Общие правила удержания брони.">
+      {owner ? <DetailSection title="Бронь">
+        <HoldSettingControl {...props} value={holdMinutes} onSaved={setHoldMinutes} />
+      </DetailSection> : <p className={css.quiet}>Настройки меняет руководитель.</p>}
+    </ListScreenShell>
+  </div>
+}
+
 function DashboardScreen(props: ScreenProps) {
+  useProkatHoldCatchUp(props)
   const bookings = bookingItems(props)
   const items = catalogItems(props)
   const stats = prokatDashboard(items, bookings, props.now)
@@ -624,6 +870,19 @@ function DashboardScreen(props: ScreenProps) {
               />
             ))}
           </TodayGroup>
+          <TodayGroup title="Не забрали" empty="Неявок нет." tone="overdue" count={stats.notPickedUpList.length}>
+            {stats.notPickedUpList.map(item => (
+              <TodayBookingRow
+                key={item.id}
+                item={item}
+                catalog={items}
+                time={formatProkatDateTime(item.from)}
+                actionLabel="Открыть"
+                onOpen={() => props.onNavigate?.(props.kit.bookingScreenId, item.id)}
+                onAction={() => props.onNavigate?.(props.kit.bookingScreenId, item.id)}
+              />
+            ))}
+          </TodayGroup>
         </div>
       </DetailSection>
       <div className={css.kpiRow} role="group" aria-label="Показатели">
@@ -670,6 +929,7 @@ function DashboardScreen(props: ScreenProps) {
 }
 
 function BookingList(props: ScreenProps) {
+  useProkatHoldCatchUp(props)
   const desk = isProkatDesk(props.actor)
   const bundle = useContext(ProkatRowsContext)
   const [search, setSearch] = useState('')
@@ -748,6 +1008,8 @@ function BookingRows(props: {
   clientFacing?: boolean
   /** Item card history: client + number + badge + dates (no repeated item title). */
   itemScoped?: boolean
+  /** Client card history: hide the repeated client name under each booking. */
+  clientScoped?: boolean
   catalog?: readonly ProkatCatalogItem[]
 }) {
   if (!props.items.length) return <div className={css.empty}><p>Броней в этом списке нет.</p></div>
@@ -779,7 +1041,7 @@ function BookingRows(props: {
               <span className={css.quiet}>{formatProkatDateTime(item.from)} — {formatProkatDateTime(item.to)}</span>
             </span>
             {overdue && item.status !== 'Просрочен возврат' ? <span className={css.lateLine}>Просрочен возврат</span> : null}
-            {props.clientFacing
+            {props.clientFacing || props.clientScoped
               ? null
               : <span className={css.ticketCardLine}>
                   <span className={css.quiet}>{item.clientName || 'Без клиента'}</span>
@@ -862,6 +1124,15 @@ function BookingCard(props: ScreenProps) {
   const transitions = desk ? staffTransitions(status) : []
   const back = clientView ? props.kit.clientListScreenId : props.kit.bookingsScreenId
   const canCancel = clientView && clientCanRequestCancel(status)
+  const holdItemValues = itemIds.map(id => props.of(props.kit.itemsTableId).find(row => row.id === id)?.values ?? {})
+  const holdMinutes = holdMinutesForItemValues(props.kit, holdItemValues)
+  const holdUntil = resolveBookingHoldUntil({
+    from,
+    holdUntil: props.kit.booking.holdUntil ? textOf(booking.values[props.kit.booking.holdUntil]) || null : null,
+    holdAfterStartMinutes: holdMinutes,
+  })
+  const holdOpen = desk && isHoldEligibleStatus(status) && holdMinutes != null && isHoldWindowOpen(holdUntil, props.now)
+  const statusReason = props.kit.booking.statusReason ? textOf(booking.values[props.kit.booking.statusReason]) : ''
   const liveCorrespondence = Boolean(props.live) && !bundle?.sample
   const sampleFixture = !liveCorrespondence
     ? prokatSampleConversation(textOf(booking.values[fields.number]), clientName)
@@ -884,12 +1155,16 @@ function BookingCard(props: ScreenProps) {
   return <div className={css.root} data-prokat-root data-prokat-screen={desk ? 'booking' : 'client-booking'} data-prokat-status={status} data-ticket-tight>
     <DetailCardShell
       back={{ label: desk ? 'Брони' : 'Мои брони', onClick: () => props.onNavigate?.(back) }}
-      title={textOf(booking.values[fields.title]) || items.map(item => item.name).join(', ') || 'Бронь'}
+      title={items.map(item => item.name).join(', ') || textOf(booking.values[fields.title]) || 'Бронь'}
       subtitle={textOf(booking.values[fields.number])}
       badge={<span className={css.badges}><StatusBadge name={status} /></span>}
       actions={desk && phone ? <div className={css.actions}>
         {status === 'Подтверждена' || status === 'Заявка' ? <button type="button" className={css.primary} onClick={() => setDialog('issue')}>Выдать</button> : null}
         {status === 'Выдано' || status === 'Просрочен возврат' ? <button type="button" className={css.primary} onClick={() => setDialog('return')}>Принять возврат</button> : null}
+        {holdOpen ? <>
+          <button type="button" className={css.mine} onClick={() => void commit(props, { kind: 'extendHold', recordId: booking.id }).then(result => setMessage(result.ok ? result.message : result.error))}>Продлить на час</button>
+          <button type="button" className={css.dangerGhost} onClick={() => void commit(props, { kind: 'markNotPickedUp', recordId: booking.id }).then(result => setMessage(result.ok ? result.message : result.error))}>Отметить: не забрали</button>
+        </> : null}
       </div> : undefined}
     >
       {clientView ? <>
@@ -933,6 +1208,23 @@ function BookingCard(props: ScreenProps) {
               {status === 'Заявка' ? <button type="button" className={css.mine} onClick={() => void commit(props, { kind: 'confirm', recordId: booking.id }).then(result => setMessage(result.ok ? result.message : result.error))}>Подтвердить</button> : null}
             </div>
           </DetailSection>
+          {holdOpen ? <DetailSection title="Ожидание выдачи">
+            <p className={css.holdUntilLine} data-prokat-hold-until>
+              Бронь держится до {formatProkatDateTime(holdUntil)}
+            </p>
+            <div className={css.actions} style={{ marginTop: 12 }}>
+              <button
+                type="button"
+                className={css.mine}
+                onClick={() => void commit(props, { kind: 'extendHold', recordId: booking.id }).then(result => setMessage(result.ok ? result.message : result.error))}
+              >Продлить на час</button>
+              <button
+                type="button"
+                className={css.dangerGhost}
+                onClick={() => void commit(props, { kind: 'markNotPickedUp', recordId: booking.id }).then(result => setMessage(result.ok ? result.message : result.error))}
+              >Отметить: не забрали</button>
+            </div>
+          </DetailSection> : null}
           {conversation}
         </div>
         <aside className={`${shell.detailSideCol} ${css.factsCol}`}>
@@ -952,6 +1244,7 @@ function BookingCard(props: ScreenProps) {
                   : <StatusBadge name={status} />}
                 </dd>
               </div>
+              {status === 'Не забрали' && statusReason ? <div><dt>Причина</dt><dd>{statusReason}</dd></div> : null}
               <div><dt>С</dt><dd>{formatProkatDateTime(from)}</dd></div>
               <div><dt>По</dt><dd>{formatProkatDateTime(to)}</dd></div>
               <div><dt>Стоимость</dt><dd>{formatMoney(price)}</dd></div>
@@ -1258,11 +1551,19 @@ function ItemsList(props: ScreenProps) {
 function ItemDetail(props: ScreenProps) {
   const item = props.of(props.kit.itemsTableId).find(row => row.id === props.recordId) ?? props.record
   const [message, setMessage] = useState('')
+  const holdFieldId = props.kit.item.holdAfterStartMinutes
+  const [holdOverride, setHoldOverride] = useState<ProkatHoldAfterStartMinutes | undefined>(() =>
+    holdFieldId && item ? parseItemHoldOverride(item.values[holdFieldId]) : undefined)
+  useEffect(() => {
+    if (!holdFieldId || !item) return
+    setHoldOverride(parseItemHoldOverride(item.values[holdFieldId]))
+  }, [holdFieldId, item?.id, item?.values])
   if (!item) return <div className={css.root}><p className={css.quiet}>Предмет не найден.</p></div>
   const fields = props.kit.item
   const catalog = catalogItems(props).find(entry => entry.id === item.id)
   const history = bookingItems(props).filter(booking => booking.itemIds.includes(item.id))
   const desk = isProkatDesk(props.actor)
+  const owner = props.actor.roleIds.includes('owner')
   const lateConfig = catalog ? itemLateFeeConfig(catalog) : null
   const modeOptions = PROKAT_LATE_FEE_MODES.map(name => {
     const field = props.tables.find(table => table.id === props.kit.itemsTableId)?.fields.find(entry => entry.id === fields.lateFeeMode)
@@ -1313,6 +1614,15 @@ function ItemDetail(props: ScreenProps) {
           </button>
         </div>
         <p className={css.quietHint}>Выключенный предмет остаётся на складе, но не виден в каталоге клиента.</p>
+      </DetailSection> : null}
+      {owner && fields.holdAfterStartMinutes ? <DetailSection title="Бронь">
+        <ItemHoldOverrideControl
+          {...props}
+          fieldId={fields.holdAfterStartMinutes}
+          value={holdOverride}
+          onSaved={setHoldOverride}
+          patchItem={patchItem}
+        />
       </DetailSection> : null}
       {desk && fields.lateFeeMode ? <DetailSection title="Штраф за просрочку">
         <fieldset className={css.lateFeeMode}>
@@ -1493,8 +1803,12 @@ function TimelineBar(props: {
 }
 
 function TimelineScreen(props: ScreenProps) {
+  useProkatHoldCatchUp(props)
   const desk = isProkatDesk(props.actor)
-  const phone = useContext(AppFrameDeviceContext) === 'phone'
+  const frameDevice = useContext(AppFrameDeviceContext)
+  const [narrow, setNarrow] = useState(false)
+  // Published runtime keeps deviceMode='auto'; detect real phone width ourselves.
+  const phone = frameDevice === 'phone' || (frameDevice === 'auto' && narrow)
   const initialMode: ProkatTimelineRangeId = phone ? 'week' : 'fortnight'
   const [mode, setMode] = useState<ProkatTimelineRangeId>(initialMode)
   const [startDate, setStartDate] = useState(() => timelineStartForToday(initialMode, props.now))
@@ -1508,6 +1822,15 @@ function TimelineScreen(props: ScreenProps) {
   const board = buildTimelineWindow({ mode, startDate, now: props.now })
   const columns = board.columns
   const columnCount = Math.max(1, columns.length)
+  useEffect(() => {
+    const root = boardRef.current
+    if (!root || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(entries => {
+      setNarrow((entries[0]?.contentRect.width ?? 0) < 760)
+    })
+    observer.observe(root)
+    return () => observer.disconnect()
+  }, [])
   const onTimelinePaneScroll = (event: { currentTarget: HTMLElement }) => {
     if (!phone || scrollSyncing.current) return
     const root = boardRef.current
@@ -1629,7 +1952,8 @@ function TimelineScreen(props: ScreenProps) {
           nextLeft,
           trackWidthPx,
           // Phone shows ~half the week track at rest; outside past that looks clipped.
-          maxOutsideEnd: phone ? 52 : 96,
+          // Month bars are thin — only show a name when it fits inside (no outside overlap).
+          maxOutsideEnd: mode === 'month' ? -1 : (phone ? 52 : 96),
         })
         nodes.push(
           <TimelineBar
@@ -1766,14 +2090,22 @@ function TimelineScreen(props: ScreenProps) {
                     {board.nowPct != null ? (
                       <span className={css.timelineTodayTag} style={{ left: `${board.nowPct}%` }}>Сегодня</span>
                     ) : null}
-                    {columns.map(column => (
-                      <span
+                    {columns.map((column, index) => {
+                      const day = timelineDayCaption(column.label, {
+                        mode,
+                        index,
+                        today: Boolean(column.today),
+                        prevLabel: columns[index - 1]?.label,
+                        dense: true,
+                      })
+                      return <span
                         key={column.key}
                         className={css.timelineDay}
                         data-today={column.today || undefined}
                         data-weekend={column.weekend || undefined}
-                      >{column.label}</span>
-                    ))}
+                        data-sparse={day.sparse || undefined}
+                      >{day.text}</span>
+                    })}
                   </div>
                 </div>
               </div>
@@ -1807,14 +2139,22 @@ function TimelineScreen(props: ScreenProps) {
                 {board.nowPct != null ? (
                   <span className={css.timelineTodayTag} style={{ left: `${board.nowPct}%` }}>Сегодня</span>
                 ) : null}
-                {columns.map(column => (
-                  <span
+                {columns.map((column, index) => {
+                  const day = timelineDayCaption(column.label, {
+                    mode,
+                    index,
+                    today: Boolean(column.today),
+                    prevLabel: columns[index - 1]?.label,
+                    dense: false,
+                  })
+                  return <span
                     key={column.key}
                     className={css.timelineDay}
                     data-today={column.today || undefined}
                     data-weekend={column.weekend || undefined}
-                  >{column.label}</span>
-                ))}
+                    data-sparse={day.sparse || undefined}
+                  >{day.text}</span>
+                })}
               </div>
             </div>
             {board.nowPct != null ? <div className={css.timelineTodayLine} aria-hidden="true" /> : null}
@@ -1885,6 +2225,8 @@ function ClientDetail(props: ScreenProps) {
   if (!client) return <div className={css.root}><p className={css.quiet}>Клиент не найден.</p></div>
   const email = textOf(client.values[props.kit.client.email]).toLowerCase()
   const history = bookingItems(props).filter(item => item.clientEmail.toLowerCase() === email)
+  const noShowCount = clientNotPickedUpCount(history)
+  const noShowLabel = formatNotPickedUpCount(noShowCount)
   return <div className={css.root} data-prokat-root data-prokat-screen="client-card">
     <DetailCardShell
       back={{ label: 'Клиенты', onClick: () => props.onNavigate?.(props.kit.clientsScreenId) }}
@@ -1895,10 +2237,11 @@ function ClientDetail(props: ScreenProps) {
         <dl className={css.facts}>
           <div><dt>Телефон</dt><dd>{textOf(client.values[props.kit.client.phone]) || '—'}</dd></div>
           <div><dt>Заметка</dt><dd>{textOf(client.values[props.kit.client.note]) || '—'}</dd></div>
+          {noShowLabel ? <div data-prokat-noshow><dt>Неявки</dt><dd className={css.noShowCount}>{noShowLabel}</dd></div> : null}
         </dl>
       </DetailSection>
       <DetailSection title="История броней">
-        <BookingRows items={history} now={props.now} onOpen={id => props.onNavigate?.(props.kit.bookingScreenId, id)} keepCards />
+        <BookingRows items={history} now={props.now} onOpen={id => props.onNavigate?.(props.kit.bookingScreenId, id)} keepCards clientScoped />
       </DetailSection>
     </DetailCardShell>
   </div>

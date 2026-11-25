@@ -2,8 +2,11 @@ import { newId } from '@tableapp/schema'
 import type { AppV2, AppV2Actor, AppV2Json, AppV2Record } from '@tableapp/schema/app-v2'
 import { authorizeAppV2Write, projectAppV2Row } from '@tableapp/schema/app-v2'
 import {
-  canStaffTransition, clientCanRequestCancel, findItemBookingConflict, isProkatBookingStatus,
-  nextBookingNumber, sameEmail, type ProkatBookingStatus, type ProkatBookingSpan,
+  canStaffTransition, clientCanRequestCancel, extendHoldUntil, findItemBookingConflict,
+  holdUntilFromStart, isHoldEligibleStatus, isProkatBookingStatus, isProkatHoldMinutes,
+  nextBookingNumber, parseItemHoldOverride, PROKAT_NOT_PICKED_UP_REASON_MANUAL,
+  resolveBookingHoldMinutes, resolveBookingHoldUntil, resolveHoldAfterStartMinutes, sameEmail,
+  type ProkatBookingStatus, type ProkatBookingSpan, type ProkatHoldAfterStartMinutes,
 } from './prokat-logic'
 
 export type ProkatApp = NonNullable<AppV2['prokat']>
@@ -66,6 +69,7 @@ export function prokatStatusName(prokat: ProkatApp, id: unknown): ProkatBookingS
   if (id === prokat.statuses.returned) return 'Возвращено'
   if (id === prokat.statuses.overdue) return 'Просрочен возврат'
   if (id === prokat.statuses.cancelled) return 'Отменена'
+  if (prokat.statuses.notPickedUp && id === prokat.statuses.notPickedUp) return 'Не забрали'
   return ''
 }
 
@@ -76,7 +80,25 @@ export function prokatStatusId(prokat: ProkatApp, name: string) {
   if (name === 'Возвращено') return prokat.statuses.returned
   if (name === 'Просрочен возврат') return prokat.statuses.overdue
   if (name === 'Отменена') return prokat.statuses.cancelled
+  if (name === 'Не забрали') return prokat.statuses.notPickedUp ?? ''
   return ''
+}
+
+export function prokatHoldMinutes(prokat: ProkatApp): ProkatHoldAfterStartMinutes {
+  return resolveHoldAfterStartMinutes(prokat.holdAfterStartMinutes)
+}
+
+export function holdMinutesForItemValues(
+  prokat: ProkatApp,
+  itemValues: ReadonlyArray<Record<string, unknown>>,
+): ProkatHoldAfterStartMinutes {
+  const business = prokatHoldMinutes(prokat)
+  if (!prokat.item.holdAfterStartMinutes) return business
+  const fieldId = prokat.item.holdAfterStartMinutes
+  return resolveBookingHoldMinutes(
+    business,
+    itemValues.map(values => parseItemHoldOverride(values[fieldId])),
+  )
 }
 
 const textOf = (value: unknown) => typeof value === 'string' ? value : ''
@@ -108,6 +130,7 @@ export function bookingCreateValues(booking: ProkatApp['booking'], input: {
   staffId?: string | null
   staffEmail?: string | null
   createdAt: string
+  holdUntil?: string | null
 }): Record<string, AppV2Json> {
   const values: Record<string, AppV2Json> = {
     [booking.number]: input.number,
@@ -129,7 +152,18 @@ export function bookingCreateValues(booking: ProkatApp['booking'], input: {
   }
   if (input.staffId) values[booking.staff] = [input.staffId]
   if (input.staffEmail) values[booking.staffEmail] = input.staffEmail
+  if (booking.holdUntil && input.holdUntil) values[booking.holdUntil] = input.holdUntil
   return values
+}
+
+export function stampBookingHoldUntil(
+  booking: ProkatApp['booking'],
+  from: string,
+  holdMinutes: ProkatHoldAfterStartMinutes,
+): Record<string, AppV2Json> {
+  if (!booking.holdUntil) return {}
+  const until = holdUntilFromStart(from, holdMinutes)
+  return until ? { [booking.holdUntil]: until } : { [booking.holdUntil]: null }
 }
 
 export function bookingIssueValues(booking: ProkatApp['booking'], input: {
@@ -185,6 +219,9 @@ export type ProkatChange =
   | { kind: 'issue'; recordId: string; condition: string; damages: string; photos?: string }
   | { kind: 'return'; recordId: string; condition: string; damages: string; photos?: AppV2Json; lateFee?: number; depositReturned?: number; depositWithheld?: number; depositReason?: string }
   | { kind: 'status'; recordId: string; statusId: string }
+  | { kind: 'extendHold'; recordId: string }
+  | { kind: 'markNotPickedUp'; recordId: string }
+  | { kind: 'holdSetting'; holdAfterStartMinutes: ProkatHoldAfterStartMinutes }
   | { kind: 'itemPatch'; recordId: string; values: Record<string, AppV2Json> }
 
 /** Mark catalog items free/rented after issue or return. Staff policy allows item updates. */
@@ -232,6 +269,7 @@ export function applyProkatChange(
     if (!change.from || !change.to) return { ok: false, error: 'Укажите срок аренды.' }
     const conflict = findItemBookingConflict(spans(), itemIds, change.from, change.to)
     if (conflict) return { ok: false, error: `Предмет уже занят в брони ${conflict.number}.` }
+    const itemValues = itemIds.map(id => rows.find(row => row.id === id && row.tableId === prokat.itemsTableId)?.values ?? {})
 
     let clientId = ''
     let clientName = ''
@@ -272,7 +310,7 @@ export function applyProkatChange(
         const values = bookingCreateValues(prokat.booking, {
           number, title: change.title.trim(), clientId: createdClient.id, clientName, clientEmail,
           itemIds, from: change.from, to: change.to, price: change.price, deposit: change.deposit,
-          statusId, createdAt: now,
+          statusId, createdAt: now, holdUntil: holdUntilFromStart(change.from, holdMinutesForItemValues(prokat, itemValues)),
         })
         const authorizeValues = Object.fromEntries(Object.entries(values).filter(([key]) => key !== prokat.booking.clientEmail))
         const decision = guardProkatCreate(app, actor, prokat.bookingsTableId, authorizeValues)
@@ -293,7 +331,7 @@ export function applyProkatChange(
     const values = bookingCreateValues(prokat.booking, {
       number, title: change.title.trim(), clientId, clientName, clientEmail,
       itemIds, from: change.from, to: change.to, price: change.price, deposit: change.deposit,
-      statusId, createdAt: now,
+      statusId, createdAt: now, holdUntil: holdUntilFromStart(change.from, holdMinutesForItemValues(prokat, itemValues)),
     })
     // Owner-stamped clientEmail must not appear in the authorize payload for clients.
     const authorizeValues = change.kind === 'clientRequest'
@@ -316,16 +354,26 @@ export function applyProkatChange(
     const allowed = new Set([
       prokat.item.showInCatalog, prokat.item.lateFeeMode, prokat.item.lateFeeValue,
       prokat.item.lateFeeGraceHours, prokat.item.lateFeeCapPerDay, prokat.item.condition, prokat.item.status,
+      prokat.item.holdAfterStartMinutes,
     ].filter((id): id is string => Boolean(id)))
     const patch: Record<string, AppV2Json> = {}
     for (const [key, value] of Object.entries(change.values)) {
       if (!allowed.has(key)) return { ok: false, error: 'Это поле предмета нельзя менять здесь.' }
+      if (key === prokat.item.holdAfterStartMinutes && !actor.roleIds.includes('owner')) {
+        return { ok: false, error: 'Переопределение окна брони меняет руководитель.' }
+      }
       patch[key] = value
     }
     if (!Object.keys(patch).length) return { ok: false, error: 'Нет изменений.' }
     const decision = guardProkatUpdate(app, actor, item, patch)
     if (!decision.ok) return decision
     return { ok: true, rows: replace(item, patch), message: 'Параметры предмета сохранены.' }
+  }
+
+  if (change.kind === 'holdSetting') {
+    if (!actor.roleIds.includes('owner')) return { ok: false, error: 'Настройку окна брони меняет руководитель.' }
+    if (!isProkatHoldMinutes(change.holdAfterStartMinutes)) return { ok: false, error: 'Выберите допустимое окно.' }
+    return { ok: true, rows: [...rows], message: 'Окно брони сохранено.' }
   }
 
   const booking = bookingRow(change.recordId)
@@ -344,13 +392,56 @@ export function applyProkatChange(
     const to = textOf(booking.values[prokat.booking.to])
     const conflict = findItemBookingConflict(spans(), itemIds, from, to, booking.id)
     if (conflict) return { ok: false, error: `Предмет уже занят в брони ${conflict.number}.` }
+    const confirmItems = itemIds.map(id => rows.find(row => row.id === id && row.tableId === prokat.itemsTableId)?.values ?? {})
     const patch: Record<string, AppV2Json> = {
       [prokat.booking.status]: prokat.statuses.confirmed,
       [prokat.booking.updatedAt]: now,
+      ...stampBookingHoldUntil(prokat.booking, from, holdMinutesForItemValues(prokat, confirmItems)),
     }
     const decision = guardProkatUpdate(app, actor, booking, patch)
     if (!decision.ok) return decision
     return { ok: true, rows: replace(booking, patch), message: 'Бронь подтверждена.' }
+  }
+
+  if (change.kind === 'extendHold') {
+    const desk = assertDesk(actor)
+    if (!desk.ok) return desk
+    if (!isHoldEligibleStatus(statusName)) return { ok: false, error: 'Продлить можно только заявку или подтверждённую бронь.' }
+    if (!prokat.booking.holdUntil) return { ok: false, error: 'В этом приложении нет поля срока удержания.' }
+    const extendItemIds = idsOf(booking.values[prokat.booking.items])
+    const extendItems = extendItemIds.map(id => rows.find(row => row.id === id && row.tableId === prokat.itemsTableId)?.values ?? {})
+    const extendHoldMinutes = holdMinutesForItemValues(prokat, extendItems)
+    if (extendHoldMinutes == null) return { ok: false, error: 'Автоотмена отключена — продлевать нечего.' }
+    const from = textOf(booking.values[prokat.booking.from])
+    const current = resolveBookingHoldUntil({
+      from,
+      holdUntil: textOf(booking.values[prokat.booking.holdUntil]) || null,
+      holdAfterStartMinutes: extendHoldMinutes,
+    })
+    const next = extendHoldUntil(current, Date.parse(now))
+    const patch: Record<string, AppV2Json> = {
+      [prokat.booking.holdUntil]: next,
+      [prokat.booking.updatedAt]: now,
+    }
+    const decision = guardProkatUpdate(app, actor, booking, patch)
+    if (!decision.ok) return decision
+    return { ok: true, rows: replace(booking, patch), message: 'Бронь продлена на час.' }
+  }
+
+  if (change.kind === 'markNotPickedUp') {
+    const desk = assertDesk(actor)
+    if (!desk.ok) return desk
+    if (!prokat.statuses.notPickedUp) return { ok: false, error: 'Статус «Не забрали» ещё не настроен.' }
+    const allowed = assertStaffStatus(statusName, 'Не забрали')
+    if (!allowed.ok) return allowed
+    const patch: Record<string, AppV2Json> = {
+      [prokat.booking.status]: prokat.statuses.notPickedUp,
+      [prokat.booking.updatedAt]: now,
+    }
+    if (prokat.booking.statusReason) patch[prokat.booking.statusReason] = PROKAT_NOT_PICKED_UP_REASON_MANUAL
+    const decision = guardProkatUpdate(app, actor, booking, patch)
+    if (!decision.ok) return decision
+    return { ok: true, rows: replace(booking, patch), message: 'Отмечено: не забрали.' }
   }
 
   if (change.kind === 'cancel') {
@@ -436,6 +527,9 @@ export function applyProkatChange(
   const patch: Record<string, AppV2Json> = {
     [prokat.booking.status]: change.statusId,
     [prokat.booking.updatedAt]: now,
+  }
+  if (nextName === 'Не забрали' && prokat.booking.statusReason) {
+    patch[prokat.booking.statusReason] = PROKAT_NOT_PICKED_UP_REASON_MANUAL
   }
   const decision = guardProkatUpdate(app, actor, booking, patch)
   if (!decision.ok) return decision

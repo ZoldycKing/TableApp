@@ -54,6 +54,8 @@ export function buildProkatV2App(built: BuiltTemplate, meta: { id: string; works
     depositReturned: column('Брони', 'Залог возвращён').id,
     depositWithheld: column('Брони', 'Залог удержан').id,
     depositReason: column('Брони', 'Причина удержания').id,
+    holdUntil: column('Брони', 'Держать до').id,
+    statusReason: column('Брони', 'Причина статуса').id,
     createdAt: column('Брони', 'Создано').id,
     updatedAt: column('Брони', 'Обновлено').id,
   }
@@ -86,6 +88,7 @@ export function buildProkatV2App(built: BuiltTemplate, meta: { id: string; works
     lateFeeValue: column('Предметы', 'Ставка штрафа').id,
     lateFeeGraceHours: column('Предметы', 'Льготные часы').id,
     lateFeeCapPerDay: column('Предметы', 'Потолок штрафа в сутки').id,
+    holdAfterStartMinutes: column('Предметы', 'Держать бронь после начала').id,
   }
   const statuses = {
     request: choice('Брони', 'Статус', 'Заявка'),
@@ -94,6 +97,7 @@ export function buildProkatV2App(built: BuiltTemplate, meta: { id: string; works
     returned: choice('Брони', 'Статус', 'Возвращено'),
     overdue: choice('Брони', 'Статус', 'Просрочен возврат'),
     cancelled: choice('Брони', 'Статус', 'Отменена'),
+    notPickedUp: choice('Брони', 'Статус', 'Не забрали'),
   }
   const itemStatuses = {
     free: choice('Предметы', 'Статус', 'Свободен'),
@@ -113,6 +117,7 @@ export function buildProkatV2App(built: BuiltTemplate, meta: { id: string; works
     catalogScreenId: newId('screen'),
     clientListScreenId: newId('screen'),
     clientBookingScreenId: newId('screen'),
+    settingsScreenId: newId('screen'),
     createFormId: newId('component'),
     issueFormId: newId('component'),
     returnFormId: newId('component'),
@@ -270,7 +275,7 @@ export function buildProkatV2App(built: BuiltTemplate, meta: { id: string; works
     booking.issueCondition, booking.issueDamages, booking.issuePhotos, booking.issueAt,
     booking.returnCondition, booking.returnDamages, booking.returnPhotos, booking.returnAt,
     booking.depositReturned, booking.depositWithheld, booking.depositReason,
-    booking.createdAt, booking.updatedAt,
+    booking.holdUntil, booking.createdAt, booking.updatedAt,
   ]
   const clientItemRead = [
     item.name, item.photo, item.category, item.serial, item.tariff, item.rate, item.deposit, item.condition, item.status,
@@ -282,7 +287,8 @@ export function buildProkatV2App(built: BuiltTemplate, meta: { id: string; works
     booking.staff, booking.staffEmail,
     booking.issueCondition, booking.issueDamages, booking.issuePhotos, booking.issueAt,
     booking.returnCondition, booking.returnDamages, booking.returnPhotos, booking.returnAt,
-    booking.depositReturned, booking.depositWithheld, booking.depositReason, booking.updatedAt,
+    booking.depositReturned, booking.depositWithheld, booking.depositReason,
+    booking.holdUntil, booking.statusReason, booking.updatedAt,
   ]
 
   return {
@@ -296,6 +302,7 @@ export function buildProkatV2App(built: BuiltTemplate, meta: { id: string; works
     prokat: {
       bookingsTableId: bookings.id, clientsTableId: clients.id, staffTableId: staffTable.id, itemsTableId: items.id,
       ...ids, booking, client, staff: person, item, statuses, itemStatuses,
+      holdAfterStartMinutes: 120,
       activeChoiceId: choice('Сотрудники', 'Статус', 'Активен'),
       inactiveChoiceId: choice('Сотрудники', 'Статус', 'Неактивен'),
     },
@@ -307,6 +314,8 @@ export function buildProkatV2App(built: BuiltTemplate, meta: { id: string; works
       screen(ids.timelineScreenId, 'Занятость', 'Занятость', 'list', desk, null, [timelineBookings, timelineItems], true),
       screen(ids.itemsScreenId, 'Предметы', 'Предметы', 'box', desk, null, [listItems], true),
       screen(ids.clientsScreenId, 'Клиенты', 'Клиенты', 'users', desk, null, [listClients], true),
+      // Owner settings — lands in «Ещё» on phone (desk already has 5 primary tabs).
+      screen(ids.settingsScreenId, 'Настройки проката', 'Настройки', 'settings', owner, null, [], true),
       screen(ids.bookingScreenId, 'Бронь', undefined, 'calendar', desk, bookings.id, [bookingItems, bookingStaff, bookingClients, ids.issueFormId, ids.returnFormId], false),
       screen(ids.itemScreenId, 'Предмет', undefined, 'box', { kind: 'roles', roleIds: ['owner', 'staff', 'client'] }, items.id, [itemBookings], false),
       screen(ids.clientScreenId, 'Клиент', undefined, 'users', desk, clients.id, [clientBookings], false),
@@ -328,7 +337,7 @@ export function buildProkatV2App(built: BuiltTemplate, meta: { id: string; works
               fieldIds: [
                 booking.number, booking.title, booking.client, booking.clientName, booking.items,
                 booking.from, booking.to, booking.price, booking.deposit, booking.lateFee, booking.status,
-                booking.issuePhotos, booking.returnPhotos, booking.createdAt, booking.updatedAt,
+                booking.issuePhotos, booking.returnPhotos, booking.holdUntil, booking.createdAt, booking.updatedAt,
               ],
               owner: { fieldId: booking.clientEmail, property: 'email' },
             },

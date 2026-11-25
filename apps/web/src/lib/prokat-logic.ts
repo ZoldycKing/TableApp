@@ -10,6 +10,7 @@ export const PROKAT_BOOKING_STATUSES = [
   'Возвращено',
   'Просрочен возврат',
   'Отменена',
+  'Не забрали',
 ] as const
 export type ProkatBookingStatus = typeof PROKAT_BOOKING_STATUSES[number]
 
@@ -21,14 +22,33 @@ export type ProkatTariff = typeof PROKAT_TARIFFS[number]
 
 export const PROKAT_CATEGORIES = ['Велосипеды', 'SUP', 'Инструменты', 'Фототехника'] as const
 
-/** Statuses that occupy an item on the timeline. */
+/** Statuses that occupy an item on the timeline. «Не забрали» frees the slot. */
 export const PROKAT_BLOCKING_STATUSES = ['Заявка', 'Подтверждена', 'Выдано', 'Просрочен возврат'] as const
+
+/** Pickup hold after booking start. `null` = never auto-cancel. Default 2 hours. */
+export const PROKAT_HOLD_AFTER_START_OPTIONS = [
+  { minutes: 30, label: '30 мин' },
+  { minutes: 60, label: '1 ч' },
+  { minutes: 120, label: '2 ч' },
+  { minutes: 240, label: '4 ч' },
+  { minutes: 720, label: '12 ч' },
+  { minutes: 1440, label: '24 ч' },
+  { minutes: null, label: 'Не отменять' },
+] as const
+export type ProkatHoldAfterStartMinutes = typeof PROKAT_HOLD_AFTER_START_OPTIONS[number]['minutes']
+export const PROKAT_DEFAULT_HOLD_AFTER_START_MINUTES = 120
+export const PROKAT_HOLD_ELIGIBLE_STATUSES = ['Заявка', 'Подтверждена'] as const
+export const PROKAT_NOT_PICKED_UP_REASON_AUTO = 'Автоотмена: клиент не забрал предмет в срок'
+export const PROKAT_NOT_PICKED_UP_REASON_MANUAL = 'Отмечено персоналом: не забрали'
+export const PROKAT_NOT_PICKED_UP_CHAT =
+  'Бронь снята: предмет не забрали вовремя. Если это ошибка — напишите нам, поможем оформить заново.'
 
 export const PROKAT_BOOKING_VIEWS = [
   { id: 'all', label: 'Все' },
   { id: 'todayIssue', label: 'Сегодня выдача' },
   { id: 'todayReturn', label: 'Сегодня возврат' },
   { id: 'overdue', label: 'Просрочены' },
+  { id: 'notPickedUp', label: 'Не забрали' },
   { id: 'request', label: 'Заявки' },
   { id: 'confirmed', label: 'Подтверждены' },
   { id: 'issued', label: 'Выдано' },
@@ -64,12 +84,13 @@ export function nextBookingNumber(existing: readonly string[]) {
 }
 
 export function staffTransitions(from: string): ProkatBookingStatus[] {
-  if (from === 'Заявка') return ['Подтверждена', 'Отменена']
-  if (from === 'Подтверждена') return ['Выдано', 'Отменена']
+  if (from === 'Заявка') return ['Подтверждена', 'Отменена', 'Не забрали']
+  if (from === 'Подтверждена') return ['Выдано', 'Отменена', 'Не забрали']
   if (from === 'Выдано') return ['Возвращено', 'Просрочен возврат']
   if (from === 'Просрочен возврат') return ['Возвращено']
   if (from === 'Возвращено') return []
   if (from === 'Отменена') return ['Заявка']
+  if (from === 'Не забрали') return ['Заявка']
   return []
 }
 
@@ -83,7 +104,116 @@ export function clientCanRequestCancel(status: string) {
 }
 
 export function isOpenBooking(status: string) {
-  return status !== 'Возвращено' && status !== 'Отменена'
+  return status !== 'Возвращено' && status !== 'Отменена' && status !== 'Не забрали'
+}
+
+export function isHoldEligibleStatus(status: string) {
+  return (PROKAT_HOLD_ELIGIBLE_STATUSES as readonly string[]).includes(status)
+}
+
+export function isProkatHoldMinutes(value: unknown): value is ProkatHoldAfterStartMinutes {
+  return PROKAT_HOLD_AFTER_START_OPTIONS.some(option => option.minutes === value)
+}
+
+/** Resolve business hold window; unknown/missing → default 2 hours. */
+export function resolveHoldAfterStartMinutes(value: unknown): ProkatHoldAfterStartMinutes {
+  if (value === null) return null
+  if (typeof value === 'number' && isProkatHoldMinutes(value)) return value
+  return PROKAT_DEFAULT_HOLD_AFTER_START_MINUTES
+}
+
+/** Sentinel stored on the item number field for «Не отменять». Empty field = inherit business. */
+export const PROKAT_ITEM_HOLD_NEVER_SENTINEL = -1
+
+/**
+ * Per-item override: `undefined` = inherit business setting;
+ * `null` = never auto-cancel for this item; otherwise minutes.
+ */
+export function parseItemHoldOverride(raw: unknown): ProkatHoldAfterStartMinutes | undefined {
+  if (raw === '' || raw == null) return undefined
+  if (raw === PROKAT_ITEM_HOLD_NEVER_SENTINEL || raw === String(PROKAT_ITEM_HOLD_NEVER_SENTINEL)) return null
+  if (typeof raw === 'number' && isProkatHoldMinutes(raw)) return raw
+  if (typeof raw === 'string' && raw.trim() !== '') {
+    const next = Number(raw)
+    if (next === PROKAT_ITEM_HOLD_NEVER_SENTINEL) return null
+    if (isProkatHoldMinutes(next)) return next
+  }
+  return undefined
+}
+
+export function encodeItemHoldOverride(value: ProkatHoldAfterStartMinutes | undefined): number | null {
+  if (value === undefined) return null
+  if (value === null) return PROKAT_ITEM_HOLD_NEVER_SENTINEL
+  return value
+}
+
+/**
+ * Effective hold for a booking: each item uses override ?? business;
+ * if any resolves to «never» → never; else the longest window among items.
+ */
+export function resolveBookingHoldMinutes(
+  business: ProkatHoldAfterStartMinutes,
+  itemOverrides: ReadonlyArray<ProkatHoldAfterStartMinutes | undefined>,
+): ProkatHoldAfterStartMinutes {
+  if (!itemOverrides.length) return business
+  const resolved = itemOverrides.map(entry => (entry === undefined ? business : entry))
+  if (resolved.some(minutes => minutes === null)) return null
+  return Math.max(...(resolved as number[])) as Exclude<ProkatHoldAfterStartMinutes, null>
+}
+
+export function holdOptionLabel(minutes: ProkatHoldAfterStartMinutes) {
+  return PROKAT_HOLD_AFTER_START_OPTIONS.find(option => option.minutes === minutes)?.label
+    ?? (minutes == null ? 'Не отменять' : `${minutes} мин`)
+}
+
+export function holdUntilFromStart(from: string | number, holdMinutes: ProkatHoldAfterStartMinutes): string | null {
+  if (holdMinutes == null) return null
+  const fromMs = typeof from === 'number' ? from : Date.parse(from)
+  if (!Number.isFinite(fromMs)) return null
+  return new Date(fromMs + holdMinutes * 60_000).toISOString()
+}
+
+/** Effective hold deadline: explicit holdUntil, else from + business window. */
+export function resolveBookingHoldUntil(input: {
+  from: string | number
+  holdUntil?: string | null
+  holdAfterStartMinutes: ProkatHoldAfterStartMinutes
+}): string | null {
+  if (input.holdUntil) {
+    const at = Date.parse(input.holdUntil)
+    if (Number.isFinite(at)) return new Date(at).toISOString()
+  }
+  return holdUntilFromStart(input.from, input.holdAfterStartMinutes)
+}
+
+export function isHoldWindowOpen(holdUntil: string | null | undefined, now: number) {
+  if (!holdUntil) return false
+  const at = Date.parse(holdUntil)
+  return Number.isFinite(at) && at > now
+}
+
+export function isHoldExpired(holdUntil: string | null | undefined, now: number) {
+  if (!holdUntil) return false
+  const at = Date.parse(holdUntil)
+  return Number.isFinite(at) && at <= now
+}
+
+/** Shift hold deadline by one hour from the later of current hold / now. */
+export function extendHoldUntil(holdUntil: string | null | undefined, now: number, hours = 1) {
+  const current = holdUntil ? Date.parse(holdUntil) : NaN
+  const base = Number.isFinite(current) ? Math.max(current, now) : now
+  return new Date(base + hours * 3_600_000).toISOString()
+}
+
+export function clientNotPickedUpCount(bookings: readonly { status: string }[]) {
+  return bookings.filter(item => item.status === 'Не забрали').length
+}
+
+export function formatNotPickedUpCount(count: number) {
+  if (count <= 0) return ''
+  if (count === 1) return 'Не забрал: 1 раз'
+  if (count >= 2 && count <= 4) return `Не забрал: ${count} раза`
+  return `Не забрал: ${count} раз`
 }
 
 export function isOverdueReturn(status: string, to: unknown, now: number) {
@@ -681,6 +811,8 @@ export type ProkatListItem = {
   itemIds: readonly string[]
   itemNames: readonly string[]
   updatedAt: string
+  holdUntil?: string
+  statusReason?: string
 }
 
 export type ProkatCatalogItem = {
@@ -766,7 +898,7 @@ export function prokatClientStepIndex(status: string) {
   if (status === 'Возвращено') return 3
   if (status === 'Выдано' || status === 'Просрочен возврат') return 2
   if (status === 'Подтверждена') return 1
-  if (status === 'Отменена') return -1
+  if (status === 'Отменена' || status === 'Не забрали') return -1
   return 0
 }
 
@@ -788,6 +920,7 @@ export function filterBookings(
     if (filter.view === 'confirmed' && item.status !== 'Подтверждена') return false
     if (filter.view === 'issued' && item.status !== 'Выдано' && item.status !== 'Просрочен возврат') return false
     if (filter.view === 'returned' && item.status !== 'Возвращено') return false
+    if (filter.view === 'notPickedUp' && item.status !== 'Не забрали') return false
     if (filter.view === 'todayIssue') {
       if (!sameMoscowDay(item.from, now)) return false
       if (item.status !== 'Подтверждена' && item.status !== 'Заявка') return false
@@ -821,6 +954,8 @@ export function prokatDashboard(
     (item.status === 'Выдано' || item.status === 'Просрочен возврат') && sameMoscowDay(item.to, now))
   const issuesToday = bookings.filter(item =>
     (item.status === 'Заявка' || item.status === 'Подтверждена') && sameMoscowDay(item.from, now))
+  const notPickedUp = bookings.filter(item => item.status === 'Не забрали')
+  const notPickedUpToday = notPickedUp.filter(item => sameMoscowDay(item.from, now) || sameMoscowDay(item.updatedAt, now))
 
   const weekMs = 7 * 86_400_000
   const revenueByWeek = [0, 1, 2, 3].map(offset => {
@@ -854,7 +989,7 @@ export function prokatDashboard(
 
   const itemHits = new Map<string, { id: string; name: string; count: number; revenue: number }>()
   for (const booking of bookings) {
-    if (booking.status === 'Отменена') continue
+    if (booking.status === 'Отменена' || booking.status === 'Не забрали') continue
     booking.itemIds.forEach((id, index) => {
       const name = booking.itemNames[index] || id
       const row = itemHits.get(id) ?? { id, name, count: 0, revenue: 0 }
@@ -872,12 +1007,14 @@ export function prokatDashboard(
     returned: byStatus('Возвращено'),
     overdueCount: overdue.length,
     cancelled: byStatus('Отменена'),
+    notPickedUp: notPickedUp.length,
     itemsOut: out.length,
     returnsDueToday: returnsDueToday.length,
     issuesToday: issuesToday.length,
     overdue,
     returnsDueTodayList: returnsDueToday,
     issuesTodayList: issuesToday,
+    notPickedUpList: notPickedUpToday.length ? notPickedUpToday : notPickedUp.slice(0, 12),
     utilisation,
     utilisationByCategory,
     revenueByWeek,

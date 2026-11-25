@@ -542,7 +542,7 @@ export function validateAppV2(app: AppV2, catalog: AppV2Catalog, options: { mode
     if (new Set(statusIds).size !== statusIds.length) issue('prokat_status', path, 'Статусы брони должны различаться')
     const itemStatusIds = [prokat.itemStatuses.free, prokat.itemStatuses.rented, prokat.itemStatuses.service, prokat.itemStatuses.writtenOff]
     if (new Set(itemStatusIds).size !== itemStatusIds.length) issue('prokat_item_status', path, 'Статусы предметов должны различаться')
-    for (const screenId of [prokat.dashboardScreenId, prokat.bookingsScreenId, prokat.bookingScreenId, prokat.itemsScreenId, prokat.itemScreenId, prokat.timelineScreenId, prokat.clientsScreenId, prokat.clientScreenId, prokat.catalogScreenId, prokat.clientListScreenId, prokat.clientBookingScreenId]) {
+    for (const screenId of [prokat.dashboardScreenId, prokat.bookingsScreenId, prokat.bookingScreenId, prokat.itemsScreenId, prokat.itemScreenId, prokat.timelineScreenId, prokat.clientsScreenId, prokat.clientScreenId, prokat.catalogScreenId, prokat.clientListScreenId, prokat.clientBookingScreenId, ...(prokat.settingsScreenId ? [prokat.settingsScreenId] : [])]) {
       if (!screens.has(screenId)) issue('prokat_screen', path, 'Экран проката удалён')
     }
     for (const formId of [prokat.createFormId, prokat.issueFormId, prokat.returnFormId, prokat.clientRequestFormId]) {

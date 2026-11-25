@@ -1154,6 +1154,7 @@
   background: var(--v2-surface, #fff); color: var(--v2-ink, var(--sc-text));
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--v2-line, #ccc) 80%, transparent);
 }
+.timelineRangeShort { display: none; }
 .timelineNav { display: inline-flex; align-items: center; gap: 6px; }
 .timelineNavBtn {
   display: inline-grid; place-items: center; width: 34px; height: 34px; padding: 0;
@@ -1165,19 +1166,30 @@
   background: transparent; color: #C4623A; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
 }
 .timelineSearch { flex: 1 1 10rem; min-width: 0; max-width: 16rem; }
+.timelineSearchToggle {
+  display: inline-grid; place-items: center; width: 34px; height: 34px; padding: 0;
+  border: 1px solid var(--v2-line, var(--sc-border)); border-radius: 10px;
+  background: transparent; color: inherit; cursor: pointer;
+}
 .timelineLegend {
   display: flex; flex-wrap: wrap; gap: 8px 14px; margin: 0; padding: 10px 20px 4px;
   list-style: none; color: var(--v2-muted, var(--sc-text-2)); font-size: 12px; font-weight: 650;
 }
 .timelineLegend li { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
-.timelineLegend i {
-  display: block; width: 8px; height: 8px; border-radius: 99px; flex: none;
-  background: color-mix(in srgb, #3F6B5C 78%, transparent);
+.timelineLegend i[data-sample] {
+  display: block; width: 18px; height: 10px; border-radius: 3px; flex: none; box-sizing: border-box;
+  background: #3F6B5C;
 }
-.timelineLegend i[data-tone='request'] { background: color-mix(in srgb, #6B7C8A 85%, transparent); }
-.timelineLegend i[data-tone='confirmed'] { background: color-mix(in srgb, #3F6B5C 85%, transparent); }
-.timelineLegend i[data-tone='issued'] { background: color-mix(in srgb, #246B45 88%, transparent); }
-.timelineLegend i[data-tone='overdue'] { background: #C4623A; }
+.timelineLegend i[data-tone='request'] {
+  background: color-mix(in srgb, #6B7C8A 14%, #fff);
+  border: 1.5px dashed #8A96A3;
+}
+.timelineLegend i[data-tone='confirmed'] {
+  background: color-mix(in srgb, #3F6B5C 18%, #fff);
+  border: 1.5px solid #3F6B5C;
+}
+.timelineLegend i[data-tone='issued'] { background: #3F6B5C; border: 0; }
+.timelineLegend i[data-tone='overdue'] { background: #C4623A; border: 0; }
 .timelineBoard {
   --prokat-label-w: 14rem;
   display: grid; gap: 0; min-width: 0; padding: 4px 20px 20px;
@@ -1219,18 +1231,19 @@
 }
 .timelineGroup { display: grid; gap: 0; min-width: 0; margin-top: 10px; }
 .timelineGroupHead {
-  display: grid; grid-template-columns: var(--prokat-label-w) minmax(0, 1fr); gap: 12px; align-items: center;
-  width: 100%; min-width: 0; margin: 0 0 4px; padding: 0; text-align: left;
-  border: 0; border-radius: 10px; background: transparent;
-  color: var(--v2-muted, var(--sc-text-2)); font: inherit; font-size: 12px; font-weight: 650; cursor: pointer;
-}
-.timelineGroupTitle {
-  display: grid; gap: 2px; min-width: 0; padding: 8px 10px; border-radius: 10px;
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px;
+  width: 100%; min-width: 0; margin: 0 0 4px; padding: 8px 12px; text-align: left;
+  border: 0; border-radius: 10px;
   background: color-mix(in srgb, var(--v2-accent, #3F6B5C) 7%, transparent);
-  position: sticky; left: 0; z-index: 2;
+  color: var(--v2-muted, var(--sc-text-2)); font: inherit; font-size: 12px; font-weight: 650; cursor: pointer;
+  box-sizing: border-box;
 }
-.timelineGroupHead strong { color: var(--v2-ink, var(--sc-text)); font-size: 14px; font-weight: 750; }
-.timelineGroupHead[aria-expanded='false'] .timelineGroupTitle { opacity: 0.88; }
+.timelineGroupLead {
+  display: inline-flex; align-items: center; gap: 8px; min-width: 0;
+}
+.timelineGroupLead strong { color: var(--v2-ink, var(--sc-text)); font-size: 14px; font-weight: 750; }
+.timelineGroupCount { flex: none; white-space: nowrap; }
+.timelineGroupHead[aria-expanded='false'] { opacity: 0.88; }
 .timelineRow {
   display: grid; grid-template-columns: var(--prokat-label-w) minmax(0, 1fr); gap: 12px; align-items: center;
   min-width: 0; min-height: 40px;
@@ -1267,39 +1280,49 @@
 }
 .timelineBar {
   position: absolute; top: 3px; bottom: 3px; min-width: 0; max-width: 100%; padding: 0 6px;
-  border: 0; border-radius: 6px; background: color-mix(in srgb, #3F6B5C 78%, transparent); color: #fff;
-  font: inherit; font-size: 11px; font-weight: 700; line-height: 22px; text-align: left;
+  border: 0; border-radius: 6px; background: #3F6B5C; color: #fff;
+  font: inherit; font-size: 11px; font-weight: 650; line-height: 22px; text-align: left;
   overflow: hidden; white-space: nowrap; cursor: pointer; z-index: 1;
   box-sizing: border-box;
 }
 .timelineBar[data-clip-start] { border-top-left-radius: 0; border-bottom-left-radius: 0; }
 .timelineBar[data-clip-end] { border-top-right-radius: 0; border-bottom-right-radius: 0; }
-.timelineBar[data-tone='request'] { background: color-mix(in srgb, #6B7C8A 72%, transparent); }
-.timelineBar[data-tone='confirmed'] { background: color-mix(in srgb, #3F6B5C 82%, transparent); }
-.timelineBar[data-tone='issued'] { background: color-mix(in srgb, #246B45 84%, transparent); }
+.timelineBar[data-tone='request'] {
+  background: color-mix(in srgb, #6B7C8A 14%, #fff);
+  color: #4A5560;
+  border: 1.5px dashed #8A96A3;
+  line-height: 19px;
+}
+.timelineBar[data-tone='confirmed'] {
+  background: color-mix(in srgb, #3F6B5C 18%, #fff);
+  color: #2F5346;
+  border: 1.5px solid #3F6B5C;
+  line-height: 19px;
+}
+.timelineBar[data-tone='issued'] { background: #3F6B5C; color: #fff; border: 0; }
 .timelineBar[data-tone='overdue'],
 .timelineBar[data-kind='overdue-tail'] {
-  z-index: 2;
+  z-index: 2; color: #fff;
   background:
     repeating-linear-gradient(
       -45deg,
-      color-mix(in srgb, #C4623A 88%, transparent) 0 5px,
-      color-mix(in srgb, #C4623A 52%, transparent) 5px 10px
+      color-mix(in srgb, #C4623A 92%, transparent) 0 5px,
+      color-mix(in srgb, #C4623A 55%, transparent) 5px 10px
     );
+  border: 0;
 }
 .timelineBar[data-kind='booking'][data-tone='overdue'] {
-  background: color-mix(in srgb, #C4623A 88%, transparent);
+  background: #C4623A; color: #fff;
 }
 .timelineBar span { display: block; overflow: hidden; text-overflow: clip; }
 .timelineBarExternal {
   position: absolute; top: 3px; bottom: 3px; z-index: 1; pointer-events: none;
-  color: var(--v2-ink, var(--sc-text)); font-size: 11px; font-weight: 700; line-height: 22px;
+  color: var(--v2-muted, #5C6B63); font-size: 11px; font-weight: 550; line-height: 22px;
   white-space: nowrap;
 }
 .catalogFree {
-  color: var(--v2-accent, #3F6B5C); font-size: 12px; font-weight: 700; line-height: 1.3;
+  color: var(--v2-muted, #5C6B63); font-size: 12px; font-weight: 600; line-height: 1.3;
 }
-.catalogFree[data-busy] { color: #C4623A; }
 .utilBar {
   display: block; height: 8px; border-radius: 99px;
   background: color-mix(in srgb, var(--v2-ink, var(--sc-text)) 10%, transparent); overflow: hidden;
@@ -1531,25 +1554,73 @@
   background: var(--v2-primary, var(--sc-accent)); color: var(--v2-on-primary, var(--sc-on-accent));
   font: inherit; font-size: 14px; font-weight: 650; cursor: pointer;
 }
+/* Phone frame sets data-phone on the prokat root — more reliable than container width. */
+.root[data-phone] :global([class*='headerBlock']),
+.root[data-phone] :global([class*='pageHeader']) {
+  padding-block: 10px 6px;
+}
+.root[data-phone] :global([class*='pageTitle']),
+.root[data-phone] :global(h1) {
+  font-size: 1.35rem; line-height: 1.2;
+}
+.root[data-phone] .timelineToolbar {
+  flex-wrap: nowrap; align-items: center; gap: 6px; padding: 4px 12px 0;
+}
+.root[data-phone] .timelineToolbar[data-search-open] { flex-wrap: wrap; }
+.root[data-phone] .timelineRange { flex: none; }
+.root[data-phone] .timelineRange button { min-height: 30px; padding: 4px 8px; font-size: 12px; }
+.root[data-phone] .timelineRangeFull { display: none; }
+.root[data-phone] .timelineRangeShort { display: inline; }
+.root[data-phone] .timelineNav { gap: 2px; flex: none; }
+.root[data-phone] .timelineNavBtn { width: 30px; height: 30px; font-size: 16px; }
+.root[data-phone] .timelineTodayBtn {
+  min-height: auto; padding: 0 4px; border: 0; border-radius: 0;
+  background: transparent; color: #C4623A; font-size: 12px; font-weight: 650;
+  text-decoration: underline; text-underline-offset: 2px;
+}
+.root[data-phone] .timelineSearch { flex: none; max-width: none; }
+.root[data-phone] .timelineToolbar[data-search-open] .timelineSearch { flex: 1 1 100%; order: 5; }
+.root[data-phone] .timelineSearchToggle { width: 30px; height: 30px; }
+.root[data-phone] .timelineLegend {
+  flex-wrap: nowrap; gap: 8px 10px; padding: 4px 12px 0;
+  font-size: 11px; overflow-x: auto; -webkit-overflow-scrolling: touch;
+}
+.root[data-phone] .timelineLegend i[data-sample] { width: 14px; height: 8px; }
+.root[data-phone] .timelineBoard {
+  --prokat-label-w: 7rem; /* ~112px */
+  padding: 0 12px 16px 0; overflow-x: auto; -webkit-overflow-scrolling: touch;
+}
+.root[data-phone] .timelineScale { min-width: max(28rem, 100%); }
+.root[data-phone] .timelineHead { padding-top: 12px; gap: 8px; }
+.root[data-phone] .timelineHead > .quiet,
+.root[data-phone] .timelineLabel {
+  position: sticky; left: 0; z-index: 5;
+  padding-inline: 10px 4px;
+  box-shadow: 4px 0 8px color-mix(in srgb, #122018 6%, transparent);
+}
+.root[data-phone] .timelineLabel strong {
+  font-size: 13px; line-height: 1.25;
+  display: block; max-height: 2.5em; /* 2 lines */
+  overflow: hidden; white-space: normal;
+}
+.root[data-phone] .timelineLabel span { font-size: 10px; }
+.root[data-phone] .timelineRow { gap: 8px; min-height: 36px; }
+.root[data-phone] .timelineGroupHead {
+  position: sticky; left: 0; z-index: 4;
+  width: 100cqw; max-width: 100%;
+  padding: 6px 10px; font-size: 11px; box-sizing: border-box;
+}
+.root[data-phone] .timelineGroupLead strong { font-size: 13px; }
+.root[data-phone] .timelineGroupCount {
+  overflow: hidden; text-overflow: ellipsis; max-width: 11rem;
+}
+.root[data-phone] .timelineTodayLine {
+  left: calc(var(--prokat-label-w) + 8px + (100% - var(--prokat-label-w) - 8px) * var(--prokat-today-pct, -1) / 100);
+}
+.root[data-phone] .timelineTodayWash { display: none; }
+.root[data-phone] .timelineToolbar + .timelineLegend { margin-top: 0; }
+
 @container builder-app (max-width: 799px) {
-  .timelineToolbar { padding-inline: 16px; gap: 8px; }
-  .timelineLegend { padding-inline: 16px; }
-  .timelineSearch { max-width: none; flex-basis: 100%; }
-  .timelineBoard {
-    --prokat-label-w: 7.5rem;
-    padding-inline: 0 16px; overflow-x: auto; -webkit-overflow-scrolling: touch;
-  }
-  .timelineScale { min-width: max(36rem, 100%); }
-  .timelineHead > .quiet, .timelineLabel {
-    position: sticky; left: 0; z-index: 5;
-    padding-inline: 16px 8px;
-    box-shadow: 4px 0 8px color-mix(in srgb, #122018 6%, transparent);
-  }
-  .timelineTodayLine {
-    left: calc(var(--prokat-label-w) + 16px + 8px + (100% - var(--prokat-label-w) - 24px) * var(--prokat-today-pct, -1) / 100);
-  }
-  /* Phone: line only — column wash reads as pink booking cells in each row. */
-  .timelineTodayWash { display: none; }
   .catalogGrid { padding-inline: 16px; grid-template-columns: 1fr; }
   .kpiRow { grid-template-columns: 1fr; }
   .dashStack { padding-inline: 16px; }
@@ -1561,4 +1632,8 @@
   .lateFeeFields { grid-template-columns: 1fr; }
   .lateFeeSpacer { display: none; }
   .quietHint { margin-top: 8px; }
+  /* Narrow desktop / preview without data-phone */
+  .timelineBoard { --prokat-label-w: 7rem; padding-inline: 0 16px; overflow-x: auto; }
+  .timelineScale { min-width: max(28rem, 100%); }
+  .timelineTodayWash { display: none; }
 }

@@ -8,12 +8,12 @@ import type { ConversationPage } from '@/lib/conversation-types'
 import { BuilderV2AttachmentInput } from './attachment-input'
 import {
   PROKAT_BOOKING_VIEWS, PROKAT_CLIENT_STEPS, PROKAT_LATE_FEE_MODES, PROKAT_TIMELINE_RANGES, PROKAT_ZONE,
-  buildTimelineWindow, catalogItemFreeLabel, clientCanRequestCancel, clientInitials,
+  buildTimelineWindow, catalogItemFreeLabel, clientCanRequestCancel,
   computeItemLateFee, catalogItemBusyUntil, computeRentalPrice, describeLateFee,
   filterBookings, formatMoney, formatMoneyOrZero, formatProkatDate, formatProkatDateTime,
   isOpenBooking, isOverdueReturn, itemLateFeeConfig, prokatClientStepIndex, prokatDashboard,
-  prokatWallInstant, shiftTimelineStart, staffTransitions, timelineBarLabel,
-  timelineBookingSegments, timelineStartForToday, type ProkatBookingViewId,
+  prokatWallInstant, shiftTimelineStart, staffTransitions, timelineBarCaptionPlacement,
+  timelineBarLabel, timelineBookingSegments, timelineStartForToday, type ProkatBookingViewId,
   type ProkatCatalogItem, type ProkatListItem, type ProkatLateFeeMode, type ProkatTimelineRangeId,
   type TimelineBarSegment,
 } from '@/lib/prokat-logic'
@@ -746,32 +746,46 @@ function BookingRows(props: {
   onStatus?: (id: string, status: string) => void
   keepCards?: boolean
   clientFacing?: boolean
+  /** Item card history: client + number + badge + dates (no repeated item title). */
+  itemScoped?: boolean
   catalog?: readonly ProkatCatalogItem[]
 }) {
   if (!props.items.length) return <div className={css.empty}><p>Броней в этом списке нет.</p></div>
   return <>
     <ul className={css.cards} data-ticket-cards data-keep-cards={props.keepCards || undefined}>{props.items.map(item => {
       const overdue = isOverdueReturn(item.status, item.to, props.now)
-      return <li key={item.id} className={css.ticketCard} data-ticket-card data-client={props.clientFacing || undefined}>
+      return <li key={item.id} className={css.ticketCard} data-ticket-card data-client={props.clientFacing || undefined} data-item-scoped={props.itemScoped || undefined}>
         <button type="button" className={css.card} onClick={() => props.onOpen(item.id)}>
-          <span className={css.ticketCardTop}>
-            <span className={`${css.subject} ${css.deviceWrap}`}>{item.title || 'Без названия'}</span>
+          {props.itemScoped ? <>
+            <span className={css.ticketCardTop}>
+              <span className={`${css.subject} ${css.deviceWrap}`}>{item.clientName || 'Без клиента'}</span>
+            </span>
+            {item.number ? <span className={css.number}>{item.number}</span> : null}
+            <span className={css.cardFacts}>
+              <StatusBadge name={item.status} />
+              <span className={css.quiet}>{formatProkatDateTime(item.from)} — {formatProkatDateTime(item.to)}</span>
+            </span>
+            {overdue && item.status !== 'Просрочен возврат' ? <span className={css.lateLine}>Просрочен возврат</span> : null}
+          </> : <>
+            <span className={css.ticketCardTop}>
+              <span className={`${css.subject} ${css.deviceWrap}`}>{item.title || 'Без названия'}</span>
+              {props.clientFacing
+                ? <span className={css.cardCost}>{item.price > 0 ? formatMoney(item.price) : '—'}</span>
+                : null}
+            </span>
+            {item.number ? <span className={css.number}>{item.number}</span> : null}
+            <span className={css.cardFacts}>
+              <StatusBadge name={item.status} />
+              <span className={css.quiet}>{formatProkatDateTime(item.from)} — {formatProkatDateTime(item.to)}</span>
+            </span>
+            {overdue && item.status !== 'Просрочен возврат' ? <span className={css.lateLine}>Просрочен возврат</span> : null}
             {props.clientFacing
-              ? <span className={css.cardCost}>{item.price > 0 ? formatMoney(item.price) : '—'}</span>
-              : null}
-          </span>
-          {item.number ? <span className={css.number}>{item.number}</span> : null}
-          <span className={css.cardFacts}>
-            <StatusBadge name={item.status} />
-            <span className={css.quiet}>{formatProkatDateTime(item.from)} → {formatProkatDateTime(item.to)}</span>
-          </span>
-          {overdue && item.status !== 'Просрочен возврат' ? <span className={css.lateLine}>Просрочен возврат</span> : null}
-          {props.clientFacing
-            ? null
-            : <span className={css.ticketCardLine}>
-                <span className={css.quiet}>{item.clientName || 'Без клиента'}</span>
-                {item.itemNames.length ? <><span className={css.quiet}>·</span><span className={css.quiet}>{item.itemNames.join(', ')}</span></> : null}
-              </span>}
+              ? null
+              : <span className={css.ticketCardLine}>
+                  <span className={css.quiet}>{item.clientName || 'Без клиента'}</span>
+                  {item.itemNames.length ? <><span className={css.quiet}>·</span><span className={css.quiet}>{item.itemNames.join(', ')}</span></> : null}
+                </span>}
+          </>}
         </button>
         {props.desk && props.onStatus ? <div className={css.ticketCardMenu}><StatusMenu status={item.status} onPick={next => props.onStatus?.(item.id, next)} /></div> : null}
       </li>
@@ -1379,7 +1393,7 @@ function ItemDetail(props: ScreenProps) {
       </DetailSection> : null}
       {message ? <p role="status">{message}</p> : null}
       {desk ? <DetailSection title="Брони предмета">
-        <BookingRows items={history} now={props.now} onOpen={id => props.onNavigate?.(props.kit.bookingScreenId, id)} keepCards />
+        <BookingRows items={history} now={props.now} onOpen={id => props.onNavigate?.(props.kit.bookingScreenId, id)} keepCards itemScoped />
       </DetailSection> : null}
     </DetailCardShell>
   </div>
@@ -1408,6 +1422,8 @@ function TimelineBar(props: {
   segment: TimelineBarSegment
   label: string
   externalLabel?: string
+  /** % where outside caption starts (after bar + overdue tail). */
+  externalAt?: number
   tip: string
   onOpen: () => void
 }) {
@@ -1428,6 +1444,7 @@ function TimelineBar(props: {
     })
   }, [tip])
   const { segment } = props
+  const externalAt = props.externalAt ?? (segment.left + segment.width)
   return <>
     <button
       ref={buttonRef}
@@ -1453,7 +1470,7 @@ function TimelineBar(props: {
     {props.externalLabel ? (
       <span
         className={css.timelineBarExternal}
-        style={{ left: `calc(${segment.left + segment.width}% + 6px)` }}
+        style={{ left: `calc(${externalAt}% + 6px)` }}
         aria-hidden="true"
       >{props.externalLabel}</span>
     ) : null}
@@ -1477,9 +1494,12 @@ function TimelineBar(props: {
 
 function TimelineScreen(props: ScreenProps) {
   const desk = isProkatDesk(props.actor)
-  const [mode, setMode] = useState<ProkatTimelineRangeId>('fortnight')
-  const [startDate, setStartDate] = useState(() => timelineStartForToday('fortnight', props.now))
+  const phone = useContext(AppFrameDeviceContext) === 'phone'
+  const initialMode: ProkatTimelineRangeId = phone ? 'week' : 'fortnight'
+  const [mode, setMode] = useState<ProkatTimelineRangeId>(initialMode)
+  const [startDate, setStartDate] = useState(() => timelineStartForToday(initialMode, props.now))
   const [search, setSearch] = useState('')
+  const [searchOpen, setSearchOpen] = useState(false)
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const [create, setCreate] = useState<{ itemId: string; date: string } | null>(null)
   const board = buildTimelineWindow({ mode, startDate, now: props.now })
@@ -1529,6 +1549,43 @@ function TimelineScreen(props: ScreenProps) {
     const bars = bookings.filter(booking =>
       booking.itemIds.includes(item.id)
       && ['Заявка', 'Подтверждена', 'Выдано', 'Просрочен возврат'].includes(booking.status))
+    type Laid = {
+      booking: typeof bars[number]
+      segment: TimelineBarSegment | null
+      overdueTail: TimelineBarSegment | null
+      tip: string
+      short: string
+      left: number
+      occupiedRight: number
+    }
+    const laid: Laid[] = bars.map(booking => {
+      const overdue = isOverdueReturn(booking.status, booking.to, props.now)
+      const { booking: segment, overdueTail } = timelineBookingSegments({
+        from: booking.from,
+        to: booking.to,
+        status: booking.status,
+        now: props.now,
+        rangeStart: board.rangeStart,
+        rangeEnd: board.rangeEnd,
+      })
+      const left = segment?.left ?? overdueTail?.left ?? 100
+      const occupiedRight = overdueTail
+        ? overdueTail.left + overdueTail.width
+        : segment
+          ? segment.left + segment.width
+          : left
+      return {
+        booking,
+        segment,
+        overdueTail,
+        tip: timelineTipText(booking, overdue),
+        short: timelineBarLabel(booking.number, booking.clientName),
+        left,
+        occupiedRight,
+      }
+    }).filter(entry => entry.segment || entry.overdueTail)
+      .sort((a, b) => a.left - b.left || a.booking.id.localeCompare(b.booking.id))
+
     return <div key={item.id} className={css.timelineRow}>
       <button type="button" className={css.timelineLabel} onClick={() => props.onNavigate?.(props.kit.itemScreenId, item.id)}>
         <strong>{item.name}</strong>
@@ -1544,44 +1601,38 @@ function TimelineScreen(props: ScreenProps) {
           setCreate({ itemId: item.id, date: civilDateForClick(event.clientX, event.currentTarget) })
         }}
       >
-        {bars.map(booking => {
-          const overdue = isOverdueReturn(booking.status, booking.to, props.now)
-          const { booking: segment, overdueTail } = timelineBookingSegments({
-            from: booking.from,
-            to: booking.to,
-            status: booking.status,
-            now: props.now,
-            rangeStart: board.rangeStart,
-            rangeEnd: board.rangeEnd,
-          })
-          const tip = timelineTipText(booking, overdue)
-          const short = timelineBarLabel(booking.number, booking.clientName)
-          const initials = clientInitials(booking.clientName)
-          const open = () => props.onNavigate?.(props.kit.bookingScreenId, booking.id)
+        {laid.map((entry, index) => {
+          const nextLeft = laid[index + 1]?.left ?? 100
+          const open = () => props.onNavigate?.(props.kit.bookingScreenId, entry.booking.id)
           const nodes: ReactNode[] = []
-          if (segment) {
-            // ~1.6% of the track ≈ one character at fortnight zoom (phone columns are tighter).
-            const fits = short.length * 1.6 <= segment.width - 2
-            const label = fits ? short : segment.width >= 4 ? initials : ''
-            const external = !fits && segment.left + segment.width < 92 ? short : undefined
+          if (entry.segment) {
+            const caption = timelineBarCaptionPlacement({
+              label: entry.short,
+              barLeft: entry.segment.left,
+              barWidth: entry.segment.width,
+              occupiedRight: entry.occupiedRight,
+              nextLeft,
+              charPct: mode === 'day' ? 1.1 : mode === 'month' ? 1.8 : 1.35,
+            })
             nodes.push(
               <TimelineBar
-                key={`${booking.id}-bar`}
-                segment={segment}
-                label={label}
-                externalLabel={external}
-                tip={tip}
+                key={`${entry.booking.id}-bar`}
+                segment={entry.segment}
+                label={caption.inside}
+                externalLabel={caption.outside ?? undefined}
+                externalAt={entry.occupiedRight}
+                tip={entry.tip}
                 onOpen={open}
               />,
             )
           }
-          if (overdueTail) {
+          if (entry.overdueTail) {
             nodes.push(
               <TimelineBar
-                key={`${booking.id}-tail`}
-                segment={overdueTail}
+                key={`${entry.booking.id}-tail`}
+                segment={entry.overdueTail}
                 label=""
-                tip={tip}
+                tip={entry.tip}
                 onOpen={open}
               />,
             )
@@ -1591,17 +1642,21 @@ function TimelineScreen(props: ScreenProps) {
       </div>
     </div>
   }
-  return <div className={css.root} data-prokat-root data-prokat-screen="timeline">
-    <ListScreenShell title="Занятость" meta="Полоса — срок аренды. Клик по пустой ячейке — новая бронь.">
-      <div className={css.timelineToolbar}>
+  return <div className={css.root} data-prokat-root data-prokat-screen="timeline" data-phone={phone || undefined}>
+    <ListScreenShell
+      title="Занятость"
+      meta={phone ? undefined : 'Полоса — срок аренды. Клик по пустой ячейке — новая бронь.'}
+    >
+      <div className={css.timelineToolbar} data-search-open={searchOpen || undefined}>
         <div className={css.timelineRange} role="group" aria-label="Диапазон шкалы">
           {PROKAT_TIMELINE_RANGES.map(item => (
             <button
               key={item.id}
               type="button"
               aria-pressed={mode === item.id}
+              aria-label={item.label}
               onClick={() => changeMode(item.id)}
-            >{item.label}</button>
+            ><span className={css.timelineRangeFull}>{item.label}</span><span className={css.timelineRangeShort}>{item.short}</span></button>
           ))}
         </div>
         <div className={css.timelineNav}>
@@ -1610,12 +1665,29 @@ function TimelineScreen(props: ScreenProps) {
           <button type="button" className={css.timelineNavBtn} aria-label="Вперёд" onClick={() => setStartDate(current => shiftTimelineStart(current, mode, 1))}>›</button>
         </div>
         <div className={css.timelineSearch}>
-          <ShellSearchField value={search} onChange={setSearch} placeholder="Предмет" aria-label="Поиск предмета" />
+          {phone && !searchOpen ? (
+            <button
+              type="button"
+              className={css.timelineSearchToggle}
+              aria-label="Поиск предмета"
+              onClick={() => setSearchOpen(true)}
+            ><ProtoIcon name="search" size={16} /></button>
+          ) : (
+            <ShellSearchField
+              value={search}
+              onChange={value => {
+                setSearch(value)
+                if (phone && !value) setSearchOpen(false)
+              }}
+              placeholder="Предмет"
+              aria-label="Поиск предмета"
+            />
+          )}
         </div>
       </div>
       <ul className={css.timelineLegend} aria-label="Статусы броней">
         {TIMELINE_LEGEND.map(item => (
-          <li key={item.tone}><i data-tone={item.tone} aria-hidden="true" /><span>{item.label}</span></li>
+          <li key={item.tone}><i data-tone={item.tone} data-sample aria-hidden="true" /><span>{item.label}</span></li>
         ))}
       </ul>
       <div
@@ -1656,10 +1728,11 @@ function TimelineScreen(props: ScreenProps) {
                 aria-expanded={open}
                 onClick={() => setCollapsed(current => ({ ...current, [category]: !current[category] }))}
               >
-                <span className={css.timelineGroupTitle}>
+                <span className={css.timelineGroupLead}>
+                  <ProtoIcon name={open ? 'up' : 'down'} size={14} />
                   <strong>{category}</strong>
-                  <span>свободно сейчас {free} из {groupItems.length}</span>
                 </span>
+                <span className={css.timelineGroupCount}>свободно сейчас {free} из {groupItems.length}</span>
               </button>
               {open ? groupItems.map(renderItemRow) : null}
             </section>
@@ -1770,7 +1843,7 @@ function CatalogScreen(props: ScreenProps) {
                 <strong>{item.name}</strong>
                 <span className={css.quiet}>{item.tariff} · {formatMoney(item.rate)}</span>
                 <span className={css.quiet}>Залог {formatMoney(item.deposit)}</span>
-                <span className={css.catalogFree} data-busy={freeLabel !== 'Свободен сейчас' || undefined}>{freeLabel}</span>
+                <span className={css.catalogFree}>{freeLabel}</span>
               </span>
             </button>
             {client ? <button type="button" className={css.catalogBook} onClick={() => openRequest(item.id)}>Забронировать</button> : null}

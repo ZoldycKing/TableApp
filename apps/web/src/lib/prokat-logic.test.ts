@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest'
 import { wallClockToInstant } from '@tableapp/schema'
 import {
   computeLateFee, computeItemLateFee, computeRentalPrice, describeLateFee, findItemBookingConflict,
-  buildTimelineWindow, catalogItemFreeLabel, catalogItemBusyUntil, clientInitials,
+  buildTimelineWindow, catalogItemFreeLabel, catalogItemBusyUntil,
   formatMoney, formatMoneyOrZero, formatProkatDateTime, isOverdueReturn,
   itemBusyUntil, nextBookingNumber, prokatDashboard, prokatRangesOverlap, shortClientName,
-  staffTransitions, timelineBarLabel, timelineBookingSegments, timelineSegmentPct,
-  timelineStartForToday, weekendDaysInRange, type ProkatCatalogItem, type ProkatListItem,
+  staffTransitions, timelineBarCaptionPlacement, timelineBarLabel, timelineBookingSegments,
+  timelineSegmentPct, timelineStartForToday, weekendDaysInRange, type ProkatCatalogItem, type ProkatListItem,
 } from './prokat-logic'
 
 const moscow = (year: number, month: number, day: number, hour = 12, minute = 0) =>
@@ -148,7 +148,6 @@ describe('computeLateFee', () => {
       .toMatch(/20%.*тарифа/i)
     expect(shortClientName('Елена Волкова')).toBe('Елена В.')
     expect(timelineBarLabel('ПР-1007', 'Елена Волкова')).toBe('Елена В.')
-    expect(clientInitials('Мария Петрова')).toBe('МП')
     expect(computeItemLateFee({
       category: 'SUP', lateFeeMode: 'Сумма за час', lateFeeValue: 500, lateFeeGraceHours: 1,
       lateFeeCapPerDay: 3500, rate: 3500,
@@ -263,12 +262,28 @@ describe('timeline bar geometry', () => {
     expect(timelineStartForToday('day', now)).toBe('2026-11-25')
   })
 
-  it('labels catalogue free-from dates', () => {
+  it('labels catalogue free-from dates relative to today', () => {
     const spans = [{
       id: 'b1', itemIds: ['bike'], from: moscow(2026, 11, 24, 10), to: moscow(2026, 11, 27, 18), status: 'Выдано',
     }]
     expect(catalogItemFreeLabel({ id: 'free', status: 'Свободен' }, [], now)).toBe('Свободен сейчас')
+    expect(catalogItemFreeLabel({ id: 'today', status: 'В прокате', busyUntil: moscow(2026, 11, 25, 20) }, [], now))
+      .toBe('Свободен сегодня с 20:00')
+    expect(catalogItemFreeLabel({ id: 'tomorrow', status: 'В прокате', busyUntil: moscow(2026, 11, 26, 10) }, [], now))
+      .toBe('Свободен завтра с 10:00')
     expect(catalogItemFreeLabel({ id: 'bike', status: 'В прокате', busyUntil: moscow(2026, 11, 27, 18) }, spans, now))
       .toBe('Свободен с 27.11')
+  })
+
+  it('places bar captions inside, outside, or hidden — never initials', () => {
+    expect(timelineBarCaptionPlacement({
+      label: 'Мария П.', barLeft: 10, barWidth: 20, occupiedRight: 30, nextLeft: 80,
+    })).toEqual({ inside: 'Мария П.', outside: null })
+    expect(timelineBarCaptionPlacement({
+      label: 'Алексей И.', barLeft: 70, barWidth: 4, occupiedRight: 74, nextLeft: 100,
+    })).toEqual({ inside: '', outside: 'Алексей И.' })
+    expect(timelineBarCaptionPlacement({
+      label: 'Дмитрий С.', barLeft: 10, barWidth: 4, occupiedRight: 40, nextLeft: 45,
+    })).toEqual({ inside: '', outside: null })
   })
 })

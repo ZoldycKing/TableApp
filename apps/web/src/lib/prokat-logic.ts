@@ -293,26 +293,41 @@ export function shortClientName(name: string) {
   return initial ? `${parts[0]} ${initial}.` : parts[0]!
 }
 
-/** Initials for a tight timeline bar: «Мария Петрова» → «МП». */
-export function clientInitials(name: string) {
-  const parts = name.trim().split(/\s+/).filter(Boolean)
-  if (!parts.length) return '—'
-  if (parts.length === 1) return ([...parts[0]!][0] ?? '—').toUpperCase()
-  const first = [...parts[0]!][0] ?? ''
-  const last = [...parts[parts.length - 1]!][0] ?? ''
-  return `${first}${last}`.toUpperCase() || '—'
-}
-
 /** Bar caption: client short name only (booking number lives in the tip). */
 export function timelineBarLabel(_number: string, clientName: string) {
   return shortClientName(clientName)
 }
 
+/**
+ * Place the client name inside the bar when it fits; otherwise outside to the right
+ * only if the gap until the next occupied segment is wide enough. Never initials.
+ */
+export function timelineBarCaptionPlacement(input: {
+  label: string
+  barLeft: number
+  barWidth: number
+  /** Right edge of this booking including overdue tail, if any. */
+  occupiedRight: number
+  /** Left edge of the next booking on the same row, or 100. */
+  nextLeft: number
+  /** Approximate % of the track per character at current zoom. */
+  charPct?: number
+}): { inside: string; outside: string | null } {
+  const label = input.label.trim()
+  if (!label) return { inside: '', outside: null }
+  const charPct = input.charPct ?? 1.35
+  const need = label.length * charPct + 1.2
+  if (need <= input.barWidth - 1.2) return { inside: label, outside: null }
+  const gap = Math.max(0, input.nextLeft - input.occupiedRight - 0.8)
+  if (need <= gap) return { inside: '', outside: label }
+  return { inside: '', outside: null }
+}
+
 export const PROKAT_TIMELINE_RANGES = [
-  { id: 'day', label: 'День', days: 1 },
-  { id: 'week', label: 'Неделя', days: 7 },
-  { id: 'fortnight', label: '2 недели', days: 14 },
-  { id: 'month', label: 'Месяц', days: 30 },
+  { id: 'day', label: 'День', short: 'Д', days: 1 },
+  { id: 'week', label: 'Неделя', short: 'Н', days: 7 },
+  { id: 'fortnight', label: '2 недели', short: '2Н', days: 14 },
+  { id: 'month', label: 'Месяц', short: 'М', days: 30 },
 ] as const
 export type ProkatTimelineRangeId = typeof PROKAT_TIMELINE_RANGES[number]['id']
 
@@ -509,7 +524,7 @@ export function timelineStartForToday(mode: ProkatTimelineRangeId, now: number) 
   return addCivilDays(today, -timelineLookbackDays(mode))
 }
 
-/** Public catalogue line: «Свободен сейчас» / «Свободен с 28.11». */
+/** Public catalogue line: «Свободен сейчас» / «Свободен сегодня с 18:00» / «Свободен завтра с 10:00» / «Свободен с 28.11». */
 export function catalogItemFreeLabel(
   item: Pick<ProkatCatalogItem, 'id' | 'status' | 'busyUntil'>,
   spans: readonly ProkatBookingSpan[],
@@ -537,7 +552,10 @@ export function catalogItemFreeLabel(
     return 'Свободен сейчас'
   }
   const wall = instantToWallClock(new Date(busyEnd).toISOString(), PROKAT_ZONE)
-  if (!wall) return 'Свободен сейчас'
+  const today = instantToWallClock(new Date(now).toISOString(), PROKAT_ZONE)
+  if (!wall || !today) return 'Свободен сейчас'
+  if (wall.date === today.date) return `Свободен сегодня с ${wall.time}`
+  if (wall.date === addCivilDays(today.date, 1)) return `Свободен завтра с ${wall.time}`
   const [, month, day] = wall.date.split('-')
   return `Свободен с ${day}.${month}`
 }

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { wallClockToInstant } from '@tableapp/schema'
 import {
-  computeLateFee, computeRentalPrice, findItemBookingConflict, formatMoney, formatProkatDateTime,
-  isOverdueReturn, nextBookingNumber, prokatDashboard, prokatRangesOverlap, staffTransitions,
-  weekendDaysInRange, type ProkatCatalogItem, type ProkatListItem,
+  computeLateFee, computeRentalPrice, findItemBookingConflict, formatMoney, formatMoneyOrZero,
+  formatProkatDateTime, isOverdueReturn, itemBusyUntil, nextBookingNumber, prokatDashboard,
+  prokatRangesOverlap, staffTransitions, weekendDaysInRange, type ProkatCatalogItem, type ProkatListItem,
 } from './prokat-logic'
 
 const moscow = (year: number, month: number, day: number, hour = 12, minute = 0) =>
@@ -51,6 +51,11 @@ describe('findItemBookingConflict', () => {
   it('detects multi-item conflicts', () => {
     const hit = findItemBookingConflict(existing, ['bike-mtb', 'bike-city'], moscow(2026, 11, 24, 11), moscow(2026, 11, 24, 13))
     expect(hit?.itemId).toBe('bike-city')
+  })
+
+  it('itemBusyUntil returns conflicting booking end', () => {
+    expect(itemBusyUntil(existing, 'bike-city', moscow(2026, 11, 24, 15), moscow(2026, 11, 24, 18))).toBe(existing[0]!.to)
+    expect(itemBusyUntil(existing, 'bike-mtb', moscow(2026, 11, 24, 15), moscow(2026, 11, 24, 18))).toBeNull()
   })
 })
 
@@ -147,6 +152,9 @@ describe('isOverdueReturn and dashboard', () => {
     expect(dash.utilisation).toBe(100)
     expect(dash.returnsDueToday).toBe(1)
     expect(formatMoney(3500)).toMatch(/3.?500/)
+    expect(formatMoney(0)).toBe('—')
+    expect(formatMoneyOrZero(0)).toMatch(/0/)
+    expect(formatMoneyOrZero(1500)).toMatch(/1.?500/)
     expect(formatProkatDateTime(moscow(2026, 11, 24, 12))).toBe('24.11.2026, 12:00')
     expect(nextBookingNumber(['ПР-1008', 'черновик'])).toBe('ПР-1009')
     expect(staffTransitions('Заявка')).toEqual(['Подтверждена', 'Отменена'])

@@ -103,13 +103,19 @@ describe.skipIf(!process.env.DATABASE_URL)('prokat runtime visual setup', () => 
     const issued = byNumber('ПР-1005')
     const overdue = byNumber('ПР-1003')
     const clientOwned = byNumber('ПР-1006') ?? byNumber('ПР-1005')
+    const petrovaReturned = byNumber('ПР-1009')
     expect(issued).toBeTruthy()
     expect(overdue).toBeTruthy()
     expect(clientOwned).toBeTruthy()
+    expect(petrovaReturned).toBeTruthy()
     if (!issued || !overdue || !clientOwned) return
 
     const issueCondition = String((issued.data as Record<string, unknown>)[prokat.booking.issueCondition] ?? '')
     expect(issueCondition.length).toBeGreaterThan(10)
+    const overdueLate = Number((overdue.data as Record<string, unknown>)[prokat.booking.lateFee] ?? 0)
+    expect(overdueLate).toBeGreaterThan(0)
+    expect(String((petrovaReturned!.data as Record<string, unknown>)[prokat.booking.clientEmail] ?? '')).toBe(clientEmail)
+    expect(String((petrovaReturned!.data as Record<string, unknown>)[prokat.booking.status] ?? '')).toBe(prokat.statuses.returned)
 
     await database.db.insert(database.businessCustomers).values({
       id: newId('businessCustomer'), workspaceId, email: clientEmail, name: 'Мария Петрова',
@@ -244,6 +250,7 @@ describe.skipIf(!process.env.DATABASE_URL)('prokat runtime visual setup', () => 
       urls: {
         staffBookings: `${base}/a/${installed.appSlug}?screen=${prokat.bookingsScreenId}`,
         staffBooking: `${base}/a/${installed.appSlug}?screen=${prokat.bookingScreenId}&row=${issued.id}`,
+        staffOverdueBooking: `${base}/a/${installed.appSlug}?screen=${prokat.bookingScreenId}&row=${overdue.id}`,
         staffTimeline: `${base}/a/${installed.appSlug}?screen=${prokat.timelineScreenId}`,
         staffDashboard: `${base}/a/${installed.appSlug}?screen=${prokat.dashboardScreenId}`,
         clientCatalog: `${base}/a/${installed.appSlug}?screen=${prokat.catalogScreenId}`,

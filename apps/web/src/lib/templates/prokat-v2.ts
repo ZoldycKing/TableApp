@@ -295,7 +295,7 @@ export function buildProkatV2App(built: BuiltTemplate, meta: { id: string; works
       screen(ids.bookingScreenId, 'Бронь', undefined, 'calendar', desk, bookings.id, [bookingItems, bookingStaff, bookingClients, ids.issueFormId, ids.returnFormId], false),
       screen(ids.itemsScreenId, 'Предметы', 'Предметы', 'box', desk, null, [listItems], true),
       screen(ids.itemScreenId, 'Предмет', undefined, 'box', { kind: 'roles', roleIds: ['owner', 'staff', 'client'] }, items.id, [itemBookings], false),
-      screen(ids.timelineScreenId, 'Лента', 'Лента', 'list', desk, null, [timelineBookings, timelineItems], true),
+      screen(ids.timelineScreenId, 'Занятость', 'Занятость', 'list', desk, null, [timelineBookings, timelineItems], true),
       screen(ids.clientsScreenId, 'Клиенты', 'Клиенты', 'users', desk, null, [listClients], true),
       screen(ids.clientScreenId, 'Клиент', undefined, 'users', desk, clients.id, [clientBookings], false),
       screen(ids.catalogScreenId, 'Каталог', 'Каталог', 'tag', { kind: 'roles', roleIds: ['owner', 'staff', 'client'] }, null, [catalogItems, ids.clientRequestFormId], true),

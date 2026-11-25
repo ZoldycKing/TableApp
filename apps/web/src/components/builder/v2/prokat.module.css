@@ -364,13 +364,25 @@
 .tableWrap { display: none; min-width: 0; }
 .table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .deviceCol { width: 28%; }
-.whoCol { width: 9rem; }
-.stateCol { width: 9.5rem; }
-.costCol { width: 5.75rem; }
-.actionsCol { width: 3rem; }
+.composeCol { width: 22%; }
+.whoCol { width: 8.5rem; }
+.stateCol { width: 8.25rem; }
+.costCol { width: 5.5rem; }
+.actionsCol { width: 2.75rem; }
 .priorityCol { width: 6.25rem; }
-.whenCol { width: 7.25rem; }
+.whenCol { width: 7rem; }
 .ownerCol { width: 9.25rem; }
+.bookingsTable th, .bookingsTable td { padding: 10px 10px; }
+.bookingsTable .composeCol { padding-right: 8px; }
+.bookingsTable .rowActions { width: 2.75rem; padding-inline: 4px !important; }
+.lateFeeLine {
+  display: block; margin-top: 2px; color: #C4623A; font-size: 12px; font-weight: 650; line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+}
+.lateFeeBlock { display: grid; gap: 2px; padding: 8px 0; border-top: 1px solid color-mix(in srgb, #C4623A 28%, var(--v2-line, #ccc)); }
+.lateFeeBlock dt { color: #C4623A; font-weight: 700; }
+.lateFeeBlock dd { display: grid; gap: 2px; }
+.lateFeeBlock strong { color: #C4623A; font-variant-numeric: tabular-nums; }
 .table caption { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 .table th, .table td { padding: 13px 16px; border: 0; border-bottom: 1px solid var(--v2-line, var(--sc-border)); text-align: left; vertical-align: top; overflow-wrap: break-word; background: transparent; }
 .table th { padding-top: 8px; color: var(--v2-muted, var(--sc-text-2)); font-size: 12px; font-weight: 650; letter-spacing: 0.01em; }
@@ -1110,22 +1122,28 @@
 /* —— Prokat availability timeline —— */
 .timelineBoard { display: grid; gap: 12px; min-width: 0; padding: 0 20px 20px; }
 .timelineHead {
-  display: grid; grid-template-columns: minmax(8rem, 11rem) minmax(0, 1fr); gap: 12px; align-items: end;
+  display: grid; grid-template-columns: minmax(12rem, 16rem) minmax(0, 1fr); gap: 12px; align-items: end;
   min-width: 0; padding-bottom: 4px; border-bottom: 1px solid var(--v2-line, var(--sc-border));
 }
 .timelineDays {
   display: grid; grid-template-columns: repeat(var(--prokat-days, 14), minmax(0, 1fr)); gap: 0;
   min-width: 0; color: var(--v2-muted, var(--sc-text-2)); font-size: 11px; font-weight: 650; text-align: center;
 }
-.timelineDay { min-width: 0; overflow-wrap: anywhere; padding: 0 2px; }
+.timelineDay { min-width: 0; overflow-wrap: normal; word-break: normal; padding: 0 2px; }
 .timelineDay[data-today] { color: var(--v2-accent, #3F6B5C); font-weight: 780; }
 .timelineRow {
-  display: grid; grid-template-columns: minmax(8rem, 11rem) minmax(0, 1fr); gap: 12px; align-items: center;
+  display: grid; grid-template-columns: minmax(12rem, 16rem) minmax(0, 1fr); gap: 12px; align-items: center;
   min-width: 0; min-height: 44px;
 }
-.timelineLabel { display: grid; gap: 2px; min-width: 0; }
-.timelineLabel strong { font-size: 13px; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
-.timelineLabel span { color: var(--v2-muted, var(--sc-text-2)); font-size: 11px; overflow-wrap: anywhere; }
+.timelineLabel { display: grid; gap: 2px; min-width: 0; text-align: left; }
+.timelineLabel strong {
+  font-size: 13px; font-weight: 700; line-height: 1.3; text-align: left;
+  overflow-wrap: normal; word-break: normal; white-space: normal;
+}
+.timelineLabel span {
+  color: var(--v2-muted, var(--sc-text-2)); font-size: 11px; text-align: left;
+  overflow-wrap: normal; word-break: normal;
+}
 .timelineTrack {
   position: relative; min-width: 0; height: 28px; border-radius: 8px;
   background:
@@ -1137,11 +1155,17 @@
       color-mix(in srgb, var(--v2-ink, var(--sc-text)) 8%, transparent) calc(100% / var(--prokat-days, 14))
     );
 }
+.timelineToday {
+  position: absolute; top: 0; bottom: 0; left: 0; width: calc(100% / var(--prokat-days, 14));
+  border-radius: 8px 0 0 8px;
+  background: color-mix(in srgb, var(--v2-accent, #3F6B5C) 12%, transparent);
+  pointer-events: none;
+}
 .timelineBar {
-  position: absolute; top: 3px; bottom: 3px; min-width: 8px; padding: 0 6px;
+  position: absolute; top: 3px; bottom: 3px; min-width: 4.5rem; padding: 0 6px;
   border: 0; border-radius: 6px; background: color-mix(in srgb, #3F6B5C 72%, transparent); color: #fff;
   font: inherit; font-size: 11px; font-weight: 700; line-height: 22px; text-align: left;
-  overflow: hidden; white-space: nowrap; cursor: pointer;
+  overflow: hidden; white-space: nowrap; cursor: pointer; z-index: 1;
 }
 .timelineBar[data-tone='request'] { background: color-mix(in srgb, #3D5A80 70%, transparent); }
 .timelineBar[data-tone='confirmed'] { background: color-mix(in srgb, #3F6B5C 78%, transparent); }
@@ -1159,17 +1183,32 @@
 }
 .utilRow strong { font-size: 13px; font-weight: 700; overflow-wrap: anywhere; }
 .utilRow span { font-variant-numeric: tabular-nums; font-weight: 750; text-align: right; color: var(--v2-accent, #3F6B5C); }
-.itemCheck {
-  display: flex; align-items: flex-start; gap: 10px; width: 100%; min-width: 0; padding: 10px 12px;
+.itemCheck, .itemPick {
+  display: flex; align-items: center; gap: 10px; width: 100%; min-width: 0; padding: 10px 12px;
   border: 1px solid var(--v2-line, var(--sc-border)); border-radius: 12px; background: transparent;
   color: inherit; font: inherit; text-align: left; cursor: pointer;
 }
-.itemCheck[aria-pressed='true'] {
+.itemCheck[aria-pressed='true'], .itemPick[aria-pressed='true'] {
   border-color: var(--v2-accent, #3F6B5C);
   background: color-mix(in srgb, var(--v2-accent, #3F6B5C) 10%, transparent);
 }
+.itemPick:disabled, .itemCheck:disabled {
+  opacity: 0.72; cursor: not-allowed;
+  background: color-mix(in srgb, var(--v2-ink, var(--sc-text)) 3%, transparent);
+}
+.itemTile {
+  display: inline-grid; place-items: center; width: 40px; height: 40px; flex: none;
+  border-radius: 10px; overflow: hidden;
+  background: color-mix(in srgb, var(--v2-accent, #3F6B5C) 12%, transparent);
+  color: var(--v2-accent, #3F6B5C);
+}
+.itemTile img { width: 100%; height: 100%; object-fit: cover; }
 .itemCheckCopy { display: grid; gap: 2px; min-width: 0; flex: 1; }
 .itemCheckCopy strong { font-size: 14px; font-weight: 700; overflow-wrap: anywhere; }
+.busyUntil { color: #C4623A; font-size: 12px; font-weight: 650; }
+.quietHint { margin: 0; color: var(--v2-muted, var(--sc-text-2)); font-size: 13px; }
+.priceSummary { display: grid; gap: 6px; margin-top: 4px; }
+.priceSummary ul { margin: 0; padding: 0 0 0 1.1rem; color: var(--v2-muted, var(--sc-text-2)); font-size: 13px; }
 .itemGrid { display: grid; gap: 8px; min-width: 0; }
 .moneyRow { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; min-width: 0; }
 .moneyRow strong { font-variant-numeric: tabular-nums; font-weight: 780; color: var(--v2-accent, #3F6B5C); }
@@ -1178,14 +1217,25 @@
   margin: 0; padding: 8px 20px 20px; list-style: none;
 }
 .catalogCard {
-  display: grid; gap: 8px; width: 100%; min-width: 0; padding: 14px 16px; text-align: left;
+  display: grid; gap: 10px; width: 100%; min-width: 0; padding: 14px 16px; text-align: left;
   border: 1px solid var(--v2-line, var(--sc-border)); border-radius: 14px;
-  background: var(--v2-surface, var(--sc-bg-elevated)); color: inherit; font: inherit; cursor: pointer;
+  background: var(--v2-surface, var(--sc-bg-elevated)); color: inherit; font: inherit;
 }
 .catalogCard:hover { border-color: color-mix(in srgb, var(--v2-accent, #3F6B5C) 40%, var(--v2-line)); }
-.catalogCard strong { font-size: 15px; font-weight: 750; overflow-wrap: anywhere; }
+.catalogCardBody {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: start;
+  width: 100%; min-width: 0; padding: 0; border: 0; background: transparent; color: inherit;
+  font: inherit; text-align: left; cursor: pointer;
+}
+.catalogCardCopy { display: grid; gap: 4px; min-width: 0; align-content: start; }
+.catalogCardCopy strong { font-size: 15px; font-weight: 750; overflow-wrap: anywhere; }
+.catalogBook {
+  justify-self: start; min-height: 40px; padding: 8px 14px; border: 0; border-radius: 12px;
+  background: var(--v2-primary, var(--sc-accent)); color: var(--v2-on-primary, var(--sc-on-accent));
+  font: inherit; font-size: 14px; font-weight: 650; cursor: pointer;
+}
 @container builder-app (max-width: 799px) {
   .timelineBoard { padding-inline: 16px; overflow-x: auto; }
-  .timelineHead, .timelineRow { min-width: 36rem; }
+  .timelineHead, .timelineRow { min-width: 40rem; }
   .catalogGrid { padding-inline: 16px; grid-template-columns: 1fr; }
 }

@@ -99,6 +99,15 @@ export function formatMoney(value: number) {
   return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 }).format(value)
 }
 
+/** Like formatMoney, but shows «0 ₽» for zero instead of «—». */
+export function formatMoneyOrZero(value: number) {
+  if (!Number.isFinite(value) || value < 0) return '—'
+  if (value === 0) {
+    return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 }).format(0)
+  }
+  return formatMoney(value)
+}
+
 export function formatProkatDateTime(value: unknown) {
   if (typeof value !== 'string' || !value) return '—'
   const wall = instantToWallClock(value, PROKAT_ZONE)
@@ -242,6 +251,16 @@ export function findItemBookingConflict(
     }
   }
   return null
+}
+
+/** Conflicting booking end instant for an item in [from, to], or null if free. */
+export function itemBusyUntil(
+  spans: readonly ProkatBookingSpan[],
+  itemId: string,
+  from: string | number,
+  to: string | number,
+): string | null {
+  return findItemBookingConflict(spans, [itemId], from, to)?.to ?? null
 }
 
 export type ProkatListItem = {

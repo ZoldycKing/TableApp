@@ -41,7 +41,14 @@ describe('prokat template', () => {
     expect(app.authentication.mode).toBe('verified_email')
     expect(app.authentication.defaultRoleId).toBe('client')
     expect(app.screens.find(screen => screen.id === prokat.bookingsScreenId)?.menuLabel).toBe('Брони')
+    expect(app.screens.find(screen => screen.id === prokat.timelineScreenId)?.menuLabel).toBe('Занятость')
     expect(app.screens.find(screen => screen.id === prokat.clientListScreenId)?.menuLabel).toBe('Кабинет')
+    const returnedPetrova = built.rows.find(row =>
+      row.tableId === prokat.bookingsTableId
+      && row.data[prokat.booking.clientEmail] === 'm.petrova@yandex.ru'
+      && row.data[prokat.booking.number] === 'ПР-1009')
+    expect(returnedPetrova).toBeTruthy()
+    expect(built.rows.filter(row => row.tableId === prokat.bookingsTableId).length).toBeGreaterThanOrEqual(11)
     const themed = configureBuilderV2ScreenAccess({ ...app, theme: { ...app.theme, scheme: 'dark' } }, prokat.bookingsScreenId, 'client', false)
     expect(themed.prokat).toEqual(app.prokat)
     expect(themed.theme.scheme).toBe('dark')

@@ -14,6 +14,7 @@ const fixture = JSON.parse(readFileSync('/tmp/prokat-runtime.json', 'utf8')) as 
   urls: {
     staffBookings: string
     staffBooking: string
+    staffOverdueBooking?: string
     staffTimeline: string
     staffDashboard: string
     clientCatalog: string
@@ -21,6 +22,7 @@ const fixture = JSON.parse(readFileSync('/tmp/prokat-runtime.json', 'utf8')) as 
     clientBooking: string
     templatePicker: string
   }
+  rows?: { overdueBookingId?: string; staffBookingWithActId?: string }
   cookies: { staff: string; client: string; member: string }
 }
 
@@ -155,7 +157,6 @@ const browser = await chromium.launch({
   await waitProkat(page)
   await page.getByRole('button', { name: 'Заявка' }).click()
   await page.getByRole('dialog').waitFor({ timeout: 15000 })
-  await page.getByRole('dialog').locator('button[aria-pressed]').first().click()
   const pickDate = async (label: string, dayText: string) => {
     await page.getByLabel(label).click()
     await page.waitForTimeout(350)
@@ -165,6 +166,7 @@ const browser = await chromium.launch({
   }
   await pickDate('Дата начала', '26')
   await pickDate('Дата окончания', '28')
+  await page.getByRole('dialog').locator('button[aria-pressed]').first().click()
   await page.waitForTimeout(700)
   await page.getByText('Предварительно').scrollIntoViewIfNeeded().catch(() => {})
   await save(page, '06-client-catalog-phone-390.png')
@@ -236,6 +238,72 @@ const browser = await chromium.launch({
   await page.waitForSelector('img[src*="prokat"], [src*="/template-icons/prokat"]', { timeout: 60000 }).catch(() => {})
   await page.waitForTimeout(800)
   await save(page, '09-template-picker-prokat.png')
+  await context.close()
+}
+
+{
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    locale: 'ru-RU',
+    timezoneId: 'Europe/Moscow',
+    deviceScaleFactor: 2,
+  })
+  await context.addCookies(cookieHeader(fixture.cookies.client))
+  const page = await context.newPage()
+  page.setDefaultTimeout(60000)
+  await page.goto(fixture.urls.clientCatalog, { waitUntil: 'networkidle' })
+  await waitProkat(page)
+  await page.getByRole('tab', { name: 'Все' }).waitFor({ timeout: 15000 }).catch(() => {})
+  await page.getByRole('button', { name: 'Забронировать' }).first().waitFor({ timeout: 15000 })
+  await page.waitForTimeout(500)
+  await save(page, '10-client-catalog-tab-phone-390.png')
+  await context.close()
+}
+
+{
+  const context = await browser.newContext({
+    viewport: { width: 1440, height: 900 },
+    locale: 'ru-RU',
+    timezoneId: 'Europe/Moscow',
+    deviceScaleFactor: 1,
+  })
+  await context.addCookies(cookieHeader(fixture.cookies.staff))
+  const page = await context.newPage()
+  page.setDefaultTimeout(60000)
+  const overdueUrl = fixture.urls.staffOverdueBooking
+    || (fixture.rows?.overdueBookingId
+      ? fixture.urls.staffBooking.replace(/row=[^&]+/, `row=${fixture.rows.overdueBookingId}`)
+      : fixture.urls.staffBooking)
+  await page.goto(overdueUrl, { waitUntil: 'networkidle' })
+  await waitProkat(page)
+  await page.getByText('Штраф за просрочку').first().waitFor({ timeout: 15000 }).catch(() => {})
+  await page.waitForTimeout(700)
+  await save(page, '11-staff-overdue-card-desktop-1440.png')
+  await context.close()
+}
+
+{
+  const context = await browser.newContext({
+    viewport: { width: 1440, height: 900 },
+    locale: 'ru-RU',
+    timezoneId: 'Europe/Moscow',
+    deviceScaleFactor: 1,
+  })
+  await context.addCookies(cookieHeader(fixture.cookies.staff))
+  const page = await context.newPage()
+  page.setDefaultTimeout(60000)
+  const overdueUrl = fixture.urls.staffOverdueBooking
+    || (fixture.rows?.overdueBookingId
+      ? fixture.urls.staffBooking.replace(/row=[^&]+/, `row=${fixture.rows.overdueBookingId}`)
+      : fixture.urls.staffBooking)
+  await page.goto(overdueUrl, { waitUntil: 'networkidle' })
+  await waitProkat(page)
+  const returnBtn = page.getByRole('button', { name: /Акт возврата|Принять возврат/ }).first()
+  await returnBtn.click({ timeout: 15000 })
+  await page.getByRole('dialog').waitFor({ timeout: 15000 })
+  await page.getByText('Фото (ссылки или заметки, по строке)').waitFor({ timeout: 10000 }).catch(() => {})
+  await page.waitForTimeout(600)
+  await save(page, '12-staff-return-act-desktop-1440.png')
   await context.close()
 }
 

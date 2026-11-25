@@ -5,11 +5,11 @@ import type { AppV2, AppV2Node, AppV2Record } from '@tableapp/schema/app-v2'
 import { savePublishedProkatAction } from '@/app/prokat-actions'
 import {
   PROKAT_BOOKING_VIEWS, PROKAT_CLIENT_STEPS, PROKAT_ZONE, clientCanRequestCancel, computeLateFee,
-  computeRentalPrice, filterBookings, formatMoney, formatProkatDate, formatProkatDateTime, isOpenBooking,
-  isOverdueReturn, prokatClientStepIndex, prokatDashboard, prokatInstantParts, prokatWallInstant,
+  computeRentalPrice, filterBookings, formatMoney, formatMoneyOrZero, formatProkatDate, formatProkatDateTime,
+  isOpenBooking, isOverdueReturn, itemBusyUntil, prokatClientStepIndex, prokatDashboard, prokatWallInstant,
   staffTransitions, type ProkatBookingViewId, type ProkatCatalogItem, type ProkatListItem,
 } from '@/lib/prokat-logic'
-import { applyProkatChange, isProkatDesk, prokatStatusName, type ProkatChange } from '@/lib/prokat-persist'
+import { applyProkatChange, bookingSpansFromRows, isProkatDesk, prokatStatusName, type ProkatChange } from '@/lib/prokat-persist'
 import { AppFrameDeviceContext } from './app-frame'
 import { AppDialog } from './app-dialog'
 import { DateMenu } from './booking-calendar'
@@ -39,6 +39,36 @@ const textOf = (value: unknown) => Array.isArray(value) ? '' : value == null ? '
 const firstId = (value: unknown) => Array.isArray(value) ? value.find((item): item is string => typeof item === 'string') ?? '' : ''
 const idsOf = (value: unknown) => Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : []
 const numberOf = (value: unknown) => typeof value === 'number' && Number.isFinite(value) ? value : Number(value) || 0
+
+function categoryIcon(category: string) {
+  if (category === 'Инструменты') return 'wrench'
+  if (category === 'Фототехника') return 'image'
+  if (category === 'SUP') return 'box'
+  return 'box'
+}
+
+function ItemTile({ item, size = 40 }: { item: Pick<ProkatCatalogItem, 'photo' | 'category' | 'name'>; size?: number }) {
+  return <span className={css.itemTile} aria-hidden="true">
+    {item.photo
+      ? <img src={item.photo} alt="" width={size} height={size} />
+      : <ProtoIcon name={categoryIcon(item.category)} size={Math.round(size * 0.45)} />}
+  </span>
+}
+
+function photosToJson(raw: string) {
+  const lines = raw.split(/\r?\n/).map(line => line.trim()).filter(Boolean)
+  return JSON.stringify(lines)
+}
+
+function photosFromJson(raw: unknown) {
+  const text = textOf(raw).trim()
+  if (!text) return ''
+  try {
+    const parsed = JSON.parse(text) as unknown
+    if (Array.isArray(parsed)) return parsed.map(item => String(item)).filter(Boolean).join('\n')
+  } catch { /* plain text fallback */ }
+  return text
+}
 
 function TimeMenu({ value, onValue, label }: { value: string; onValue: (value: string) => void; label: string }) {
   const [open, setOpen] = useState(false)
@@ -419,7 +449,7 @@ function DashboardScreen(props: ScreenProps) {
             {stats.revenueByWeek.map(week => {
               const pct = week.value ? Math.max(10, Math.round((week.value / maxWeek) * 100)) : 0
               return <div key={week.label} className={css.revBar}>
-                <strong>{week.value ? formatMoney(week.value) : '—'}</strong>
+                <strong>{formatMoneyOrZero(week.value)}</strong>
                 <div className={css.revChart}><span className={css.revFill} style={{ height: `${pct}%` }} /></div>
                 <span>{week.label}</span>
               </div>
@@ -475,7 +505,14 @@ function BookingList(props: ScreenProps) {
       <div className={css.chips} role="tablist" aria-label="Представления броней">
         {PROKAT_BOOKING_VIEWS.map(item => <button key={item.id} type="button" role="tab" className={css.chip} aria-selected={view === item.id} onClick={() => setView(item.id)}>{item.label} · {counts[item.id]}</button>)}
       </div>
-      <BookingRows items={filtered} now={props.now} onOpen={id => props.onNavigate?.(props.kit.bookingScreenId, id)} desk={desk} onStatus={(id, name) => void runStatus(props, id, statusId(props, name), () => {})} />
+      <BookingRows
+        items={filtered}
+        catalog={catalogItems(props)}
+        now={props.now}
+        onOpen={id => props.onNavigate?.(props.kit.bookingScreenId, id)}
+        desk={desk}
+        onStatus={(id, name) => void runStatus(props, id, statusId(props, name), () => {})}
+      />
     </ListScreenShell>
     {createOpen && desk ? <CreateDialog {...props} onClose={() => setCreateOpen(false)} onDone={() => setCreateOpen(false)} /> : null}
   </div>
@@ -492,12 +529,23 @@ function ClientBookingList(props: ScreenProps) {
         <h3>Открытые · {open.length}</h3>
         <BookingRows items={open} now={props.now} onOpen={id => props.onNavigate?.(props.kit.clientBookingScreenId, id)} clientFacing />
       </div>
-      <div className={css.clientListSection}>
+      {closed.length ? <div className={css.clientListSection}>
         <h3>Завершённые · {closed.length}</h3>
         <BookingRows items={closed} now={props.now} onOpen={id => props.onNavigate?.(props.kit.clientBookingScreenId, id)} clientFacing />
-      </div>
+      </div> : null}
     </ListScreenShell>
   </div>
+}
+
+function bookingLateFeeAmount(item: ProkatListItem, catalog: readonly ProkatCatalogItem[] | undefined, now: number) {
+  if (item.lateFee > 0) return item.lateFee
+  if (!isOverdueReturn(item.status, item.to, now) || !catalog?.length) return 0
+  const byId = new Map(catalog.map(entry => [entry.id, entry]))
+  return item.itemIds.reduce((sum, id) => {
+    const entry = byId.get(id)
+    if (!entry) return sum
+    return sum + computeLateFee({ tariff: entry.tariff, rate: entry.rate, to: item.to, now: new Date(now).toISOString() })
+  }, 0)
 }
 
 function BookingRows(props: {
@@ -508,6 +556,7 @@ function BookingRows(props: {
   onStatus?: (id: string, status: string) => void
   keepCards?: boolean
   clientFacing?: boolean
+  catalog?: readonly ProkatCatalogItem[]
 }) {
   if (!props.items.length) return <div className={css.empty}><p>Броней в этом списке нет.</p></div>
   return <>
@@ -538,23 +587,41 @@ function BookingRows(props: {
       </li>
     })}</ul>
     {!props.keepCards && !props.clientFacing ? <div className={css.tableWrap}>
-      <table className={css.table} data-columns={6}>
+      <table className={`${css.table} ${css.bookingsTable}`} data-columns={8}>
         <caption className={css.quiet}>Список броней</caption>
-        <thead><tr><th>Состав</th><th>Клиент</th><th>Статус</th><th>Период</th><th>Сумма</th><th><span className={css.srOnly}>Действия</span></th></tr></thead>
+        <thead><tr>
+          <th className={css.composeCol}>Состав</th>
+          <th className={css.whoCol}>Клиент</th>
+          <th className={css.stateCol}>Статус</th>
+          <th className={css.whenCol}>Период</th>
+          <th className={css.costCol}>Сумма</th>
+          <th className={css.costCol}>Залог</th>
+          <th className={css.whenCol}>Возврат до</th>
+          <th className={css.actionsCol}><span className={css.srOnly}>Действия</span></th>
+        </tr></thead>
         <tbody>
-          {props.items.map(item => (
-            <tr key={item.id}>
-              <td><button type="button" className={css.rowButton} onClick={() => props.onOpen(item.id)}>
-                <span className={`${css.subject} ${css.deviceWrap}`}>{item.title || 'Без названия'}</span>
-                {item.number ? <span className={css.number}>{item.number}</span> : null}
-              </button></td>
-              <td><span className={css.person}>{item.clientName || 'Без клиента'}</span></td>
-              <td><StatusBadge name={item.status} /></td>
-              <td><span className={css.quiet}>{formatProkatDate(item.from)} — {formatProkatDate(item.to)}</span></td>
-              <td>{item.price > 0 ? formatMoney(item.price) : '—'}</td>
-              <td className={css.rowActions}>{props.desk && props.onStatus ? <StatusMenu status={item.status} onPick={next => props.onStatus?.(item.id, next)} /> : null}</td>
-            </tr>
-          ))}
+          {props.items.map(item => {
+            const overdue = isOverdueReturn(item.status, item.to, props.now)
+            const lateFee = bookingLateFeeAmount(item, props.catalog, props.now)
+            return (
+              <tr key={item.id}>
+                <td className={css.composeCol}><button type="button" className={css.rowButton} onClick={() => props.onOpen(item.id)}>
+                  <span className={`${css.subject} ${css.deviceWrap}`}>{item.title || 'Без названия'}</span>
+                  {item.number ? <span className={css.number}>{item.number}</span> : null}
+                </button></td>
+                <td><span className={css.person}>{item.clientName || 'Без клиента'}</span></td>
+                <td><StatusBadge name={item.status} /></td>
+                <td><span className={css.quiet}>{formatProkatDate(item.from)} — {formatProkatDate(item.to)}</span></td>
+                <td>
+                  <span>{item.price > 0 ? formatMoney(item.price) : '—'}</span>
+                  {overdue && lateFee > 0 ? <span className={css.lateFeeLine}>+{lateFee.toLocaleString('ru-RU')} ₽ пеня</span> : null}
+                </td>
+                <td>{item.deposit > 0 ? formatMoney(item.deposit) : '—'}</td>
+                <td><span className={css.quiet}>{formatProkatDateTime(item.to)}</span></td>
+                <td className={css.rowActions}>{props.desk && props.onStatus ? <StatusMenu status={item.status} onPick={next => props.onStatus?.(item.id, next)} /> : null}</td>
+              </tr>
+            )
+          })}
         </tbody>
       </table>
     </div> : null}
@@ -580,7 +647,23 @@ function BookingCard(props: ScreenProps) {
   const to = textOf(booking.values[fields.to])
   const price = numberOf(booking.values[fields.price])
   const deposit = numberOf(booking.values[fields.deposit])
-  const lateFee = numberOf(booking.values[fields.lateFee])
+  const storedLateFee = numberOf(booking.values[fields.lateFee])
+  const depositReturned = numberOf(booking.values[fields.depositReturned])
+  const depositWithheld = numberOf(booking.values[fields.depositWithheld])
+  const depositReason = textOf(booking.values[fields.depositReason])
+  const overdue = isOverdueReturn(status, to, props.now)
+  const computedLate = items.reduce((sum, item) => sum + computeLateFee({
+    tariff: item.tariff, rate: item.rate, to, now: new Date(props.now).toISOString(),
+  }), 0)
+  const lateFee = storedLateFee > 0 ? storedLateFee : (overdue ? computedLate : 0)
+  const lateDays = (() => {
+    const toMs = Date.parse(to)
+    if (!Number.isFinite(toMs) || props.now <= toMs) return 0
+    return Math.max(1, Math.ceil((props.now - toMs) / 86_400_000))
+  })()
+  const lateRateHint = items.length === 1
+    ? `${lateDays} ${items[0]!.tariff === 'За час' ? 'ч' : 'сут.'} × ${formatMoney(items[0]!.rate)}`
+    : lateDays > 0 ? `${lateDays} сут. просрочки` : ''
   const transitions = desk ? staffTransitions(status) : []
   const back = clientView ? props.kit.clientListScreenId : props.kit.bookingsScreenId
   const canCancel = clientView && clientCanRequestCancel(status)
@@ -676,7 +759,20 @@ function BookingCard(props: ScreenProps) {
               <div><dt>По</dt><dd>{formatProkatDateTime(to)}</dd></div>
               <div><dt>Стоимость</dt><dd>{formatMoney(price)}</dd></div>
               <div><dt>Залог</dt><dd>{formatMoney(deposit)}</dd></div>
-              {lateFee > 0 ? <div><dt>Штраф</dt><dd>{formatMoney(lateFee)}</dd></div> : null}
+              {(overdue || lateFee > 0) ? <div className={css.lateFeeBlock}>
+                <dt>Штраф за просрочку</dt>
+                <dd>
+                  <strong>{formatMoney(lateFee || computedLate)}</strong>
+                  {lateRateHint ? <span className={css.quiet}>{lateRateHint}</span> : <span className={css.quiet}>Дни просрочки × ставка тарифа</span>}
+                </dd>
+              </div> : null}
+              {(depositWithheld > 0 || textOf(booking.values[fields.returnAt]) || overdue) ? <>
+                {textOf(booking.values[fields.returnAt]) || depositWithheld > 0 || depositReturned > 0 ? <>
+                  <div><dt>Залог возвращён</dt><dd>{depositReturned > 0 || textOf(booking.values[fields.returnAt]) ? formatMoneyOrZero(depositReturned) : '—'}</dd></div>
+                  <div><dt>Залог удержан</dt><dd>{depositWithheld > 0 ? formatMoney(depositWithheld) : (textOf(booking.values[fields.returnAt]) ? formatMoneyOrZero(0) : 'при возврате')}</dd></div>
+                </> : overdue ? <div><dt>Залог</dt><dd className={css.quiet}>Удержание уточняется при возврате</dd></div> : null}
+                {depositReason ? <div><dt>Причина удержания</dt><dd>{depositReason}</dd></div> : null}
+              </> : null}
               <div><dt>Обновлено</dt><dd>{formatProkatDateTime(booking.values[fields.updatedAt])}</dd></div>
             </dl>
             {message ? <p role="status">{message}</p> : null}
@@ -723,12 +819,14 @@ function CreateDialog(props: ScreenProps & { onClose: () => void; onDone: () => 
   return <AppDialog title="Новая бронь" placement="center" onClose={props.onClose} footer={<button type="submit" form={formId} className={css.primary} disabled={busy}>{busy ? 'Сохраняем…' : 'Создать бронь'}</button>}>
     <form id={formId} onSubmit={event => { event.preventDefault(); void save() }}>
       <ProkatSelect field label="Клиент" value={clientId} options={clients.map(row => ({ id: row.id, name: textOf(row.values[props.kit.client.name]) || 'Без имени' }))} onChange={setClientId} />
-      <fieldset className={css.field}><legend>Предметы</legend><div className={css.itemGrid}>{items.map(item => (
-        <button key={item.id} type="button" className={css.itemCheck} aria-pressed={itemIds.includes(item.id)} onClick={() => toggle(item.id)}>
-          <span className={css.checkMark} data-on={itemIds.includes(item.id) || undefined}>{itemIds.includes(item.id) ? <ProtoIcon name="check" size={12} /> : null}</span>
+      <fieldset className={css.field}><legend>Предметы</legend><div className={css.itemGrid}>{items.map(item => {
+        const selected = itemIds.includes(item.id)
+        return <button key={item.id} type="button" className={css.itemPick} aria-pressed={selected} onClick={() => toggle(item.id)}>
+          <ItemTile item={item} />
           <span className={css.itemCheckCopy}><strong>{item.name}</strong><span className={css.quiet}>{item.category} · {formatMoney(item.rate)} / {item.tariff.toLowerCase()}</span></span>
+          <span className={css.checkMark} data-on={selected || undefined}>{selected ? <ProtoIcon name="check" size={12} /> : null}</span>
         </button>
-      ))}</div></fieldset>
+      })}</div></fieldset>
       <div className={css.field}><span>С</span><div className={css.deadlineRow}><DateMenu value={fromDate} onValue={setFromDate} label="Дата начала" /><TimeMenu value={fromTime} onValue={setFromTime} label="Время начала" /></div></div>
       <div className={css.field}><span>По</span><div className={css.deadlineRow}><DateMenu value={toDate} onValue={setToDate} label="Дата окончания" /><TimeMenu value={toTime} onValue={setToTime} label="Время окончания" /></div></div>
       <p className={css.moneyRow}>Стоимость <strong>{formatMoney(price)}</strong> · Залог <strong>{formatMoney(deposit)}</strong></p>
@@ -742,12 +840,13 @@ function IssueDialog(props: ScreenProps & { booking: AppV2Record; onClose: () =>
   const formId = useId()
   const [condition, setCondition] = useState(textOf(props.booking.values[props.kit.booking.issueCondition]) || 'Исправен')
   const [damages, setDamages] = useState(textOf(props.booking.values[props.kit.booking.issueDamages]))
+  const [photos, setPhotos] = useState(photosFromJson(props.booking.values[props.kit.booking.issuePhotos]))
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const save = async () => {
     if (!condition.trim()) { setError('Опишите состояние при выдаче.'); return }
     setBusy(true)
-    const result = await commit(props, { kind: 'issue', recordId: props.booking.id, condition, damages })
+    const result = await commit(props, { kind: 'issue', recordId: props.booking.id, condition, damages, photos: photosToJson(photos) })
     setBusy(false)
     if (!result.ok) { setError(result.error); return }
     props.onMessage(result.message)
@@ -757,6 +856,7 @@ function IssueDialog(props: ScreenProps & { booking: AppV2Record; onClose: () =>
     <form id={formId} onSubmit={event => { event.preventDefault(); void save() }}>
       <label className={css.field}><span>Состояние при выдаче</span><textarea value={condition} onChange={event => setCondition(event.target.value)} maxLength={4000} required /></label>
       <label className={css.field}><span>Повреждения</span><textarea value={damages} onChange={event => setDamages(event.target.value)} maxLength={4000} /></label>
+      <label className={css.field}><span>Фото (ссылки или заметки, по строке)</span><textarea value={photos} onChange={event => setPhotos(event.target.value)} maxLength={8000} rows={3} /></label>
       {error ? <p className={css.error} role="alert">{error}</p> : null}
     </form>
   </AppDialog>
@@ -769,15 +869,17 @@ function ReturnDialog(props: ScreenProps & { booking: AppV2Record; onClose: () =
   const deposit = numberOf(props.booking.values[fields.deposit])
   const itemIds = idsOf(props.booking.values[fields.items])
   const items = catalogItems(props).filter(item => itemIds.includes(item.id))
-  const suggestedLate = items.reduce((sum, item) => sum + computeLateFee({
+  const storedLate = numberOf(props.booking.values[fields.lateFee])
+  const suggestedLate = storedLate > 0 ? storedLate : items.reduce((sum, item) => sum + computeLateFee({
     tariff: item.tariff, rate: item.rate, to: textOf(props.booking.values[fields.to]), now: new Date(props.now).toISOString(),
   }), 0)
   const [condition, setCondition] = useState(textOf(props.booking.values[fields.returnCondition]) || 'Исправен')
   const [damages, setDamages] = useState(textOf(props.booking.values[fields.returnDamages]))
+  const [photos, setPhotos] = useState(photosFromJson(props.booking.values[fields.returnPhotos]))
   const [lateFee, setLateFee] = useState(String(suggestedLate || ''))
   const [depositReturned, setDepositReturned] = useState(String(deposit || ''))
-  const [depositWithheld, setDepositWithheld] = useState('0')
-  const [depositReason, setDepositReason] = useState('')
+  const [depositWithheld, setDepositWithheld] = useState(String(numberOf(props.booking.values[fields.depositWithheld]) || '0'))
+  const [depositReason, setDepositReason] = useState(textOf(props.booking.values[fields.depositReason]))
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const save = async () => {
@@ -788,6 +890,7 @@ function ReturnDialog(props: ScreenProps & { booking: AppV2Record; onClose: () =
       recordId: props.booking.id,
       condition,
       damages,
+      photos: photosToJson(photos),
       lateFee: lateFee.trim() ? Number(lateFee.replace(/\s/g, '').replace(',', '.')) : 0,
       depositReturned: depositReturned.trim() ? Number(depositReturned.replace(/\s/g, '').replace(',', '.')) : 0,
       depositWithheld: depositWithheld.trim() ? Number(depositWithheld.replace(/\s/g, '').replace(',', '.')) : 0,
@@ -802,6 +905,7 @@ function ReturnDialog(props: ScreenProps & { booking: AppV2Record; onClose: () =
     <form id={formId} onSubmit={event => { event.preventDefault(); void save() }}>
       <label className={css.field}><span>Состояние при возврате</span><textarea value={condition} onChange={event => setCondition(event.target.value)} maxLength={4000} required /></label>
       <label className={css.field}><span>Повреждения</span><textarea value={damages} onChange={event => setDamages(event.target.value)} maxLength={4000} /></label>
+      <label className={css.field}><span>Фото (ссылки или заметки, по строке)</span><textarea value={photos} onChange={event => setPhotos(event.target.value)} maxLength={8000} rows={3} /></label>
       <label className={css.field}><span>Штраф за просрочку</span><input value={lateFee} onChange={event => setLateFee(event.target.value)} inputMode="decimal" /></label>
       <label className={css.field}><span>Залог возвращён</span><input value={depositReturned} onChange={event => setDepositReturned(event.target.value)} inputMode="decimal" /></label>
       <label className={css.field}><span>Залог удержан</span><input value={depositWithheld} onChange={event => setDepositWithheld(event.target.value)} inputMode="decimal" /></label>
@@ -880,10 +984,11 @@ function TimelineScreen(props: ScreenProps) {
   }
   const rangeStart = Date.parse(`${dayLabels[0]!.key}T00:00:00+03:00`)
   const rangeEnd = Date.parse(`${dayLabels[days - 1]!.key}T23:59:59+03:00`)
+  const span = Math.max(1, rangeEnd - rangeStart)
   const items = catalogItems(props).filter(item => item.status !== 'Списан')
   const bookings = bookingItems(props)
   return <div className={css.root} data-prokat-root data-prokat-screen="timeline">
-    <ListScreenShell title="Лента" meta="Занятость предметов на ближайшие две недели.">
+    <ListScreenShell title="Занятость" meta="Занятость предметов на ближайшие две недели.">
       <div className={css.timelineBoard} style={{ ['--prokat-days' as string]: days }}>
         <div className={css.timelineHead}>
           <span className={css.quiet}>Предмет</span>
@@ -897,20 +1002,39 @@ function TimelineScreen(props: ScreenProps) {
               <span>{item.serial}</span>
             </button>
             <div className={css.timelineTrack} aria-label={`Занятость ${item.name}`}>
+              <span className={css.timelineToday} aria-hidden="true" />
               {bars.map(booking => {
                 const from = Date.parse(booking.from)
                 const to = Date.parse(booking.to)
                 if (!Number.isFinite(from) || !Number.isFinite(to)) return null
-                const left = Math.max(0, Math.min(100, ((from - rangeStart) / (rangeEnd - rangeStart)) * 100))
-                const right = Math.max(0, Math.min(100, ((to - rangeStart) / (rangeEnd - rangeStart)) * 100))
-                const width = Math.max(2, right - left)
-                const tone = booking.status === 'Заявка' ? 'request' : booking.status === 'Просрочен возврат' ? 'overdue' : booking.status === 'Выдано' ? 'issued' : 'confirmed'
+                const overdue = isOverdueReturn(booking.status, booking.to, props.now)
+                if (overdue) {
+                  const leftMs = Math.max(from, rangeStart)
+                  const rightMs = Math.min(props.now, rangeEnd)
+                  if (rightMs <= rangeStart || leftMs >= rangeEnd) return null
+                  const left = Math.max(0, Math.min(100, ((leftMs - rangeStart) / span) * 100))
+                  const right = Math.max(0, Math.min(100, ((rightMs - rangeStart) / span) * 100))
+                  const width = Math.max(8, right - left)
+                  return <button
+                    key={booking.id}
+                    type="button"
+                    className={css.timelineBar}
+                    data-tone="overdue"
+                    style={{ left: `${left}%`, width: `${Math.min(width, 100 - left)}%` }}
+                    title={`${booking.number} · просрочен · до ${formatProkatDateTime(booking.to)}`}
+                    onClick={() => props.onNavigate?.(props.kit.bookingScreenId, booking.id)}
+                  ><span>{booking.number || booking.clientName} · просрочен</span></button>
+                }
+                const left = Math.max(0, Math.min(100, ((from - rangeStart) / span) * 100))
+                const right = Math.max(0, Math.min(100, ((to - rangeStart) / span) * 100))
+                const width = Math.max(8, right - left)
+                const tone = booking.status === 'Заявка' ? 'request' : booking.status === 'Выдано' ? 'issued' : 'confirmed'
                 return <button
                   key={booking.id}
                   type="button"
                   className={css.timelineBar}
                   data-tone={tone}
-                  style={{ left: `${left}%`, width: `${width}%` }}
+                  style={{ left: `${left}%`, width: `${Math.min(width, 100 - left)}%` }}
                   title={`${booking.number} · ${formatProkatDateTime(booking.from)} — ${formatProkatDateTime(booking.to)}`}
                   onClick={() => props.onNavigate?.(props.kit.bookingScreenId, booking.id)}
                 ><span>{booking.number || booking.clientName}</span></button>
@@ -977,28 +1101,44 @@ function CatalogScreen(props: ScreenProps) {
   const bundle = useContext(ProkatRowsContext)
   const [requestOpen, setRequestOpen] = useState(bundle?.open === 'request')
   const [selectedId, setSelectedId] = useState('')
+  const [category, setCategory] = useState('Все')
   useEffect(() => { if (bundle?.open === 'request') setRequestOpen(true) }, [bundle?.open])
-  const items = catalogItems(props).filter(item => item.status === 'Свободен' || item.status === 'В прокате')
+  const all = catalogItems(props).filter(item => item.status === 'Свободен' || item.status === 'В прокате')
+  const categories = ['Все', ...[...new Set(all.map(item => item.category))].sort((a, b) => a.localeCompare(b, 'ru'))]
+  const items = category === 'Все' ? all : all.filter(item => item.category === category)
+  const openRequest = (itemId = '') => { setSelectedId(itemId); setRequestOpen(true) }
   return <div className={css.root} data-prokat-root data-prokat-screen="catalog">
     <ListScreenShell
       title="Каталог"
       meta="Доступные предметы и предварительный расчёт."
-      actions={client ? <button type="button" className={css.primary} onClick={() => { setSelectedId(''); setRequestOpen(true) }}>Заявка</button> : undefined}
+      actions={client ? <button type="button" className={css.primary} onClick={() => openRequest()}>Заявка</button> : undefined}
     >
+      <div className={css.chips} role="tablist" aria-label="Категории каталога">
+        {categories.map(name => (
+          <button key={name} type="button" role="tab" className={css.chip} aria-selected={category === name} onClick={() => setCategory(name)}>{name}</button>
+        ))}
+      </div>
       <ul className={css.catalogGrid}>{items.map(item => (
         <li key={item.id}>
-          <button type="button" className={css.catalogCard} onClick={() => {
-            if (client) { setSelectedId(item.id); setRequestOpen(true); return }
-            props.onNavigate?.(props.kit.itemScreenId, item.id)
-          }}>
-            <strong>{item.name}</strong>
-            <span className={css.quiet}>{item.category} · {item.serial}</span>
-            <span className={css.cardFacts}>
-              <StatusBadge name={item.status} />
-              <span className={css.quiet}>{formatMoney(item.rate)} / {item.tariff.toLowerCase()}</span>
-            </span>
-            <span className={css.quiet}>Залог {formatMoney(item.deposit)}</span>
-          </button>
+          <div className={css.catalogCard}>
+            <button
+              type="button"
+              className={css.catalogCardBody}
+              onClick={() => {
+                if (client) { openRequest(item.id); return }
+                props.onNavigate?.(props.kit.itemScreenId, item.id)
+              }}
+            >
+              <ItemTile item={item} size={48} />
+              <span className={css.catalogCardCopy}>
+                <strong>{item.name}</strong>
+                <span className={css.quiet}>{item.tariff} · {formatMoney(item.rate)}</span>
+                <span className={css.quiet}>Залог {formatMoney(item.deposit)}</span>
+                <StatusBadge name={item.status} />
+              </span>
+            </button>
+            {client ? <button type="button" className={css.catalogBook} onClick={() => openRequest(item.id)}>Забронировать</button> : null}
+          </div>
         </li>
       ))}</ul>
     </ListScreenShell>
@@ -1010,6 +1150,7 @@ function RequestDialog(props: ScreenProps & { initialItemId?: string; onClose: (
   useDialogBehavior(props.onClose)
   const formId = useId()
   const items = catalogItems(props).filter(item => item.status === 'Свободен' || item.status === 'В прокате')
+  const spans = bookingSpansFromRows(props.kit, props.rows)
   const [itemIds, setItemIds] = useState<string[]>(props.initialItemId ? [props.initialItemId] : [])
   const [fromDate, setFromDate] = useState('')
   const [fromTime, setFromTime] = useState('12:00')
@@ -1021,12 +1162,13 @@ function RequestDialog(props: ScreenProps & { initialItemId?: string; onClose: (
   const selected = items.filter(item => itemIds.includes(item.id))
   const from = fromDate ? prokatWallInstant(fromDate, fromTime) : null
   const to = toDate ? prokatWallInstant(toDate, toTime) : null
+  const datesReady = Boolean(from && to)
   const price = selected.reduce((sum, item) => sum + (from && to ? computeRentalPrice({ tariff: item.tariff, rate: item.rate, from, to }) : 0), 0)
   const deposit = selected.reduce((sum, item) => sum + item.deposit, 0)
   const toggle = (id: string) => setItemIds(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id])
   const save = async () => {
-    if (!itemIds.length) { setError('Выберите хотя бы один предмет.'); return }
     if (!from || !to) { setError('Укажите срок аренды.'); return }
+    if (!itemIds.length) { setError('Выберите хотя бы один предмет.'); return }
     setBusy(true)
     const result = await commit(props, {
       kind: 'clientRequest',
@@ -1044,15 +1186,40 @@ function RequestDialog(props: ScreenProps & { initialItemId?: string; onClose: (
   }
   return <AppDialog title="Заявка на прокат" placement="center" onClose={props.onClose} footer={<button type="submit" form={formId} className={css.primary} disabled={busy}>{busy ? 'Отправляем…' : 'Отправить заявку'}</button>}>
     <form id={formId} onSubmit={event => { event.preventDefault(); void save() }}>
-      <fieldset className={css.field}><legend>Предметы</legend><div className={css.itemGrid}>{items.map(item => (
-        <button key={item.id} type="button" className={css.itemCheck} aria-pressed={itemIds.includes(item.id)} onClick={() => toggle(item.id)}>
-          <span className={css.checkMark} data-on={itemIds.includes(item.id) || undefined}>{itemIds.includes(item.id) ? <ProtoIcon name="check" size={12} /> : null}</span>
-          <span className={css.itemCheckCopy}><strong>{item.name}</strong><span className={css.quiet}>{formatMoney(item.rate)} / {item.tariff.toLowerCase()}</span></span>
-        </button>
-      ))}</div></fieldset>
       <div className={css.field}><span>С</span><div className={css.deadlineRow}><DateMenu value={fromDate} onValue={setFromDate} label="Дата начала" /><TimeMenu value={fromTime} onValue={setFromTime} label="Время начала" /></div></div>
       <div className={css.field}><span>По</span><div className={css.deadlineRow}><DateMenu value={toDate} onValue={setToDate} label="Дата окончания" /><TimeMenu value={toTime} onValue={setToTime} label="Время окончания" /></div></div>
-      <p className={css.moneyRow}>Предварительно <strong>{formatMoney(price)}</strong> · Залог <strong>{formatMoney(deposit)}</strong></p>
+      <fieldset className={css.field}>
+        <legend>Предметы</legend>
+        {!datesReady
+          ? <p className={css.quietHint}>Сначала выберите даты</p>
+          : <div className={css.itemGrid}>{items.map(item => {
+            const busyUntil = from && to ? itemBusyUntil(spans, item.id, from, to) : null
+            const unavailable = Boolean(busyUntil)
+            const selected = itemIds.includes(item.id)
+            return <button
+              key={item.id}
+              type="button"
+              className={css.itemPick}
+              aria-pressed={selected}
+              disabled={unavailable}
+              onClick={() => { if (!unavailable) toggle(item.id) }}
+            >
+              <ItemTile item={item} />
+              <span className={css.itemCheckCopy}>
+                <strong>{item.name}</strong>
+                <span className={css.quiet}>{formatMoney(item.rate)} / {item.tariff.toLowerCase()} · залог {formatMoney(item.deposit)}</span>
+                {unavailable ? <span className={css.busyUntil}>Занят до {formatProkatDate(busyUntil)}</span> : null}
+              </span>
+              <span className={css.checkMark} data-on={selected || undefined}>{selected ? <ProtoIcon name="check" size={12} /> : null}</span>
+            </button>
+          })}</div>}
+      </fieldset>
+      {selected.length ? (
+        <div className={css.priceSummary}>
+          <ul>{selected.map(item => <li key={item.id}>{item.name}</li>)}</ul>
+          <p className={css.moneyRow}>Предварительно <strong>{formatMoney(price)}</strong> · Залог <strong>{formatMoney(deposit)}</strong></p>
+        </div>
+      ) : <p className={css.moneyRow}>Предварительно <strong>—</strong> · Залог <strong>—</strong></p>}
       {error ? <p className={css.error} role="alert">{error}</p> : null}
     </form>
   </AppDialog>

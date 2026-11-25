@@ -234,6 +234,7 @@ export function buildProkatV2App(built: BuiltTemplate, meta: { id: string; works
   const listItems = collection('Предметы', items.id, item.name, openItem, item.name)
   const listClients = collection('Клиенты', clients.id, client.name, openClient, client.name)
   const timelineBookings = collection('Лента броней', bookings.id, booking.title, openBooking, booking.from)
+  const timelineItems = collection('Предметы ленты', items.id, item.name, openItem, item.name)
   const dashBookings = collection('Брони главной', bookings.id, booking.title, openBooking, booking.updatedAt)
   const dashItems = collection('Предметы главной', items.id, item.name, openItem, item.name)
   const bookingItems = collection('Предметы брони', items.id, item.name, null, item.name)
@@ -294,7 +295,7 @@ export function buildProkatV2App(built: BuiltTemplate, meta: { id: string; works
       screen(ids.bookingScreenId, 'Бронь', undefined, 'calendar', desk, bookings.id, [bookingItems, bookingStaff, bookingClients, ids.issueFormId, ids.returnFormId], false),
       screen(ids.itemsScreenId, 'Предметы', 'Предметы', 'box', desk, null, [listItems], true),
       screen(ids.itemScreenId, 'Предмет', undefined, 'box', { kind: 'roles', roleIds: ['owner', 'staff', 'client'] }, items.id, [itemBookings], false),
-      screen(ids.timelineScreenId, 'Лента', 'Лента', 'list', desk, null, [timelineBookings], true),
+      screen(ids.timelineScreenId, 'Лента', 'Лента', 'list', desk, null, [timelineBookings, timelineItems], true),
       screen(ids.clientsScreenId, 'Клиенты', 'Клиенты', 'users', desk, null, [listClients], true),
       screen(ids.clientScreenId, 'Клиент', undefined, 'users', desk, clients.id, [clientBookings], false),
       screen(ids.catalogScreenId, 'Каталог', 'Каталог', 'tag', { kind: 'roles', roleIds: ['owner', 'staff', 'client'] }, null, [catalogItems, ids.clientRequestFormId], true),

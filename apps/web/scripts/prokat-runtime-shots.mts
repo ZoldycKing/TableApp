@@ -153,6 +153,20 @@ const browser = await chromium.launch({
   page.setDefaultTimeout(60000)
   await page.goto(fixture.urls.clientCatalog, { waitUntil: 'networkidle' })
   await waitProkat(page)
+  await page.getByRole('button', { name: 'Заявка' }).click()
+  await page.getByRole('dialog').waitFor({ timeout: 15000 })
+  await page.getByRole('dialog').locator('button[aria-pressed]').first().click()
+  const pickDate = async (label: string, dayText: string) => {
+    await page.getByLabel(label).click()
+    await page.waitForTimeout(350)
+    const day = page.locator('button').filter({ hasText: new RegExp(`^${dayText}$`) }).last()
+    await day.click({ timeout: 5000 }).catch(() => {})
+    await page.waitForTimeout(200)
+  }
+  await pickDate('Дата начала', '26')
+  await pickDate('Дата окончания', '28')
+  await page.waitForTimeout(700)
+  await page.getByText('Предварительно').scrollIntoViewIfNeeded().catch(() => {})
   await save(page, '06-client-catalog-phone-390.png')
   await context.close()
 }
@@ -185,6 +199,22 @@ const browser = await chromium.launch({
   page.setDefaultTimeout(60000)
   await page.goto(fixture.urls.clientBooking, { waitUntil: 'networkidle' })
   await waitProkat(page)
+  await page.waitForSelector('[data-correspondence-module], [data-prokat-thread]', { timeout: 60000 }).catch(() => {})
+  await page.evaluate(() => {
+    const thread = document.querySelector('[data-prokat-thread], [data-correspondence-module]') as HTMLElement | null
+    const heading = Array.from(document.querySelectorAll('h2, h3, [class*="detailSection"]')).find(node => /Переписка/.test(node.textContent ?? '')) as HTMLElement | undefined
+    const target = heading ?? thread
+    if (!target) return
+    let scroller: HTMLElement | null = target
+    while (scroller) {
+      const { overflowY } = getComputedStyle(scroller)
+      if ((overflowY === 'auto' || overflowY === 'scroll') && scroller.scrollHeight > scroller.clientHeight + 8) break
+      scroller = scroller.parentElement
+    }
+    if (!scroller) { target.scrollIntoView({ block: 'start' }); return }
+    const offset = target.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop - 40
+    scroller.scrollTop = Math.max(0, offset)
+  })
   await page.waitForTimeout(800)
   await save(page, '08-client-booking-chat-phone-390.png')
   await context.close()

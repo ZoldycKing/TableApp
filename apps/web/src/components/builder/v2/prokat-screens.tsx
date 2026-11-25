@@ -627,12 +627,53 @@ function useProkatHoldCatchUp(props: ScreenProps) {
   }, [props.screenId, props.actor])
 }
 
+function useHoldMenuPlace(open: boolean, trigger: RefObject<HTMLElement | null>) {
+  const [place, setPlace] = useState<{ top: number; left: number; width: number } | null>(null)
+  useLayoutEffect(() => {
+    if (!open || !trigger.current) { setPlace(null); return }
+    const update = () => {
+      const rect = trigger.current!.getBoundingClientRect()
+      setPlace({ top: rect.bottom + 6, left: rect.left, width: Math.max(rect.width, 220) })
+    }
+    update()
+    window.addEventListener('resize', update)
+    window.addEventListener('scroll', update, true)
+    return () => {
+      window.removeEventListener('resize', update)
+      window.removeEventListener('scroll', update, true)
+    }
+  }, [open, trigger])
+  return place
+}
+
+/** Outside-click that also keeps a portaled hold menu open. */
+function useHoldMenuOpen(open: boolean, root: RefObject<HTMLElement | null>, onClose: () => void) {
+  useEffect(() => {
+    if (!open) return
+    const outside = (event: PointerEvent) => {
+      if (!(event.target instanceof Node)) return
+      if (root.current?.contains(event.target)) return
+      if (event.target instanceof Element && event.target.closest('[data-prokat-hold-menu]')) return
+      onClose()
+    }
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose() }
+    document.addEventListener('pointerdown', outside)
+    document.addEventListener('keydown', escape)
+    return () => {
+      document.removeEventListener('pointerdown', outside)
+      document.removeEventListener('keydown', escape)
+    }
+  }, [open, root, onClose])
+}
+
 function HoldSettingControl(props: ScreenProps & { value: ProkatHoldAfterStartMinutes; onSaved: (next: ProkatHoldAfterStartMinutes) => void }) {
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
   const root = useRef<HTMLDivElement>(null)
-  useMenuOpen(open, root, () => setOpen(false))
+  const trigger = useRef<HTMLButtonElement>(null)
+  const place = useHoldMenuPlace(open, trigger)
+  useHoldMenuOpen(open, root, () => setOpen(false))
   const current = PROKAT_HOLD_AFTER_START_OPTIONS.find(option => option.minutes === props.value)
     ?? PROKAT_HOLD_AFTER_START_OPTIONS.find(option => option.minutes === 120)!
   const save = async (minutes: ProkatHoldAfterStartMinutes) => {
@@ -645,10 +686,31 @@ function HoldSettingControl(props: ScreenProps & { value: ProkatHoldAfterStartMi
       setOpen(false)
     }
   }
-  return <div className={css.holdSetting} data-prokat-hold-setting>
-    <div className={`${css.assigneeFilter} ${css.singleFilter}`} ref={root}>
+  const panel = open && place && typeof document !== 'undefined' ? createPortal(
+    <div
+      className={css.assigneePanel}
+      role="listbox"
+      aria-label="Держать бронь после начала"
+      data-prokat-hold-menu
+      style={{ position: 'fixed', top: place.top, left: place.left, width: place.width, zIndex: 80 }}
+    >
+      {PROKAT_HOLD_AFTER_START_OPTIONS.map(option => (
+        <button
+          key={String(option.minutes)}
+          type="button"
+          role="option"
+          aria-selected={option.minutes === props.value}
+          onClick={() => void save(option.minutes)}
+        >{option.label}</button>
+      ))}
+    </div>,
+    document.body,
+  ) : null
+  return <div className={css.holdSetting} data-prokat-hold-setting ref={root}>
+    <div className={`${css.assigneeFilter} ${css.singleFilter}`}>
       <button
         type="button"
+        ref={trigger}
         className={css.assigneeTrigger}
         data-active
         aria-expanded={open}
@@ -660,17 +722,7 @@ function HoldSettingControl(props: ScreenProps & { value: ProkatHoldAfterStartMi
         <span>Держать бронь после начала · <strong>{current.label}</strong></span>
         <ProtoIcon name="down" size={14} />
       </button>
-      {open ? <div className={css.assigneePanel} role="listbox" aria-label="Держать бронь после начала">
-        {PROKAT_HOLD_AFTER_START_OPTIONS.map(option => (
-          <button
-            key={String(option.minutes)}
-            type="button"
-            role="option"
-            aria-selected={option.minutes === props.value}
-            onClick={() => void save(option.minutes)}
-          >{option.label}</button>
-        ))}
-      </div> : null}
+      {panel}
     </div>
     <p className={css.holdSettingLead}>Общее правило для всего проката: сколько ждать клиента после начала брони, прежде чем снять её как «Не забрали». На карточке предмета можно переопределить.</p>
     {message ? <p role="status" className={css.quiet}>{message}</p> : null}
@@ -686,7 +738,9 @@ function ItemHoldOverrideControl(props: ScreenProps & {
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const root = useRef<HTMLDivElement>(null)
-  useMenuOpen(open, root, () => setOpen(false))
+  const trigger = useRef<HTMLButtonElement>(null)
+  const place = useHoldMenuPlace(open, trigger)
+  useHoldMenuOpen(open, root, () => setOpen(false))
   const business = prokatHoldMinutes(props.kit)
   const businessLabel = holdOptionLabel(business) ?? '2 ч'
   const inheritLabel = `Как в настройках (${businessLabel})`
@@ -700,10 +754,32 @@ function ItemHoldOverrideControl(props: ScreenProps & {
     props.onSaved(next)
     setOpen(false)
   }
-  return <div className={css.holdSetting} data-prokat-hold-override>
-    <div className={`${css.assigneeFilter} ${css.singleFilter}`} ref={root}>
+  const panel = open && place && typeof document !== 'undefined' ? createPortal(
+    <div
+      className={css.assigneePanel}
+      role="listbox"
+      aria-label="Держать бронь после начала"
+      data-prokat-hold-menu
+      style={{ position: 'fixed', top: place.top, left: place.left, width: place.width, zIndex: 80 }}
+    >
+      <button type="button" role="option" aria-selected={props.value === undefined} onClick={() => void save(undefined)}>{inheritLabel}</button>
+      {PROKAT_HOLD_AFTER_START_OPTIONS.map(option => (
+        <button
+          key={String(option.minutes)}
+          type="button"
+          role="option"
+          aria-selected={option.minutes === props.value}
+          onClick={() => void save(option.minutes)}
+        >{option.label}</button>
+      ))}
+    </div>,
+    document.body,
+  ) : null
+  return <div className={css.holdSetting} data-prokat-hold-override ref={root}>
+    <div className={`${css.assigneeFilter} ${css.singleFilter}`}>
       <button
         type="button"
+        ref={trigger}
         className={css.assigneeTrigger}
         data-active
         aria-expanded={open}
@@ -715,18 +791,7 @@ function ItemHoldOverrideControl(props: ScreenProps & {
         <span>Держать бронь после начала · <strong>{currentLabel}</strong></span>
         <ProtoIcon name="down" size={14} />
       </button>
-      {open ? <div className={css.assigneePanel} role="listbox" aria-label="Держать бронь после начала">
-        <button type="button" role="option" aria-selected={props.value === undefined} onClick={() => void save(undefined)}>{inheritLabel}</button>
-        {PROKAT_HOLD_AFTER_START_OPTIONS.map(option => (
-          <button
-            key={String(option.minutes)}
-            type="button"
-            role="option"
-            aria-selected={option.minutes === props.value}
-            onClick={() => void save(option.minutes)}
-          >{option.label}</button>
-        ))}
-      </div> : null}
+      {panel}
     </div>
     <p className={css.holdSettingLead}>Необязательное правило только для этого предмета. По умолчанию — как в «Настройках проката».</p>
   </div>

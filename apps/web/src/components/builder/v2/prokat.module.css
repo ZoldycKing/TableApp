@@ -387,10 +387,7 @@
 }
 .holdSetting { display: grid; gap: 10px; min-width: 0; }
 .holdSettingLead { margin: 0; color: var(--v2-muted, var(--sc-text-2)); font-size: 13px; line-height: 1.45; }
-/* Setting sits near the bottom of the dashboard — open the menu upward. */
-.holdSetting .assigneePanel {
-  top: auto; bottom: calc(100% + 6px);
-}
+/* Open downward — settings page and item card have room below the trigger. */
 .holdUntilLine {
   margin: 0; padding: 10px 12px; border-radius: 10px;
   background: color-mix(in srgb, #3F6B5C 10%, transparent);

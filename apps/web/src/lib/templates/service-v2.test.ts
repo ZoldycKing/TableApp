@@ -37,6 +37,7 @@ describe('service template', () => {
     expect(app.screens.find(screen => screen.id === service.clientListScreenId)?.audience).toMatchObject({ kind: 'roles', roleIds: ['owner', 'staff', 'client'] })
     expect(app.screens.find(screen => screen.id === service.dashboardScreenId)?.audience).toMatchObject({ kind: 'roles', roleIds: ['owner', 'staff'] })
     expect(app.roles.map(role => role.name)).toEqual(['Руководитель', 'Мастер', 'Клиент'])
+    expect(app.communications).toEqual({ enabled: true })
     expect(app.authentication.mode).toBe('verified_email')
     expect(app.authentication.defaultRoleId).toBe('client')
     expect(app.screens.find(screen => screen.id === service.repairsScreenId)?.menuLabel).toBe('Ремонты')

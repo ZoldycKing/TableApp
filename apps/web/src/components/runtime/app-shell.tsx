@@ -46,6 +46,8 @@ import {
 } from './nav-history'
 import { IntakeVerify } from './intake-verify'
 import { ConversationInbox, MESSAGES_SCREEN, parseConversationTarget } from './conversation-inbox'
+import { CorrespondenceModule } from './correspondence-module'
+import { conversationResource } from '@/lib/conversation-resource'
 import { GeneralQuestion } from './general-question'
 import { generalChatAvailableApp } from '@/lib/general-conversation-config'
 import { GENERAL_QUESTION_SCREEN, parseGeneralQuestionDraft, type GeneralQuestionDraft } from '@/lib/general-question-draft'
@@ -1256,8 +1258,16 @@ export function AppShell({
               if (item.slug === app.slug && screens.has(item.screenId)) navigate(item.screenId, item.id)
               else window.location.assign(`/a/${encodeURIComponent(item.slug)}?e=${encodeURIComponent(item.screenId)}&r=${encodeURIComponent(item.id)}`)
             }} /> : null}
-            {messagesAvailable && current.screenId !== MESSAGES_SCREEN && sent === null && intake === null && checkout === null && screen.type === 'detail' && row && (app.booking?.tables.visits === screen.tableId || customerWorkflows(app).some(config => config.tableId === screen.tableId)) ?
-              <div className="mx-auto mt-5 max-w-xl"><button type="button" onClick={() => navigate(MESSAGES_SCREEN, JSON.stringify({ slug: app.slug, tableId: screen.tableId, rowId: row.id }))} className="inline-flex items-center gap-2 rounded-xl border border-sand-200 bg-white px-4 py-2.5 text-sm font-medium text-sage-700 hover:bg-sand-50"><Icon name="chat" className="size-5" />Открыть переписку</button></div> : null}
+            {!demo && !editing && viewer && sent === null && intake === null && checkout === null && screen.type === 'detail' && row && conversationResource(app, screen.tableId) ?
+              <CorrespondenceModule
+                key={`${app.id}:${screen.tableId}:${row.id}:chat`}
+                slug={app.slug}
+                tableId={screen.tableId}
+                rowId={row.id}
+                configured={Boolean(app.communications?.enabled)}
+                business={false}
+                showContext={false}
+              /> : null}
             {sent === null && intake === null && app.booking && screen.type === 'detail' && screen.tableId === app.booking.tables.visits && row &&
               app.screens.some(candidate => candidate.type === 'form' && candidate.mode === 'edit' && candidate.tableId === app.booking!.tables.visits &&
                 candidate.components.some(component => component.type === 'form_field' && component.fieldId === app.booking!.visit.status)) &&

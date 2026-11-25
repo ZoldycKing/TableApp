@@ -18,6 +18,7 @@ import { ProtoIcon } from '../prototype/icons'
 import { usePublishedV2 } from './published-context'
 
 const SupportConversationShotPanel = lazy(() => import('./support-conversation-shot').then(module => ({ default: module.SupportConversationShotPanel })))
+const CorrespondenceModule = lazy(() => import('@/components/runtime/correspondence-module').then(module => ({ default: module.CorrespondenceModule })))
 import { useBuilderV2NodeData } from './use-data'
 import type { AppV2RendererProps } from './view'
 import css from './support.module.css'
@@ -975,6 +976,17 @@ function TicketCard(props: ScreenProps) {
                   tableId={props.kit.ticketsTableId}
                   ticketId={ticket.id}
                   shot={conversationShot}
+                />
+              </Suspense>
+            ) : Boolean(props.live) && !bundle?.sample ? (
+              <Suspense fallback={<p className={css.quiet} role="status">Загружаем переписку…</p>}>
+                <CorrespondenceModule
+                  slug={props.app.slug}
+                  tableId={props.kit.ticketsTableId}
+                  rowId={ticket.id}
+                  configured={Boolean(props.app.communications?.enabled)}
+                  business={false}
+                  showContext={false}
                 />
               </Suspense>
             ) : <>

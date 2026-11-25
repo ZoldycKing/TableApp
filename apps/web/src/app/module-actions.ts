@@ -200,7 +200,10 @@ export async function setCommunicationsAction(appId: string, enabled: boolean) {
       const [record] = await context.tx.select().from(apps).where(and(eq(apps.id, appId), eq(apps.workspaceId, context.workspaceId))).for('update')
       if (!record) throw new RowWriteError('missing', 'Приложение не найдено')
       const app = ownedApp(record)
-      if (!app.screens.some(screen => screen.type === 'detail' && conversationResource(app, screen.tableId))) throw new RowWriteError('invalid', 'Для переписки нужен клиентский сценарий с карточкой обращения')
+      const hasClientDetail = app.screens.some(screen => screen.type === 'detail' && screen.access.roles.includes('client'))
+      const hasResource = app.screens.some(screen => screen.type === 'detail' && conversationResource(app, screen.tableId))
+      if (!hasClientDetail) throw new RowWriteError('invalid', 'Для переписки нужна клиентская карточка записи: экран подробностей, открытый роли «Клиент».')
+      if (!hasResource) throw new RowWriteError('invalid', 'Для переписки нужно поле почты клиента в сценарии (запись, заказ или ремонт) и кабинет с карточкой этого обращения.')
       app.communications = { enabled }
       await checkpointBeforeChange(context.tx, record, auth.member.userId)
       await context.tx.update(apps).set({ draft: app, updatedAt: new Date() }).where(eq(apps.id, appId))

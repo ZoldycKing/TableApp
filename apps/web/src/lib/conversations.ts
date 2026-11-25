@@ -1,6 +1,8 @@
 import { apps, attachments, businessCustomerApps, businessCustomers, conversationMessages as messages, conversationNotes as notes, conversationRevisions as revisions,
   conversations, db, rows, tables, workspaces } from '@tableapp/db'
-import { appSchema, newId, type Attachment } from '@tableapp/schema'
+import { appSchema, newId, type App, type Attachment } from '@tableapp/schema'
+import { readAppDefinition, validateAppV2Definition } from '@tableapp/schema/app-definition'
+import { projectAppV2Row, readableAppV2Fields, type AppV2 } from '@tableapp/schema/app-v2'
 import { and, asc, desc, eq, gt, inArray, isNull, lt, sql } from 'drizzle-orm'
 import { createHash } from 'node:crypto'
 import { appAccessFor, currentAppAccess } from './app-session'
@@ -11,6 +13,7 @@ import { canEnter } from './app-roles'
 import { hasRole, moduleForTable, workflowRole } from './module-access'
 import { legacyAppModules } from './app-modules'
 import { conversationResource } from './conversation-resource'
+import { conversationManagerV2, conversationResourceV2, conversationStaffV2 } from './conversation-resource-v2'
 import { conversationContextTitle } from './conversation-context'
 import { removeTrackedAttachment } from './file-upload'
 import { RowWriteError, writeRows } from './row-mutations'
@@ -18,6 +21,8 @@ import type { Transaction } from './db-transaction'
 import type { ConversationPage } from './conversation-types'
 import { GENERAL_CONVERSATION_TABLE } from './conversation-types'
 import { generalConversationAccess } from './general-conversation-access'
+import { loadBuilderV2Catalog } from './builder-v2'
+import { publishedV2Actor, publishedV2Roles } from './builder-v2-published'
 
 type Runner = typeof db | Transaction
 const denied = () => new RowWriteError('denied', 'Переписка недоступна или обращение не найдено')
@@ -28,13 +33,80 @@ function bodyText(value: string) {
   return value.trim()
 }
 
+type ConversationHost = {
+  id: string
+  workspaceId: string
+  slug: string
+  name: string
+  communications?: { enabled: boolean }
+  booking?: App['booking']
+}
+
+async function conversationAccessAppV2(app: AppV2, tableId: string, rowId: string, runner: Runner, business: boolean) {
+  const resource = conversationResourceV2(app, tableId)
+  if (!resource) throw denied()
+  const catalog = await loadBuilderV2Catalog(app.workspaceId, runner)
+  const checked = validateAppV2Definition(app, catalog.catalog)
+  if (!checked.ok) throw denied()
+  const [parent] = await runner.select({ row: rows }).from(rows).innerJoin(tables, eq(rows.tableId, tables.id))
+    .where(and(eq(rows.id, rowId), eq(rows.tableId, tableId), eq(tables.workspaceId, app.workspaceId), isNull(rows.deletedAt))).limit(1)
+  if (!parent) throw denied()
+  const member = business ? await currentMember() : null
+  if (member && member.role !== 'owner' && member.tableAccess != null) throw denied()
+  const [space] = await runner.select({ ownerId: workspaces.ownerId }).from(workspaces).where(eq(workspaces.id, app.workspaceId))
+  const owner = Boolean(member && member.workspaceId === app.workspaceId && member.role === 'owner' && space?.ownerId === member.userId)
+  if (business && (!member || member.workspaceId !== app.workspaceId)) throw denied()
+  const data = parent.row.data as Record<string, unknown>
+  const email = String(data[resource.emailFieldId] ?? '').trim().toLowerCase()
+  if (!email || email.length > 254 || !email.includes('@')) throw denied()
+  let staff = owner, manager = owner, readableData = data
+  let actorEmail = owner ? member!.email : ''
+  let uploadId = owner ? member!.userId : ''
+  let authorName = owner ? (member!.name ?? 'Владелец бизнеса') : ''
+  if (!owner) {
+    const actor = business
+      ? (() => {
+          const roles = publishedV2Roles(app, member!.email)
+          return { authenticated: roles.roleIds.length > 0, roleIds: roles.roleIds, email: member!.email, name: member!.name, company: roles.company, id: member!.userId }
+        })()
+      : await publishedV2Actor(app, runner)
+    if (!actor.authenticated || !actor.email || !actor.id) throw denied()
+    const record = { id: parent.row.id, tableId, values: Object.fromEntries(Object.entries(data).map(([key, value]) => [key, value as never])) }
+    const fields = readableAppV2Fields(app, actor, record)
+    if (!fields.size) throw denied()
+    readableData = projectAppV2Row(app, actor, record) as Record<string, unknown>
+    manager = conversationManagerV2(app, tableId, actor.roleIds)
+    staff = manager || conversationStaffV2(app, tableId, actor.roleIds)
+    if (!staff && (!actor.roleIds.includes('client') || actor.email.trim().toLowerCase() !== email)) throw denied()
+    if (business && !staff) throw denied()
+    actorEmail = actor.email
+    uploadId = actor.id
+    authorName = (actor.name ?? (staff ? 'Сотрудник' : 'Клиент')).slice(0, 80)
+  }
+  const [profile] = await runner.select().from(businessCustomers).where(and(eq(businessCustomers.workspaceId, app.workspaceId), eq(businessCustomers.email, email)))
+  const actorId = `person_${createHash('sha256').update(`${app.workspaceId}:${actorEmail.trim().toLowerCase()}`).digest('hex')}`
+  const host: ConversationHost = { id: app.id, workspaceId: app.workspaceId, slug: app.slug, name: app.name, communications: app.communications }
+  const module = { id: resource.moduleId, kind: 'repair' as const, version: 1 as const, source: { type: 'customer' as const, tableId }, dependsOn: [] as string[], intakeEnabled: true }
+  return {
+    kind: 'record' as const, app: host, parent: parent.row, readableData, access: null, module, customerId: profile?.id ?? null, email, staff, manager, owner, actorId,
+    uploadId, authorKind: owner ? 'business' as const : staff ? 'staff' as const : 'client' as const, authorName: authorName.slice(0, 80),
+    contextTitle: String(readableData[resource.titleFieldId] ?? 'Обращение').slice(0, 160),
+  }
+}
+
 /** Resolve tenant, parent, identity and live grants from the server on every operation. */
 export async function conversationAccess(slug: string, tableId: string, rowId: string, runner: Runner = db, business = false) {
   if (typeof business !== 'boolean') throw denied()
   if (![slug, tableId, rowId].every(validReference)) throw denied()
   const [record] = await runner.select().from(apps).where(eq(apps.slug, slug)).limit(1)
-  const parsed = appSchema.safeParse(record?.published)
-  if (!record || !parsed.success) throw denied()
+  if (!record) throw denied()
+  const read = readAppDefinition(record.published)
+  if (read.ok && read.formatVersion === 2) {
+    if (tableId === GENERAL_CONVERSATION_TABLE) throw denied()
+    return conversationAccessAppV2({ ...read.app, id: record.id, workspaceId: record.workspaceId, slug: record.slug }, tableId, rowId, runner, business)
+  }
+  const parsed = appSchema.safeParse(record.published)
+  if (!parsed.success) throw denied()
   const app = { ...parsed.data, id: record.id, workspaceId: record.workspaceId, slug: record.slug }
   if (tableId === GENERAL_CONVERSATION_TABLE) {
     if (await validateAppReferences(app)) throw denied()
@@ -74,8 +146,9 @@ export async function conversationAccess(slug: string, tableId: string, rowId: s
   const actorId = `person_${createHash('sha256').update(`${app.workspaceId}:${actorEmail.trim().toLowerCase()}`).digest('hex')}`
   return { kind: 'record' as const, app, parent: parent.row, readableData, access, module, customerId: profile?.id ?? null, email, staff, manager, owner, actorId,
     uploadId: owner ? member!.userId : access!.viewer!.id,
-    authorKind: owner ? 'business' : staff ? 'staff' : 'client',
-    authorName: (owner ? member!.name ?? 'Владелец бизнеса' : access!.viewer!.name ?? (staff ? 'Сотрудник' : 'Клиент')).slice(0, 80) }
+    authorKind: owner ? 'business' as const : staff ? 'staff' as const : 'client' as const,
+    authorName: (owner ? member!.name ?? 'Владелец бизнеса' : access!.viewer!.name ?? (staff ? 'Сотрудник' : 'Клиент')).slice(0, 80),
+    contextTitle: undefined as string | undefined }
 }
 type Access = Awaited<ReturnType<typeof conversationAccess>>
 async function threadFor(access: Access, runner: Runner, create = false) {
@@ -109,8 +182,11 @@ const fileDTO = (file: typeof attachments.$inferSelect): Attachment => ({
 export async function readConversation(slug: string, tableId: string, rowId: string, before?: number, business = false): Promise<ConversationPage> {
   if (before !== undefined && (!Number.isSafeInteger(before) || before <= 0)) throw denied()
   const access = await conversationAccess(slug, tableId, rowId, db, business), thread = await threadFor(access, db)
-  const base = { conversationId: thread?.id ?? null, enabled: Boolean(access.app.communications?.enabled), closed: Boolean(thread?.closedAt), staff: access.staff, canManage: access.manager,
-    contextTitle: access.kind === 'general' ? 'Вопрос бизнесу' : await conversationContextTitle(access.app, tableId, access.readableData, access.access) }
+  const contextTitle = access.kind === 'general' ? 'Вопрос бизнесу'
+    : 'contextTitle' in access && access.contextTitle
+      ? access.contextTitle
+      : await conversationContextTitle(access.app as App, tableId, access.readableData, access.access)
+  const base = { conversationId: thread?.id ?? null, enabled: Boolean(access.app.communications?.enabled), closed: Boolean(thread?.closedAt), staff: access.staff, canManage: access.manager, contextTitle }
   if (!thread) return { ...base, messages: [], nextBefore: null, notes: [] }
   const found = await db.select().from(messages).where(and(eq(messages.workspaceId, access.app.workspaceId), eq(messages.conversationId, thread.id),
     before === undefined ? undefined : lt(messages.sequence, before))).orderBy(desc(messages.sequence)).limit(51)

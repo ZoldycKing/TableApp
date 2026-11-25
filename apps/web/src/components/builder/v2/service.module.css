@@ -316,11 +316,23 @@
 .ticketCard[data-client] .card { padding-right: 16px; }
 .linesWrap { display: grid; gap: 8px; min-width: 0; }
 .linesTable { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 14px; }
-.linesTable th, .linesTable td { padding: 8px 6px; border-bottom: 1px solid var(--v2-line, var(--sc-border)); text-align: left; vertical-align: top; }
+.linesTable th, .linesTable td { padding: 8px 6px; border-bottom: 1px solid var(--v2-line, var(--sc-border)); text-align: left; vertical-align: top; overflow-wrap: break-word; }
 .linesTable th:nth-child(2), .linesTable td:nth-child(2),
 .linesTable th:nth-child(3), .linesTable td:nth-child(3),
 .linesTable th:nth-child(4), .linesTable td:nth-child(4) { text-align: right; width: 5.5rem; }
 .linesTable tfoot th, .linesTable tfoot td { border-bottom: 0; font-weight: 750; }
+.linesStack { display: none; margin: 0; padding: 0; list-style: none; gap: 12px; }
+.lineStackItem { display: grid; gap: 4px; padding-bottom: 12px; border-bottom: 1px solid var(--v2-line, var(--sc-border)); min-width: 0; }
+.lineStackName { margin: 0; font-size: 14px; font-weight: 650; line-height: 1.35; overflow-wrap: anywhere; }
+.lineStackName .quiet { font-weight: 500; }
+.lineStackMeta { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; min-width: 0; font-size: 14px; line-height: 1.35; font-variant-numeric: tabular-nums; }
+.lineStackMeta span { color: var(--v2-muted, var(--sc-text-2)); min-width: 0; }
+.lineStackMeta strong { font-weight: 750; text-align: right; white-space: nowrap; }
+.lineStackTotal { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-top: 2px; font-size: 14px; font-weight: 750; font-variant-numeric: tabular-nums; }
+@container builder-app (max-width: 479px) {
+  .linesTable { display: none; }
+  .linesStack { display: grid; }
+}
 @container builder-app (max-width: 560px) {
   .revBars { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .revBar { grid-template-rows: auto 100px auto; }

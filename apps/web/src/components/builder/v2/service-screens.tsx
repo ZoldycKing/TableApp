@@ -23,6 +23,7 @@ import type { AppV2RendererProps } from './view'
 import css from './service.module.css'
 
 const ServiceConversationShotPanel = lazy(() => import('./service-conversation-shot').then(module => ({ default: module.ServiceConversationShotPanel })))
+const CorrespondenceModule = lazy(() => import('@/components/runtime/correspondence-module').then(module => ({ default: module.CorrespondenceModule })))
 
 export type ServiceOpen = 'create' | 'reply' | 'note' | 'assign' | null
 export type ServiceConversationShot = {
@@ -541,7 +542,7 @@ function RepairRows(props: { items: ServiceListItem[]; now: number; onOpen: (id:
 function LinesTable({ lines, approval }: { lines: ReturnType<typeof parseServiceLines>; approval?: string }) {
   if (!lines.length) return <p className={css.quiet}>Позиций сметы пока нет.</p>
   const total = serviceLinesTotal(lines)
-  return <div className={css.linesWrap}>
+  return <div className={css.linesWrap} data-service-lines>
     <table className={css.linesTable}>
       <thead><tr><th>Название</th><th>Кол-во</th><th>Цена</th><th>Сумма</th></tr></thead>
       <tbody>
@@ -556,6 +557,18 @@ function LinesTable({ lines, approval }: { lines: ReturnType<typeof parseService
       </tbody>
       <tfoot><tr><th colSpan={3}>Итого</th><th>{formatMoney(total)}</th></tr></tfoot>
     </table>
+    <ul className={css.linesStack} aria-label="Работы и запчасти">
+      {lines.map((line, index) => (
+        <li key={`${line.name}-${index}`} className={css.lineStackItem}>
+          <p className={css.lineStackName}>{line.name}<span className={css.quiet}> · {line.kind === 'work' ? 'работа' : 'запчасть'}</span></p>
+          <div className={css.lineStackMeta}>
+            <span>{line.qty} × {formatMoney(line.price)}</span>
+            <strong>{formatMoney(line.qty * line.price)}</strong>
+          </div>
+        </li>
+      ))}
+      <li className={css.lineStackTotal}><span>Итого</span><strong>{formatMoney(total)}</strong></li>
+    </ul>
     {approval ? <p className={css.cardFacts} style={{ marginTop: 10 }}><StatusBadge name={approval} /></p> : null}
   </div>
 }
@@ -682,6 +695,7 @@ function RepairCard(props: ScreenProps) {
     if (!date) return
     void saveAssign({ deadline: serviceDeadlineInstant(date, time || '17:00') })
   }
+  const liveCorrespondence = Boolean(props.live) && !bundle?.sample && !conversationShot
   const conversation = <DetailSection title="Переписка">
     <div ref={threadRef} data-service-thread>
       {conversationShot ? (
@@ -691,6 +705,17 @@ function RepairCard(props: ScreenProps) {
             tableId={props.kit.repairsTableId}
             repairId={repair.id}
             shot={conversationShot}
+          />
+        </Suspense>
+      ) : liveCorrespondence ? (
+        <Suspense fallback={<p className={css.quiet} role="status">Загружаем переписку…</p>}>
+          <CorrespondenceModule
+            slug={props.app.slug}
+            tableId={props.kit.repairsTableId}
+            rowId={repair.id}
+            configured={Boolean(props.app.communications?.enabled)}
+            business={false}
+            showContext={false}
           />
         </Suspense>
       ) : <>

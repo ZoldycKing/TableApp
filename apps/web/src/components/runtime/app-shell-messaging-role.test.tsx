@@ -37,7 +37,7 @@ function preview(templateId: string, role: string) {
 }
 
 describe('messages audience in permission-projected applications', () => {
-  it.each(['service', 'dostavka'])('%s: opens the assigned record conversation from a staff detail without a client detail screen', async templateId => {
+  it.each(['service', 'dostavka'])('%s: embeds Переписка on a staff detail without a client detail screen', async templateId => {
     const example = templateExample(templateId), config = example.app.customer!, email = 'person@example.invalid'
     example.app.communications = { enabled: true }
     const assigned = example.rows.find(row => row.tableId === config.tableId)!
@@ -49,11 +49,9 @@ describe('messages audience in permission-projected applications', () => {
     expect(runtime.tables[config.tableId]!.rows.map(row => row.id)).toContain(assigned.id)
     window.history.replaceState(null, '', `/a/review?e=${detail.id}&r=${assigned.id}`)
     const ui = render(<AppShell runtime={runtime} viewer={viewer} browserHistory />)
-    fireEvent.click(await ui.findByRole('button', { name: 'Открыть переписку' }))
-    expect(await ui.findByText('Вопросы клиентов и переписка по заказам и записям, к которым у вас есть доступ.')).toBeTruthy()
-    const search = new URLSearchParams(window.location.search)
-    expect(search.get('e')).toBe('__tableapp_messages')
-    expect(JSON.parse(search.get('r')!)).toEqual({ slug: runtime.app.slug, tableId: config.tableId, rowId: assigned.id })
+    expect(ui.queryByRole('button', { name: 'Открыть переписку' })).toBeNull()
+    expect(ui.getAllByRole('button', { name: 'Сообщения' }).length).toBeGreaterThan(0)
+    expect(document.querySelector(`[data-correspondence-module][data-table="${config.tableId}"][data-row="${assigned.id}"]`)).toBeTruthy()
   })
 
   it.each(['service', 'dostavka', 'salon', 'zakazy'].flatMap(templateId => ['staff', 'manager'].map(role => [templateId, role])))('%s: shows %s the work inbox without a customer question action', async (templateId, role) => {

@@ -24,13 +24,12 @@ describe('CorrespondenceModule', () => {
         rowId="row_1"
         business
         showContext={false}
-        slaBadge="Просрочено"
         fixture={conversationShotPage(true)}
         fixtureFiles={conversationShotDraftFiles}
       />,
     )
     expect(document.querySelector('[data-correspondence-module][data-table="tbl_repairs"][data-row="row_1"]')).toBeTruthy()
-    expect(screen.getByText('Просрочено')).toBeTruthy()
+    expect(screen.queryByText('Просрочено')).toBeNull()
     expect(screen.getByRole('radiogroup', { name: 'Режим ответа' }).textContent).toMatch(/Клиенту|Заметка/)
     expect(await screen.findByRole('button', { name: 'Прикрепить файл' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Отправить' })).toBeTruthy()

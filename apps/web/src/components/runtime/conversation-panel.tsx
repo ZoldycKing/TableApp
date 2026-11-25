@@ -104,7 +104,8 @@ export function ConversationPanel({
     finally { if (snapshot === generation.current) { sending.current = false; setBusy(false) } }
   }
   const availableFiles = files.filter(isAttachmentAvailable)
-  const embedded = Boolean(fixture) && !showContext
+  /** Embedded in a detail card: no outer chrome / duplicate title. */
+  const embedded = !showContext
   type TimelineItem =
     | { kind: 'message'; message: ConversationMessage }
     | { kind: 'note'; id: string; body: string; author: string; createdAt: string }

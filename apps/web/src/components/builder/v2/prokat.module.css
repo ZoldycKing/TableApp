@@ -1152,6 +1152,7 @@
 }
 .timelineTrack {
   position: relative; min-width: 0; height: 28px; border-radius: 8px;
+  overflow: visible;
   background:
     repeating-linear-gradient(
       to right,

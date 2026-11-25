@@ -23,9 +23,9 @@ const hide = async (page: Page) => {
   })
 }
 
-const save = async (page: Page, name: string) => {
+const save = async (page: Page, name: string, opts?: { keepHover?: boolean }) => {
   await hide(page)
-  await page.mouse.move(2, 2)
+  if (!opts?.keepHover) await page.mouse.move(2, 2)
   await page.waitForTimeout(450)
   const path = resolve(outDir, name)
   await page.screenshot({ path, fullPage: false })
@@ -37,7 +37,12 @@ const waitProkat = async (page: Page) => {
   await page.waitForTimeout(700)
 }
 
-const shot = async (path: string, opts: { phone?: boolean; width?: number; height?: number }, name: string, interact?: (page: Page) => Promise<void>) => {
+const shot = async (
+  path: string,
+  opts: { phone?: boolean; width?: number; height?: number; keepHover?: boolean },
+  name: string,
+  interact?: (page: Page) => Promise<void>,
+) => {
   const phone = Boolean(opts.phone)
   const context = await browser.newContext({
     viewport: { width: opts.width ?? (phone ? 390 : 1440), height: opts.height ?? (phone ? 844 : 900) },
@@ -50,7 +55,7 @@ const shot = async (path: string, opts: { phone?: boolean; width?: number; heigh
   await page.goto(`${base}${path}`, { waitUntil: 'networkidle' })
   await waitProkat(page)
   if (interact) await interact(page)
-  await save(page, name)
+  await save(page, name, { keepHover: opts.keepHover })
   await context.close()
 }
 
@@ -62,17 +67,19 @@ const browser = await chromium.launch({
 await shot('/prokat-shot?view=dashboard', {}, '01-staff-home-desktop-1440.png')
 await shot('/prokat-shot?view=dashboard&phone=1', { phone: true }, '02-staff-home-phone-390.png')
 await shot('/prokat-shot?view=bookings', {}, '03-staff-bookings-desktop-1440.png')
-await shot('/prokat-shot?view=timeline', {}, '04-timeline-tooltip-desktop-1440.png', async page => {
-  const bar = page.locator('[data-prokat-screen="timeline"] .timelineBar, [data-prokat-screen="timeline"] button[class*="timelineBar"]').first()
-  // CSS module hashes the class — use title/aria buttons inside the track.
-  const target = page.locator('[data-prokat-screen="timeline"] button[data-prokat-bar-tip], [data-prokat-screen="timeline"] [class*="timelineBar"]').first()
+await shot('/prokat-shot?view=timeline', { keepHover: true }, '04-timeline-tooltip-desktop-1440.png', async page => {
+  const target = page.locator('[data-prokat-screen="timeline"] button[data-prokat-bar-tip]').first()
   await target.waitFor({ timeout: 15000 })
-  await target.hover({ force: true })
-  await page.waitForTimeout(500)
+  await target.scrollIntoViewIfNeeded()
+  await target.hover()
+  await page.getByRole('tooltip').waitFor({ timeout: 5000 })
+  await page.waitForTimeout(300)
 })
-await shot('/prokat-shot?view=item', {}, '05-item-card-late-fee-desktop-1440.png', async page => {
-  await page.getByText('Штраф за просрочку').first().waitFor({ timeout: 15000 })
-  await page.getByText('Показывать клиентам').first().waitFor({ timeout: 10000 })
+await shot('/prokat-shot?view=item', { height: 1100 }, '05-item-card-late-fee-desktop-1440.png', async page => {
+  await page.getByRole('heading', { name: /SUP Red|SUP Aqua|Trek|Предмет/ }).first().waitFor({ timeout: 15000 }).catch(() => {})
+  await page.getByText('Показывать клиентам').first().waitFor({ timeout: 15000 })
+  await page.locator('[data-prokat-late-formula]').first().waitFor({ timeout: 15000 })
+  await page.evaluate(() => window.scrollTo(0, 0))
   await page.waitForTimeout(400)
 })
 await shot('/prokat-shot?view=overdue', {}, '06-overdue-booking-desktop-1440.png', async page => {
@@ -81,7 +88,19 @@ await shot('/prokat-shot?view=overdue', {}, '06-overdue-booking-desktop-1440.png
 })
 await shot('/prokat-shot?view=catalog&phone=1', { phone: true }, '07-client-catalog-phone-390.png')
 await shot('/prokat-shot?view=request&phone=1', { phone: true }, '08-request-modal-phone-390.png', async page => {
-  await page.getByRole('dialog').waitFor({ timeout: 15000 })
+  const dialog = page.getByRole('dialog')
+  await dialog.waitFor({ timeout: 15000 })
+  const pickDate = async (label: string, dayText: string) => {
+    await dialog.getByLabel(label).click()
+    await page.waitForTimeout(300)
+    await page.locator('button').filter({ hasText: new RegExp(`^${dayText}$`) }).last().click({ timeout: 5000 }).catch(() => {})
+    await page.waitForTimeout(200)
+  }
+  await pickDate('Дата начала', '26')
+  await pickDate('Дата окончания', '27')
+  await dialog.getByText('Сначала выберите даты').waitFor({ state: 'hidden', timeout: 5000 }).catch(() => {})
+  await dialog.locator('button[aria-pressed]:not([disabled])').first().click({ timeout: 8000 }).catch(() => {})
+  await dialog.getByText('Предварительно').waitFor({ timeout: 5000 })
   await page.waitForTimeout(500)
 })
 await shot('/prokat-shot?view=dashboard&phone=1', { phone: true }, '09-staff-nav-phone-390.png', async page => {

@@ -10,7 +10,7 @@ import { appReadPolicy } from './app-read-policy'
 import { validateAppReferences } from './app-references'
 import { legacyAppModules } from './app-modules'
 import { conversationResource } from './conversation-resource'
-import { conversationManagerV2, conversationResourceV2, conversationStaffV2 } from './conversation-resource-v2'
+import { conversationDetailScreenV2, conversationManagerV2, conversationResourceV2, conversationStaffV2 } from './conversation-resource-v2'
 import { conversationAccess } from './conversations'
 import { hasRole, moduleForTable, workflowRole } from './module-access'
 import { currentMember } from './session'
@@ -80,6 +80,7 @@ export async function listConversationInbox(input: InboxInput = {}, business = f
     policy: Awaited<ReturnType<typeof appReadPolicy>> | null
     detailScreenId: string
     titleFieldId?: string
+    statusFieldId?: string
     v2?: boolean
   }
   const scopes: Scope[] = []
@@ -102,9 +103,14 @@ export async function listConversationInbox(input: InboxInput = {}, business = f
         const staff = owner || conversationStaffV2(app, tableId, actor.roleIds)
         const manager = owner || conversationManagerV2(app, tableId, actor.roleIds)
         if (!owner && (business ? !staff : !staff && !actor.roleIds.includes('client'))) continue
+        const statusFieldId = app.service?.repairsTableId === tableId ? app.service.repair.status
+          : app.support?.ticketsTableId === tableId ? app.support.ticket.status
+          : undefined
         scopes.push({
           app, tableId, emailFieldId: resource.emailFieldId, moduleId: resource.moduleId, staff: staff || manager, owner,
-          visitor: null, viewer: null, policy: null, detailScreenId: resource.detailScreenId, titleFieldId: resource.titleFieldId, v2: true,
+          visitor: null, viewer: null, policy: null,
+          detailScreenId: conversationDetailScreenV2(resource, staff || manager || owner),
+          titleFieldId: resource.titleFieldId, statusFieldId, v2: true,
         })
       }
       continue
@@ -141,7 +147,8 @@ export async function listConversationInbox(input: InboxInput = {}, business = f
   const unread = sql<number>`(select count(*) from conversation_messages m where m.conversation_id=${conversations.id} and m.deleted_at is null and m.author_id<>${actorId} and m.sequence>coalesce((select r.sequence from conversation_reads r where r.workspace_id=${workspaceId} and r.conversation_id=${conversations.id} and r.actor_id=${actorId}),0))`
   const found = await db.select({ thread: conversations, row: rows, primary: tables.primaryFieldId, customer: businessCustomers.name, email: businessCustomers.email, lastSequence, unread,
     preview: sql<string | null>`(select case when m.deleted_at is not null then 'Сообщение удалено' when m.body='' then 'Документ' else left(m.body,160) end from conversation_messages m where m.conversation_id=${conversations.id} order by m.sequence desc limit 1)`,
-    lastAt: sql<string | null>`(select m.created_at::text from conversation_messages m where m.conversation_id=${conversations.id} order by m.sequence desc limit 1)` })
+    lastAt: sql<string | null>`(select m.created_at::text from conversation_messages m where m.conversation_id=${conversations.id} order by m.sequence desc limit 1)`,
+    lastAuthor: sql<string | null>`(select m.author_name from conversation_messages m where m.conversation_id=${conversations.id} and m.deleted_at is null order by m.sequence desc limit 1)` })
     .from(conversations).leftJoin(rows, and(eq(rows.id, conversations.rowId), eq(rows.tableId, conversations.tableId)))
     .leftJoin(tables, and(eq(tables.id, conversations.tableId), eq(tables.workspaceId, workspaceId)))
     .innerJoin(businessCustomers, and(eq(businessCustomers.id, conversations.customerId), eq(businessCustomers.workspaceId, workspaceId)))
@@ -151,17 +158,28 @@ export async function listConversationInbox(input: InboxInput = {}, business = f
       customerContext ? eq(businessCustomers.email, customerContext.email) : undefined,
       input.unreadOnly ? sql`${unread}>0` : undefined,
       cursor ? or(lt(lastSequence, Number(cursor[0])), and(eq(lastSequence, Number(cursor[0])), lt(conversations.id, cursor[1]!))) : undefined))
-    .orderBy(desc(lastSequence), desc(conversations.id)).limit(51)
+    .orderBy(desc(lastSequence), sql`(select m.created_at from conversation_messages m where m.conversation_id=${conversations.id} order by m.sequence desc limit 1) desc nulls last`, desc(conversations.id)).limit(51)
   const page = found.slice(0, 50), items: ConversationInboxPage['items'] = []
   const titles = new Map<string, string>()
   const servicePolicies = new Map<string, Awaited<ReturnType<typeof appReadPolicy>>>()
+  const statusLabels = new Map<string, Map<string, string>>()
+  const statusFieldIds = [...new Set(scopes.map(scope => scope.statusFieldId).filter((id): id is string => Boolean(id)))]
+  if (statusFieldIds.length) {
+    const statusFields = await db.select().from(fields).where(inArray(fields.id, statusFieldIds))
+    for (const field of statusFields) {
+      const choices = (field.options as { choices?: { id: string; name: string }[] } | null)?.choices
+      if (!choices?.length) continue
+      statusLabels.set(field.id, new Map(choices.map(choice => [choice.id, choice.name])))
+    }
+  }
   for (const item of page) {
     if (item.thread.kind === 'general') {
       const app = generalApps[0]
       if (!app || !operator && item.email !== actorEmail.trim().toLowerCase()) continue
       items.push({ id: item.thread.id, kind: 'general', slug: app.slug, tableId: GENERAL_CONVERSATION_TABLE, rowId: item.thread.customerId,
         title: 'Вопрос бизнесу', customer: item.customer || (operator ? item.email : 'Вы'), appName: app.name, detailScreenId: '',
-        preview: item.preview ?? 'Сообщений пока нет', lastAt: item.lastAt ? new Date(item.lastAt).toISOString() : item.thread.createdAt.toISOString(), unread: Number(item.unread), closed: Boolean(item.thread.closedAt) })
+        preview: item.preview ?? 'Сообщений пока нет', lastAt: item.lastAt ? new Date(item.lastAt).toISOString() : item.thread.createdAt.toISOString(),
+        unread: Number(item.unread), closed: Boolean(item.thread.closedAt), lastAuthor: item.lastAuthor?.trim() || undefined })
       continue
     }
     if (!item.row) continue
@@ -219,9 +237,16 @@ export async function listConversationInbox(input: InboxInput = {}, business = f
     const nameField = booking?.tables.visits === item.thread.tableId ? booking.visit.client
       : !scope.v2 ? customerWorkflows(scope.app as App).find(workflow => workflow.tableId === item.thread.tableId)?.profile?.nameFieldId : undefined
     const recordName = nameField && typeof projected[nameField] === 'string' ? String(projected[nameField]).trim().slice(0, 80) : ''
+    const statusRaw = scope.statusFieldId ? String(projected[scope.statusFieldId] ?? '').trim() : ''
+    const statusNames = scope.statusFieldId ? statusLabels.get(scope.statusFieldId) : undefined
+    const statusLabel = statusRaw
+      ? statusNames?.get(statusRaw) ?? ([...statusNames?.values() ?? []].includes(statusRaw) ? statusRaw : undefined)
+      : undefined
     items.push({ id: item.thread.id, slug: scope.app.slug, tableId: item.thread.tableId!, rowId: item.thread.rowId!, title,
       customer: item.customer || recordName || (scope.staff ? 'Клиент' : 'Вы'), appName: scope.app.name, detailScreenId: scope.detailScreenId,
-      preview: item.preview ?? 'Сообщений пока нет', lastAt: item.lastAt ? new Date(item.lastAt).toISOString() : item.thread.createdAt.toISOString(), unread: Number(item.unread), closed: Boolean(item.thread.closedAt) })
+      preview: item.preview ?? 'Сообщений пока нет', lastAt: item.lastAt ? new Date(item.lastAt).toISOString() : item.thread.createdAt.toISOString(),
+      unread: Number(item.unread), closed: Boolean(item.thread.closedAt),
+      lastAuthor: item.lastAuthor?.trim() || undefined, statusLabel })
   }
   const last = page.at(-1)
   return { items, next: found.length > 50 && last ? `${last.lastSequence}~${last.thread.id}` : null }

@@ -19,12 +19,19 @@ import { builderV2StatusColumn } from './builder-v2-order-summary'
 import { builderV2StatusForm } from './builder-v2-status-form'
 import { calendarCreateTarget } from './team-calendar-prefill'
 import { isBuilderV2OrderTable } from '@/components/builder/v2/record-presentation'
+import { MESSAGES_SCREEN, v2MessagesAvailable, v2MessagesLabel, withV2MessagesNav } from './builder-v2-messages'
 
 /** Only the current visible page is serialized; access lists, policies and action bodies stay server-side. */
 export async function loadPublishedV2Page(slug:string,request:{screen?:string;row?:string}){
   return withPublishedV2Read(async tx=>{
     const current=await publishedV2Context(slug,tx),{app,actor,revision}=current,visibleScreens=app.screens.filter(screen=>canOpenAppV2Screen(app,actor,screen.id))
     if(!visibleScreens.length)return {login:true as const,id:app.id,workspaceId:app.workspaceId,name:app.name,accent:app.theme.accent,theme:app.theme,appearance:app.appearance}
+    if(request.screen===MESSAGES_SCREEN){
+      if(!v2MessagesAvailable(app,actor))throw new RowWriteError('denied','Этот экран недоступен')
+      const label=v2MessagesLabel(actor)
+      const nav=withV2MessagesNav({...app,authentication:{mode:'invite_only',defaultRoleId:null,members:[]},roles:app.roles.filter(role=>actor.roleIds.includes(role.id)),policy:{tables:[],workflows:[]},screens:visibleScreens.map(item=>({...item,catalog:undefined,rootIds:[],events:{enter:null}})),nodes:[],sources:[],workflows:[]},actor)
+      return {login:false as const,asOf:Date.now(),app:nav,tables:[],actor,revision,screenId:MESSAGES_SCREEN,recordId:request.row,record:undefined,title:label,buttons:{},rowActions:{}}
+    }
     // Create-product deep link opens the items list with the form dialog, so the list stays behind.
     const openCreate = Boolean(app.inventory && request.screen === app.inventory.createItemScreenId)
     const requestedScreenId = openCreate && app.inventory ? app.inventory.itemsScreenId
@@ -135,7 +142,7 @@ export async function loadPublishedV2Page(slug:string,request:{screen?:string;ro
     const tables:BuilderV2Table[]=current.tables.filter(table=>tableIds.has(table.id)).map(table=>({...table,fields:table.fields.filter(field=>fields.get(table.id)?.has(field.id)),views:[]}))
     const navigationIds=new Set(nodes.flatMap(node=>node.type==='collection'&&node.events.itemPress&&collectionCardScreen(app,node)?[node.events.itemPress]:[]))
     const workflows=app.workflows.filter(flow=>navigationIds.has(flow.id)&&canInvokeAppV2Workflow(app,actor,flow.id)).map(flow=>({...flow,steps:flow.steps.filter(step=>step.type==='open_screen'&&canOpenAppV2Screen(app,actor,step.screenId))}))
-    const safe:AppV2={...app,authentication:{mode:'invite_only',defaultRoleId:null,members:[]},roles:app.roles.filter(role=>actor.roleIds.includes(role.id)),policy:{tables:[],workflows:[]},screens:visibleScreens.map(item=>({...item,catalog:item.id===screen.id?item.catalog:undefined,rootIds:item.id===screen.id?rootIds:queue&&item.id===parent?.screenId?[queue.id]:[],events:{enter:null}})),nodes,sources,workflows}
+    const safe:AppV2=withV2MessagesNav({...app,authentication:{mode:'invite_only',defaultRoleId:null,members:[]},roles:app.roles.filter(role=>actor.roleIds.includes(role.id)),policy:{tables:[],workflows:[]},screens:visibleScreens.map(item=>({...item,catalog:item.id===screen.id?item.catalog:undefined,rootIds:item.id===screen.id?rootIds:queue&&item.id===parent?.screenId?[queue.id]:[],events:{enter:null}})),nodes,sources,workflows},actor)
     const enter=(!screen.contextTableId||request.row)?await publishedV2EnterState(current,tx,{screenId:screen.id,...(request.row?{recordId:request.row}:{})}):undefined
     const titleFieldId = screen.catalog?.titleFieldId ?? screen.recordTitleFieldId ?? current.tables.find(table=>table.id===screen.contextTableId)?.primaryFieldId
     const purchaseSection = builderV2InventoryPurchaseSection(app, screen.id)

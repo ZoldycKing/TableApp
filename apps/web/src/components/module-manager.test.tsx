@@ -26,7 +26,7 @@ describe('technical module attachment controls', () => {
     const app = { ...templateExample('salon').app, modules: undefined, communications: undefined }
     const ui = render(<ModuleManager app={app} primary sources={[]} />)
     expect(ui.getByRole('button', { name: 'Включить переписку' })).toBeTruthy()
-    expect(ui.getByText(/В карточке записи и в разделе «Сообщения»/)).toBeTruthy()
+    expect(ui.getByText(/В карточке записи и в разделе «Чат» \/ «Сообщения»/)).toBeTruthy()
     expect(ui.getByRole('button', { name: 'Добавить возможность' })).toBeTruthy()
     expect(ui.container.querySelector('select')).toBeNull()
   })

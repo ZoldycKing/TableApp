@@ -263,7 +263,8 @@ export function AppShell({
   const sales = customerCartWorkflow(app)
   useLiveApp(app.slug, !demo && !editing)
   const messagesAvailable = !demo && !editing && Boolean(viewer) && Boolean(app.booking || customerWorkflows(app).some(workflow => moduleForTable(app, workflow.tableId)?.kind !== 'crm'))
-  const messagesTab = useMemo(() => messagesAvailable && app.screens[0] ? { ...app.screens[0], id: MESSAGES_SCREEN, name: 'Сообщения', tab: { label: 'Сообщения', icon: 'chat' } } as Screen : null, [messagesAvailable, app.screens])
+  const messagesLabel = messagesOperator ? 'Сообщения' : 'Чат'
+  const messagesTab = useMemo(() => messagesAvailable && app.screens[0] ? { ...app.screens[0], id: MESSAGES_SCREEN, name: messagesLabel, tab: { label: messagesLabel, icon: 'chat' } } as Screen : null, [messagesAvailable, messagesLabel, app.screens])
   const questionScreen = useMemo(() => questionAvailable && app.screens[0] ? { ...app.screens[0], id: GENERAL_QUESTION_SCREEN, name: 'Задать вопрос', tab: null } as Screen : null, [questionAvailable, app.screens])
   const screens = useMemo(() => new Map([...namedScreens, ...(messagesTab ? [messagesTab] : []), ...(questionScreen ? [questionScreen] : [])].map((screen) => [screen.id, screen])), [namedScreens, messagesTab, questionScreen])
   const tabs = [...(editing ? namedScreens.filter(screen => screen.tab !== null) : navigation.tabs), ...(messagesTab ? [messagesTab] : [])]
@@ -855,7 +856,7 @@ export function AppShell({
    */
   const heading = (() => {
     if (current.screenId === GENERAL_QUESTION_SCREEN) return questionDraft.login && !viewer ? 'Подтвердите почту' : 'Задать вопрос'
-    if (current.screenId === MESSAGES_SCREEN) return 'Сообщения'
+    if (current.screenId === MESSAGES_SCREEN) return messagesLabel
     if (checkout && !viewer) return 'Подтвердите почту'
     if (screen.type !== 'detail' || !row || !table) return screen.name
     if (app.booking?.tables.visits === screen.tableId && app.screens.some(s => s.id === app.homeScreenId)) {

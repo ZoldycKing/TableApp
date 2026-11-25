@@ -3,6 +3,8 @@ import type { Attachment } from '@tableapp/schema'
 /** API targets only. General conversations never create an artificial table row. */
 export const GENERAL_CONVERSATION_TABLE = '__tableapp_general'
 export const GENERAL_CONVERSATION_SELF = 'self'
+/** Virtual inbox screen id for AppShell and App V2 published runtime. */
+export const MESSAGES_SCREEN = '__tableapp_messages'
 
 export type ConversationMessage = { id: string; sequence: number; body: string; author: string; mine: boolean; version: number;
   createdAt: string; edited: boolean; deleted: boolean; files: Attachment[]; canModerate: boolean; canViewRevisions: boolean }
@@ -11,6 +13,11 @@ export type ConversationPage = { conversationId: string | null; enabled: boolean
 
 export type ConversationSummary = {
   id: string; slug: string; tableId: string; rowId: string; title: string; customer: string;
-  appName: string; detailScreenId: string; preview: string; lastAt: string; unread: number; closed: boolean; kind?: 'record' | 'general'
+  appName: string; detailScreenId: string; preview: string; lastAt: string; unread: number; closed: boolean;
+  kind?: 'record' | 'general'
+  /** Last public message author name for the inbox meta line. */
+  lastAuthor?: string
+  /** Human status label from the parent record, when available. */
+  statusLabel?: string
 }
 export type ConversationInboxPage = { items: ConversationSummary[]; next: string | null }

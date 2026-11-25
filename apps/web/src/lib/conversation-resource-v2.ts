@@ -1,7 +1,15 @@
 import type { AppV2 } from '@tableapp/schema/app-v2'
 
+export type ConversationResourceV2 = {
+  emailFieldId: string
+  moduleId: string
+  staffDetailScreenId: string
+  clientDetailScreenId: string
+  titleFieldId: string
+}
+
 /** Client-facing record tables that may own a Переписка thread in App V2 kits. */
-export function conversationResourceV2(app: AppV2, tableId: string): { emailFieldId: string; moduleId: string; detailScreenId: string; titleFieldId: string } | null {
+export function conversationResourceV2(app: AppV2, tableId: string): ConversationResourceV2 | null {
   if (app.service?.repairsTableId === tableId) {
     const hasClientCard = app.screens.some(screen => screen.id === app.service!.clientRepairScreenId && screen.contextTableId === tableId
       && screen.audience.kind === 'roles' && screen.audience.roleIds.includes('client'))
@@ -9,7 +17,8 @@ export function conversationResourceV2(app: AppV2, tableId: string): { emailFiel
     return {
       emailFieldId: app.service.repair.clientEmail,
       moduleId: `mod_service_${tableId}`,
-      detailScreenId: app.service.repairScreenId,
+      staffDetailScreenId: app.service.repairScreenId,
+      clientDetailScreenId: app.service.clientRepairScreenId,
       titleFieldId: app.service.repair.device,
     }
   }
@@ -20,11 +29,16 @@ export function conversationResourceV2(app: AppV2, tableId: string): { emailFiel
     return {
       emailFieldId: app.support.ticket.clientEmail,
       moduleId: `mod_support_${tableId}`,
-      detailScreenId: app.support.ticketScreenId,
+      staffDetailScreenId: app.support.ticketScreenId,
+      clientDetailScreenId: app.support.clientTicketScreenId,
       titleFieldId: app.support.ticket.subject,
     }
   }
   return null
+}
+
+export function conversationDetailScreenV2(resource: ConversationResourceV2, staff: boolean) {
+  return staff ? resource.staffDetailScreenId : resource.clientDetailScreenId
 }
 
 /** Desk roles that may see internal notes and reply as staff. */

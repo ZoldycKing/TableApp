@@ -35,5 +35,16 @@ export function v2MessagesScreen(app: AppV2, actor: AppV2Actor): AppV2['screens'
 export function withV2MessagesNav(app: AppV2, actor: AppV2Actor): AppV2 {
   if (!v2MessagesAvailable(app, actor)) return app
   if (app.screens.some(screen => screen.id === MESSAGES_SCREEN)) return app
-  return { ...app, screens: [...app.screens, v2MessagesScreen(app, actor)] }
+  const tab = v2MessagesScreen(app, actor)
+  // Prokat staff phone: Главная, Брони, Занятость, Сообщения (+ Ещё for the rest).
+  if (app.prokat && v2MessagesOperator(actor)) {
+    const after = app.prokat.timelineScreenId
+    const index = app.screens.findIndex(screen => screen.id === after)
+    if (index >= 0) {
+      const screens = [...app.screens]
+      screens.splice(index + 1, 0, tab)
+      return { ...app, screens }
+    }
+  }
+  return { ...app, screens: [...app.screens, tab] }
 }

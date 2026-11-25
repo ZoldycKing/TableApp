@@ -40,6 +40,7 @@ import { stageSupportPortrait } from '@/lib/templates/support-portrait-files'
 import { stageBookingSampleFile } from '@/lib/templates/booking-sample-files'
 import { stageSalonPortrait } from '@/lib/templates/salon-portraits'
 import { discardInventorySampleFiles, stageInventorySampleFile } from '@/lib/templates/inventory-sample-files'
+import { discardProkatSampleFiles, stageProkatSampleFile } from '@/lib/templates/prokat-sample-files'
 import { discardShopSampleFiles, stageShopSampleFile } from '@/lib/templates/shop-sample-files'
 import { linkAttachments } from '@/lib/attachments'
 import type { ActionResult } from './actions'
@@ -177,6 +178,18 @@ export async function applyTemplateAction(
         sampleFiles.push({ tableId, rowId: row.id, fieldId: imageFieldId, file })
       }
     }
+    if (isProkatTemplate(template.id)) {
+      const itemsTable = built.tables.find(table => table.name === 'Предметы')
+      const photo = itemsTable && built.fields.find(field => field.tableId === itemsTable.id && field.name === 'Фото')
+      if (itemsTable?.primaryFieldId && photo) {
+        for (const row of built.rows.filter(row => row.tableId === itemsTable.id)) {
+          const file = await stageProkatSampleFile(workspaceId, auth.member.userId, row.data[itemsTable.primaryFieldId])
+          if (!file) continue
+          row.data[photo.id] = [file]
+          sampleFiles.push({ tableId: itemsTable.id, rowId: row.id, fieldId: photo.id, file })
+        }
+      }
+    }
     await writeRows(workspaceId, async (context) => {
       const { tx } = context
       await lockRowUsage(context)
@@ -217,6 +230,7 @@ export async function applyTemplateAction(
     await Promise.allSettled([
       discardShopSampleFiles(workspaceId, sampleFiles.map(item => item.file)),
       discardInventorySampleFiles(workspaceId, sampleFiles.map(item => item.file)),
+      discardProkatSampleFiles(workspaceId, sampleFiles.map(item => item.file)),
     ])
     if (isPlanLimitError(error)) return { ok: false, error: error.message }
     throw error

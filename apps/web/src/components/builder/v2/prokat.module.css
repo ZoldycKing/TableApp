@@ -1215,10 +1215,93 @@
 .itemTile {
   display: inline-grid; place-items: center; width: 40px; height: 40px; flex: none;
   border-radius: 10px; overflow: hidden;
-  background: color-mix(in srgb, var(--v2-accent, #3F6B5C) 12%, transparent);
-  color: var(--v2-accent, #3F6B5C);
+  background: color-mix(in srgb, var(--v2-ink, var(--sc-text)) 6%, transparent);
+  color: var(--v2-muted, var(--sc-text-2));
+}
+.itemTile[data-empty] {
+  background: color-mix(in srgb, var(--v2-ink, var(--sc-text)) 5%, #F3F5F2);
+  color: color-mix(in srgb, var(--v2-accent, #3F6B5C) 70%, #6B7C72);
 }
 .itemTile img { width: 100%; height: 100%; object-fit: cover; }
+.itemHero {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 16px; align-items: start;
+  min-width: 0; padding: 4px 0 8px;
+}
+.lateFeeFormula {
+  margin: 8px 0 0; padding: 10px 12px; border-radius: 12px;
+  background: color-mix(in srgb, #C4623A 8%, transparent);
+  color: var(--v2-ink, var(--sc-text)); font-size: 13px; line-height: 1.45; overflow-wrap: anywhere;
+}
+.plainInput {
+  width: 100%; min-height: 40px; padding: 8px 12px; border: 1px solid var(--v2-line, var(--sc-border));
+  border-radius: 10px; background: transparent; color: inherit; font: inherit; font-variant-numeric: tabular-nums;
+}
+.todayStack { display: grid; gap: 16px; min-width: 0; }
+.todayGroup {
+  display: grid; gap: 8px; min-width: 0; padding: 12px 14px; border-radius: 14px;
+  border: 1px solid var(--v2-line, var(--sc-border));
+  background: var(--v2-surface, var(--sc-bg-elevated));
+}
+.todayGroup[data-tone='overdue'] {
+  border-color: color-mix(in srgb, #C4623A 35%, var(--v2-line));
+  background: color-mix(in srgb, #C4623A 5%, var(--v2-surface, #fff));
+}
+.todayHead {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px; min-width: 0;
+}
+.todayHead h3 { margin: 0; font-size: 15px; font-weight: 750; }
+.todayCount {
+  flex: none; min-width: 1.5rem; padding: 2px 8px; border-radius: 999px;
+  background: color-mix(in srgb, var(--v2-accent, #3F6B5C) 12%, transparent);
+  color: var(--v2-accent, #3F6B5C); font-size: 12px; font-weight: 750; font-variant-numeric: tabular-nums; text-align: center;
+}
+.todayGroup[data-tone='overdue'] .todayCount {
+  background: color-mix(in srgb, #C4623A 14%, transparent); color: #C4623A;
+}
+.todayList { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.todayRow {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; min-width: 0;
+}
+.todayMain {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: center;
+  min-width: 0; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.todayCopy { display: grid; gap: 2px; min-width: 0; }
+.todayCopy strong { font-size: 14px; font-weight: 700; overflow-wrap: anywhere; }
+.todayAction {
+  flex: none; min-height: 36px; padding: 6px 12px; border: 0; border-radius: 10px;
+  background: var(--v2-primary, var(--sc-accent)); color: var(--v2-on-primary, var(--sc-on-accent));
+  font: inherit; font-size: 13px; font-weight: 650; cursor: pointer; white-space: nowrap;
+}
+.todayEmpty {
+  margin: 0; color: var(--v2-muted, var(--sc-text-2)); font-size: 13px; line-height: 1.45;
+}
+.kpiRow {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px;
+  margin: 0; padding: 4px 20px 8px;
+}
+.kpiPill {
+  display: grid; gap: 4px; min-width: 0; min-height: 72px; padding: 12px 14px; text-align: left;
+  border: 1px solid var(--v2-line, var(--sc-border)); border-radius: 14px;
+  background: var(--v2-surface, var(--sc-bg-elevated)); color: inherit; font: inherit; cursor: pointer;
+}
+.kpiPill strong {
+  font-size: clamp(1.15rem, 2.4cqw, 1.45rem); font-weight: 780; line-height: 1.15;
+  letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: var(--v2-accent, #3F6B5C);
+  overflow-wrap: anywhere;
+}
+.kpiPill span { color: var(--v2-muted, var(--sc-text-2)); font-size: 12px; line-height: 1.3; overflow-wrap: anywhere; }
+.timelineBar:hover, .timelineBar:focus-visible, .timelineBar[data-tip] {
+  outline: 2px solid color-mix(in srgb, #fff 70%, transparent); outline-offset: 1px; z-index: 3;
+  overflow: visible;
+}
+.timelineTip {
+  position: absolute; left: 0; bottom: calc(100% + 6px); z-index: 8;
+  max-width: min(18rem, 70vw); padding: 6px 8px; border-radius: 8px;
+  background: #1F2A24; color: #fff; font-size: 11px; font-weight: 600; font-style: normal; line-height: 1.35;
+  white-space: normal; pointer-events: none; text-align: left;
+  box-shadow: 0 6px 16px color-mix(in srgb, #122018 20%, transparent);
+}
 .itemCheckCopy { display: grid; gap: 2px; min-width: 0; flex: 1; }
 .itemCheckCopy strong { font-size: 14px; font-weight: 700; overflow-wrap: anywhere; }
 .busyUntil { color: #C4623A; font-size: 12px; font-weight: 650; }
@@ -1303,4 +1386,8 @@
   .timelineBoard { padding-inline: 16px; overflow-x: auto; }
   .timelineHead, .timelineRow { min-width: 40rem; }
   .catalogGrid { padding-inline: 16px; grid-template-columns: 1fr; }
+  .kpiRow { grid-template-columns: 1fr; padding-inline: 16px; }
+  .todayRow { grid-template-columns: minmax(0, 1fr); }
+  .todayAction { justify-self: start; }
+  .itemHero { grid-template-columns: 1fr; }
 }

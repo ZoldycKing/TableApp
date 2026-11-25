@@ -185,6 +185,7 @@ export type ProkatChange =
   | { kind: 'issue'; recordId: string; condition: string; damages: string; photos?: string }
   | { kind: 'return'; recordId: string; condition: string; damages: string; photos?: AppV2Json; lateFee?: number; depositReturned?: number; depositWithheld?: number; depositReason?: string }
   | { kind: 'status'; recordId: string; statusId: string }
+  | { kind: 'itemPatch'; recordId: string; values: Record<string, AppV2Json> }
 
 /** Mark catalog items free/rented after issue or return. Staff policy allows item updates. */
 export function syncItemStatuses(
@@ -305,6 +306,26 @@ export function applyProkatChange(
       rows: [...rows, { id: newId('row'), tableId: prokat.bookingsTableId, values: { ...values, ...(decision.ownerValues ?? {}) } }],
       message: change.kind === 'create' ? 'Бронь создана.' : 'Заявка отправлена.',
     }
+  }
+
+  if (change.kind === 'itemPatch') {
+    const desk = assertDesk(actor)
+    if (!desk.ok) return desk
+    const item = rows.find(row => row.id === change.recordId && row.tableId === prokat.itemsTableId)
+    if (!item) return { ok: false, error: 'Предмет не найден.' }
+    const allowed = new Set([
+      prokat.item.showInCatalog, prokat.item.lateFeeMode, prokat.item.lateFeeValue,
+      prokat.item.lateFeeGraceHours, prokat.item.lateFeeCapPerDay, prokat.item.condition, prokat.item.status,
+    ].filter((id): id is string => Boolean(id)))
+    const patch: Record<string, AppV2Json> = {}
+    for (const [key, value] of Object.entries(change.values)) {
+      if (!allowed.has(key)) return { ok: false, error: 'Это поле предмета нельзя менять здесь.' }
+      patch[key] = value
+    }
+    if (!Object.keys(patch).length) return { ok: false, error: 'Нет изменений.' }
+    const decision = guardProkatUpdate(app, actor, item, patch)
+    if (!decision.ok) return decision
+    return { ok: true, rows: replace(item, patch), message: 'Параметры предмета сохранены.' }
   }
 
   const booking = bookingRow(change.recordId)

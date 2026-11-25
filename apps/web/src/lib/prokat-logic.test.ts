@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { wallClockToInstant } from '@tableapp/schema'
 import {
-  computeLateFee, computeRentalPrice, findItemBookingConflict, formatMoney, formatMoneyOrZero,
-  catalogItemBusyUntil, formatProkatDateTime, isOverdueReturn, itemBusyUntil, nextBookingNumber, prokatDashboard,
-  prokatRangesOverlap, staffTransitions, weekendDaysInRange, type ProkatCatalogItem, type ProkatListItem,
+  computeLateFee, computeItemLateFee, computeRentalPrice, describeLateFee, findItemBookingConflict,
+  formatMoney, formatMoneyOrZero, catalogItemBusyUntil, formatProkatDateTime, isOverdueReturn,
+  itemBusyUntil, nextBookingNumber, prokatDashboard, prokatRangesOverlap, shortClientName,
+  staffTransitions, timelineBarLabel, weekendDaysInRange, type ProkatCatalogItem, type ProkatListItem,
 } from './prokat-logic'
 
 const moscow = (year: number, month: number, day: number, hour = 12, minute = 0) =>
@@ -99,29 +100,56 @@ describe('computeRentalPrice', () => {
 })
 
 describe('computeLateFee', () => {
-  it('charges overdue hours for hourly tariff', () => {
+  it('applies grace then hourly fee with daily cap (SUP seed)', () => {
+    // Due Mon 18:00, grace 1h → charge from 19:00; now Tue 12:00 → 17h × 500 = 8500, cap 3500/day → 3500
     expect(computeLateFee({
-      tariff: 'За час', rate: 200,
-      to: moscow(2026, 11, 24, 12), now: moscow(2026, 11, 24, 14, 30),
-    })).toBe(600)
+      mode: 'Сумма за час', value: 500, graceHours: 1, capPerDay: 3500, rate: 3500,
+      to: moscow(2026, 11, 23, 18), now: moscow(2026, 11, 24, 12),
+    })).toBe(3500)
   })
 
-  it('charges ceil days for daily and weekend tariffs', () => {
+  it('charges percent of tariff per day for bikes and tools', () => {
+    // Due 18:00 + 1h grace → 19:00; to next day 12:00 ≈ 17h → 1 day × 20% × 1500
     expect(computeLateFee({
-      tariff: 'За сутки', rate: 1500,
-      to: moscow(2026, 11, 24, 18), now: moscow(2026, 11, 25, 10),
-    })).toBe(1500)
+      mode: 'Процент от тарифа за сутки', value: 20, graceHours: 1, rate: 1500,
+      to: moscow(2026, 11, 24, 18), now: moscow(2026, 11, 25, 12),
+    })).toBe(300)
+    // ~41h after grace → 2 days × 100% × 800
     expect(computeLateFee({
-      tariff: 'Выходные', rate: 3500,
-      to: moscow(2026, 11, 23, 18), now: moscow(2026, 11, 25, 12),
-    })).toBe(7000)
+      mode: 'Процент от тарифа за сутки', value: 100, graceHours: 1, rate: 800,
+      to: moscow(2026, 11, 24, 18), now: moscow(2026, 11, 26, 12),
+    })).toBe(1600)
   })
 
-  it('is zero when still on time', () => {
+  it('charges fixed sum per day after grace', () => {
     expect(computeLateFee({
-      tariff: 'За сутки', rate: 1500,
-      to: moscow(2026, 11, 24, 18), now: moscow(2026, 11, 24, 17),
+      mode: 'Сумма за сутки', value: 400, graceHours: 1, rate: 0,
+      to: moscow(2026, 11, 24, 18), now: moscow(2026, 11, 25, 12),
+    })).toBe(400)
+  })
+
+  it('is zero within grace or when mode is none', () => {
+    expect(computeLateFee({
+      mode: 'Сумма за час', value: 500, graceHours: 1, rate: 1800,
+      to: moscow(2026, 11, 24, 18), now: moscow(2026, 11, 24, 18, 30),
     })).toBe(0)
+    expect(computeLateFee({
+      mode: 'Нет', value: 500, graceHours: 0, rate: 1800,
+      to: moscow(2026, 11, 24, 18), now: moscow(2026, 11, 25, 12),
+    })).toBe(0)
+  })
+
+  it('describes the formula in plain Russian and shortens client names', () => {
+    expect(describeLateFee({ mode: 'Сумма за час', value: 500, graceHours: 1, capPerDay: 3500 }))
+      .toMatch(/1 час льготы.*500.*час.*3.?500.*сутки/i)
+    expect(describeLateFee({ mode: 'Процент от тарифа за сутки', value: 20, graceHours: 1, rate: 1500 }))
+      .toMatch(/20%.*тарифа/i)
+    expect(shortClientName('Елена Волкова')).toBe('Елена В.')
+    expect(timelineBarLabel('ПР-1007', 'Елена Волкова')).toBe('ПР-1007 · Елена В.')
+    expect(computeItemLateFee({
+      category: 'SUP', lateFeeMode: 'Сумма за час', lateFeeValue: 500, lateFeeGraceHours: 1,
+      lateFeeCapPerDay: 3500, rate: 3500,
+    }, moscow(2026, 11, 23, 18), moscow(2026, 11, 24, 12))).toBe(3500)
   })
 })
 

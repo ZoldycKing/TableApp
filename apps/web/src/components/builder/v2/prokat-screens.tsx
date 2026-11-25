@@ -5,11 +5,14 @@ import type { AppV2, AppV2Json, AppV2Node, AppV2Record } from '@tableapp/schema/
 import { savePublishedProkatAction } from '@/app/prokat-actions'
 import { BuilderV2AttachmentInput } from './attachment-input'
 import {
-  PROKAT_BOOKING_VIEWS, PROKAT_CLIENT_STEPS, PROKAT_ZONE, clientCanRequestCancel, computeLateFee,
-  catalogItemBusyUntil, computeRentalPrice, filterBookings, formatMoney, formatMoneyOrZero, formatProkatDate, formatProkatDateTime,
-  isOpenBooking, isOverdueReturn, prokatClientStepIndex, prokatDashboard, prokatWallInstant,
-  staffTransitions, type ProkatBookingViewId, type ProkatCatalogItem, type ProkatListItem,
+  PROKAT_BOOKING_VIEWS, PROKAT_CLIENT_STEPS, PROKAT_LATE_FEE_MODES, PROKAT_ZONE, clientCanRequestCancel,
+  computeItemLateFee, catalogItemBusyUntil, computeRentalPrice, describeLateFee,
+  filterBookings, formatMoney, formatMoneyOrZero, formatProkatDate, formatProkatDateTime,
+  isOpenBooking, isOverdueReturn, itemLateFeeConfig, prokatClientStepIndex, prokatDashboard,
+  prokatWallInstant, staffTransitions, timelineBarLabel, type ProkatBookingViewId,
+  type ProkatCatalogItem, type ProkatListItem,
 } from '@/lib/prokat-logic'
+import { prokatSamplePublicPath } from '@/lib/templates/prokat-samples'
 import { applyProkatChange, bookingSpansFromRows, isProkatDesk, prokatStatusName, type ProkatChange } from '@/lib/prokat-persist'
 import { AppFrameDeviceContext } from './app-frame'
 import { AppDialog } from './app-dialog'
@@ -17,6 +20,7 @@ import { DateMenu } from './booking-calendar'
 import { DetailCardShell, DetailSection, ListScreenShell, ShellSearchField } from './layout-shell'
 import shell from './layout-shell.module.css'
 import { ProtoIcon } from '../prototype/icons'
+import { builderV2MediaItems } from './media-values'
 import { usePublishedV2 } from './published-context'
 import { useBuilderV2NodeData } from './use-data'
 import type { AppV2RendererProps } from './view'
@@ -45,34 +49,22 @@ function categoryIcon(category: string) {
   if (category === 'Инструменты') return 'wrench'
   if (category === 'Фототехника') return 'image'
   if (category === 'SUP') return 'box'
+  if (category === 'Велосипеды') return 'box'
   return 'box'
 }
 
-const ITEM_PHOTO_BY_SERIAL: Record<string, string> = {
-  'ВЕЛ-1001': '/template-media/prokat/bike-mtb.svg',
-  'ВЕЛ-1002': '/template-media/prokat/bike-city.svg',
-  'ВЕЛ-1003': '/template-media/prokat/bike-road.svg',
-  'ВЕЛ-1004': '/template-media/prokat/bike-kids.svg',
-  'СУП-2001': '/template-media/prokat/sup-red.svg',
-  'СУП-2002': '/template-media/prokat/sup-blue.svg',
-  'СУП-2003': '/template-media/prokat/sup-kids.svg',
-  'ИНСТ-3001': '/template-media/prokat/drill.svg',
-  'ИНСТ-3002': '/template-media/prokat/saw.svg',
-  'ИНСТ-3003': '/template-media/prokat/laser.svg',
-}
-
-function itemPhotoSrc(item: Pick<ProkatCatalogItem, 'photo' | 'serial'>) {
+function itemPhotoSrc(item: Pick<ProkatCatalogItem, 'photo' | 'serial' | 'name'>) {
   const raw = item.photo?.trim()
   if (raw && (raw.startsWith('/') || raw.startsWith('http') || raw.startsWith('data:'))) return raw
-  return ITEM_PHOTO_BY_SERIAL[item.serial] ?? null
+  return prokatSamplePublicPath(item.serial) ?? prokatSamplePublicPath(item.name) ?? null
 }
 
 function ItemTile({ item, size = 40 }: { item: Pick<ProkatCatalogItem, 'photo' | 'category' | 'name' | 'serial'>; size?: number }) {
   const src = itemPhotoSrc(item)
-  return <span className={css.itemTile} aria-hidden="true">
+  return <span className={css.itemTile} data-empty={!src || undefined} style={{ width: size, height: size }} aria-hidden="true">
     {src
       ? <img src={src} alt="" width={size} height={size} />
-      : <ProtoIcon name={categoryIcon(item.category)} size={Math.round(size * 0.45)} />}
+      : <ProtoIcon name={categoryIcon(item.category)} size={Math.round(size * 0.42)} />}
   </span>
 }
 
@@ -383,19 +375,31 @@ function bookingItems(props: ScreenProps): ProkatListItem[] {
 
 function catalogItems(props: ScreenProps): ProkatCatalogItem[] {
   const fields = props.kit.item
-  return props.of(props.kit.itemsTableId).map(row => ({
-    id: row.id,
-    name: textOf(row.values[fields.name]),
-    category: choiceLabel(props, props.kit.itemsTableId, fields.category, row.values[fields.category]),
-    serial: textOf(row.values[fields.serial]),
-    tariff: choiceLabel(props, props.kit.itemsTableId, fields.tariff, row.values[fields.tariff]),
-    rate: numberOf(row.values[fields.rate]),
-    deposit: numberOf(row.values[fields.deposit]),
-    condition: textOf(row.values[fields.condition]),
-    status: choiceLabel(props, props.kit.itemsTableId, fields.status, row.values[fields.status]),
-    photo: fields.photo ? textOf(row.values[fields.photo]) || undefined : undefined,
-    busyUntil: fields.busyUntil ? textOf(row.values[fields.busyUntil]) || undefined : undefined,
-  }))
+  const published = publishedHolder.current
+  return props.of(props.kit.itemsTableId).map(row => {
+    const media = fields.photo
+      ? builderV2MediaItems(row.values[fields.photo], published?.slug).find(item => item.image)?.url
+      : undefined
+    const showRaw = fields.showInCatalog ? row.values[fields.showInCatalog] : true
+    return {
+      id: row.id,
+      name: textOf(row.values[fields.name]),
+      category: choiceLabel(props, props.kit.itemsTableId, fields.category, row.values[fields.category]),
+      serial: textOf(row.values[fields.serial]),
+      tariff: choiceLabel(props, props.kit.itemsTableId, fields.tariff, row.values[fields.tariff]),
+      rate: numberOf(row.values[fields.rate]),
+      deposit: numberOf(row.values[fields.deposit]),
+      condition: textOf(row.values[fields.condition]),
+      status: choiceLabel(props, props.kit.itemsTableId, fields.status, row.values[fields.status]),
+      photo: media || (fields.photo ? textOf(row.values[fields.photo]) || undefined : undefined),
+      showInCatalog: showRaw !== false && showRaw !== 0 && showRaw !== 'false',
+      lateFeeMode: fields.lateFeeMode ? choiceLabel(props, props.kit.itemsTableId, fields.lateFeeMode, row.values[fields.lateFeeMode]) : undefined,
+      lateFeeValue: fields.lateFeeValue ? numberOf(row.values[fields.lateFeeValue]) : undefined,
+      lateFeeGraceHours: fields.lateFeeGraceHours ? numberOf(row.values[fields.lateFeeGraceHours]) : undefined,
+      lateFeeCapPerDay: fields.lateFeeCapPerDay ? numberOf(row.values[fields.lateFeeCapPerDay]) : undefined,
+      busyUntil: fields.busyUntil ? textOf(row.values[fields.busyUntil]) || undefined : undefined,
+    }
+  })
 }
 
 function formatDay(value: unknown) {
@@ -455,28 +459,112 @@ async function runStatus(props: ScreenProps, recordId: string, nextStatusId: str
   setMessage(result.ok ? result.message : result.error)
 }
 
+function TodayBookingRow(props: {
+  item: ProkatListItem
+  catalog: readonly ProkatCatalogItem[]
+  time: string
+  actionLabel: string
+  onOpen: () => void
+  onAction: () => void
+}) {
+  const photoItem = props.catalog.find(entry => props.item.itemIds.includes(entry.id))
+  return <li className={css.todayRow}>
+    <button type="button" className={css.todayMain} onClick={props.onOpen}>
+      {photoItem ? <ItemTile item={photoItem} size={44} /> : <span className={css.itemTile} data-empty aria-hidden="true"><ProtoIcon name="box" size={18} /></span>}
+      <span className={css.todayCopy}>
+        <strong className={css.deviceWrap}>{props.item.title || props.item.number}</strong>
+        <span className={css.quiet}>{props.item.clientName || 'Без клиента'} · {props.time}</span>
+      </span>
+    </button>
+    <button type="button" className={css.todayAction} onClick={props.onAction}>{props.actionLabel}</button>
+  </li>
+}
+
+function TodayGroup(props: {
+  title: string
+  empty: string
+  tone?: 'overdue'
+  children: ReactNode
+  count: number
+}) {
+  return <section className={css.todayGroup} data-tone={props.tone} aria-label={props.title}>
+    <header className={css.todayHead}>
+      <h3>{props.title}</h3>
+      <span className={css.todayCount}>{props.count}</span>
+    </header>
+    {props.count
+      ? <ul className={css.todayList}>{props.children}</ul>
+      : <p className={css.todayEmpty}>{props.empty}</p>}
+  </section>
+}
+
 function DashboardScreen(props: ScreenProps) {
   const bookings = bookingItems(props)
   const items = catalogItems(props)
   const stats = prokatDashboard(items, bookings, props.now)
+  const weekRevenue = stats.revenueByWeek[stats.revenueByWeek.length - 1]?.value ?? 0
   const maxWeek = Math.max(1, ...stats.revenueByWeek.map(week => week.value))
+  const [act, setAct] = useState<{ kind: 'issue' | 'return'; bookingId: string } | null>(null)
+  const actBooking = act ? props.of(props.kit.bookingsTableId).find(row => row.id === act.bookingId) : null
   return <div className={css.root} data-prokat-root data-prokat-screen="dashboard">
-    <ListScreenShell title="Прокат" meta="Загрузка парка, выручка и возвраты.">
-      <fieldset className={css.statCards} aria-label="Показатели проката">
-        <button type="button" className={css.statCard} onClick={() => props.onNavigate?.(props.kit.bookingsScreenId)}><strong>{stats.utilisation}%</strong><span>Загрузка парка</span></button>
-        <button type="button" className={css.statCard} onClick={() => props.onNavigate?.(props.kit.bookingsScreenId)}><strong>{stats.itemsOut}</strong><span>Сейчас в прокате</span></button>
-        <button type="button" className={css.statCard} data-tone="rose" onClick={() => props.onNavigate?.(props.kit.bookingsScreenId)}><strong>{stats.returnsDueToday}</strong><span>Возврат сегодня</span></button>
-        <button type="button" className={css.statCard} data-tone="rose" onClick={() => props.onNavigate?.(props.kit.bookingsScreenId)}><strong>{stats.overdueCount}</strong><span>Просрочено</span></button>
-      </fieldset>
-      <div className={css.summary} role="group" aria-label="По статусам">
-        <button type="button" onClick={() => props.onNavigate?.(props.kit.bookingsScreenId)}><strong>{stats.request}</strong><span>Заявки</span></button>
-        <button type="button" onClick={() => props.onNavigate?.(props.kit.bookingsScreenId)}><strong>{stats.confirmed}</strong><span>Подтверждены</span></button>
-        <button type="button" onClick={() => props.onNavigate?.(props.kit.bookingsScreenId)}><strong>{stats.issued}</strong><span>Выдано</span></button>
-        <button type="button" onClick={() => props.onNavigate?.(props.kit.bookingsScreenId)}><strong>{stats.returned}</strong><span>Возвращено</span></button>
+    <ListScreenShell title="Главная" meta="Что сделать сегодня — и как загружен парк.">
+      <DetailSection title="Сегодня">
+        <div className={css.todayStack}>
+          <TodayGroup title="Выдать сегодня" empty="На сегодня выдач нет — новые подтверждённые брони появятся здесь." count={stats.issuesTodayList.length}>
+            {stats.issuesTodayList.map(item => (
+              <TodayBookingRow
+                key={item.id}
+                item={item}
+                catalog={items}
+                time={formatProkatDateTime(item.from)}
+                actionLabel="Выдать"
+                onOpen={() => props.onNavigate?.(props.kit.bookingScreenId, item.id)}
+                onAction={() => setAct({ kind: 'issue', bookingId: item.id })}
+              />
+            ))}
+          </TodayGroup>
+          <TodayGroup title="Вернуть сегодня" empty="На сегодня возвратов нет." count={stats.returnsDueTodayList.length}>
+            {stats.returnsDueTodayList.map(item => (
+              <TodayBookingRow
+                key={item.id}
+                item={item}
+                catalog={items}
+                time={formatProkatDateTime(item.to)}
+                actionLabel="Принять возврат"
+                onOpen={() => props.onNavigate?.(props.kit.bookingScreenId, item.id)}
+                onAction={() => setAct({ kind: 'return', bookingId: item.id })}
+              />
+            ))}
+          </TodayGroup>
+          <TodayGroup title="Просрочено" empty="Просрочек нет — всё вовремя." tone="overdue" count={stats.overdue.length}>
+            {stats.overdue.map(item => (
+              <TodayBookingRow
+                key={item.id}
+                item={item}
+                catalog={items}
+                time={`до ${formatProkatDateTime(item.to)}`}
+                actionLabel="Принять возврат"
+                onOpen={() => props.onNavigate?.(props.kit.bookingScreenId, item.id)}
+                onAction={() => setAct({ kind: 'return', bookingId: item.id })}
+              />
+            ))}
+          </TodayGroup>
+        </div>
+      </DetailSection>
+      <div className={css.kpiRow} role="group" aria-label="Показатели">
+        <button type="button" className={css.kpiPill} onClick={() => props.onNavigate?.(props.kit.timelineScreenId)}>
+          <strong>{stats.utilisation}%</strong><span>Загрузка парка</span>
+        </button>
+        <button type="button" className={css.kpiPill} onClick={() => props.onNavigate?.(props.kit.bookingsScreenId)}>
+          <strong>{stats.itemsOut}</strong><span>Сейчас в прокате</span>
+        </button>
+        <button type="button" className={css.kpiPill} onClick={() => props.onNavigate?.(props.kit.bookingsScreenId)}>
+          <strong>{formatMoneyOrZero(weekRevenue)}</strong><span>Выручка за неделю</span>
+        </button>
       </div>
       <div className={css.dashGrid}>
         <DetailSection title="Загрузка по категориям">
-          {!stats.utilisationByCategory.length ? <p className={css.quiet}>Предметов пока нет.</p> : stats.utilisationByCategory.map(row => (
+          {!stats.utilisationByCategory.length ? <p className={css.quiet}>Добавьте предметы — здесь появится загрузка.</p> : stats.utilisationByCategory.map(row => (
             <div key={row.name} className={css.utilRow}>
               <div className={css.utilRow} style={{ gridTemplateColumns: 'minmax(0,1fr)', border: 0, padding: 0 }}>
                 <strong>{row.name}</strong>
@@ -499,31 +587,9 @@ function DashboardScreen(props: ScreenProps) {
           </div>
         </DetailSection>
       </div>
-      {stats.overdue.length ? <DetailSection title="Просроченный возврат">
-        <ul className={css.cards} data-keep-cards>{stats.overdue.slice(0, 5).map(item => <li key={item.id}>
-          <button type="button" className={css.card} onClick={() => props.onNavigate?.(props.kit.bookingScreenId, item.id)}>
-            <span className={`${css.subject} ${css.deviceWrap}`}>{item.title || item.number}</span>
-            <span className={css.number}>{item.number} · до {formatProkatDateTime(item.to)}</span>
-            <span className={css.cardFacts}><StatusBadge name={item.status} /></span>
-          </button>
-        </li>)}</ul>
-      </DetailSection> : null}
-      {stats.returnsDueTodayList.length ? <DetailSection title="Возврат сегодня">
-        <ul className={css.cards} data-keep-cards>{stats.returnsDueTodayList.slice(0, 5).map(item => <li key={item.id}>
-          <button type="button" className={css.card} onClick={() => props.onNavigate?.(props.kit.bookingScreenId, item.id)}>
-            <span className={`${css.subject} ${css.deviceWrap}`}>{item.title || item.number}</span>
-            <span className={css.number}>{item.clientName} · {formatProkatDateTime(item.to)}</span>
-            <span className={css.cardFacts}><StatusBadge name={item.status} /></span>
-          </button>
-        </li>)}</ul>
-      </DetailSection> : null}
-      {stats.topItems.length ? <DetailSection title="Топ предметов">
-        <ul className={css.cards} data-keep-cards>{stats.topItems.map(item => <li key={item.id} className={css.card}>
-          <span className={css.subject}>{item.name}</span>
-          <span className={css.quiet}>{item.count} брон. · {formatMoney(item.revenue)}</span>
-        </li>)}</ul>
-      </DetailSection> : null}
     </ListScreenShell>
+    {act?.kind === 'issue' && actBooking ? <IssueDialog {...props} booking={actBooking} onClose={() => setAct(null)} onMessage={() => setAct(null)} /> : null}
+    {act?.kind === 'return' && actBooking ? <ReturnDialog {...props} booking={actBooking} onClose={() => setAct(null)} onMessage={() => setAct(null)} /> : null}
   </div>
 }
 
@@ -586,8 +652,14 @@ function bookingLateFeeAmount(item: ProkatListItem, catalog: readonly ProkatCata
   return item.itemIds.reduce((sum, id) => {
     const entry = byId.get(id)
     if (!entry) return sum
-    return sum + computeLateFee({ tariff: entry.tariff, rate: entry.rate, to: item.to, now: new Date(now).toISOString() })
+    return sum + computeItemLateFee(entry, item.to, new Date(now).toISOString())
   }, 0)
+}
+
+function bookingLateFeeHint(items: readonly ProkatCatalogItem[]) {
+  if (!items.length) return 'Штраф считается по настройкам предметов'
+  if (items.length === 1) return describeLateFee(itemLateFeeConfig(items[0]!))
+  return items.map(item => `${item.name}: ${describeLateFee(itemLateFeeConfig(item))}`).join(' · ')
 }
 
 function BookingRows(props: {
@@ -694,18 +766,9 @@ function BookingCard(props: ScreenProps) {
   const depositWithheld = numberOf(booking.values[fields.depositWithheld])
   const depositReason = textOf(booking.values[fields.depositReason])
   const overdue = isOverdueReturn(status, to, props.now)
-  const computedLate = items.reduce((sum, item) => sum + computeLateFee({
-    tariff: item.tariff, rate: item.rate, to, now: new Date(props.now).toISOString(),
-  }), 0)
+  const computedLate = items.reduce((sum, item) => sum + computeItemLateFee(item, to, new Date(props.now).toISOString()), 0)
   const lateFee = storedLateFee > 0 ? storedLateFee : (overdue ? computedLate : 0)
-  const lateDays = (() => {
-    const toMs = Date.parse(to)
-    if (!Number.isFinite(toMs) || props.now <= toMs) return 0
-    return Math.max(1, Math.ceil((props.now - toMs) / 86_400_000))
-  })()
-  const lateRateHint = items.length === 1
-    ? `${lateDays} ${items[0]!.tariff === 'За час' ? 'ч' : 'сут.'} × ${formatMoney(items[0]!.rate)}`
-    : lateDays > 0 ? `${lateDays} сут. просрочки` : ''
+  const lateRateHint = bookingLateFeeHint(items)
   const transitions = desk ? staffTransitions(status) : []
   const back = clientView ? props.kit.clientListScreenId : props.kit.bookingsScreenId
   const canCancel = clientView && clientCanRequestCancel(status)
@@ -752,7 +815,7 @@ function BookingCard(props: ScreenProps) {
         {message ? <p role="status">{message}</p> : null}
         <DetailSection title="Предметы">
           <ul className={css.cards} data-keep-cards>{items.map(item => <li key={item.id} className={css.card}>
-            <span className={css.subject}>{item.name}</span>
+            <span className={css.mark}><ItemTile item={item} /><strong className={css.deviceWrap}>{item.name}</strong></span>
             <span className={css.quiet}>{item.category} · {item.tariff} {formatMoney(item.rate)}</span>
           </li>)}</ul>
         </DetailSection>
@@ -762,7 +825,7 @@ function BookingCard(props: ScreenProps) {
           <DetailSection title="Предметы">
             <ul className={css.cards} data-keep-cards>{items.map(item => <li key={item.id}>
               <button type="button" className={css.card} onClick={() => props.onNavigate?.(props.kit.itemScreenId, item.id)}>
-                <span className={css.subject}>{item.name}</span>
+                <span className={css.mark}><ItemTile item={item} /><strong className={css.deviceWrap}>{item.name}</strong></span>
                 <span className={css.quiet}>{item.serial} · {item.status}</span>
               </button>
             </li>)}</ul>
@@ -805,7 +868,7 @@ function BookingCard(props: ScreenProps) {
                 <dt>Штраф за просрочку</dt>
                 <dd>
                   <strong>{formatMoney(lateFee || computedLate)}</strong>
-                  {lateRateHint ? <span className={css.quiet}>{lateRateHint}</span> : <span className={css.quiet}>Дни просрочки × ставка тарифа</span>}
+                  <span className={css.quiet}>{lateRateHint}</span>
                 </dd>
               </div> : null}
               {(depositWithheld > 0 || textOf(booking.values[fields.returnAt]) || overdue) ? <>
@@ -914,9 +977,9 @@ function ReturnDialog(props: ScreenProps & { booking: AppV2Record; onClose: () =
   const itemIds = idsOf(props.booking.values[fields.items])
   const items = catalogItems(props).filter(item => itemIds.includes(item.id))
   const storedLate = numberOf(props.booking.values[fields.lateFee])
-  const suggestedLate = storedLate > 0 ? storedLate : items.reduce((sum, item) => sum + computeLateFee({
-    tariff: item.tariff, rate: item.rate, to: textOf(props.booking.values[fields.to]), now: new Date(props.now).toISOString(),
-  }), 0)
+  const suggestedLate = storedLate > 0 ? storedLate : items.reduce((sum, item) => sum + computeItemLateFee(
+    item, textOf(props.booking.values[fields.to]), new Date(props.now).toISOString(),
+  ), 0)
   const initialDamages = textOf(props.booking.values[fields.returnDamages])
   const initialCondition = textOf(props.booking.values[fields.returnCondition])
   const [hasDamage, setHasDamage] = useState(Boolean(initialDamages) || /поврежд/i.test(initialCondition))
@@ -1067,16 +1130,18 @@ function ItemsList(props: ScreenProps) {
     return [item.name, item.category, item.serial, item.status].join(' ').toLowerCase().includes(needle)
   })
   return <div className={css.root} data-prokat-root data-prokat-screen="items">
-    <ListScreenShell title="Предметы" meta="Парк проката и статусы.">
+    <ListScreenShell title="Предметы" meta="Склад проката: фото, тариф и статус.">
       <div className={css.toolbar}><ShellSearchField value={search} onChange={setSearch} placeholder="Поиск предмета" aria-label="Поиск предметов" /></div>
+      {!items.length ? <div className={css.empty}><p>Предметов пока нет. Добавьте первый в таблице «Предметы».</p></div> : null}
       <ul className={css.cards} data-keep-cards>{items.map(item => (
         <li key={item.id}>
           <button type="button" className={css.card} onClick={() => props.onNavigate?.(props.kit.itemScreenId, item.id)}>
-            <span className={css.subject}>{item.name}</span>
+            <span className={css.mark}><ItemTile item={item} size={48} /><strong className={`${css.subject} ${css.deviceWrap}`}>{item.name}</strong></span>
             <span className={css.number}>{item.serial} · {item.category}</span>
             <span className={css.cardFacts}>
               <StatusBadge name={item.status} />
               <span className={css.quiet}>{formatMoney(item.rate)} / {item.tariff.toLowerCase()} · залог {formatMoney(item.deposit)}</span>
+              {item.showInCatalog === false ? <span className={css.quiet}>Скрыт от клиентов</span> : null}
             </span>
           </button>
         </li>
@@ -1087,11 +1152,28 @@ function ItemsList(props: ScreenProps) {
 
 function ItemDetail(props: ScreenProps) {
   const item = props.of(props.kit.itemsTableId).find(row => row.id === props.recordId) ?? props.record
+  const [message, setMessage] = useState('')
   if (!item) return <div className={css.root}><p className={css.quiet}>Предмет не найден.</p></div>
   const fields = props.kit.item
   const catalog = catalogItems(props).find(entry => entry.id === item.id)
   const history = bookingItems(props).filter(booking => booking.itemIds.includes(item.id))
   const desk = isProkatDesk(props.actor)
+  const lateConfig = catalog ? itemLateFeeConfig(catalog) : null
+  const modeOptions = PROKAT_LATE_FEE_MODES.map(name => {
+    const field = props.tables.find(table => table.id === props.kit.itemsTableId)?.fields.find(entry => entry.id === fields.lateFeeMode)
+    const choice = field?.choices?.find(entry => entry.name === name)
+    return { id: choice?.id ?? name, name }
+  })
+  const selectedModeId = (() => {
+    if (!fields.lateFeeMode) return ''
+    const raw = textOf(item.values[fields.lateFeeMode])
+    const match = modeOptions.find(option => option.id === raw || option.name === raw || option.name === catalog?.lateFeeMode)
+    return match?.id ?? raw
+  })()
+  const patchItem = async (values: Record<string, import('@tableapp/schema/app-v2').AppV2Json>) => {
+    const result = await commit(props, { kind: 'itemPatch', recordId: item.id, values })
+    setMessage(result.ok ? result.message : result.error)
+  }
   return <div className={css.root} data-prokat-root data-prokat-screen="item">
     <DetailCardShell
       back={{ label: desk ? 'Предметы' : 'Каталог', onClick: () => props.onNavigate?.(desk ? props.kit.itemsScreenId : props.kit.catalogScreenId) }}
@@ -1099,19 +1181,128 @@ function ItemDetail(props: ScreenProps) {
       subtitle={textOf(item.values[fields.serial])}
       badge={catalog ? <StatusBadge name={catalog.status} /> : undefined}
     >
-      <DetailSection title="Параметры">
+      <div className={css.itemHero}>
+        {catalog ? <ItemTile item={catalog} size={96} /> : null}
         <dl className={css.facts}>
           <div><dt>Категория</dt><dd>{catalog?.category || '—'}</dd></div>
           <div><dt>Тариф</dt><dd>{catalog ? `${formatMoney(catalog.rate)} / ${catalog.tariff.toLowerCase()}` : '—'}</dd></div>
           <div><dt>Залог</dt><dd>{formatMoney(catalog?.deposit ?? 0)}</dd></div>
           <div><dt>Состояние</dt><dd>{catalog?.condition || '—'}</dd></div>
         </dl>
-      </DetailSection>
+      </div>
+      {desk && fields.showInCatalog ? <DetailSection title="Витрина">
+        <button
+          type="button"
+          role="switch"
+          className={css.rowSwitch}
+          aria-checked={catalog?.showInCatalog !== false}
+          data-on={catalog?.showInCatalog !== false || undefined}
+          aria-label="Показывать клиентам"
+          onClick={() => void patchItem({ [fields.showInCatalog!]: catalog?.showInCatalog === false })}
+        >
+          <span>Показывать клиентам</span>
+          <i aria-hidden="true" />
+        </button>
+        <p className={css.quietHint}>Выключенный предмет остаётся на складе, но не виден в каталоге клиента.</p>
+      </DetailSection> : null}
+      {desk && fields.lateFeeMode ? <DetailSection title="Штраф за просрочку">
+        <ProkatSelect
+          field
+          label="Как считать"
+          value={selectedModeId}
+          options={modeOptions}
+          onChange={id => void patchItem({
+            [fields.lateFeeMode!]: id,
+            ...(fields.lateFeeGraceHours && numberOf(item.values[fields.lateFeeGraceHours]) <= 0
+              ? { [fields.lateFeeGraceHours]: 1 }
+              : {}),
+          })}
+        />
+        {lateConfig && lateConfig.mode !== 'Нет' ? <>
+          <label className={css.field}>
+            <span>{lateConfig.mode === 'Процент от тарифа за сутки' ? 'Процент от тарифа' : 'Сумма'}</span>
+            <span className={css.moneyField}>
+              <input
+                defaultValue={String(lateConfig.value || 0)}
+                inputMode="decimal"
+                aria-label="Ставка штрафа"
+                onBlur={event => {
+                  const next = Number(event.target.value.replace(/\s/g, '').replace(',', '.'))
+                  if (!Number.isFinite(next) || next < 0 || !fields.lateFeeValue) return
+                  void patchItem({ [fields.lateFeeValue]: next })
+                }}
+              />
+              <em>{lateConfig.mode === 'Процент от тарифа за сутки' ? '%' : '₽'}</em>
+            </span>
+          </label>
+          <label className={css.field}>
+            <span>Льготные часы</span>
+            <input
+              className={css.plainInput}
+              defaultValue={String(lateConfig.graceHours)}
+              inputMode="numeric"
+              aria-label="Льготные часы"
+              onBlur={event => {
+                const next = Number(event.target.value)
+                if (!Number.isFinite(next) || next < 0 || !fields.lateFeeGraceHours) return
+                void patchItem({ [fields.lateFeeGraceHours]: Math.round(next) })
+              }}
+            />
+          </label>
+          {lateConfig.mode === 'Сумма за час' && fields.lateFeeCapPerDay ? <label className={css.field}>
+            <span>Потолок в сутки</span>
+            <span className={css.moneyField}>
+              <input
+                defaultValue={String(lateConfig.capPerDay ?? catalog?.rate ?? 0)}
+                inputMode="decimal"
+                aria-label="Потолок штрафа в сутки"
+                onBlur={event => {
+                  const next = Number(event.target.value.replace(/\s/g, '').replace(',', '.'))
+                  if (!Number.isFinite(next) || next < 0) return
+                  void patchItem({ [fields.lateFeeCapPerDay!]: next })
+                }}
+              />
+              <em>₽</em>
+            </span>
+          </label> : null}
+        </> : null}
+        {lateConfig ? <p className={css.lateFeeFormula} data-prokat-late-formula>{describeLateFee(lateConfig)}</p> : null}
+      </DetailSection> : null}
+      {message ? <p role="status">{message}</p> : null}
       {desk ? <DetailSection title="Брони предмета">
         <BookingRows items={history} now={props.now} onOpen={id => props.onNavigate?.(props.kit.bookingScreenId, id)} keepCards />
       </DetailSection> : null}
     </DetailCardShell>
   </div>
+}
+
+function TimelineBar(props: {
+  left: number
+  width: number
+  tone: string
+  label: string
+  tip: string
+  onOpen: () => void
+}) {
+  const [tip, setTip] = useState(false)
+  return <button
+    type="button"
+    className={css.timelineBar}
+    data-tone={props.tone}
+    data-tip={tip || undefined}
+    style={{ left: `${props.left}%`, width: `${props.width}%` }}
+    title={props.tip}
+    aria-label={props.tip}
+    data-prokat-bar-tip={props.tip}
+    onMouseEnter={() => setTip(true)}
+    onMouseLeave={() => setTip(false)}
+    onFocus={() => setTip(true)}
+    onBlur={() => setTip(false)}
+    onClick={props.onOpen}
+  >
+    <span>{props.label}</span>
+    {tip ? <em className={css.timelineTip} role="tooltip">{props.tip}</em> : null}
+  </button>
 }
 
 function TimelineScreen(props: ScreenProps) {
@@ -1132,7 +1323,7 @@ function TimelineScreen(props: ScreenProps) {
   const items = catalogItems(props).filter(item => item.status !== 'Списан')
   const bookings = bookingItems(props)
   return <div className={css.root} data-prokat-root data-prokat-screen="timeline">
-    <ListScreenShell title="Занятость" meta="Занятость предметов на ближайшие две недели.">
+    <ListScreenShell title="Занятость" meta="Нажмите полосу — откроется бронь.">
       <div className={css.timelineBoard} style={{ ['--prokat-days' as string]: days }}>
         <div className={css.timelineHead}>
           <span className={css.quiet}>Предмет</span>
@@ -1152,6 +1343,8 @@ function TimelineScreen(props: ScreenProps) {
                 const to = Date.parse(booking.to)
                 if (!Number.isFinite(from) || !Number.isFinite(to)) return null
                 const overdue = isOverdueReturn(booking.status, booking.to, props.now)
+                const label = timelineBarLabel(booking.number, booking.clientName)
+                const tip = `${formatProkatDateTime(booking.from)} — ${formatProkatDateTime(booking.to)} · ${booking.clientName || 'Без клиента'} · ${overdue ? 'Просрочен возврат' : booking.status}`
                 if (overdue) {
                   const leftMs = Math.max(from, rangeStart)
                   const rightMs = Math.min(Math.max(props.now, leftMs + 1), rangeEnd)
@@ -1160,29 +1353,29 @@ function TimelineScreen(props: ScreenProps) {
                   const dayPct = 100 / days
                   const right = Math.max(left + dayPct, Math.min(100, ((rightMs - rangeStart) / span) * 100))
                   const width = Math.max(dayPct, right - left)
-                  return <button
+                  return <TimelineBar
                     key={booking.id}
-                    type="button"
-                    className={css.timelineBar}
-                    data-tone="overdue"
-                    style={{ left: `${left}%`, width: `${Math.min(width, 100 - left)}%` }}
-                    title={`${booking.number} · просрочен · до ${formatProkatDateTime(booking.to)}`}
-                    onClick={() => props.onNavigate?.(props.kit.bookingScreenId, booking.id)}
-                  ><span>{booking.number || booking.clientName} · просрочен</span></button>
+                    left={left}
+                    width={Math.min(width, 100 - left)}
+                    tone="overdue"
+                    label={label}
+                    tip={tip}
+                    onOpen={() => props.onNavigate?.(props.kit.bookingScreenId, booking.id)}
+                  />
                 }
                 const left = Math.max(0, Math.min(100, ((from - rangeStart) / span) * 100))
                 const right = Math.max(0, Math.min(100, ((to - rangeStart) / span) * 100))
                 const width = Math.max(100 / days, right - left)
                 const tone = booking.status === 'Заявка' ? 'request' : booking.status === 'Выдано' ? 'issued' : 'confirmed'
-                return <button
+                return <TimelineBar
                   key={booking.id}
-                  type="button"
-                  className={css.timelineBar}
-                  data-tone={tone}
-                  style={{ left: `${left}%`, width: `${Math.min(width, 100 - left)}%` }}
-                  title={`${booking.number} · ${formatProkatDateTime(booking.from)} — ${formatProkatDateTime(booking.to)}`}
-                  onClick={() => props.onNavigate?.(props.kit.bookingScreenId, booking.id)}
-                ><span>{booking.number || booking.clientName}</span></button>
+                  left={left}
+                  width={Math.min(width, 100 - left)}
+                  tone={tone}
+                  label={label}
+                  tip={tip}
+                  onOpen={() => props.onNavigate?.(props.kit.bookingScreenId, booking.id)}
+                />
               })}
             </div>
           </div>
@@ -1248,21 +1441,23 @@ function CatalogScreen(props: ScreenProps) {
   const [selectedId, setSelectedId] = useState('')
   const [category, setCategory] = useState('Все')
   useEffect(() => { if (bundle?.open === 'request') setRequestOpen(true) }, [bundle?.open])
-  const all = catalogItems(props).filter(item => item.status === 'Свободен' || item.status === 'В прокате')
+  const all = catalogItems(props).filter(item =>
+    (item.status === 'Свободен' || item.status === 'В прокате')
+    && item.showInCatalog !== false)
   const categories = ['Все', ...[...new Set(all.map(item => item.category))].sort((a, b) => a.localeCompare(b, 'ru'))]
   const items = category === 'Все' ? all : all.filter(item => item.category === category)
   const openRequest = (itemId = '') => { setSelectedId(itemId); setRequestOpen(true) }
   return <div className={css.root} data-prokat-root data-prokat-screen="catalog">
     <ListScreenShell
       title="Каталог"
-      meta="Доступные предметы и предварительный расчёт."
-      actions={client ? <button type="button" className={css.primary} onClick={() => openRequest()}>Заявка</button> : undefined}
+      meta="Выберите предмет и срок — стоимость посчитаем сразу."
     >
       <div className={css.chips} role="tablist" aria-label="Категории каталога">
         {categories.map(name => (
           <button key={name} type="button" role="tab" className={css.chip} aria-selected={category === name} onClick={() => setCategory(name)}>{name}</button>
         ))}
       </div>
+      {!items.length ? <div className={css.empty}><p>Сейчас ничего не сдаётся. Загляните позже или напишите в чат.</p></div> : null}
       <ul className={css.catalogGrid}>{items.map(item => (
         <li key={item.id}>
           <div className={css.catalogCard}>
@@ -1274,7 +1469,7 @@ function CatalogScreen(props: ScreenProps) {
                 props.onNavigate?.(props.kit.itemScreenId, item.id)
               }}
             >
-              <ItemTile item={item} size={48} />
+              <ItemTile item={item} size={72} />
               <span className={css.catalogCardCopy}>
                 <strong>{item.name}</strong>
                 <span className={css.quiet}>{item.tariff} · {formatMoney(item.rate)}</span>

@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { fieldTimeZone, instantToWallClock, wallClockToInstant, type Field } from '@tableapp/schema'
 import { canOpenAppV2Screen, type AppV2Actor, type AppV2Record } from '@tableapp/schema/app-v2'
 import type { BuilderV2Table } from '@/lib/builder-v2'
+import { MESSAGES_SCREEN, withV2MessagesNav } from '@/lib/builder-v2-messages'
 import { projectProkatRows } from '@/lib/prokat-persist'
 import { templateExample } from '@/lib/templates/presentation'
 import { buildProkatV2App } from '@/lib/templates/prokat-v2'
@@ -51,8 +52,11 @@ function goalFor(model: ReturnType<typeof prokatTemplateDemoModel>, view: string
       open: view === 'issue' ? 'issue' as const : view === 'return' ? 'return' as const : null,
     }
   }
+  if (view === 'overdue') {
+    return { ...base, screenId: kit.bookingScreenId, recordId: booking('ПР-1003')?.id, open: null }
+  }
   if (view === 'items') return { ...base, screenId: kit.itemsScreenId, recordId: undefined }
-  if (view === 'item') return { ...base, screenId: kit.itemScreenId, recordId: item('ВЕЛ-1001')?.id }
+  if (view === 'item') return { ...base, screenId: kit.itemScreenId, recordId: item('СУП-2001')?.id ?? item('ВЕЛ-1001')?.id }
   if (view === 'timeline') return { ...base, screenId: kit.timelineScreenId, recordId: undefined }
   if (view === 'clients') return { ...base, who: 'owner' as const, screenId: kit.clientsScreenId, recordId: undefined }
   if (view === 'client-card') return { ...base, who: 'owner' as const, screenId: kit.clientScreenId, recordId: client('m.petrova@yandex.ru')?.id }
@@ -89,7 +93,11 @@ export function ProkatDemo({ view = 'bookings', bare = false, scheme, phone = fa
   if (!model?.app.prokat || !screenId) return <div data-prokat-root data-prokat-screen="loading" />
   const themed = scheme ? { ...model.app, theme: { ...model.app.theme, scheme } } : model.app
   const actor = actorFor(who)
-  const visible = { ...themed, screens: themed.screens.filter(screen => canOpenAppV2Screen(themed, actor, screen.id)) }
+  const withMessages = withV2MessagesNav(themed, actor)
+  const visible = {
+    ...withMessages,
+    screens: withMessages.screens.filter(screen => canOpenAppV2Screen(withMessages, actor, screen.id) || screen.id === MESSAGES_SCREEN),
+  }
   const navigate = (id: string, rowId?: string) => { setScreenId(id); setRecordId(rowId); setOpen(null) }
   return <BuilderV2Theme app={themed}><ProkatRowsContext value={{ rows, setRows, open, now: demoNowMs(), sample: true }}>
     <div data-prokat-root data-prokat-screen={view} data-preview-screen={screenId}>

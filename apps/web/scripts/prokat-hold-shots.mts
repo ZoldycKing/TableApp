@@ -81,17 +81,16 @@ await owner.waitForTimeout(300)
 await save(owner, 'hold-setting-desktop.png')
 await owner.keyboard.press('Escape')
 
-// 1b. Item override defaults to «Как в настройках»
+// 1b. Item override defaults to «Как в настройках» (dropdown closed; facts filled)
 const overrideUrl = fixture.urls.staffItemOverride
 if (overrideUrl) {
   await owner.goto(overrideUrl, { waitUntil: 'networkidle' })
   await waitProkat(owner, 'item')
   await owner.locator('[data-prokat-hold-override]').scrollIntoViewIfNeeded()
-  await owner.getByRole('button', { name: /Держать бронь после начала/ }).click()
-  await owner.locator('[role="listbox"][aria-label="Держать бронь после начала"]').waitFor({ state: 'visible', timeout: 5000 })
+  const category = owner.locator('[data-prokat-screen="item"] dl').getByText('Велосипеды')
+  await category.waitFor({ state: 'visible', timeout: 10000 })
   await owner.waitForTimeout(300)
   await save(owner, 'hold-item-override-desktop.png')
-  await owner.keyboard.press('Escape')
 }
 
 const staffContext = await browser.newContext({
@@ -177,11 +176,9 @@ if (overrideUrl) {
   await phone.goto(overrideUrl, { waitUntil: 'networkidle' })
   await waitProkat(phone, 'item')
   await phone.locator('[data-prokat-hold-override]').scrollIntoViewIfNeeded()
-  await phone.getByRole('button', { name: /Держать бронь после начала/ }).click()
-  await phone.locator('[role="listbox"][aria-label="Держать бронь после начала"]').waitFor({ state: 'visible', timeout: 5000 })
+  await phone.locator('[data-prokat-screen="item"] dl').getByText('Велосипеды').waitFor({ state: 'visible', timeout: 10000 })
   await phone.waitForTimeout(300)
   await save(phone, 'hold-item-override-phone.png')
-  await phone.keyboard.press('Escape')
 }
 
 await phoneContext.clearCookies()

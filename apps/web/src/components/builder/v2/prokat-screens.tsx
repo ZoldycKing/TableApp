@@ -487,33 +487,40 @@ function bookingItems(props: ScreenProps): ProkatListItem[] {
   })
 }
 
-function catalogItems(props: ScreenProps): ProkatCatalogItem[] {
+function catalogItemFromRow(props: ScreenProps, row: AppV2Record): ProkatCatalogItem {
   const fields = props.kit.item
   const published = publishedHolder.current
-  return props.of(props.kit.itemsTableId).map(row => {
-    const media = fields.photo
-      ? builderV2MediaItems(row.values[fields.photo], published?.slug).find(item => item.image)?.url
-      : undefined
-    const showRaw = fields.showInCatalog ? row.values[fields.showInCatalog] : true
-    return {
-      id: row.id,
-      name: textOf(row.values[fields.name]),
-      category: choiceLabel(props, props.kit.itemsTableId, fields.category, row.values[fields.category]),
-      serial: textOf(row.values[fields.serial]),
-      tariff: choiceLabel(props, props.kit.itemsTableId, fields.tariff, row.values[fields.tariff]),
-      rate: numberOf(row.values[fields.rate]),
-      deposit: numberOf(row.values[fields.deposit]),
-      condition: textOf(row.values[fields.condition]),
-      status: choiceLabel(props, props.kit.itemsTableId, fields.status, row.values[fields.status]),
-      photo: media || (fields.photo ? textOf(row.values[fields.photo]) || undefined : undefined),
-      showInCatalog: showRaw !== false && showRaw !== 0 && showRaw !== 'false',
-      lateFeeMode: fields.lateFeeMode ? choiceLabel(props, props.kit.itemsTableId, fields.lateFeeMode, row.values[fields.lateFeeMode]) : undefined,
-      lateFeeValue: fields.lateFeeValue ? numberOf(row.values[fields.lateFeeValue]) : undefined,
-      lateFeeGraceHours: fields.lateFeeGraceHours ? numberOf(row.values[fields.lateFeeGraceHours]) : undefined,
-      lateFeeCapPerDay: fields.lateFeeCapPerDay ? numberOf(row.values[fields.lateFeeCapPerDay]) : undefined,
-      busyUntil: fields.busyUntil ? textOf(row.values[fields.busyUntil]) || undefined : undefined,
-    }
-  })
+  const media = fields.photo
+    ? builderV2MediaItems(row.values[fields.photo], published?.slug).find(item => item.image)?.url
+    : undefined
+  const showRaw = fields.showInCatalog ? row.values[fields.showInCatalog] : true
+  return {
+    id: row.id,
+    name: textOf(row.values[fields.name]),
+    category: choiceLabel(props, props.kit.itemsTableId, fields.category, row.values[fields.category]),
+    serial: textOf(row.values[fields.serial]),
+    tariff: choiceLabel(props, props.kit.itemsTableId, fields.tariff, row.values[fields.tariff]),
+    rate: numberOf(row.values[fields.rate]),
+    deposit: numberOf(row.values[fields.deposit]),
+    condition: textOf(row.values[fields.condition]),
+    status: choiceLabel(props, props.kit.itemsTableId, fields.status, row.values[fields.status]),
+    photo: media || (fields.photo ? textOf(row.values[fields.photo]) || undefined : undefined),
+    showInCatalog: showRaw !== false && showRaw !== 0 && showRaw !== 'false',
+    lateFeeMode: fields.lateFeeMode ? choiceLabel(props, props.kit.itemsTableId, fields.lateFeeMode, row.values[fields.lateFeeMode]) : undefined,
+    lateFeeValue: fields.lateFeeValue ? numberOf(row.values[fields.lateFeeValue]) : undefined,
+    lateFeeGraceHours: fields.lateFeeGraceHours ? numberOf(row.values[fields.lateFeeGraceHours]) : undefined,
+    lateFeeCapPerDay: fields.lateFeeCapPerDay ? numberOf(row.values[fields.lateFeeCapPerDay]) : undefined,
+    busyUntil: fields.busyUntil ? textOf(row.values[fields.busyUntil]) || undefined : undefined,
+  }
+}
+
+function catalogItems(props: ScreenProps): ProkatCatalogItem[] {
+  // Item detail screen only mounts booking collections — include context record so
+  // «О предмете» still resolves category/tariff/deposit from the opened row.
+  const loaded = props.of(props.kit.itemsTableId)
+  const context = props.record?.tableId === props.kit.itemsTableId ? props.record : null
+  const rows = context && !loaded.some(row => row.id === context.id) ? [...loaded, context] : loaded
+  return rows.map(row => catalogItemFromRow(props, row))
 }
 
 function formatDay(value: unknown) {

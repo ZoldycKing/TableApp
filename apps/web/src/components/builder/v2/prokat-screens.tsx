@@ -941,8 +941,10 @@ function ReturnDialog(props: ScreenProps & { booking: AppV2Record; onClose: () =
       recordId: props.booking.id,
     }).then(result => {
       if (!alive || !result.ok || !('state' in result)) return
-      const revision = result.state.revision
-      const fingerprint = result.state.fingerprint
+      // Published inspect attaches revision onto state at runtime; typed FormState omits it.
+      const state = result.state as { revision?: unknown; fingerprint?: unknown }
+      const revision = typeof state.revision === 'string' ? state.revision : published.revision
+      const fingerprint = state.fingerprint
       if (typeof revision === 'string' && typeof fingerprint === 'string') setUploadCtx({ revision, fingerprint })
     }).catch(() => {})
     return () => { alive = false }

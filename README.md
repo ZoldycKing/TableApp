@@ -150,6 +150,7 @@ docs/              архитектура, эксплуатация и план 
 ## Документация
 
 - [Архитектура](docs/architecture.md) и [границы MVP](docs/mvp-scope.md).
+- [Модель аккаунта клиента](docs/account-model.md) и [авторизация / IDOR](docs/security-authorization.md).
 - [Работа с кодом и проверки](CONTRIBUTING.md).
 - [План развития и ограничения](docs/roadmap.md).
 - [Исправления браузерного аудита и границы локальной проверки](docs/browser-audit-remediation-2026-10-16.md).

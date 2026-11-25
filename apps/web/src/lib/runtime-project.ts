@@ -1,6 +1,6 @@
 import { compileTableFormulas, computeDerivedRow, relatedIndexFrom } from '@tableapp/formula'
 import { byPosition, systemRowData, type App, type Field, type View, type RowMetadata } from '@tableapp/schema'
-import { ANONYMOUS, canOpenScreen, fieldPolicy, formFields, onlyReadable, rowReach, type Visitor } from './app-roles'
+import { ANONYMOUS, canOpenScreen, defaultRole, fieldPolicy, formFields, onlyReadable, rowReach, type Visitor } from './app-roles'
 import { applyView } from './apply-view'
 import { computeDashboards } from './dashboard-data'
 import { formatCell } from './format'
@@ -45,8 +45,9 @@ export function projectRuntime(app: App, visitor: Visitor, views: Record<string,
     const fields = (fieldsByTable.get(table.id) ?? []).sort(byPosition)
     const formulas = compileTableFormulas(fields)
     const rules = rulesFor(app, table.id, visitor)
+    const client = defaultRole(app)
     const viewer = visitor.email
-      ? { email: visitor.email, company: visitor.company, enrolled: visitor.enrolled }
+      ? { email: visitor.email, company: visitor.company, enrolled: visitor.enrolled, customer: visitor.enrolled || (client !== null && visitor.roleId === client) }
       : null
 
     /*
@@ -214,11 +215,13 @@ export function buildTitles(
   },
 ): RelatedTitles {
   const titles: RelatedTitles = {}
+  const client = access ? defaultRole(access.app) : null
   const viewer = access?.visitor.email
     ? {
         email: access.visitor.email,
         company: access.visitor.company,
         enrolled: access.visitor.enrolled,
+        customer: access.visitor.enrolled || (client !== null && access.visitor.roleId === client),
       }
     : null
 

@@ -158,6 +158,7 @@ describe('что видно', () => {
 
 describe('что можно делать', () => {
   const full = app({
+    rowAccessRules: [{ tableId: 'tbl_1', emailFieldId: 'fld_email', appliesTo: ['client'] }],
     screens: [
       { ...listScreen, access: { roles: ['guest', 'client', 'staff', 'manager'] } },
       { ...detailScreen, access: { roles: ['client', 'staff', 'manager'], allowDelete: false } },
@@ -272,6 +273,7 @@ describe('роли задаёт владелец, а не мы', () => {
     accessMode: 'public',
     roles: [doctor, patient],
     allowlist: [{ email: 'vrach@klinika.ru', roleId: 'rol_doctor' }],
+    rowAccessRules: [{ tableId: 'tbl_1', emailFieldId: 'fld_email', appliesTo: ['rol_patient'] }],
     screens: [
       { ...listScreen, id: 'scr_priem', access: { roles: ['rol_doctor'] } },
       { ...createScreen, id: 'scr_zapis', access: { roles: ['guest', 'rol_patient'] } },

@@ -18,7 +18,7 @@ vi.mock('next/headers', () => ({
 const envFile = resolve(import.meta.dirname, '../../../../.env')
 if (!process.env.DATABASE_URL && existsSync(envFile)) process.loadEnvFile(envFile)
 
-describe.skipIf(!process.env.DATABASE_URL)('platform /my must not list end-client businesses', () => {
+describe.skipIf(!process.env.DATABASE_URL)('platform /my: staff apps + client businesses without data leakage', () => {
   const clientEmail = `${newId('appUser')}@client-privacy.invalid`
   const staffEmail = `${newId('appUser')}@staff-privacy.invalid`
   const fixtures = [0, 1].map(index => {
@@ -40,7 +40,7 @@ describe.skipIf(!process.env.DATABASE_URL)('platform /my must not list end-clien
     directory = await import('./customer-apps')
     auth = await import('@/app/auth-actions')
     sessions = await import('./app-session')
-    for (const fixture of fixtures) {
+    for (const [index, fixture] of fixtures.entries()) {
       const { example, workspaceId, userId, slug } = fixture
       example.app.workspaceId = workspaceId
       example.app.slug = slug
@@ -50,7 +50,10 @@ describe.skipIf(!process.env.DATABASE_URL)('platform /my must not list end-clien
         { email: staffEmail, roleId: 'staff', company: '' },
       ]
       await database.db.insert(database.users).values({ id: userId, email: `${userId}@example.invalid` })
-      await database.db.insert(database.workspaces).values({ id: workspaceId, ownerId: userId, name: `Privacy biz ${slug}`, slug })
+      await database.db.insert(database.workspaces).values({
+        id: workspaceId, ownerId: userId, name: `Privacy biz ${slug}`, slug,
+        businessProfile: { name: `Бизнес ${index + 1}`, location: '', phone: '' },
+      })
       await database.db.insert(database.tables).values(example.built.tables.map(table => ({ ...table, workspaceId })))
       await database.db.insert(database.fields).values(example.built.fields)
       await database.db.insert(database.views).values(example.built.views)
@@ -75,15 +78,33 @@ describe.skipIf(!process.env.DATABASE_URL)('platform /my must not list end-clien
     await database.sql.end()
   })
 
-  it('hides client enrolments from the platform directory while keeping same-workspace sections', async () => {
-    const platform = await directory.listAccessibleApps(clientEmail)
-    expect(platform).toEqual([])
+  it('hides allowlist-only enrolments from both platform directories until client activity exists', async () => {
+    expect(await directory.listAccessibleApps(clientEmail)).toEqual([])
+    expect(await directory.listClientBusinesses(clientEmail)).toEqual([])
 
     const first = fixtures[0]!
     const sections = await directory.listAccessibleApps(clientEmail, first.workspaceId)
     expect(sections.map(item => item.slug)).toContain(first.slug)
     expect(sections.every(item => item.businessId === first.workspaceId)).toBe(true)
     expect(sections.some(item => item.slug === fixtures[1]!.slug)).toBe(false)
+  })
+
+  it('lists client businesses only after activity, as name+link without orders or messages', async () => {
+    for (const fixture of fixtures) {
+      await database.db.insert(database.businessCustomers).values({
+        id: newId('businessCustomer'),
+        workspaceId: fixture.workspaceId,
+        email: clientEmail,
+        name: 'Клиент',
+      })
+    }
+
+    const clients = await directory.listClientBusinesses(clientEmail)
+    expect(clients).toHaveLength(2)
+    expect(clients.map(item => item.businessId).sort()).toEqual(fixtures.map(f => f.workspaceId).sort())
+    expect(clients.every(item => item.slug && item.businessName && !('orders' in item) && !('messages' in item) && !('count' in item))).toBe(true)
+    // Platform staff directory stays empty for pure clients.
+    expect(await directory.listAccessibleApps(clientEmail)).toEqual([])
   })
 
   it('lists staff apps on /my and never mixes foreign businesses for a client session', async () => {
@@ -99,10 +120,15 @@ describe.skipIf(!process.env.DATABASE_URL)('platform /my must not list end-clien
     expect(await sessions.currentStaffEmail()).toBe(staffEmail)
     const staffApps = await auth.appsForStaff(staffEmail)
     expect(staffApps.map(item => item.slug).sort()).toEqual(fixtures.map(f => f.slug).sort())
+    // Staff already sees working apps — client section omits the same workspaces.
+    expect(await auth.businessesForClient(staffEmail)).toEqual([])
 
     state.jar.set('tableapp_staff', clientSession)
     expect(await sessions.currentStaffEmail()).toBe(clientEmail)
     expect(await auth.appsForStaff(clientEmail)).toEqual([])
     expect(await directory.listAccessibleApps(clientEmail)).toEqual([])
+    const forClient = await auth.businessesForClient(clientEmail)
+    expect(forClient).toHaveLength(2)
+    expect(forClient.every(item => typeof item.businessName === 'string' && typeof item.slug === 'string')).toBe(true)
   })
 })

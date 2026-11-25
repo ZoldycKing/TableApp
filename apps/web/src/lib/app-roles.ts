@@ -608,7 +608,10 @@ export function permits(app: App, tableId: string, action: AppAction, visitor: V
   // Не вошедший не пишет ни при каких настройках экрана: заказ с витрины
   // проходит через подтверждение почты, а не через это право.
   if (!visitor.authenticated || visitor.roleId === null) return false
-  if (visitor.enrolled && !app.rowAccessRules.some(rule => rule.tableId === tableId && rule.appliesTo.includes(visitor.roleId!))) return false
+  // Client / default role (invited or storefront) never writes without ownership rules.
+  const client = defaultRole(app)
+  const customer = visitor.enrolled || (client !== null && visitor.roleId === client)
+  if (customer && !app.rowAccessRules.some(rule => rule.tableId === tableId && rule.appliesTo.includes(visitor.roleId!))) return false
 
   if (action === 'delete') {
     return app.screens.some(

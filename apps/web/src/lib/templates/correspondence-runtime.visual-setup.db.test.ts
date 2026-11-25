@@ -108,20 +108,20 @@ describe.skipIf(!process.env.DATABASE_URL)('correspondence runtime visual setup'
     const clientActor = `person_${createHash('sha256').update(`${workspaceId}:${email}`).digest('hex')}`
     await database.db.insert(database.conversationMessages).values([
       {
-        id: newId('message'), workspaceId, conversationId, authorId: clientActor, authorKind: 'client', authorName: 'Мария Сидорова',
+        id: `msg_${newId('row').slice(4)}`, workspaceId, conversationId, authorId: clientActor, authorKind: 'client', authorName: 'Мария Сидорова',
         requestId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeee1',
         body: 'Добрый день. Подскажите, когда будет готова стиральная машина?',
         createdAt: new Date('2026-11-24T09:12:00.000Z'),
       },
       {
-        id: newId('message'), workspaceId, conversationId, authorId: staffActor, authorKind: 'staff', authorName: 'Андрей Морозов',
+        id: `msg_${newId('row').slice(4)}`, workspaceId, conversationId, authorId: staffActor, authorKind: 'staff', authorName: 'Андрей Морозов',
         requestId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeee2',
         body: 'Здравствуйте. Диагностика завершена, ждём деталь. Ориентир — 26.11.2026.',
         createdAt: new Date('2026-11-24T10:05:00.000Z'),
       },
     ])
     await database.db.insert(database.conversationNotes).values({
-      id: newId('note'), workspaceId, conversationId, authorId: staffActor, authorName: 'Андрей Морозов',
+      id: `msg_${newId('row').slice(4)}`, workspaceId, conversationId, authorId: staffActor, authorName: 'Андрей Морозов',
       requestId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeee3',
       body: 'Клиент просил перезвонить после 18:00. Деталь на складе поставщика.',
       createdAt: new Date('2026-11-24T10:06:00.000Z'),

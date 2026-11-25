@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useRef, useState, useTransition, type RefObject } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { MODULE_DEFINITIONS, type App } from '@tableapp/schema'
@@ -8,6 +8,59 @@ import { hasUnsaved } from '@/lib/unsaved'
 import { availableModuleStarters } from '@/lib/module-options'
 import { legacyAppModules } from '@/lib/app-modules'
 import { connectModuleAction, enableModuleAccessAction, previewModuleConnectionAction, setCommunicationsAction, setModuleIntakeAction, setPrimaryClientAppAction } from '@/app/module-actions'
+
+function useMenuOpen(open: boolean, root: RefObject<HTMLElement | null>, onClose: () => void) {
+  useEffect(() => {
+    if (!open) return
+    const outside = (event: PointerEvent) => { if (event.target instanceof Node && !root.current?.contains(event.target)) onClose() }
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose() }
+    document.addEventListener('pointerdown', outside)
+    document.addEventListener('keydown', escape)
+    return () => { document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape) }
+  }, [open, onClose, root])
+}
+
+/** Custom single-select — no native <select>, same listbox pattern as SupportSelect / ServiceSelect. */
+function ModuleSelect({ label, value, options, onChange, disabled = false }: {
+  label: string
+  value: string
+  options: { id: string; name: string }[]
+  onChange: (id: string) => void
+  disabled?: boolean
+}) {
+  const [open, setOpen] = useState(false)
+  const root = useRef<HTMLDivElement>(null)
+  useMenuOpen(open, root, () => setOpen(false))
+  const selected = options.find(item => item.id === value)
+  return <div className="block space-y-1 text-sm">
+    <span id={`${label}-label`}>{label}</span>
+    <div className="relative max-w-lg" ref={root}>
+      <button
+        type="button"
+        className="flex w-full items-center justify-between gap-3 rounded-lg border border-sand-200 bg-white px-3 py-2 text-left text-sm disabled:opacity-50 hover:bg-sand-50"
+        aria-labelledby={`${label}-label`}
+        aria-label={label}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        disabled={disabled}
+        onClick={() => setOpen(current => !current)}
+      >
+        <span className="min-w-0 break-words">{selected?.name ?? 'Выберите'}</span>
+        <span aria-hidden="true" className="text-ink-muted">▾</span>
+      </button>
+      {open ? <div className="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-lg border border-sand-200 bg-white p-1 shadow-lift" role="listbox" aria-label={label}>
+        {options.map(option => <button
+          key={option.id || option.name}
+          type="button"
+          role="option"
+          aria-selected={option.id === value}
+          className={`block w-full rounded-md px-3 py-2 text-left text-sm hover:bg-sand-50 ${option.id === value ? 'bg-sand-50 font-medium' : ''}`}
+          onClick={() => { onChange(option.id); setOpen(false) }}
+        >{option.name}</button>)}
+      </div> : null}
+    </div>
+  </div>
+}
 
 export function ModuleManager({ app, primary, sources, owner = false }: { app: App; primary: boolean; sources: { id: string; name: string; kind: string }[]; owner?: boolean }) {
   const router = useRouter(), [pending, start] = useTransition()
@@ -18,6 +71,12 @@ export function ModuleManager({ app, primary, sources, owner = false }: { app: A
   const choices = availableModuleStarters(modules.map(module => module.kind))
   const choice = choices.find(choice => choice.templateId === selection) ?? choices[0]
   const addition = choice?.templateId, desiredKind = choice?.kind
+  const sourceOptions = [
+    { id: '', name: 'Создать пустые таблицы для нового раздела' },
+    ...(desiredKind !== 'inventory' && desiredKind !== 'production'
+      ? sources.filter(item => item.kind === desiredKind).map(item => ({ id: item.id, name: `Использовать таблицы: ${item.name}` }))
+      : []),
+  ]
   const run = (action: () => Promise<{ ok: boolean; error?: string }>, success: string) => start(async () => {
     if (hasUnsaved()) { setMessage('Дождитесь сохранения изменений конструктора. Если сохранение завершилось ошибкой, сначала исправьте её.'); return }
     const result = await action()
@@ -43,13 +102,20 @@ export function ModuleManager({ app, primary, sources, owner = false }: { app: A
     </div> : null}
     {!app.moduleAccess ? <button className={button} disabled={pending} onClick={() => run(() => enableModuleAccessAction(app.id), 'Рабочие права разделены по модулям в черновике. Прежние приглашения сохранены.')}>Разделить рабочие права по возможностям</button> : null}
     {addition ? <div className="space-y-3 border-t border-sand-200 pt-3">
-      <label className="block space-y-1 text-sm"><span>Добавить возможность</span><select value={addition} disabled={pending} onChange={event => { setSelection(event.target.value); setSource(''); setPreview(null); setMessage(null) }} className="w-full max-w-lg rounded-lg border border-sand-200 px-3 py-2">
-        {choices.map(choice => <option key={choice.templateId} value={choice.templateId}>{choice.name}</option>)}
-      </select></label>
-      <label className="block space-y-1 text-sm"><span>Данные нового раздела</span><select value={source} disabled={pending} onChange={event => { setSource(event.target.value); setPreview(null) }} className="w-full max-w-lg rounded-lg border border-sand-200 px-3 py-2">
-        <option value="">Создать пустые таблицы для нового раздела</option>
-        {desiredKind !== 'inventory' && desiredKind !== 'production' ? sources.filter(item => item.kind === desiredKind).map(item => <option key={item.id} value={item.id}>Использовать таблицы: {item.name}</option>) : null}
-      </select></label>
+      <ModuleSelect
+        label="Добавить возможность"
+        value={addition}
+        disabled={pending}
+        options={choices.map(item => ({ id: item.templateId, name: item.name }))}
+        onChange={id => { setSelection(id); setSource(''); setPreview(null); setMessage(null) }}
+      />
+      <ModuleSelect
+        label="Данные нового раздела"
+        value={source}
+        disabled={pending}
+        options={sourceOptions}
+        onChange={id => { setSource(id); setPreview(null) }}
+      />
       <button className={button} disabled={pending} onClick={() => start(async () => {
         const result = await previewModuleConnectionAction(app.id, addition, source || undefined)
         if (result.ok) { setPreview(result); setMessage(null) } else { setPreview(null); setMessage(result.error) }

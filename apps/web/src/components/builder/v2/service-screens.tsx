@@ -542,7 +542,7 @@ function RepairRows(props: { items: ServiceListItem[]; now: number; onOpen: (id:
 function LinesTable({ lines, approval }: { lines: ReturnType<typeof parseServiceLines>; approval?: string }) {
   if (!lines.length) return <p className={css.quiet}>Позиций сметы пока нет.</p>
   const total = serviceLinesTotal(lines)
-  return <div className={css.linesWrap}>
+  return <div className={css.linesWrap} data-service-lines>
     <table className={css.linesTable}>
       <thead><tr><th>Название</th><th>Кол-во</th><th>Цена</th><th>Сумма</th></tr></thead>
       <tbody>
@@ -557,6 +557,18 @@ function LinesTable({ lines, approval }: { lines: ReturnType<typeof parseService
       </tbody>
       <tfoot><tr><th colSpan={3}>Итого</th><th>{formatMoney(total)}</th></tr></tfoot>
     </table>
+    <ul className={css.linesStack} aria-label="Работы и запчасти">
+      {lines.map((line, index) => (
+        <li key={`${line.name}-${index}`} className={css.lineStackItem}>
+          <p className={css.lineStackName}>{line.name}<span className={css.quiet}> · {line.kind === 'work' ? 'работа' : 'запчасть'}</span></p>
+          <div className={css.lineStackMeta}>
+            <span>{line.qty} × {formatMoney(line.price)}</span>
+            <strong>{formatMoney(line.qty * line.price)}</strong>
+          </div>
+        </li>
+      ))}
+      <li className={css.lineStackTotal}><span>Итого</span><strong>{formatMoney(total)}</strong></li>
+    </ul>
     {approval ? <p className={css.cardFacts} style={{ marginTop: 10 }}><StatusBadge name={approval} /></p> : null}
   </div>
 }

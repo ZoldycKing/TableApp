@@ -39,14 +39,47 @@ const cookieHeader = (raw: string) => raw.split(';').map(part => {
   return { name: name!, value: rest.join('='), domain: '127.0.0.1', path: '/' }
 })
 
-const scrollThreadIntoView = async (page: Page) => {
+/** Frame the estimate lines (stacked on phone) and keep chat in view below when possible. */
+const frameLinesAndChat = async (page: Page) => {
   await page.evaluate(() => {
-    const thread = document.querySelector('[data-service-thread], [data-correspondence], [data-conversation-panel]') as HTMLElement | null
-    const section = thread?.closest('section') ?? thread
-    if (!section) return
-    section.scrollIntoView({ block: 'center' })
+    const lines = document.querySelector('[data-service-lines]') as HTMLElement | null
+    const heading = Array.from(document.querySelectorAll('h2, h3, [class*="detailSection"]')).find(node => /Работы и запчасти|Смета/.test(node.textContent ?? '')) as HTMLElement | undefined
+    const target = heading ?? lines
+    if (!target) return
+    let scroller: HTMLElement | null = target
+    while (scroller) {
+      const { overflowY } = getComputedStyle(scroller)
+      if ((overflowY === 'auto' || overflowY === 'scroll') && scroller.scrollHeight > scroller.clientHeight + 8) break
+      scroller = scroller.parentElement
+    }
+    if (!scroller) {
+      target.scrollIntoView({ block: 'start' })
+      return
+    }
+    const offset = target.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop - 48
+    scroller.scrollTop = Math.max(0, offset)
   })
   await page.waitForTimeout(500)
+}
+
+const assertStackedLines = async (page: Page) => {
+  const ok = await page.evaluate(() => {
+    const wrap = document.querySelector('[data-service-lines]') as HTMLElement | null
+    if (!wrap) return { ok: false, reason: 'no lines wrap' }
+    const table = wrap.querySelector('table') as HTMLElement | null
+    const stack = wrap.querySelector('ul[aria-label="Работы и запчасти"]') as HTMLElement | null
+    if (!stack) return { ok: false, reason: 'no stack list' }
+    const tableHidden = !table || getComputedStyle(table).display === 'none'
+    const stackShown = getComputedStyle(stack).display !== 'none'
+    const text = stack.innerText.replace(/\s+/g, ' ')
+    if (!tableHidden || !stackShown) return { ok: false, reason: `visibility tableHidden=${tableHidden} stackShown=${stackShown}` }
+    if (/запчас\s|Работа\s+по\s+замене/.test(stack.innerText) && stack.querySelectorAll('li').length < 2) {
+      return { ok: false, reason: 'looks crushed', text }
+    }
+    if (!/×/.test(text) || !/Итого/.test(text)) return { ok: false, reason: 'missing qty×price or total', text }
+    return { ok: true, text }
+  })
+  if (!ok.ok) throw new Error(`stacked lines check failed: ${JSON.stringify(ok)}`)
 }
 
 const browser = await chromium.launch({
@@ -67,9 +100,7 @@ const browser = await chromium.launch({
   await page.goto(fixture.service.operatorUrl, { waitUntil: 'networkidle' })
   await page.waitForSelector('[data-correspondence-module]', { timeout: 60000 })
   await page.getByRole('radiogroup', { name: 'Режим ответа' }).waitFor({ timeout: 60000 })
-  await page.getByText('Добрый день. Подскажите').waitFor({ timeout: 60000 })
-  await page.waitForTimeout(1200)
-  await scrollThreadIntoView(page)
+  await page.waitForTimeout(800)
   await save(page, '01-operator-repair-chat-desktop-1440.png')
   await context.close()
 }
@@ -85,11 +116,11 @@ const browser = await chromium.launch({
   const page = await context.newPage()
   page.setDefaultTimeout(60000)
   await page.goto(fixture.service.operatorUrl, { waitUntil: 'networkidle' })
-  await page.waitForSelector('[data-correspondence-module]', { timeout: 60000 })
-  await page.getByRole('radiogroup', { name: 'Режим ответа' }).waitFor({ timeout: 60000 })
-  await page.waitForTimeout(1200)
-  await scrollThreadIntoView(page)
-  await save(page, '02-operator-repair-chat-phone-390.png')
+  await page.waitForSelector('[data-service-lines]', { timeout: 60000 })
+  await page.waitForTimeout(800)
+  await frameLinesAndChat(page)
+  await assertStackedLines(page)
+  await save(page, '02-operator-repair-lines-phone-390.png')
   await context.close()
 }
 
@@ -105,13 +136,14 @@ const browser = await chromium.launch({
   page.setDefaultTimeout(60000)
   await page.goto(fixture.service.clientUrl, { waitUntil: 'networkidle' })
   await page.waitForSelector('[data-correspondence-module]', { timeout: 60000 })
+  await page.waitForSelector('[data-service-lines]', { timeout: 60000 })
   await page.getByText('Добрый день. Подскажите').waitFor({ timeout: 60000 })
-  // Client must not see the staff mode switch or the internal note body
   if (await page.getByRole('radiogroup', { name: 'Режим ответа' }).count()) throw new Error('client saw staff composer modes')
   if (await page.getByText('Клиент просил перезвонить').count()) throw new Error('client saw internal note')
-  await page.waitForTimeout(1200)
-  await scrollThreadIntoView(page)
-  await save(page, '03-client-repair-chat-phone-390.png')
+  await page.waitForTimeout(800)
+  await frameLinesAndChat(page)
+  await assertStackedLines(page)
+  await save(page, '03-client-repair-lines-chat-phone-390.png')
   await context.close()
 }
 
@@ -127,11 +159,31 @@ const browser = await chromium.launch({
   page.setDefaultTimeout(60000)
   await page.goto(fixture.builder.url, { waitUntil: 'networkidle' })
   await page.waitForSelector('[data-communications-toggle]', { timeout: 60000 })
+  await page.getByRole('button', { name: 'Добавить возможность' }).waitFor({ timeout: 60000 })
+  await page.getByRole('button', { name: 'Данные нового раздела' }).waitFor({ timeout: 60000 })
+  const moduleSelects = await page.locator('section:has([data-communications-toggle]) select').count()
+  if (moduleSelects > 0) throw new Error(`ModuleManager still has ${moduleSelects} native <select>`)
   await page.evaluate(() => {
-    document.querySelector('[data-communications-toggle]')?.scrollIntoView({ block: 'center' })
+    const section = document.querySelector('section:has([data-communications-toggle])') as HTMLElement | null
+    section?.scrollIntoView({ block: 'start' })
   })
   await page.waitForTimeout(600)
-  await save(page, '04-builder-communications-toggle.png')
+  // Clip to the ModuleManager block so the v1 editor selects below stay out of frame
+  const box = await page.locator('section:has([data-communications-toggle])').boundingBox()
+  if (!box) throw new Error('ModuleManager section not found')
+  await hide(page)
+  await page.mouse.move(2, 2)
+  await page.waitForTimeout(300)
+  await page.screenshot({
+    path: resolve(outDir, '04-builder-communications-toggle.png'),
+    clip: {
+      x: Math.max(0, box.x - 16),
+      y: Math.max(0, box.y - 72),
+      width: Math.min(box.width + 32, 1280),
+      height: Math.min(box.height + 96, 900),
+    },
+  })
+  console.log('saved', '04-builder-communications-toggle.png')
   await context.close()
 }
 

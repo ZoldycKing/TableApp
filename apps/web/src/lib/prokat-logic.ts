@@ -293,10 +293,306 @@ export function shortClientName(name: string) {
   return initial ? `${parts[0]} ${initial}.` : parts[0]!
 }
 
-export function timelineBarLabel(number: string, clientName: string) {
-  const short = shortClientName(clientName)
-  if (number && short) return `${number} · ${short}`
-  return number || short
+/** Bar caption: client short name only (booking number lives in the tip). */
+export function timelineBarLabel(_number: string, clientName: string) {
+  return shortClientName(clientName)
+}
+
+/** Estimate caption width in px: canvas measureText when available, else length × charWidth. */
+export function estimateTimelineCaptionWidthPx(label: string, charWidthPx = 7) {
+  const text = label.trim()
+  if (!text) return 0
+  if (typeof document !== 'undefined') {
+    try {
+      const canvas = document.createElement('canvas')
+      const ctx = canvas.getContext('2d')
+      if (ctx) {
+        // Match .timelineBar: 11px / weight 650.
+        ctx.font = '650 11px system-ui, -apple-system, "Segoe UI", sans-serif'
+        const width = ctx.measureText(text).width
+        if (Number.isFinite(width) && width > 0) return Math.ceil(width)
+      }
+    } catch {
+      // fall through
+    }
+  }
+  return Math.ceil([...text].length * charWidthPx)
+}
+
+/**
+ * Place the client name inside the bar when it fits in real px; otherwise outside to the right
+ * only if the gap until the next occupied segment is wide enough. Never initials.
+ */
+export function timelineBarCaptionPlacement(input: {
+  label: string
+  barLeft: number
+  barWidth: number
+  /** Right edge of this booking including overdue tail, if any. */
+  occupiedRight: number
+  /** Left edge of the next booking on the same row, or 100. */
+  nextLeft: number
+  /** Full track width in CSS pixels (required for px fit). */
+  trackWidthPx: number
+  /** Fallback average glyph width when canvas measureText is unavailable. */
+  charWidthPx?: number
+  /** Horizontal padding inside the bar (both sides). */
+  padPx?: number
+  /**
+   * Outside caption is allowed only when its end stays under this % of the track.
+   * Phone week view shows ~half the track at rest — keep this lower to avoid clipped text.
+   */
+  maxOutsideEnd?: number
+}): { inside: string; outside: string | null } {
+  const label = input.label.trim()
+  if (!label) return { inside: '', outside: null }
+  const track = Math.max(1, input.trackWidthPx)
+  const padPx = input.padPx ?? 12
+  const needPx = estimateTimelineCaptionWidthPx(label, input.charWidthPx ?? 7) + padPx
+  const barPx = (Math.max(0, input.barWidth) / 100) * track
+  if (needPx <= barPx) return { inside: label, outside: null }
+  const gapPct = Math.max(0, input.nextLeft - input.occupiedRight - 0.8)
+  const gapPx = (gapPct / 100) * track
+  const maxEnd = input.maxOutsideEnd ?? 96
+  const outsideEndPct = input.occupiedRight + (needPx / track) * 100
+  if (needPx <= gapPx && outsideEndPct <= maxEnd) return { inside: '', outside: label }
+  return { inside: '', outside: null }
+}
+
+export const PROKAT_TIMELINE_RANGES = [
+  { id: 'day', label: 'День', short: 'Д', days: 1 },
+  { id: 'week', label: 'Неделя', short: 'Н', days: 7 },
+  { id: 'fortnight', label: '2 недели', short: '2Н', days: 14 },
+  { id: 'month', label: 'Месяц', short: 'М', days: 30 },
+] as const
+export type ProkatTimelineRangeId = typeof PROKAT_TIMELINE_RANGES[number]['id']
+
+/** Day-mode hour window (Moscow wall clock). */
+export const PROKAT_DAY_HOUR_START = 8
+export const PROKAT_DAY_HOUR_END = 22
+
+export type TimelineBarTone = 'request' | 'confirmed' | 'issued' | 'overdue'
+
+export type TimelineBarSegment = {
+  left: number
+  width: number
+  tone: TimelineBarTone
+  /** True when the real start is before the visible range. */
+  clippedStart: boolean
+  /** True when the real end is after the visible range. */
+  clippedEnd: boolean
+  kind: 'booking' | 'overdue-tail'
+}
+
+function clampPct(value: number) {
+  if (!Number.isFinite(value)) return 0
+  return Math.max(0, Math.min(100, value))
+}
+
+function addCivilDays(isoDate: string, days: number) {
+  const [year, month, day] = isoDate.split('-').map(Number)
+  if (!year || !month || !day) return isoDate
+  const stamp = Date.UTC(year, month - 1, day + days)
+  return new Date(stamp).toISOString().slice(0, 10)
+}
+
+function isWeekendCivil(isoDate: string) {
+  const [year, month, day] = isoDate.split('-').map(Number)
+  if (!year || !month || !day) return false
+  const weekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay()
+  return weekday === 0 || weekday === 6
+}
+
+/** Lookback so overdue bookings stay visible when jumping to «Сегодня». */
+export function timelineLookbackDays(mode: ProkatTimelineRangeId) {
+  if (mode === 'day') return 0
+  if (mode === 'week') return 1
+  if (mode === 'fortnight') return 3
+  return 5
+}
+
+export function timelineToneForStatus(status: string, overdue: boolean): TimelineBarTone {
+  if (overdue) return 'overdue'
+  if (status === 'Заявка') return 'request'
+  if (status === 'Выдано' || status === 'Просрочен возврат') return 'issued'
+  return 'confirmed'
+}
+
+/**
+ * Maps a half-open [from, to] instant range onto the visible timeline as a %.
+ * Returns null when fully outside the window. Width follows real duration (no day floor).
+ */
+export function timelineSegmentPct(
+  fromMs: number,
+  toMs: number,
+  rangeStart: number,
+  rangeEnd: number,
+): Omit<TimelineBarSegment, 'tone' | 'kind'> | null {
+  if (!Number.isFinite(fromMs) || !Number.isFinite(toMs) || !Number.isFinite(rangeStart) || !Number.isFinite(rangeEnd)) {
+    return null
+  }
+  const span = rangeEnd - rangeStart
+  if (span <= 0 || toMs <= rangeStart || fromMs >= rangeEnd) return null
+  const leftMs = Math.max(fromMs, rangeStart)
+  const rightMs = Math.min(toMs, rangeEnd)
+  if (rightMs <= leftMs) return null
+  const left = clampPct(((leftMs - rangeStart) / span) * 100)
+  const right = clampPct(((rightMs - rangeStart) / span) * 100)
+  const width = Math.max(0.35, right - left)
+  return {
+    left,
+    width: Math.min(width, 100 - left),
+    clippedStart: fromMs < rangeStart,
+    clippedEnd: toMs > rangeEnd,
+  }
+}
+
+/**
+ * Planned booking bar + optional hatched overdue tail (planned end → now).
+ * Tail only when the booking is overdue and the planned end is before now.
+ */
+export function timelineBookingSegments(input: {
+  from: string | number
+  to: string | number
+  status: string
+  now: number
+  rangeStart: number
+  rangeEnd: number
+}): { booking: TimelineBarSegment | null; overdueTail: TimelineBarSegment | null } {
+  const fromMs = typeof input.from === 'number' ? input.from : Date.parse(input.from)
+  const toMs = typeof input.to === 'number' ? input.to : Date.parse(input.to)
+  const overdue = isOverdueReturn(input.status, input.to, input.now)
+  // Planned interval follows status colour; «Просрочен возврат» is solid terracotta.
+  // Hatched terracotta is reserved for the overdue tail past the planned end.
+  const bookingTone: TimelineBarTone = input.status === 'Просрочен возврат'
+    ? 'overdue'
+    : timelineToneForStatus(input.status, false)
+  const plannedEnd = Number.isFinite(toMs) ? toMs : fromMs
+  const bookingPct = timelineSegmentPct(fromMs, plannedEnd, input.rangeStart, input.rangeEnd)
+  const booking: TimelineBarSegment | null = bookingPct
+    ? { ...bookingPct, tone: bookingTone, kind: 'booking' }
+    : null
+
+  let overdueTail: TimelineBarSegment | null = null
+  if (overdue && Number.isFinite(toMs) && toMs < input.now) {
+    const tailPct = timelineSegmentPct(toMs, input.now, input.rangeStart, input.rangeEnd)
+    if (tailPct) overdueTail = { ...tailPct, tone: 'overdue', kind: 'overdue-tail' }
+  }
+  return { booking, overdueTail }
+}
+
+export type TimelineColumn = {
+  key: string
+  label: string
+  today: boolean
+  weekend: boolean
+}
+
+/** Build the visible window for the staff occupancy board. */
+export function buildTimelineWindow(input: {
+  mode: ProkatTimelineRangeId
+  /** First civil day of the window (Moscow YYYY-MM-DD). */
+  startDate: string
+  now: number
+}): {
+  rangeStart: number
+  rangeEnd: number
+  columns: TimelineColumn[]
+  /** 0–100 position of «now» inside the window, or null if outside. */
+  nowPct: number | null
+  todayKey: string
+} {
+  const todayWall = instantToWallClock(new Date(input.now).toISOString(), PROKAT_ZONE)
+  const todayKey = todayWall?.date ?? input.startDate
+
+  if (input.mode === 'day') {
+    const rangeStart = Date.parse(`${input.startDate}T${String(PROKAT_DAY_HOUR_START).padStart(2, '0')}:00:00+03:00`)
+    const rangeEnd = Date.parse(`${input.startDate}T${String(PROKAT_DAY_HOUR_END).padStart(2, '0')}:00:00+03:00`)
+    const hours = PROKAT_DAY_HOUR_END - PROKAT_DAY_HOUR_START
+    const columns: TimelineColumn[] = []
+    for (let index = 0; index < hours; index += 1) {
+      const hour = PROKAT_DAY_HOUR_START + index
+      const label = `${String(hour).padStart(2, '0')}:00`
+      columns.push({
+        key: `${input.startDate}T${label}`,
+        label: hour % 2 === 0 ? label : '',
+        today: input.startDate === todayKey,
+        weekend: isWeekendCivil(input.startDate),
+      })
+    }
+    const span = Math.max(1, rangeEnd - rangeStart)
+    const nowPct = input.now >= rangeStart && input.now <= rangeEnd
+      ? clampPct(((input.now - rangeStart) / span) * 100)
+      : null
+    return { rangeStart, rangeEnd, columns, nowPct, todayKey }
+  }
+
+  const days = PROKAT_TIMELINE_RANGES.find(item => item.id === input.mode)?.days ?? 14
+  const columns: TimelineColumn[] = []
+  for (let index = 0; index < days; index += 1) {
+    const iso = addCivilDays(input.startDate, index)
+    const [, month, day] = iso.split('-')
+    columns.push({
+      key: iso,
+      label: `${day}.${month}`,
+      today: iso === todayKey,
+      weekend: isWeekendCivil(iso),
+    })
+  }
+  const last = columns[columns.length - 1]?.key ?? input.startDate
+  const rangeStart = Date.parse(`${columns[0]!.key}T00:00:00+03:00`)
+  const rangeEnd = Date.parse(`${last}T23:59:59.999+03:00`)
+  const span = Math.max(1, rangeEnd - rangeStart)
+  const nowPct = input.now >= rangeStart && input.now <= rangeEnd
+    ? clampPct(((input.now - rangeStart) / span) * 100)
+    : null
+  return { rangeStart, rangeEnd, columns, nowPct, todayKey }
+}
+
+export function shiftTimelineStart(startDate: string, mode: ProkatTimelineRangeId, direction: -1 | 1) {
+  const days = mode === 'day' ? 1 : (PROKAT_TIMELINE_RANGES.find(item => item.id === mode)?.days ?? 7)
+  return addCivilDays(startDate, days * direction)
+}
+
+export function timelineStartForToday(mode: ProkatTimelineRangeId, now: number) {
+  const wall = instantToWallClock(new Date(now).toISOString(), PROKAT_ZONE)
+  const today = wall?.date ?? new Date(now).toISOString().slice(0, 10)
+  return addCivilDays(today, -timelineLookbackDays(mode))
+}
+
+/** Public catalogue line: «Свободен сейчас» / «Свободен сегодня с 18:00» / «Свободен завтра с 10:00» / «Свободен с 28.11». */
+export function catalogItemFreeLabel(
+  item: Pick<ProkatCatalogItem, 'id' | 'status' | 'busyUntil'>,
+  spans: readonly ProkatBookingSpan[],
+  now: number,
+): string {
+  if (item.status === 'На обслуживании') return 'На обслуживании'
+  if (item.status === 'Списан') return 'Недоступен'
+
+  let busyEnd = 0
+  for (const span of spans) {
+    if (!(PROKAT_BLOCKING_STATUSES as readonly string[]).includes(span.status)) continue
+    if (!span.itemIds.includes(item.id)) continue
+    const from = Date.parse(span.from)
+    const to = Date.parse(span.to)
+    if (!Number.isFinite(from) || !Number.isFinite(to)) continue
+    const end = isOverdueReturn(span.status, span.to, now) ? Math.max(to, now) : to
+    if (from < now && end > now) busyEnd = Math.max(busyEnd, end)
+  }
+  if (item.busyUntil) {
+    const until = Date.parse(item.busyUntil)
+    if (Number.isFinite(until) && until > now) busyEnd = Math.max(busyEnd, until)
+  }
+  if (busyEnd <= now) {
+    if (item.status === 'В прокате') return 'Занят'
+    return 'Свободен сейчас'
+  }
+  const wall = instantToWallClock(new Date(busyEnd).toISOString(), PROKAT_ZONE)
+  const today = instantToWallClock(new Date(now).toISOString(), PROKAT_ZONE)
+  if (!wall || !today) return 'Свободен сейчас'
+  if (wall.date === today.date) return `Свободен сегодня с ${wall.time}`
+  if (wall.date === addCivilDays(today.date, 1)) return `Свободен завтра с ${wall.time}`
+  const [, month, day] = wall.date.split('-')
+  return `Свободен с ${day}.${month}`
 }
 
 /** @deprecated Prefer computeLateFee with explicit mode; kept for older call sites during migration. */

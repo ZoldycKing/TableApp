@@ -7,12 +7,15 @@ import { savePublishedProkatAction } from '@/app/prokat-actions'
 import type { ConversationPage } from '@/lib/conversation-types'
 import { BuilderV2AttachmentInput } from './attachment-input'
 import {
-  PROKAT_BOOKING_VIEWS, PROKAT_CLIENT_STEPS, PROKAT_LATE_FEE_MODES, PROKAT_ZONE, clientCanRequestCancel,
+  PROKAT_BOOKING_VIEWS, PROKAT_CLIENT_STEPS, PROKAT_LATE_FEE_MODES, PROKAT_TIMELINE_RANGES, PROKAT_ZONE,
+  buildTimelineWindow, catalogItemFreeLabel, clientCanRequestCancel,
   computeItemLateFee, catalogItemBusyUntil, computeRentalPrice, describeLateFee,
   filterBookings, formatMoney, formatMoneyOrZero, formatProkatDate, formatProkatDateTime,
   isOpenBooking, isOverdueReturn, itemLateFeeConfig, prokatClientStepIndex, prokatDashboard,
-  prokatWallInstant, staffTransitions, timelineBarLabel, type ProkatBookingViewId,
-  type ProkatCatalogItem, type ProkatListItem, type ProkatLateFeeMode,
+  prokatWallInstant, shiftTimelineStart, staffTransitions, timelineBarCaptionPlacement,
+  timelineBarLabel, timelineBookingSegments, timelineStartForToday, type ProkatBookingViewId,
+  type ProkatCatalogItem, type ProkatListItem, type ProkatLateFeeMode, type ProkatTimelineRangeId,
+  type TimelineBarSegment,
 } from '@/lib/prokat-logic'
 import { prokatSamplePublicPath } from '@/lib/templates/prokat-samples'
 import { applyProkatChange, bookingSpansFromRows, isProkatDesk, prokatStatusName, type ProkatChange } from '@/lib/prokat-persist'
@@ -743,32 +746,46 @@ function BookingRows(props: {
   onStatus?: (id: string, status: string) => void
   keepCards?: boolean
   clientFacing?: boolean
+  /** Item card history: client + number + badge + dates (no repeated item title). */
+  itemScoped?: boolean
   catalog?: readonly ProkatCatalogItem[]
 }) {
   if (!props.items.length) return <div className={css.empty}><p>Броней в этом списке нет.</p></div>
   return <>
     <ul className={css.cards} data-ticket-cards data-keep-cards={props.keepCards || undefined}>{props.items.map(item => {
       const overdue = isOverdueReturn(item.status, item.to, props.now)
-      return <li key={item.id} className={css.ticketCard} data-ticket-card data-client={props.clientFacing || undefined}>
+      return <li key={item.id} className={css.ticketCard} data-ticket-card data-client={props.clientFacing || undefined} data-item-scoped={props.itemScoped || undefined}>
         <button type="button" className={css.card} onClick={() => props.onOpen(item.id)}>
-          <span className={css.ticketCardTop}>
-            <span className={`${css.subject} ${css.deviceWrap}`}>{item.title || 'Без названия'}</span>
+          {props.itemScoped ? <>
+            <span className={css.ticketCardTop}>
+              <span className={`${css.subject} ${css.deviceWrap}`}>{item.clientName || 'Без клиента'}</span>
+            </span>
+            {item.number ? <span className={css.number}>{item.number}</span> : null}
+            <span className={css.cardFacts}>
+              <StatusBadge name={item.status} />
+              <span className={css.quiet}>{formatProkatDateTime(item.from)} — {formatProkatDateTime(item.to)}</span>
+            </span>
+            {overdue && item.status !== 'Просрочен возврат' ? <span className={css.lateLine}>Просрочен возврат</span> : null}
+          </> : <>
+            <span className={css.ticketCardTop}>
+              <span className={`${css.subject} ${css.deviceWrap}`}>{item.title || 'Без названия'}</span>
+              {props.clientFacing
+                ? <span className={css.cardCost}>{item.price > 0 ? formatMoney(item.price) : '—'}</span>
+                : null}
+            </span>
+            {item.number ? <span className={css.number}>{item.number}</span> : null}
+            <span className={css.cardFacts}>
+              <StatusBadge name={item.status} />
+              <span className={css.quiet}>{formatProkatDateTime(item.from)} — {formatProkatDateTime(item.to)}</span>
+            </span>
+            {overdue && item.status !== 'Просрочен возврат' ? <span className={css.lateLine}>Просрочен возврат</span> : null}
             {props.clientFacing
-              ? <span className={css.cardCost}>{item.price > 0 ? formatMoney(item.price) : '—'}</span>
-              : null}
-          </span>
-          {item.number ? <span className={css.number}>{item.number}</span> : null}
-          <span className={css.cardFacts}>
-            <StatusBadge name={item.status} />
-            <span className={css.quiet}>{formatProkatDateTime(item.from)} → {formatProkatDateTime(item.to)}</span>
-          </span>
-          {overdue ? <span className={css.lateLine}>Просрочен возврат</span> : null}
-          {props.clientFacing
-            ? null
-            : <span className={css.ticketCardLine}>
-                <span className={css.quiet}>{item.clientName || 'Без клиента'}</span>
-                {item.itemNames.length ? <><span className={css.quiet}>·</span><span className={css.quiet}>{item.itemNames.join(', ')}</span></> : null}
-              </span>}
+              ? null
+              : <span className={css.ticketCardLine}>
+                  <span className={css.quiet}>{item.clientName || 'Без клиента'}</span>
+                  {item.itemNames.length ? <><span className={css.quiet}>·</span><span className={css.quiet}>{item.itemNames.join(', ')}</span></> : null}
+                </span>}
+          </>}
         </button>
         {props.desk && props.onStatus ? <div className={css.ticketCardMenu}><StatusMenu status={item.status} onPick={next => props.onStatus?.(item.id, next)} /></div> : null}
       </li>
@@ -965,19 +982,32 @@ function BookingCard(props: ScreenProps) {
   </div>
 }
 
-function CreateDialog(props: ScreenProps & { onClose: () => void; onDone: () => void }) {
+function CreateDialog(props: ScreenProps & {
+  onClose: () => void
+  onDone: () => void
+  initialItemId?: string
+  initialDate?: string
+}) {
   useDialogBehavior(props.onClose)
   const formId = useId()
   const clients = props.of(props.kit.clientsTableId)
   const items = catalogItems(props).filter(item => item.status === 'Свободен' || item.status === 'В прокате')
   const [clientId, setClientId] = useState(clients[0]?.id ?? '')
-  const [itemIds, setItemIds] = useState<string[]>([])
-  const [fromDate, setFromDate] = useState('')
+  const [itemIds, setItemIds] = useState<string[]>(props.initialItemId ? [props.initialItemId] : [])
+  const [fromDate, setFromDate] = useState(props.initialDate ?? '')
   const [fromTime, setFromTime] = useState('12:00')
-  const [toDate, setToDate] = useState('')
+  const [toDate, setToDate] = useState(props.initialDate ?? '')
   const [toTime, setToTime] = useState('18:00')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  useEffect(() => {
+    if (props.initialItemId) setItemIds([props.initialItemId])
+  }, [props.initialItemId])
+  useEffect(() => {
+    if (!props.initialDate) return
+    setFromDate(props.initialDate)
+    setToDate(props.initialDate)
+  }, [props.initialDate])
   const selected = items.filter(item => itemIds.includes(item.id))
   const from = fromDate ? prokatWallInstant(fromDate, fromTime) : null
   const to = toDate ? prokatWallInstant(toDate, toTime) : null
@@ -1363,17 +1393,37 @@ function ItemDetail(props: ScreenProps) {
       </DetailSection> : null}
       {message ? <p role="status">{message}</p> : null}
       {desk ? <DetailSection title="Брони предмета">
-        <BookingRows items={history} now={props.now} onOpen={id => props.onNavigate?.(props.kit.bookingScreenId, id)} keepCards />
+        <BookingRows items={history} now={props.now} onOpen={id => props.onNavigate?.(props.kit.bookingScreenId, id)} keepCards itemScoped />
       </DetailSection> : null}
     </DetailCardShell>
   </div>
 }
 
+const TIMELINE_LEGEND: { tone: string; label: string }[] = [
+  { tone: 'request', label: 'Заявка' },
+  { tone: 'confirmed', label: 'Подтверждена' },
+  { tone: 'issued', label: 'Выдана' },
+  { tone: 'overdue', label: 'Просрочена' },
+]
+
+function timelineTipText(booking: ProkatListItem, overdue: boolean) {
+  const status = overdue && booking.status !== 'Просрочен возврат' ? 'Просрочен возврат' : booking.status
+  const sum = booking.price > 0 ? formatMoney(booking.price) : '—'
+  return [
+    booking.number || 'Бронь',
+    booking.clientName || 'Без клиента',
+    `${formatProkatDateTime(booking.from)} — ${formatProkatDateTime(booking.to)}`,
+    status,
+    sum,
+  ].join(' · ')
+}
+
 function TimelineBar(props: {
-  left: number
-  width: number
-  tone: string
+  segment: TimelineBarSegment
   label: string
+  externalLabel?: string
+  /** % where outside caption starts (after bar + overdue tail). */
+  externalAt?: number
   tip: string
   onOpen: () => void
 }) {
@@ -1383,10 +1433,9 @@ function TimelineBar(props: {
   useLayoutEffect(() => {
     if (!tip || !buttonRef.current) { setPlace(null); return }
     const rect = buttonRef.current.getBoundingClientRect()
-    const tipHeight = 56
+    const tipHeight = 72
     const spaceAbove = rect.top
     const spaceBelow = window.innerHeight - rect.bottom
-    // Prefer below when the tip would sit under the day header / chrome.
     const below = spaceAbove < tipHeight + 24 || spaceAbove < spaceBelow
     setPlace({
       top: below ? rect.bottom + 8 : rect.top - 8,
@@ -1394,14 +1443,19 @@ function TimelineBar(props: {
       below,
     })
   }, [tip])
+  const { segment } = props
+  const externalAt = props.externalAt ?? (segment.left + segment.width)
   return <>
     <button
       ref={buttonRef}
       type="button"
       className={css.timelineBar}
-      data-tone={props.tone}
+      data-tone={segment.tone}
+      data-kind={segment.kind}
+      data-clip-start={segment.clippedStart || undefined}
+      data-clip-end={segment.clippedEnd || undefined}
       data-tip={tip || undefined}
-      style={{ left: `${props.left}%`, width: `${props.width}%` }}
+      style={{ left: `${segment.left}%`, width: `${segment.width}%` }}
       title={props.tip}
       aria-label={props.tip}
       data-prokat-bar-tip={props.tip}
@@ -1409,10 +1463,17 @@ function TimelineBar(props: {
       onMouseLeave={() => setTip(false)}
       onFocus={() => setTip(true)}
       onBlur={() => setTip(false)}
-      onClick={props.onOpen}
+      onClick={event => { event.stopPropagation(); props.onOpen() }}
     >
-      <span>{props.label}</span>
+      {props.label ? <span>{props.label}</span> : null}
     </button>
+    {props.externalLabel ? (
+      <span
+        className={css.timelineBarExternal}
+        style={{ left: `calc(${externalAt}% + 6px)` }}
+        aria-hidden="true"
+      >{props.externalLabel}</span>
+    ) : null}
     {tip && place && typeof document !== 'undefined' ? createPortal(
       <em
         className={css.timelineTip}
@@ -1432,82 +1493,365 @@ function TimelineBar(props: {
 }
 
 function TimelineScreen(props: ScreenProps) {
-  const days = 14
-  const startWall = instantToWallClock(new Date(props.now).toISOString(), PROKAT_ZONE)
-  const startDate = startWall?.date ?? new Date(props.now).toISOString().slice(0, 10)
-  const dayLabels: { key: string; label: string; today: boolean }[] = []
-  for (let index = 0; index < days; index += 1) {
-    const [year, month, day] = startDate.split('-').map(Number)
-    const stamp = Date.UTC(year!, month! - 1, day! + index)
-    const iso = new Date(stamp).toISOString().slice(0, 10)
-    const [, mm, dd] = iso.split('-')
-    dayLabels.push({ key: iso, label: `${dd}.${mm}`, today: index === 0 })
+  const desk = isProkatDesk(props.actor)
+  const phone = useContext(AppFrameDeviceContext) === 'phone'
+  const initialMode: ProkatTimelineRangeId = phone ? 'week' : 'fortnight'
+  const [mode, setMode] = useState<ProkatTimelineRangeId>(initialMode)
+  const [startDate, setStartDate] = useState(() => timelineStartForToday(initialMode, props.now))
+  const [search, setSearch] = useState('')
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
+  const [create, setCreate] = useState<{ itemId: string; date: string } | null>(null)
+  const boardRef = useRef<HTMLDivElement>(null)
+  const scrollSyncing = useRef(false)
+  const [trackWidthPx, setTrackWidthPx] = useState(phone ? 448 : 1100)
+  const board = buildTimelineWindow({ mode, startDate, now: props.now })
+  const columns = board.columns
+  const columnCount = Math.max(1, columns.length)
+  const onTimelinePaneScroll = (event: { currentTarget: HTMLElement }) => {
+    if (!phone || scrollSyncing.current) return
+    const root = boardRef.current
+    if (!root) return
+    scrollSyncing.current = true
+    const left = event.currentTarget.scrollLeft
+    root.querySelectorAll<HTMLElement>('[data-timeline-scroll]').forEach(pane => {
+      if (pane !== event.currentTarget) pane.scrollLeft = left
+    })
+    scrollSyncing.current = false
   }
-  const rangeStart = Date.parse(`${dayLabels[0]!.key}T00:00:00+03:00`)
-  const rangeEnd = Date.parse(`${dayLabels[days - 1]!.key}T23:59:59+03:00`)
-  const span = Math.max(1, rangeEnd - rangeStart)
   const items = catalogItems(props).filter(item => item.status !== 'Списан')
   const bookings = bookingItems(props)
-  return <div className={css.root} data-prokat-root data-prokat-screen="timeline">
-    <ListScreenShell title="Занятость" meta="Нажмите полосу — откроется бронь.">
-      <div className={css.timelineBoard} style={{ ['--prokat-days' as string]: days }}>
-        <div className={css.timelineHead}>
-          <span className={css.quiet}>Предмет</span>
-          <div className={css.timelineDays}>{dayLabels.map(day => <span key={day.key} className={css.timelineDay} data-today={day.today || undefined}>{day.label}</span>)}</div>
-        </div>
-        {items.map(item => {
-          const bars = bookings.filter(booking => booking.itemIds.includes(item.id) && ['Заявка', 'Подтверждена', 'Выдано', 'Просрочен возврат'].includes(booking.status))
-          return <div key={item.id} className={css.timelineRow}>
-            <button type="button" className={css.timelineLabel} onClick={() => props.onNavigate?.(props.kit.itemScreenId, item.id)}>
-              <strong>{item.name}</strong>
-              <span>{item.serial}</span>
-            </button>
-            <div className={css.timelineTrack} aria-label={`Занятость ${item.name}`}>
-              <span className={css.timelineToday} aria-hidden="true" />
-              {bars.map(booking => {
-                const from = Date.parse(booking.from)
-                const to = Date.parse(booking.to)
-                if (!Number.isFinite(from) || !Number.isFinite(to)) return null
-                const overdue = isOverdueReturn(booking.status, booking.to, props.now)
-                const label = timelineBarLabel(booking.number, booking.clientName)
-                const tip = `${formatProkatDateTime(booking.from)} — ${formatProkatDateTime(booking.to)} · ${booking.clientName || 'Без клиента'} · ${overdue ? 'Просрочен возврат' : booking.status}`
-                if (overdue) {
-                  const leftMs = Math.max(from, rangeStart)
-                  const rightMs = Math.min(Math.max(props.now, leftMs + 1), rangeEnd)
-                  if (rightMs <= rangeStart || leftMs >= rangeEnd) return null
-                  const left = Math.max(0, Math.min(100, ((leftMs - rangeStart) / span) * 100))
-                  const dayPct = 100 / days
-                  const right = Math.max(left + dayPct, Math.min(100, ((rightMs - rangeStart) / span) * 100))
-                  const width = Math.max(dayPct, right - left)
-                  return <TimelineBar
-                    key={booking.id}
-                    left={left}
-                    width={Math.min(width, 100 - left)}
-                    tone="overdue"
-                    label={label}
-                    tip={tip}
-                    onOpen={() => props.onNavigate?.(props.kit.bookingScreenId, booking.id)}
-                  />
-                }
-                const left = Math.max(0, Math.min(100, ((from - rangeStart) / span) * 100))
-                const right = Math.max(0, Math.min(100, ((to - rangeStart) / span) * 100))
-                const width = Math.max(100 / days, right - left)
-                const tone = booking.status === 'Заявка' ? 'request' : booking.status === 'Выдано' ? 'issued' : 'confirmed'
-                return <TimelineBar
-                  key={booking.id}
-                  left={left}
-                  width={Math.min(width, 100 - left)}
-                  tone={tone}
-                  label={label}
-                  tip={tip}
-                  onOpen={() => props.onNavigate?.(props.kit.bookingScreenId, booking.id)}
-                />
-              })}
-            </div>
+  const needle = search.trim().toLowerCase()
+  const filtered = needle
+    ? items.filter(item => [item.name, item.serial, item.category].join(' ').toLowerCase().includes(needle))
+    : items
+  useLayoutEffect(() => {
+    const root = boardRef.current
+    if (!root) return
+    const measure = () => {
+      const el = root.querySelector<HTMLElement>(
+        phone ? '[data-timeline-scroll] > *' : `.${css.timelineTrack}`,
+      )
+      const width = el?.clientWidth ?? 0
+      if (width > 0) setTrackWidthPx(Math.round(width))
+    }
+    measure()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(measure)
+    observer.observe(root)
+    return () => observer.disconnect()
+  }, [phone, mode, columnCount, filtered.length])
+  const groups = (() => {
+    const map = new Map<string, ProkatCatalogItem[]>()
+    for (const item of filtered) {
+      const list = map.get(item.category) ?? []
+      list.push(item)
+      map.set(item.category, list)
+    }
+    return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0], 'ru'))
+  })()
+  const occupiedNow = new Set(
+    bookings
+      .filter(booking => {
+        if (!['Заявка', 'Подтверждена', 'Выдано', 'Просрочен возврат'].includes(booking.status)) return false
+        const from = Date.parse(booking.from)
+        const to = Date.parse(booking.to)
+        if (!Number.isFinite(from) || !Number.isFinite(to)) return false
+        const end = isOverdueReturn(booking.status, booking.to, props.now) ? Math.max(to, props.now) : to
+        return from <= props.now && end > props.now
+      })
+      .flatMap(booking => booking.itemIds),
+  )
+  const goToday = () => setStartDate(timelineStartForToday(mode, props.now))
+  const changeMode = (next: ProkatTimelineRangeId) => {
+    setMode(next)
+    setStartDate(timelineStartForToday(next, props.now))
+  }
+  const civilDateForClick = (clientX: number, track: HTMLElement) => {
+    const rect = track.getBoundingClientRect()
+    if (rect.width <= 0) return startDate
+    const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width))
+    if (mode === 'day') return startDate
+    const index = Math.min(columnCount - 1, Math.floor(ratio * columnCount))
+    return columns[index]?.key ?? startDate
+  }
+  const renderItemRow = (item: ProkatCatalogItem) => {
+    const bars = bookings.filter(booking =>
+      booking.itemIds.includes(item.id)
+      && ['Заявка', 'Подтверждена', 'Выдано', 'Просрочен возврат'].includes(booking.status))
+    type Laid = {
+      booking: typeof bars[number]
+      segment: TimelineBarSegment | null
+      overdueTail: TimelineBarSegment | null
+      tip: string
+      short: string
+      left: number
+      occupiedRight: number
+    }
+    const laid: Laid[] = bars.map(booking => {
+      const overdue = isOverdueReturn(booking.status, booking.to, props.now)
+      const { booking: segment, overdueTail } = timelineBookingSegments({
+        from: booking.from,
+        to: booking.to,
+        status: booking.status,
+        now: props.now,
+        rangeStart: board.rangeStart,
+        rangeEnd: board.rangeEnd,
+      })
+      const left = segment?.left ?? overdueTail?.left ?? 100
+      const occupiedRight = overdueTail
+        ? overdueTail.left + overdueTail.width
+        : segment
+          ? segment.left + segment.width
+          : left
+      return {
+        booking,
+        segment,
+        overdueTail,
+        tip: timelineTipText(booking, overdue),
+        short: timelineBarLabel(booking.number, booking.clientName),
+        left,
+        occupiedRight,
+      }
+    }).filter(entry => entry.segment || entry.overdueTail)
+      .sort((a, b) => a.left - b.left || a.booking.id.localeCompare(b.booking.id))
+
+    const barNodes = laid.map((entry, index) => {
+      const nextLeft = laid[index + 1]?.left ?? 100
+      const open = () => props.onNavigate?.(props.kit.bookingScreenId, entry.booking.id)
+      const nodes: ReactNode[] = []
+      if (entry.segment) {
+        const caption = timelineBarCaptionPlacement({
+          label: entry.short,
+          barLeft: entry.segment.left,
+          barWidth: entry.segment.width,
+          occupiedRight: entry.occupiedRight,
+          nextLeft,
+          trackWidthPx,
+          // Phone shows ~half the week track at rest; outside past that looks clipped.
+          maxOutsideEnd: phone ? 52 : 96,
+        })
+        nodes.push(
+          <TimelineBar
+            key={`${entry.booking.id}-bar`}
+            segment={entry.segment}
+            label={caption.inside}
+            externalLabel={caption.outside ?? undefined}
+            externalAt={entry.occupiedRight}
+            tip={entry.tip}
+            onOpen={open}
+          />,
+        )
+      }
+      if (entry.overdueTail) {
+        nodes.push(
+          <TimelineBar
+            key={`${entry.booking.id}-tail`}
+            segment={entry.overdueTail}
+            label=""
+            tip={entry.tip}
+            onOpen={open}
+          />,
+        )
+      }
+      return nodes
+    })
+    const track = (
+      <div
+        className={css.timelineTrack}
+        aria-label={`Занятость ${item.name}`}
+        data-create={desk || undefined}
+        onClick={event => {
+          if (!desk) return
+          if ((event.target as HTMLElement).closest(`.${css.timelineBar}`)) return
+          setCreate({ itemId: item.id, date: civilDateForClick(event.clientX, event.currentTarget) })
+        }}
+      >{barNodes}</div>
+    )
+    const label = (
+      <button
+        type="button"
+        className={css.timelineLabel}
+        title={item.name}
+        onClick={() => props.onNavigate?.(props.kit.itemScreenId, item.id)}
+      >
+        <strong style={phone ? {
+          display: '-webkit-box',
+          WebkitBoxOrient: 'vertical',
+          WebkitLineClamp: 2,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+        } : undefined}>{item.name}</strong>
+        <span>{item.serial}</span>
+      </button>
+    )
+    if (phone) {
+      return <div key={item.id} className={css.timelineRow}>
+        {label}
+        <div className={css.timelinePane} data-timeline-scroll onScroll={onTimelinePaneScroll}>
+          <div className={css.timelinePaneInner}>
+            {board.nowPct != null ? <div className={css.timelineTodayLine} aria-hidden="true" /> : null}
+            {track}
           </div>
-        })}
+        </div>
+      </div>
+    }
+    return <div key={item.id} className={css.timelineRow}>{label}{track}</div>
+  }
+  return <div className={css.root} data-prokat-root data-prokat-screen="timeline" data-phone={phone || undefined}>
+    <ListScreenShell
+      title="Занятость"
+      meta={phone ? undefined : 'Полоса — срок аренды. Клик по пустой ячейке — новая бронь.'}
+    >
+      <div className={css.timelineToolbar} data-search-open={searchOpen || undefined}>
+        <div className={css.timelineRange} role="group" aria-label="Диапазон шкалы">
+          {PROKAT_TIMELINE_RANGES.map(item => (
+            <button
+              key={item.id}
+              type="button"
+              aria-pressed={mode === item.id}
+              aria-label={item.label}
+              onClick={() => changeMode(item.id)}
+            ><span className={css.timelineRangeFull}>{item.label}</span><span className={css.timelineRangeShort}>{item.short}</span></button>
+          ))}
+        </div>
+        <div className={css.timelineNav}>
+          <button type="button" className={css.timelineNavBtn} aria-label="Назад" onClick={() => setStartDate(current => shiftTimelineStart(current, mode, -1))}>‹</button>
+          <button type="button" className={css.timelineTodayBtn} onClick={goToday}>Сегодня</button>
+          <button type="button" className={css.timelineNavBtn} aria-label="Вперёд" onClick={() => setStartDate(current => shiftTimelineStart(current, mode, 1))}>›</button>
+        </div>
+        <div className={css.timelineSearch}>
+          {phone && !searchOpen ? (
+            <button
+              type="button"
+              className={css.timelineSearchToggle}
+              aria-label="Поиск предмета"
+              onClick={() => setSearchOpen(true)}
+            ><ProtoIcon name="search" size={16} /></button>
+          ) : (
+            <ShellSearchField
+              value={search}
+              onChange={value => {
+                setSearch(value)
+                if (phone && !value) setSearchOpen(false)
+              }}
+              placeholder="Предмет"
+              aria-label="Поиск предмета"
+            />
+          )}
+        </div>
+      </div>
+      <ul className={css.timelineLegend} aria-label="Статусы броней">
+        {TIMELINE_LEGEND.map(item => (
+          <li key={item.tone}><i data-tone={item.tone} data-sample aria-hidden="true" /><span>{item.label}</span></li>
+        ))}
+      </ul>
+      <div
+        ref={boardRef}
+        className={css.timelineBoard}
+        data-mode={mode}
+        data-phone-board={phone || undefined}
+        style={{
+          ['--prokat-days' as string]: columnCount,
+          ['--prokat-today-pct' as string]: board.nowPct == null ? '-1' : String(board.nowPct),
+        }}
+      >
+        {phone ? (
+          <>
+            <div className={css.timelineHead}>
+              <span className={css.timelineHeadLabel}>Предмет</span>
+              <div className={css.timelinePane} data-timeline-scroll onScroll={onTimelinePaneScroll}>
+                <div className={css.timelinePaneInner}>
+                  <div className={css.timelineDays}>
+                    {board.nowPct != null ? (
+                      <span className={css.timelineTodayTag} style={{ left: `${board.nowPct}%` }}>Сегодня</span>
+                    ) : null}
+                    {columns.map(column => (
+                      <span
+                        key={column.key}
+                        className={css.timelineDay}
+                        data-today={column.today || undefined}
+                        data-weekend={column.weekend || undefined}
+                      >{column.label}</span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+            {!filtered.length ? <p className={css.quiet} style={{ padding: '12px' }}>Нет предметов по этому запросу.</p> : null}
+            {groups.map(([category, groupItems]) => {
+              const free = groupItems.filter(item => item.status === 'Свободен' && !occupiedNow.has(item.id)).length
+              const open = !collapsed[category]
+              return <section key={category} className={css.timelineGroup}>
+                <button
+                  type="button"
+                  className={css.timelineGroupHead}
+                  aria-expanded={open}
+                  onClick={() => setCollapsed(current => ({ ...current, [category]: !current[category] }))}
+                >
+                  <span className={css.timelineGroupLead}>
+                    <ProtoIcon name={open ? 'up' : 'down'} size={14} />
+                    <strong>{category}</strong>
+                  </span>
+                  <span className={css.timelineGroupCount}>{free} из {groupItems.length} свободно</span>
+                </button>
+                {open ? groupItems.map(renderItemRow) : null}
+              </section>
+            })}
+          </>
+        ) : (
+          <div className={css.timelineScale}>
+            <div className={css.timelineHead}>
+              <span className={css.quiet}>Предмет</span>
+              <div className={css.timelineDays}>
+                {board.nowPct != null ? (
+                  <span className={css.timelineTodayTag} style={{ left: `${board.nowPct}%` }}>Сегодня</span>
+                ) : null}
+                {columns.map(column => (
+                  <span
+                    key={column.key}
+                    className={css.timelineDay}
+                    data-today={column.today || undefined}
+                    data-weekend={column.weekend || undefined}
+                  >{column.label}</span>
+                ))}
+              </div>
+            </div>
+            {board.nowPct != null ? <div className={css.timelineTodayLine} aria-hidden="true" /> : null}
+            {board.nowPct != null ? <div className={css.timelineTodayWash} aria-hidden="true" /> : null}
+            {!filtered.length ? <p className={css.quiet} style={{ padding: '12px 0' }}>Нет предметов по этому запросу.</p> : null}
+            {groups.map(([category, groupItems]) => {
+              const free = groupItems.filter(item => item.status === 'Свободен' && !occupiedNow.has(item.id)).length
+              const open = !collapsed[category]
+              return <section key={category} className={css.timelineGroup}>
+                <button
+                  type="button"
+                  className={css.timelineGroupHead}
+                  aria-expanded={open}
+                  onClick={() => setCollapsed(current => ({ ...current, [category]: !current[category] }))}
+                >
+                  <span className={css.timelineGroupLead}>
+                    <ProtoIcon name={open ? 'up' : 'down'} size={14} />
+                    <strong>{category}</strong>
+                  </span>
+                  <span className={css.timelineGroupCount}>свободно сейчас {free} из {groupItems.length}</span>
+                </button>
+                {open ? groupItems.map(renderItemRow) : null}
+              </section>
+            })}
+          </div>
+        )}
       </div>
     </ListScreenShell>
+    {create && desk ? (
+      <CreateDialog
+        {...props}
+        initialItemId={create.itemId}
+        initialDate={create.date}
+        onClose={() => setCreate(null)}
+        onDone={() => setCreate(null)}
+      />
+    ) : null}
   </div>
 }
 
@@ -1567,6 +1911,7 @@ function CatalogScreen(props: ScreenProps) {
   const [selectedId, setSelectedId] = useState('')
   const [category, setCategory] = useState('Все')
   useEffect(() => { if (bundle?.open === 'request') setRequestOpen(true) }, [bundle?.open])
+  const spans = bookingSpansFromRows(props.kit, props.rows)
   const all = catalogItems(props).filter(item =>
     (item.status === 'Свободен' || item.status === 'В прокате')
     && item.showInCatalog !== false)
@@ -1584,8 +1929,9 @@ function CatalogScreen(props: ScreenProps) {
         ))}
       </div>
       {!items.length ? <div className={css.empty}><p>Сейчас ничего не сдаётся. Загляните позже или напишите в чат.</p></div> : null}
-      <ul className={css.catalogGrid}>{items.map(item => (
-        <li key={item.id}>
+      <ul className={css.catalogGrid}>{items.map(item => {
+        const freeLabel = catalogItemFreeLabel(item, spans, props.now)
+        return <li key={item.id}>
           <div className={css.catalogCard}>
             <button
               type="button"
@@ -1600,13 +1946,13 @@ function CatalogScreen(props: ScreenProps) {
                 <strong>{item.name}</strong>
                 <span className={css.quiet}>{item.tariff} · {formatMoney(item.rate)}</span>
                 <span className={css.quiet}>Залог {formatMoney(item.deposit)}</span>
-                <StatusBadge name={item.status} />
+                <span className={css.catalogFree}>{freeLabel}</span>
               </span>
             </button>
             {client ? <button type="button" className={css.catalogBook} onClick={() => openRequest(item.id)}>Забронировать</button> : null}
           </div>
         </li>
-      ))}</ul>
+      })}</ul>
     </ListScreenShell>
     {requestOpen && client ? <RequestDialog {...props} initialItemId={selectedId} onClose={() => setRequestOpen(false)} onDone={() => setRequestOpen(false)} /> : null}
   </div>

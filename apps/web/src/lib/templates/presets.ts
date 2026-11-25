@@ -14,7 +14,8 @@ import { withWorkflowScreenNames } from '../workflow-screen-names'
 export function templatePreset(app: App, built: BuiltTemplate): App {
   const preset = buildPreset(app, built)
   const modules = legacyAppModules(preset, new Map(built.tables.filter(table => table.templateId).map(table => [table.id, table.templateId!])))
-  return withWorkflowScreenNames({ ...preset, ...(modules.length ? { modules } : {}), templateTableIds: built.tables.map(table => table.id) }, Object.fromEntries(built.views.map(view => [view.id, view])))
+  const withChat = preset.booking || preset.customer ? { communications: { enabled: true as const } } : {}
+  return withWorkflowScreenNames({ ...preset, ...withChat, ...(modules.length ? { modules } : {}), templateTableIds: built.tables.map(table => table.id) }, Object.fromEntries(built.views.map(view => [view.id, view])))
 }
 
 function buildPreset(app: App, built: BuiltTemplate): App {

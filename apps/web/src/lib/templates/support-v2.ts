@@ -277,6 +277,7 @@ export function buildSupportV2App(built: BuiltTemplate, meta: { id: string; work
   const deskTicketUpdate = [ticket.assignee, ticket.assigneeEmail, ticket.line, ticket.priority, ticket.category, ticket.status, ticket.deadline, ticket.updatedAt, ticket.subject, ticket.description, ticket.client, ticket.clientName, ticket.clientEmail]
   return {
     formatVersion: 2, id: meta.id, workspaceId: meta.workspaceId, name: meta.name, slug: meta.slug, purpose: 'business',
+    communications: { enabled: true },
     appearance: { navigation: 'tabs', icon: 'clipboard', density: 'regular', corners: 'rounded' },
     theme: { accent: 'green', scheme: 'light', logoKey: null, iconKey: null },
     roles: [{ id: 'owner', name: 'Руководитель' }, { id: 'staff', name: 'Оператор' }, { id: 'client', name: 'Клиент' }],

@@ -110,6 +110,8 @@ export const appV2Schema = z.strictObject({
   formatVersion: z.literal(2),
   id, workspaceId: id, name: z.string().min(1).max(200), slug: z.string().regex(SLUG_PATTERN),
   purpose: z.enum(['personal', 'business']), theme: appThemeSchema,
+  /** Record-bound Переписка: when enabled, new threads can start on client detail cards. */
+  communications: z.strictObject({ enabled: z.boolean() }).optional(),
   appearance: z.strictObject({
     navigation: z.enum(['bottom', 'sidebar', 'tabs']), icon: z.string().min(1).max(64),
     density: z.enum(['regular', 'compact']).optional(),

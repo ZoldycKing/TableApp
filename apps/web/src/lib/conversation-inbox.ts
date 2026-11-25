@@ -1,5 +1,7 @@
 import { apps, businessCustomers, conversationMessages as messages, conversationReads as reads, conversations, db, fields, rows, tables, workspaces } from '@tableapp/db'
 import { appSchema, customerWorkflows, dateInstant, fieldTimeZone, normalizeFieldOptions, type App, type Field } from '@tableapp/schema'
+import { readAppDefinition } from '@tableapp/schema/app-definition'
+import { projectAppV2Row, readableAppV2Fields, type AppV2 } from '@tableapp/schema/app-v2'
 import { and, desc, eq, inArray, isNull, isNotNull, lt, or, sql } from 'drizzle-orm'
 import { createHash } from 'node:crypto'
 import { appAccessFor, currentAppAccess, currentStaffEmail, type AppViewer } from './app-session'
@@ -8,6 +10,7 @@ import { appReadPolicy } from './app-read-policy'
 import { validateAppReferences } from './app-references'
 import { legacyAppModules } from './app-modules'
 import { conversationResource } from './conversation-resource'
+import { conversationManagerV2, conversationResourceV2, conversationStaffV2 } from './conversation-resource-v2'
 import { conversationAccess } from './conversations'
 import { hasRole, moduleForTable, workflowRole } from './module-access'
 import { currentMember } from './session'
@@ -17,6 +20,7 @@ import type { ConversationInboxPage } from './conversation-types'
 import { GENERAL_CONVERSATION_TABLE, GENERAL_CONVERSATION_SELF } from './conversation-types'
 import { generalChatAvailableApp } from './general-conversation-config'
 import { generalConversationAccess, generalOperator } from './general-conversation-access'
+import { publishedV2Actor, publishedV2Roles } from './builder-v2-published'
 
 const denied = () => new RowWriteError('denied', 'Сообщения недоступны. Войдите в кабинет этого бизнеса.')
 const person = (workspace: string, email: string) => `person_${createHash('sha256').update(`${workspace}:${email.trim().toLowerCase()}`).digest('hex')}`
@@ -38,12 +42,22 @@ export async function listConversationInbox(input: InboxInput = {}, business = f
   } else {
     if (!input.slug) throw denied()
     const [root] = await db.select().from(apps).where(eq(apps.slug, input.slug)).limit(1)
-    const parsed = appSchema.safeParse(root?.published)
-    if (!root || !parsed.success) throw denied()
-    const app = { ...parsed.data, id: root.id, workspaceId: root.workspaceId, slug: root.slug }
-    const access = await currentAppAccess(app), verifiedEmail = await currentStaffEmail()
-    if ((!access.viewer || !access.visitor.authenticated || !canEnter(app, access.visitor)) && (!verifiedEmail || !generalChatAvailableApp(app))) throw denied()
-    workspaceId = root.workspaceId; actorEmail = access.viewer?.email ?? verifiedEmail!
+    if (!root) throw denied()
+    const definition = readAppDefinition(root.published)
+    if (definition.ok && definition.formatVersion === 2) {
+      const app = { ...definition.app, id: root.id, workspaceId: root.workspaceId, slug: root.slug }
+      const actor = await publishedV2Actor(app)
+      const verifiedEmail = await currentStaffEmail()
+      if ((!actor.authenticated || !actor.email) && !verifiedEmail) throw denied()
+      workspaceId = root.workspaceId; actorEmail = actor.email ?? verifiedEmail!
+    } else {
+      const parsed = appSchema.safeParse(root.published)
+      if (!parsed.success) throw denied()
+      const app = { ...parsed.data, id: root.id, workspaceId: root.workspaceId, slug: root.slug }
+      const access = await currentAppAccess(app), verifiedEmail = await currentStaffEmail()
+      if ((!access.viewer || !access.visitor.authenticated || !canEnter(app, access.visitor)) && (!verifiedEmail || !generalChatAvailableApp(app))) throw denied()
+      workspaceId = root.workspaceId; actorEmail = access.viewer?.email ?? verifiedEmail!
+    }
   }
   const [space] = await db.select({ ownerId: workspaces.ownerId }).from(workspaces).where(eq(workspaces.id, workspaceId))
   const owner = Boolean(business && member?.role === 'owner' && space?.ownerId === member.userId)
@@ -54,9 +68,47 @@ export async function listConversationInbox(input: InboxInput = {}, business = f
   const records = await db.select().from(apps).where(and(eq(apps.workspaceId, workspaceId), input.appId ? eq(apps.id, input.appId) : undefined))
   const operator = await generalOperator(workspaceId, business)
   const generalApps: App[] = []
-  type Scope = { app: App; tableId: string; emailFieldId: string; moduleId: string; staff: boolean; owner: boolean; visitor: Visitor | null; viewer: AppViewer | null; policy: Awaited<ReturnType<typeof appReadPolicy>> | null }
+  type Scope = {
+    app: App | AppV2
+    tableId: string
+    emailFieldId: string
+    moduleId: string
+    staff: boolean
+    owner: boolean
+    visitor: Visitor | null
+    viewer: AppViewer | null
+    policy: Awaited<ReturnType<typeof appReadPolicy>> | null
+    detailScreenId: string
+    titleFieldId?: string
+    v2?: boolean
+  }
   const scopes: Scope[] = []
   for (const record of records) {
+    const definition = readAppDefinition(record.published)
+    if (definition.ok && definition.formatVersion === 2) {
+      const app = { ...definition.app, id: record.id, workspaceId, slug: record.slug }
+      const actor = owner
+        ? { authenticated: true as const, roleIds: ['owner'], email: actorEmail, name: member?.name ?? null, company: '', id: member?.userId ?? 'owner' }
+        : business
+          ? (() => {
+              const roles = publishedV2Roles(app, actorEmail)
+              return { authenticated: roles.roleIds.length > 0, roleIds: roles.roleIds, email: actorEmail, name: member?.name ?? null, company: roles.company, id: member?.userId ?? actorEmail }
+            })()
+          : await publishedV2Actor(app)
+      if (!owner && (!actor.authenticated || !actor.email)) continue
+      for (const tableId of [app.service?.repairsTableId, app.support?.ticketsTableId].filter((id): id is string => Boolean(id))) {
+        const resource = conversationResourceV2(app, tableId)
+        if (!resource) continue
+        const staff = owner || conversationStaffV2(app, tableId, actor.roleIds)
+        const manager = owner || conversationManagerV2(app, tableId, actor.roleIds)
+        if (!owner && (business ? !staff : !staff && !actor.roleIds.includes('client'))) continue
+        scopes.push({
+          app, tableId, emailFieldId: resource.emailFieldId, moduleId: resource.moduleId, staff: staff || manager, owner,
+          visitor: null, viewer: null, policy: null, detailScreenId: resource.detailScreenId, titleFieldId: resource.titleFieldId, v2: true,
+        })
+      }
+      continue
+    }
     const parsed = appSchema.safeParse(record.published)
     if (!parsed.success) continue
     const app = { ...parsed.data, id: record.id, workspaceId, slug: record.slug }
@@ -77,7 +129,9 @@ export async function listConversationInbox(input: InboxInput = {}, business = f
       if (!resource || !module) continue
       const staff = owner || hasRole(access!.visitor, workflowRole(app, tableId, 'manager')) || hasRole(access!.visitor, workflowRole(app, tableId, 'staff')) || module.source.type === 'booking' && hasRole(access!.visitor, workflowRole(app, tableId, 'master'))
       if (!owner && (business ? !staff : !staff && access!.visitor.roleId !== 'client')) continue
-      scopes.push({ app, tableId, emailFieldId: resource.emailFieldId, moduleId: module.id, staff, owner, visitor: access?.visitor ?? null, viewer: access?.viewer ?? null, policy: owner ? null : await appReadPolicy(app, tableId, access!.visitor, access!.viewer!) })
+      const detail = app.screens.find(screen => screen.type === 'detail' && screen.tableId === tableId && (owner || canOpenScreen(screen, access!.visitor)))
+      if (!detail) continue
+      scopes.push({ app, tableId, emailFieldId: resource.emailFieldId, moduleId: module.id, staff, owner, visitor: access?.visitor ?? null, viewer: access?.viewer ?? null, policy: owner ? null : await appReadPolicy(app, tableId, access!.visitor, access!.viewer!), detailScreenId: detail.id })
     }
   }
   if (!scopes.length && !generalApps.length) return { items: [], next: null }
@@ -114,11 +168,35 @@ export async function listConversationInbox(input: InboxInput = {}, business = f
     const data = item.row.data as Record<string, unknown>
     const scope = scopes.filter(scope => scope.tableId === item.thread.tableId && scope.moduleId === item.thread.moduleId)
       .sort((a, b) => Number(b.app.slug === input.slug) - Number(a.app.slug === input.slug))
-      .find(scope => String(data[scope.emailFieldId] ?? '').trim().toLowerCase() === item.email && (scope.owner || scope.policy!.canRead(data, item.row!) && (scope.staff || item.email === actorEmail.trim().toLowerCase())))
+      .find(scope => {
+        if (String(data[scope.emailFieldId] ?? '').trim().toLowerCase() !== item.email) return false
+        if (scope.owner || scope.staff || item.email === actorEmail.trim().toLowerCase()) {
+          if (scope.v2) {
+            if (scope.owner || scope.staff) return true
+            const actor = { authenticated: true as const, roleIds: ['client'], email: actorEmail, name: null, company: '', id: actorEmail }
+            const record = { id: item.row!.id, tableId: item.thread.tableId!, values: Object.fromEntries(Object.entries(data).map(([key, value]) => [key, value as never])) }
+            return readableAppV2Fields(scope.app as AppV2, actor, record).size > 0
+          }
+          return scope.owner || scope.policy!.canRead(data, item.row!)
+        }
+        return false
+      })
     if (!scope) continue
-    const projected = scope.policy ? scope.policy.project(data, item.row) : data
-    let title = String(projected[item.primary ?? ''] ?? 'Обращение').slice(0, 160)
-    const booking = scope.app.booking
+    let projected = data
+    if (scope.v2 && !scope.owner) {
+      const actor = {
+        authenticated: true as const,
+        roleIds: scope.staff ? ['staff'] : ['client'],
+        email: actorEmail,
+        name: null,
+        company: '',
+        id: actorEmail,
+      }
+      const record = { id: item.row.id, tableId: item.thread.tableId!, values: Object.fromEntries(Object.entries(data).map(([key, value]) => [key, value as never])) }
+      projected = projectAppV2Row(scope.app as AppV2, actor, record) as Record<string, unknown>
+    } else if (scope.policy) projected = scope.policy.project(data, item.row)
+    let title = String(projected[scope.titleFieldId ?? item.primary ?? ''] ?? 'Обращение').slice(0, 160)
+    const booking = !scope.v2 && 'booking' in scope.app ? scope.app.booking : undefined
     if (booking?.tables.visits === item.thread.tableId) {
       const ids = projected[booking.visit.service], serviceId = Array.isArray(ids) && typeof ids[0] === 'string' ? ids[0] : ''
       const key = `${scope.app.id}:${serviceId}`
@@ -126,7 +204,7 @@ export async function listConversationInbox(input: InboxInput = {}, business = f
         const [service] = serviceId ? await db.select().from(rows).where(and(eq(rows.id, serviceId), eq(rows.tableId, booking.tables.services), isNull(rows.deletedAt))) : []
         let serviceData = service?.data as Record<string, unknown> | undefined
         if (service && !scope.owner) {
-          if (!servicePolicies.has(scope.app.id)) servicePolicies.set(scope.app.id, await appReadPolicy(scope.app, booking.tables.services, scope.visitor!, scope.viewer!))
+          if (!servicePolicies.has(scope.app.id)) servicePolicies.set(scope.app.id, await appReadPolicy(scope.app as App, booking.tables.services, scope.visitor!, scope.viewer!))
           const policy = servicePolicies.get(scope.app.id)!
           serviceData = policy.canRead(serviceData!, service) ? policy.project(serviceData!, service) : undefined
         }
@@ -137,12 +215,12 @@ export async function listConversationInbox(input: InboxInput = {}, business = f
       const instant = dateInstant(projected[booking.visit.start])
       title = `${titles.get(key)}${instant ? ` · ${new Date(instant).toLocaleString('ru-RU', { timeZone: zone, day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}` : ''}`
     }
-    const detail = scope.app.screens.find(screen => screen.type === 'detail' && screen.tableId === item.thread.tableId && (scope.owner || canOpenScreen(screen, scope.visitor!)))!
-    if (!detail) continue
-    const nameField = booking?.tables.visits === item.thread.tableId ? booking.visit.client : customerWorkflows(scope.app).find(workflow => workflow.tableId === item.thread.tableId)?.profile?.nameFieldId
+    if (!scope.detailScreenId) continue
+    const nameField = booking?.tables.visits === item.thread.tableId ? booking.visit.client
+      : !scope.v2 ? customerWorkflows(scope.app as App).find(workflow => workflow.tableId === item.thread.tableId)?.profile?.nameFieldId : undefined
     const recordName = nameField && typeof projected[nameField] === 'string' ? String(projected[nameField]).trim().slice(0, 80) : ''
     items.push({ id: item.thread.id, slug: scope.app.slug, tableId: item.thread.tableId!, rowId: item.thread.rowId!, title,
-      customer: item.customer || recordName || (scope.staff ? 'Клиент' : 'Вы'), appName: scope.app.name, detailScreenId: detail.id,
+      customer: item.customer || recordName || (scope.staff ? 'Клиент' : 'Вы'), appName: scope.app.name, detailScreenId: scope.detailScreenId,
       preview: item.preview ?? 'Сообщений пока нет', lastAt: item.lastAt ? new Date(item.lastAt).toISOString() : item.thread.createdAt.toISOString(), unread: Number(item.unread), closed: Boolean(item.thread.closedAt) })
   }
   const last = page.at(-1)

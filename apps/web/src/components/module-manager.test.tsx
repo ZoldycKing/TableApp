@@ -8,14 +8,15 @@ import { connectSalesInventory } from '@/lib/sales-inventory-connection'
 const mocks = vi.hoisted(() => ({ preview: vi.fn(), connect: vi.fn(), refresh: vi.fn() }))
 vi.mock('next/navigation', () => ({ useRouter: () => mocks }))
 vi.mock('@/app/module-actions', () => ({ previewModuleConnectionAction: mocks.preview, connectModuleAction: mocks.connect,
-  enableModuleAccessAction: vi.fn(), setModuleIntakeAction: vi.fn(), setPrimaryClientAppAction: vi.fn() }))
+  enableModuleAccessAction: vi.fn(), setModuleIntakeAction: vi.fn(), setPrimaryClientAppAction: vi.fn(), setCommunicationsAction: vi.fn() }))
 afterEach(() => { cleanup(); vi.resetAllMocks() })
 
 describe('technical module attachment controls', () => {
   it('offers communication settings for a legacy customer app without stored module metadata', () => {
-    const app = { ...templateExample('salon').app, modules: undefined }
+    const app = { ...templateExample('salon').app, modules: undefined, communications: undefined }
     const ui = render(<ModuleManager app={app} primary sources={[]} />)
     expect(ui.getByRole('button', { name: 'Включить переписку' })).toBeTruthy()
+    expect(ui.getByText(/В карточке записи и в разделе «Сообщения»/)).toBeTruthy()
     expect(ui.getByLabelText('Добавить возможность')).toBeTruthy()
   })
   it('clears a previous preview and reused source when selecting another scenario', async () => {

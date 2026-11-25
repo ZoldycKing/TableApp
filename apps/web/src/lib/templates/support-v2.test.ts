@@ -37,6 +37,7 @@ describe('support template', () => {
     expect(app.screens.find(screen => screen.id === support.clientListScreenId)?.audience).toMatchObject({ kind: 'roles', roleIds: ['owner', 'staff', 'client'] })
     expect(app.screens.find(screen => screen.id === support.dashboardScreenId)?.audience).toMatchObject({ kind: 'roles', roleIds: ['owner', 'staff'] })
     expect(app.roles.map(role => role.name)).toEqual(['Руководитель', 'Оператор', 'Клиент'])
+    expect(app.communications).toEqual({ enabled: true })
     expect(app.authentication.mode).toBe('verified_email')
     expect(app.authentication.defaultRoleId).toBe('client')
     const themed = configureBuilderV2ScreenAccess({ ...app, theme: { ...app.theme, scheme: 'dark' } }, support.queueScreenId, 'client', false)

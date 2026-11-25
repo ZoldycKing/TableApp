@@ -23,6 +23,7 @@ import type { AppV2RendererProps } from './view'
 import css from './service.module.css'
 
 const ServiceConversationShotPanel = lazy(() => import('./service-conversation-shot').then(module => ({ default: module.ServiceConversationShotPanel })))
+const CorrespondenceModule = lazy(() => import('@/components/runtime/correspondence-module').then(module => ({ default: module.CorrespondenceModule })))
 
 export type ServiceOpen = 'create' | 'reply' | 'note' | 'assign' | null
 export type ServiceConversationShot = {
@@ -682,6 +683,7 @@ function RepairCard(props: ScreenProps) {
     if (!date) return
     void saveAssign({ deadline: serviceDeadlineInstant(date, time || '17:00') })
   }
+  const liveCorrespondence = Boolean(props.live) && !bundle?.sample && !conversationShot
   const conversation = <DetailSection title="Переписка">
     <div ref={threadRef} data-service-thread>
       {conversationShot ? (
@@ -691,6 +693,17 @@ function RepairCard(props: ScreenProps) {
             tableId={props.kit.repairsTableId}
             repairId={repair.id}
             shot={conversationShot}
+          />
+        </Suspense>
+      ) : liveCorrespondence ? (
+        <Suspense fallback={<p className={css.quiet} role="status">Загружаем переписку…</p>}>
+          <CorrespondenceModule
+            slug={props.app.slug}
+            tableId={props.kit.repairsTableId}
+            rowId={repair.id}
+            configured={Boolean(props.app.communications?.enabled)}
+            business={false}
+            showContext={false}
           />
         </Suspense>
       ) : <>

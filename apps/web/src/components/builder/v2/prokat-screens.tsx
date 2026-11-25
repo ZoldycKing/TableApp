@@ -597,7 +597,6 @@ function HoldSettingControl(props: ScreenProps & { value: ProkatHoldAfterStartMi
     }
   }
   return <div className={css.holdSetting} data-prokat-hold-setting>
-    <p className={css.holdSettingLead}>Сколько ждать клиента после начала брони, прежде чем снять её как «Не забрали».</p>
     <div className={`${css.assigneeFilter} ${css.singleFilter}`} ref={root}>
       <button
         type="button"
@@ -624,6 +623,7 @@ function HoldSettingControl(props: ScreenProps & { value: ProkatHoldAfterStartMi
         ))}
       </div> : null}
     </div>
+    <p className={css.holdSettingLead}>Сколько ждать клиента после начала брони, прежде чем снять её как «Не забрали».</p>
     {message ? <p role="status" className={css.quiet}>{message}</p> : null}
   </div>
 }
@@ -1869,14 +1869,20 @@ function TimelineScreen(props: ScreenProps) {
                     {board.nowPct != null ? (
                       <span className={css.timelineTodayTag} style={{ left: `${board.nowPct}%` }}>Сегодня</span>
                     ) : null}
-                    {columns.map(column => (
-                      <span
+                    {columns.map((column, index) => {
+                      // Month on phone: keep today + every 5th day so labels do not collide.
+                      const show = mode !== 'month' || column.today || index % 5 === 0
+                      const label = mode === 'month' && show
+                        ? (column.label.split('.')[0] || column.label)
+                        : column.label
+                      return <span
                         key={column.key}
                         className={css.timelineDay}
                         data-today={column.today || undefined}
                         data-weekend={column.weekend || undefined}
-                      >{column.label}</span>
-                    ))}
+                        data-sparse={show && mode === 'month' ? true : undefined}
+                      >{show ? label : ''}</span>
+                    })}
                   </div>
                 </div>
               </div>
@@ -1910,14 +1916,19 @@ function TimelineScreen(props: ScreenProps) {
                 {board.nowPct != null ? (
                   <span className={css.timelineTodayTag} style={{ left: `${board.nowPct}%` }}>Сегодня</span>
                 ) : null}
-                {columns.map(column => (
-                  <span
+                {columns.map((column, index) => {
+                  const show = mode !== 'month' || column.today || index % 5 === 0
+                  const label = mode === 'month' && show
+                    ? (column.label.split('.')[0] || column.label)
+                    : column.label
+                  return <span
                     key={column.key}
                     className={css.timelineDay}
                     data-today={column.today || undefined}
                     data-weekend={column.weekend || undefined}
-                  >{column.label}</span>
-                ))}
+                    data-sparse={show && mode === 'month' ? true : undefined}
+                  >{show ? label : ''}</span>
+                })}
               </div>
             </div>
             {board.nowPct != null ? <div className={css.timelineTodayLine} aria-hidden="true" /> : null}

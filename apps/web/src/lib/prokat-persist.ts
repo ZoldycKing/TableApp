@@ -193,6 +193,7 @@ export function syncItemStatuses(
   rows: readonly AppV2Record[],
   itemIds: readonly string[],
   statusId: string,
+  busyUntil: string | null = null,
 ): { ok: true; rows: AppV2Record[] } | { ok: false; error: string } {
   const prokat = app.prokat
   if (!prokat) return { ok: false, error: 'Это не приложение проката.' }
@@ -201,6 +202,7 @@ export function syncItemStatuses(
     const item = next.find(row => row.id === itemId && row.tableId === prokat.itemsTableId)
     if (!item) continue
     const patch: Record<string, AppV2Json> = { [prokat.item.status]: statusId }
+    if (prokat.item.busyUntil) patch[prokat.item.busyUntil] = busyUntil
     const decision = guardProkatUpdate(app, actor, item, patch)
     if (!decision.ok) return decision
     next = next.map(row => row.id === item.id ? { ...row, values: { ...row.values, ...patch } } : row)
@@ -368,7 +370,7 @@ export function applyProkatChange(
     })
     const decision = guardProkatUpdate(app, actor, booking, patch)
     if (!decision.ok) return decision
-    const itemStatus = syncItemStatuses(app, actor, replace(booking, patch), itemIds, prokat.itemStatuses.rented)
+    const itemStatus = syncItemStatuses(app, actor, replace(booking, patch), itemIds, prokat.itemStatuses.rented, to || null)
     if (!itemStatus.ok) return itemStatus
     return { ok: true, rows: itemStatus.rows, message: 'Акт выдачи сохранён.' }
   }
@@ -393,7 +395,7 @@ export function applyProkatChange(
     })
     const decision = guardProkatUpdate(app, actor, booking, patch)
     if (!decision.ok) return decision
-    const itemStatus = syncItemStatuses(app, actor, replace(booking, patch), itemIds, prokat.itemStatuses.free)
+    const itemStatus = syncItemStatuses(app, actor, replace(booking, patch), itemIds, prokat.itemStatuses.free, null)
     if (!itemStatus.ok) return itemStatus
     return { ok: true, rows: itemStatus.rows, message: 'Акт возврата сохранён.' }
   }

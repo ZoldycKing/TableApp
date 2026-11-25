@@ -293,6 +293,28 @@ export type ProkatCatalogItem = {
   condition: string
   status: string
   photo?: string
+  /** Public «занят до» for client catalogue without exposing foreign bookings. */
+  busyUntil?: string
+}
+
+/** Busy end for [from, to]: booking span first, else public item.busyUntil / service hold. */
+export function catalogItemBusyUntil(
+  spans: readonly ProkatBookingSpan[],
+  item: Pick<ProkatCatalogItem, 'id' | 'status' | 'busyUntil'>,
+  from: string | number,
+  to: string | number,
+): string | null {
+  const fromSpan = itemBusyUntil(spans, item.id, from, to)
+  if (fromSpan) return fromSpan
+  if (item.status === 'На обслуживании') return item.busyUntil || 'service'
+  if (item.status !== 'В прокате' || !item.busyUntil) return null
+  const fromMs = typeof from === 'number' ? from : Date.parse(from)
+  const toMs = typeof to === 'number' ? to : Date.parse(to)
+  const busyEnd = Date.parse(item.busyUntil)
+  if (!Number.isFinite(fromMs) || !Number.isFinite(toMs) || !Number.isFinite(busyEnd)) return null
+  // Currently rented: blocked from −∞ until busyUntil.
+  if (fromMs < busyEnd && toMs > fromMs) return item.busyUntil
+  return null
 }
 
 export function prokatClientStepIndex(status: string) {

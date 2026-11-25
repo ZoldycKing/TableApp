@@ -164,11 +164,23 @@ const browser = await chromium.launch({
     await day.click({ timeout: 5000 }).catch(() => {})
     await page.waitForTimeout(200)
   }
-  await pickDate('Дата начала', '26')
-  await pickDate('Дата окончания', '28')
-  await page.getByRole('dialog').locator('button[aria-pressed]').first().click()
-  await page.waitForTimeout(700)
-  await page.getByText('Предварительно').scrollIntoViewIfNeeded().catch(() => {})
+  // Dates first (25–26) so in-rental items show «Занят до …», then pick a free item.
+  await pickDate('Дата начала', '25')
+  await pickDate('Дата окончания', '26')
+  await page.getByText('Сначала выберите даты').waitFor({ state: 'hidden', timeout: 5000 }).catch(() => {})
+  const freePick = page.getByRole('dialog').locator('button[aria-pressed]:not([disabled])').filter({ hasText: /Aqua Marina|Giant Contend|Makita|Trek Marlin/ }).first()
+  await freePick.click({ timeout: 8000 })
+  await page.waitForTimeout(400)
+  await page.getByRole('dialog').getByText('Предварительно').waitFor({ timeout: 5000 })
+  // Keep dates + selected card + price summary in the dialog viewport.
+  await page.evaluate(() => {
+    const dialog = document.querySelector('[role="dialog"]') as HTMLElement | null
+    if (!dialog) return
+    const scroller = (dialog.querySelector('[class*="body"], [class*="content"], [class*="scroll"]') as HTMLElement | null)
+      ?? dialog
+    scroller.scrollTop = 0
+  })
+  await page.waitForTimeout(500)
   await save(page, '06-client-catalog-phone-390.png')
   await context.close()
 }
@@ -302,7 +314,16 @@ const browser = await chromium.launch({
   await returnBtn.click({ timeout: 15000 })
   await page.getByRole('dialog').waitFor({ timeout: 15000 })
   await page.getByText('Фото (ссылки или заметки, по строке)').waitFor({ timeout: 10000 }).catch(() => {})
-  await page.waitForTimeout(600)
+  const photos = page.getByRole('dialog').locator('textarea').nth(2)
+  await photos.fill('https://example.com/return-front.jpg\nЦарапина на носу борта').catch(() => {})
+  const withheld = page.getByRole('dialog').getByLabel('Залог удержан')
+  await withheld.fill('1500').catch(() => {})
+  const returned = page.getByRole('dialog').getByLabel('Залог возвращён')
+  await returned.fill('6500').catch(() => {})
+  const reason = page.getByRole('dialog').getByLabel('Причина удержания')
+  await reason.fill('Царапина на носу борта — частичное удержание залога.').catch(() => {})
+  await reason.scrollIntoViewIfNeeded().catch(() => {})
+  await page.waitForTimeout(500)
   await save(page, '12-staff-return-act-desktop-1440.png')
   await context.close()
 }

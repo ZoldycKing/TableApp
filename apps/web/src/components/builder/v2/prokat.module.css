@@ -50,10 +50,14 @@
   font-style: normal; font-size: 12px; font-weight: 750; font-variant-numeric: tabular-nums;
 }
 .checkMark {
-  display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 5px;
-  border: 1px solid var(--v2-line, var(--sc-border)); background: transparent; color: var(--v2-accent, #3F6B5C); flex: none;
+  display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 999px;
+  border: 1.5px solid color-mix(in srgb, var(--v2-ink, var(--sc-text)) 22%, transparent);
+  background: transparent; color: #fff; flex: none;
 }
-.checkMark[data-on] { border-color: var(--v2-accent, #3F6B5C); background: color-mix(in srgb, var(--v2-accent, #3F6B5C) 14%, transparent); }
+.checkMark[data-on] {
+  border-color: var(--v2-accent, #3F6B5C);
+  background: var(--v2-accent, #3F6B5C);
+}
 .assigneeTrigger[data-active] { border-color: var(--v2-accent, #3F6B5C); }
 .sheetScrim {
   position: fixed; inset: 0; z-index: 40; display: grid; align-items: end;
@@ -304,8 +308,9 @@
   margin: 0; padding: 16px 20px 10px; font-size: 13px; font-weight: 750; letter-spacing: 0.01em;
   color: var(--v2-muted, var(--sc-text-2));
 }
+.clientListSection .ticketCard:last-child .card { border-bottom: 0; }
 .clientListSection + .clientListSection h3 {
-  margin-top: 4px; padding-top: 18px;
+  margin-top: 0; padding-top: 18px;
   border-top: 1px solid var(--v2-line, var(--sc-border));
 }
 .cardCost {
@@ -1162,15 +1167,19 @@
   pointer-events: none;
 }
 .timelineBar {
-  position: absolute; top: 3px; bottom: 3px; min-width: 4.5rem; padding: 0 6px;
+  position: absolute; top: 3px; bottom: 3px; min-width: 5.5rem; max-width: 100%; padding: 0 8px;
   border: 0; border-radius: 6px; background: color-mix(in srgb, #3F6B5C 72%, transparent); color: #fff;
   font: inherit; font-size: 11px; font-weight: 700; line-height: 22px; text-align: left;
   overflow: hidden; white-space: nowrap; cursor: pointer; z-index: 1;
+  box-sizing: border-box;
 }
 .timelineBar[data-tone='request'] { background: color-mix(in srgb, #3D5A80 70%, transparent); }
 .timelineBar[data-tone='confirmed'] { background: color-mix(in srgb, #3F6B5C 78%, transparent); }
 .timelineBar[data-tone='issued'] { background: color-mix(in srgb, #246B45 80%, transparent); }
-.timelineBar[data-tone='overdue'] { background: color-mix(in srgb, #C4623A 85%, transparent); }
+.timelineBar[data-tone='overdue'] {
+  min-width: 10.5rem; z-index: 2;
+  background: color-mix(in srgb, #C4623A 88%, transparent);
+}
 .timelineBar span { display: block; overflow: hidden; text-overflow: ellipsis; }
 .utilBar {
   display: block; height: 8px; border-radius: 99px;
@@ -1185,17 +1194,20 @@
 .utilRow span { font-variant-numeric: tabular-nums; font-weight: 750; text-align: right; color: var(--v2-accent, #3F6B5C); }
 .itemCheck, .itemPick {
   display: flex; align-items: center; gap: 10px; width: 100%; min-width: 0; padding: 10px 12px;
-  border: 1px solid var(--v2-line, var(--sc-border)); border-radius: 12px; background: transparent;
+  border: 1.5px solid var(--v2-line, var(--sc-border)); border-radius: 12px; background: var(--v2-surface, var(--sc-bg-elevated));
   color: inherit; font: inherit; text-align: left; cursor: pointer;
+  transition: border-color 120ms ease, background-color 120ms ease;
 }
 .itemCheck[aria-pressed='true'], .itemPick[aria-pressed='true'] {
   border-color: var(--v2-accent, #3F6B5C);
-  background: color-mix(in srgb, var(--v2-accent, #3F6B5C) 10%, transparent);
+  background: color-mix(in srgb, var(--v2-accent, #3F6B5C) 12%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--v2-accent, #3F6B5C) 35%, transparent);
 }
 .itemPick:disabled, .itemCheck:disabled {
-  opacity: 0.72; cursor: not-allowed;
-  background: color-mix(in srgb, var(--v2-ink, var(--sc-text)) 3%, transparent);
+  opacity: 0.68; cursor: not-allowed;
+  background: color-mix(in srgb, var(--v2-ink, var(--sc-text)) 4%, transparent);
 }
+.itemPick:disabled .checkMark { visibility: hidden; }
 .itemTile {
   display: inline-grid; place-items: center; width: 40px; height: 40px; flex: none;
   border-radius: 10px; overflow: hidden;
@@ -1207,9 +1219,15 @@
 .itemCheckCopy strong { font-size: 14px; font-weight: 700; overflow-wrap: anywhere; }
 .busyUntil { color: #C4623A; font-size: 12px; font-weight: 650; }
 .quietHint { margin: 0; color: var(--v2-muted, var(--sc-text-2)); font-size: 13px; }
-.priceSummary { display: grid; gap: 6px; margin-top: 4px; }
+.priceSummary {
+  display: grid; gap: 6px; margin-top: 10px; padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--v2-accent, #3F6B5C) 28%, var(--v2-line, #ccc));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--v2-accent, #3F6B5C) 8%, transparent);
+}
 .priceSummary ul { margin: 0; padding: 0 0 0 1.1rem; color: var(--v2-muted, var(--sc-text-2)); font-size: 13px; }
-.itemGrid { display: grid; gap: 8px; min-width: 0; }
+.priceSummary li { overflow-wrap: anywhere; }
+.itemGrid { display: grid; gap: 8px; min-width: 0; max-height: min(42vh, 320px); overflow: auto; padding-bottom: 2px; }
 .moneyRow { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; min-width: 0; }
 .moneyRow strong { font-variant-numeric: tabular-nums; font-weight: 780; color: var(--v2-accent, #3F6B5C); }
 .catalogGrid {

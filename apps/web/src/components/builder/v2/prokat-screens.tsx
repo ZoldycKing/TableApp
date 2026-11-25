@@ -5,8 +5,8 @@ import type { AppV2, AppV2Node, AppV2Record } from '@tableapp/schema/app-v2'
 import { savePublishedProkatAction } from '@/app/prokat-actions'
 import {
   PROKAT_BOOKING_VIEWS, PROKAT_CLIENT_STEPS, PROKAT_ZONE, clientCanRequestCancel, computeLateFee,
-  computeRentalPrice, filterBookings, formatMoney, formatMoneyOrZero, formatProkatDate, formatProkatDateTime,
-  isOpenBooking, isOverdueReturn, itemBusyUntil, prokatClientStepIndex, prokatDashboard, prokatWallInstant,
+  catalogItemBusyUntil, computeRentalPrice, filterBookings, formatMoney, formatMoneyOrZero, formatProkatDate, formatProkatDateTime,
+  isOpenBooking, isOverdueReturn, prokatClientStepIndex, prokatDashboard, prokatWallInstant,
   staffTransitions, type ProkatBookingViewId, type ProkatCatalogItem, type ProkatListItem,
 } from '@/lib/prokat-logic'
 import { applyProkatChange, bookingSpansFromRows, isProkatDesk, prokatStatusName, type ProkatChange } from '@/lib/prokat-persist'
@@ -47,10 +47,30 @@ function categoryIcon(category: string) {
   return 'box'
 }
 
-function ItemTile({ item, size = 40 }: { item: Pick<ProkatCatalogItem, 'photo' | 'category' | 'name'>; size?: number }) {
+const ITEM_PHOTO_BY_SERIAL: Record<string, string> = {
+  'ВЕЛ-1001': '/template-media/prokat/bike-mtb.svg',
+  'ВЕЛ-1002': '/template-media/prokat/bike-city.svg',
+  'ВЕЛ-1003': '/template-media/prokat/bike-road.svg',
+  'ВЕЛ-1004': '/template-media/prokat/bike-kids.svg',
+  'СУП-2001': '/template-media/prokat/sup-red.svg',
+  'СУП-2002': '/template-media/prokat/sup-blue.svg',
+  'СУП-2003': '/template-media/prokat/sup-kids.svg',
+  'ИНСТ-3001': '/template-media/prokat/drill.svg',
+  'ИНСТ-3002': '/template-media/prokat/saw.svg',
+  'ИНСТ-3003': '/template-media/prokat/laser.svg',
+}
+
+function itemPhotoSrc(item: Pick<ProkatCatalogItem, 'photo' | 'serial'>) {
+  const raw = item.photo?.trim()
+  if (raw && (raw.startsWith('/') || raw.startsWith('http') || raw.startsWith('data:'))) return raw
+  return ITEM_PHOTO_BY_SERIAL[item.serial] ?? null
+}
+
+function ItemTile({ item, size = 40 }: { item: Pick<ProkatCatalogItem, 'photo' | 'category' | 'name' | 'serial'>; size?: number }) {
+  const src = itemPhotoSrc(item)
   return <span className={css.itemTile} aria-hidden="true">
-    {item.photo
-      ? <img src={item.photo} alt="" width={size} height={size} />
+    {src
+      ? <img src={src} alt="" width={size} height={size} />
       : <ProtoIcon name={categoryIcon(item.category)} size={Math.round(size * 0.45)} />}
   </span>
 }
@@ -353,6 +373,7 @@ function catalogItems(props: ScreenProps): ProkatCatalogItem[] {
     condition: textOf(row.values[fields.condition]),
     status: choiceLabel(props, props.kit.itemsTableId, fields.status, row.values[fields.status]),
     photo: fields.photo ? textOf(row.values[fields.photo]) || undefined : undefined,
+    busyUntil: fields.busyUntil ? textOf(row.values[fields.busyUntil]) || undefined : undefined,
   }))
 }
 
@@ -1010,11 +1031,12 @@ function TimelineScreen(props: ScreenProps) {
                 const overdue = isOverdueReturn(booking.status, booking.to, props.now)
                 if (overdue) {
                   const leftMs = Math.max(from, rangeStart)
-                  const rightMs = Math.min(props.now, rangeEnd)
+                  const rightMs = Math.min(Math.max(props.now, leftMs + 1), rangeEnd)
                   if (rightMs <= rangeStart || leftMs >= rangeEnd) return null
                   const left = Math.max(0, Math.min(100, ((leftMs - rangeStart) / span) * 100))
-                  const right = Math.max(0, Math.min(100, ((rightMs - rangeStart) / span) * 100))
-                  const width = Math.max(8, right - left)
+                  const dayPct = 100 / days
+                  const right = Math.max(left + dayPct, Math.min(100, ((rightMs - rangeStart) / span) * 100))
+                  const width = Math.max(dayPct, right - left)
                   return <button
                     key={booking.id}
                     type="button"
@@ -1027,7 +1049,7 @@ function TimelineScreen(props: ScreenProps) {
                 }
                 const left = Math.max(0, Math.min(100, ((from - rangeStart) / span) * 100))
                 const right = Math.max(0, Math.min(100, ((to - rangeStart) / span) * 100))
-                const width = Math.max(8, right - left)
+                const width = Math.max(100 / days, right - left)
                 const tone = booking.status === 'Заявка' ? 'request' : booking.status === 'Выдано' ? 'issued' : 'confirmed'
                 return <button
                   key={booking.id}
@@ -1193,8 +1215,9 @@ function RequestDialog(props: ScreenProps & { initialItemId?: string; onClose: (
         {!datesReady
           ? <p className={css.quietHint}>Сначала выберите даты</p>
           : <div className={css.itemGrid}>{items.map(item => {
-            const busyUntil = from && to ? itemBusyUntil(spans, item.id, from, to) : null
-            const unavailable = Boolean(busyUntil)
+            const busyUntil = from && to ? catalogItemBusyUntil(spans, item, from, to) : null
+            const onService = busyUntil === 'service' || item.status === 'На обслуживании' && Boolean(from && to)
+            const unavailable = Boolean(busyUntil) || onService
             const selected = itemIds.includes(item.id)
             return <button
               key={item.id}
@@ -1208,7 +1231,11 @@ function RequestDialog(props: ScreenProps & { initialItemId?: string; onClose: (
               <span className={css.itemCheckCopy}>
                 <strong>{item.name}</strong>
                 <span className={css.quiet}>{formatMoney(item.rate)} / {item.tariff.toLowerCase()} · залог {formatMoney(item.deposit)}</span>
-                {unavailable ? <span className={css.busyUntil}>Занят до {formatProkatDate(busyUntil)}</span> : null}
+                {unavailable ? <span className={css.busyUntil}>
+                  {onService && (!busyUntil || busyUntil === 'service')
+                    ? 'На обслуживании'
+                    : `Занят до ${formatDay(busyUntil === 'service' ? null : busyUntil) || formatProkatDate(busyUntil)}`}
+                </span> : null}
               </span>
               <span className={css.checkMark} data-on={selected || undefined}>{selected ? <ProtoIcon name="check" size={12} /> : null}</span>
             </button>

@@ -80,6 +80,7 @@ export function buildProkatV2App(built: BuiltTemplate, meta: { id: string; works
     deposit: column('Предметы', 'Залог').id,
     condition: column('Предметы', 'Состояние').id,
     status: column('Предметы', 'Статус').id,
+    busyUntil: column('Предметы', 'Занят до').id,
   }
   const statuses = {
     request: choice('Брони', 'Статус', 'Заявка'),
@@ -243,6 +244,8 @@ export function buildProkatV2App(built: BuiltTemplate, meta: { id: string; works
   const itemBookings = collection('Брони предмета', bookings.id, booking.title, openBooking, booking.updatedAt)
   const clientBookings = collection('Брони клиента', bookings.id, booking.title, openBooking, booking.updatedAt)
   const catalogItems = collection('Каталог', items.id, item.name, openCatalogItem, item.name)
+  // Occupancy for «Занят до …» in the request modal — items + booking spans on one screen.
+  const catalogBookings = collection('Занятость каталога', bookings.id, booking.title, null, booking.from)
   const myBookings = collection('Мои брони', bookings.id, booking.title, openClientBooking, booking.updatedAt)
   const clientBookingItems = collection('Предметы моей брони', items.id, item.name, null, item.name)
 
@@ -265,6 +268,7 @@ export function buildProkatV2App(built: BuiltTemplate, meta: { id: string; works
   ]
   const clientItemRead = [
     item.name, item.photo, item.category, item.serial, item.tariff, item.rate, item.deposit, item.condition, item.status,
+    item.busyUntil,
   ]
   const deskBookingUpdate = [
     booking.title, booking.client, booking.clientName, booking.clientEmail, booking.items,
@@ -298,7 +302,7 @@ export function buildProkatV2App(built: BuiltTemplate, meta: { id: string; works
       screen(ids.timelineScreenId, 'Занятость', 'Занятость', 'list', desk, null, [timelineBookings, timelineItems], true),
       screen(ids.clientsScreenId, 'Клиенты', 'Клиенты', 'users', desk, null, [listClients], true),
       screen(ids.clientScreenId, 'Клиент', undefined, 'users', desk, clients.id, [clientBookings], false),
-      screen(ids.catalogScreenId, 'Каталог', 'Каталог', 'tag', { kind: 'roles', roleIds: ['owner', 'staff', 'client'] }, null, [catalogItems, ids.clientRequestFormId], true),
+      screen(ids.catalogScreenId, 'Каталог', 'Каталог', 'tag', { kind: 'roles', roleIds: ['owner', 'staff', 'client'] }, null, [catalogItems, catalogBookings, ids.clientRequestFormId], true),
       screen(ids.clientListScreenId, 'Мои брони', 'Кабинет', 'clipboard', { kind: 'roles', roleIds: ['owner', 'staff', 'client'] }, null, [myBookings], true),
       screen(ids.clientBookingScreenId, 'Моя бронь', undefined, 'calendar', clientRole, bookings.id, [clientBookingItems], false),
     ],

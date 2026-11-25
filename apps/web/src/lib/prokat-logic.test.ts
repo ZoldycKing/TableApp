@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { wallClockToInstant } from '@tableapp/schema'
 import {
   computeLateFee, computeRentalPrice, findItemBookingConflict, formatMoney, formatMoneyOrZero,
-  formatProkatDateTime, isOverdueReturn, itemBusyUntil, nextBookingNumber, prokatDashboard,
+  catalogItemBusyUntil, formatProkatDateTime, isOverdueReturn, itemBusyUntil, nextBookingNumber, prokatDashboard,
   prokatRangesOverlap, staffTransitions, weekendDaysInRange, type ProkatCatalogItem, type ProkatListItem,
 } from './prokat-logic'
 
@@ -56,6 +56,13 @@ describe('findItemBookingConflict', () => {
   it('itemBusyUntil returns conflicting booking end', () => {
     expect(itemBusyUntil(existing, 'bike-city', moscow(2026, 11, 24, 15), moscow(2026, 11, 24, 18))).toBe(existing[0]!.to)
     expect(itemBusyUntil(existing, 'bike-mtb', moscow(2026, 11, 24, 15), moscow(2026, 11, 24, 18))).toBeNull()
+  })
+
+  it('catalogItemBusyUntil falls back to public item.busyUntil for rented gear', () => {
+    const busy = moscow(2026, 11, 27, 12)
+    expect(catalogItemBusyUntil([], { id: 'sup', status: 'В прокате', busyUntil: busy }, moscow(2026, 11, 25, 12), moscow(2026, 11, 26, 18))).toBe(busy)
+    expect(catalogItemBusyUntil([], { id: 'sup', status: 'Свободен', busyUntil: busy }, moscow(2026, 11, 25, 12), moscow(2026, 11, 26, 18))).toBeNull()
+    expect(catalogItemBusyUntil([], { id: 'kids', status: 'На обслуживании' }, moscow(2026, 11, 25, 12), moscow(2026, 11, 26, 18))).toBe('service')
   })
 })
 

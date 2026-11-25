@@ -2,11 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { listConversationInboxAction } from '@/app/conversation-actions'
-import { GENERAL_CONVERSATION_SELF, GENERAL_CONVERSATION_TABLE, type ConversationInboxPage, type ConversationSummary } from '@/lib/conversation-types'
+import { GENERAL_CONVERSATION_SELF, GENERAL_CONVERSATION_TABLE, MESSAGES_SCREEN, type ConversationInboxPage, type ConversationSummary } from '@/lib/conversation-types'
 import { ConversationPanel } from './conversation-panel'
 import { Icon } from './icons'
 
-export const MESSAGES_SCREEN = '__tableapp_messages'
+export { MESSAGES_SCREEN }
 export type ConversationTarget = { slug: string; tableId: string; rowId: string }
 export function parseConversationTarget(value: string | null): ConversationTarget | null {
   try {
@@ -15,7 +15,13 @@ export function parseConversationTarget(value: string | null): ConversationTarge
   } catch { return null }
 }
 type Props = { slug?: string; business?: boolean; operator?: boolean; appId?: string; initialTarget?: ConversationTarget | null; onOpenRecord?: (item: ConversationSummary) => void; onAskQuestion?: () => void }
-const time = (value: string) => new Date(value).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+const time = (value: string) => {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const day = new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(date)
+  const clock = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit', hour12: false }).format(date)
+  return `${day}, ${clock}`
+}
 const reachesCursor = (cursor: string, boundary: string) => {
   const [sequence, id] = cursor.split('~'), [limit, limitId] = boundary.split('~')
   return Number(sequence) < Number(limit) || Number(sequence) === Number(limit) && id! <= limitId!

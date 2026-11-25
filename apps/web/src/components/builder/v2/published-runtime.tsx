@@ -15,10 +15,14 @@ import ui from './view.module.css'
 import { builderV2InventoryPurchaseSection, builderV2RecordParent } from './collection-navigation'
 import { BuilderV2OrderWorkbench } from './order-workbench'
 import { builderV2HeaderProfile } from './record-presentation'
+import { ConversationInbox, parseConversationTarget } from '@/components/runtime/conversation-inbox'
+import { MESSAGES_SCREEN, v2MessagesOperator } from '@/lib/builder-v2-messages'
 type Page=Extract<Awaited<ReturnType<typeof loadPublishedV2Page>>,{login:false}>
 type Data=Omit<Page,'asOf'> & { asOf?: number; openCreate?: boolean }
 export function PublishedV2Runtime({data}:{data:Data}){
-  const router=useRouter(),{app,actor,revision,screenId,recordId,record,title,buttons,tables,rowActions,enter,openCreate}=data,slug=app.slug,page=app.screens.find(screen=>screen.id===screenId)!
+  const router=useRouter(),{app,actor,revision,screenId,recordId,record,title,buttons,tables,rowActions,enter,openCreate}=data,slug=app.slug
+  const messages=screenId===MESSAGES_SCREEN
+  const page=app.screens.find(screen=>screen.id===screenId)!
   const [dataVersion,setDataVersion]=useState(0),[notice,setNotice]=useState(''),[headerAccessory,setHeaderAccessoryState]=useState<ReactNode>(null)
   const setHeaderAccessory=useCallback((node:ReactNode)=>setHeaderAccessoryState(node),[])
   const enterNavigation=useRef(new BuilderV2EnterNavigation()),scopeKey=JSON.stringify([screenId,recordId]),visit=useRef({key:'',id:''})
@@ -29,10 +33,10 @@ export function PublishedV2Runtime({data}:{data:Data}){
   useEffect(()=>{setNotice('')},[screenId,recordId])
   const refresh=(message?:string)=>{if(message)setNotice(message);setDataVersion(value=>value+1);router.refresh()}
   const history=usePublishedV2Back(app,{screenId,recordId},router)
-  const navigate=(screenId:string,rowId?:string,options?:{automatic?:boolean;replace?:boolean})=>{
+  const navigate=(nextScreen:string,rowId?:string,options?:{automatic?:boolean;replace?:boolean})=>{
     enterNavigation.current.prepare(Boolean(options?.automatic))
-    history.beforeNavigate({screenId,recordId:rowId},options?.replace)
-    const url=`/a/${encodeURIComponent(slug)}?screen=${encodeURIComponent(screenId)}${rowId?`&row=${encodeURIComponent(rowId)}`:''}`
+    history.beforeNavigate({screenId:nextScreen,recordId:rowId},options?.replace)
+    const url=`/a/${encodeURIComponent(slug)}?screen=${encodeURIComponent(nextScreen)}${rowId?`&row=${encodeURIComponent(rowId)}`:''}`
     if(window.location.pathname+window.location.search===url)router.refresh()
     else if(options?.replace)router.replace(url)
     else router.push(url)
@@ -54,7 +58,8 @@ export function PublishedV2Runtime({data}:{data:Data}){
   const shopCatalog = Boolean(app.shop && screenId === app.shop.catalogScreenId)
   const shopBasket = Boolean(app.shop && screenId === app.shop.basketScreenId)
   // Mockup: chrome is logo + pills + user only. List/detail H1s live in page content.
-  const frameTitle = shellList || shopCatalog || shopBasket || page.contextTableId || suppliersHub || supplierCard || reorderHub ? '' : title
+  const frameTitle = messages || shellList || shopCatalog || shopBasket || page.contextTableId || suppliersHub || supplierCard || reorderHub ? '' : title
+  const operator = v2MessagesOperator(actor)
   return <PublishedV2Context.Provider value={transport}>
     <BuilderV2Theme as="main" app={app} className={`${ui.preview} ${ui.published}`}>
       <BuilderV2AppFrame
@@ -65,12 +70,16 @@ export function PublishedV2Runtime({data}:{data:Data}){
         notice={<><BuilderV2WorkflowNotice appId={slug} />{notice && <p role="status" className={ui.context}>{notice}</p>}</>}
         onNavigate={id => navigate(id)}
       >
-        {enter && <BuilderV2ScreenEnter key={visit.current.id} appId={app.id} slug={slug} scope={{ screenId, ...(recordId ? { recordId } : {}) }} initial={enter} automatic blocked={enterBlocked} requestId={visit.current.id} onDone={refresh} />}
-        {page.contextTableId && !recordId
-          ? <p className={ui.hint}>Откройте запись из списка.</p>
-          : <BuilderV2OrderWorkbench app={app} parent={parent} tables={tables} recordId={recordId} record={record} onOpen={id => navigate(screenId, id, { replace: true })}>
-              <AppV2Renderer key={JSON.stringify([revision,actor,screenId,recordId,record])} live app={app} actor={actor} screenId={screenId} record={record} tables={tables} businessLinks={data.businessLinks} onNavigate={navigate} statusFormId={data.statusFormId} openCreate={Boolean(openCreate)} />
-            </BuilderV2OrderWorkbench>}
+        {enter && !messages && <BuilderV2ScreenEnter key={visit.current.id} appId={app.id} slug={slug} scope={{ screenId, ...(recordId ? { recordId } : {}) }} initial={enter} automatic blocked={enterBlocked} requestId={visit.current.id} onDone={refresh} />}
+        {messages
+          ? <ConversationInbox key={`${app.id}:${actor.id ?? actor.email}`} slug={slug} operator={operator} initialTarget={parseConversationTarget(recordId ?? null)} onOpenRecord={item => {
+            if (item.detailScreenId) navigate(item.detailScreenId, item.rowId)
+          }} />
+          : page.contextTableId && !recordId
+            ? <p className={ui.hint}>Откройте запись из списка.</p>
+            : <BuilderV2OrderWorkbench app={app} parent={parent} tables={tables} recordId={recordId} record={record} onOpen={id => navigate(screenId, id, { replace: true })}>
+                <AppV2Renderer key={JSON.stringify([revision,actor,screenId,recordId,record])} live app={app} actor={actor} screenId={screenId} record={record} tables={tables} businessLinks={data.businessLinks} onNavigate={navigate} statusFormId={data.statusFormId} openCreate={Boolean(openCreate)} />
+              </BuilderV2OrderWorkbench>}
       </BuilderV2AppFrame>
     </BuilderV2Theme>
   </PublishedV2Context.Provider>

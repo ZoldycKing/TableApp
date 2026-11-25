@@ -252,7 +252,7 @@ describe('runtime navigation during live refresh', () => {
     window.history.replaceState(null, '', '/a/review?e=__tableapp_messages')
     const ui = render(<AppShell runtime={runtime} viewer={viewer} browserHistory />)
     await ui.findByText('Список переписок бизнеса')
-    expect(ui.getAllByRole('button', { name: 'Сообщения' }).at(-1)!.getAttribute('aria-current')).toBe('page')
+    expect(ui.getAllByRole('button', { name: 'Чат' }).at(-1)!.getAttribute('aria-current')).toBe('page')
     for (const button of ui.queryAllByRole('button', { name: /^(Услуги|Каталог)$/ })) expect(button.getAttribute('aria-current')).toBeNull()
   })
   it('keeps a secondary sales cart through two repair submissions, rotating the repair key and selecting the right service', async () => {

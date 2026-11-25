@@ -16,6 +16,7 @@ describe('business and client inbox', () => {
     fireEvent.click(await ui.findByRole('button', { name: /Анна/ }))
     expect(ui.getByText('salon:visit:client')).toBeTruthy()
     expect(ui.getByLabelText('Непрочитанных сообщений: 2')).toBeTruthy()
+    expect(ui.getByText(/13\.10\.2026,/)).toBeTruthy()
     fireEvent.click(ui.getByRole('button', { name: 'Открыть запись' })); expect(open).toHaveBeenCalledWith(item)
     fireEvent.click(ui.getByRole('button', { name: 'Все диалоги' })); expect(ui.queryByText('salon:visit:client')).toBeNull()
   })

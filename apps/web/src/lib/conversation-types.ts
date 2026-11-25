@@ -3,6 +3,8 @@ import type { Attachment } from '@tableapp/schema'
 /** API targets only. General conversations never create an artificial table row. */
 export const GENERAL_CONVERSATION_TABLE = '__tableapp_general'
 export const GENERAL_CONVERSATION_SELF = 'self'
+/** Virtual inbox screen id for AppShell and App V2 published runtime. */
+export const MESSAGES_SCREEN = '__tableapp_messages'
 
 export type ConversationMessage = { id: string; sequence: number; body: string; author: string; mine: boolean; version: number;
   createdAt: string; edited: boolean; deleted: boolean; files: Attachment[]; canModerate: boolean; canViewRevisions: boolean }

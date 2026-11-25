@@ -10,7 +10,7 @@ import { appReadPolicy } from './app-read-policy'
 import { validateAppReferences } from './app-references'
 import { legacyAppModules } from './app-modules'
 import { conversationResource } from './conversation-resource'
-import { conversationManagerV2, conversationResourceV2, conversationStaffV2 } from './conversation-resource-v2'
+import { conversationDetailScreenV2, conversationManagerV2, conversationResourceV2, conversationStaffV2 } from './conversation-resource-v2'
 import { conversationAccess } from './conversations'
 import { hasRole, moduleForTable, workflowRole } from './module-access'
 import { currentMember } from './session'
@@ -104,7 +104,9 @@ export async function listConversationInbox(input: InboxInput = {}, business = f
         if (!owner && (business ? !staff : !staff && !actor.roleIds.includes('client'))) continue
         scopes.push({
           app, tableId, emailFieldId: resource.emailFieldId, moduleId: resource.moduleId, staff: staff || manager, owner,
-          visitor: null, viewer: null, policy: null, detailScreenId: resource.detailScreenId, titleFieldId: resource.titleFieldId, v2: true,
+          visitor: null, viewer: null, policy: null,
+          detailScreenId: conversationDetailScreenV2(resource, staff || manager || owner),
+          titleFieldId: resource.titleFieldId, v2: true,
         })
       }
       continue

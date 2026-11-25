@@ -92,40 +92,47 @@ describe.skipIf(!process.env.DATABASE_URL)('correspondence runtime visual setup'
     await database.db.update(database.apps).set({ published: publishedService, draft: publishedService, publishedAt: new Date() }).where(eq(database.apps.id, serviceInstalled.appId))
 
     const repairs = await database.db.select().from(database.rows).where(and(eq(database.rows.tableId, service.repairsTableId), isNull(database.rows.deletedAt)))
-    const repair = repairs.find(row => String((row.data as Record<string, unknown>)[service.repair.clientEmail] ?? '').toLowerCase() === clientEmail) ?? repairs[0]
-    expect(repair).toBeTruthy()
-    const repairData = repair!.data as Record<string, unknown>
-    const email = String(repairData[service.repair.clientEmail] ?? clientEmail).trim().toLowerCase()
+    const owned = repairs.filter(row => String((row.data as Record<string, unknown>)[service.repair.clientEmail] ?? '').toLowerCase() === clientEmail)
+    expect(owned.length).toBeGreaterThanOrEqual(2)
+    const primary = owned[0]!, secondary = owned[1]!
+    const primaryData = primary.data as Record<string, unknown>
+    const secondaryData = secondary.data as Record<string, unknown>
+    const email = clientEmail
 
-    await database.db.insert(database.businessCustomers).values({ id: newId('businessCustomer'), workspaceId, email }).onConflictDoNothing()
+    await database.db.insert(database.businessCustomers).values({ id: newId('businessCustomer'), workspaceId, email, name: 'Мария Сидорова' }).onConflictDoNothing()
     const [customer] = await database.db.select().from(database.businessCustomers).where(and(eq(database.businessCustomers.workspaceId, workspaceId), eq(database.businessCustomers.email, email)))
-    const conversationId = `con_${newId('row').slice(4)}`
-    await database.db.insert(database.conversations).values({
-      id: conversationId, workspaceId, appId: serviceInstalled.appId, kind: 'record',
-      moduleId: `mod_service_${service.repairsTableId}`, tableId: service.repairsTableId, rowId: repair!.id, customerId: customer!.id,
-    })
     const staffActor = `person_${createHash('sha256').update(`${workspaceId}:${staffEmail}`).digest('hex')}`
     const clientActor = `person_${createHash('sha256').update(`${workspaceId}:${email}`).digest('hex')}`
-    await database.db.insert(database.conversationMessages).values([
-      {
-        id: `msg_${newId('row').slice(4)}`, workspaceId, conversationId, authorId: clientActor, authorKind: 'client', authorName: 'Мария Сидорова',
-        requestId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeee1',
-        body: 'Добрый день. Подскажите, когда будет готова стиральная машина?',
-        createdAt: new Date('2026-11-24T09:12:00.000Z'),
-      },
-      {
-        id: `msg_${newId('row').slice(4)}`, workspaceId, conversationId, authorId: staffActor, authorKind: 'staff', authorName: 'Андрей Морозов',
-        requestId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeee2',
-        body: 'Здравствуйте. Диагностика завершена, ждём деталь. Ориентир — 26.11.2026.',
-        createdAt: new Date('2026-11-24T10:05:00.000Z'),
-      },
-    ])
-    await database.db.insert(database.conversationNotes).values({
-      id: `msg_${newId('row').slice(4)}`, workspaceId, conversationId, authorId: staffActor, authorName: 'Андрей Морозов',
-      requestId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeee3',
-      body: 'Клиент просил перезвонить после 18:00. Деталь на складе поставщика.',
-      createdAt: new Date('2026-11-24T10:06:00.000Z'),
-    })
+    const seedThread = async (repair: typeof primary, bodies: [string, string], note: string, stamp: string) => {
+      const conversationId = `con_${newId('row').slice(4)}`
+      await database.db.insert(database.conversations).values({
+        id: conversationId, workspaceId, appId: serviceInstalled.appId, kind: 'record',
+        moduleId: `mod_service_${service.repairsTableId}`, tableId: service.repairsTableId, rowId: repair.id, customerId: customer!.id,
+      })
+      await database.db.insert(database.conversationMessages).values([
+        {
+          id: `msg_${newId('row').slice(4)}`, workspaceId, conversationId, authorId: clientActor, authorKind: 'client', authorName: 'Мария Сидорова',
+          requestId: newId('row'), body: bodies[0], createdAt: new Date(`${stamp}T09:12:00.000Z`),
+        },
+        {
+          id: `msg_${newId('row').slice(4)}`, workspaceId, conversationId, authorId: staffActor, authorKind: 'staff', authorName: 'Андрей Морозов',
+          requestId: newId('row'), body: bodies[1], createdAt: new Date(`${stamp}T10:05:00.000Z`),
+        },
+      ])
+      await database.db.insert(database.conversationNotes).values({
+        id: `msg_${newId('row').slice(4)}`, workspaceId, conversationId, authorId: staffActor, authorName: 'Андрей Морозов',
+        requestId: newId('row'), body: note, createdAt: new Date(`${stamp}T10:06:00.000Z`),
+      })
+      return conversationId
+    }
+    await seedThread(primary,
+      ['Добрый день. Подскажите, когда будет готова стиральная машина?', 'Здравствуйте. Диагностика завершена, ждём деталь. Ориентир — 26.11.2026.'],
+      'Клиент просил перезвонить после 18:00. Деталь на складе поставщика.',
+      '2026-11-24')
+    await seedThread(secondary,
+      ['Можно уточнить стоимость замены экрана?', 'Да, смета готова — посмотрите в карточке ремонта.'],
+      'Согласовать с клиентом замену стекла до заказа детали.',
+      '2026-11-23')
 
     const [deliveryRow] = await database.db.select().from(database.apps).where(eq(database.apps.id, deliveryInstalled.appId))
     const deliveryDraft = deliveryRow!.draft as Record<string, unknown>
@@ -133,14 +140,19 @@ describe.skipIf(!process.env.DATABASE_URL)('correspondence runtime visual setup'
     await database.db.update(database.apps).set({ published: deliveryDraft, publishedAt: new Date() }).where(eq(database.apps.id, deliveryInstalled.appId))
 
     const base = 'http://127.0.0.1:3210'
+    const messagesUrl = `${base}/a/${serviceInstalled.appSlug}?screen=__tableapp_messages`
     writeFileSync('/tmp/correspondence-runtime.json', JSON.stringify({
       workspaceId,
       service: {
-        appId: serviceInstalled.appId, slug: serviceInstalled.appSlug, repairId: repair!.id,
+        appId: serviceInstalled.appId, slug: serviceInstalled.appSlug, repairId: primary.id, repairIds: [primary.id, secondary.id],
         repairsTableId: service.repairsTableId, repairScreenId: service.repairScreenId, clientRepairScreenId: service.clientRepairScreenId,
-        device: String(repairData[service.repair.device] ?? ''),
-        operatorUrl: `${base}/a/${serviceInstalled.appSlug}?screen=${service.repairScreenId}&row=${repair!.id}`,
-        clientUrl: `${base}/a/${serviceInstalled.appSlug}?screen=${service.clientRepairScreenId}&row=${repair!.id}`,
+        device: String(primaryData[service.repair.device] ?? ''),
+        secondaryDevice: String(secondaryData[service.repair.device] ?? ''),
+        operatorUrl: `${base}/a/${serviceInstalled.appSlug}?screen=${service.repairScreenId}&row=${primary.id}`,
+        clientUrl: `${base}/a/${serviceInstalled.appSlug}?screen=${service.clientRepairScreenId}&row=${primary.id}`,
+        messagesUrl,
+        operatorMessagesUrl: messagesUrl,
+        clientMessagesUrl: messagesUrl,
       },
       builder: {
         appId: deliveryInstalled.appId, slug: deliveryInstalled.appSlug,

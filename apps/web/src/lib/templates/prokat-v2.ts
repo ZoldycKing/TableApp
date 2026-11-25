@@ -190,6 +190,8 @@ export function buildProkatV2App(built: BuiltTemplate, meta: { id: string; works
   nodes.push({
     id: ids.returnFormId, name: 'Акт возврата', type: 'form', tableId: bookings.id, mode: 'edit', childIds: returnInputs,
     submitLabel: 'Принять возврат', visibleTo: desk, visibleWhen: null,
+    // Values must be form-bound only (no status literal) so builderV2SaveFormAction
+    // recognizes the workflow — needed for published photo upload fingerprints.
     events: { submit: flow('Акт возврата', ids.returnFormId, bookings.id, bookings.id, [{
       id: newId('action'), type: 'update_row', tableId: bookings.id, target: { kind: 'current' }, values: {
         [booking.returnCondition]: bind(ids.returnFormId, booking.returnCondition),
@@ -199,7 +201,6 @@ export function buildProkatV2App(built: BuiltTemplate, meta: { id: string; works
         [booking.depositReturned]: bind(ids.returnFormId, booking.depositReturned),
         [booking.depositWithheld]: bind(ids.returnFormId, booking.depositWithheld),
         [booking.depositReason]: bind(ids.returnFormId, booking.depositReason),
-        [booking.status]: literal(statuses.returned),
       },
     }], desk) },
   })

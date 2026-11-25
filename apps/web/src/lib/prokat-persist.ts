@@ -123,7 +123,7 @@ export function bookingCreateValues(booking: ProkatApp['booking'], input: {
     [booking.lateFee]: 0,
     [booking.status]: input.statusId,
     [booking.issuePhotos]: '[]',
-    [booking.returnPhotos]: '[]',
+    [booking.returnPhotos]: [],
     [booking.createdAt]: input.createdAt,
     [booking.updatedAt]: input.createdAt,
   }
@@ -153,7 +153,7 @@ export function bookingIssueValues(booking: ProkatApp['booking'], input: {
 export function bookingReturnValues(booking: ProkatApp['booking'], input: {
   condition: string
   damages: string
-  photos?: string
+  photos?: AppV2Json
   returnAt: string
   lateFee?: number
   depositReturned?: number
@@ -165,7 +165,7 @@ export function bookingReturnValues(booking: ProkatApp['booking'], input: {
   const values: Record<string, AppV2Json> = {
     [booking.returnCondition]: input.condition,
     [booking.returnDamages]: input.damages,
-    [booking.returnPhotos]: input.photos ?? '[]',
+    [booking.returnPhotos]: input.photos ?? [],
     [booking.returnAt]: input.returnAt,
     [booking.status]: input.statusId,
     [booking.updatedAt]: input.updatedAt,
@@ -183,7 +183,7 @@ export type ProkatChange =
   | { kind: 'confirm'; recordId: string }
   | { kind: 'cancel'; recordId: string }
   | { kind: 'issue'; recordId: string; condition: string; damages: string; photos?: string }
-  | { kind: 'return'; recordId: string; condition: string; damages: string; photos?: string; lateFee?: number; depositReturned?: number; depositWithheld?: number; depositReason?: string }
+  | { kind: 'return'; recordId: string; condition: string; damages: string; photos?: AppV2Json; lateFee?: number; depositReturned?: number; depositWithheld?: number; depositReason?: string }
   | { kind: 'status'; recordId: string; statusId: string }
 
 /** Mark catalog items free/rented after issue or return. Staff policy allows item updates. */

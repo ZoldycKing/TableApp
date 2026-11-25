@@ -175,7 +175,7 @@ export const prokat: TemplateDef = {
         { key: 'issueAt', name: 'Выдано в', type: 'datetime', options: moscow, help: 'Фактическое время выдачи.' },
         { key: 'returnCondition', name: 'Состояние при возврате', type: 'long_text', help: 'Акт возврата: как вернули.' },
         { key: 'returnDamages', name: 'Повреждения при возврате', type: 'long_text', help: 'Новые повреждения после аренды.' },
-        { key: 'returnPhotos', name: 'Фото при возврате', type: 'long_text', help: 'JSON-массив URL фото акта возврата или пустой массив.' },
+        { key: 'returnPhotos', name: 'Фото при возврате', type: 'image', options: { maxCount: 8 }, help: 'Фото акта возврата. Загружаются файлами, не ссылками.' },
         { key: 'returnAt', name: 'Возвращено в', type: 'datetime', options: moscow, help: 'Фактическое время возврата.' },
         { key: 'depositReturned', name: 'Залог возвращён', type: 'number', options: { format: 'currency', precision: 0, currency: 'RUB' }, help: 'Сколько залога вернули клиенту.' },
         { key: 'depositWithheld', name: 'Залог удержан', type: 'number', options: { format: 'currency', precision: 0, currency: 'RUB' }, help: 'Сколько удержали.' },
@@ -197,7 +197,7 @@ export const prokat: TemplateDef = {
             items: { rowKeys: ['bike-mtb'] },
             from: inDays(2, 10), to: inDays(4, 18), price: 3000, deposit: 5000, lateFee: 0,
             status: 'Заявка', createdAt: inDays(0, 9), updatedAt: inDays(0, 9),
-            issuePhotos: '[]', returnPhotos: '[]',
+            issuePhotos: '[]', 
           },
         },
         {
@@ -209,7 +209,7 @@ export const prokat: TemplateDef = {
             from: inDays(1, 9), to: inDays(2, 19), price: 1800, deposit: 6000, lateFee: 0,
             status: 'Подтверждена', staff: { rowKey: 'anna' }, staffEmail: 'anna@prokat-demo.ru',
             createdAt: inDays(-1, 11), updatedAt: inDays(0, 8),
-            issuePhotos: '[]', returnPhotos: '[]',
+            issuePhotos: '[]', 
           },
         },
         {
@@ -223,7 +223,7 @@ export const prokat: TemplateDef = {
             issueCondition: 'Рама без сколов, шины в норме, звонок работает.', issueDamages: 'Мелкая царапина на багажнике.',
             issuePhotos: '[]', issueAt: inDays(0, 10),
             createdAt: inDays(-1, 14), updatedAt: inDays(0, 10),
-            returnPhotos: '[]',
+            
           },
         },
         {
@@ -237,7 +237,7 @@ export const prokat: TemplateDef = {
             issueCondition: 'Комплект буров полный, патрон без люфта.', issueDamages: '',
             issuePhotos: '[]', issueAt: inDays(0, 9),
             createdAt: inDays(-2, 16), updatedAt: inDays(0, 9),
-            returnPhotos: '[]',
+            
           },
         },
         {
@@ -250,8 +250,9 @@ export const prokat: TemplateDef = {
             status: 'Просрочен возврат', staff: { rowKey: 'anna' }, staffEmail: 'anna@prokat-demo.ru',
             issueCondition: 'Борт без проколов, плавник целый, насос в комплекте.', issueDamages: '',
             issuePhotos: '[]', issueAt: inDays(-3, 10),
+            // Prefill damage draft for the return-act modal (status stays overdue until staff accepts).
+            returnDamages: 'Царапина на носу борта, плавник без сколов.',
             createdAt: inDays(-5, 12), updatedAt: inDays(-1, 19),
-            returnPhotos: '[]',
           },
         },
         {
@@ -265,7 +266,7 @@ export const prokat: TemplateDef = {
             issueCondition: 'Рама чистая, переключатели настроены.', issueDamages: '',
             issuePhotos: '[]', issueAt: inDays(-7, 9),
             returnCondition: 'Без новых повреждений, цепь смазана.', returnDamages: '',
-            returnPhotos: '[]', returnAt: inDays(-5, 17, 30),
+            returnAt: inDays(-5, 17, 30),
             depositReturned: 7000, depositWithheld: 0, depositReason: '',
             createdAt: inDays(-8, 11), updatedAt: inDays(-5, 17, 30),
           },
@@ -279,7 +280,7 @@ export const prokat: TemplateDef = {
             from: inDays(-4, 12), to: inDays(-4, 16), price: 600, deposit: 2500, lateFee: 0,
             status: 'Отменена', staff: { rowKey: 'olga' }, staffEmail: 'olga@prokat-demo.ru',
             createdAt: inDays(-6, 10), updatedAt: inDays(-5, 9),
-            issuePhotos: '[]', returnPhotos: '[]',
+            issuePhotos: '[]', 
           },
         },
         {
@@ -291,7 +292,7 @@ export const prokat: TemplateDef = {
             from: inDays(5, 10), to: inDays(7, 18), price: 3900, deposit: 6500, lateFee: 0,
             status: 'Подтверждена', staff: { rowKey: 'anna' }, staffEmail: 'anna@prokat-demo.ru',
             createdAt: inDays(-1, 15), updatedAt: inDays(0, 11),
-            issuePhotos: '[]', returnPhotos: '[]',
+            issuePhotos: '[]', 
           },
         },
         {
@@ -305,7 +306,7 @@ export const prokat: TemplateDef = {
             issueCondition: 'Борт без проколов, насос в комплекте.', issueDamages: '',
             issuePhotos: '[]', issueAt: inDays(-16, 9),
             returnCondition: 'Без новых повреждений.', returnDamages: '',
-            returnPhotos: '[]', returnAt: inDays(-14, 17),
+            returnAt: inDays(-14, 17),
             depositReturned: 6000, depositWithheld: 0, depositReason: '',
             createdAt: inDays(-17, 12), updatedAt: inDays(-14, 17),
           },
@@ -321,7 +322,7 @@ export const prokat: TemplateDef = {
             issueCondition: 'Диск целый, упор без люфта.', issueDamages: '',
             issuePhotos: '[]', issueAt: inDays(-12, 10),
             returnCondition: 'Пыль на корпусе, механика в норме.', returnDamages: '',
-            returnPhotos: '[]', returnAt: inDays(-11, 17, 30),
+            returnAt: inDays(-11, 17, 30),
             depositReturned: 3500, depositWithheld: 0, depositReason: '',
             createdAt: inDays(-13, 11), updatedAt: inDays(-11, 17, 30),
           },
@@ -337,7 +338,7 @@ export const prokat: TemplateDef = {
             issueCondition: 'Луч ровный, штатив в комплекте.', issueDamages: '',
             issuePhotos: '[]', issueAt: inDays(-24, 11),
             returnCondition: 'Исправен.', returnDamages: '',
-            returnPhotos: '[]', returnAt: inDays(-24, 15, 45),
+            returnAt: inDays(-24, 15, 45),
             depositReturned: 2500, depositWithheld: 0, depositReason: '',
             createdAt: inDays(-25, 10), updatedAt: inDays(-24, 15, 45),
           },
@@ -353,7 +354,7 @@ export const prokat: TemplateDef = {
             issueCondition: 'Рама чистая, переключатели настроены.', issueDamages: '',
             issuePhotos: '[]', issueAt: inDays(-28, 9),
             returnCondition: 'Лёгкая грязь на вилке, без повреждений.', returnDamages: '',
-            returnPhotos: '[]', returnAt: inDays(-26, 17),
+            returnAt: inDays(-26, 17),
             depositReturned: 7000, depositWithheld: 0, depositReason: '',
             createdAt: inDays(-29, 14), updatedAt: inDays(-26, 17),
           },

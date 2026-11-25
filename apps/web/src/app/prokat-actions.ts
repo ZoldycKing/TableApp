@@ -18,7 +18,7 @@ type ConfirmRequest = { kind: 'confirm'; revision: string; screenId: string; rec
 type CancelRequest = { kind: 'cancel'; revision: string; screenId: string; recordId: string }
 type IssueRequest = { kind: 'issue'; revision: string; screenId: string; recordId: string; condition: string; damages: string; photos?: string }
 type ReturnRequest = {
-  kind: 'return'; revision: string; screenId: string; recordId: string; condition: string; damages: string; photos?: string
+  kind: 'return'; revision: string; screenId: string; recordId: string; condition: string; damages: string; photos?: AppV2Json
   lateFee?: number; depositReturned?: number; depositWithheld?: number; depositReason?: string
 }
 type StatusRequest = { kind: 'status'; revision: string; screenId: string; recordId: string; statusId: string }
@@ -70,8 +70,12 @@ function readRequest(input: unknown): Request | null {
   if (value.kind === 'return') {
     const condition = text(value.condition, 4000)
     const damages = optionalText(value.damages, 4000)
-    const photosRaw = value.photos === undefined ? undefined : optionalText(value.photos, 20_000)
-    if (!condition || damages == null || photosRaw === null) return null
+    if (!condition || damages == null) return null
+    let photos: AppV2Json | undefined
+    if (value.photos !== undefined) {
+      if (!Array.isArray(value.photos) || value.photos.length > 12) return null
+      photos = value.photos as AppV2Json
+    }
     const lateFee = value.lateFee === undefined ? undefined : money(value.lateFee)
     const depositReturned = value.depositReturned === undefined ? undefined : money(value.depositReturned)
     const depositWithheld = value.depositWithheld === undefined ? undefined : money(value.depositWithheld)
@@ -87,7 +91,7 @@ function readRequest(input: unknown): Request | null {
     const result: ReturnRequest = {
       kind: 'return', revision: value.revision, screenId: value.screenId, recordId, condition, damages,
     }
-    if (photosRaw !== undefined) result.photos = photosRaw
+    if (photos !== undefined) result.photos = photos
     if (lateFee !== undefined) result.lateFee = lateFee
     if (depositReturned !== undefined) result.depositReturned = depositReturned
     if (depositWithheld !== undefined) result.depositWithheld = depositWithheld

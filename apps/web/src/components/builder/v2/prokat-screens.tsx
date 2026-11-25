@@ -1,8 +1,9 @@
 'use client'
 import { createContext, lazy, Suspense, useContext, useEffect, useId, useRef, useState, type ReactNode, type RefObject } from 'react'
-import { instantToWallClock } from '@tableapp/schema'
-import type { AppV2, AppV2Node, AppV2Record } from '@tableapp/schema/app-v2'
+import { attachmentSchema, instantToWallClock, type Attachment } from '@tableapp/schema'
+import type { AppV2, AppV2Json, AppV2Node, AppV2Record } from '@tableapp/schema/app-v2'
 import { savePublishedProkatAction } from '@/app/prokat-actions'
+import { BuilderV2AttachmentInput } from './attachment-input'
 import {
   PROKAT_BOOKING_VIEWS, PROKAT_CLIENT_STEPS, PROKAT_ZONE, clientCanRequestCancel, computeLateFee,
   catalogItemBusyUntil, computeRentalPrice, filterBookings, formatMoney, formatMoneyOrZero, formatProkatDate, formatProkatDateTime,
@@ -73,6 +74,26 @@ function ItemTile({ item, size = 40 }: { item: Pick<ProkatCatalogItem, 'photo' |
       ? <img src={src} alt="" width={size} height={size} />
       : <ProtoIcon name={categoryIcon(item.category)} size={Math.round(size * 0.45)} />}
   </span>
+}
+
+function formatRubGrouped(value: number) {
+  if (!Number.isFinite(value) || value < 0) return '0'
+  return Math.round(value).toLocaleString('ru-RU')
+}
+
+function parseRubGrouped(raw: string) {
+  const normalized = raw.replace(/\s/g, '').replace(',', '.')
+  if (!normalized) return 0
+  const value = Number(normalized)
+  return Number.isFinite(value) && value >= 0 ? value : 0
+}
+
+function attachmentsOf(raw: unknown): Attachment[] {
+  if (!Array.isArray(raw)) return []
+  return raw.flatMap(item => {
+    const parsed = attachmentSchema.safeParse(item)
+    return parsed.success ? [parsed.data] : []
+  })
 }
 
 function photosToJson(raw: string) {
@@ -886,6 +907,8 @@ function IssueDialog(props: ScreenProps & { booking: AppV2Record; onClose: () =>
 function ReturnDialog(props: ScreenProps & { booking: AppV2Record; onClose: () => void; onMessage: (value: string) => void }) {
   useDialogBehavior(props.onClose)
   const formId = useId()
+  const photoFieldId = useId()
+  const published = usePublishedV2()
   const fields = props.kit.booking
   const deposit = numberOf(props.booking.values[fields.deposit])
   const itemIds = idsOf(props.booking.values[fields.items])
@@ -894,28 +917,78 @@ function ReturnDialog(props: ScreenProps & { booking: AppV2Record; onClose: () =
   const suggestedLate = storedLate > 0 ? storedLate : items.reduce((sum, item) => sum + computeLateFee({
     tariff: item.tariff, rate: item.rate, to: textOf(props.booking.values[fields.to]), now: new Date(props.now).toISOString(),
   }), 0)
-  const [condition, setCondition] = useState(textOf(props.booking.values[fields.returnCondition]) || 'Исправен')
-  const [damages, setDamages] = useState(textOf(props.booking.values[fields.returnDamages]))
-  const [photos, setPhotos] = useState(photosFromJson(props.booking.values[fields.returnPhotos]))
-  const [lateFee, setLateFee] = useState(String(suggestedLate || ''))
-  const [depositReturned, setDepositReturned] = useState(String(deposit || ''))
-  const [depositWithheld, setDepositWithheld] = useState(String(numberOf(props.booking.values[fields.depositWithheld]) || '0'))
+  const initialDamages = textOf(props.booking.values[fields.returnDamages])
+  const initialCondition = textOf(props.booking.values[fields.returnCondition])
+  const [hasDamage, setHasDamage] = useState(Boolean(initialDamages) || /поврежд/i.test(initialCondition))
+  const [damages, setDamages] = useState(initialDamages)
+  const [photos, setPhotos] = useState<AppV2Json[]>(attachmentsOf(props.booking.values[fields.returnPhotos]) as unknown as AppV2Json[])
+  const [lateFee, setLateFee] = useState(formatRubGrouped(suggestedLate || 0))
+  const [depositWithheld, setDepositWithheld] = useState(formatRubGrouped(numberOf(props.booking.values[fields.depositWithheld]) || 0))
   const [depositReason, setDepositReason] = useState(textOf(props.booking.values[fields.depositReason]))
+  const [uploadCtx, setUploadCtx] = useState<{ revision: string; fingerprint: string } | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const withheldAmount = parseRubGrouped(depositWithheld)
+  const returnedAmount = Math.max(0, deposit - withheldAmount)
+  const showDamageFields = hasDamage || withheldAmount > 0
+  useEffect(() => {
+    if (!published || published.revision === 'demo') return
+    let alive = true
+    void published.inspectForm({
+      mode: 'initial',
+      formId: props.kit.returnFormId,
+      screenId: props.screenId,
+      recordId: props.booking.id,
+    }).then(result => {
+      if (!alive || !result.ok || !('state' in result)) return
+      const revision = result.state.revision
+      const fingerprint = result.state.fingerprint
+      if (typeof revision === 'string' && typeof fingerprint === 'string') setUploadCtx({ revision, fingerprint })
+    }).catch(() => {})
+    return () => { alive = false }
+  }, [published, props.kit.returnFormId, props.screenId, props.booking.id])
+  const upload = published && uploadCtx
+    ? async (file: File, signal: AbortSignal): Promise<Attachment> => {
+      const body = new FormData()
+      body.set('file', file)
+      body.set('context', JSON.stringify({
+        kind: 'published',
+        slug: published.slug,
+        formId: props.kit.returnFormId,
+        screenId: props.screenId,
+        recordId: props.booking.id,
+        fieldId: fields.returnPhotos,
+        revision: uploadCtx.revision,
+        fingerprint: uploadCtx.fingerprint,
+      }))
+      let response: Response
+      let payload: { ok?: boolean; error?: string; attachment?: unknown }
+      try {
+        response = await fetch('/api/builder-v2/files', { method: 'POST', body, signal })
+        payload = await response.json() as { ok?: boolean; error?: string; attachment?: unknown }
+      } catch {
+        throw new Error('Не удалось загрузить файл. Проверьте соединение и повторите попытку.')
+      }
+      if (!response.ok || !payload.ok) throw new Error(payload.error || 'Не удалось загрузить файл. Повторите попытку.')
+      const parsed = attachmentSchema.safeParse(payload.attachment)
+      if (!parsed.success) throw new Error('Не удалось подтвердить загрузку файла. Повторите попытку.')
+      return parsed.data
+    }
+    : undefined
   const save = async () => {
-    if (!condition.trim()) { setError('Опишите состояние при возврате.'); return }
+    if (hasDamage && !damages.trim()) { setError('Опишите повреждения.'); return }
+    if (withheldAmount > 0 && !depositReason.trim()) { setError('Укажите причину удержания залога.'); return }
     setBusy(true)
     const result = await commit(props, {
       kind: 'return',
       recordId: props.booking.id,
-      condition,
-      damages,
-      photos: photosToJson(photos),
-      lateFee: lateFee.trim() ? Number(lateFee.replace(/\s/g, '').replace(',', '.')) : 0,
-      depositReturned: depositReturned.trim() ? Number(depositReturned.replace(/\s/g, '').replace(',', '.')) : 0,
-      depositWithheld: depositWithheld.trim() ? Number(depositWithheld.replace(/\s/g, '').replace(',', '.')) : 0,
-      depositReason,
+      condition: hasDamage ? 'Есть повреждения' : 'Без замечаний',
+      damages: hasDamage ? damages.trim() : '',
+      photos: photos as AppV2Json,
+      lateFee: parseRubGrouped(lateFee),
+      depositReturned: returnedAmount,
+      depositWithheld: withheldAmount,
+      depositReason: withheldAmount > 0 || hasDamage ? depositReason.trim() : '',
     })
     setBusy(false)
     if (!result.ok) { setError(result.error); return }
@@ -924,13 +997,61 @@ function ReturnDialog(props: ScreenProps & { booking: AppV2Record; onClose: () =
   }
   return <AppDialog title="Акт возврата" placement="center" onClose={props.onClose} footer={<button type="submit" form={formId} className={css.primary} disabled={busy}>{busy ? 'Сохраняем…' : 'Принять возврат'}</button>}>
     <form id={formId} onSubmit={event => { event.preventDefault(); void save() }}>
-      <label className={css.field}><span>Состояние при возврате</span><textarea value={condition} onChange={event => setCondition(event.target.value)} maxLength={4000} required /></label>
-      <label className={css.field}><span>Повреждения</span><textarea value={damages} onChange={event => setDamages(event.target.value)} maxLength={4000} /></label>
-      <label className={css.field}><span>Фото (ссылки или заметки, по строке)</span><textarea value={photos} onChange={event => setPhotos(event.target.value)} maxLength={8000} rows={3} /></label>
-      <label className={css.field}><span>Штраф за просрочку</span><input value={lateFee} onChange={event => setLateFee(event.target.value)} inputMode="decimal" /></label>
-      <label className={css.field}><span>Залог возвращён</span><input value={depositReturned} onChange={event => setDepositReturned(event.target.value)} inputMode="decimal" /></label>
-      <label className={css.field}><span>Залог удержан</span><input value={depositWithheld} onChange={event => setDepositWithheld(event.target.value)} inputMode="decimal" /></label>
-      <label className={css.field}><span>Причина удержания</span><textarea value={depositReason} onChange={event => setDepositReason(event.target.value)} maxLength={2000} /></label>
+      <div className={css.field}>
+        <span>Состояние</span>
+        <div className={css.segmented} role="group" aria-label="Состояние при возврате">
+          <button type="button" aria-pressed={!hasDamage} onClick={() => setHasDamage(false)}>Без замечаний</button>
+          <button type="button" aria-pressed={hasDamage} onClick={() => setHasDamage(true)}>Есть повреждения</button>
+        </div>
+      </div>
+      {showDamageFields ? <label className={css.field}><span>Повреждения</span><textarea value={damages} onChange={event => setDamages(event.target.value)} maxLength={4000} rows={2} /></label> : null}
+      {showDamageFields ? <label className={css.field}><span>Причина удержания</span><textarea value={depositReason} onChange={event => setDepositReason(event.target.value)} maxLength={2000} rows={2} aria-label="Причина удержания" /></label> : null}
+      <div className={css.field}>
+        <span>Фото</span>
+        <BuilderV2AttachmentInput
+          id={photoFieldId}
+          field={{ nodeId: photoFieldId, fieldId: fields.returnPhotos, label: 'Фото', type: 'image', required: false, readOnly: false, supported: true, maxCount: 8 }}
+          value={photos}
+          disabled={busy}
+          slug={published?.slug}
+          upload={upload}
+          onChange={value => setPhotos(Array.isArray(value) ? value as AppV2Json[] : [])}
+          onPending={() => {}}
+        />
+      </div>
+      <label className={css.field}>
+        <span>Штраф за просрочку</span>
+        <span className={css.moneyField}>
+          <input
+            value={lateFee}
+            onChange={event => setLateFee(event.target.value)}
+            onBlur={() => setLateFee(formatRubGrouped(parseRubGrouped(lateFee)))}
+            inputMode="decimal"
+            aria-label="Штраф за просрочку"
+          />
+          <em>₽</em>
+        </span>
+      </label>
+      <label className={css.field}>
+        <span>Залог удержан</span>
+        <span className={css.moneyField}>
+          <input
+            value={depositWithheld}
+            onChange={event => setDepositWithheld(event.target.value)}
+            onBlur={() => setDepositWithheld(formatRubGrouped(parseRubGrouped(depositWithheld)))}
+            inputMode="decimal"
+            aria-label="Залог удержан"
+          />
+          <em>₽</em>
+        </span>
+      </label>
+      <div className={css.field}>
+        <span>Залог возвращён</span>
+        <div className={css.moneyReadonly} aria-live="polite">
+          <span>Автоматически</span>
+          <strong>{formatMoney(returnedAmount)}</strong>
+        </div>
+      </div>
       {error ? <p className={css.error} role="alert">{error}</p> : null}
     </form>
   </AppDialog>
@@ -1244,9 +1365,19 @@ function RequestDialog(props: ScreenProps & { initialItemId?: string; onClose: (
       {selected.length ? (
         <div className={css.priceSummary}>
           <ul>{selected.map(item => <li key={item.id}>{item.name}</li>)}</ul>
-          <p className={css.moneyRow}>Предварительно <strong>{formatMoney(price)}</strong> · Залог <strong>{formatMoney(deposit)}</strong></p>
+          <div className={css.priceSummaryRows}>
+            <div><span>Предварительно</span><strong>{formatMoney(price)}</strong></div>
+            <div><span>Залог</span><strong>{formatMoney(deposit)}</strong></div>
+          </div>
         </div>
-      ) : <p className={css.moneyRow}>Предварительно <strong>—</strong> · Залог <strong>—</strong></p>}
+      ) : (
+        <div className={css.priceSummary}>
+          <div className={css.priceSummaryRows}>
+            <div><span>Предварительно</span><strong>—</strong></div>
+            <div><span>Залог</span><strong>—</strong></div>
+          </div>
+        </div>
+      )}
       {error ? <p className={css.error} role="alert">{error}</p> : null}
     </form>
   </AppDialog>

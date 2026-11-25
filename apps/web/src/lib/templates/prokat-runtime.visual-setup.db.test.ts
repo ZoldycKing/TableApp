@@ -182,14 +182,14 @@ describe.skipIf(!process.env.DATABASE_URL)('prokat runtime visual setup', () => 
         id: `msg_${newId('row').slice(4)}`, workspaceId, conversationId: overdueThreadId,
         authorId: overdueClientActor, authorKind: 'client', authorName: 'Дмитрий Соколов',
         requestId: newId('row'),
-        body: 'SUP Red Paddle ещё на съёмке — вернём завтра утром. Можно продлить?',
+        body: 'SUP Red Paddle ещё на съёмке — можно продлить до завтра 12:00?',
         createdAt: new Date('2026-11-23T09:12:00.000Z'),
       },
       {
         id: `msg_${newId('row').slice(4)}`, workspaceId, conversationId: overdueThreadId,
         authorId: staffActor, authorKind: 'staff', authorName: 'Анна Смирнова',
         requestId: newId('row'),
-        body: 'Да, продлеваем до завтра 12:00. Штраф за просрочку уже в карточке — 3500 ₽.',
+        body: 'Продление возможно только со штрафом за просрочку. Он уже в карточке — 3 500 ₽. Возврат принимаем по акту.',
         createdAt: new Date('2026-11-23T10:05:00.000Z'),
       },
     ])

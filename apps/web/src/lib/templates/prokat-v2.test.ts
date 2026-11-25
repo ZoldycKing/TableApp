@@ -123,8 +123,9 @@ describe('prokat template', () => {
   })
 
   it('keeps transitions and numbering coherent', () => {
-    expect(staffTransitions('Заявка')).toEqual(['Подтверждена', 'Отменена'])
+    expect(staffTransitions('Заявка')).toEqual(['Подтверждена', 'Отменена', 'Не забрали'])
     expect(staffTransitions('Выдано')).toEqual(['Возвращено', 'Просрочен возврат'])
+    expect(staffTransitions('Не забрали')).toEqual(['Заявка'])
     expect(nextBookingNumber(['ПР-1008', 'черновик', 'ПР-1003'])).toBe('ПР-1009')
     expect(findItemBookingConflict([], ['x'], '2026-11-24T07:00:00.000Z', '2026-11-24T15:00:00.000Z')).toBeNull()
   })

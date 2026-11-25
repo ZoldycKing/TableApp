@@ -54,6 +54,8 @@ export function buildProkatV2App(built: BuiltTemplate, meta: { id: string; works
     depositReturned: column('Брони', 'Залог возвращён').id,
     depositWithheld: column('Брони', 'Залог удержан').id,
     depositReason: column('Брони', 'Причина удержания').id,
+    holdUntil: column('Брони', 'Держать до').id,
+    statusReason: column('Брони', 'Причина статуса').id,
     createdAt: column('Брони', 'Создано').id,
     updatedAt: column('Брони', 'Обновлено').id,
   }
@@ -94,6 +96,7 @@ export function buildProkatV2App(built: BuiltTemplate, meta: { id: string; works
     returned: choice('Брони', 'Статус', 'Возвращено'),
     overdue: choice('Брони', 'Статус', 'Просрочен возврат'),
     cancelled: choice('Брони', 'Статус', 'Отменена'),
+    notPickedUp: choice('Брони', 'Статус', 'Не забрали'),
   }
   const itemStatuses = {
     free: choice('Предметы', 'Статус', 'Свободен'),
@@ -270,7 +273,7 @@ export function buildProkatV2App(built: BuiltTemplate, meta: { id: string; works
     booking.issueCondition, booking.issueDamages, booking.issuePhotos, booking.issueAt,
     booking.returnCondition, booking.returnDamages, booking.returnPhotos, booking.returnAt,
     booking.depositReturned, booking.depositWithheld, booking.depositReason,
-    booking.createdAt, booking.updatedAt,
+    booking.holdUntil, booking.createdAt, booking.updatedAt,
   ]
   const clientItemRead = [
     item.name, item.photo, item.category, item.serial, item.tariff, item.rate, item.deposit, item.condition, item.status,
@@ -282,7 +285,8 @@ export function buildProkatV2App(built: BuiltTemplate, meta: { id: string; works
     booking.staff, booking.staffEmail,
     booking.issueCondition, booking.issueDamages, booking.issuePhotos, booking.issueAt,
     booking.returnCondition, booking.returnDamages, booking.returnPhotos, booking.returnAt,
-    booking.depositReturned, booking.depositWithheld, booking.depositReason, booking.updatedAt,
+    booking.depositReturned, booking.depositWithheld, booking.depositReason,
+    booking.holdUntil, booking.statusReason, booking.updatedAt,
   ]
 
   return {
@@ -296,6 +300,7 @@ export function buildProkatV2App(built: BuiltTemplate, meta: { id: string; works
     prokat: {
       bookingsTableId: bookings.id, clientsTableId: clients.id, staffTableId: staffTable.id, itemsTableId: items.id,
       ...ids, booking, client, staff: person, item, statuses, itemStatuses,
+      holdAfterStartMinutes: 120,
       activeChoiceId: choice('Сотрудники', 'Статус', 'Активен'),
       inactiveChoiceId: choice('Сотрудники', 'Статус', 'Неактивен'),
     },
@@ -328,7 +333,7 @@ export function buildProkatV2App(built: BuiltTemplate, meta: { id: string; works
               fieldIds: [
                 booking.number, booking.title, booking.client, booking.clientName, booking.items,
                 booking.from, booking.to, booking.price, booking.deposit, booking.lateFee, booking.status,
-                booking.issuePhotos, booking.returnPhotos, booking.createdAt, booking.updatedAt,
+                booking.issuePhotos, booking.returnPhotos, booking.holdUntil, booking.createdAt, booking.updatedAt,
               ],
               owner: { fieldId: booking.clientEmail, property: 'email' },
             },

@@ -318,6 +318,10 @@ export const appV2Schema = z.strictObject({
       returnCondition: id, returnDamages: id, returnPhotos: id, returnAt: id,
       depositReturned: id, depositWithheld: id, depositReason: id,
       createdAt: id, updatedAt: id,
+      /** Hold deadline after start; staff may extend. Absent on older installs until ensured. */
+      holdUntil: id.optional(),
+      /** Why status moved to «Не забрали» / cancel — shown in history via row_changes. */
+      statusReason: id.optional(),
     }),
     client: z.strictObject({ name: id, email: id, phone: id, note: id }),
     staff: z.strictObject({ name: id, email: id, phone: id, photo: id.optional(), active: id }),
@@ -330,10 +334,19 @@ export const appV2Schema = z.strictObject({
     }),
     statuses: z.strictObject({
       request: id, confirmed: id, issued: id, returned: id, overdue: id, cancelled: id,
+      /** Pickup no-show. Optional so older published kits validate until ensured. */
+      notPickedUp: id.optional(),
     }),
     itemStatuses: z.strictObject({
       free: id, rented: id, service: id, writtenOff: id,
     }),
+    /**
+     * Minutes to hold a booking after `from` before auto «Не забрали».
+     * `null` = never cancel. Default when omitted: 120.
+     */
+    holdAfterStartMinutes: z.union([
+      z.literal(30), z.literal(60), z.literal(120), z.literal(240), z.literal(720), z.literal(1440), z.null(),
+    ]).optional(),
     activeChoiceId: id, inactiveChoiceId: id,
   }).optional(),
   /** Internal warehouse starter (stock from movements). Absent outside that install. */

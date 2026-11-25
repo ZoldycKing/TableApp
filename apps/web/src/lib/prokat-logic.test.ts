@@ -41,9 +41,16 @@ describe('findItemBookingConflict', () => {
     expect(hit).toMatchObject({ bookingId: 'b1', itemId: 'bike-city', number: 'ПР-1005' })
   })
 
-  it('ignores returned and cancelled bookings', () => {
+  it('ignores returned, cancelled and not-picked-up bookings', () => {
     expect(findItemBookingConflict(existing, ['bike-road'], moscow(2026, 11, 10, 10), moscow(2026, 11, 11, 10))).toBeNull()
     expect(findItemBookingConflict(existing, ['laser'], moscow(2026, 11, 24, 12), moscow(2026, 11, 24, 16))).toBeNull()
+    expect(findItemBookingConflict([
+      ...existing,
+      {
+        id: 'b4', number: 'ПР-1010', itemIds: ['bike-mtb'], from: moscow(2026, 11, 24, 10), to: moscow(2026, 11, 24, 18),
+        status: 'Не забрали',
+      },
+    ], ['bike-mtb'], moscow(2026, 11, 24, 12), moscow(2026, 11, 24, 16))).toBeNull()
   })
 
   it('allows adjacent ranges and excludeBookingId', () => {
@@ -194,7 +201,7 @@ describe('isOverdueReturn and dashboard', () => {
     expect(formatMoneyOrZero(1500)).toMatch(/1.?500/)
     expect(formatProkatDateTime(moscow(2026, 11, 24, 12))).toBe('24.11.2026, 12:00')
     expect(nextBookingNumber(['ПР-1008', 'черновик'])).toBe('ПР-1009')
-    expect(staffTransitions('Заявка')).toEqual(['Подтверждена', 'Отменена'])
+    expect(staffTransitions('Заявка')).toEqual(['Подтверждена', 'Отменена', 'Не забрали'])
     expect(staffTransitions('Выдано')).toContain('Просрочен возврат')
   })
 })

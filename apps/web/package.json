@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit",
     "retention": "tsx scripts/retention.mts",
     "automations:worker": "tsx scripts/stock-automations.mts",
+    "prokat:hold": "tsx scripts/prokat-hold.mts",
     "files:cleanup": "tsx scripts/file-cleanup.mts",
     "test:sync-files": "tsx scripts/sync-files-smoke.mts",
     "test:readiness": "tsx scripts/readiness-smoke.mts",

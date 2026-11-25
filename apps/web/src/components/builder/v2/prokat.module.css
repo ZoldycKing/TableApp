@@ -236,7 +236,8 @@
 .badge[data-kind='status'][data-tone='resolved'] { background: #DCEFE4; color: #246B45; }
 .badge[data-kind='status'][data-tone='closed'] { background: color-mix(in srgb, var(--v2-ink, var(--sc-text)) 8%, transparent); color: var(--v2-muted, var(--sc-text-2)); }
 .badge[data-kind='status'][data-tone='overdue'],
-.badge[data-kind='status'][data-tone='urgent'] { background: color-mix(in srgb, #C4623A 16%, transparent); color: #A93232; }
+.badge[data-kind='status'][data-tone='urgent'],
+.badge[data-kind='status'][data-tone='noshow'] { background: color-mix(in srgb, #C4623A 16%, transparent); color: #C4623A; }
 .deviceOneLine { display: block; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .deviceWrap { display: block; max-width: 100%; white-space: normal; overflow-wrap: anywhere; line-height: 1.3; }
 .dashGrid { display: grid; gap: 16px; min-width: 0; }
@@ -384,6 +385,20 @@
   display: block; margin-top: 2px; color: #C4623A; font-size: 12px; font-weight: 650; line-height: 1.25;
   font-variant-numeric: tabular-nums;
 }
+.holdSetting { display: grid; gap: 10px; min-width: 0; }
+.holdSettingLead { margin: 0; color: var(--v2-muted, var(--sc-text-2)); font-size: 13px; line-height: 1.45; }
+.holdUntilLine {
+  margin: 0; padding: 10px 12px; border-radius: 10px;
+  background: color-mix(in srgb, #3F6B5C 10%, transparent);
+  color: #2F5346; font-size: 14px; font-weight: 650; line-height: 1.4;
+}
+.noShowCount { color: #C4623A; font-weight: 700; }
+.dangerGhost {
+  display: inline-flex; align-items: center; justify-content: center; min-height: 40px; padding: 0 14px;
+  border: 1.5px solid color-mix(in srgb, #C4623A 55%, transparent); border-radius: 10px;
+  background: transparent; color: #C4623A; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer;
+}
+.dangerGhost:hover { background: color-mix(in srgb, #C4623A 8%, transparent); }
 .lateFeeBlock { display: grid; gap: 2px; padding: 8px 0; border-top: 1px solid color-mix(in srgb, #C4623A 28%, var(--v2-line, #ccc)); }
 .lateFeeBlock dt { color: #C4623A; font-weight: 700; }
 .lateFeeBlock dd { display: grid; gap: 2px; }
@@ -1218,7 +1233,8 @@
   white-space: nowrap; pointer-events: none; z-index: 2;
 }
 .timelineTodayLine {
-  position: absolute; top: 18px; bottom: 0; z-index: 2; pointer-events: none;
+  /* Behind bars so «Сегодня» never covers the client name inside a bar. */
+  position: absolute; top: 18px; bottom: 0; z-index: 0; pointer-events: none;
   left: calc(var(--prokat-label-w) + 12px + (100% - var(--prokat-label-w) - 12px) * var(--prokat-today-pct, -1) / 100);
   width: 2px; margin-left: -1px; background: #C4623A;
 }
@@ -1282,7 +1298,7 @@
   position: absolute; top: 3px; bottom: 3px; min-width: 0; max-width: 100%; padding: 0 6px;
   border: 0; border-radius: 6px; background: #3F6B5C; color: #fff;
   font: inherit; font-size: 11px; font-weight: 650; line-height: 22px; text-align: left;
-  overflow: hidden; white-space: nowrap; cursor: pointer; z-index: 1;
+  overflow: hidden; white-space: nowrap; cursor: pointer; z-index: 2;
   box-sizing: border-box;
 }
 .timelineBar[data-clip-start] { border-top-left-radius: 0; border-bottom-left-radius: 0; }
@@ -1636,7 +1652,7 @@
 }
 .root[data-phone] .timelineTodayLine {
   left: calc(var(--prokat-today-pct, -1) * 1%);
-  top: 0; bottom: 0; z-index: 2;
+  top: 0; bottom: 0; z-index: 0;
   width: 2px; margin-left: -1px;
 }
 .root[data-phone] .timelineTodayWash { display: none; }
@@ -1661,7 +1677,8 @@
   background: var(--v2-surface, var(--sc-bg-elevated, #fff));
 }
 .root[data-phone] .timelineLabel {
-  position: relative; left: auto; z-index: 6;
+  /* Above the today line so the item name stays readable on the phone board. */
+  position: relative; left: auto; z-index: 6; isolation: isolate;
   width: var(--prokat-label-w); min-height: 100%; box-sizing: border-box;
   align-content: center; padding: 6px 8px;
   margin: 0; border-radius: 0;

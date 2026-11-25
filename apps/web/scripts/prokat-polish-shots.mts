@@ -82,9 +82,15 @@ await shot('/prokat-shot?view=item', { height: 1100 }, '05-item-card-late-fee-de
   await page.evaluate(() => window.scrollTo(0, 0))
   await page.waitForTimeout(400)
 })
-await shot('/prokat-shot?view=overdue', {}, '06-overdue-booking-desktop-1440.png', async page => {
+await shot('/prokat-shot?view=overdue', { height: 1100 }, '06-overdue-booking-desktop-1440.png', async page => {
   await page.getByText('Штраф за просрочку').first().waitFor({ timeout: 15000 })
-  await page.waitForTimeout(400)
+  await page.waitForSelector('[data-correspondence-module], [data-prokat-thread]', { timeout: 20000 })
+  await page.getByText('Дмитрий Соколов').first().waitFor({ timeout: 15000 })
+  await page.getByText(/SUP Red Paddle ещё на съёмке|штрафом за просрочку/).first().waitFor({ timeout: 15000 })
+  await page.locator('[data-correspondence-module], [data-prokat-thread]').first().evaluate(node => {
+    node.scrollIntoView({ block: 'center' })
+  })
+  await page.waitForTimeout(500)
 })
 await shot('/prokat-shot?view=catalog&phone=1', { phone: true }, '07-client-catalog-phone-390.png')
 await shot('/prokat-shot?view=request&phone=1', { phone: true }, '08-request-modal-phone-390.png', async page => {
@@ -104,9 +110,10 @@ await shot('/prokat-shot?view=request&phone=1', { phone: true }, '08-request-mod
   await page.waitForTimeout(500)
 })
 await shot('/prokat-shot?view=dashboard&phone=1', { phone: true }, '09-staff-nav-phone-390.png', async page => {
-  // Capture the bottom nav: scroll to top, ensure nav labels visible.
   await page.evaluate(() => window.scrollTo(0, 0))
   await page.getByRole('navigation', { name: 'Разделы приложения' }).waitFor({ timeout: 10000 })
+  await page.getByRole('button', { name: 'Ещё' }).click()
+  await page.getByRole('region', { name: 'Другие разделы' }).waitFor({ timeout: 5000 })
   await page.waitForTimeout(400)
 })
 

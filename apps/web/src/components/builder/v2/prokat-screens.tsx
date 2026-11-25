@@ -1,8 +1,10 @@
 'use client'
-import { createContext, lazy, Suspense, useContext, useEffect, useId, useRef, useState, type ReactNode, type RefObject } from 'react'
+import { createContext, lazy, Suspense, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
+import { createPortal } from 'react-dom'
 import { attachmentSchema, instantToWallClock, type Attachment } from '@tableapp/schema'
 import type { AppV2, AppV2Json, AppV2Node, AppV2Record } from '@tableapp/schema/app-v2'
 import { savePublishedProkatAction } from '@/app/prokat-actions'
+import type { ConversationPage } from '@/lib/conversation-types'
 import { BuilderV2AttachmentInput } from './attachment-input'
 import {
   PROKAT_BOOKING_VIEWS, PROKAT_CLIENT_STEPS, PROKAT_LATE_FEE_MODES, PROKAT_ZONE, clientCanRequestCancel,
@@ -10,7 +12,7 @@ import {
   filterBookings, formatMoney, formatMoneyOrZero, formatProkatDate, formatProkatDateTime,
   isOpenBooking, isOverdueReturn, itemLateFeeConfig, prokatClientStepIndex, prokatDashboard,
   prokatWallInstant, staffTransitions, timelineBarLabel, type ProkatBookingViewId,
-  type ProkatCatalogItem, type ProkatListItem,
+  type ProkatCatalogItem, type ProkatListItem, type ProkatLateFeeMode,
 } from '@/lib/prokat-logic'
 import { prokatSamplePublicPath } from '@/lib/templates/prokat-samples'
 import { applyProkatChange, bookingSpansFromRows, isProkatDesk, prokatStatusName, type ProkatChange } from '@/lib/prokat-persist'
@@ -35,6 +37,75 @@ export type ProkatBundle = {
   open?: ProkatOpen
   now?: number
   sample?: boolean
+}
+
+const LATE_FEE_SEGMENT_LABEL: Record<ProkatLateFeeMode, string> = {
+  'Нет': 'Нет',
+  'Сумма за час': 'В час',
+  'Сумма за сутки': 'В сутки',
+  'Процент от тарифа за сутки': '% от тарифа',
+}
+
+/** Demo/preview seed threads — mirrors published runtime seed for Дмитрий / Мария. */
+function prokatSampleConversation(bookingNumber: string, clientName: string): ConversationPage {
+  const base = {
+    enabled: true,
+    closed: false,
+    staff: true,
+    canManage: true,
+    nextBefore: null as number | null,
+    notes: [] as ConversationPage['notes'],
+  }
+  if (bookingNumber === 'ПР-1003' || clientName === 'Дмитрий Соколов') {
+    return {
+      ...base,
+      conversationId: 'con_prokat_overdue_demo',
+      messages: [
+        {
+          id: 'msg_prokat_ov_1', sequence: 1,
+          body: 'SUP Red Paddle ещё на съёмке — можно продлить до завтра 12:00?',
+          author: 'Дмитрий Соколов', mine: false, version: 1,
+          createdAt: '2026-11-23T09:12:00.000Z', edited: false, deleted: false, files: [],
+          canModerate: false, canViewRevisions: false,
+        },
+        {
+          id: 'msg_prokat_ov_2', sequence: 2,
+          body: 'Продление возможно только со штрафом за просрочку. Он уже в карточке — 3 500 ₽. Возврат принимаем по акту.',
+          author: 'Анна Смирнова', mine: true, version: 1,
+          createdAt: '2026-11-23T10:05:00.000Z', edited: false, deleted: false, files: [],
+          canModerate: true, canViewRevisions: true,
+        },
+      ],
+    }
+  }
+  if (bookingNumber === 'ПР-1005' || clientName === 'Мария Петрова') {
+    return {
+      ...base,
+      conversationId: 'con_prokat_issued_demo',
+      messages: [
+        {
+          id: 'msg_prokat_is_1', sequence: 1,
+          body: 'Городской велосипед Electra можно вернуть после 20:00?',
+          author: 'Мария Петрова', mine: false, version: 1,
+          createdAt: '2026-11-24T10:00:00.000Z', edited: false, deleted: false, files: [],
+          canModerate: false, canViewRevisions: false,
+        },
+        {
+          id: 'msg_prokat_is_2', sequence: 2,
+          body: 'Да, пункт работает до 21:00. Акт выдачи уже в карточке — сверьте состояние рамы.',
+          author: 'Анна Смирнова', mine: true, version: 1,
+          createdAt: '2026-11-24T10:05:00.000Z', edited: false, deleted: false, files: [],
+          canModerate: true, canViewRevisions: true,
+        },
+      ],
+      notes: [{ id: 'note_prokat_is_1', body: 'Клиент просил SMS за час до возврата.', author: 'Анна Смирнова', createdAt: '2026-11-24T10:06:00.000Z' }],
+    }
+  }
+  return {
+    ...base,
+    conversationId: `con_prokat_${bookingNumber || 'demo'}`,
+    messages: [],
+  }
 }
 export const ProkatRowsContext = createContext<ProkatBundle | null>(null)
 
@@ -508,6 +579,7 @@ function DashboardScreen(props: ScreenProps) {
   const actBooking = act ? props.of(props.kit.bookingsTableId).find(row => row.id === act.bookingId) : null
   return <div className={css.root} data-prokat-root data-prokat-screen="dashboard">
     <ListScreenShell title="Главная" meta="Что сделать сегодня — и как загружен парк.">
+      <div className={css.dashStack}>
       <DetailSection title="Сегодня">
         <div className={css.todayStack}>
           <TodayGroup title="Выдать сегодня" empty="На сегодня выдач нет — новые подтверждённые брони появятся здесь." count={stats.issuesTodayList.length}>
@@ -586,6 +658,7 @@ function DashboardScreen(props: ScreenProps) {
             })}
           </div>
         </DetailSection>
+      </div>
       </div>
     </ListScreenShell>
     {act?.kind === 'issue' && actBooking ? <IssueDialog {...props} booking={actBooking} onClose={() => setAct(null)} onMessage={() => setAct(null)} /> : null}
@@ -773,20 +846,22 @@ function BookingCard(props: ScreenProps) {
   const back = clientView ? props.kit.clientListScreenId : props.kit.bookingsScreenId
   const canCancel = clientView && clientCanRequestCancel(status)
   const liveCorrespondence = Boolean(props.live) && !bundle?.sample
+  const sampleFixture = !liveCorrespondence
+    ? prokatSampleConversation(textOf(booking.values[fields.number]), clientName)
+    : null
   const conversation = <DetailSection title="Переписка">
     <div data-prokat-thread>
-      {liveCorrespondence ? (
-        <Suspense fallback={<p className={css.quiet} role="status">Загружаем переписку…</p>}>
-          <CorrespondenceModule
-            slug={props.app.slug}
-            tableId={props.kit.bookingsTableId}
-            rowId={booking.id}
-            configured={Boolean(props.app.communications?.enabled)}
-            business={false}
-            showContext={false}
-          />
-        </Suspense>
-      ) : <div className={css.empty} data-compact><p>Переписка появится после публикации приложения.</p></div>}
+      <Suspense fallback={<p className={css.quiet} role="status">Загружаем переписку…</p>}>
+        <CorrespondenceModule
+          slug={props.app.slug}
+          tableId={props.kit.bookingsTableId}
+          rowId={booking.id}
+          configured={Boolean(props.app.communications?.enabled) || Boolean(sampleFixture)}
+          business={desk}
+          showContext={false}
+          fixture={sampleFixture ?? undefined}
+        />
+      </Suspense>
     </div>
   </DetailSection>
   return <div className={css.root} data-prokat-root data-prokat-screen={desk ? 'booking' : 'client-booking'} data-prokat-status={status} data-ticket-tight>
@@ -1181,54 +1256,68 @@ function ItemDetail(props: ScreenProps) {
       subtitle={textOf(item.values[fields.serial])}
       badge={catalog ? <StatusBadge name={catalog.status} /> : undefined}
     >
-      <div className={css.itemHero}>
-        {catalog ? <ItemTile item={catalog} size={96} /> : null}
-        <dl className={css.facts}>
-          <div><dt>Категория</dt><dd>{catalog?.category || '—'}</dd></div>
-          <div><dt>Тариф</dt><dd>{catalog ? `${formatMoney(catalog.rate)} / ${catalog.tariff.toLowerCase()}` : '—'}</dd></div>
-          <div><dt>Залог</dt><dd>{formatMoney(catalog?.deposit ?? 0)}</dd></div>
-          <div><dt>Состояние</dt><dd>{catalog?.condition || '—'}</dd></div>
-        </dl>
-      </div>
+      <DetailSection title="О предмете">
+        <div className={css.itemHero}>
+          {catalog ? <ItemTile item={catalog} size={160} /> : null}
+          <dl className={`${css.facts} ${css.factsGrid}`}>
+            <div><dt>Категория</dt><dd>{catalog?.category || '—'}</dd></div>
+            <div><dt>Тариф</dt><dd>{catalog ? `${formatMoney(catalog.rate)} / ${catalog.tariff.toLowerCase()}` : '—'}</dd></div>
+            <div><dt>Залог</dt><dd>{formatMoney(catalog?.deposit ?? 0)}</dd></div>
+            <div><dt>Состояние</dt><dd>{catalog?.condition || '—'}</dd></div>
+          </dl>
+        </div>
+      </DetailSection>
       {desk && fields.showInCatalog ? <DetailSection title="Витрина">
-        <button
-          type="button"
-          role="switch"
-          className={css.rowSwitch}
-          aria-checked={catalog?.showInCatalog !== false}
-          data-on={catalog?.showInCatalog !== false || undefined}
-          aria-label="Показывать клиентам"
-          onClick={() => void patchItem({ [fields.showInCatalog!]: catalog?.showInCatalog === false })}
-        >
-          <span>Показывать клиентам</span>
-          <i aria-hidden="true" />
-        </button>
+        <div className={css.showcaseRow}>
+          <span className={css.showcaseLabel}>Показывать клиентам</span>
+          <button
+            type="button"
+            role="switch"
+            className={css.switchOnly}
+            aria-checked={catalog?.showInCatalog !== false}
+            data-on={catalog?.showInCatalog !== false || undefined}
+            aria-label="Показывать клиентам"
+            onClick={() => void patchItem({ [fields.showInCatalog!]: catalog?.showInCatalog === false })}
+          >
+            <i aria-hidden="true" />
+          </button>
+        </div>
         <p className={css.quietHint}>Выключенный предмет остаётся на складе, но не виден в каталоге клиента.</p>
       </DetailSection> : null}
       {desk && fields.lateFeeMode ? <DetailSection title="Штраф за просрочку">
-        <ProkatSelect
-          field
-          label="Как считать"
-          value={selectedModeId}
-          options={modeOptions}
-          onChange={id => void patchItem({
-            [fields.lateFeeMode!]: id,
-            ...(fields.lateFeeGraceHours && numberOf(item.values[fields.lateFeeGraceHours]) <= 0
-              ? { [fields.lateFeeGraceHours]: 1 }
-              : {}),
-          })}
-        />
-        {lateConfig && lateConfig.mode !== 'Нет' ? <>
+        <fieldset className={css.lateFeeMode}>
+          <legend>Как считать</legend>
+          <div className={css.lateFeeSegments} role="radiogroup" aria-label="Как считать">
+            {modeOptions.map(option => {
+              const modeName = (PROKAT_LATE_FEE_MODES.find(name => name === option.name) ?? 'Нет') as ProkatLateFeeMode
+              return <button
+                key={option.id || option.name}
+                type="button"
+                role="radio"
+                aria-checked={option.id === selectedModeId}
+                onClick={() => void patchItem({
+                  [fields.lateFeeMode!]: option.id,
+                  ...(fields.lateFeeGraceHours && numberOf(item.values[fields.lateFeeGraceHours]) <= 0
+                    ? { [fields.lateFeeGraceHours]: 1 }
+                    : {}),
+                })}
+              >{LATE_FEE_SEGMENT_LABEL[modeName]}</button>
+            })}
+          </div>
+        </fieldset>
+        {lateConfig && lateConfig.mode !== 'Нет' ? <div className={css.lateFeeFields}>
           <label className={css.field}>
-            <span>{lateConfig.mode === 'Процент от тарифа за сутки' ? 'Процент от тарифа' : 'Сумма'}</span>
+            <span>{lateConfig.mode === 'Процент от тарифа за сутки' ? 'Процент' : 'Сумма'}</span>
             <span className={css.moneyField}>
               <input
-                defaultValue={String(lateConfig.value || 0)}
+                key={`value-${lateConfig.mode}-${lateConfig.value}`}
+                defaultValue={formatRubGrouped(lateConfig.value || 0)}
                 inputMode="decimal"
                 aria-label="Ставка штрафа"
                 onBlur={event => {
-                  const next = Number(event.target.value.replace(/\s/g, '').replace(',', '.'))
-                  if (!Number.isFinite(next) || next < 0 || !fields.lateFeeValue) return
+                  const next = parseRubGrouped(event.target.value)
+                  event.target.value = formatRubGrouped(next)
+                  if (!fields.lateFeeValue) return
                   void patchItem({ [fields.lateFeeValue]: next })
                 }}
               />
@@ -1236,36 +1325,40 @@ function ItemDetail(props: ScreenProps) {
             </span>
           </label>
           <label className={css.field}>
-            <span>Льготные часы</span>
-            <input
-              className={css.plainInput}
-              defaultValue={String(lateConfig.graceHours)}
-              inputMode="numeric"
-              aria-label="Льготные часы"
-              onBlur={event => {
-                const next = Number(event.target.value)
-                if (!Number.isFinite(next) || next < 0 || !fields.lateFeeGraceHours) return
-                void patchItem({ [fields.lateFeeGraceHours]: Math.round(next) })
-              }}
-            />
+            <span>Льгота</span>
+            <span className={css.moneyField}>
+              <input
+                key={`grace-${lateConfig.graceHours}`}
+                defaultValue={String(lateConfig.graceHours)}
+                inputMode="numeric"
+                aria-label="Льготные часы"
+                onBlur={event => {
+                  const next = Number(event.target.value.replace(/\s/g, ''))
+                  if (!Number.isFinite(next) || next < 0 || !fields.lateFeeGraceHours) return
+                  void patchItem({ [fields.lateFeeGraceHours]: Math.round(next) })
+                }}
+              />
+              <em>ч</em>
+            </span>
           </label>
           {lateConfig.mode === 'Сумма за час' && fields.lateFeeCapPerDay ? <label className={css.field}>
             <span>Потолок в сутки</span>
             <span className={css.moneyField}>
               <input
-                defaultValue={String(lateConfig.capPerDay ?? catalog?.rate ?? 0)}
+                key={`cap-${lateConfig.capPerDay ?? catalog?.rate ?? 0}`}
+                defaultValue={formatRubGrouped(lateConfig.capPerDay ?? catalog?.rate ?? 0)}
                 inputMode="decimal"
                 aria-label="Потолок штрафа в сутки"
                 onBlur={event => {
-                  const next = Number(event.target.value.replace(/\s/g, '').replace(',', '.'))
-                  if (!Number.isFinite(next) || next < 0) return
+                  const next = parseRubGrouped(event.target.value)
+                  event.target.value = formatRubGrouped(next)
                   void patchItem({ [fields.lateFeeCapPerDay!]: next })
                 }}
               />
               <em>₽</em>
             </span>
-          </label> : null}
-        </> : null}
+          </label> : <span className={css.lateFeeSpacer} aria-hidden="true" />}
+        </div> : null}
         {lateConfig ? <p className={css.lateFeeFormula} data-prokat-late-formula>{describeLateFee(lateConfig)}</p> : null}
       </DetailSection> : null}
       {message ? <p role="status">{message}</p> : null}
@@ -1285,24 +1378,57 @@ function TimelineBar(props: {
   onOpen: () => void
 }) {
   const [tip, setTip] = useState(false)
-  return <button
-    type="button"
-    className={css.timelineBar}
-    data-tone={props.tone}
-    data-tip={tip || undefined}
-    style={{ left: `${props.left}%`, width: `${props.width}%` }}
-    title={props.tip}
-    aria-label={props.tip}
-    data-prokat-bar-tip={props.tip}
-    onMouseEnter={() => setTip(true)}
-    onMouseLeave={() => setTip(false)}
-    onFocus={() => setTip(true)}
-    onBlur={() => setTip(false)}
-    onClick={props.onOpen}
-  >
-    <span>{props.label}</span>
-    {tip ? <em className={css.timelineTip} role="tooltip">{props.tip}</em> : null}
-  </button>
+  const [place, setPlace] = useState<{ top: number; left: number; below: boolean } | null>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  useLayoutEffect(() => {
+    if (!tip || !buttonRef.current) { setPlace(null); return }
+    const rect = buttonRef.current.getBoundingClientRect()
+    const tipHeight = 56
+    const spaceAbove = rect.top
+    const spaceBelow = window.innerHeight - rect.bottom
+    // Prefer below when the tip would sit under the day header / chrome.
+    const below = spaceAbove < tipHeight + 24 || spaceAbove < spaceBelow
+    setPlace({
+      top: below ? rect.bottom + 8 : rect.top - 8,
+      left: Math.min(Math.max(8, rect.left), window.innerWidth - 280),
+      below,
+    })
+  }, [tip])
+  return <>
+    <button
+      ref={buttonRef}
+      type="button"
+      className={css.timelineBar}
+      data-tone={props.tone}
+      data-tip={tip || undefined}
+      style={{ left: `${props.left}%`, width: `${props.width}%` }}
+      title={props.tip}
+      aria-label={props.tip}
+      data-prokat-bar-tip={props.tip}
+      onMouseEnter={() => setTip(true)}
+      onMouseLeave={() => setTip(false)}
+      onFocus={() => setTip(true)}
+      onBlur={() => setTip(false)}
+      onClick={props.onOpen}
+    >
+      <span>{props.label}</span>
+    </button>
+    {tip && place && typeof document !== 'undefined' ? createPortal(
+      <em
+        className={css.timelineTip}
+        role="tooltip"
+        data-below={place.below || undefined}
+        style={{
+          position: 'fixed',
+          top: place.top,
+          left: place.left,
+          transform: place.below ? 'none' : 'translateY(-100%)',
+          zIndex: 80,
+        }}
+      >{props.tip}</em>,
+      document.body,
+    ) : null}
+  </>
 }
 
 function TimelineScreen(props: ScreenProps) {

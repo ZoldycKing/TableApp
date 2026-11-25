@@ -33,6 +33,7 @@ import { buildDispatchV2App, isDispatchTemplate } from '@/lib/templates/dispatch
 import { buildProjectsV2App, isProjectsTemplate } from '@/lib/templates/projects-v2'
 import { buildSupportV2App, isSupportTemplate } from '@/lib/templates/support-v2'
 import { buildServiceV2App, isServiceTemplate } from '@/lib/templates/service-v2'
+import { buildProkatV2App, isProkatTemplate } from '@/lib/templates/prokat-v2'
 import { stageDispatchPortrait } from '@/lib/templates/dispatch-portrait-files'
 import { stageProjectsPortrait } from '@/lib/templates/projects-portrait-files'
 import { stageSupportPortrait } from '@/lib/templates/support-portrait-files'
@@ -100,7 +101,7 @@ export async function applyTemplateAction(
    * производственный учёт, склад с приёмками и заявки с ролями мастера и диспетчера.
    */
   const draft = templatePreset(generated, built)
-  const nativeV2 = isShopTemplate(template.id) || isCrmTemplate(template.id) || isInventoryTemplate(template.id) || isBookingTemplate(template.id) || isDispatchTemplate(template.id) || isProjectsTemplate(template.id) || isSupportTemplate(template.id) || isServiceTemplate(template.id)
+  const nativeV2 = isShopTemplate(template.id) || isCrmTemplate(template.id) || isInventoryTemplate(template.id) || isBookingTemplate(template.id) || isDispatchTemplate(template.id) || isProjectsTemplate(template.id) || isSupportTemplate(template.id) || isServiceTemplate(template.id) || isProkatTemplate(template.id)
   // Production uses "director" for the creator's existing owner role.
   if (!nativeV2 && (draft.booking || draft.customer || draft.inventory || draft.production || template.id === 'crm')) draft.allowlist = [{ email: auth.member.email, roleId: draft.production ? 'director' : 'manager', company: '' }]
 
@@ -191,7 +192,7 @@ export async function applyTemplateAction(
       await lockAppSlugs(tx)
       draft.slug = await uniqueSlug(slugify(built.appName), undefined, tx)
       const meta = { id: appId, workspaceId, name: built.appName, slug: draft.slug, email: auth.member.email }
-      const native = isShopTemplate(template.id) ? buildShopV2App(built, meta) : isCrmTemplate(template.id) ? buildCrmV2App(built, meta) : isInventoryTemplate(template.id) ? buildInventoryV2App(built, meta) : isBookingTemplate(template.id) ? buildBookingV2App(built, meta) : isDispatchTemplate(template.id) ? buildDispatchV2App(built, meta) : isProjectsTemplate(template.id) ? buildProjectsV2App(built, meta) : isSupportTemplate(template.id) ? buildSupportV2App(built, meta) : isServiceTemplate(template.id) ? buildServiceV2App(built, meta) : null
+      const native = isShopTemplate(template.id) ? buildShopV2App(built, meta) : isCrmTemplate(template.id) ? buildCrmV2App(built, meta) : isInventoryTemplate(template.id) ? buildInventoryV2App(built, meta) : isBookingTemplate(template.id) ? buildBookingV2App(built, meta) : isDispatchTemplate(template.id) ? buildDispatchV2App(built, meta) : isProjectsTemplate(template.id) ? buildProjectsV2App(built, meta) : isSupportTemplate(template.id) ? buildSupportV2App(built, meta) : isServiceTemplate(template.id) ? buildServiceV2App(built, meta) : isProkatTemplate(template.id) ? buildProkatV2App(built, meta) : null
       if (native) {
         const { catalog } = await loadBuilderV2Catalog(workspaceId, tx)
         const valid = validateAppV2Definition(native, catalog)

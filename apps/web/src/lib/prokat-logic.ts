@@ -298,8 +298,29 @@ export function timelineBarLabel(_number: string, clientName: string) {
   return shortClientName(clientName)
 }
 
+/** Estimate caption width in px: canvas measureText when available, else length × charWidth. */
+export function estimateTimelineCaptionWidthPx(label: string, charWidthPx = 7) {
+  const text = label.trim()
+  if (!text) return 0
+  if (typeof document !== 'undefined') {
+    try {
+      const canvas = document.createElement('canvas')
+      const ctx = canvas.getContext('2d')
+      if (ctx) {
+        // Match .timelineBar: 11px / weight 650.
+        ctx.font = '650 11px system-ui, -apple-system, "Segoe UI", sans-serif'
+        const width = ctx.measureText(text).width
+        if (Number.isFinite(width) && width > 0) return Math.ceil(width)
+      }
+    } catch {
+      // fall through
+    }
+  }
+  return Math.ceil([...text].length * charWidthPx)
+}
+
 /**
- * Place the client name inside the bar when it fits; otherwise outside to the right
+ * Place the client name inside the bar when it fits in real px; otherwise outside to the right
  * only if the gap until the next occupied segment is wide enough. Never initials.
  */
 export function timelineBarCaptionPlacement(input: {
@@ -310,23 +331,30 @@ export function timelineBarCaptionPlacement(input: {
   occupiedRight: number
   /** Left edge of the next booking on the same row, or 100. */
   nextLeft: number
-  /** Approximate % of the track per character at current zoom. */
-  charPct?: number
+  /** Full track width in CSS pixels (required for px fit). */
+  trackWidthPx: number
+  /** Fallback average glyph width when canvas measureText is unavailable. */
+  charWidthPx?: number
+  /** Horizontal padding inside the bar (both sides). */
+  padPx?: number
   /**
-   * Outside caption is allowed only when occupiedRight + need stays under this %.
+   * Outside caption is allowed only when its end stays under this % of the track.
    * Phone week view shows ~half the track at rest — keep this lower to avoid clipped text.
    */
   maxOutsideEnd?: number
 }): { inside: string; outside: string | null } {
   const label = input.label.trim()
   if (!label) return { inside: '', outside: null }
-  const charPct = input.charPct ?? 1.35
-  const need = label.length * charPct + 1.2
-  // Leave room for bar padding so the last glyph (e.g. «.») is not clipped.
-  if (need <= input.barWidth - 2.6) return { inside: label, outside: null }
-  const gap = Math.max(0, input.nextLeft - input.occupiedRight - 0.8)
+  const track = Math.max(1, input.trackWidthPx)
+  const padPx = input.padPx ?? 12
+  const needPx = estimateTimelineCaptionWidthPx(label, input.charWidthPx ?? 7) + padPx
+  const barPx = (Math.max(0, input.barWidth) / 100) * track
+  if (needPx <= barPx) return { inside: label, outside: null }
+  const gapPct = Math.max(0, input.nextLeft - input.occupiedRight - 0.8)
+  const gapPx = (gapPct / 100) * track
   const maxEnd = input.maxOutsideEnd ?? 96
-  if (need <= gap && input.occupiedRight + need <= maxEnd) return { inside: '', outside: label }
+  const outsideEndPct = input.occupiedRight + (needPx / track) * 100
+  if (needPx <= gapPx && outsideEndPct <= maxEnd) return { inside: '', outside: label }
   return { inside: '', outside: null }
 }
 

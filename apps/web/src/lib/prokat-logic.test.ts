@@ -275,24 +275,29 @@ describe('timeline bar geometry', () => {
       .toBe('Свободен с 27.11')
   })
 
-  it('places bar captions inside, outside, or hidden — never initials', () => {
+  it('places bar captions inside, outside, or hidden — never initials (px fit)', () => {
+    const track = 1000
+    // ~2 days of fortnight (~14%) → room for «Алексей И.» inside
     expect(timelineBarCaptionPlacement({
-      label: 'Мария П.', barLeft: 10, barWidth: 20, occupiedRight: 30, nextLeft: 80,
+      label: 'Алексей И.', barLeft: 35, barWidth: 14, occupiedRight: 49, nextLeft: 70, trackWidthPx: track,
+    })).toEqual({ inside: 'Алексей И.', outside: null })
+    expect(timelineBarCaptionPlacement({
+      label: 'Мария П.', barLeft: 10, barWidth: 20, occupiedRight: 30, nextLeft: 80, trackWidthPx: track,
     })).toEqual({ inside: 'Мария П.', outside: null })
     expect(timelineBarCaptionPlacement({
-      label: 'Алексей И.', barLeft: 70, barWidth: 4, occupiedRight: 74, nextLeft: 100,
+      label: 'Алексей И.', barLeft: 70, barWidth: 4, occupiedRight: 74, nextLeft: 100, trackWidthPx: track,
     })).toEqual({ inside: '', outside: 'Алексей И.' })
     expect(timelineBarCaptionPlacement({
-      label: 'Дмитрий С.', barLeft: 10, barWidth: 4, occupiedRight: 40, nextLeft: 45,
+      label: 'Дмитрий С.', barLeft: 10, barWidth: 4, occupiedRight: 40, nextLeft: 45, trackWidthPx: track,
     })).toEqual({ inside: '', outside: null })
     expect(timelineBarCaptionPlacement({
-      label: 'Игорь О.', barLeft: 80, barWidth: 4, occupiedRight: 90, nextLeft: 100,
+      label: 'Игорь О.', barLeft: 80, barWidth: 4, occupiedRight: 90, nextLeft: 100, trackWidthPx: track,
     })).toEqual({ inside: '', outside: null })
     expect(timelineBarCaptionPlacement({
-      label: 'Игорь О.', barLeft: 20, barWidth: 4, occupiedRight: 45, nextLeft: 100, maxOutsideEnd: 52,
+      label: 'Игорь О.', barLeft: 20, barWidth: 4, occupiedRight: 48, nextLeft: 100, trackWidthPx: track, maxOutsideEnd: 52,
     })).toEqual({ inside: '', outside: null })
     expect(timelineBarCaptionPlacement({
-      label: 'Мария П.', barLeft: 10, barWidth: 4, occupiedRight: 20, nextLeft: 80, maxOutsideEnd: 52,
+      label: 'Мария П.', barLeft: 10, barWidth: 4, occupiedRight: 20, nextLeft: 80, trackWidthPx: track, maxOutsideEnd: 52,
     })).toEqual({ inside: '', outside: 'Мария П.' })
   })
 })

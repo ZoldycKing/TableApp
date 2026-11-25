@@ -1504,6 +1504,7 @@ function TimelineScreen(props: ScreenProps) {
   const [create, setCreate] = useState<{ itemId: string; date: string } | null>(null)
   const boardRef = useRef<HTMLDivElement>(null)
   const scrollSyncing = useRef(false)
+  const [trackWidthPx, setTrackWidthPx] = useState(phone ? 448 : 1100)
   const board = buildTimelineWindow({ mode, startDate, now: props.now })
   const columns = board.columns
   const columnCount = Math.max(1, columns.length)
@@ -1524,6 +1525,22 @@ function TimelineScreen(props: ScreenProps) {
   const filtered = needle
     ? items.filter(item => [item.name, item.serial, item.category].join(' ').toLowerCase().includes(needle))
     : items
+  useLayoutEffect(() => {
+    const root = boardRef.current
+    if (!root) return
+    const measure = () => {
+      const el = root.querySelector<HTMLElement>(
+        phone ? '[data-timeline-scroll] > *' : `.${css.timelineTrack}`,
+      )
+      const width = el?.clientWidth ?? 0
+      if (width > 0) setTrackWidthPx(Math.round(width))
+    }
+    measure()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(measure)
+    observer.observe(root)
+    return () => observer.disconnect()
+  }, [phone, mode, columnCount, filtered.length])
   const groups = (() => {
     const map = new Map<string, ProkatCatalogItem[]>()
     for (const item of filtered) {
@@ -1599,9 +1616,6 @@ function TimelineScreen(props: ScreenProps) {
     }).filter(entry => entry.segment || entry.overdueTail)
       .sort((a, b) => a.left - b.left || a.booking.id.localeCompare(b.booking.id))
 
-    const charPct = phone
-      ? (mode === 'day' ? 1.85 : mode === 'month' ? 2.8 : 2.4)
-      : (mode === 'day' ? 1.1 : mode === 'month' ? 1.8 : 1.35)
     const barNodes = laid.map((entry, index) => {
       const nextLeft = laid[index + 1]?.left ?? 100
       const open = () => props.onNavigate?.(props.kit.bookingScreenId, entry.booking.id)
@@ -1613,7 +1627,7 @@ function TimelineScreen(props: ScreenProps) {
           barWidth: entry.segment.width,
           occupiedRight: entry.occupiedRight,
           nextLeft,
-          charPct,
+          trackWidthPx,
           // Phone shows ~half the week track at rest; outside past that looks clipped.
           maxOutsideEnd: phone ? 52 : 96,
         })

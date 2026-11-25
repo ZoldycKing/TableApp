@@ -1,24 +1,67 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ConversationInbox, parseConversationTarget } from './conversation-inbox'
 import { GENERAL_CONVERSATION_TABLE, type ConversationSummary } from '@/lib/conversation-types'
 
 const list = vi.hoisted(() => vi.fn())
 vi.mock('@/app/conversation-actions', () => ({ listConversationInboxAction: list }))
 vi.mock('./conversation-panel', () => ({ ConversationPanel: ({ slug, rowId, business }: { slug: string; rowId: string; business: boolean }) => <p>{slug}:{rowId}:{business ? 'business' : 'client'}</p> }))
-afterEach(() => { cleanup(); vi.useRealTimers(); vi.resetAllMocks() })
-const item: ConversationSummary = { id: 'thread', slug: 'salon', tableId: 'visits', rowId: 'visit', title: 'Стрижка · 15 октября', customer: 'Анна', appName: 'Салон', detailScreenId: 'visit-details', preview: 'Как подготовиться?', lastAt: '2026-10-13T10:00:00Z', unread: 2, closed: false }
+const item: ConversationSummary = { id: 'thread', slug: 'salon', tableId: 'visits', rowId: 'visit', title: 'Стрижка · 15 октября', customer: 'Анна', appName: 'Салон', detailScreenId: 'visit-details', preview: 'Как подготовиться?', lastAt: '2026-10-13T10:00:00Z', unread: 2, closed: false, lastAuthor: 'Мария', statusLabel: 'В работе' }
+const matchMedia = (matches: boolean) => {
+  Object.defineProperty(window, 'matchMedia', {
+    configurable: true,
+    writable: true,
+    value: (query: string) => ({
+      matches: query.includes('740') ? matches : false,
+      media: query, onchange: null, addListener: () => {}, removeListener: () => {},
+      addEventListener: () => {}, removeEventListener: () => {}, dispatchEvent: () => false,
+    }),
+  })
+}
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.resetAllMocks(); matchMedia(false) })
+beforeEach(() => { matchMedia(false) })
 describe('business and client inbox', () => {
   it('opens the same scoped conversation and its parent, with a mobile return to the list', async () => {
+    matchMedia(false)
     list.mockResolvedValue({ ok: true, value: { items: [item], next: null } })
-    const open = vi.fn(), ui = render(<ConversationInbox slug="salon" onOpenRecord={open} />)
+    const open = vi.fn(), ui = render(<ConversationInbox slug="salon" business onOpenRecord={open} />)
     fireEvent.click(await ui.findByRole('button', { name: /Анна/ }))
-    expect(ui.getByText('salon:visit:client')).toBeTruthy()
+    expect(ui.getByText('salon:visit:business')).toBeTruthy()
     expect(ui.getByLabelText('Непрочитанных сообщений: 2')).toBeTruthy()
-    expect(ui.getByText(/13\.10\.2026,/)).toBeTruthy()
+    expect(ui.getByText(/Мария · 13\.10\.2026,/)).toBeTruthy()
+    expect(ui.queryByText('Салон')).toBeNull()
     fireEvent.click(ui.getByRole('button', { name: 'Открыть запись' })); expect(open).toHaveBeenCalledWith(item)
-    fireEvent.click(ui.getByRole('button', { name: 'Все диалоги' })); expect(ui.queryByText('salon:visit:client')).toBeNull()
+    fireEvent.click(ui.getByRole('button', { name: 'Все диалоги' })); expect(ui.queryByText('salon:visit:business')).toBeNull()
+  })
+  it('shows the record title and status for the client list, not the client own name', async () => {
+    matchMedia(false)
+    list.mockResolvedValue({ ok: true, value: { items: [item], next: null } })
+    const ui = render(<ConversationInbox slug="salon" />)
+    const thread = await ui.findByRole('button', { name: /Стрижка · 15 октября/ })
+    expect(thread.textContent).toContain('В работе')
+    expect(thread.textContent).toContain('Мария ·')
+    expect(thread.textContent).not.toMatch(/^Анна/)
+    expect(ui.queryByText('Салон')).toBeNull()
+  })
+  it('hides list chrome on phone when a thread is open', async () => {
+    matchMedia(false)
+    list.mockResolvedValue({ ok: true, value: { items: [item], next: null } })
+    const ui = render(<ConversationInbox slug="salon" />)
+    expect(await ui.findByText('Вопросы бизнесу и переписка по вашим заказам и записям.')).toBeTruthy()
+    expect(ui.getByRole('button', { name: 'Только непрочитанные' })).toBeTruthy()
+    fireEvent.click(ui.getByRole('button', { name: /Стрижка · 15 октября/ }))
+    await ui.findByText('salon:visit:client')
+    const chrome = ui.getByText('Вопросы бизнесу и переписка по вашим заказам и записям.').parentElement!
+    expect(chrome.className).toMatch(/hidden/)
+    expect(chrome.contains(ui.getByRole('button', { name: 'Только непрочитанные' }))).toBe(true)
+  })
+  it('auto-selects the newest thread on a wide desktop inbox', async () => {
+    matchMedia(true)
+    list.mockResolvedValue({ ok: true, value: { items: [item], next: null } })
+    const ui = render(<ConversationInbox slug="salon" />)
+    expect(await ui.findByText('salon:visit:client')).toBeTruthy()
+    expect(ui.queryByText('Выберите диалог, чтобы прочитать сообщения или ответить.')).toBeNull()
   })
   it('passes the platform identity explicitly and applies the unread filter on the server', async () => {
     list.mockResolvedValue({ ok: true, value: { items: [item], next: null } })
@@ -57,7 +100,7 @@ describe('business and client inbox', () => {
     expect(ask).toHaveBeenCalledOnce()
     list.mockResolvedValue({ ok: true, value: { items: [item], next: null } })
     window.dispatchEvent(new Event('tableapp:messages-read'))
-    await ui.findByRole('button', { name: /Анна/ })
+    await ui.findByRole('button', { name: /Стрижка · 15 октября/ })
     expect(ui.getByRole('button', { name: 'Задать вопрос' })).toBeTruthy()
     ui.rerender(<ConversationInbox slug="salon" business onAskQuestion={ask} />)
     expect(ui.queryByRole('button', { name: 'Задать вопрос' })).toBeNull()
@@ -67,12 +110,13 @@ describe('business and client inbox', () => {
     list.mockResolvedValue({ ok: true, value: { items: [general], next: null } })
     const open = vi.fn(), ui = render(<ConversationInbox slug="salon" initialTarget={{ slug: 'salon', tableId: GENERAL_CONVERSATION_TABLE, rowId: 'self' }} onOpenRecord={open} />)
     await ui.findAllByText('Вопрос бизнесу')
-    expect(ui.getByRole('button', { current: true }).textContent).toContain('Анна')
+    expect(ui.getByRole('button', { current: true }).textContent).toContain('Вопрос бизнесу')
     expect(ui.queryByRole('button', { name: 'Открыть запись' })).toBeNull()
     expect(ui.queryByRole('link', { name: 'Открыть запись' })).toBeNull()
     expect(open).not.toHaveBeenCalled()
     ui.rerender(<ConversationInbox slug="salon" initialTarget={general} business />)
     await ui.findByText(`salon:bcu_anna:business`)
+    expect(ui.getByRole('button', { current: true }).textContent).toContain('Анна')
     expect(ui.queryByRole('link', { name: 'Открыть запись' })).toBeNull()
   })
   it('revalidates revealed older pages on refresh and updates unread counts without losing the continuation', async () => {

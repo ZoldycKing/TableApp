@@ -22,6 +22,8 @@ type Props = {
   configured: boolean
   business?: boolean
   showContext?: boolean
+  /** Stretch to the inbox column height with the composer pinned to the bottom. */
+  fill?: boolean
   /** Fixture page for visual shots; skips network reads when provided. */
   fixture?: ConversationPage
   fixtureFiles?: Attachment[]
@@ -29,7 +31,7 @@ type Props = {
 }
 
 export function ConversationPanel({
-  slug, tableId, rowId, configured, business = false, showContext = true, fixture, fixtureFiles, fixtureAlert = null,
+  slug, tableId, rowId, configured, business = false, showContext = true, fill = false, fixture, fixtureFiles, fixtureAlert = null,
 }: Props) {
   const general = tableId === GENERAL_CONVERSATION_TABLE
   const [page, setPage] = useState<ConversationPage | null>(fixture ?? null)
@@ -117,9 +119,10 @@ export function ConversationPanel({
     const right = b.kind === 'message' ? b.message.createdAt : b.createdAt
     return left.localeCompare(right) || (a.kind === 'note' ? a.id : a.message.id).localeCompare(b.kind === 'note' ? b.id : b.message.id)
   }) : []
-  return <section aria-label={general ? 'Вопрос бизнесу' : 'Переписка по обращению'} className={embedded
-    ? 'min-w-0 w-full space-y-4 [overflow-wrap:anywhere]'
-    : 'mx-auto mt-5 min-w-0 w-full max-w-xl space-y-4 rounded-2xl border border-sand-200 bg-white p-4 [overflow-wrap:anywhere]'}>
+  const shell = embedded
+    ? `min-w-0 w-full [overflow-wrap:anywhere] ${fill ? 'flex min-h-0 flex-1 flex-col' : 'space-y-4'}`
+    : `mx-auto mt-5 min-w-0 w-full max-w-xl rounded-2xl border border-sand-200 bg-white p-4 [overflow-wrap:anywhere] ${fill ? 'flex min-h-0 flex-1 flex-col space-y-4' : 'space-y-4'}`
+  return <section aria-label={general ? 'Вопрос бизнесу' : 'Переписка по обращению'} className={shell} data-conversation-fill={fill || undefined}>
     {embedded ? null : <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">{general ? 'Вопрос бизнесу' : showContext && page?.contextTitle ? page.contextTitle : 'Переписка и документы'}</h3>
       {page?.canManage && page.conversationId && !fixture ? <button disabled={busy} type="button" className="text-xs text-sage-700 underline" onClick={() => void mutate(() => closeConversationAction(slug, tableId, rowId, !page.closed, business))}>{page.closed ? 'Возобновить обсуждение' : 'Завершить обсуждение'}</button> : null}
     </div>}
@@ -128,6 +131,7 @@ export function ConversationPanel({
       : 'Сообщения относятся к этому обращению. Их видите вы и сотрудники бизнеса, которым оно доступно.'}</p>}
     {error ? <p role="alert" className="text-sm text-red-700">{error}</p> : null}
     {!page ? <button type="button" className="text-sm text-sage-700 underline" onClick={() => void loadRef.current()}>Загрузить переписку</button> : <>
+      <div className={fill ? 'min-h-0 flex-1 space-y-3 overflow-y-auto' : 'space-y-3'}>
       {page.nextBefore && !fixture ? <button disabled={busy} type="button" className="text-xs text-sage-700 underline" onClick={() => void load(true)}>Показать предыдущие сообщения</button> : null}
       <div className="space-y-3" aria-live="polite" aria-label="Хронология">
         {timeline.map(item => {
@@ -177,7 +181,8 @@ export function ConversationPanel({
       {!page.messages.length && !(page.staff && page.notes.length) ? <p className="text-sm text-ink-muted">{general ? business ? 'Здесь появится переписка с клиентом.' : 'Напишите вопрос о товарах, услугах или работе бизнеса.' : 'Задайте вопрос по этому обращению или приложите документ.'}</p> : null}
       {clientGeneralDisabled ? <p className="text-sm text-ink-muted">Бизнес пока не принимает новые сообщения. История переписки сохранена.</p> : null}
       {page.closed && !clientGeneralDisabled ? <p className="text-sm text-ink-muted">{general && !page.staff && page.enabled ? 'Предыдущий вопрос закрыт. Новое сообщение возобновит переписку.' : 'Обсуждение завершено. Сообщения и документы сохранены в истории.'}</p> : null}
-      {!clientGeneralDisabled && (!page.closed || general && !page.staff) ? <form className="space-y-3 border-t border-sand-200 pt-3" onSubmit={event => {
+      </div>
+      {!clientGeneralDisabled && (!page.closed || general && !page.staff) ? <form className={`space-y-3 border-t border-sand-200 pt-3 ${fill ? 'shrink-0' : ''}`} onSubmit={event => {
         event.preventDefault()
         if (sending.current || uploadInProgress.current || fixture) return
         void mutate(() => sendConversationAction(slug, tableId, rowId, { body, requestId: request.current, fileIds: internal ? [] : availableFiles.map(file => file.id), internal }, business),

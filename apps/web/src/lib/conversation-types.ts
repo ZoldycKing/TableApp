@@ -13,6 +13,11 @@ export type ConversationPage = { conversationId: string | null; enabled: boolean
 
 export type ConversationSummary = {
   id: string; slug: string; tableId: string; rowId: string; title: string; customer: string;
-  appName: string; detailScreenId: string; preview: string; lastAt: string; unread: number; closed: boolean; kind?: 'record' | 'general'
+  appName: string; detailScreenId: string; preview: string; lastAt: string; unread: number; closed: boolean;
+  kind?: 'record' | 'general'
+  /** Last public message author name for the inbox meta line. */
+  lastAuthor?: string
+  /** Human status label from the parent record, when available. */
+  statusLabel?: string
 }
 export type ConversationInboxPage = { items: ConversationSummary[]; next: string | null }

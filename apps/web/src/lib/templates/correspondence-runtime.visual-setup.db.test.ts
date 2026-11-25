@@ -94,16 +94,19 @@ describe.skipIf(!process.env.DATABASE_URL)('correspondence runtime visual setup'
     const repairs = await database.db.select().from(database.rows).where(and(eq(database.rows.tableId, service.repairsTableId), isNull(database.rows.deletedAt)))
     const owned = repairs.filter(row => String((row.data as Record<string, unknown>)[service.repair.clientEmail] ?? '').toLowerCase() === clientEmail)
     expect(owned.length).toBeGreaterThanOrEqual(2)
-    const primary = owned[0]!, secondary = owned[1]!
-    const primaryData = primary.data as Record<string, unknown>
-    const secondaryData = secondary.data as Record<string, unknown>
+    const byDevice = (name: string) => owned.find(row => String((row.data as Record<string, unknown>)[service.repair.device] ?? '') === name)
+    const washer = byDevice('Стиральная машина Bosch WLG')
+    const vacuum = byDevice('Пылесос Xiaomi G9')
+    expect(washer).toBeTruthy()
+    expect(vacuum).toBeTruthy()
+    if (!washer || !vacuum) return
     const email = clientEmail
 
     await database.db.insert(database.businessCustomers).values({ id: newId('businessCustomer'), workspaceId, email, name: 'Мария Сидорова' }).onConflictDoNothing()
     const [customer] = await database.db.select().from(database.businessCustomers).where(and(eq(database.businessCustomers.workspaceId, workspaceId), eq(database.businessCustomers.email, email)))
     const staffActor = `person_${createHash('sha256').update(`${workspaceId}:${staffEmail}`).digest('hex')}`
     const clientActor = `person_${createHash('sha256').update(`${workspaceId}:${email}`).digest('hex')}`
-    const seedThread = async (repair: typeof primary, bodies: [string, string], note: string, stamp: string) => {
+    const seedThread = async (repair: typeof washer, bodies: [string, string], note: string, stamp: string) => {
       const conversationId = `con_${newId('row').slice(4)}`
       await database.db.insert(database.conversations).values({
         id: conversationId, workspaceId, appId: serviceInstalled.appId, kind: 'record',
@@ -125,14 +128,26 @@ describe.skipIf(!process.env.DATABASE_URL)('correspondence runtime visual setup'
       })
       return conversationId
     }
-    await seedThread(primary,
-      ['Добрый день. Подскажите, когда будет готова стиральная машина?', 'Здравствуйте. Диагностика завершена, ждём деталь. Ориентир — 26.11.2026.'],
-      'Клиент просил перезвонить после 18:00. Деталь на складе поставщика.',
-      '2026-11-24')
-    await seedThread(secondary,
-      ['Можно уточнить стоимость замены экрана?', 'Да, смета готова — посмотрите в карточке ремонта.'],
-      'Согласовать с клиентом замену стекла до заказа детали.',
+    // Seed the older vacuum thread first so the washer conversation id sorts above it when sequences tie.
+    const vacuumThread = await seedThread(vacuum,
+      ['Пылесос Xiaomi G9 сильно греется. Это из‑за фильтра HEPA?', 'Да, фильтр засорён. Меняем HEPA и чистим моторный блок — смета в карточке.'],
+      'Согласовать с клиентом замену HEPA до чистки мотора.',
       '2026-11-23')
+    const washerThread = await seedThread(washer,
+      ['Добрый день. Подскажите, когда будет готова стиральная машина Bosch?', 'Здравствуйте. Манжет люка заказан, ориентир готовности — 26.11.2026.'],
+      'Клиент просил перезвонить после 18:00. Манжета Bosch на складе поставщика.',
+      '2026-11-24')
+
+    // Binding check: each conversation points at the intended repair, and message bodies match that device.
+    const bound = await database.db.select().from(database.conversations).where(eq(database.conversations.workspaceId, workspaceId))
+    expect(bound.find(item => item.id === washerThread)?.rowId).toBe(washer.id)
+    expect(bound.find(item => item.id === vacuumThread)?.rowId).toBe(vacuum.id)
+    const washerBodies = (await database.db.select().from(database.conversationMessages).where(eq(database.conversationMessages.conversationId, washerThread))).map(item => item.body).join('\n')
+    const vacuumBodies = (await database.db.select().from(database.conversationMessages).where(eq(database.conversationMessages.conversationId, vacuumThread))).map(item => item.body).join('\n')
+    expect(washerBodies).toMatch(/стиральная машина Bosch/i)
+    expect(washerBodies).not.toMatch(/пылесос|HEPA/i)
+    expect(vacuumBodies).toMatch(/пылесос Xiaomi G9|HEPA/i)
+    expect(vacuumBodies).not.toMatch(/стиральная машина/i)
 
     const [deliveryRow] = await database.db.select().from(database.apps).where(eq(database.apps.id, deliveryInstalled.appId))
     const deliveryDraft = deliveryRow!.draft as Record<string, unknown>
@@ -144,12 +159,14 @@ describe.skipIf(!process.env.DATABASE_URL)('correspondence runtime visual setup'
     writeFileSync('/tmp/correspondence-runtime.json', JSON.stringify({
       workspaceId,
       service: {
-        appId: serviceInstalled.appId, slug: serviceInstalled.appSlug, repairId: primary.id, repairIds: [primary.id, secondary.id],
+        appId: serviceInstalled.appId, slug: serviceInstalled.appSlug, repairId: washer.id, repairIds: [washer.id, vacuum.id],
         repairsTableId: service.repairsTableId, repairScreenId: service.repairScreenId, clientRepairScreenId: service.clientRepairScreenId,
-        device: String(primaryData[service.repair.device] ?? ''),
-        secondaryDevice: String(secondaryData[service.repair.device] ?? ''),
-        operatorUrl: `${base}/a/${serviceInstalled.appSlug}?screen=${service.repairScreenId}&row=${primary.id}`,
-        clientUrl: `${base}/a/${serviceInstalled.appSlug}?screen=${service.clientRepairScreenId}&row=${primary.id}`,
+        device: 'Стиральная машина Bosch WLG',
+        secondaryDevice: 'Пылесос Xiaomi G9',
+        vacuumRepairId: vacuum.id,
+        operatorUrl: `${base}/a/${serviceInstalled.appSlug}?screen=${service.repairScreenId}&row=${washer.id}`,
+        clientUrl: `${base}/a/${serviceInstalled.appSlug}?screen=${service.clientRepairScreenId}&row=${washer.id}`,
+        vacuumClientUrl: `${base}/a/${serviceInstalled.appSlug}?screen=${service.clientRepairScreenId}&row=${vacuum.id}`,
         messagesUrl,
         operatorMessagesUrl: messagesUrl,
         clientMessagesUrl: messagesUrl,

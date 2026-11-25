@@ -8,7 +8,7 @@ import { currentAppAccess } from './app-session'
 import { validateAppReferences } from './app-references'
 import { canReadBuilderV2File } from './builder-v2-file-access'
 import { canReadConversationFile } from './conversations'
-import { isCustomerVisitor } from './record-access'
+import { accessViewerFor } from './record-access'
 import { currentMember } from './session'
 import { restrictedTables, tablePermission } from './table-permissions'
 
@@ -28,6 +28,10 @@ function appClaimsTable(published: unknown, tableId: string): boolean {
 /**
  * Single download gate. File keys are identifiers, never authorization.
  * Returns false for anything the principal cannot see — callers map that to 404.
+ *
+ * Status rule: file GET denials are always 404 (existence leak prevention).
+ * Write/upload denials elsewhere may still be 403 when the principal is in
+ * scope but lacks the action (e.g. viewer uploading).
  */
 export async function canReadAttachment(
   record: FileRecord,
@@ -48,8 +52,7 @@ export async function canReadAttachment(
   const published = await db.select().from(apps).where(eq(apps.workspaceId, record.workspaceId))
 
   // Bound to a row/field: authorize via published app policy (V1 or V2). Never
-  // fall through to a blanket workspace-member allow — that bypasses client
-  // ownership and V2 field grants.
+  // fall through to a blanket workspace-member allow for app-claimed tables.
   if (record.tableId && record.rowId && record.fieldId) {
     let claimedByApp = false
     for (const candidate of published) {
@@ -65,12 +68,7 @@ export async function canReadAttachment(
       const app = { ...parsed.data, id: candidate.id, workspaceId: candidate.workspaceId, slug: candidate.slug }
       if (await validateAppReferences(app)) continue
       const { visitor, viewer } = await currentAppAccess(app)
-      const accessViewer = viewer
-        ? { email: viewer.email, company: viewer.company, enrolled: viewer.enrolled, customer: isCustomerVisitor(app, visitor) }
-        : visitor.email
-          ? { email: visitor.email, company: visitor.company, enrolled: visitor.enrolled, customer: isCustomerVisitor(app, visitor) }
-          : null
-      const policy = await appReadPolicy(app, record.tableId, visitor, accessViewer)
+      const policy = await appReadPolicy(app, record.tableId, visitor, accessViewerFor(app, visitor, viewer))
       if (!policy.readable.fields.has(record.fieldId)) continue
       const [row] = await db.select().from(rows)
         .where(and(eq(rows.id, record.rowId), eq(rows.tableId, record.tableId))).limit(1)
@@ -80,19 +78,19 @@ export async function canReadAttachment(
       const linked = Array.isArray(cell) && cell.some((file) => file && typeof file === 'object' && 'key' in file && file.key === record.key)
       if (linked && policy.canRead(data, row)) return true
     }
-    // Spreadsheet / non-app tables: workspace members with table permission.
-    // App-claimed tables stay denied once policy above rejected the principal.
     if (claimedByApp) return false
     const member = await currentMember()
     return Boolean(member?.workspaceId === record.workspaceId && tablePermission(member, record.tableId) !== 'none')
   }
 
-  // Unlinked / staging uploads: uploader only (or restricted-table member on that table).
+  // Spreadsheet / unbound workspace files.
   const member = await currentMember()
   if (member?.workspaceId === record.workspaceId) {
     if (record.tableId) return tablePermission(member, record.tableId) !== 'none'
+    // Restricted members: only their own unbound uploads.
     if (restrictedTables(member)) return record.uploadedBy === member.userId
-    return record.uploadedBy === member.userId
+    // Unrestricted workspace editors/owners may read unbound workspace files.
+    return true
   }
 
   // App visitor previewing their own unlinked upload before save.

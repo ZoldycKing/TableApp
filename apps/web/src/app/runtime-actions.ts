@@ -14,7 +14,7 @@ import { isPlanLimitError } from '@/lib/limits'
 import { assertCurrentModuleState, deleteRow, updateRow, writeRows, RowWriteError } from '@/lib/row-mutations'
 import { insertRow, loadTableFields } from '@/lib/row-write'
 import { canAccessRow, dropOwnerChange, rulesFor } from '@/lib/row-access'
-import { customerRequiresOwnRows, isCustomerVisitor } from '@/lib/record-access'
+import { accessViewerFor, customerRequiresOwnRows } from '@/lib/record-access'
 import type { ActionResult } from './actions'
 import { canCreateWithValues } from '@/lib/form-required'
 
@@ -122,9 +122,7 @@ export async function appUpdateRowAction(
   if (!access.ok) return access
   const { app, viewer, visitor } = access
   const rules = rulesFor(app, tableId, visitor)
-  const accessViewer = viewer
-    ? { email: viewer.email, company: viewer.company, enrolled: viewer.enrolled, customer: isCustomerVisitor(app, visitor) }
-    : null
+  const accessViewer = accessViewerFor(app, visitor, viewer)
   const customer = customerWorkflows(app).find(config => config.tableId === tableId)
   if (customer && !Number.isSafeInteger(baseVersion)) return { ok: false, error: 'Обновите карточку перед изменением.' }
   if (app.booking?.tables.visits === tableId && visitor.enrolled && !Number.isInteger(baseVersion)) return { ok: false, error: 'Обновите запись перед переносом.' }
@@ -157,9 +155,7 @@ export async function appDeleteRowAction(
   if (!access.ok) return access
   const { app, viewer, visitor } = access
   const rules = rulesFor(app, tableId, visitor)
-  const accessViewer = viewer
-    ? { email: viewer.email, company: viewer.company, enrolled: viewer.enrolled, customer: isCustomerVisitor(app, visitor) }
-    : null
+  const accessViewer = accessViewerFor(app, visitor, viewer)
   try {
     await writeRows(app.workspaceId, async (context) => {
       await assertCurrentModuleState(context, app)

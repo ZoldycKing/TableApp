@@ -2,9 +2,9 @@ import { apps, db, rows, tables } from '@tableapp/db'
 import { appSchema, type App } from '@tableapp/schema'
 import { and, eq, isNull } from 'drizzle-orm'
 import { currentAppAccess, type AppViewer } from './app-session'
-import { defaultRole, permits, type AppAction, type Visitor } from './app-roles'
+import { isCustomerRole, permits, type AppAction, type Visitor } from './app-roles'
 import { assertTableAllowed, loadApp } from './app-write-access'
-import { canAccessRow, ownRowsDeclared, rulesFor } from './row-access'
+import { canAccessRow, ownRowsDeclared, rulesFor, type AccessViewer } from './row-access'
 import { authorizeApp, type Authorization } from './authorize'
 import { RowWriteError } from './row-mutations'
 
@@ -16,6 +16,8 @@ import { RowWriteError } from './row-mutations'
  * 2. Resource is loaded scoped to the app's workspace, then role + ownership.
  * 3. Cross-app IDs are rejected.
  * 4. Unknown / invisible resources fail as not-found (callers map to 404).
+ * 5. Workflow writes (stock, order allocation) act server-side on referenced
+ *    rows and must not be confused with generic client row updates.
  */
 
 const NOT_FOUND = 'Объект не найден'
@@ -30,8 +32,30 @@ export class AccessError extends Error {
 }
 
 export function isCustomerVisitor(app: Pick<App, 'roles'>, visitor: Visitor): boolean {
-  const client = defaultRole(app)
-  return Boolean(visitor.authenticated && visitor.roleId && client && visitor.roleId === client)
+  return Boolean(visitor.authenticated && isCustomerRole(app, visitor.roleId))
+}
+
+/** AccessViewer for canAccessRow — marks customer roles for fail-closed empty rules. */
+export function accessViewerFor(
+  app: Pick<App, 'roles'>,
+  visitor: Visitor,
+  viewer: { email: string; company?: string; enrolled?: boolean } | null,
+): AccessViewer {
+  if (viewer) {
+    return {
+      email: viewer.email,
+      company: viewer.company,
+      enrolled: viewer.enrolled,
+      customer: Boolean(viewer.enrolled) || isCustomerVisitor(app, visitor),
+    }
+  }
+  if (!visitor.email) return null
+  return {
+    email: visitor.email,
+    company: visitor.company,
+    enrolled: visitor.enrolled,
+    customer: visitor.enrolled || isCustomerVisitor(app, visitor),
+  }
 }
 
 /** Customer roles fail closed when ownership rules are missing — never allow-all. */
@@ -91,13 +115,8 @@ export async function requireRecordAccess(input: {
     .limit(1)
   if (!found) throw new AccessError('not_found', NOT_FOUND)
 
-  const accessViewer = viewer
-    ? { email: viewer.email, company: viewer.company, enrolled: viewer.enrolled, customer: isCustomerVisitor(app, visitor) }
-    : visitor.email
-      ? { email: visitor.email, company: visitor.company, enrolled: visitor.enrolled, customer: isCustomerVisitor(app, visitor) }
-      : null
   const rules = rulesFor(app, input.tableId, visitor)
-  if (!canAccessRow(rules, accessViewer, found.row.data as Record<string, unknown>)) {
+  if (!canAccessRow(rules, accessViewerFor(app, visitor, viewer), found.row.data as Record<string, unknown>)) {
     throw new AccessError('not_found', NOT_FOUND)
   }
 

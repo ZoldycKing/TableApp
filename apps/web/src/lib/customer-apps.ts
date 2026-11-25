@@ -10,12 +10,27 @@ import { grantedRoles } from './module-access'
 
 export type AccessibleApp = { slug: string; name: string; businessName: string; businessId: string }
 
-/** Platform «Где вы клиент»: name + logo only, no orders/statuses/messages. */
+/** Platform «Где вы клиент»: name + logo/icon only, no orders/statuses/messages. */
 export type ClientBusiness = {
   businessId: string
   businessName: string
   slug: string
   logoUrl?: string
+  /** ProtoIcon name when no logo — never a letter avatar. */
+  icon: string
+}
+
+function clientDirectoryIcon(app: { name?: string; appearance?: { icon?: string }; purpose?: string; modules?: unknown }): string {
+  const explicit = app.appearance?.icon
+  if (explicit && explicit !== 'apps') return explicit
+  const hay = `${app.name ?? ''} ${app.purpose ?? ''}`.toLowerCase()
+  if (/салон|salon|красот|парикм/.test(hay)) return 'scissors'
+  if (/сервис|ремонт|service|мастерск|wrench/.test(hay)) return 'wrench'
+  if (/склад|товар|shop|магазин|продаж/.test(hay)) return 'box'
+  if (/доставк|курьер|delivery/.test(hay)) return 'truck'
+  if (/запис|booking|календар/.test(hay)) return 'calendar'
+  if (Array.isArray(app.modules) && app.modules.length) return 'clipboard'
+  return 'building'
 }
 
 /** Working (non-client) roles only — platform «Мои приложения» must not list end-client businesses. */
@@ -122,6 +137,7 @@ export async function listClientBusinesses(email: string): Promise<ClientBusines
             businessName: profile.success ? profile.data.name : app.name,
             slug: record.slug,
             logoUrl: builderV2LogoUrl(app),
+            icon: clientDirectoryIcon(app),
           }
           break
         }
@@ -132,6 +148,7 @@ export async function listClientBusinesses(email: string): Promise<ClientBusines
             businessName: profile.success ? profile.data.name : app.name,
             slug: record.slug,
             logoUrl: builderV2LogoUrl(app),
+            icon: clientDirectoryIcon(app),
           }
         }
         continue
@@ -150,6 +167,7 @@ export async function listClientBusinesses(email: string): Promise<ClientBusines
           businessId: entry.workspaceId,
           businessName: profile.success ? profile.data.name : app.name,
           slug: record.slug,
+          icon: clientDirectoryIcon(app),
         }
         if (isClient || preferred?.id === record.id) {
           chosen = next

@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { appsForStaff, businessesForClient } from '@/app/auth-actions'
+import { ProtoIcon } from '@/components/builder/prototype/icons'
 import { StaffSignOut } from '@/components/staff-sign-out'
 import { currentStaffEmail } from '@/lib/app-session'
 import { PRIVATE_PAGE } from '@/lib/seo'
@@ -18,7 +19,7 @@ export const metadata = { title: 'Мои приложения', ...PRIVATE_PAGE 
  * Platform account home.
  *
  * Working apps (owner/staff) stay in «Ваши приложения». Client activity is a
- * separate «Где вы клиент» list: business name + logo + link only — never
+ * separate «Где вы клиент» list: business name + logo/icon + link only — never
  * orders, statuses, messages or counts from those businesses.
  */
 export default async function MyAppsPage() {
@@ -80,13 +81,13 @@ export default async function MyAppsPage() {
                   className="flex items-center gap-3 rounded-xl border border-sand-200 bg-white px-4 py-3 text-sm shadow-soft transition-all hover:-translate-y-0.5 hover:border-sage-300 hover:shadow-lift"
                 >
                   <span
-                    className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-sage-100 text-sm font-semibold text-sage-800"
+                    className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-sage-100 text-sage-800"
                     aria-hidden
                   >
                     {business.logoUrl ? (
                       <img src={business.logoUrl} alt="" width={40} height={40} className="h-full w-full object-cover" />
                     ) : (
-                      business.businessName.trim().charAt(0).toUpperCase() || '·'
+                      <ProtoIcon name={business.icon} size={22} />
                     )}
                   </span>
                   <span className="min-w-0 flex-1 break-words font-medium">{business.businessName}</span>

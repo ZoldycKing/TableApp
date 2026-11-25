@@ -8,6 +8,7 @@ import {
   rowReach,
   defaultRole,
   homeScreenFor,
+  isCustomerRole,
   permits,
   visitorFor,
   roleName,
@@ -903,6 +904,57 @@ describe('до каких строк человек может дойти', () =
     expect(reach.kind).toBe('gated')
     if (reach.kind !== 'gated') return
     expect(reach.allows({ fld_done: false })).toBe(true)
+  })
+})
+
+describe('isCustomerRole', () => {
+  it('не считает рабочие роли клиентами, даже если они default', () => {
+    const warehouse = app({
+      roles: [
+        { id: 'staff', name: 'Кладовщик', isDefault: true },
+        { id: 'manager', name: 'Владелец', isDefault: false },
+      ],
+    })
+    expect(isCustomerRole(warehouse, 'staff')).toBe(false)
+    expect(isCustomerRole(warehouse, 'manager')).toBe(false)
+    expect(isCustomerRole(warehouse, 'owner')).toBe(false)
+  })
+
+  it('считает client и кастомный default при наличии рабочей роли клиентами', () => {
+    const clinic = app({
+      roles: [
+        { id: 'rol_patient', name: 'Пациент', isDefault: true },
+        { id: 'rol_doctor', name: 'Врач', isDefault: false },
+      ],
+    })
+    expect(isCustomerRole(clinic, 'rol_patient')).toBe(true)
+    expect(isCustomerRole(clinic, 'rol_doctor')).toBe(false)
+    expect(isCustomerRole(clinic, 'client')).toBe(true)
+  })
+
+  it('запрещает запись клиенту без правил владения, но не кладовщику', () => {
+    const warehouse = app({
+      roles: [
+        { id: 'staff', name: 'Кладовщик', isDefault: true },
+        { id: 'manager', name: 'Владелец', isDefault: false },
+      ],
+      screens: [
+        { ...createScreen, access: { public: false, publicFields: [], roles: ['staff', 'manager'], allowDelete: false } },
+      ],
+      rowAccessRules: [],
+    })
+    expect(permits(warehouse, 'tbl_1', 'create', asRole('staff'))).toBe(true)
+    const shop = app({
+      roles: [
+        { id: 'client', name: 'Клиент', isDefault: true },
+        { id: 'staff', name: 'Сотрудник', isDefault: false },
+      ],
+      screens: [
+        { ...createScreen, access: { public: false, publicFields: [], roles: ['client', 'staff'], allowDelete: false } },
+      ],
+      rowAccessRules: [],
+    })
+    expect(permits(shop, 'tbl_1', 'create', asRole('client'))).toBe(false)
   })
 })
 

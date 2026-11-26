@@ -108,7 +108,20 @@
 .surface { container-type: inline-size; width: 100%; max-width: 960px; min-height: 100%; margin-inline: auto; border: 1px solid var(--v2-line, #d4ddcc); border-radius: 16px; background: var(--v2-bg, #f8faf6); overflow: clip; }
 .previewStage[data-device="mobile"] .surface { width: min(390px, 100%); max-width: 100%; margin-inline: auto; border-radius: 28px; box-shadow: 0 0 0 8px #141516; overflow: hidden; }
 @media (max-width: 780px) {
+  .header { min-height: 44px; padding: 6px 10px; gap: 8px; flex-wrap: nowrap; }
+  .mainNav { min-height: 40px; padding-inline: 8px; }
+  .mainNav > button { min-height: 40px; padding-block: 4px; gap: 6px; }
+  .previewToolbar { min-height: 40px; padding: 6px 8px; }
+  .mobilePanels { min-height: 36px; padding-block: 2px; }
   .previewStage { padding: 8px; }
+  .previewStage[data-device='mobile'] { display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  .previewStage[data-device='mobile'] .surface {
+    width: min(390px, 100%);
+    height: 100%;
+    max-height: 100%;
+    min-height: 0;
+    flex: none;
+  }
   .appearancePane { grid-template-columns: 1fr; padding: 16px; }
 }
 .palette { display: grid; gap: 6px; }
@@ -281,8 +294,9 @@ button.recordRow:hover { border-color: var(--v2-accent, #8eaa81); background: va
   .mobileBack { display: flex; margin-bottom: 16px; }
 }
 @media (max-width: 700px) {
-  .header { flex-wrap: wrap; gap: 8px; padding: 12px; }
+  .header { flex-wrap: nowrap; gap: 8px; padding: 6px 10px; min-height: 44px; }
   .brandArea { flex: 1; }
+  .headerActions { width: auto; }
   .brand { width: 32px; overflow: hidden; }
   .brand > * { width: max-content; }
   .headerDivider { display: none; }

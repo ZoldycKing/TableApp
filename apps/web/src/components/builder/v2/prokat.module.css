@@ -53,9 +53,17 @@
 .dayDetail dt { color: var(--sc-text-3, #6E7076); font-size: 12px; }
 .dayDetail dd { margin: 0; }
 @container builder-app (max-width: 800px) {
-  .dayLayout { grid-template-columns: 1fr; }
+  .dayLayout, .dayLayout[data-open] { grid-template-columns: minmax(0, 1fr); position: relative; }
   .daySummary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .dayDetail { border-left: 0; border-top: 1px solid var(--sc-border-subtle, #ECECE8); }
+  .dayLayout[data-open] .dayDetail {
+    position: absolute; inset: 0; z-index: 4; overflow: auto;
+    gap: 8px; padding: 12px 12px 20px;
+    border: 0; border-radius: 12px; background: var(--sc-bg-elevated, #fff);
+    box-shadow: 0 0 0 1px rgba(20, 21, 22, 0.08);
+  }
+  .dayLayout[data-open] .dayDetail dl { gap: 4px; }
+  .dayLayout[data-open] .dayDetail dl > div { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+  .dayLayout[data-open] .dayDetail dd { text-align: right; }
   .settingsLayout { grid-template-columns: 1fr; }
   .settingsLayout aside { position: static; }
   .stepper { flex-flow: row wrap; gap: 10px 16px; }
@@ -1857,7 +1865,9 @@
 .bookingFoot { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end; }
 .bookingFoot > span { margin-right: auto; font-family: var(--font-scatta-mono), ui-monospace, monospace; }
 .bookingForm { display: grid; gap: 12px; }
-.bookingDates { display: grid; gap: 12px; align-content: start; }
+.bookingDates { display: grid; gap: 8px; align-content: start; padding-bottom: 24px; }
+.bookingDates :global(button[class*='day']) { height: 30px; }
+.bookingDates :global(button[role='switch']) { color: #141516; margin: 0 0 16px; }
 .bookingDates .deadlineRow { grid-template-columns: minmax(0, 1fr); }
 .bookingForm .itemGrid { max-height: none; overflow: visible; }
 @container builder-app (max-width: 719px) {

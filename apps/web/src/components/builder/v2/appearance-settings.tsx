@@ -133,9 +133,20 @@ export function BuilderV2AppearanceSettings({ app, onChange, onScreens, onUpload
       }
     }
   }
-  return <div className={styles.inspectorContent}>
+  const [section, setSection] = useState<'look' | 'booking' | 'shop'>('look')
+  return <div className={`${styles.inspectorContent} ${ui.settingsLayout}`}>
+    <nav className={ui.settingsNav} aria-label="Разделы настроек">
+      <button type="button" aria-current={section === 'look' ? 'page' : undefined} onClick={() => setSection('look')}>Оформление</button>
+      {app.booking ? <button type="button" aria-current={section === 'booking' ? 'page' : undefined} onClick={() => setSection('booking')}>Запись</button> : null}
+      {app.shop ? <button type="button" aria-current={section === 'shop' ? 'page' : undefined} onClick={() => setSection('shop')}>Магазин</button> : null}
+    </nav>
+    <aside className={ui.clientPreview} aria-label="Так видит клиент">
+      <small>Так видит клиент</small>
+      <strong>{app.name}</strong>
+      <span style={{ background: 'var(--sc-accent, #266DF0)' }}>Записаться</span>
+    </aside>
     <div className={styles.inspectorHeading}><span className={styles.elementMark}><ProtoIcon name="palette"/></span><div><span>Всё приложение</span><h2>Оформление</h2></div></div>
-    <fieldset className={shell.logoField} disabled={pending}>
+    {section === 'look' ? <><fieldset className={shell.logoField} disabled={pending}>
       <legend>Логотип приложения</legend>
       <div className={shell.logoHint}>
         {logo && <BuilderV2AppMark logo={logo} icon={appearance.icon} />}
@@ -161,8 +172,8 @@ export function BuilderV2AppearanceSettings({ app, onChange, onScreens, onUpload
     <Select label="Плотность списка" value={appearance.density ?? 'regular'} onValue={value => setAppearance({ density: value === 'compact' ? 'compact' : 'regular' })} options={[{ value: 'regular', label: 'Обычная' }, { value: 'compact', label: 'Компактная' }]} />
     <Select label="Скругление" value={appearance.corners ?? 'rounded'} onValue={value => setAppearance({ corners: value === 'subtle' ? 'subtle' : 'rounded' })} options={[{ value: 'rounded', label: 'Обычное' }, { value: 'subtle', label: 'Минимальное' }]} />
     <p className={ui.hint}>На телефоне меню находится снизу. Изменения видны здесь сразу, а пользователям — после публикации.</p>
-    {app.shop && <ShopStockSettings app={app} onChange={onChange} />}
-    {app.booking && <BookingRulesSettings app={app} onChange={onChange} />}
-    <button type="button" className={styles.secondary} onClick={onScreens}>Настроить разделы<ProtoIcon name="arrow"/></button>
+    <button type="button" className={styles.secondary} onClick={onScreens}>Настроить разделы<ProtoIcon name="arrow"/></button></> : null}
+    {section === 'shop' && app.shop ? <ShopStockSettings app={app} onChange={onChange} /> : null}
+    {section === 'booking' && app.booking ? <BookingRulesSettings app={app} onChange={onChange} /> : null}
   </div>
 }

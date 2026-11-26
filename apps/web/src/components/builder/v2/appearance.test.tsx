@@ -95,6 +95,7 @@ it('saves salon booking rules from the appearance settings', () => {
   let current = app
   const onChange = vi.fn((next: typeof app) => { current = next })
   const view = render(<BuilderV2AppearanceSettings app={current} onChange={onChange} onScreens={vi.fn()} onUploadLogo={vi.fn()} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Запись' }))
   expect(screen.getByRole('group', { name: 'Правила записи' })).toBeTruthy()
   expect(screen.getByRole('heading', { name: 'Правила записи' })).toBeTruthy()
   const show = () => view.rerender(<BuilderV2AppearanceSettings app={current} onChange={onChange} onScreens={vi.fn()} onUploadLogo={vi.fn()} />)

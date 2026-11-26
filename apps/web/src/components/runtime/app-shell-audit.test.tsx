@@ -394,7 +394,7 @@ describe('browser audit runtime integration regressions', () => {
 
     fireEvent.click(ui.getByRole('button', { name: 'Загрузить актуальные данные' }))
     await waitFor(() => expect(JSON.parse(sessionStorage.getItem(key)!).drafts[draftId].booking.baseVersion).toBe(2))
-    await waitFor(() => expect(ui.getByLabelText('Дата')).toHaveProperty('value', '2099-10-11'))
+    await waitFor(() => expect(ui.getByLabelText('Дата')).toHaveProperty('value', '11.10.2099'))
     fireEvent.click(await ui.findByRole('button', { name: '13:00' }))
     expect(JSON.parse(sessionStorage.getItem(key)!).drafts[draftId].booking.baseVersion).toBe(2)
     expect(ui.queryByRole('button', { name: 'Загрузить актуальные данные' })).toBeNull()

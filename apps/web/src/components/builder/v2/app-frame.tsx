@@ -42,7 +42,8 @@ export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,childre
   const calendarScreen = app.screens.find(screen => screen.id === screenId)?.rootIds.some(id => app.nodes.some(node => node.id === id && node.type === 'team_calendar'))
   if (calendarScreen) title = ''
   const screens=builderV2Menu(app),[more,setMore]=useState(false),menuId=useId(),root=useRef<HTMLDivElement>(null),trigger=useRef<HTMLButtonElement>(null),navItems=useRef<HTMLDivElement>(null)
-  const staticFit=screens.length>5?4:screens.length
+  const phoneCap=5
+  const staticFit=screens.length>phoneCap?phoneCap:screens.length
   const [fit,setFit]=useState(staticFit)
   const catalogDetail = Boolean(app.screens.find(screen => screen.id === screenId)?.catalog)
   const body = useRef<HTMLDivElement>(null)
@@ -81,8 +82,8 @@ export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,childre
     if(!row)return
     const measure=()=>{
       const phoneNav=Boolean(phone||(typeof window!=='undefined'&&typeof window.matchMedia==='function'&&window.matchMedia('(max-width: 720px)').matches))
-      const hardCap=phoneNav?4:screens.length
-      if(navigation==='sidebar'||row.clientWidth<8){setFit(navigation==='sidebar'?screens.length:Math.min(hardCap,screens.length>5?4:screens.length));return}
+      const hardCap=phoneNav?phoneCap:screens.length
+      if(navigation==='sidebar'||row.clientWidth<8){setFit(navigation==='sidebar'?screens.length:Math.min(hardCap,screens.length>phoneCap?phoneCap:screens.length));return}
       const tabs=[...row.querySelectorAll<HTMLElement>(':scope > [data-nav-item]')]
       const extra=row.querySelector<HTMLElement>(':scope > [data-nav-more]')
       const reveal=(count:number)=>{

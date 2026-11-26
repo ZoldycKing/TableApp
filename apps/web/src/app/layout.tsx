@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { Metrika } from '@/components/marketing/metrika'
 import type { ReactNode } from 'react'
 import './globals.css'
-import { onest } from './fonts'
+import { onest, piazzolla, plexMono, plexSans, plexSansItalic } from './fonts'
 import { SITE_URL } from '@/lib/site-url'
 import { AgentationDevtools } from '@/components/agentation-devtools'
 
@@ -54,12 +54,12 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html
       lang="ru"
-      className={onest.variable}
+      className={`${plexSans.variable} ${plexSansItalic.variable} ${plexMono.variable} ${piazzolla.variable} ${onest.variable}`}
       // Плавная прокрутка нужна для якорей на лендинге, но не при переходе
       // между страницами: без этой отметки Next гасит её целиком.
       data-scroll-behavior="smooth"
     >
-      <body className={onest.className}>
+      <body className={plexSans.className}>
         {children}
         <Metrika />
         {process.env.NODE_ENV === 'development' ? <AgentationDevtools /> : null}

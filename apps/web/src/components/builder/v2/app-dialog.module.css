@@ -108,13 +108,13 @@
 }
 .footer :global(button) { width: 100%; }
 .panel[data-placement='center'] {
-  /* Fixed to the viewport so a tall app frame cannot push the footer off-screen. */
-  position: fixed;
-  top: 24px;
+  /* Stay inside the app frame. 100dvh is taller than a phone mockup and pushed the footer past its edge. */
+  position: absolute;
+  top: 16px;
   left: 50%;
   bottom: auto;
-  width: min(32rem, calc(100vw - 32px));
-  max-height: calc(100dvh - 48px);
+  width: min(32rem, calc(100% - 32px));
+  max-height: min(calc(100% - 32px), calc(100dvh - 32px));
   transform: translateX(-50%);
 }
 .panel[data-placement='center'] .body {

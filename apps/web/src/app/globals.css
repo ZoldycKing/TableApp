@@ -7,9 +7,16 @@
  * Tailwind @theme aliases keep existing sage/sand/ink utility classes in sync.
  */
 @theme {
-  --font-sans: var(--font-onest), var(--sc-font);
-  --font-display: var(--font-onest), var(--sc-font);
-  --font-accent: var(--font-onest), var(--sc-font);
+  --font-sans: var(--font-scatta-sans), var(--sc-font);
+  --font-display: var(--font-scatta-sans), var(--sc-font);
+  --font-mono: var(--font-scatta-mono), var(--sc-font-mono);
+  --font-accent: var(--font-piazzolla), var(--sc-font);
+
+  --color-paper: var(--sc-bg-page);
+  --color-wash-blue: var(--sc-bg-blue);
+  --color-wash-beige: var(--sc-bg-beige);
+  --color-graphite: var(--sc-bg-dark);
+  --color-hairline: var(--sc-border);
   --font-weight-extrabold: 700;
 
   --color-sand-50: var(--sc-bg-page);
@@ -43,8 +50,8 @@
   --radius-xl: var(--sc-radius-lg);
   --radius-2xl: var(--sc-radius-xl);
 
-  --shadow-soft: 0 1px 2px rgb(21 21 26 / 0.04), 0 8px 24px -12px rgb(21 21 26 / 0.10);
-  --shadow-lift: 0 2px 4px rgb(21 21 26 / 0.05), 0 18px 40px -18px rgb(21 21 26 / 0.16);
+  --shadow-soft: var(--sc-shadow-hairline);
+  --shadow-lift: var(--sc-shadow-float);
 }
 
 :root {
@@ -81,20 +88,21 @@ body {
 body {
   background: var(--sc-bg-page);
   color: var(--sc-text);
-  font-family: var(--font-onest), var(--sc-font);
+  font-family: var(--font-scatta-sans), var(--sc-font);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
 h1, h2, h3 {
-  font-family: var(--font-onest), var(--sc-font);
-  letter-spacing: -0.018em;
+  font-family: var(--font-scatta-sans), var(--sc-font);
+  font-stretch: 90%;
+  letter-spacing: -0.03em;
 }
 
 .accent-word {
-  font-family: var(--font-onest), var(--sc-font);
-  font-style: normal;
-  font-weight: 600;
+  font-family: var(--font-piazzolla), var(--sc-font);
+  font-style: italic;
+  font-weight: 450;
   letter-spacing: -0.01em;
 }
 

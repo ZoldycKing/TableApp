@@ -50,7 +50,7 @@ describe('new appointment from an empty slot', () => {
         </TeamCalendarDemoContext>
       </BookingJourneyProvider>,
     )
-    fireEvent.change(await screen.findByLabelText('Дата календаря'), { target: { value: day } })
+    fireEvent.change(await screen.findByLabelText('Дата календаря'), { target: { value: day.split('-').reverse().join('.') } })
     fireEvent.click(await screen.findByRole('button', { name: `Добавить запись: Оля, ${day}, 09:00` }))
     const dialog = await screen.findByRole('dialog', { name: 'Новая запись' })
     expect(dialog.textContent).toContain('Оля')

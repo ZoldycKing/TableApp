@@ -1,5 +1,10 @@
 # Локальные шрифты
 
+IBM Plex Sans (оси веса и ширины), IBM Plex Mono и курсив Piazzolla лежат здесь
+же и подключаются через `next/font/local`. Наборы ужаты до латиницы и кириллицы
+(FontTools `pyftsubset`, woff2). Лицензия — SIL OFL, тексты рядом:
+`ibm-plex-OFL.txt`, `ibm-plex-mono-OFL.txt`, `piazzolla-OFL.txt`.
+
 Inter, Unbounded и курсивная Literata поставляются вместе с приложением через
 `next/font/local`. Сборка не скачивает CSS или файлы Google Fonts. Файлы сохраняют
 полный набор символов исходных шрифтов, включая кириллицу и латиницу.

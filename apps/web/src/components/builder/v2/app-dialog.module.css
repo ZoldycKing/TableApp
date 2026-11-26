@@ -132,8 +132,19 @@
   padding: 10px 16px 14px;
 }
 @container builder-app (max-width: 720px) {
+  .panel[data-placement='center'] {
+    top: 8px;
+    height: calc(100% - 85px);
+    max-height: calc(100% - 85px);
+  }
   .body[data-split] :global(form) { max-height: none; overflow: visible; padding-bottom: 12px; }
-  .panel[data-placement='center'] .body[data-split] { max-height: 42dvh; overflow: auto; padding-bottom: 12px; }
+  .panel[data-placement='center'] .body[data-split] {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none;
+    overflow: auto;
+    padding-bottom: 12px;
+  }
 }
 @container builder-app (max-width: 560px) {
   .panel[data-placement='sheet'] {

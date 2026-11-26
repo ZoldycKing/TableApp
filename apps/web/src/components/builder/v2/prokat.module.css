@@ -16,8 +16,13 @@
 .dayColumns { display: grid; grid-template-columns: 72px minmax(0, 1fr); min-width: 0; overflow: hidden; }
 .dayHours { position: relative; height: 560px; margin-top: 72px; overflow: visible; }
 .dayHours span { position: absolute; right: 8px; left: auto; transform: translateY(-50%); color: var(--sc-text-3, #6E7076); font-family: var(--font-scatta-mono), ui-monospace, monospace; font-size: 11px; white-space: nowrap; }
-.dayScroll { display: flex; gap: 8px; overflow-x: auto; min-width: 0; padding-bottom: 8px; }
-.dayColumn { flex: 0 0 168px; min-width: 168px; }
+.dayScroll { display: flex; gap: 8px; overflow-x: auto; min-width: 0; padding-bottom: 8px; container-type: inline-size; scroll-snap-type: x proximity; }
+.dayColumn { flex: 0 0 calc(100cqi - 28px); min-width: 168px; max-width: calc(100cqi - 28px); scroll-snap-align: start; }
+@container (min-width: 344px) { .dayColumn { flex-basis: calc((100cqi - 8px) / 2); min-width: 0; } }
+@container (min-width: 520px) { .dayColumn { flex-basis: calc((100cqi - 16px) / 3); } }
+@container (min-width: 696px) { .dayColumn { flex-basis: calc((100cqi - 24px) / 4); } }
+@container (min-width: 872px) { .dayColumn { flex-basis: calc((100cqi - 32px) / 5); } }
+@container (min-width: 1048px) { .dayColumn { flex-basis: calc((100cqi - 40px) / 6); } }
 .dayColumn header { display: grid; grid-template-columns: 22px minmax(0, 1fr); column-gap: 6px; align-items: center; min-height: 64px; }
 .dayColumn header strong, .dayColumn header small { overflow-wrap: anywhere; }
 .dayColumn header strong { font-size: 13px; font-weight: 550; }
@@ -53,8 +58,8 @@
   .dayDetail { border-left: 0; border-top: 1px solid var(--sc-border-subtle, #ECECE8); }
   .settingsLayout { grid-template-columns: 1fr; }
   .settingsLayout aside { position: static; }
-  .stepper { flex-direction: column; gap: 8px; }
-  .stepper li { flex: none; white-space: normal; overflow-wrap: anywhere; }
+  .stepper { flex-flow: row wrap; gap: 10px 16px; }
+  .stepper li { flex: 1 1 calc(50% - 16px); min-width: 0; white-space: normal; overflow-wrap: anywhere; }
 }
 .phoneAdd {
   position: absolute; right: 16px; bottom: 196px; z-index: 6;
@@ -1820,7 +1825,11 @@
 .clientTable .mono { font-family: var(--font-scatta-mono), ui-monospace, monospace; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .cardSplit { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(220px, .8fr); gap: 16px; min-width: 0; }
 .stepper { display: flex; gap: 0; margin: 10px 0; padding: 0; list-style: none; }
-.stepper li { flex: 1; display: grid; gap: 6px; color: var(--sc-text-3, #6E7076); font-size: 12px; }
+.stepper li { flex: 1; display: grid; gap: 6px; min-width: 0; color: var(--sc-text-3, #6E7076); font-size: 12px; }
+@container builder-app (max-width: 800px) {
+  .stepper { flex-flow: row wrap; gap: 10px 16px; }
+  .stepper li { flex: 1 1 calc(50% - 16px); white-space: normal; overflow-wrap: anywhere; }
+}
 .stepper i { display: block; height: 3px; border-radius: 2px; background: var(--sc-border, #E3E3DF); }
 .stepper li[data-on] { color: var(--sc-text, #141516); }
 .stepper li[data-on] i { background: #266DF0; }
@@ -1852,7 +1861,7 @@
 .bookingDates .deadlineRow { grid-template-columns: minmax(0, 1fr); }
 .bookingForm .itemGrid { max-height: none; overflow: visible; }
 @container builder-app (max-width: 719px) {
-  .bookingForm { display: flex; flex-direction: column; padding-bottom: 132px; }
+  .bookingForm { display: flex; flex-direction: column; padding-bottom: 16px; }
   .bookingDates { order: 2; }
 }
 @container builder-app (min-width: 720px) {

@@ -812,20 +812,20 @@ function SettingsScreen(props: ScreenProps) {
   const owner = props.actor.roleIds.includes('owner')
   const [holdMinutes, setHoldMinutes] = useState<ProkatHoldAfterStartMinutes>(() => prokatHoldMinutes(props.kit))
   useEffect(() => { setHoldMinutes(prokatHoldMinutes(props.kit)) }, [props.kit.holdAfterStartMinutes])
-  const [section, setSection] = useState<'hold' | 'money' | 'client'>('hold')
   const catalog = catalogItems(props)
+  const show = (id: string) => document.getElementById(id)?.scrollIntoView({ block: 'nearest' })
   return <div className={css.root} data-prokat-root data-prokat-screen="settings">
     <ListScreenShell title="Настройки" meta="Правила, которые видит клиент.">
       <div className={css.settingsLayout}>
         <nav aria-label="Разделы настроек">
-          <button type="button" aria-current={section === 'hold' ? 'page' : undefined} onClick={() => setSection('hold')}>Бронь</button>
-          <button type="button" aria-current={section === 'money' ? 'page' : undefined} onClick={() => setSection('money')}>Залог и штраф</button>
-          <button type="button" aria-current={section === 'client' ? 'page' : undefined} onClick={() => setSection('client')}>Клиенту</button>
+          <button type="button" onClick={() => show('prokat-settings-hold')}>Бронь</button>
+          <button type="button" onClick={() => show('prokat-settings-money')}>Залог и штраф</button>
+          <button type="button" onClick={() => show('prokat-settings-client')}>Клиенту</button>
         </nav>
         <div>
-          {section === 'hold' ? (owner ? <DetailSection title="Удержание брони"><HoldSettingControl {...props} value={holdMinutes} onSaved={setHoldMinutes} /><p className={css.quiet}>Окно общее. У предмета может быть своё — в карточке предмета.</p></DetailSection> : <p className={css.quiet}>Настройки меняет руководитель.</p>) : null}
-          {section === 'money' ? <DetailSection title="Залог и штраф по предметам"><ul className={css.noteList}>{catalog.map(item => <li key={item.id}><b>{item.name}</b><span>Залог {formatMoneyOrZero(item.deposit)} · {item.lateFeeMode || 'штраф по тарифу'}{item.lateFeeValue ? ` · ${item.lateFeeValue}` : ''}{item.lateFeeGraceHours ? ` · льгота ${ruCount(item.lateFeeGraceHours, 'час', 'часа', 'часов')}` : ''}</span></li>)}</ul></DetailSection> : null}
-          {section === 'client' ? <DetailSection title="Что видно клиенту"><p>Каталог, срок и сумма. Подтверждение уходит в переписку, если оно включено в форме брони.</p></DetailSection> : null}
+          <div id="prokat-settings-hold">{owner ? <DetailSection title="Удержание брони"><HoldSettingControl {...props} value={holdMinutes} onSaved={setHoldMinutes} /><p className={css.quiet}>Окно общее. У предмета может быть своё — в карточке предмета.</p></DetailSection> : <p className={css.quiet}>Настройки меняет руководитель.</p>}</div>
+          <div id="prokat-settings-money"><DetailSection title="Залог и штраф по предметам"><ul className={css.noteList}>{catalog.map(item => <li key={item.id}><b>{item.name}</b><span>{item.tariff} {formatMoneyOrZero(item.rate)} · залог {formatMoneyOrZero(item.deposit)} · {item.lateFeeMode || 'штраф по тарифу'}{item.lateFeeValue ? ` ${item.lateFeeValue}` : ''}{item.lateFeeGraceHours ? ` · льгота ${ruCount(item.lateFeeGraceHours, 'час', 'часа', 'часов')}` : ''}{item.lateFeeCapPerDay ? ` · потолок ${formatMoneyOrZero(item.lateFeeCapPerDay)}` : ''}</span></li>)}</ul></DetailSection></div>
+          <div id="prokat-settings-client"><DetailSection title="Что видно клиенту"><p>Каталог, срок и сумма. Подтверждение уходит в переписку, если оно включено в форме брони. Отдельных настроек графика и уведомлений в шаблоне нет.</p></DetailSection></div>
         </div>
         <aside aria-label="Так видит клиент">
           <small>Так видит клиент</small>

@@ -11,6 +11,8 @@ import { ruCount, ruPlural } from '@/components/ui/format'
 import { InlineRangeCalendar } from '@/components/ui/pickers'
 import { Select } from '@/components/ui/select'
 import { ProkatDayBoard } from './prokat-day-board'
+import { ClientCardView, ClientsView, useClientsNarrow, type ClientTab } from './prokat-clients'
+import { demoClientById, prokatDemoCard, prokatDemoClients, type DemoCard, type DemoCardMessage, type DemoCardStep, type DemoClient, type PillTone } from '@/lib/prokat-clients-demo'
 import { buildProkatDaySchedule, PROKAT_SCHEDULE_AT } from '@/lib/prokat-day-demo'
 import type { ConversationPage } from '@/lib/conversation-types'
 import { BuilderV2AttachmentInput } from './attachment-input'
@@ -2266,170 +2268,194 @@ function TimelineScreen(props: ScreenProps) {
   </div>
 }
 
-function ClientDirectory(props: ScreenProps) {
-  const [search, setSearch] = useState('')
-  const [tab, setTab] = useState<'all' | 'open' | 'none'>('all')
-  const [sort, setSort] = useState('name')
-  const [picked, setPicked] = useState<string[]>([])
-  const [focus, setFocus] = useState<string | null>(null)
-  const [importNote, setImportNote] = useState('')
-  const needle = search.trim().toLowerCase()
-  const openStatuses = ['Заявка', 'Подтверждена', 'Выдано', 'Просрочен возврат']
-  const rows = props.of(props.kit.clientsTableId).map(row => {
+const OPEN_STATUSES = ['Заявка', 'Подтверждена', 'Выдано', 'Просрочен возврат']
+
+function pillTone(status: string): PillTone {
+  if (status === 'Заявка') return 'wt'
+  if (status === 'Подтверждена' || status === 'Выдано') return 'nw'
+  if (status === 'Просрочен возврат') return 'bd'
+  if (status === 'Возвращено') return 'ok'
+  return 'mu'
+}
+
+function stampKey(value: string) {
+  const match = formatProkatDateTime(value).match(/^(\d\d)\.(\d\d)\.(\d{4}), (\d\d):(\d\d)$/)
+  return match ? Number(`${match[3]}${match[2]}${match[1]}${match[4]}${match[5]}`) : 0
+}
+
+function nowStamp(now: number) {
+  const wall = instantToWallClock(new Date(now).toISOString(), PROKAT_ZONE)
+  const date = wall?.date.replaceAll('-', '') ?? '20261127'
+  const time = (wall?.time ?? '12:00').replace(':', '')
+  return Number(`${date}${time}`)
+}
+
+function shiftStamp(key: number, days: number) {
+  const text = String(key).padStart(12, '0')
+  const moved = new Date(Date.UTC(Number(text.slice(0, 4)), Number(text.slice(4, 6)) - 1, Number(text.slice(6, 8)) + days))
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return Number(`${moved.getUTCFullYear()}${pad(moved.getUTCMonth() + 1)}${pad(moved.getUTCDate())}0000`)
+}
+
+function realClients(props: ScreenProps): DemoClient[] {
+  const bookings = bookingItems(props)
+  return props.of(props.kit.clientsTableId).map(row => {
     const email = textOf(row.values[props.kit.client.email])
-    const history = bookingItems(props).filter(item => item.clientEmail.toLowerCase() === email.toLowerCase())
-    const ordered = [...history].sort((a, b) => Date.parse(a.from) - Date.parse(b.from))
-    const next = ordered.find(item => openStatuses.includes(item.status) && Date.parse(item.from) >= props.now) ?? ordered.find(item => openStatuses.includes(item.status))
-    const sum = history.reduce((total, item) => total + item.price, 0)
-    return { row, email, name: textOf(row.values[props.kit.client.name]) || 'Без имени', history, next, sum, phone: textOf(row.values[props.kit.client.phone]) }
-  }).filter(item => {
-    if (!needle) return true
-    return [item.name, item.email, item.phone].join(' ').toLowerCase().includes(needle)
+    const history = bookings.filter(item => item.clientEmail.toLowerCase() === email.toLowerCase() && email)
+      .sort((a, b) => Date.parse(b.from) - Date.parse(a.from))
+    const last = history[0]
+    const open = history.filter(item => OPEN_STATUSES.includes(item.status))
+    const next = [...open].sort((a, b) => Date.parse(a.from) - Date.parse(b.from)).find(item => Date.parse(item.from) >= props.now) ?? open[0]
+    const stamp = last ? formatProkatDateTime(last.from) : ''
+    const [lastDate = '', lastTime = ''] = stamp.split(', ')
+    const first = history[history.length - 1]
+    const done = history.filter(item => item.status === 'Возвращено').length
+    return {
+      id: row.id,
+      name: textOf(row.values[props.kit.client.name]) || 'Без имени',
+      phone: textOf(row.values[props.kit.client.phone]),
+      email,
+      lastDate: last ? lastDate : '',
+      lastTime: last ? lastTime : '',
+      lastKey: last ? stampKey(last.from) : 0,
+      since: first ? formatProkatDate(first.from) : '',
+      sinceKey: first ? stampKey(first.from) : 0,
+      kind: { label: last ? (last.itemNames[0] ?? last.title) : '', tone: open.some(item => item.status === 'Просрочен возврат') ? 'y' as const : open.length ? 'b' as const : 'n' as const },
+      used: history.length > 1 ? { done, total: history.length } : null,
+      paid: history.reduce((total, item) => total + item.price, 0),
+      next: next ? formatProkatDateTime(next.from).replace(', ', ' ') : null,
+      doing: last ? `${last.itemNames[0] ?? last.title} · ${last.status.toLowerCase()}` : 'Пока без броней',
+      open: open.length > 0,
+    }
   })
-  const counts = { all: rows.length, open: rows.filter(item => item.next).length, none: rows.filter(item => !item.history.length).length }
-  const visible = rows.filter(item => tab === 'all' ? true : tab === 'open' ? Boolean(item.next) : !item.history.length).sort((a, b) => {
-    if (sort === 'sum') return b.sum - a.sum
-    if (sort === 'next') return Date.parse(a.next?.from ?? '') - Date.parse(b.next?.from ?? '')
-    return a.name.localeCompare(b.name, 'ru')
-  })
-  const shown = visible.find(item => item.row.id === focus) ?? visible[0]
-  const toggle = (id: string, on: boolean) => setPicked(current => on ? [...current, id] : current.filter(item => item !== id))
-  return <div className={css.root} data-prokat-root data-prokat-screen="clients">
-    <ListScreenShell title="Клиенты" meta="Кто брал оборудование в прокат." actions={<button type="button" className={css.quietButton} onClick={() => setImportNote('Импорт читает таблицу из кабинета. Отдельный файл на этом экране не подменяет записи.')}>Импорт</button>}>
-      <div className={css.clientTabs} role="tablist" aria-label="Списки клиентов">
-        {([['all', 'Все', counts.all], ['open', 'С записью', counts.open], ['none', 'Без визитов', counts.none]] as const).map(([id, label, count]) => (
-          <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)}>{label}<em>{count}</em></button>
-        ))}
-      </div>
-      <div className={css.clientTools}>
-        <ShellSearchField value={search} onChange={setSearch} placeholder="Имя, телефон или почта" aria-label="Поиск клиентов" />
-        <Select label="Сортировка" value={sort} onValue={setSort} options={[{ value: 'name', label: 'По имени' }, { value: 'sum', label: 'По сумме' }, { value: 'next', label: 'По следующему визиту' }]} />
-      </div>
-      {importNote ? <p role="status" className={css.quiet}>{importNote}</p> : null}
-      {picked.length ? <p className={css.clientBulk}>{ruPlural(picked.length, 'Выбран', 'Выбрано', 'Выбрано')} {ruCount(picked.length, 'клиент', 'клиента', 'клиентов')}. <button type="button" onClick={() => props.onNavigate?.(MESSAGES_SCREEN)}>Написать</button><button type="button" onClick={() => props.onNavigate?.(props.kit.bookingsScreenId)}>Записать</button><button type="button" onClick={() => setPicked([])}>Снять выбор</button></p> : null}
-      <div className={css.clientSplit}>
-        <div className={css.clientTableWrap}>
-          <table className={css.clientTable}>
-            <thead><tr><th /><th>Клиент</th><th>Последний визит</th><th>Что брал</th><th>Сумма</th></tr></thead>
-            <tbody>
-              {visible.map(item => (
-                <tr key={item.row.id} data-on={shown?.row.id === item.row.id || undefined} onMouseEnter={() => setFocus(item.row.id)}>
-                  <td><Checkbox labelHidden label={`Выбрать ${item.name}`} checked={picked.includes(item.row.id)} onChecked={on => toggle(item.row.id, on)} /></td>
-                  <td>
-                    <button type="button" className={css.clientLink} onClick={() => props.onNavigate?.(props.kit.clientScreenId, item.row.id)}>
-                      <PersonMark id={item.row.id} name={item.name} />
-                      <span className={css.clientIdentity}><strong>{item.name}</strong><span>{item.phone || item.email || '—'}</span></span>
-                    </button>
-                    <span className={css.clientHover}>
-                      <button type="button" onClick={() => props.onNavigate?.(props.kit.clientScreenId, item.row.id)}>Открыть</button>
-                      <button type="button" onClick={() => props.onNavigate?.(props.kit.bookingsScreenId)}>Записать</button>
-                    </span>
-                  </td>
-                  <td className={css.mono}>{item.history.length ? formatProkatDate([...item.history].sort((a, b) => Date.parse(b.from) - Date.parse(a.from))[0]!.from) : '—'}</td>
-                  <td>{item.history.length ? [...item.history].sort((a, b) => Date.parse(b.from) - Date.parse(a.from))[0]!.title : '—'}</td>
-                  <td className={css.mono}>{formatMoney(item.sum)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {!visible.length ? <p className={css.quiet}>Никого не нашли.</p> : null}
-        </div>
-        <aside className={css.clientAside} aria-label="Карточка в списке">
-          {shown ? <>
-            <PersonMark id={shown.row.id} name={shown.name} size={40} />
-            <strong>{shown.name}</strong>
-            <p>{shown.phone || 'Телефон не указан'}</p>
-            <p>{shown.email || 'Почта не указана'}</p>
-            <p className={css.mono}>{ruCount(shown.history.length, 'бронь', 'брони', 'броней')} · {formatMoney(shown.sum)}</p>
-            <button type="button" className={css.primary} onClick={() => props.onNavigate?.(props.kit.clientScreenId, shown.row.id)}>Открыть карточку</button>
-          </> : <p className={css.quiet}>Список пуст.</p>}
-        </aside>
-      </div>
-    </ListScreenShell>
-  </div>
+}
+
+function ClientDirectory(props: ScreenProps) {
+  const bundle = useContext(ProkatRowsContext)
+  const sample = Boolean(bundle?.sample)
+  const phone = useClientsNarrow(useContext(AppFrameDeviceContext))
+  const [note, setNote] = useState('')
+  const rows = sample ? prokatDemoClients() : realClients(props)
+  const nowKey = nowStamp(props.now)
+  const tabs: { id: ClientTab; label: string }[] = sample
+    ? [{ id: 'all', label: 'Все' }, { id: 'open', label: 'С записью' }, { id: 'new', label: 'Новые за месяц' }, { id: 'stale', label: 'Давно не были' }]
+    : [{ id: 'all', label: 'Все' }, { id: 'open', label: 'С записью' }, { id: 'stale', label: 'Давно не были' }, { id: 'none', label: 'Без броней' }]
+  const open = (id: string) => props.onNavigate?.(props.kit.clientScreenId, id)
+  return <ClientsView
+    rows={rows}
+    tabs={tabs}
+    newFrom={sample ? shiftStamp(nowKey, -26) : Infinity}
+    staleBefore={shiftStamp(nowKey, -60)}
+    nowKey={nowKey}
+    phone={phone}
+    initialPicked={sample ? ['demo-client-3'] : []}
+    note={note}
+    addLabel="Добавить клиента"
+    onOpen={open}
+    onMessage={() => props.onNavigate?.(MESSAGES_SCREEN)}
+    onBook={() => props.onNavigate?.(props.kit.bookingsScreenId)}
+    onImport={() => setNote('Импорт читает таблицу из кабинета. Отдельный файл на этом экране не подменяет записи.')}
+    onAdd={() => setNote('Клиент появляется в списке сам: при первой брони или после импорта таблицы.')}
+  />
+}
+
+const CARD_STEPS = ['Заявка', 'Подтверждена', 'Оплачена', 'Выдано', 'Возврат'] as const
+
+function realCard(props: ScreenProps, client: AppV2Record, history: ProkatListItem[], noteText: string): { card: DemoCard; pastIds: string[] } {
+  const sorted = [...history].sort((a, b) => Date.parse(b.from) - Date.parse(a.from))
+  const open = sorted.filter(item => OPEN_STATUSES.includes(item.status))
+  const current = open[0]
+  const past = sorted.filter(item => item.id !== current?.id)
+  const sum = history.reduce((total, item) => total + item.price, 0)
+  const index = current ? (current.status === 'Заявка' ? 0 : current.status === 'Подтверждена' ? 1 : 3) : -1
+  const steps: DemoCardStep[] = CARD_STEPS.map((label, position) => ({
+    label,
+    date: position === index ? formatProkatDate(position === 3 ? current?.from : current?.updatedAt || current?.from) : '—',
+    state: position < index ? 'done' : position === index ? 'cur' : 'todo',
+  }))
+  const first = sorted[sorted.length - 1]
+  const messages: DemoCardMessage[] = []
+  if (current) messages.push({ id: 'sys-open', kind: 'sys', head: '', text: `Бронь ${current.number} · ${current.title}` })
+  if (noteText) messages.push({ id: 'note-client', kind: 'note', head: 'Заметка', text: noteText })
+  sorted.slice(0, 3).forEach(item => messages.push({ id: `sys-${item.id}`, kind: 'sys', head: '', text: `${item.number} · ${item.status} · ${formatProkatDate(item.from)}` }))
+  const tags: DemoCard['tags'] = []
+  if (history.length >= 3) tags.push({ label: 'Постоянный', tone: 'b' })
+  if (open.some(item => item.status === 'Просрочен возврат')) tags.push({ label: 'Просрочен возврат', tone: 'y' })
+  const phoneText = textOf(client.values[props.kit.client.phone])
+  const mailText = textOf(client.values[props.kit.client.email])
+  return {
+    pastIds: past.map(item => item.id),
+    card: {
+      since: first ? formatProkatDate(first.from) : '',
+      tags,
+      count: history.length,
+      average: history.length ? Math.round(sum / history.length) : 0,
+      paid: sum,
+      open: open.length,
+      active: current ? {
+        title: current.itemNames.join(', ') || current.title,
+        sub: `${formatProkatDate(current.from)} – ${formatProkatDate(current.to)}`,
+        number: `№ ${current.number} · с ${formatProkatDate(current.from)}`,
+        status: { label: current.status, tone: pillTone(current.status) },
+        amount: current.price,
+        steps,
+      } : null,
+      past: past.map(item => ({
+        date: formatProkatDate(item.from),
+        title: item.itemNames.join(', ') || item.title,
+        sub: item.number,
+        status: { label: item.status, tone: pillTone(item.status) },
+        amount: item.price,
+      })),
+      fields: [
+        { label: 'Телефон', value: phoneText || '—' },
+        { label: 'Почта', value: mailText || '—' },
+      ],
+      messages,
+    },
+  }
 }
 
 function ClientDetail(props: ScreenProps) {
+  const bundle = useContext(ProkatRowsContext)
+  const sample = Boolean(bundle?.sample)
+  const narrow = useClientsNarrow(useContext(AppFrameDeviceContext))
   const client = props.of(props.kit.clientsTableId).find(row => row.id === props.recordId) ?? props.record
+  const demo = demoClientById(props.recordId)
   const [extraFields, setExtraFields] = useState<string[]>([])
-  const [draftField, setDraftField] = useState('')
-  const [noteMode, setNoteMode] = useState<'client' | 'note'>('client')
-  const [noteText, setNoteText] = useState('')
-  const [thread, setThread] = useState<{ id: string; mode: 'client' | 'note'; text: string }[]>([])
-  if (!client) return <div className={css.root}><p className={css.quiet}>Клиент не найден.</p></div>
-  const email = textOf(client.values[props.kit.client.email]).toLowerCase()
-  const history = bookingItems(props).filter(item => item.clientEmail.toLowerCase() === email)
+  const [thread, setThread] = useState<DemoCardMessage[]>([])
+  if (!client && !demo) return <div className={css.root}><p className={css.quiet}>Клиент не найден.</p></div>
+  const email = client ? textOf(client.values[props.kit.client.email]) : demo?.email ?? ''
+  const name = (client ? textOf(client.values[props.kit.client.name]) : demo?.name) || 'Клиент'
+  const phone = client ? textOf(client.values[props.kit.client.phone]) : demo?.phone ?? ''
+  const history = bookingItems(props).filter(item => email && item.clientEmail.toLowerCase() === email.toLowerCase())
   const noShowCount = clientNotPickedUpCount(history)
-  const sum = history.reduce((total, item) => total + item.price, 0)
-  const average = history.length ? Math.round(sum / history.length) : 0
-  const openItems = history.filter(item => ['Заявка', 'Подтверждена', 'Выдано', 'Просрочен возврат'].includes(item.status))
-  const open = [...openItems].sort((a, b) => Date.parse(b.from) - Date.parse(a.from))[0]
-  const steps = ['Заявка', 'Подтверждена', 'Выдано', 'Возвращено']
-  const stepIndex = open ? Math.max(0, steps.indexOf(open.status === 'Просрочен возврат' ? 'Выдано' : open.status)) : -1
-  const name = textOf(client.values[props.kit.client.name]) || 'Клиент'
-  return <div className={css.root} data-prokat-root data-prokat-screen="client-card">
-    <DetailCardShell
-      back={{ label: 'Клиенты', onClick: () => props.onNavigate?.(props.kit.clientsScreenId) }}
-      title={name}
-      subtitle={textOf(client.values[props.kit.client.email])}
-      media={<PersonMark id={client.id} name={name} size={48} />}
-      actions={<>
-        <button type="button" className={css.quietButton} onClick={() => props.onNavigate?.(MESSAGES_SCREEN)}>Написать</button>
-        <button type="button" className={css.primary} onClick={() => props.onNavigate?.(props.kit.bookingsScreenId)}>Новая заявка</button>
-      </>}
-      metrics={[
-        { key: 'bookings', caption: 'Броней', value: String(history.length) },
-        { key: 'avg', caption: 'Средний чек', value: formatMoney(average) },
-        { key: 'sum', caption: 'Сумма', value: formatMoney(sum) },
-        { key: 'open', caption: 'Сейчас в работе', value: String(openItems.length) },
-      ]}
-    >
-      <div className={css.cardSplit}>
-        <div>
-          {open ? <DetailSection title="Сейчас в работе">
-            <p><strong>{open.title}</strong> · {formatProkatDateTime(open.from)}</p>
-            <ol className={css.stepper}>
-              {steps.map((step, index) => <li key={step} data-on={index <= stepIndex || undefined} data-current={index === stepIndex || undefined}><i />{step}</li>)}
-            </ol>
-            <button type="button" className={css.quietButton} onClick={() => props.onNavigate?.(props.kit.bookingScreenId, open.id)}>Открыть запись</button>
-          </DetailSection> : <DetailSection title="Сейчас в работе"><p className={css.quiet}>Открытых записей нет.</p></DetailSection>}
-          <DetailSection title="История">
-            <BookingRows items={history} now={props.now} onOpen={id => props.onNavigate?.(props.kit.bookingScreenId, id)} keepCards clientScoped />
-          </DetailSection>
-        </div>
-        <aside>
-          <DetailSection title="Переписка и заметки">
-            <p>{textOf(client.values[props.kit.client.note]) || 'Заметок пока нет.'}</p>
-            {noShowCount ? <p className={css.noShowCount}>{formatNotPickedUpCount(noShowCount)}</p> : null}
-            <ul className={css.noteList}>
-              {history.slice(0, 4).map(item => <li key={item.id}><b>{item.status}</b><span>{formatProkatDate(item.from)} · {item.title}</span></li>)}
-              {thread.map(item => <li key={item.id}><b>{item.mode === 'client' ? 'Клиенту' : 'Заметка'}</b><span>{item.text}</span></li>)}
-            </ul>
-            <div className={css.composer}>
-              <div role="tablist" aria-label="Кому запись">
-                <button type="button" aria-selected={noteMode === 'client'} onClick={() => setNoteMode('client')}>Клиенту</button>
-                <button type="button" aria-selected={noteMode === 'note'} onClick={() => setNoteMode('note')}>Заметка</button>
-              </div>
-              <textarea aria-label={noteMode === 'client' ? 'Сообщение клиенту' : 'Заметка'} value={noteText} onChange={event => setNoteText(event.target.value)} rows={3} />
-              <button type="button" onClick={() => { const text = noteText.trim(); if (!text) return; setThread(current => [...current, { id: `${current.length}`, mode: noteMode, text }]); setNoteText('') }}>Добавить</button>
-            </div>
-          </DetailSection>
-          <DetailSection title="Данные клиента">
-            <dl className={css.facts}>
-              <div><dt>Телефон</dt><dd>{textOf(client.values[props.kit.client.phone]) || '—'}</dd></div>
-              <div><dt>Почта</dt><dd>{textOf(client.values[props.kit.client.email]) || '—'}</dd></div>
-              {extraFields.map(field => <div key={field}><dt>{field}</dt><dd>—</dd></div>)}
-            </dl>
-            <form className={css.addField} onSubmit={event => { event.preventDefault(); const name = draftField.trim(); if (!name) return; setExtraFields(current => [...current, name]); setDraftField('') }}>
-              <input aria-label="Новое поле" value={draftField} onChange={event => setDraftField(event.target.value)} placeholder="Название поля" />
-              <button type="submit">Добавить поле</button>
-            </form>
-            <p className={css.quiet}>Новое поле видно на этой карточке и не записывается в таблицу, пока его нет в шаблоне.</p>
-          </DetailSection>
-        </aside>
-      </div>
-    </DetailCardShell>
-  </div>
+  const real = client && !sample ? realCard(props, client, history, textOf(client.values[props.kit.client.note])) : null
+  const card = real?.card ?? prokatDemoCard({ id: demo?.id ?? client?.id ?? name, name, since: demo?.since })
+  const openOrder = (id: string | undefined) => { if (id) props.onNavigate?.(props.kit.bookingScreenId, id) }
+  const activeId = real ? history.filter(item => OPEN_STATUSES.includes(item.status)).sort((a, b) => Date.parse(b.from) - Date.parse(a.from))[0]?.id : undefined
+  return <ClientCardView
+    name={name}
+    avatarId={demo?.id ?? client?.id ?? name}
+    phone={phone}
+    email={email}
+    card={card}
+    noun="бронь"
+    thread={thread}
+    extraFields={extraFields}
+    noShow={noShowCount ? formatNotPickedUpCount(noShowCount) : undefined}
+    narrow={narrow}
+    onBack={() => props.onNavigate?.(props.kit.clientsScreenId)}
+    onWrite={() => props.onNavigate?.(MESSAGES_SCREEN)}
+    onNewBooking={() => props.onNavigate?.(props.kit.bookingsScreenId)}
+    onOpenOrder={real ? () => openOrder(activeId) : undefined}
+    onOpenBooking={real ? position => openOrder(real.pastIds[position]) : undefined}
+    onSend={(mode, text) => {
+      const stamp = formatProkatDateTime(new Date(props.now).toISOString())
+      setThread(current => [...current, { id: `local-${current.length}`, kind: mode === 'client' ? 'out' : 'note', head: `${mode === 'client' ? 'Вы' : 'Заметка'} · ${stamp}`, text }])
+    }}
+    onAddField={label => setExtraFields(current => [...current, label])}
+  />
 }
 
 function CatalogScreen(props: ScreenProps) {

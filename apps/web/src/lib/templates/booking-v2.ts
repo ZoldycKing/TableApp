@@ -154,7 +154,7 @@ export function buildBookingV2App(built: BuiltTemplate, meta: { id: string; work
   const calendarIndex = nodes.findIndex(node => node.type === 'collection' && screens.find(screen=>screen.id===booking.listScreenId)?.rootIds.includes(node.id))
   if (calendarIndex >= 0) nodes[calendarIndex] = bookingTeamCalendarNode(booking,nodes[calendarIndex]!.id)
   return {
-    formatVersion: 2, id: meta.id, workspaceId: meta.workspaceId, name: meta.name, slug: meta.slug, purpose: 'business', appearance: { navigation: 'tabs', icon: 'calendar', density: 'regular', corners: 'rounded' }, theme: { accent: 'green', scheme: 'light', logoKey: null, iconKey: null },
+    formatVersion: 2, id: meta.id, workspaceId: meta.workspaceId, name: meta.name, slug: meta.slug, purpose: 'business', appearance: { navigation: 'sidebar', icon: 'calendar', density: 'regular', corners: 'rounded' }, theme: { accent: 'green', scheme: 'light', logoKey: null, iconKey: null },
     roles: [{ id: 'owner', name: 'Администратор' }, { id: 'staff', name: 'Мастер' }, { id: 'client', name: 'Клиент' }],
     authentication: { mode: 'verified_email', defaultRoleId: 'client', members: [{ email: meta.email.trim().toLowerCase(), roleIds: ['owner'], company: '' }] },
     homeScreenId: booking.catalogScreenId, booking, screens, nodes, sources, workflows,

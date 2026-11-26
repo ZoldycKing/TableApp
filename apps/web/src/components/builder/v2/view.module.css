@@ -2744,3 +2744,11 @@ button.recordButton:hover strong { color: var(--v2-accent, #3F6B5C); }
     display: none;
   }
 }
+.settingsLayout { display: grid; grid-template-columns: 148px minmax(0, 1fr); gap: 12px; align-items: start; }
+.settingsNav { grid-column: 1; grid-row: 1 / span 8; display: grid; align-content: start; gap: 4px; }
+.settingsLayout > :not(.settingsNav) { grid-column: 2; }
+.settingsNav button { min-height: 34px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent; text-align: left; }
+.settingsNav button[aria-current='page'] { background: #fff; box-shadow: 0 0 0 1px rgba(20,21,22,.06); }
+.clientPreview { grid-column: 2; display: grid; gap: 6px; padding: 12px; border-radius: 12px; background: #E7EEFA; }
+.clientPreview small { color: var(--sc-text-3, #6E7076); }
+.clientPreview span { justify-self: start; padding: 6px 12px; border-radius: 999px; color: #fff; }

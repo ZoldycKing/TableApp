@@ -9,22 +9,20 @@ import shell from './app-frame.module.css'
 import {BUILDER_V2_COLORS,BUILDER_V2_ICONS} from './appearance'
 import { BuilderV2AppMark } from './app-frame'
 import { SHOP_LOW_STOCK_THRESHOLD } from '@/lib/builder-v2-shop-stock'
+import { DurationField } from '@/components/ui/duration-field'
+import { Select } from '@/components/ui/select'
 import { BOOKING_SLOT_STEPS, bookingRules, type BookingSlotStep } from '@/lib/booking-rules'
 
 function BookingRulesSettings({ app, onChange }: { app: AppV2; onChange: (app: AppV2) => void }) {
   const booking = app.booking
   if (!booking) return null
   const rules = bookingRules(booking)
-  const [lead, setLead] = useState(String(rules.leadMinutes))
   const [horizon, setHorizon] = useState(String(rules.horizonDays))
-  const [buffer, setBuffer] = useState(String(rules.bufferMinutes))
   const [deadline, setDeadline] = useState(String(rules.cancelDeadlineHours))
   useEffect(() => {
-    setLead(String(rules.leadMinutes))
     setHorizon(String(rules.horizonDays))
-    setBuffer(String(rules.bufferMinutes))
     setDeadline(String(rules.cancelDeadlineHours))
-  }, [rules.leadMinutes, rules.horizonDays, rules.bufferMinutes, rules.cancelDeadlineHours])
+  }, [rules.horizonDays, rules.cancelDeadlineHours])
   const save = (patch: Partial<NonNullable<AppV2['booking']>>) => {
     if (!app.booking) return
     const next = { ...app.booking, ...patch }
@@ -39,19 +37,14 @@ function BookingRulesSettings({ app, onChange }: { app: AppV2; onChange: (app: A
   }
   return <fieldset className={shell.rulesField} aria-label="Правила записи">
     <h3>Правила записи</h3>
-    <label>Шаг слотов
-      <select aria-label="Шаг слотов" value={rules.stepMinutes} onChange={event => save({ slotStepMinutes: Number(event.target.value) as BookingSlotStep })}>
-        {BOOKING_SLOT_STEPS.map(step => <option key={step} value={step}>{step} мин</option>)}
-      </select>
-    </label>
+    <Select
+      label="Шаг слотов"
+      value={String(rules.stepMinutes)}
+      onValue={value => save({ slotStepMinutes: Number(value) as BookingSlotStep })}
+      options={BOOKING_SLOT_STEPS.map(step => ({ value: String(step), label: step >= 60 ? '1 час' : `${step} мин` }))}
+    />
     <p className={ui.hint}>Свободное время предлагается с этим интервалом.</p>
-    <label>Не раньше чем за, минут
-      <input aria-label="Не раньше чем за" type="number" min="0" max="10080" step="1" value={lead} onChange={event => {
-        setLead(event.target.value)
-        const value = number(event.target.value, 0, 10080)
-        if (value !== null) save({ minLeadMinutes: value })
-      }} />
-    </label>
+    <DurationField label="Не раньше чем за" amountLabel="Не раньше чем за" minutes={rules.leadMinutes} onMinutes={value => save({ minLeadMinutes: value })} />
     <p className={ui.hint}>Клиент не увидит время ближе этого срока.</p>
     <label>Не дальше чем на, дней
       <input aria-label="Не дальше чем на" type="number" min="1" max="365" step="1" value={horizon} onChange={event => {
@@ -61,13 +54,7 @@ function BookingRulesSettings({ app, onChange }: { app: AppV2; onChange: (app: A
       }} />
     </label>
     <p className={ui.hint}>Дальше этого срока записаться нельзя.</p>
-    <label>Буфер после приёма, минут
-      <input aria-label="Буфер после приёма" type="number" min="0" max="240" step="1" value={buffer} onChange={event => {
-        setBuffer(event.target.value)
-        const value = number(event.target.value, 0, 240)
-        if (value !== null) save({ bufferMinutes: value })
-      }} />
-    </label>
+    <DurationField label="Буфер после приёма" amountLabel="Буфер после приёма" minutes={rules.bufferMinutes} onMinutes={value => { if (value <= 240) save({ bufferMinutes: value }) }} />
     <p className={ui.hint}>Следующая запись к этому мастеру начнётся не раньше конца буфера. В сетке видна длительность услуги.</p>
     <label>Отмена не позднее чем за, часов
       <input aria-label="Отмена не позднее чем за" type="number" min="0" max="720" step="1" value={deadline} onChange={event => {
@@ -146,9 +133,20 @@ export function BuilderV2AppearanceSettings({ app, onChange, onScreens, onUpload
       }
     }
   }
-  return <div className={styles.inspectorContent}>
+  const [section, setSection] = useState<'look' | 'booking' | 'shop'>('look')
+  return <div className={`${styles.inspectorContent} ${ui.settingsLayout}`}>
+    <nav className={ui.settingsNav} aria-label="Разделы настроек">
+      <button type="button" aria-current={section === 'look' ? 'page' : undefined} onClick={() => setSection('look')}>Оформление</button>
+      {app.booking ? <button type="button" aria-current={section === 'booking' ? 'page' : undefined} onClick={() => setSection('booking')}>Запись</button> : null}
+      {app.shop ? <button type="button" aria-current={section === 'shop' ? 'page' : undefined} onClick={() => setSection('shop')}>Магазин</button> : null}
+    </nav>
+    <aside className={ui.clientPreview} aria-label="Так видит клиент">
+      <small>Так видит клиент</small>
+      <strong>{app.name}</strong>
+      <span style={{ background: 'var(--sc-accent, #266DF0)' }}>Записаться</span>
+    </aside>
     <div className={styles.inspectorHeading}><span className={styles.elementMark}><ProtoIcon name="palette"/></span><div><span>Всё приложение</span><h2>Оформление</h2></div></div>
-    <fieldset className={shell.logoField} disabled={pending}>
+    {section === 'look' ? <><fieldset className={shell.logoField} disabled={pending}>
       <legend>Логотип приложения</legend>
       <div className={shell.logoHint}>
         {logo && <BuilderV2AppMark logo={logo} icon={appearance.icon} />}
@@ -167,15 +165,15 @@ export function BuilderV2AppearanceSettings({ app, onChange, onScreens, onUpload
       </div>
     </fieldset>
     {!logo && <BuilderV2IconPicker label="Иконка приложения" value={appearance.icon} onChange={icon=>setAppearance({ icon })}/>}
-    <label>Тема<select value={app.theme.scheme} onChange={event=>onChange({...app,theme:{...app.theme,scheme:event.target.value as AppV2['theme']['scheme']}})}><option value="light">Светлая</option><option value="dark">Тёмная</option><option value="auto">Как на устройстве</option></select></label>
+    <Select label="Тема" value={app.theme.scheme} onValue={scheme => onChange({ ...app, theme: { ...app.theme, scheme: scheme as AppV2['theme']['scheme'] } })} options={[{ value: 'light', label: 'Светлая' }, { value: 'dark', label: 'Тёмная' }, { value: 'auto', label: 'Как на устройстве' }]} />
     <fieldset className={shell.colorField}><legend>Цвет приложения</legend><div className={shell.swatches}>{Object.entries(BUILDER_V2_COLORS).map(([id,[name,color]])=><button type="button" key={id} aria-label={`Цвет: ${name}`} title={name} aria-pressed={app.theme.accent===id} style={{'--swatch':color} as React.CSSProperties} onClick={()=>onChange({...app,theme:{...app.theme,accent:id as AppV2['theme']['accent']}})}>{app.theme.accent===id&&<ProtoIcon name="check"/>}</button>)}</div></fieldset>
-    <label>Вид на компьютере<select value={appearance.presentation ?? 'workspace'} onChange={event=>setAppearance({ presentation: event.target.value === 'centered' ? 'centered' : 'workspace' })}><option value="workspace">Рабочее пространство</option><option value="centered">По центру с нижним меню</option></select></label>
-    {appearance.presentation !== 'centered' && <label>Меню на компьютере<select value={appearance.navigation} onChange={event=>setAppearance({ navigation: event.target.value as typeof appearance.navigation })}><option value="sidebar">Сбоку</option><option value="tabs">Сверху</option><option value="bottom">Снизу</option></select></label>}
-    <label>Плотность списка<select value={appearance.density ?? 'regular'} onChange={event => setAppearance({ density: event.target.value === 'compact' ? 'compact' : 'regular' })}><option value="regular">Обычная</option><option value="compact">Компактная</option></select></label>
-    <label>Скругление<select value={appearance.corners ?? 'rounded'} onChange={event => setAppearance({ corners: event.target.value === 'subtle' ? 'subtle' : 'rounded' })}><option value="rounded">Обычное</option><option value="subtle">Минимальное</option></select></label>
+    <Select label="Вид на компьютере" value={appearance.presentation ?? 'workspace'} onValue={value => setAppearance({ presentation: value === 'centered' ? 'centered' : 'workspace' })} options={[{ value: 'workspace', label: 'Рабочее пространство' }, { value: 'centered', label: 'По центру с нижним меню' }]} />
+    {appearance.presentation !== 'centered' && <Select label="Меню на компьютере" value={appearance.navigation} onValue={navigation => setAppearance({ navigation: navigation as typeof appearance.navigation })} options={[{ value: 'sidebar', label: 'Сбоку' }, { value: 'tabs', label: 'Сверху' }, { value: 'bottom', label: 'Снизу' }]} />}
+    <Select label="Плотность списка" value={appearance.density ?? 'regular'} onValue={value => setAppearance({ density: value === 'compact' ? 'compact' : 'regular' })} options={[{ value: 'regular', label: 'Обычная' }, { value: 'compact', label: 'Компактная' }]} />
+    <Select label="Скругление" value={appearance.corners ?? 'rounded'} onValue={value => setAppearance({ corners: value === 'subtle' ? 'subtle' : 'rounded' })} options={[{ value: 'rounded', label: 'Обычное' }, { value: 'subtle', label: 'Минимальное' }]} />
     <p className={ui.hint}>На телефоне меню находится снизу. Изменения видны здесь сразу, а пользователям — после публикации.</p>
-    {app.shop && <ShopStockSettings app={app} onChange={onChange} />}
-    {app.booking && <BookingRulesSettings app={app} onChange={onChange} />}
-    <button type="button" className={styles.secondary} onClick={onScreens}>Настроить разделы<ProtoIcon name="arrow"/></button>
+    <button type="button" className={styles.secondary} onClick={onScreens}>Настроить разделы<ProtoIcon name="arrow"/></button></> : null}
+    {section === 'shop' && app.shop ? <ShopStockSettings app={app} onChange={onChange} /> : null}
+    {section === 'booking' && app.booking ? <BookingRulesSettings app={app} onChange={onChange} /> : null}
   </div>
 }

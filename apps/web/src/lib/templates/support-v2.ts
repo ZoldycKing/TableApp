@@ -278,7 +278,7 @@ export function buildSupportV2App(built: BuiltTemplate, meta: { id: string; work
   return {
     formatVersion: 2, id: meta.id, workspaceId: meta.workspaceId, name: meta.name, slug: meta.slug, purpose: 'business',
     communications: { enabled: true },
-    appearance: { navigation: 'tabs', icon: 'clipboard', density: 'regular', corners: 'rounded' },
+    appearance: { navigation: 'sidebar', icon: 'clipboard', density: 'regular', corners: 'rounded' },
     theme: { accent: 'green', scheme: 'light', logoKey: null, iconKey: null },
     roles: [{ id: 'owner', name: 'Руководитель' }, { id: 'staff', name: 'Оператор' }, { id: 'client', name: 'Клиент' }],
     authentication: { mode: 'verified_email', defaultRoleId: 'client', members: [{ email: meta.email.trim().toLowerCase(), roleIds: ['owner'], company: '' }] },

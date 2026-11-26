@@ -41,7 +41,7 @@ describe('calendar and client context in a new booking', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Изменить' }))
     expect((screen.getByLabelText('Дата записи') as HTMLInputElement).value).toBe('20.11.2026')
     expect(document.querySelector('input[type="date"]')).toBeNull()
-    expect((screen.getByLabelText('Мастер') as HTMLSelectElement).value).toBe('master_olya')
+    expect(screen.getByRole('button', { name: 'Мастер' }).textContent).toContain('Оля')
   })
   it('does not silently select a different slot after the chosen time becomes unavailable', async () => {
     const { b, change } = seedFixture(false)
@@ -77,7 +77,8 @@ describe('calendar and client context in a new booking', () => {
     fireEvent.click(screen.getByRole('button', { name: '11:00' }))
     expect(change).toHaveBeenCalledWith(booking.visit.master, [])
     expect(change).toHaveBeenCalledWith(booking.visit.start, '2026-11-20T08:00:00.000Z')
-    fireEvent.change(screen.getByLabelText('Мастер'), { target: { value: 'master_olya' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Мастер' }))
+    fireEvent.click(screen.getByRole('option', { name: 'Оля' }))
     expect(await screen.findByRole('button', { name: '18:00' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '11:00' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: '09:30' })).toBeNull()

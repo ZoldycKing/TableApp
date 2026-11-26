@@ -20,7 +20,7 @@
   left: 50%;
   display: flex;
   flex-direction: column;
-  width: min(40rem, calc(100% - 32px));
+  width: min(48rem, calc(100% - 32px));
   min-height: 0;
   /* Fit the app frame. 92dvh is taller than the preview under its own header and clips the button. */
   max-height: calc(100% - 32px);
@@ -96,9 +96,10 @@
 .body[data-split] :global(form) {
   display: grid;
   gap: 12px;
-  overflow: visible;
+  overflow: auto;
   flex: none;
   min-height: auto;
+  max-height: min(56dvh, 520px);
 }
 .footer {
   flex: none;
@@ -113,7 +114,7 @@
   top: 16px;
   left: 50%;
   bottom: auto;
-  width: min(32rem, calc(100% - 32px));
+  width: min(52rem, calc(100% - 32px));
   max-height: min(calc(100% - 32px), calc(100dvh - 32px));
   transform: translateX(-50%);
 }
@@ -129,6 +130,21 @@
 .panel[data-placement='center'] .footer {
   flex: none;
   padding: 10px 16px 14px;
+}
+@container builder-app (max-width: 720px) {
+  .panel[data-placement='center'] {
+    top: 8px;
+    height: calc(100% - 85px);
+    max-height: calc(100% - 85px);
+  }
+  .body[data-split] :global(form) { max-height: none; overflow: visible; padding-bottom: 12px; }
+  .panel[data-placement='center'] .body[data-split] {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none;
+    overflow: auto;
+    padding-bottom: 12px;
+  }
 }
 @container builder-app (max-width: 560px) {
   .panel[data-placement='sheet'] {

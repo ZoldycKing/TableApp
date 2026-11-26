@@ -4,14 +4,10 @@ import Link from 'next/link'
 import { useTransition } from 'react'
 import { signOutMemberAction } from '@/app/auth-actions'
 import { ROLE_LABELS, isKnownRole } from '@/lib/roles'
+import { Avatar } from '@/components/ui/avatar'
 import { ShellIcon } from './icons'
 import { MENU_ITEM, Menu } from './menu'
 import { ONLY_NARROW, ONLY_WIDE, type ShellVariant } from './variant'
-
-/** Инициалы по почте: имени у участника может и не быть. */
-export function initialsOf(email: string): string {
-  return (email.trim()[0] ?? '?').toUpperCase()
-}
 
 /** Имя человека из почты, пока настоящего нет: «nikolala13@…» → «nikolala13». */
 export function nameFromEmail(email: string): string {
@@ -52,18 +48,14 @@ export function UserMenu({
       minWidth={230}
       trigger={(open) => (
         <span title={email}>
-          <span
-            className={`mx-auto size-9 items-center justify-center rounded-full bg-sage-100 text-sm font-semibold text-ink ${ONLY_NARROW[variant]}`}
-          >
-            {initialsOf(email)}
+          <span className={ONLY_NARROW[variant]}>
+            <Avatar id={email} size={36} />
           </span>
 
           <span
             className={`items-center gap-2.5 rounded-xl px-2 py-2 transition-colors ${ONLY_WIDE[variant]} ${open ? 'bg-sand-100' : 'hover:bg-sand-100'}`}
           >
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-sage-100 text-sm font-semibold text-ink">
-              {initialsOf(email)}
-            </span>
+            <Avatar id={email} size={32} />
             {/* Почта длинная почти всегда: обрезаем, а не переносим —
                 перенос раздвигает низ панели и двигает всё над ним. */}
             <span className="min-w-0 flex-1 text-left">

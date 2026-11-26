@@ -325,7 +325,7 @@ export function buildProjectsV2App(built: BuiltTemplate, meta: { id: string; wor
   const clientLinkRead = [linkFields.project, linkFields.from, linkFields.to]
   return {
     formatVersion: 2, id: meta.id, workspaceId: meta.workspaceId, name: meta.name, slug: meta.slug, purpose: 'business',
-    appearance: { navigation: 'tabs', icon: 'clipboard', density: 'regular', corners: 'rounded' },
+    appearance: { navigation: 'sidebar', icon: 'clipboard', density: 'regular', corners: 'rounded' },
     theme: { accent: 'green', scheme: 'light', logoKey: null, iconKey: null },
     roles: [{ id: 'owner', name: 'Руководитель' }, { id: 'staff', name: 'Исполнитель' }, { id: 'client', name: 'Клиент' }],
     authentication: { mode: 'invite_only', defaultRoleId: null, members: [{ email: meta.email.trim().toLowerCase(), roleIds: ['owner'], company: '' }] },

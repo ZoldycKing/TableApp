@@ -36,9 +36,9 @@ export function withV2MessagesNav(app: AppV2, actor: AppV2Actor): AppV2 {
   if (!v2MessagesAvailable(app, actor)) return app
   if (app.screens.some(screen => screen.id === MESSAGES_SCREEN)) return app
   const tab = v2MessagesScreen(app, actor)
-  // Prokat staff phone: Главная, Брони, Занятость, Сообщения (+ Ещё for the rest).
+  // After the five desk tabs so the phone bar keeps Клиенты visible: Главная, Брони, Занятость, Предметы, Клиенты.
   if (app.prokat && v2MessagesOperator(actor)) {
-    const after = app.prokat.timelineScreenId
+    const after = app.prokat.clientsScreenId
     const index = app.screens.findIndex(screen => screen.id === after)
     if (index >= 0) {
       const screens = [...app.screens]

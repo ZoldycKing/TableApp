@@ -157,6 +157,35 @@ export function DateField({
   )
 }
 
+/** Month grid that stays open. The first click sets the start, the second sets the end. */
+export function InlineRangeCalendar({
+  from, to, onChange,
+}: {
+  from: string
+  to: string
+  onChange: (next: { from: string; to: string }) => void
+}) {
+  const [anchor, setAnchor] = useState<string | null>(null)
+  const [cursor, setCursor] = useCursor(from || to)
+  const pick = (iso: string) => {
+    if (!anchor) {
+      setAnchor(iso)
+      onChange({ from: iso, to: '' })
+      return
+    }
+    const next = iso < anchor ? { from: iso, to: anchor } : { from: anchor, to: iso }
+    onChange(next)
+    setAnchor(null)
+  }
+  return (
+    <div className={css.stack}>
+      <span className={css.label}>Срок</span>
+      <Calendar cursor={cursor} onCursor={setCursor} selected={[from, to, anchor].filter((value): value is string => Boolean(value))} range={from && to ? { from, to } : undefined} onPick={pick} />
+      <span className={css.hint}>{from && to ? `${formatRuDate(from)} – ${formatRuDate(to)}` : from ? `${formatRuDate(from)} — выберите конец` : 'Выберите начало и конец'}</span>
+    </div>
+  )
+}
+
 export function DateRangeField({
   label, from, to, onChange, min, max,
 }: {

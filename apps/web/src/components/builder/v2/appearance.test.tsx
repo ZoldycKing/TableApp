@@ -55,8 +55,8 @@ it('passes only the application presentation to a portaled dialog and preserves 
 })
 it('updates appearance without changing screen audiences, authentication or grants',()=>{
  const app=appV2Fixture(),change=vi.fn();render(<BuilderV2AppearanceSettings app={app} onChange={change} onScreens={vi.fn()} onUploadLogo={vi.fn()}/>)
- fireEvent.change(screen.getByLabelText('Тема'),{target:{value:'dark'}});let next=change.mock.calls.at(-1)![0];expect(next.theme.scheme).toBe('dark');expect(next.policy).toEqual(app.policy);expect(next.screens).toEqual(app.screens)
- fireEvent.change(screen.getByLabelText('Меню на компьютере'),{target:{value:'sidebar'}});next=change.mock.calls.at(-1)![0];expect(next.appearance).toEqual({navigation:'sidebar',icon:'apps'});expect(next.authentication).toEqual(app.authentication)
+ fireEvent.click(screen.getByRole('button', { name: 'Тема' }));fireEvent.click(screen.getByRole('option', { name: 'Тёмная' }));let next=change.mock.calls.at(-1)![0];expect(next.theme.scheme).toBe('dark');expect(next.policy).toEqual(app.policy);expect(next.screens).toEqual(app.screens)
+ fireEvent.click(screen.getByRole('button', { name: 'Меню на компьютере' }));fireEvent.click(screen.getByRole('option', { name: 'Сбоку' }));next=change.mock.calls.at(-1)![0];expect(next.appearance).toEqual({navigation:'sidebar',icon:'apps'});expect(next.authentication).toEqual(app.authentication)
  fireEvent.click(screen.getByRole('button',{name:'Цвет: Бирюзовый'}));expect(change.mock.calls.at(-1)![0].theme.accent).toBe('teal')
 })
 it('applies a completed logo upload to the latest appearance settings', async () => {
@@ -95,10 +95,12 @@ it('saves salon booking rules from the appearance settings', () => {
   let current = app
   const onChange = vi.fn((next: typeof app) => { current = next })
   const view = render(<BuilderV2AppearanceSettings app={current} onChange={onChange} onScreens={vi.fn()} onUploadLogo={vi.fn()} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Запись' }))
   expect(screen.getByRole('group', { name: 'Правила записи' })).toBeTruthy()
   expect(screen.getByRole('heading', { name: 'Правила записи' })).toBeTruthy()
   const show = () => view.rerender(<BuilderV2AppearanceSettings app={current} onChange={onChange} onScreens={vi.fn()} onUploadLogo={vi.fn()} />)
-  fireEvent.change(screen.getByLabelText('Шаг слотов'), { target: { value: '30' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Шаг слотов' }))
+  fireEvent.click(screen.getByRole('option', { name: '30 мин' }))
   show()
   fireEvent.change(screen.getByLabelText('Буфер после приёма'), { target: { value: '15' } })
   show()

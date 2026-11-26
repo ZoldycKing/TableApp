@@ -4,11 +4,12 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Logo } from '@/components/marketing/logo'
+import { Avatar } from '@/components/ui/avatar'
 import { ShellIcon } from './icons'
 import { HoverLockProvider } from './menu'
 import { NavList } from './nav-list'
 import { SidebarPanel, type PanelAction } from './sidebar-panel'
-import { UserMenu, initialsOf } from './user-menu'
+import { UserMenu } from './user-menu'
 import {
   CLOSE_AFTER,
   COOKIE_VALUE,
@@ -298,12 +299,7 @@ function MobileBar({ email, onOpen }: { email: string; onOpen: () => void }) {
       </Link>
 
       <button type="button" aria-label="Помощь" onClick={() => window.dispatchEvent(new Event(OWNER_HELP_EVENT))} className="ml-auto flex size-11 shrink-0 items-center justify-center rounded-lg text-ink-soft outline-none hover:bg-sand-100 focus-visible:ring-2 focus-visible:ring-sage-400"><ShellIcon name="help" className="size-5" /></button>
-      <span
-        aria-hidden="true"
-        className="flex size-8 shrink-0 items-center justify-center rounded-full bg-sage-100 text-sm font-semibold text-ink"
-      >
-        {initialsOf(email)}
-      </span>
+      <Avatar id={email} size={32} />
     </header>
   )
 }

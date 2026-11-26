@@ -320,7 +320,7 @@ export function buildDispatchV2App(built: BuiltTemplate, meta: { id: string; wor
   const staffJobUpdate = [job.status, job.photo, job.comment, job.report, job.signature, job.signerName, job.signerPosition, job.signedAt, job.noClaims, job.claims, job.signatureRefused, job.refusalReason, job.checklist, job.onSiteAt, job.doneAt, job.actualMinutes]
   return {
     formatVersion: 2, id: meta.id, workspaceId: meta.workspaceId, name: meta.name, slug: meta.slug, purpose: 'business',
-    appearance: { navigation: 'tabs', icon: 'clipboard', density: 'regular', corners: 'rounded' },
+    appearance: { navigation: 'sidebar', icon: 'clipboard', density: 'regular', corners: 'rounded' },
     theme: { accent: 'green', scheme: 'light', logoKey: null, iconKey: null },
     roles: [{ id: 'owner', name: 'Диспетчер' }, { id: 'staff', name: 'Мастер' }],
     authentication: { mode: 'invite_only', defaultRoleId: null, members: [{ email: meta.email.trim().toLowerCase(), roleIds: ['owner'], company: '' }] },

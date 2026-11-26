@@ -2,8 +2,15 @@
 import { createContext, lazy, Suspense, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { attachmentSchema, instantToWallClock, type Attachment } from '@tableapp/schema'
+import { MESSAGES_SCREEN } from '@/lib/conversation-types'
 import type { AppV2, AppV2Json, AppV2Node, AppV2Record } from '@tableapp/schema/app-v2'
 import { catchUpPublishedProkatHolds, savePublishedProkatAction } from '@/app/prokat-actions'
+import { Avatar } from '@/components/ui/avatar'
+import { Checkbox, Switch } from '@/components/ui/choice'
+import { ruCount, ruPlural } from '@/components/ui/format'
+import { InlineRangeCalendar } from '@/components/ui/pickers'
+import { Select } from '@/components/ui/select'
+import { ProkatDayBoard } from './prokat-day-board'
 import type { ConversationPage } from '@/lib/conversation-types'
 import { BuilderV2AttachmentInput } from './attachment-input'
 import {
@@ -14,9 +21,9 @@ import {
   encodeItemHoldOverride, filterBookings, formatMoney, formatMoneyOrZero, formatNotPickedUpCount,
   formatProkatDate, formatProkatDateTime, holdOptionLabel, isHoldEligibleStatus, isHoldWindowOpen,
   isOpenBooking, isOverdueReturn, itemLateFeeConfig, parseItemHoldOverride, prokatClientStepIndex,
-  prokatDashboard, prokatWallInstant, resolveBookingHoldUntil,
-  shiftTimelineStart, staffTransitions, timelineBarCaptionPlacement,
-  timelineBarLabel, timelineBookingSegments, timelineStartForToday, type ProkatBookingViewId,
+  prokatDashboard, prokatInstantParts, prokatWallInstant, resolveBookingHoldUntil,
+  shiftTimelineStart, staffTransitions,
+  timelineBookingSegments, timelineStartForToday, type ProkatBookingViewId,
   type ProkatCatalogItem, type ProkatHoldAfterStartMinutes, type ProkatListItem, type ProkatLateFeeMode,
   type ProkatTimelineRangeId, type TimelineBarSegment,
 } from '@/lib/prokat-logic'
@@ -264,11 +271,9 @@ function StatusBadge({ name }: { name: string }) {
   return <span className={css.badge} data-kind="status" data-tone={statusTone(name)}>{name}</span>
 }
 
-function PersonMark({ name, photo, size = 28 }: { name: string; photo?: string; size?: number }) {
-  const icon = size <= 24 ? 12 : 14
-  return <span className={css.avatar} data-size={size <= 24 ? 'sm' : 'md'} aria-hidden="true" title={name || undefined}>
-    {photo ? <img src={photo} alt="" width={size} height={size} /> : <ProtoIcon name="user" size={icon} />}
-  </span>
+function PersonMark({ name, photo, size = 28, id }: { name: string; photo?: string; size?: number; id?: string }) {
+  if (photo) return <span className={css.avatar} data-size={size <= 24 ? 'sm' : 'md'} aria-hidden="true" title={name || undefined}><img src={photo} alt="" width={size} height={size} /></span>
+  return <Avatar id={id || name || 'person'} size={size} label={name || undefined} />
 }
 
 function useMenuOpen(open: boolean, root: RefObject<HTMLElement | null>, onClose: () => void) {
@@ -608,14 +613,13 @@ function TodayGroup(props: {
   children: ReactNode
   count: number
 }) {
+  if (!props.count) return null
   return <section className={css.todayGroup} data-tone={props.tone} aria-label={props.title}>
     <header className={css.todayHead}>
       <h3>{props.title}</h3>
       <span className={css.todayCount}>{props.count}</span>
     </header>
-    {props.count
-      ? <ul className={css.todayList}>{props.children}</ul>
-      : <p className={css.todayEmpty}>{props.empty}</p>}
+    <ul className={css.todayList}>{props.children}</ul>
   </section>
 }
 
@@ -808,11 +812,28 @@ function SettingsScreen(props: ScreenProps) {
   const owner = props.actor.roleIds.includes('owner')
   const [holdMinutes, setHoldMinutes] = useState<ProkatHoldAfterStartMinutes>(() => prokatHoldMinutes(props.kit))
   useEffect(() => { setHoldMinutes(prokatHoldMinutes(props.kit)) }, [props.kit.holdAfterStartMinutes])
+  const catalog = catalogItems(props)
+  const show = (id: string) => document.getElementById(id)?.scrollIntoView({ block: 'nearest' })
   return <div className={css.root} data-prokat-root data-prokat-screen="settings">
-    <ListScreenShell title="Настройки проката" meta="Общие правила удержания брони.">
-      {owner ? <DetailSection title="Бронь">
-        <HoldSettingControl {...props} value={holdMinutes} onSaved={setHoldMinutes} />
-      </DetailSection> : <p className={css.quiet}>Настройки меняет руководитель.</p>}
+    <ListScreenShell title="Настройки" meta="Правила, которые видит клиент.">
+      <div className={css.settingsLayout}>
+        <nav aria-label="Разделы настроек">
+          <button type="button" onClick={() => show('prokat-settings-hold')}>Бронь</button>
+          <button type="button" onClick={() => show('prokat-settings-money')}>Залог и штраф</button>
+          <button type="button" onClick={() => show('prokat-settings-client')}>Клиенту</button>
+        </nav>
+        <div>
+          <div id="prokat-settings-hold">{owner ? <DetailSection title="Удержание брони"><HoldSettingControl {...props} value={holdMinutes} onSaved={setHoldMinutes} /><p className={css.quiet}>Окно общее. У предмета может быть своё — в карточке предмета.</p></DetailSection> : <p className={css.quiet}>Настройки меняет руководитель.</p>}</div>
+          <div id="prokat-settings-money"><DetailSection title="Залог и штраф по предметам"><ul className={css.noteList}>{catalog.map(item => <li key={item.id}><b>{item.name}</b><span>{item.tariff} {formatMoneyOrZero(item.rate)} · залог {formatMoneyOrZero(item.deposit)} · {item.lateFeeMode || 'штраф по тарифу'}{item.lateFeeValue ? ` ${item.lateFeeValue}` : ''}{item.lateFeeGraceHours ? ` · льгота ${ruCount(item.lateFeeGraceHours, 'час', 'часа', 'часов')}` : ''}{item.lateFeeCapPerDay ? ` · потолок ${formatMoneyOrZero(item.lateFeeCapPerDay)}` : ''}</span></li>)}</ul></DetailSection></div>
+          <div id="prokat-settings-client"><DetailSection title="Что видно клиенту"><p>Каталог, срок и сумма. Подтверждение уходит в переписку, если оно включено в форме брони. Отдельных настроек графика и уведомлений в шаблоне нет.</p></DetailSection></div>
+        </div>
+        <aside aria-label="Так видит клиент">
+          <small>Так видит клиент</small>
+          <strong>{props.app.name}</strong>
+          <p>Срок и сумма на одном экране.</p>
+          <span>Записаться</span>
+        </aside>
+      </div>
     </ListScreenShell>
   </div>
 }
@@ -825,12 +846,42 @@ function DashboardScreen(props: ScreenProps) {
   const weekRevenue = stats.revenueByWeek[stats.revenueByWeek.length - 1]?.value ?? 0
   const maxWeek = Math.max(1, ...stats.revenueByWeek.map(week => week.value))
   const [act, setAct] = useState<{ kind: 'issue' | 'return'; bookingId: string } | null>(null)
+  const [create, setCreate] = useState(false)
+  const [frameHost, setFrameHost] = useState<HTMLElement | null>(null)
+  const desk = isProkatDesk(props.actor)
+  const phone = useContext(AppFrameDeviceContext) === 'phone'
+  useEffect(() => { setFrameHost(document.querySelector('[data-app-frame]')) }, [])
   const actBooking = act ? props.of(props.kit.bookingsTableId).find(row => row.id === act.bookingId) : null
   return <div className={css.root} data-prokat-root data-prokat-screen="dashboard">
-    <ListScreenShell title="Главная" meta="Что сделать сегодня — и как загружен парк.">
+    {desk && phone && frameHost ? createPortal(<button type="button" className={css.phoneAdd} aria-label="Новая бронь" onClick={() => setCreate(true)}>+</button>, frameHost) : null}
+    <ListScreenShell title={phone ? 'Сегодня' : 'Главная'} meta="Что сделать сегодня — и как загружен парк.">
       <div className={css.dashStack}>
+      <div className={css.kpiRow} role="group" aria-label="Показатели">
+        <button type="button" className={css.kpiPill} onClick={() => props.onNavigate?.(props.kit.timelineScreenId)}>
+          <strong>{stats.utilisation}%</strong><span>Загрузка парка</span>
+        </button>
+        <button type="button" className={css.kpiPill} onClick={() => props.onNavigate?.(props.kit.bookingsScreenId)}>
+          <strong>{stats.itemsOut}</strong><span>Сейчас в прокате</span>
+        </button>
+        <button type="button" className={css.kpiPill} onClick={() => props.onNavigate?.(props.kit.bookingsScreenId)}>
+          <strong>{formatMoneyOrZero(weekRevenue)}</strong><span>Выручка за неделю</span>
+        </button>
+      </div>
       <DetailSection title="Сегодня">
         <div className={css.todayStack}>
+          <TodayGroup title="Просрочено" empty="Просрочек нет — всё вовремя." tone="overdue" count={stats.overdue.length}>
+            {stats.overdue.map(item => (
+              <TodayBookingRow
+                key={item.id}
+                item={item}
+                catalog={items}
+                time={`до ${formatProkatDateTime(item.to)}`}
+                actionLabel="Принять возврат"
+                onOpen={() => props.onNavigate?.(props.kit.bookingScreenId, item.id)}
+                onAction={() => setAct({ kind: 'return', bookingId: item.id })}
+              />
+            ))}
+          </TodayGroup>
           <TodayGroup title="Выдать сегодня" empty="На сегодня выдач нет — новые подтверждённые брони появятся здесь." count={stats.issuesTodayList.length}>
             {stats.issuesTodayList.map(item => (
               <TodayBookingRow
@@ -857,19 +908,6 @@ function DashboardScreen(props: ScreenProps) {
               />
             ))}
           </TodayGroup>
-          <TodayGroup title="Просрочено" empty="Просрочек нет — всё вовремя." tone="overdue" count={stats.overdue.length}>
-            {stats.overdue.map(item => (
-              <TodayBookingRow
-                key={item.id}
-                item={item}
-                catalog={items}
-                time={`до ${formatProkatDateTime(item.to)}`}
-                actionLabel="Принять возврат"
-                onOpen={() => props.onNavigate?.(props.kit.bookingScreenId, item.id)}
-                onAction={() => setAct({ kind: 'return', bookingId: item.id })}
-              />
-            ))}
-          </TodayGroup>
           <TodayGroup title="Не забрали" empty="Неявок нет." tone="overdue" count={stats.notPickedUpList.length}>
             {stats.notPickedUpList.map(item => (
               <TodayBookingRow
@@ -885,17 +923,6 @@ function DashboardScreen(props: ScreenProps) {
           </TodayGroup>
         </div>
       </DetailSection>
-      <div className={css.kpiRow} role="group" aria-label="Показатели">
-        <button type="button" className={css.kpiPill} onClick={() => props.onNavigate?.(props.kit.timelineScreenId)}>
-          <strong>{stats.utilisation}%</strong><span>Загрузка парка</span>
-        </button>
-        <button type="button" className={css.kpiPill} onClick={() => props.onNavigate?.(props.kit.bookingsScreenId)}>
-          <strong>{stats.itemsOut}</strong><span>Сейчас в прокате</span>
-        </button>
-        <button type="button" className={css.kpiPill} onClick={() => props.onNavigate?.(props.kit.bookingsScreenId)}>
-          <strong>{formatMoneyOrZero(weekRevenue)}</strong><span>Выручка за неделю</span>
-        </button>
-      </div>
       <div className={css.dashGrid}>
         <DetailSection title="Загрузка по категориям">
           {!stats.utilisationByCategory.length ? <p className={css.quiet}>Добавьте предметы — здесь появится загрузка.</p> : stats.utilisationByCategory.map(row => (
@@ -923,6 +950,7 @@ function DashboardScreen(props: ScreenProps) {
       </div>
       </div>
     </ListScreenShell>
+    {create ? <CreateDialog {...props} onClose={() => setCreate(false)} onDone={() => setCreate(false)} /> : null}
     {act?.kind === 'issue' && actBooking ? <IssueDialog {...props} booking={actBooking} onClose={() => setAct(null)} onMessage={() => setAct(null)} /> : null}
     {act?.kind === 'return' && actBooking ? <ReturnDialog {...props} booking={actBooking} onClose={() => setAct(null)} onMessage={() => setAct(null)} /> : null}
   </div>
@@ -1286,13 +1314,20 @@ function CreateDialog(props: ScreenProps & {
   const clients = props.of(props.kit.clientsTableId)
   const items = catalogItems(props).filter(item => item.status === 'Свободен' || item.status === 'В прокате')
   const [clientId, setClientId] = useState(clients[0]?.id ?? '')
-  const [itemIds, setItemIds] = useState<string[]>(props.initialItemId ? [props.initialItemId] : [])
-  const [fromDate, setFromDate] = useState(props.initialDate ?? '')
+  const [itemIds, setItemIds] = useState<string[]>(props.initialItemId ? [props.initialItemId] : items.filter(item => item.status === 'Свободен').slice(0, 1).map(item => item.id))
+  const todayIso = prokatInstantParts(new Date(props.now).toISOString()).date
+  const tomorrowIso = (() => {
+    const [year, month, day] = todayIso.split('-').map(Number)
+    if (!year || !month || !day) return todayIso
+    return new Date(Date.UTC(year, month - 1, day + 1)).toISOString().slice(0, 10)
+  })()
+  const [fromDate, setFromDate] = useState(props.initialDate || todayIso)
   const [fromTime, setFromTime] = useState('12:00')
-  const [toDate, setToDate] = useState(props.initialDate ?? '')
+  const [toDate, setToDate] = useState(props.initialDate || tomorrowIso)
   const [toTime, setToTime] = useState('18:00')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [confirm, setConfirm] = useState(true)
   useEffect(() => {
     if (props.initialItemId) setItemIds([props.initialItemId])
   }, [props.initialItemId])
@@ -1319,20 +1354,31 @@ function CreateDialog(props: ScreenProps & {
     if (!result.ok) { setError(result.error); return }
     props.onDone()
   }
-  return <AppDialog title="Новая бронь" placement="center" onClose={props.onClose} footer={<button type="submit" form={formId} className={css.primary} disabled={busy}>{busy ? 'Сохраняем…' : 'Создать бронь'}</button>}>
-    <form id={formId} onSubmit={event => { event.preventDefault(); void save() }}>
-      <ProkatSelect field label="Клиент" value={clientId} options={clients.map(row => ({ id: row.id, name: textOf(row.values[props.kit.client.name]) || 'Без имени' }))} onChange={setClientId} />
+  const clientRow = clients.find(row => row.id === clientId)
+  const clientEmail = textOf(clientRow?.values[props.kit.client.email]).toLowerCase()
+  const visits = bookingItems(props).filter(item => item.clientEmail.toLowerCase() === clientEmail && clientEmail).length
+  return <AppDialog title="Новая бронь" placement="center" onClose={props.onClose} footer={<div className={css.bookingFoot}><span>{formatMoneyOrZero(price)} · залог {formatMoneyOrZero(deposit)}</span><button type="button" className={css.quietButton} onClick={props.onClose}>Отмена</button><button type="submit" form={formId} className={css.primary} disabled={busy}>{busy ? 'Сохраняем…' : 'Создать бронь'}</button></div>}>
+    <form id={formId} className={css.bookingForm} onSubmit={event => { event.preventDefault(); void save() }}>
+      <div>
+        <ProkatSelect field label="Клиент" value={clientId} options={clients.map(row => ({ id: row.id, name: textOf(row.values[props.kit.client.name]) || 'Без имени' }))} onChange={setClientId} />
+        <p className={css.quiet}>{clientRow ? `${textOf(clientRow.values[props.kit.client.name]) || 'Клиент'} · брал ${ruCount(visits, 'раз', 'раза', 'раз')}` : 'Выберите клиента'}</p>
+        <button type="button" className={css.quietButton} onClick={() => setClientId('')}>Другой клиент</button>
+      </div>
       <fieldset className={css.field}><legend>Предметы</legend><div className={css.itemGrid}>{items.map(item => {
         const selected = itemIds.includes(item.id)
-        return <button key={item.id} type="button" className={css.itemPick} aria-pressed={selected} onClick={() => toggle(item.id)}>
+        const busyItem = item.status !== 'Свободен'
+        return <button key={item.id} type="button" className={css.itemPick} aria-pressed={selected} disabled={busyItem && !selected} onClick={() => toggle(item.id)}>
           <ItemTile item={item} />
-          <span className={css.itemCheckCopy}><strong>{item.name}</strong><span className={css.quiet}>{item.category} · {formatMoney(item.rate)} / {item.tariff.toLowerCase()}</span></span>
+          <span className={css.itemCheckCopy}><strong>{item.name}</strong><span className={css.quiet}>{item.category} · {formatMoney(item.rate)} / {item.tariff.toLowerCase()} · {busyItem ? item.status : 'свободен'}</span></span>
           <span className={css.checkMark} data-on={selected || undefined}>{selected ? <ProtoIcon name="check" size={12} /> : null}</span>
         </button>
       })}</div></fieldset>
-      <div className={css.field}><span>С</span><div className={css.deadlineRow}><DateMenu value={fromDate} onValue={setFromDate} label="Дата начала" /><TimeMenu value={fromTime} onValue={setFromTime} label="Время начала" /></div></div>
-      <div className={css.field}><span>По</span><div className={css.deadlineRow}><DateMenu value={toDate} onValue={setToDate} label="Дата окончания" /><TimeMenu value={toTime} onValue={setToTime} label="Время окончания" /></div></div>
-      <p className={css.moneyRow}>Стоимость <strong>{formatMoney(price)}</strong> · Залог <strong>{formatMoney(deposit)}</strong></p>
+      <div className={css.bookingDates}>
+        <InlineRangeCalendar from={fromDate} to={toDate} onChange={next => { setFromDate(next.from); setToDate(next.to) }} />
+        <div className={css.deadlineRow}><TimeMenu value={fromTime} onValue={setFromTime} label="Время начала" /><TimeMenu value={toTime} onValue={setToTime} label="Время окончания" /></div>
+        <p className={css.moneyRow}>Стоимость <strong>{formatMoneyOrZero(price)}</strong> · Залог <strong>{formatMoneyOrZero(deposit)}</strong></p>
+        <Switch label="Отправить подтверждение" checked={confirm} onChecked={setConfirm} />
+      </div>
       {error ? <p className={css.error} role="alert">{error}</p> : null}
     </form>
   </AppDialog>
@@ -1731,6 +1777,7 @@ function timelineTipText(booking: ProkatListItem, overdue: boolean) {
 function TimelineBar(props: {
   segment: TimelineBarSegment
   label: string
+  markId?: string
   externalLabel?: string
   /** % where outside caption starts (after bar + overdue tail). */
   externalAt?: number
@@ -1775,7 +1822,8 @@ function TimelineBar(props: {
       onBlur={() => setTip(false)}
       onClick={event => { event.stopPropagation(); props.onOpen() }}
     >
-      {props.label ? <span>{props.label}</span> : null}
+      {props.markId ? <Avatar id={props.markId} size={16} /> : null}
+      {props.label && !props.markId ? <span>{props.label}</span> : null}
     </button>
     {props.externalLabel ? (
       <span
@@ -1809,7 +1857,7 @@ function TimelineScreen(props: ScreenProps) {
   const [narrow, setNarrow] = useState(false)
   // Published runtime keeps deviceMode='auto'; detect real phone width ourselves.
   const phone = frameDevice === 'phone' || (frameDevice === 'auto' && narrow)
-  const initialMode: ProkatTimelineRangeId = phone ? 'week' : 'fortnight'
+  const initialMode: ProkatTimelineRangeId = 'day'
   const [mode, setMode] = useState<ProkatTimelineRangeId>(initialMode)
   const [startDate, setStartDate] = useState(() => timelineStartForToday(initialMode, props.now))
   const [search, setSearch] = useState('')
@@ -1907,7 +1955,6 @@ function TimelineScreen(props: ScreenProps) {
       segment: TimelineBarSegment | null
       overdueTail: TimelineBarSegment | null
       tip: string
-      short: string
       left: number
       occupiedRight: number
     }
@@ -1932,35 +1979,23 @@ function TimelineScreen(props: ScreenProps) {
         segment,
         overdueTail,
         tip: timelineTipText(booking, overdue),
-        short: timelineBarLabel(booking.number, booking.clientName),
         left,
         occupiedRight,
       }
     }).filter(entry => entry.segment || entry.overdueTail)
       .sort((a, b) => a.left - b.left || a.booking.id.localeCompare(b.booking.id))
 
-    const barNodes = laid.map((entry, index) => {
-      const nextLeft = laid[index + 1]?.left ?? 100
+    const barNodes = laid.map(entry => {
       const open = () => props.onNavigate?.(props.kit.bookingScreenId, entry.booking.id)
       const nodes: ReactNode[] = []
       if (entry.segment) {
-        const caption = timelineBarCaptionPlacement({
-          label: entry.short,
-          barLeft: entry.segment.left,
-          barWidth: entry.segment.width,
-          occupiedRight: entry.occupiedRight,
-          nextLeft,
-          trackWidthPx,
-          // Phone shows ~half the week track at rest; outside past that looks clipped.
-          // Month bars are thin — only show a name when it fits inside (no outside overlap).
-          maxOutsideEnd: mode === 'month' ? -1 : (phone ? 52 : 96),
-        })
         nodes.push(
           <TimelineBar
             key={`${entry.booking.id}-bar`}
             segment={entry.segment}
-            label={caption.inside}
-            externalLabel={caption.outside ?? undefined}
+            label=""
+            markId={entry.booking.clientEmail || entry.booking.id}
+            externalLabel={undefined}
             externalAt={entry.occupiedRight}
             tip={entry.tip}
             onOpen={open}
@@ -2070,7 +2105,16 @@ function TimelineScreen(props: ScreenProps) {
           <li key={item.tone}><i data-tone={item.tone} data-sample aria-hidden="true" /><span>{item.label}</span></li>
         ))}
       </ul>
-      <div
+      {mode === 'day' ? (
+        <ProkatDayBoard
+          day={startDate}
+          now={props.now}
+          items={filtered}
+          bookings={bookings}
+          onOpen={id => props.onNavigate?.(props.kit.bookingScreenId, id)}
+          onCreate={(itemId, date) => desk && setCreate({ itemId, date })}
+        />
+      ) : <div
         ref={boardRef}
         className={css.timelineBoard}
         data-mode={mode}
@@ -2181,7 +2225,7 @@ function TimelineScreen(props: ScreenProps) {
             })}
           </div>
         )}
-      </div>
+      </div>}
     </ListScreenShell>
     {create && desk ? (
       <CreateDialog
@@ -2197,52 +2241,166 @@ function TimelineScreen(props: ScreenProps) {
 
 function ClientDirectory(props: ScreenProps) {
   const [search, setSearch] = useState('')
+  const [tab, setTab] = useState<'all' | 'open' | 'none'>('all')
+  const [sort, setSort] = useState('name')
+  const [picked, setPicked] = useState<string[]>([])
+  const [focus, setFocus] = useState<string | null>(null)
+  const [importNote, setImportNote] = useState('')
   const needle = search.trim().toLowerCase()
-  const clients = props.of(props.kit.clientsTableId).filter(row => {
+  const openStatuses = ['Заявка', 'Подтверждена', 'Выдано', 'Просрочен возврат']
+  const rows = props.of(props.kit.clientsTableId).map(row => {
+    const email = textOf(row.values[props.kit.client.email])
+    const history = bookingItems(props).filter(item => item.clientEmail.toLowerCase() === email.toLowerCase())
+    const ordered = [...history].sort((a, b) => Date.parse(a.from) - Date.parse(b.from))
+    const next = ordered.find(item => openStatuses.includes(item.status) && Date.parse(item.from) >= props.now) ?? ordered.find(item => openStatuses.includes(item.status))
+    const sum = history.reduce((total, item) => total + item.price, 0)
+    return { row, email, name: textOf(row.values[props.kit.client.name]) || 'Без имени', history, next, sum, phone: textOf(row.values[props.kit.client.phone]) }
+  }).filter(item => {
     if (!needle) return true
-    return [textOf(row.values[props.kit.client.name]), textOf(row.values[props.kit.client.email]), textOf(row.values[props.kit.client.phone])].join(' ').toLowerCase().includes(needle)
+    return [item.name, item.email, item.phone].join(' ').toLowerCase().includes(needle)
   })
+  const counts = { all: rows.length, open: rows.filter(item => item.next).length, none: rows.filter(item => !item.history.length).length }
+  const visible = rows.filter(item => tab === 'all' ? true : tab === 'open' ? Boolean(item.next) : !item.history.length).sort((a, b) => {
+    if (sort === 'sum') return b.sum - a.sum
+    if (sort === 'next') return Date.parse(a.next?.from ?? '') - Date.parse(b.next?.from ?? '')
+    return a.name.localeCompare(b.name, 'ru')
+  })
+  const shown = visible.find(item => item.row.id === focus) ?? visible[0]
+  const toggle = (id: string, on: boolean) => setPicked(current => on ? [...current, id] : current.filter(item => item !== id))
   return <div className={css.root} data-prokat-root data-prokat-screen="clients">
-    <ListScreenShell title="Клиенты" meta="Кто брал оборудование в прокат.">
-      <div className={css.toolbar}><ShellSearchField value={search} onChange={setSearch} placeholder="Поиск клиента" aria-label="Поиск клиентов" /></div>
-      <ul className={css.cards} data-keep-cards>{clients.map(row => {
-        const email = textOf(row.values[props.kit.client.email])
-        const count = bookingItems(props).filter(item => item.clientEmail.toLowerCase() === email.toLowerCase()).length
-        return <li key={row.id}>
-          <button type="button" className={css.card} onClick={() => props.onNavigate?.(props.kit.clientScreenId, row.id)}>
-            <span className={css.mark}><PersonMark name={textOf(row.values[props.kit.client.name])} /><strong>{textOf(row.values[props.kit.client.name]) || 'Без имени'}</strong></span>
-            <span className={css.number}>{email} · {textOf(row.values[props.kit.client.phone])}</span>
-            <span className={css.quiet}>{count} {count === 1 ? 'бронь' : 'брони'}</span>
-          </button>
-        </li>
-      })}</ul>
+    <ListScreenShell title="Клиенты" meta="Кто брал оборудование в прокат." actions={<button type="button" className={css.quietButton} onClick={() => setImportNote('Импорт читает таблицу из кабинета. Отдельный файл на этом экране не подменяет записи.')}>Импорт</button>}>
+      <div className={css.clientTabs} role="tablist" aria-label="Списки клиентов">
+        {([['all', 'Все', counts.all], ['open', 'С записью', counts.open], ['none', 'Без визитов', counts.none]] as const).map(([id, label, count]) => (
+          <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)}>{label}<em>{count}</em></button>
+        ))}
+      </div>
+      <div className={css.clientTools}>
+        <ShellSearchField value={search} onChange={setSearch} placeholder="Имя, телефон или почта" aria-label="Поиск клиентов" />
+        <Select label="Сортировка" value={sort} onValue={setSort} options={[{ value: 'name', label: 'По имени' }, { value: 'sum', label: 'По сумме' }, { value: 'next', label: 'По следующему визиту' }]} />
+      </div>
+      {importNote ? <p role="status" className={css.quiet}>{importNote}</p> : null}
+      {picked.length ? <p className={css.clientBulk}>{ruPlural(picked.length, 'Выбран', 'Выбрано', 'Выбрано')} {ruCount(picked.length, 'клиент', 'клиента', 'клиентов')}. <button type="button" onClick={() => props.onNavigate?.(MESSAGES_SCREEN)}>Написать</button><button type="button" onClick={() => props.onNavigate?.(props.kit.bookingsScreenId)}>Записать</button><button type="button" onClick={() => setPicked([])}>Снять выбор</button></p> : null}
+      <div className={css.clientSplit}>
+        <div className={css.clientTableWrap}>
+          <table className={css.clientTable}>
+            <thead><tr><th /><th>Клиент</th><th>Последний визит</th><th>Что брал</th><th>Сумма</th></tr></thead>
+            <tbody>
+              {visible.map(item => (
+                <tr key={item.row.id} data-on={shown?.row.id === item.row.id || undefined} onMouseEnter={() => setFocus(item.row.id)}>
+                  <td><Checkbox labelHidden label={`Выбрать ${item.name}`} checked={picked.includes(item.row.id)} onChecked={on => toggle(item.row.id, on)} /></td>
+                  <td>
+                    <button type="button" className={css.clientLink} onClick={() => props.onNavigate?.(props.kit.clientScreenId, item.row.id)}>
+                      <PersonMark id={item.row.id} name={item.name} />
+                      <span className={css.clientIdentity}><strong>{item.name}</strong><span>{item.phone || item.email || '—'}</span></span>
+                    </button>
+                    <span className={css.clientHover}>
+                      <button type="button" onClick={() => props.onNavigate?.(props.kit.clientScreenId, item.row.id)}>Открыть</button>
+                      <button type="button" onClick={() => props.onNavigate?.(props.kit.bookingsScreenId)}>Записать</button>
+                    </span>
+                  </td>
+                  <td className={css.mono}>{item.history.length ? formatProkatDate([...item.history].sort((a, b) => Date.parse(b.from) - Date.parse(a.from))[0]!.from) : '—'}</td>
+                  <td>{item.history.length ? [...item.history].sort((a, b) => Date.parse(b.from) - Date.parse(a.from))[0]!.title : '—'}</td>
+                  <td className={css.mono}>{formatMoney(item.sum)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {!visible.length ? <p className={css.quiet}>Никого не нашли.</p> : null}
+        </div>
+        <aside className={css.clientAside} aria-label="Карточка в списке">
+          {shown ? <>
+            <PersonMark id={shown.row.id} name={shown.name} size={40} />
+            <strong>{shown.name}</strong>
+            <p>{shown.phone || 'Телефон не указан'}</p>
+            <p>{shown.email || 'Почта не указана'}</p>
+            <p className={css.mono}>{ruCount(shown.history.length, 'бронь', 'брони', 'броней')} · {formatMoney(shown.sum)}</p>
+            <button type="button" className={css.primary} onClick={() => props.onNavigate?.(props.kit.clientScreenId, shown.row.id)}>Открыть карточку</button>
+          </> : <p className={css.quiet}>Список пуст.</p>}
+        </aside>
+      </div>
     </ListScreenShell>
   </div>
 }
 
 function ClientDetail(props: ScreenProps) {
   const client = props.of(props.kit.clientsTableId).find(row => row.id === props.recordId) ?? props.record
+  const [extraFields, setExtraFields] = useState<string[]>([])
+  const [draftField, setDraftField] = useState('')
+  const [noteMode, setNoteMode] = useState<'client' | 'note'>('client')
+  const [noteText, setNoteText] = useState('')
+  const [thread, setThread] = useState<{ id: string; mode: 'client' | 'note'; text: string }[]>([])
   if (!client) return <div className={css.root}><p className={css.quiet}>Клиент не найден.</p></div>
   const email = textOf(client.values[props.kit.client.email]).toLowerCase()
   const history = bookingItems(props).filter(item => item.clientEmail.toLowerCase() === email)
   const noShowCount = clientNotPickedUpCount(history)
-  const noShowLabel = formatNotPickedUpCount(noShowCount)
+  const sum = history.reduce((total, item) => total + item.price, 0)
+  const average = history.length ? Math.round(sum / history.length) : 0
+  const openItems = history.filter(item => ['Заявка', 'Подтверждена', 'Выдано', 'Просрочен возврат'].includes(item.status))
+  const open = [...openItems].sort((a, b) => Date.parse(b.from) - Date.parse(a.from))[0]
+  const steps = ['Заявка', 'Подтверждена', 'Выдано', 'Возвращено']
+  const stepIndex = open ? Math.max(0, steps.indexOf(open.status === 'Просрочен возврат' ? 'Выдано' : open.status)) : -1
+  const name = textOf(client.values[props.kit.client.name]) || 'Клиент'
   return <div className={css.root} data-prokat-root data-prokat-screen="client-card">
     <DetailCardShell
       back={{ label: 'Клиенты', onClick: () => props.onNavigate?.(props.kit.clientsScreenId) }}
-      title={textOf(client.values[props.kit.client.name]) || 'Клиент'}
+      title={name}
       subtitle={textOf(client.values[props.kit.client.email])}
+      media={<PersonMark id={client.id} name={name} size={48} />}
+      actions={<>
+        <button type="button" className={css.quietButton} onClick={() => props.onNavigate?.(MESSAGES_SCREEN)}>Написать</button>
+        <button type="button" className={css.primary} onClick={() => props.onNavigate?.(props.kit.bookingsScreenId)}>Новая заявка</button>
+      </>}
+      metrics={[
+        { key: 'bookings', caption: 'Броней', value: String(history.length) },
+        { key: 'avg', caption: 'Средний чек', value: formatMoney(average) },
+        { key: 'sum', caption: 'Сумма', value: formatMoney(sum) },
+        { key: 'open', caption: 'Сейчас в работе', value: String(openItems.length) },
+      ]}
     >
-      <DetailSection title="Контакты">
-        <dl className={css.facts}>
-          <div><dt>Телефон</dt><dd>{textOf(client.values[props.kit.client.phone]) || '—'}</dd></div>
-          <div><dt>Заметка</dt><dd>{textOf(client.values[props.kit.client.note]) || '—'}</dd></div>
-          {noShowLabel ? <div data-prokat-noshow><dt>Неявки</dt><dd className={css.noShowCount}>{noShowLabel}</dd></div> : null}
-        </dl>
-      </DetailSection>
-      <DetailSection title="История броней">
-        <BookingRows items={history} now={props.now} onOpen={id => props.onNavigate?.(props.kit.bookingScreenId, id)} keepCards clientScoped />
-      </DetailSection>
+      <div className={css.cardSplit}>
+        <div>
+          {open ? <DetailSection title="Сейчас в работе">
+            <p><strong>{open.title}</strong> · {formatProkatDateTime(open.from)}</p>
+            <ol className={css.stepper}>
+              {steps.map((step, index) => <li key={step} data-on={index <= stepIndex || undefined} data-current={index === stepIndex || undefined}><i />{step}</li>)}
+            </ol>
+            <button type="button" className={css.quietButton} onClick={() => props.onNavigate?.(props.kit.bookingScreenId, open.id)}>Открыть запись</button>
+          </DetailSection> : <DetailSection title="Сейчас в работе"><p className={css.quiet}>Открытых записей нет.</p></DetailSection>}
+          <DetailSection title="История">
+            <BookingRows items={history} now={props.now} onOpen={id => props.onNavigate?.(props.kit.bookingScreenId, id)} keepCards clientScoped />
+          </DetailSection>
+        </div>
+        <aside>
+          <DetailSection title="Переписка и заметки">
+            <p>{textOf(client.values[props.kit.client.note]) || 'Заметок пока нет.'}</p>
+            {noShowCount ? <p className={css.noShowCount}>{formatNotPickedUpCount(noShowCount)}</p> : null}
+            <ul className={css.noteList}>
+              {history.slice(0, 4).map(item => <li key={item.id}><b>{item.status}</b><span>{formatProkatDate(item.from)} · {item.title}</span></li>)}
+              {thread.map(item => <li key={item.id}><b>{item.mode === 'client' ? 'Клиенту' : 'Заметка'}</b><span>{item.text}</span></li>)}
+            </ul>
+            <div className={css.composer}>
+              <div role="tablist" aria-label="Кому запись">
+                <button type="button" aria-selected={noteMode === 'client'} onClick={() => setNoteMode('client')}>Клиенту</button>
+                <button type="button" aria-selected={noteMode === 'note'} onClick={() => setNoteMode('note')}>Заметка</button>
+              </div>
+              <textarea aria-label={noteMode === 'client' ? 'Сообщение клиенту' : 'Заметка'} value={noteText} onChange={event => setNoteText(event.target.value)} rows={3} />
+              <button type="button" onClick={() => { const text = noteText.trim(); if (!text) return; setThread(current => [...current, { id: `${current.length}`, mode: noteMode, text }]); setNoteText('') }}>Добавить</button>
+            </div>
+          </DetailSection>
+          <DetailSection title="Данные клиента">
+            <dl className={css.facts}>
+              <div><dt>Телефон</dt><dd>{textOf(client.values[props.kit.client.phone]) || '—'}</dd></div>
+              <div><dt>Почта</dt><dd>{textOf(client.values[props.kit.client.email]) || '—'}</dd></div>
+              {extraFields.map(field => <div key={field}><dt>{field}</dt><dd>—</dd></div>)}
+            </dl>
+            <form className={css.addField} onSubmit={event => { event.preventDefault(); const name = draftField.trim(); if (!name) return; setExtraFields(current => [...current, name]); setDraftField('') }}>
+              <input aria-label="Новое поле" value={draftField} onChange={event => setDraftField(event.target.value)} placeholder="Название поля" />
+              <button type="submit">Добавить поле</button>
+            </form>
+            <p className={css.quiet}>Новое поле видно на этой карточке и не записывается в таблицу, пока его нет в шаблоне.</p>
+          </DetailSection>
+        </aside>
+      </div>
     </DetailCardShell>
   </div>
 }

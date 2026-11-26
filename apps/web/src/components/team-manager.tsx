@@ -3,6 +3,7 @@
 import { useRef, useState, useTransition } from 'react'
 import { changeRoleAction, inviteMemberAction, removeMemberAction,setMemberTableAccessAction } from '@/app/team-actions'
 import { MEMBER_ROLES, ROLE_LABELS, type MemberRole } from '@/lib/roles'
+import { Avatar } from '@/components/ui/avatar'
 import { TableAccessDialog,type AccessTable } from './table-access-dialog'
 import { tablePermission,type TableAccess } from '@/lib/table-permissions'
 
@@ -69,7 +70,7 @@ export function TeamManager({ rows, canManage,tables=[] }: { rows: TeamRow[]; ca
       {error ? <p role="alert" className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</p> : null}
       <ul className="divide-y divide-sand-200 rounded-2xl border border-sand-200 bg-white">
         {rows.map(row => <li key={row.userId} className="flex flex-wrap items-start gap-3 p-4 sm:items-center sm:p-5">
-          <span aria-hidden="true" className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-sage-50 text-sm font-medium text-sage-700">{(row.name || row.email).trim().slice(0, 1).toUpperCase()}</span>
+          <Avatar id={row.userId || row.email} size={40} />
           <div className="min-w-0 flex-1 basis-36"><p className="break-words text-sm font-medium text-ink">{row.name || row.email}{row.isSelf ? <span className="ml-2 text-xs font-normal text-ink-muted">Вы</span> : null}</p>{row.name ? <p className="mt-1 break-all text-sm text-ink-soft">{row.email}</p> : null}<p className="mt-1 text-xs text-ink-muted">{row.accepted ? 'В команде' : 'Приглашение отправлено'}</p></div>
           <div className="w-full pl-[52px] sm:w-auto sm:pl-0">
             {canManage && !(soleOwner && row.role === 'owner') ? <label className="block text-xs text-ink-muted">Роль: {row.name || row.email}<select aria-label={`Роль: ${row.email}`} value={row.role} disabled={pending} onChange={event => run(() => changeRoleAction(row.userId, event.target.value))} className={`${INPUT} mt-1 block w-full sm:min-w-36`}>{MEMBER_ROLES.map(candidate => <option key={candidate} value={candidate}>{ROLE_LABELS[candidate]}</option>)}</select></label> : <span className="inline-flex rounded-md bg-sand-100 px-2 py-1 text-sm text-ink-soft">{ROLE_LABELS[row.role]}</span>}

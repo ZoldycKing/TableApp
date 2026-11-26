@@ -38,6 +38,7 @@ export function ListScreenShell({
   children,
   footer,
   hideHeader,
+  desktopActions,
 }: {
   title?: ReactNode
   meta?: ReactNode
@@ -55,6 +56,8 @@ export function ListScreenShell({
   children: ReactNode
   footer?: ReactNode
   hideHeader?: boolean
+  /** Header actions stay on the desktop row; the phone uses the round add button. */
+  desktopActions?: boolean
 }) {
   const visibleMetrics = metrics?.filter(metric => {
     if (metric.value == null || metric.value === '' || metric.value === '—') return false
@@ -81,10 +84,10 @@ export function ListScreenShell({
         {title ? <h2 className={shell.headerTitle}>{title}</h2> : null}
         {meta ? <p className={shell.headerMeta}>{meta}</p> : null}
       </div>
-      {actions ? <div className={shell.headerActions}>{actions}</div> : null}
+      {actions ? <div className={shell.headerActions} data-desktop-only={desktopActions || undefined}>{actions}</div> : null}
     </header> : null}
     {cards ? summary : null}
-    <div className={shell.panel}>
+    <div className={shell.panel} data-shell-panel="">
       {!cards ? summary : null}
       {filterBar ?? ((tabs?.length || search || selects) ? <div className={shell.filters}>
         {tabs?.length ? <div className={shell.filterTabs} role="tablist" aria-label="Фильтры списка">
@@ -118,13 +121,17 @@ export function ShellSearchField({
   onChange,
   placeholder = 'Найти в списке',
   label = 'Поиск',
+  soft = false,
+  hint,
 }: {
   value: string
   onChange: (value: string) => void
   placeholder?: string
   label?: string
+  soft?: boolean
+  hint?: string
 }) {
-  return <label className={shell.filterSearch}>
+  return <label className={shell.filterSearch} data-soft={soft || undefined}>
     <ProtoIcon name="search" size={16} />
     <input
       type="search"
@@ -134,6 +141,7 @@ export function ShellSearchField({
       value={value}
       onChange={event => onChange(event.target.value)}
     />
+    {hint ? <kbd>{hint}</kbd> : null}
   </label>
 }
 

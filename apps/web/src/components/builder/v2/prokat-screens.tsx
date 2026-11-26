@@ -11,6 +11,7 @@ import { ruCount, ruPlural } from '@/components/ui/format'
 import { InlineRangeCalendar } from '@/components/ui/pickers'
 import { Select } from '@/components/ui/select'
 import { ProkatDayBoard } from './prokat-day-board'
+import { buildProkatDaySchedule, PROKAT_SCHEDULE_AT } from '@/lib/prokat-day-demo'
 import type { ConversationPage } from '@/lib/conversation-types'
 import { BuilderV2AttachmentInput } from './attachment-input'
 import {
@@ -1853,13 +1854,22 @@ function TimelineBar(props: {
 function TimelineScreen(props: ScreenProps) {
   useProkatHoldCatchUp(props)
   const desk = isProkatDesk(props.actor)
+  const demoBundle = useContext(ProkatRowsContext)
+  const sample = Boolean(demoBundle?.sample)
+  const scheduleNow = sample ? PROKAT_SCHEDULE_AT : props.now
+  const scheduleClock = (() => {
+    const wall = instantToWallClock(new Date(scheduleNow).toISOString(), PROKAT_ZONE)
+    if (!wall?.time) return 14 * 60 + 20
+    const [hour, minute] = wall.time.split(':').map(Number)
+    return (hour ?? 14) * 60 + (minute ?? 0)
+  })()
   const frameDevice = useContext(AppFrameDeviceContext)
-  const [narrow, setNarrow] = useState(false)
-  // Published runtime keeps deviceMode='auto'; detect real phone width ourselves.
-  const phone = frameDevice === 'phone' || (frameDevice === 'auto' && narrow)
+  const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 759px)').matches)
+  const phone = frameDevice === 'phone' || narrow
   const initialMode: ProkatTimelineRangeId = 'day'
   const [mode, setMode] = useState<ProkatTimelineRangeId>(initialMode)
-  const [startDate, setStartDate] = useState(() => timelineStartForToday(initialMode, props.now))
+  const [startDate, setStartDate] = useState(() => timelineStartForToday(initialMode, scheduleNow))
+  const [frameHost, setFrameHost] = useState<HTMLElement | null>(null)
   const [search, setSearch] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
@@ -1870,14 +1880,13 @@ function TimelineScreen(props: ScreenProps) {
   const board = buildTimelineWindow({ mode, startDate, now: props.now })
   const columns = board.columns
   const columnCount = Math.max(1, columns.length)
+  useEffect(() => { setFrameHost(document.querySelector('[data-app-frame]')) }, [])
   useEffect(() => {
-    const root = boardRef.current
-    if (!root || typeof ResizeObserver === 'undefined') return
-    const observer = new ResizeObserver(entries => {
-      setNarrow((entries[0]?.contentRect.width ?? 0) < 760)
-    })
-    observer.observe(root)
-    return () => observer.disconnect()
+    const query = window.matchMedia('(max-width: 759px)')
+    const apply = () => setNarrow(query.matches)
+    apply()
+    query.addEventListener('change', apply)
+    return () => query.removeEventListener('change', apply)
   }, [])
   const onTimelinePaneScroll = (event: { currentTarget: HTMLElement }) => {
     if (!phone || scrollSyncing.current) return
@@ -1933,10 +1942,10 @@ function TimelineScreen(props: ScreenProps) {
       })
       .flatMap(booking => booking.itemIds),
   )
-  const goToday = () => setStartDate(timelineStartForToday(mode, props.now))
+  const goToday = () => setStartDate(timelineStartForToday(mode, scheduleNow))
   const changeMode = (next: ProkatTimelineRangeId) => {
     setMode(next)
-    setStartDate(timelineStartForToday(next, props.now))
+    setStartDate(timelineStartForToday(next, scheduleNow))
   }
   const civilDateForClick = (clientX: number, track: HTMLElement) => {
     const rect = track.getBoundingClientRect()
@@ -2057,12 +2066,24 @@ function TimelineScreen(props: ScreenProps) {
     }
     return <div key={item.id} className={css.timelineRow}>{label}{track}</div>
   }
+  const dayPlan = sample ? buildProkatDaySchedule(items) : null
+  const dayCount = dayPlan ? dayPlan.blocks.filter(block => block.tone !== 'br').length : bookings.length
+  const dayWaiting = dayPlan ? dayPlan.blocks.filter(block => block.tone === 'w').length : 0
   return <div className={css.root} data-prokat-root data-prokat-screen="timeline" data-phone={phone || undefined}>
+    {desk && phone && frameHost ? createPortal(
+      <button type="button" className={css.phoneAdd} aria-label="Новая бронь" onClick={() => setCreate({ itemId: items[0]?.id ?? '', date: startDate })}>+</button>,
+      frameHost,
+    ) : null}
     <ListScreenShell
       title="Занятость"
-      meta={phone ? undefined : 'Полоса — срок аренды. Клик по пустой ячейке — новая бронь.'}
+      meta={dayPlan ? `${ruCount(dayCount, 'запись', 'записи', 'записей')} на сегодня, ${dayWaiting} ждут подтверждения` : 'Полоса — срок аренды. Клик по пустой ячейке — новая бронь.'}
+      actions={<>
+        <ShellSearchField value={search} onChange={setSearch} placeholder="Найти клиента или запись" label="Поиск записи" soft hint="Ctrl K" />
+        {desk ? <button type="button" className={css.cabinetBtn} onClick={() => setCreate({ itemId: items[0]?.id ?? '', date: startDate })}>+ Новая бронь</button> : null}
+      </>}
+      desktopActions
     >
-      <div className={css.timelineToolbar} data-search-open={searchOpen || undefined}>
+      {mode === 'day' ? null : <div className={css.timelineToolbar} data-search-open={searchOpen || undefined}>
         <div className={css.timelineRange} role="group" aria-label="Диапазон шкалы">
           {PROKAT_TIMELINE_RANGES.map(item => (
             <button
@@ -2099,20 +2120,26 @@ function TimelineScreen(props: ScreenProps) {
             />
           )}
         </div>
-      </div>
-      <ul className={css.timelineLegend} aria-label="Статусы броней">
+      </div>}
+      {mode === 'day' ? null : <ul className={css.timelineLegend} aria-label="Статусы броней">
         {TIMELINE_LEGEND.map(item => (
           <li key={item.tone}><i data-tone={item.tone} data-sample aria-hidden="true" /><span>{item.label}</span></li>
         ))}
-      </ul>
+      </ul>}
       {mode === 'day' ? (
         <ProkatDayBoard
           day={startDate}
-          now={props.now}
+          nowMin={scheduleClock}
           items={filtered}
           bookings={bookings}
+          sample={sample}
+          phone={phone}
+          mode={mode}
+          onMode={changeMode}
+          onShift={direction => setStartDate(current => shiftTimelineStart(current, mode, direction))}
+          onToday={goToday}
+          onCreate={(itemId, date) => { if (desk) setCreate({ itemId, date }) }}
           onOpen={id => props.onNavigate?.(props.kit.bookingScreenId, id)}
-          onCreate={(itemId, date) => desk && setCreate({ itemId, date })}
         />
       ) : <div
         ref={boardRef}

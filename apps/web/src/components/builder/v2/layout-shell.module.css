@@ -19,13 +19,11 @@
 }
 
 .header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px 16px;
-  align-items: end;
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
   min-width: 0;
-  /* Align H1/meta with the card/panel edge below (same as cart). */
-  padding-inline: 0;
+  padding: 22px 28px 18px;
 }
 
 .headerCopy {
@@ -36,19 +34,20 @@
 
 .headerTitle {
   margin: 0;
-  color: var(--shell-ink);
-  font-size: clamp(1.25rem, 2.2cqw, 1.55rem);
-  font-weight: 750;
-  line-height: 1.25;
-  letter-spacing: -0.02em;
+  color: #141516;
+  font-size: 28px;
+  font-weight: 500;
+  line-height: 1.05;
+  letter-spacing: -0.035em;
+  font-stretch: 88%;
 }
 
 .headerMeta {
-  margin: 0;
-  color: var(--shell-muted);
-  font-size: 13px;
+  margin: 5px 0 0;
+  color: #6E7076;
+  font-size: 13.5px;
   line-height: 1.35;
-  font-variant-numeric: tabular-nums;
+  font-weight: 400;
 }
 
 .headerActions {
@@ -60,9 +59,10 @@
   min-width: 0;
 }
 /* The phone preview is a narrow container inside a wide window, so the viewport query never stacks this row. */
-@container builder-app (max-width: 480px) {
-  .header { grid-template-columns: minmax(0, 1fr); align-items: start; }
-  .headerTitle { overflow-wrap: normal; }
+@container builder-app (max-width: 759px) {
+  .header { align-items: flex-start; padding: 16px 18px 0; }
+  .headerTitle { font-size: 30px; overflow-wrap: normal; }
+  .headerActions[data-desktop-only] { display: none; }
 }
 @container builder-app (max-width: 719px) {
   .detailHead:has([data-dispatch-status]) { grid-template-columns: minmax(0, 1fr); }
@@ -703,6 +703,30 @@
 }
 
 .filterSearch > input::placeholder { color: var(--shell-muted); }
+.filterSearch[data-soft] {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  width: 290px;
+  max-width: 100%;
+  min-height: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 10px;
+  background: #F1F1EE;
+  color: #6E7076;
+  font-size: 13.5px;
+}
+.filterSearch[data-soft] > input::placeholder { color: #6E7076; font-size: 13.5px; }
+.filterSearch[data-soft] kbd {
+  margin-left: auto;
+  padding: 0 5px;
+  border: 1px solid #E3E3DF;
+  border-radius: 5px;
+  background: #fff;
+  color: #6E7076;
+  font-family: var(--font-scatta-mono), ui-monospace, monospace;
+  font-size: 11px;
+}
 
 .filterSearch > select {
   appearance: none;

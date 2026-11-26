@@ -67,6 +67,16 @@ function goalFor(model: ReturnType<typeof prokatTemplateDemoModel>, view: string
   return { ...base, screenId: kit.bookingsScreenId, recordId: undefined }
 }
 
+function navBadges(model: ReturnType<typeof prokatTemplateDemoModel>, rows: AppV2Record[]) {
+  const kit = model.kit
+  const clients = rows.filter(row => row.tableId === kit.clientsTableId).length
+  const requests = rows.filter(row => row.tableId === kit.bookingsTableId && row.values[kit.booking.status] === kit.statuses.request).length
+  return {
+    [kit.clientsScreenId]: { count: clients },
+    [kit.bookingsScreenId]: { count: Math.max(requests, 2), alert: true },
+  }
+}
+
 function actorFor(who: DemoWho): AppV2Actor {
   if (who === 'client') return { authenticated: true, id: 'demo_client', roleIds: ['client'], email: 'm.petrova@yandex.ru', name: 'Мария Петрова', company: '' }
   if (who === 'owner') return { authenticated: true, id: 'demo_owner', roleIds: ['owner'], email: 'owner@prokat-demo.ru', name: 'Руководитель проката', company: '' }
@@ -102,7 +112,7 @@ export function ProkatDemo({ view = 'bookings', bare = false, scheme, phone = fa
   const navigate = (id: string, rowId?: string) => { setScreenId(id); setRecordId(rowId); setOpen(null) }
   return <BuilderV2Theme app={themed}><ProkatRowsContext value={{ rows, setRows, open, now: demoNowMs(), sample: true }}>
     <div data-prokat-root data-prokat-screen={view} data-preview-screen={screenId}>
-      <BuilderV2AppFrame app={visible} screenId={screenId} title="" phone={phone} deviceMode={phone ? 'phone' : 'desktop'} fullScreen={bare} onNavigate={navigate}>
+      <BuilderV2AppFrame app={visible} screenId={screenId} title="" phone={phone} deviceMode={phone ? 'phone' : 'auto'} fullScreen={bare} onNavigate={navigate} accountProfile={{ name: who === 'client' ? 'Мария Петрова' : 'Анна Смирнова', role: who === 'owner' ? 'Руководитель' : who === 'client' ? 'Клиент' : 'Сотрудник' }} navBadges={navBadges(model, rows)}>
         <AppV2Renderer live app={visible} tables={model.tables} actor={actor} screenId={screenId} record={rows.find(row => row.id === recordId)} onNavigate={navigate} />
       </BuilderV2AppFrame>
     </div>

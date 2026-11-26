@@ -12,7 +12,7 @@ import { ProkatRowsContext, type ProkatOpen } from './prokat-screens'
 import { AppV2Renderer } from './view'
 
 export function prokatTemplateDemoModel(example = templateExample('prokat')) {
-  const app = buildProkatV2App(example.built, { id: example.app.id, workspaceId: example.app.workspaceId, name: 'Прокат', slug: 'prokat-demo', email: 'owner@prokat-demo.ru' })
+  const app = buildProkatV2App(example.built, { id: example.app.id, workspaceId: example.app.workspaceId, name: 'Прокат «Сплав»', slug: 'prokat-demo', email: 'owner@prokat-demo.ru' })
   const kit = app.prokat!
   const tables: BuilderV2Table[] = example.built.tables.map(table => ({
     ...table, views: [], primaryFieldId: table.primaryFieldId,

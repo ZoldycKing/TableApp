@@ -161,11 +161,12 @@
 .phoneAdd {
   position: absolute; right: 16px; bottom: 100px; z-index: 6;
   display: grid; place-items: center;
-  width: 54px; height: 54px; margin: 0; border: 0; border-radius: 50%;
+  width: 54px; height: 54px; margin: 0; padding: 0; border: 0; border-radius: 50%;
   background: #141516; color: #fff;
-  font-size: 28px; line-height: 1; cursor: pointer;
+  line-height: 0; cursor: pointer;
   box-shadow: 0 14px 30px -10px rgba(20,21,22,.5);
 }
+.phoneAdd svg { display: block; width: 24px; height: 24px; }
 .stack { display: grid; gap: 0; min-width: 0; padding: 0 0 8px; }
 .stack > .sample {
   margin: 0; padding: 8px 20px 0; border-radius: 0; background: transparent;

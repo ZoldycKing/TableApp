@@ -915,7 +915,7 @@ function DashboardScreen(props: ScreenProps) {
   }
 
   return <div className={css.root} data-prokat-root data-prokat-screen="dashboard" data-phone={phone || undefined}>
-    {desk && phone && frameHost ? createPortal(<button type="button" className={css.phoneAdd} aria-label="Новая бронь" onClick={() => setCreate(true)}>+</button>, frameHost) : null}
+    {desk && phone && frameHost ? createPortal(<button type="button" className={css.phoneAdd} aria-label="Новая бронь" onClick={() => setCreate(true)}><ProtoIcon name="plus" size={24} /></button>, frameHost) : null}
     <TodayView
       phone={phone}
       subtitle={subtitle}
@@ -2171,7 +2171,7 @@ function TimelineScreen(props: ScreenProps) {
   const dayWaiting = dayPlan ? dayPlan.blocks.filter(block => block.tone === 'w').length : 0
   return <div className={css.root} data-prokat-root data-prokat-screen="timeline" data-phone={phone || undefined}>
     {desk && phone && frameHost ? createPortal(
-      <button type="button" className={css.phoneAdd} aria-label="Новая бронь" onClick={() => setCreate({ itemId: items[0]?.id ?? '', date: startDate })}>+</button>,
+      <button type="button" className={css.phoneAdd} aria-label="Новая бронь" onClick={() => setCreate({ itemId: items[0]?.id ?? '', date: startDate })}><ProtoIcon name="plus" size={24} /></button>,
       frameHost,
     ) : null}
     <ListScreenShell

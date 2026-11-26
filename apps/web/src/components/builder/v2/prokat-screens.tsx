@@ -7,6 +7,8 @@ import type { AppV2, AppV2Json, AppV2Node, AppV2Record } from '@tableapp/schema/
 import { catchUpPublishedProkatHolds, savePublishedProkatAction } from '@/app/prokat-actions'
 import { Avatar } from '@/components/ui/avatar'
 import { Checkbox, Switch } from '@/components/ui/choice'
+import { ruCount } from '@/components/ui/format'
+import { DateRangeField } from '@/components/ui/pickers'
 import { Select } from '@/components/ui/select'
 import { ProkatDayBoard } from './prokat-day-board'
 import type { ConversationPage } from '@/lib/conversation-types'
@@ -19,7 +21,7 @@ import {
   encodeItemHoldOverride, filterBookings, formatMoney, formatMoneyOrZero, formatNotPickedUpCount,
   formatProkatDate, formatProkatDateTime, holdOptionLabel, isHoldEligibleStatus, isHoldWindowOpen,
   isOpenBooking, isOverdueReturn, itemLateFeeConfig, parseItemHoldOverride, prokatClientStepIndex,
-  prokatDashboard, prokatWallInstant, resolveBookingHoldUntil,
+  prokatDashboard, prokatInstantParts, prokatWallInstant, resolveBookingHoldUntil,
   shiftTimelineStart, staffTransitions,
   timelineBookingSegments, timelineStartForToday, type ProkatBookingViewId,
   type ProkatCatalogItem, type ProkatHoldAfterStartMinutes, type ProkatListItem, type ProkatLateFeeMode,
@@ -611,14 +613,13 @@ function TodayGroup(props: {
   children: ReactNode
   count: number
 }) {
+  if (!props.count) return null
   return <section className={css.todayGroup} data-tone={props.tone} aria-label={props.title}>
     <header className={css.todayHead}>
       <h3>{props.title}</h3>
       <span className={css.todayCount}>{props.count}</span>
     </header>
-    {props.count
-      ? <ul className={css.todayList}>{props.children}</ul>
-      : <p className={css.todayEmpty}>{props.title} — нет</p>}
+    <ul className={css.todayList}>{props.children}</ul>
   </section>
 }
 
@@ -811,11 +812,24 @@ function SettingsScreen(props: ScreenProps) {
   const owner = props.actor.roleIds.includes('owner')
   const [holdMinutes, setHoldMinutes] = useState<ProkatHoldAfterStartMinutes>(() => prokatHoldMinutes(props.kit))
   useEffect(() => { setHoldMinutes(prokatHoldMinutes(props.kit)) }, [props.kit.holdAfterStartMinutes])
+  const [section, setSection] = useState<'hold' | 'client'>('hold')
   return <div className={css.root} data-prokat-root data-prokat-screen="settings">
-    <ListScreenShell title="Настройки проката" meta="Общие правила удержания брони.">
-      {owner ? <DetailSection title="Бронь">
-        <HoldSettingControl {...props} value={holdMinutes} onSaved={setHoldMinutes} />
-      </DetailSection> : <p className={css.quiet}>Настройки меняет руководитель.</p>}
+    <ListScreenShell title="Настройки" meta="Правила, которые видит клиент.">
+      <div className={css.settingsLayout}>
+        <nav aria-label="Разделы настроек">
+          <button type="button" aria-current={section === 'hold' ? 'page' : undefined} onClick={() => setSection('hold')}>Бронь</button>
+          <button type="button" aria-current={section === 'client' ? 'page' : undefined} onClick={() => setSection('client')}>Клиенту</button>
+        </nav>
+        <div>
+          {section === 'hold' ? (owner ? <DetailSection title="Удержание брони"><HoldSettingControl {...props} value={holdMinutes} onSaved={setHoldMinutes} /></DetailSection> : <p className={css.quiet}>Настройки меняет руководитель.</p>) : <DetailSection title="Что видно клиенту"><p>Каталог, срок и сумма. Подтверждение уходит в переписку, если оно включено в форме брони.</p></DetailSection>}
+        </div>
+        <aside aria-label="Так видит клиент">
+          <small>Так видит клиент</small>
+          <strong>{props.app.name}</strong>
+          <p>Срок и сумма на одном экране.</p>
+          <span>Записаться</span>
+        </aside>
+      </div>
     </ListScreenShell>
   </div>
 }
@@ -1296,10 +1310,16 @@ function CreateDialog(props: ScreenProps & {
   const clients = props.of(props.kit.clientsTableId)
   const items = catalogItems(props).filter(item => item.status === 'Свободен' || item.status === 'В прокате')
   const [clientId, setClientId] = useState(clients[0]?.id ?? '')
-  const [itemIds, setItemIds] = useState<string[]>(props.initialItemId ? [props.initialItemId] : [])
-  const [fromDate, setFromDate] = useState(props.initialDate ?? '')
+  const [itemIds, setItemIds] = useState<string[]>(props.initialItemId ? [props.initialItemId] : items.filter(item => item.status === 'Свободен').slice(0, 1).map(item => item.id))
+  const todayIso = prokatInstantParts(new Date(props.now).toISOString()).date
+  const tomorrowIso = (() => {
+    const [year, month, day] = todayIso.split('-').map(Number)
+    if (!year || !month || !day) return todayIso
+    return new Date(Date.UTC(year, month - 1, day + 1)).toISOString().slice(0, 10)
+  })()
+  const [fromDate, setFromDate] = useState(props.initialDate || todayIso)
   const [fromTime, setFromTime] = useState('12:00')
-  const [toDate, setToDate] = useState(props.initialDate ?? '')
+  const [toDate, setToDate] = useState(props.initialDate || tomorrowIso)
   const [toTime, setToTime] = useState('18:00')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -1333,11 +1353,12 @@ function CreateDialog(props: ScreenProps & {
   const clientRow = clients.find(row => row.id === clientId)
   const clientEmail = textOf(clientRow?.values[props.kit.client.email]).toLowerCase()
   const visits = bookingItems(props).filter(item => item.clientEmail.toLowerCase() === clientEmail && clientEmail).length
-  return <AppDialog title="Новая бронь" placement="center" onClose={props.onClose} footer={<div className={css.bookingFoot}><span>{formatMoney(price)} · залог {formatMoney(deposit)}</span><button type="button" className={css.quietButton} onClick={props.onClose}>Отмена</button><button type="submit" form={formId} className={css.primary} disabled={busy}>{busy ? 'Сохраняем…' : 'Создать бронь'}</button></div>}>
+  return <AppDialog title="Новая бронь" placement="center" onClose={props.onClose} footer={<div className={css.bookingFoot}><span>{formatMoneyOrZero(price)} · залог {formatMoneyOrZero(deposit)}</span><button type="button" className={css.quietButton} onClick={props.onClose}>Отмена</button><button type="submit" form={formId} className={css.primary} disabled={busy}>{busy ? 'Сохраняем…' : 'Создать бронь'}</button></div>}>
     <form id={formId} className={css.bookingForm} onSubmit={event => { event.preventDefault(); void save() }}>
       <div>
         <ProkatSelect field label="Клиент" value={clientId} options={clients.map(row => ({ id: row.id, name: textOf(row.values[props.kit.client.name]) || 'Без имени' }))} onChange={setClientId} />
-        <p className={css.quiet}>{clientRow ? `${textOf(clientRow.values[props.kit.client.name]) || 'Клиент'} · брал ${visits} раз` : 'Выберите клиента'}</p>
+        <p className={css.quiet}>{clientRow ? `${textOf(clientRow.values[props.kit.client.name]) || 'Клиент'} · брал ${ruCount(visits, 'раз', 'раза', 'раз')}` : 'Выберите клиента'}</p>
+        <button type="button" className={css.quietButton} onClick={() => setClientId('')}>Другой клиент</button>
       </div>
       <fieldset className={css.field}><legend>Предметы</legend><div className={css.itemGrid}>{items.map(item => {
         const selected = itemIds.includes(item.id)
@@ -1349,9 +1370,9 @@ function CreateDialog(props: ScreenProps & {
         </button>
       })}</div></fieldset>
       <div className={css.bookingDates}>
-        <div className={css.field}><span>С</span><div className={css.deadlineRow}><DateMenu value={fromDate} onValue={setFromDate} label="Дата начала" /><TimeMenu value={fromTime} onValue={setFromTime} label="Время начала" /></div></div>
-        <div className={css.field}><span>По</span><div className={css.deadlineRow}><DateMenu value={toDate} onValue={setToDate} label="Дата окончания" /><TimeMenu value={toTime} onValue={setToTime} label="Время окончания" /></div></div>
-        <p className={css.moneyRow}>Стоимость <strong>{formatMoney(price)}</strong> · Залог <strong>{formatMoney(deposit)}</strong></p>
+        <DateRangeField label="Срок" from={fromDate} to={toDate} onChange={next => { setFromDate(next.from); setToDate(next.to) }} />
+        <div className={css.deadlineRow}><TimeMenu value={fromTime} onValue={setFromTime} label="Время начала" /><TimeMenu value={toTime} onValue={setToTime} label="Время окончания" /></div>
+        <p className={css.moneyRow}>Стоимость <strong>{formatMoneyOrZero(price)}</strong> · Залог <strong>{formatMoneyOrZero(deposit)}</strong></p>
         <Switch label="Отправить подтверждение" checked={confirm} onChecked={setConfirm} />
       </div>
       {error ? <p className={css.error} role="alert">{error}</p> : null}
@@ -2254,15 +2275,15 @@ function ClientDirectory(props: ScreenProps) {
         <Select label="Сортировка" value={sort} onValue={setSort} options={[{ value: 'name', label: 'По имени' }, { value: 'sum', label: 'По сумме' }, { value: 'next', label: 'По следующему визиту' }]} />
       </div>
       {importNote ? <p role="status" className={css.quiet}>{importNote}</p> : null}
-      {picked.length ? <p className={css.clientBulk}>Выбрано {picked.length}. <button type="button" onClick={() => setPicked([])}>Снять выбор</button></p> : null}
+      {picked.length ? <p className={css.clientBulk}>Выбрано {ruCount(picked.length, 'клиент', 'клиента', 'клиентов')}. <button type="button" onClick={() => props.onNavigate?.(MESSAGES_SCREEN)}>Написать</button><button type="button" onClick={() => props.onNavigate?.(props.kit.bookingsScreenId)}>Записать</button><button type="button" onClick={() => setPicked([])}>Снять выбор</button></p> : null}
       <div className={css.clientSplit}>
         <div className={css.clientTableWrap}>
           <table className={css.clientTable}>
-            <thead><tr><th /><th>Клиент</th><th>Статус</th><th>Сумма</th><th>Следующий</th></tr></thead>
+            <thead><tr><th /><th>Клиент</th><th>Последний визит</th><th>Что брал</th><th>Сумма</th></tr></thead>
             <tbody>
               {visible.map(item => (
                 <tr key={item.row.id} data-on={shown?.row.id === item.row.id || undefined} onMouseEnter={() => setFocus(item.row.id)}>
-                  <td><Checkbox label={`Выбрать ${item.name}`} checked={picked.includes(item.row.id)} onChecked={on => toggle(item.row.id, on)} /></td>
+                  <td><Checkbox labelHidden label={`Выбрать ${item.name}`} checked={picked.includes(item.row.id)} onChecked={on => toggle(item.row.id, on)} /></td>
                   <td>
                     <button type="button" className={css.clientLink} onClick={() => props.onNavigate?.(props.kit.clientScreenId, item.row.id)}>
                       <PersonMark id={item.row.id} name={item.name} />
@@ -2273,9 +2294,9 @@ function ClientDirectory(props: ScreenProps) {
                       <button type="button" onClick={() => props.onNavigate?.(props.kit.bookingsScreenId)}>Записать</button>
                     </span>
                   </td>
-                  <td>{item.next?.status ?? (item.history.length ? 'Без открытых' : 'Новый')}</td>
+                  <td className={css.mono}>{item.history.length ? formatProkatDate([...item.history].sort((a, b) => Date.parse(b.from) - Date.parse(a.from))[0]!.from) : '—'}</td>
+                  <td>{item.history.length ? [...item.history].sort((a, b) => Date.parse(b.from) - Date.parse(a.from))[0]!.title : '—'}</td>
                   <td className={css.mono}>{formatMoney(item.sum)}</td>
-                  <td className={css.mono}>{item.next ? formatProkatDate(item.next.from) : '—'}</td>
                 </tr>
               ))}
             </tbody>
@@ -2288,7 +2309,7 @@ function ClientDirectory(props: ScreenProps) {
             <strong>{shown.name}</strong>
             <p>{shown.phone || 'Телефон не указан'}</p>
             <p>{shown.email || 'Почта не указана'}</p>
-            <p className={css.mono}>{shown.history.length} {shown.history.length === 1 ? 'бронь' : 'брони'} · {formatMoney(shown.sum)}</p>
+            <p className={css.mono}>{ruCount(shown.history.length, 'бронь', 'брони', 'броней')} · {formatMoney(shown.sum)}</p>
             <button type="button" className={css.primary} onClick={() => props.onNavigate?.(props.kit.clientScreenId, shown.row.id)}>Открыть карточку</button>
           </> : <p className={css.quiet}>Список пуст.</p>}
         </aside>
@@ -2301,6 +2322,9 @@ function ClientDetail(props: ScreenProps) {
   const client = props.of(props.kit.clientsTableId).find(row => row.id === props.recordId) ?? props.record
   const [extraFields, setExtraFields] = useState<string[]>([])
   const [draftField, setDraftField] = useState('')
+  const [noteMode, setNoteMode] = useState<'client' | 'note'>('client')
+  const [noteText, setNoteText] = useState('')
+  const [thread, setThread] = useState<{ id: string; mode: 'client' | 'note'; text: string }[]>([])
   if (!client) return <div className={css.root}><p className={css.quiet}>Клиент не найден.</p></div>
   const email = textOf(client.values[props.kit.client.email]).toLowerCase()
   const history = bookingItems(props).filter(item => item.clientEmail.toLowerCase() === email)
@@ -2325,14 +2349,15 @@ function ClientDetail(props: ScreenProps) {
         { key: 'bookings', caption: 'Броней', value: String(history.length) },
         { key: 'avg', caption: 'Средний чек', value: formatMoney(average) },
         { key: 'sum', caption: 'Сумма', value: formatMoney(sum) },
+        { key: 'open', caption: 'Сейчас в работе', value: open ? open.title : 'нет' },
       ]}
     >
       <div className={css.cardSplit}>
         <div>
           {open ? <DetailSection title="Сейчас в работе">
             <p><strong>{open.title}</strong> · {formatProkatDateTime(open.from)}</p>
-            <ol className={css.stepRow}>
-              {steps.map((step, index) => <li key={step} data-on={index <= stepIndex || undefined}>{step}</li>)}
+            <ol className={css.stepper}>
+              {steps.map((step, index) => <li key={step} data-on={index <= stepIndex || undefined} data-current={index === stepIndex || undefined}><i />{step}</li>)}
             </ol>
             <button type="button" className={css.quietButton} onClick={() => props.onNavigate?.(props.kit.bookingScreenId, open.id)}>Открыть запись</button>
           </DetailSection> : <DetailSection title="Сейчас в работе"><p className={css.quiet}>Открытых записей нет.</p></DetailSection>}
@@ -2346,7 +2371,16 @@ function ClientDetail(props: ScreenProps) {
             {noShowCount ? <p className={css.noShowCount}>{formatNotPickedUpCount(noShowCount)}</p> : null}
             <ul className={css.noteList}>
               {history.slice(0, 4).map(item => <li key={item.id}><b>{item.status}</b><span>{formatProkatDate(item.from)} · {item.title}</span></li>)}
+              {thread.map(item => <li key={item.id}><b>{item.mode === 'client' ? 'Клиенту' : 'Заметка'}</b><span>{item.text}</span></li>)}
             </ul>
+            <div className={css.composer}>
+              <div role="tablist" aria-label="Кому запись">
+                <button type="button" aria-selected={noteMode === 'client'} onClick={() => setNoteMode('client')}>Клиенту</button>
+                <button type="button" aria-selected={noteMode === 'note'} onClick={() => setNoteMode('note')}>Заметка</button>
+              </div>
+              <textarea aria-label={noteMode === 'client' ? 'Сообщение клиенту' : 'Заметка'} value={noteText} onChange={event => setNoteText(event.target.value)} rows={3} />
+              <button type="button" onClick={() => { const text = noteText.trim(); if (!text) return; setThread(current => [...current, { id: `${current.length}`, mode: noteMode, text }]); setNoteText('') }}>Добавить</button>
+            </div>
           </DetailSection>
           <DetailSection title="Данные клиента">
             <dl className={css.facts}>

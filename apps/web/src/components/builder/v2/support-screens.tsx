@@ -1500,9 +1500,16 @@ function SettingsScreen(props: ScreenProps) {
     const result = await commit(props, { kind: 'category', recordId: row.id, name: textOf(row.values[props.kit.category.name]), description: textOf(row.values[props.kit.category.description]), active: row.values[props.kit.category.active] !== true })
     setMessage(result.ok ? result.message : result.error)
   }
+  const [section, setSection] = useState<'categories' | 'team'>('categories')
   return <div className={css.root} data-support-root data-support-screen="settings">
-    <ListScreenShell title="Настройки службы" meta="Категории для новых обращений." actions={<button type="button" className={css.mine} onClick={() => setOpen(true)}>Добавить категорию</button>}>
-      <div className={css.stack}>
+    <ListScreenShell title="Настройки" meta="Как служба выглядит для клиента." actions={section === 'categories' ? <button type="button" className={css.mine} onClick={() => setOpen(true)}>Добавить категорию</button> : undefined}>
+      <div className={css.settingsLayout}>
+        <nav aria-label="Разделы настроек">
+          <button type="button" aria-current={section === 'categories' ? 'page' : undefined} onClick={() => setSection('categories')}>Категории</button>
+          <button type="button" aria-current={section === 'team' ? 'page' : undefined} onClick={() => setSection('team')}>Команда</button>
+        </nav>
+        <div>
+          {section === 'team' ? <p>В смене {operators.length}. Клиент видит имя в ответе, не список всей команды.</p> : <div className={css.stack}>
         {message ? <p role="status">{message}</p> : null}
         {props.loading ? <p role="status">Загружаем настройки…</p> : null}
         {!categories.length && !props.loading ? <div className={css.empty}><p>Категорий пока нет.</p></div> : null}
@@ -1531,6 +1538,9 @@ function SettingsScreen(props: ScreenProps) {
         <h3>Операторы</h3>
         <p className={css.quiet}>{props.kit.teamScreenId ? 'Полный список и правка — в разделе «Команда».' : 'Линия и статус правятся в карточке оператора.'}</p>
         <ul className={css.directory}>{operators.map(row => <li key={row.id}><strong>{textOf(row.values[props.kit.operator.name])}</strong><span className={css.badges}><Badge name={choiceName(props, props.kit.operatorsTableId, props.kit.operator.role, row.values[props.kit.operator.role])} />{props.kit.operator.line ? <Badge name={choiceName(props, props.kit.operatorsTableId, props.kit.operator.line, row.values[props.kit.operator.line])} /> : null}<Badge name={choiceName(props, props.kit.operatorsTableId, props.kit.operator.active, row.values[props.kit.operator.active])} /></span></li>)}</ul>
+      </div>}
+        </div>
+        <aside aria-label="Так видит клиент"><small>Так видит клиент</small><strong>{props.app.name}</strong><p>Категория, сообщение и срок ответа.</p><span>Написать</span></aside>
       </div>
     </ListScreenShell>
     {open ? <CategoryDialog {...props} onClose={() => setOpen(false)} onMessage={setMessage} /> : null}

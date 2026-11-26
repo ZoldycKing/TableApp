@@ -1,23 +1,32 @@
+.settingsLayout { display: grid; grid-template-columns: 160px minmax(0, 1fr) 220px; gap: 16px; align-items: start; }
+.settingsLayout nav { display: grid; align-content: start; gap: 4px; }
+.settingsLayout nav button { min-height: 34px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent; text-align: left; }
+.settingsLayout nav button[aria-current='page'] { background: #fff; box-shadow: 0 0 0 1px rgba(20,21,22,.06); }
+.settingsLayout aside { display: grid; gap: 6px; padding: 12px; border-radius: 12px; background: #E7EEFA; }
+.settingsLayout aside span { justify-self: start; padding: 6px 12px; border-radius: 999px; background: #266DF0; color: #fff; }
 .root { display: grid; gap: 12px; min-width: 0; width: 100%; }
 .dayBoard { display: grid; gap: 12px; min-width: 0; }
-.daySummary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid var(--sc-text, #141516); }
+.daySummary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 0 0 12px; padding-bottom: 8px; border-top: 1px solid var(--sc-text, #141516); border-bottom: 1px solid var(--sc-border-subtle, #ECECE8); }
 .daySummary div { padding: 8px 12px 0; min-width: 0; }
 .daySummary div + div { border-left: 1px solid var(--sc-border-subtle, #ECECE8); }
 .daySummary small { color: var(--sc-text-3, #6E7076); font-size: 12px; }
 .daySummary b { display: block; font-family: var(--font-scatta-mono), ui-monospace, monospace; font-size: 22px; font-weight: 500; letter-spacing: -0.03em; }
 .dayLayout { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 12px; min-width: 0; min-height: 640px; }
-.dayColumns { display: grid; grid-template-columns: 52px minmax(0, 1fr); min-width: 0; }
-.dayHours { position: relative; height: 560px; margin-top: 72px; }
-.dayHours span { position: absolute; left: 0; transform: translateY(-50%); color: var(--sc-text-3, #6E7076); font-family: var(--font-scatta-mono), ui-monospace, monospace; font-size: 11px; }
+.dayColumns { display: grid; grid-template-columns: 72px minmax(0, 1fr); min-width: 0; }
+.dayHours { position: relative; height: 560px; margin-top: 72px; overflow: visible; }
+.dayHours span { position: absolute; right: 8px; left: auto; transform: translateY(-50%); color: var(--sc-text-3, #6E7076); font-family: var(--font-scatta-mono), ui-monospace, monospace; font-size: 11px; white-space: nowrap; }
 .dayScroll { display: flex; gap: 8px; overflow-x: auto; min-width: 0; padding-bottom: 8px; }
-.dayColumn { flex: 0 0 148px; min-width: 0; }
+.dayColumn { flex: 0 0 168px; min-width: 0; }
+@container builder-app (max-width: 640px) {
+  .dayColumn { flex-basis: 78%; }
+}
 .dayColumn header { display: grid; grid-template-columns: 22px minmax(0, 1fr); column-gap: 6px; align-items: center; min-height: 64px; }
 .dayColumn header strong, .dayColumn header small { overflow-wrap: anywhere; }
 .dayColumn header strong { font-size: 13px; font-weight: 550; }
 .dayColumn header small { grid-column: 2; color: var(--sc-text-3, #6E7076); font-size: 11px; }
 .dayTrack { position: relative; height: 560px; border-radius: 10px; background: repeating-linear-gradient(to bottom, transparent, transparent 55px, var(--sc-border-subtle, #ECECE8) 56px); }
-.dayVisit { position: absolute; left: 4px; right: 4px; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 6px; overflow: hidden; border: 0; border-radius: 8px; text-align: left; color: var(--sc-text, #141516); }
-.dayVisit[data-tone='ok'] { background: #E9F0FE; }
+.dayVisit { position: absolute; left: 4px; right: 4px; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 6px; overflow: hidden; border: 1px solid transparent; border-radius: 8px; text-align: left; color: var(--sc-text, #141516); }
+.dayVisit[data-tone='ok'] { background: #E9F0FE; border-color: #266DF0; }
 .dayVisit[data-tone='wait'] { background: #FBF1DC; }
 .dayVisit[data-tone='past'] { background: #F1F1EE; color: var(--sc-text-3, #6E7076); }
 .dayVisit[data-tone='bad'] { background: #FBE9E5; }
@@ -26,9 +35,12 @@
 .dayVisit small { font-family: var(--font-scatta-mono), ui-monospace, monospace; font-size: 11px; }
 .dayFree { position: absolute; left: 8px; right: 8px; top: 12px; height: 36px; border: 1px dashed var(--sc-border, #E3E3DF); border-radius: 8px; background: transparent; color: var(--sc-text-3, #6E7076); }
 .dayNow { position: absolute; left: 0; right: 0; z-index: 2; border-top: 1.5px solid var(--sc-accent, #266DF0); }
-.dayNow b { position: absolute; top: -9px; left: 4px; padding: 0 4px; background: var(--sc-accent, #266DF0); color: #fff; border-radius: 4px; font-size: 10px; font-weight: 500; }
+.dayNow b, .dayNowLabel { position: absolute; top: -9px; right: 0; padding: 0 4px; background: var(--sc-accent, #266DF0); color: #fff; border-radius: 4px; font-size: 10px; font-weight: 500; white-space: nowrap; }
+.dayNowLabel { right: 4px; }
 .dayDetail { display: grid; align-content: start; gap: 12px; padding: 12px; border-left: 1px solid var(--sc-border-subtle, #ECECE8); }
-.dayDetail header { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 8px; align-items: center; }
+.dayDetail header { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 8px; align-items: start; }
+.dayDetail header div { display: grid; gap: 2px; min-width: 0; }
+.dayDetail header strong, .dayDetail header small { display: block; overflow-wrap: anywhere; }
 .dayDetail header em { grid-column: 1 / -1; justify-self: start; padding: 2px 8px; border-radius: 99px; font-style: normal; font-size: 12px; }
 .dayDetail header em[data-tone='ok'] { background: #E9F0FE; color: #1B4DB3; }
 .dayDetail header em[data-tone='wait'] { background: #FBF1DC; color: #A86A00; }
@@ -1250,11 +1262,11 @@
   border: 1.5px dashed #8A96A3;
 }
 .timelineLegend i[data-tone='confirmed'] {
-  background: color-mix(in srgb, #3F6B5C 18%, #fff);
-  border: 1.5px solid #3F6B5C;
+  background: #E9F0FE;
+  border: 1.5px solid #266DF0;
 }
-.timelineLegend i[data-tone='issued'] { background: #3F6B5C; border: 0; }
-.timelineLegend i[data-tone='overdue'] { background: #C4623A; border: 0; }
+.timelineLegend i[data-tone='issued'] { background: #266DF0; border: 0; }
+.timelineLegend i[data-tone='overdue'] { background: #A86A00; border: 0; }
 .timelineBoard {
   --prokat-label-w: 14rem;
   display: grid; gap: 0; min-width: 0; padding: 4px 20px 20px;
@@ -1362,12 +1374,12 @@
   line-height: 19px;
 }
 .timelineBar[data-tone='confirmed'] {
-  background: color-mix(in srgb, #3F6B5C 18%, #fff);
-  color: #2F5346;
-  border: 1.5px solid #3F6B5C;
+  background: #E9F0FE;
+  color: #1B4DB3;
+  border: 1.5px solid #266DF0;
   line-height: 19px;
 }
-.timelineBar[data-tone='issued'] { background: #3F6B5C; color: #fff; border: 0; }
+.timelineBar[data-tone='issued'] { background: #266DF0; color: #fff; border: 0; }
 .timelineBar[data-tone='overdue'],
 .timelineBar[data-kind='overdue-tail'] {
   z-index: 2; color: #fff;
@@ -1633,14 +1645,16 @@
 .root[data-phone] :global(h1) {
   font-size: 1.35rem; line-height: 1.2;
 }
+.root[data-phone] .kpiRow { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .root[data-phone] .timelineToolbar {
-  flex-wrap: nowrap; align-items: center; gap: 6px; padding: 4px 12px 0;
+  flex-wrap: wrap; align-items: center; gap: 6px; padding: 4px 12px 0;
 }
 .root[data-phone] .timelineToolbar[data-search-open] { flex-wrap: wrap; }
 .root[data-phone] .timelineRange { flex: none; }
 .root[data-phone] .timelineRange button { min-height: 30px; padding: 4px 8px; font-size: 12px; }
-.root[data-phone] .timelineRangeFull { display: none; }
-.root[data-phone] .timelineRangeShort { display: inline; }
+.root[data-phone] .timelineRange { flex-wrap: wrap; }
+.root[data-phone] .timelineRangeFull { display: inline; }
+.root[data-phone] .timelineRangeShort { display: none; }
 .root[data-phone] .timelineNav { gap: 2px; flex: none; }
 .root[data-phone] .timelineNavBtn { width: 30px; height: 30px; font-size: 16px; }
 .root[data-phone] .timelineTodayBtn {
@@ -1764,7 +1778,7 @@
 
 @container builder-app (max-width: 799px) {
   .catalogGrid { padding-inline: 16px; grid-template-columns: 1fr; }
-  .kpiRow { grid-template-columns: 1fr; }
+  .kpiRow { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .dashStack { padding-inline: 16px; }
   .todayRow { grid-template-columns: minmax(0, 1fr); }
   .todayAction { justify-self: start; }
@@ -1803,6 +1817,17 @@
 .clientIdentity span { color: var(--sc-text-3, #6E7076); font-size: 12.5px; }
 .clientTable .mono { font-family: var(--font-scatta-mono), ui-monospace, monospace; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .cardSplit { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(220px, .8fr); gap: 16px; min-width: 0; }
+.stepper { display: flex; gap: 0; margin: 10px 0; padding: 0; list-style: none; }
+.stepper li { flex: 1; display: grid; gap: 6px; color: var(--sc-text-3, #6E7076); font-size: 12px; }
+.stepper i { display: block; height: 3px; border-radius: 2px; background: var(--sc-border, #E3E3DF); }
+.stepper li[data-on] { color: var(--sc-text, #141516); }
+.stepper li[data-on] i { background: #266DF0; }
+.stepper li[data-current] { font-weight: 600; }
+.composer { display: grid; gap: 8px; margin-top: 10px; }
+.composer div { display: flex; gap: 8px; }
+.composer button[aria-selected='true'] { color: #266DF0; }
+.composer textarea { width: 100%; min-height: 72px; padding: 8px; border: 1px solid var(--sc-border, #E3E3DF); border-radius: 10px; }
+.composer > button { justify-self: start; height: 32px; padding: 0 12px; border: 0; border-radius: 999px; background: var(--sc-text, #141516); color: #fff; }
 .stepRow { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; padding: 0; list-style: none; }
 .stepRow li { padding: 4px 8px; border-radius: 99px; background: var(--sc-bg-surface, #EEEBE4); color: var(--sc-text-3, #6E7076); font-size: 12px; }
 .stepRow li[data-on] { background: #E9F0FE; color: #1B4DB3; }
@@ -1825,7 +1850,8 @@
 .bookingDates .deadlineRow { grid-template-columns: minmax(0, 1fr); }
 .bookingForm .itemGrid { max-height: none; overflow: visible; }
 @container builder-app (max-width: 719px) {
-  .bookingDates { order: -1; }
+  .bookingForm { display: flex; flex-direction: column; }
+  .bookingDates { order: 2; }
 }
 @container builder-app (min-width: 720px) {
   .bookingForm { grid-template-columns: minmax(0, 1.25fr) minmax(220px, .8fr); }

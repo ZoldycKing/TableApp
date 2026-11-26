@@ -1,4 +1,5 @@
 'use client'
+import Link from 'next/link'
 import {createContext,useEffect,useId,useLayoutEffect,useRef,useState,type ReactNode} from 'react'
 import type {AppV2} from '@tableapp/schema/app-v2'
 import {ProtoIcon} from '../prototype/icons'
@@ -90,6 +91,7 @@ export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,childre
     const measure=()=>{
       const phoneNav=Boolean(phone||(typeof window!=='undefined'&&typeof window.matchMedia==='function'&&window.matchMedia('(max-width: 720px)').matches))
       const hardCap=phoneNav?phoneCap:screens.length
+      if(phoneNav){setFit(screens.length>phoneCap?phoneCap:screens.length);return}
       if(navigation==='sidebar'||row.clientWidth<8){setFit(navigation==='sidebar'?screens.length:Math.min(hardCap,screens.length>phoneCap?phoneCap:screens.length));return}
       const tabs=[...row.querySelectorAll<HTMLElement>(':scope > [data-nav-item]')]
       const extra=row.querySelector<HTMLElement>(':scope > [data-nav-more]')
@@ -125,7 +127,7 @@ export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,childre
     const label=builderV2MenuLabel(screen,app,{phone})
     return <button type="button" key={screen.id} title={builderV2MenuLabel(screen,app)} aria-current={screen.id===sectionId?'page':undefined} className={extra?css.extraItem:undefined} onClick={()=>choose(screen.id)}><ProtoIcon name={screen.icon}/><span>{label}</span></button>
   }
-  const limit=navigation==='sidebar'?screens.length:fit
+  const limit=phone ? fit : navigation==='sidebar' ? screens.length : fit
   const rest=screens.slice(limit),overflow=rest.length>0,activeExtra=rest.some(screen=>screen.id===sectionId)
   const appName = (app.name || 'Моё приложение').replaceAll(' · ', '\u00A0·\u00A0')
   const sectionScreen = app.screens.find(screen => screen.id === sectionId)
@@ -149,7 +151,8 @@ export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,childre
     {showNav&&<nav className={css.navigation} aria-label="Разделы приложения">
       <div className={navigation === 'sidebar' ? css.navStack : `${css.chromeBar} ${presentation.contentWidth}`}>
         <div className={css.railIdentity}>{mark}<strong>{appName}</strong></div>
-        <div className={css.navItems} ref={navItems}>{screens.map((screen,index)=><div key={screen.id} data-nav-item="" hidden={index>=limit}>{navButton(screen)}</div>)}<div className={css.more} data-nav-more="" ref={root} hidden={!overflow}><button type="button" ref={trigger} aria-expanded={more} aria-controls={menuId} aria-current={activeExtra?'true':undefined} onClick={()=>setMore(!more)}><ProtoIcon name="more"/><span>Ещё</span></button>{more&&<div className={css.morePanel} id={menuId} role="region" aria-label="Другие разделы"><strong>Разделы</strong>{rest.map(screen=>navButton(screen,true))}</div>}</div></div>
+        <div className={css.navItems} ref={navItems}>{screens.map((screen,index)=><div key={screen.id} data-nav-item="" hidden={index>=limit}>{navButton(screen)}</div>)}<div className={css.more} data-nav-more="" ref={root} hidden={!overflow}><button type="button" ref={trigger} aria-expanded={more} aria-controls={menuId} aria-current={activeExtra?'true':undefined} onClick={()=>setMore(!more)}><ProtoIcon name="more"/><span>Ещё</span></button>{more&&<div className={css.morePanel} id={menuId} role="region" aria-label="Другие разделы"><strong>Разделы</strong>{rest.map(screen=>navButton(screen,true))}{phone ? <><Link className={css.extraItem} href={`/apps/${app.id}`}>Конструктор</Link><Link className={css.extraItem} href={`/a/${encodeURIComponent(app.slug)}`}>Страница для клиентов</Link></> : null}</div>}</div></div>
+        {navigation === 'sidebar' && !phone ? <div className={css.railLinks}><span>Приложение</span><Link href={`/apps/${app.id}`}>Конструктор</Link><Link href={`/a/${encodeURIComponent(app.slug)}`}>Страница для клиентов</Link></div> : null}
         {navigation === 'sidebar' && !phone ? <div className={css.railAccount}>{account}</div> : null}
         {shellTopNav ? account : null}
       </div>

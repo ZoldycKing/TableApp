@@ -1,3 +1,17 @@
+/** Russian noun after a number: 1 запись, 2 записи, 5 записей. */
+export function ruPlural(value: number, one: string, few: string, many: string) {
+  const n = Math.abs(Math.trunc(value)) % 100
+  if (n >= 11 && n <= 14) return many
+  const digit = n % 10
+  if (digit === 1) return one
+  if (digit >= 2 && digit <= 4) return few
+  return many
+}
+
+export function ruCount(value: number, one: string, few: string, many: string) {
+  return `${value} ${ruPlural(value, one, few, many)}`
+}
+
 /** Calendar date as `дд.мм.гггг`. The value stored by pickers stays `YYYY-MM-DD`. */
 export function formatRuDate(iso: string): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso)

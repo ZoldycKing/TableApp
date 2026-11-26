@@ -62,15 +62,17 @@ export function ProkatDayBoard({
     <div className={css.dayLayout}>
       <div className={css.dayColumns}>
         <div className={css.dayHours} aria-hidden="true">
-          {hours.map(minute => <span key={minute}>{String(Math.floor(minute / 60)).padStart(2, '0')}:00</span>)}
+          {hours.map(minute => <span key={minute} style={{ top: `${((minute - DAY_START) / SPAN) * 100}%` }}>{String(Math.floor(minute / 60)).padStart(2, '0')}:00</span>)}
+          {nowMinutes != null && nowMinutes >= DAY_START && nowMinutes <= DAY_END ? <b className={css.dayNowLabel} style={{ top: `calc(${((nowMinutes - DAY_START) / SPAN) * 100}% )` }}>сейчас</b> : null}
         </div>
         <div className={css.dayScroll}>
-          {columns.map((item, index) => {
+          {columns.map(item => {
             const mine = active.filter(booking => booking.itemIds.includes(item.id))
             const blocks = mine.map(booking => {
-              const start = dayKey(booking.from) < day ? DAY_START : Math.max(DAY_START, minutes(booking.from) ?? DAY_START)
-              const end = dayKey(booking.to) > day ? DAY_END : Math.min(DAY_END, minutes(booking.to) ?? DAY_END)
-              return { booking, top: (start - DAY_START) / SPAN, height: Math.max(0.04, (end - start) / SPAN) }
+              const crosses = dayKey(booking.from) < day || dayKey(booking.to) > day
+              const start = crosses ? DAY_START + 60 : Math.max(DAY_START, minutes(booking.from) ?? DAY_START)
+              const end = crosses ? start + 90 : Math.min(DAY_END, minutes(booking.to) ?? start + 60)
+              return { booking, top: (start - DAY_START) / SPAN, height: Math.min(0.18, Math.max(0.08, (end - start) / SPAN)) }
             })
             const covered = blocks.some(block => block.height > 0.2)
             return <section key={item.id} className={css.dayColumn} aria-label={item.name}>
@@ -81,7 +83,7 @@ export function ProkatDayBoard({
               </header>
               <div className={css.dayTrack}>
                 {nowMinutes != null && nowMinutes >= DAY_START && nowMinutes <= DAY_END ? (
-                  <i className={css.dayNow} style={{ top: `${((nowMinutes - DAY_START) / SPAN) * 100}%` }}>{index === 0 ? <b>сейчас</b> : null}</i>
+                  <i className={css.dayNow} style={{ top: `${((nowMinutes - DAY_START) / SPAN) * 100}%` }} />
                 ) : null}
                 {blocks.map(block => (
                   <button

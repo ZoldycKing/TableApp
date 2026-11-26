@@ -2,6 +2,7 @@
 import { createContext, lazy, Suspense, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { attachmentSchema, instantToWallClock, type Attachment } from '@tableapp/schema'
+import { MESSAGES_SCREEN } from '@/lib/conversation-types'
 import type { AppV2, AppV2Json, AppV2Node, AppV2Record } from '@tableapp/schema/app-v2'
 import { catchUpPublishedProkatHolds, savePublishedProkatAction } from '@/app/prokat-actions'
 import { Avatar } from '@/components/ui/avatar'
@@ -2289,33 +2290,69 @@ function ClientDirectory(props: ScreenProps) {
 
 function ClientDetail(props: ScreenProps) {
   const client = props.of(props.kit.clientsTableId).find(row => row.id === props.recordId) ?? props.record
+  const [extraFields, setExtraFields] = useState<string[]>([])
+  const [draftField, setDraftField] = useState('')
   if (!client) return <div className={css.root}><p className={css.quiet}>Клиент не найден.</p></div>
   const email = textOf(client.values[props.kit.client.email]).toLowerCase()
   const history = bookingItems(props).filter(item => item.clientEmail.toLowerCase() === email)
   const noShowCount = clientNotPickedUpCount(history)
-  const noShowLabel = formatNotPickedUpCount(noShowCount)
+  const sum = history.reduce((total, item) => total + item.price, 0)
+  const average = history.length ? Math.round(sum / history.length) : 0
+  const open = [...history].sort((a, b) => Date.parse(b.from) - Date.parse(a.from)).find(item => ['Заявка', 'Подтверждена', 'Выдано', 'Просрочен возврат'].includes(item.status))
+  const steps = ['Заявка', 'Подтверждена', 'Выдано', 'Возвращено']
+  const stepIndex = open ? Math.max(0, steps.indexOf(open.status === 'Просрочен возврат' ? 'Выдано' : open.status)) : -1
+  const name = textOf(client.values[props.kit.client.name]) || 'Клиент'
   return <div className={css.root} data-prokat-root data-prokat-screen="client-card">
     <DetailCardShell
       back={{ label: 'Клиенты', onClick: () => props.onNavigate?.(props.kit.clientsScreenId) }}
-      title={textOf(client.values[props.kit.client.name]) || 'Клиент'}
+      title={name}
       subtitle={textOf(client.values[props.kit.client.email])}
-      media={<PersonMark id={client.id} name={textOf(client.values[props.kit.client.name])} size={48} />}
+      media={<PersonMark id={client.id} name={name} size={48} />}
+      actions={<>
+        <button type="button" className={css.quietButton} onClick={() => props.onNavigate?.(MESSAGES_SCREEN)}>Написать</button>
+        <button type="button" className={css.primary} onClick={() => props.onNavigate?.(props.kit.bookingsScreenId)}>Новая заявка</button>
+      </>}
       metrics={[
         { key: 'bookings', caption: 'Броней', value: String(history.length) },
-        { key: 'noshow', caption: 'Неявки', value: String(noShowCount) },
-        { key: 'last', caption: 'Последняя', value: history[0] ? formatProkatDate([...history].sort((a, b) => Date.parse(b.from) - Date.parse(a.from))[0]!.from) : '—' },
+        { key: 'avg', caption: 'Средний чек', value: formatMoney(average) },
+        { key: 'sum', caption: 'Сумма', value: formatMoney(sum) },
       ]}
     >
-      <DetailSection title="Контакты">
-        <dl className={css.facts}>
-          <div><dt>Телефон</dt><dd>{textOf(client.values[props.kit.client.phone]) || '—'}</dd></div>
-          <div><dt>Заметка</dt><dd>{textOf(client.values[props.kit.client.note]) || '—'}</dd></div>
-          {noShowLabel ? <div data-prokat-noshow><dt>Неявки</dt><dd className={css.noShowCount}>{noShowLabel}</dd></div> : null}
-        </dl>
-      </DetailSection>
-      <DetailSection title="История броней">
-        <BookingRows items={history} now={props.now} onOpen={id => props.onNavigate?.(props.kit.bookingScreenId, id)} keepCards clientScoped />
-      </DetailSection>
+      <div className={css.cardSplit}>
+        <div>
+          {open ? <DetailSection title="Сейчас в работе">
+            <p><strong>{open.title}</strong> · {formatProkatDateTime(open.from)}</p>
+            <ol className={css.stepRow}>
+              {steps.map((step, index) => <li key={step} data-on={index <= stepIndex || undefined}>{step}</li>)}
+            </ol>
+            <button type="button" className={css.quietButton} onClick={() => props.onNavigate?.(props.kit.bookingScreenId, open.id)}>Открыть запись</button>
+          </DetailSection> : <DetailSection title="Сейчас в работе"><p className={css.quiet}>Открытых записей нет.</p></DetailSection>}
+          <DetailSection title="История">
+            <BookingRows items={history} now={props.now} onOpen={id => props.onNavigate?.(props.kit.bookingScreenId, id)} keepCards clientScoped />
+          </DetailSection>
+        </div>
+        <aside>
+          <DetailSection title="Переписка и заметки">
+            <p>{textOf(client.values[props.kit.client.note]) || 'Заметок пока нет.'}</p>
+            {noShowCount ? <p className={css.noShowCount}>{formatNotPickedUpCount(noShowCount)}</p> : null}
+            <ul className={css.noteList}>
+              {history.slice(0, 4).map(item => <li key={item.id}><b>{item.status}</b><span>{formatProkatDate(item.from)} · {item.title}</span></li>)}
+            </ul>
+          </DetailSection>
+          <DetailSection title="Данные клиента">
+            <dl className={css.facts}>
+              <div><dt>Телефон</dt><dd>{textOf(client.values[props.kit.client.phone]) || '—'}</dd></div>
+              <div><dt>Почта</dt><dd>{textOf(client.values[props.kit.client.email]) || '—'}</dd></div>
+              {extraFields.map(field => <div key={field}><dt>{field}</dt><dd>—</dd></div>)}
+            </dl>
+            <form className={css.addField} onSubmit={event => { event.preventDefault(); const name = draftField.trim(); if (!name) return; setExtraFields(current => [...current, name]); setDraftField('') }}>
+              <input aria-label="Новое поле" value={draftField} onChange={event => setDraftField(event.target.value)} placeholder="Название поля" />
+              <button type="submit">Добавить поле</button>
+            </form>
+            <p className={css.quiet}>Новое поле видно на этой карточке и не записывается в таблицу, пока его нет в шаблоне.</p>
+          </DetailSection>
+        </aside>
+      </div>
     </DetailCardShell>
   </div>
 }

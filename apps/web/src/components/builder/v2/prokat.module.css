@@ -1802,6 +1802,17 @@
 .clientIdentity strong, .clientIdentity span { overflow-wrap: anywhere; }
 .clientIdentity span { color: var(--sc-text-3, #6E7076); font-size: 12.5px; }
 .clientTable .mono { font-family: var(--font-scatta-mono), ui-monospace, monospace; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cardSplit { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(220px, .8fr); gap: 16px; min-width: 0; }
+.stepRow { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; padding: 0; list-style: none; }
+.stepRow li { padding: 4px 8px; border-radius: 99px; background: var(--sc-bg-surface, #EEEBE4); color: var(--sc-text-3, #6E7076); font-size: 12px; }
+.stepRow li[data-on] { background: #E9F0FE; color: #1B4DB3; }
+.noteList { display: grid; gap: 8px; margin: 8px 0 0; padding: 0; list-style: none; }
+.noteList li { display: grid; gap: 2px; }
+.noteList span { color: var(--sc-text-3, #6E7076); font-size: 12.5px; }
+.addField { display: flex; gap: 8px; margin-top: 8px; }
+.addField input { flex: 1; min-width: 0; height: 36px; padding: 0 10px; border: 1px solid var(--sc-border, #E3E3DF); border-radius: 8px; background: #fff; }
+.addField button { height: 36px; padding: 0 12px; border: 0; border-radius: 8px; background: var(--sc-text, #141516); color: #fff; }
+.root[data-prokat-screen='client-card'] { padding-bottom: 88px; }
 .clientHero { display: flex; align-items: center; gap: 16px; padding: 4px 0 12px; }
 .clientStats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0; min-width: 0; }
 .clientStats div { min-width: 0; }
@@ -1817,7 +1828,7 @@
   .bookingDates { grid-column: 2; grid-row: 1 / span 4; }
 }
 @container builder-app (max-width: 800px) {
-  .clientSplit { grid-template-columns: 1fr; }
+  .clientSplit, .cardSplit { grid-template-columns: 1fr; }
 }
 @container builder-app (max-width: 640px) {
   .clientTable thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }

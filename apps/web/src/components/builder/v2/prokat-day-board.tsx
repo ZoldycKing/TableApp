@@ -1,130 +1,268 @@
 'use client'
-import { useState } from 'react'
-import { instantToWallClock } from '@tableapp/schema'
+import { useEffect, useMemo, useState } from 'react'
+import { ProtoIcon } from '../prototype/icons'
 import { Avatar } from '@/components/ui/avatar'
-import { formatMoney, formatProkatDateTime, prokatInstantParts, PROKAT_ZONE, type ProkatCatalogItem, type ProkatListItem } from '@/lib/prokat-logic'
+import { formatMoney, PROKAT_TIMELINE_RANGES, type ProkatCatalogItem, type ProkatListItem, type ProkatTimelineRangeId } from '@/lib/prokat-logic'
+import {
+  buildProkatDaySchedule, PROKAT_SCHEDULE_DAY, scheduleClockLabel, SCHEDULE_DAY_END, SCHEDULE_DAY_START, SCHEDULE_NOW_MIN, shortResourceLabel,
+  visibleGaps, type ScheduleBlock, type ScheduleColumn, type ScheduleTone,
+} from '@/lib/prokat-day-demo'
 import css from './prokat.module.css'
 
-const OPEN = ['Заявка', 'Подтверждена', 'Выдано', 'Просрочен возврат']
-const DAY_START = 8 * 60
-const DAY_END = 21 * 60
-const SPAN = DAY_END - DAY_START
+const HOURS = Array.from({ length: (SCHEDULE_DAY_END - SCHEDULE_DAY_START) / 60 + 1 }, (_, index) => SCHEDULE_DAY_START + index * 60)
 
-function minutes(iso: string) {
-  const wall = instantToWallClock(iso, PROKAT_ZONE)
-  if (!wall?.time) return null
-  const [hour, minute] = wall.time.split(':')
-  const hours = Number(hour)
-  const mins = Number(minute)
-  if (!Number.isFinite(hours) || !Number.isFinite(mins)) return null
-  return hours * 60 + mins
+function toneOf(status: string, endMin: number, nowMin: number): ScheduleTone {
+  if (status === 'Заявка') return 'w'
+  if (endMin <= nowMin) return 'p'
+  return 'a'
 }
 
-function dayKey(iso: string) {
-  return instantToWallClock(iso, PROKAT_ZONE)?.date ?? ''
+function minutesOf(iso: string) {
+  const time = iso.match(/T(\d{2}):(\d{2})/)
+  if (!time) return null
+  return Number(time[1]) * 60 + Number(time[2])
 }
 
-function toneOf(status: string) {
-  if (status === 'Заявка') return 'wait'
-  if (status === 'Просрочен возврат') return 'bad'
-  if (status === 'Возвращено' || status === 'Отменена' || status === 'Не забрали') return 'past'
-  return 'ok'
+function dayOf(iso: string) {
+  return iso.slice(0, 10)
+}
+
+function blocksFromBookings(items: readonly ProkatCatalogItem[], bookings: readonly ProkatListItem[], day: string, nowMin: number): ScheduleBlock[] {
+  const open = ['Заявка', 'Подтверждена', 'Выдано', 'Просрочен возврат']
+  return bookings.flatMap(booking => {
+    if (!open.includes(booking.status)) return []
+    if (dayOf(booking.from) > day || dayOf(booking.to) < day) return []
+    const itemId = booking.itemIds.find(id => items.some(item => item.id === id))
+    if (!itemId) return []
+    const start = dayOf(booking.from) < day ? SCHEDULE_DAY_START : Math.max(SCHEDULE_DAY_START, minutesOf(booking.from) ?? SCHEDULE_DAY_START)
+    const end = dayOf(booking.to) > day ? SCHEDULE_DAY_END : Math.min(SCHEDULE_DAY_END, minutesOf(booking.to) ?? start + 60)
+    if (end <= start) return []
+    const item = items.find(entry => entry.id === itemId)
+    return [{
+      id: booking.id,
+      itemId,
+      title: booking.clientName || 'Без клиента',
+      service: item?.name || booking.title,
+      startMin: start,
+      endMin: end,
+      tone: toneOf(booking.status, end, nowMin),
+      oneLine: end - start <= 45,
+      clientName: booking.clientName,
+      phone: '',
+      visits: 1,
+      price: booking.price,
+      deposit: booking.deposit,
+      source: 'Кабинет',
+      note: booking.statusReason ?? '',
+      history: [],
+    }]
+  })
+}
+
+function weekday(day: string) {
+  const [year, month, date] = day.split('-').map(Number) as [number, number, number]
+  const label = new Intl.DateTimeFormat('ru-RU', { weekday: 'long', timeZone: 'Europe/Moscow' }).format(new Date(Date.UTC(year, month - 1, date, 9, 0)))
+  return label.charAt(0).toUpperCase() + label.slice(1)
+}
+
+function dateLabel(day: string) {
+  const [, month, date] = day.split('-')
+  return `${weekday(day)}, ${date}.${month}.${day.slice(0, 4)}`
+}
+
+function visitLabel(count: number) {
+  return `${count}-й визит`
+}
+
+function hoursLabel(value: number) {
+  const n = Math.max(1, Math.round(value || 1))
+  const mod10 = n % 10
+  const mod100 = n % 100
+  const word = mod10 === 1 && mod100 !== 11 ? 'час' : mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14) ? 'часа' : 'часов'
+  return `около ${n} ${word}`
 }
 
 export function ProkatDayBoard({
-  day, now, items, bookings, onOpen, onCreate,
+  day, nowMin = SCHEDULE_NOW_MIN, items, bookings, sample, phone, mode, onMode, onShift, onToday, onCreate, onOpen,
 }: {
   day: string
-  now: number
+  nowMin?: number
   items: readonly ProkatCatalogItem[]
   bookings: readonly ProkatListItem[]
-  onOpen: (id: string) => void
+  sample: boolean
+  phone: boolean
+  mode: ProkatTimelineRangeId
+  onMode: (mode: ProkatTimelineRangeId) => void
+  onShift: (direction: -1 | 1) => void
+  onToday: () => void
   onCreate: (itemId: string, day: string) => void
+  onOpen: (id: string) => void
 }) {
-  const [selected, setSelected] = useState<string | null>(null)
-  const today = dayKey(new Date(now).toISOString()) === day
-  const nowMinutes = today ? minutes(new Date(now).toISOString()) : null
-  const active = bookings.filter(booking => OPEN.includes(booking.status) && dayKey(booking.from) <= day && dayKey(booking.to) >= day)
-  const waiting = active.filter(booking => booking.status === 'Заявка').length
-  const sum = active.reduce((total, booking) => total + booking.price, 0)
-  const columns = items.filter(item => item.name)
-  const freeCount = columns.filter(item => !active.some(booking => booking.itemIds.includes(item.id))).length
-  const chosen = active.find(booking => booking.id === selected) ?? null
-  const hours = Array.from({ length: (DAY_END - DAY_START) / 60 + 1 }, (_, index) => DAY_START + index * 60)
+  const demo = useMemo(() => sample && day === PROKAT_SCHEDULE_DAY ? buildProkatDaySchedule(items) : null, [sample, day, items])
+  const columns: ScheduleColumn[] = demo?.columns ?? items.filter(item => item.name && item.status !== 'Списан').map(item => ({ ...item, off: item.status === 'На обслуживании' }))
+  const blocks = demo?.blocks ?? blocksFromBookings(columns, bookings, day, nowMin)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [dockedDetail, setDockedDetail] = useState(false)
+  useEffect(() => {
+    const query = window.matchMedia('(min-width: 1280px)')
+    const apply = () => setDockedDetail(query.matches)
+    apply()
+    query.addEventListener('change', apply)
+    return () => query.removeEventListener('change', apply)
+  }, [])
+  useEffect(() => {
+    if (dockedDetail) setSelectedId(demo?.selectedId ?? null)
+  }, [dockedDetail, demo?.selectedId])
+  const [arrived, setArrived] = useState<string | null>(null)
+  const [focusId, setFocusId] = useState<string | null>(null)
+  const [pickOpen, setPickOpen] = useState(false)
+  const shown = focusId ? columns.filter(column => column.id === focusId) : columns
+  const phoneColumn = phone ? (shown.find(column => column.id === focusId) ?? shown[0] ?? null) : null
+  const gridColumns = phone && phoneColumn ? [phoneColumn] : shown
+  const selected = blocks.find(block => block.id === selectedId) ?? null
+  const gaps = visibleGaps(columns, blocks)
+  const counted = blocks.filter(block => block.tone !== 'br')
+  const waiting = counted.filter(block => block.tone === 'w').length
+  const revenue = counted.reduce((sum, block) => sum + block.price, 0)
+  const freeHours = gaps.reduce((sum, gap) => sum + (gap.endMin - gap.startMin) / 60, 0)
+  const showNow = day === PROKAT_SCHEDULE_DAY || (!sample && nowMin >= SCHEDULE_DAY_START && nowMin <= SCHEDULE_DAY_END)
+  const nowTop = ((nowMin - SCHEDULE_DAY_START) / (SCHEDULE_DAY_END - SCHEDULE_DAY_START)) * 100
+  const hourPx = phone ? 44 : 51
 
-  return <div className={css.dayBoard}>
-    <div className={css.daySummary} aria-label="Сводка дня">
-      <div><small>Записей</small><b>{active.length}</b></div>
-      <div><small>Свободно</small><b>{freeCount}</b></div>
-      <div><small>Ждут</small><b>{waiting}</b></div>
-      <div><small>Сумма</small><b>{formatMoney(sum)}</b></div>
+  const place = (start: number, end: number) => ({
+    top: `${((start - SCHEDULE_DAY_START) / 60) * hourPx}px`,
+    height: `${Math.max(phone ? 22 : 26, ((end - start) / 60) * hourPx - 2)}px`,
+  })
+
+  return <div className={css.dayBoard} data-phone={phone || undefined}>
+    <div className={css.daySummary} data-cols={phone ? 3 : 4} aria-label="Сводка дня">
+      <div><small>Записей сегодня</small><b>{counted.length}{demo ? <i className={css.dayUp}>+{demo.delta} к прошлой пятнице</i> : null}</b></div>
+      <div><small>Свободных окон</small><b>{gaps.length}<i>{hoursLabel(freeHours)}</i></b></div>
+      <div><small>Ждут подтверждения</small><b>{waiting}</b></div>
+      {phone ? null : <div><small>Выручка по записям</small><b>{formatMoney(revenue)}</b></div>}
     </div>
-    <div className={css.dayLayout} data-open={chosen ? true : undefined}>
-      <div className={css.dayColumns}>
-        <div className={css.dayHours} aria-hidden="true">
-          {hours.map(minute => <span key={minute} style={{ top: `${((minute - DAY_START) / SPAN) * 100}%` }}>{String(Math.floor(minute / 60)).padStart(2, '0')}:00</span>)}
-          {nowMinutes != null && nowMinutes >= DAY_START && nowMinutes <= DAY_END ? <b className={css.dayNowLabel} style={{ top: `calc(${((nowMinutes - DAY_START) / SPAN) * 100}% )` }}>сейчас</b> : null}
+    <div className={css.dayToolbar}>
+      <div className={css.dayDate}>
+        <button type="button" className={css.dayIcon} aria-label="Назад" onClick={() => onShift(-1)}><ProtoIcon name="back" size={16} /></button>
+        <button type="button" className={css.dayIcon} aria-label="Вперёд" onClick={() => onShift(1)}><ProtoIcon name="arrow" size={16} /></button>
+        <b>{dateLabel(day)}</b>
+        <button type="button" className={css.dayToday} onClick={onToday}>Сегодня</button>
+      </div>
+      <div className={css.dayTools}>
+        <div className={css.daySeg} role="group" aria-label="Диапазон шкалы">
+          {PROKAT_TIMELINE_RANGES.map(range => (
+            <button key={range.id} type="button" data-on={mode === range.id || undefined} aria-pressed={mode === range.id} onClick={() => onMode(range.id)}>{range.label}</button>
+          ))}
         </div>
-        <div className={css.dayScroll}>
-          {columns.map(item => {
-            const mine = active.filter(booking => booking.itemIds.includes(item.id))
-            const blocks = mine.map(booking => {
-              const crosses = dayKey(booking.from) < day || dayKey(booking.to) > day
-              const start = crosses ? DAY_START + 60 : Math.max(DAY_START, minutes(booking.from) ?? DAY_START)
-              const end = crosses ? start + 90 : Math.min(DAY_END, minutes(booking.to) ?? start + 60)
-              return { booking, top: (start - DAY_START) / SPAN, height: Math.min(0.18, Math.max(0.08, (end - start) / SPAN)) }
-            })
-            const covered = blocks.some(block => block.height > 0.2)
-            return <section key={item.id} className={css.dayColumn} aria-label={item.name}>
-              <header>
-                <Avatar id={item.id} size={22} />
-                <strong>{item.name}</strong>
-                <small>{item.serial}</small>
-              </header>
-              <div className={css.dayTrack}>
-                {nowMinutes != null && nowMinutes >= DAY_START && nowMinutes <= DAY_END ? (
-                  <i className={css.dayNow} style={{ top: `${((nowMinutes - DAY_START) / SPAN) * 100}%` }} />
-                ) : null}
-                {blocks.map(block => (
-                  <button
-                    key={block.booking.id}
-                    type="button"
-                    className={css.dayVisit}
-                    data-tone={toneOf(block.booking.status)}
-                    data-on={selected === block.booking.id || undefined}
-                    style={{ top: `${block.top * 100}%`, height: `${block.height * 100}%` }}
-                    onClick={() => setSelected(block.booking.id)}
-                  >
-                    <Avatar id={block.booking.clientEmail || block.booking.id} size={16} />
-                    <span>{block.booking.clientName || 'Без клиента'}</span>
-                    <small>{prokatInstantParts(block.booking.from).time || '12:00'}</small>
-                  </button>
-                ))}
-                {!covered ? <button type="button" className={css.dayFree} onClick={() => onCreate(item.id, day)}>+ Свободно</button> : null}
-              </div>
-            </section>
-          })}
+        <div className={css.dayPick}>
+          <button type="button" aria-expanded={pickOpen} onClick={() => setPickOpen(open => !open)}>
+            <ProtoIcon name="box" size={14} />
+            <span>Предметы <b>{focusId ? (columns.find(column => column.id === focusId)?.serial ?? 'один') : `все ${columns.length}`}</b></span>
+            <ProtoIcon name="down" size={14} />
+          </button>
+          {pickOpen ? <div role="listbox" aria-label="Предметы">
+            <button type="button" role="option" aria-selected={!focusId} onClick={() => { setFocusId(null); setPickOpen(false) }}>Все {columns.length}</button>
+            {columns.map(column => <button type="button" role="option" key={column.id} aria-selected={focusId === column.id} onClick={() => { setFocusId(column.id); setPickOpen(false) }}>{column.name}</button>)}
+          </div> : null}
         </div>
       </div>
-      {chosen ? <aside className={css.dayDetail} aria-label="Выбранная запись">
-          <header>
-            <Avatar id={chosen.clientEmail || chosen.id} size={36} />
-            <div>
-              <strong>{chosen.clientName || 'Без клиента'}</strong>
-              <small>{chosen.title}</small>
+    </div>
+    {phone ? <div className={css.dayChips} aria-label="Предметы">
+      {columns.map(column => <button key={column.id} type="button" data-on={(phoneColumn?.id === column.id) || undefined} onClick={() => setFocusId(column.id)}>{column.serial || column.name}</button>)}
+    </div> : null}
+    <div className={css.dayLayout} data-open={selected ? true : undefined} data-phone={phone || undefined}>
+      <div className={css.dayCal}>
+        <div className={css.dayScroll}>
+        <div className={css.daySheet} style={{ width: `max(100%, ${52 + gridColumns.length * 150}px)` }}>
+        <div className={css.dayHead} style={{ gridTemplateColumns: `52px repeat(${gridColumns.length}, minmax(0, 1fr))` }}>
+          <span />
+          {gridColumns.map(column => {
+            const count = blocks.filter(block => block.itemId === column.id && block.tone !== 'br').length
+            return <div key={column.id}>
+              <Avatar id={column.serial || column.name} size={24} />
+              <span><b title={column.name}>{shortResourceLabel(column.name)}</b><small>{column.off ? 'выходной' : `${count} ${count === 1 ? 'запись' : count > 1 && count < 5 ? 'записи' : 'записей'}`}</small></span>
             </div>
-            <em data-tone={toneOf(chosen.status)}>{chosen.status}</em>
-          </header>
-          <dl>
-            <div><dt>Когда</dt><dd>{formatProkatDateTime(chosen.from)} — {formatProkatDateTime(chosen.to)}</dd></div>
-            <div><dt>Сумма</dt><dd>{formatMoney(chosen.price)}</dd></div>
-            <div><dt>Залог</dt><dd>{formatMoney(chosen.deposit)}</dd></div>
-            {chosen.statusReason ? <div><dt>Заметка</dt><dd>{chosen.statusReason}</dd></div> : null}
+          })}
+        </div>
+        <div className={css.dayGrid} style={{ gridTemplateColumns: `52px repeat(${gridColumns.length}, minmax(0, 1fr))`, height: `${((SCHEDULE_DAY_END - SCHEDULE_DAY_START) / 60) * hourPx}px` }}>
+          <div className={css.dayHours} aria-hidden="true">
+            {HOURS.map(minute => {
+              const near = showNow && Math.abs(((minute - nowMin) / 60) * hourPx) < 18
+              if (near) return null
+              return <span key={minute} style={{ top: `${((minute - SCHEDULE_DAY_START) / 60) * hourPx}px` }}>{scheduleClockLabel(minute)}</span>
+            })}
+            {showNow ? <b className={css.dayNowTag} style={{ top: `${((nowMin - SCHEDULE_DAY_START) / 60) * hourPx}px` }}>{scheduleClockLabel(nowMin)}</b> : null}
+          </div>
+          {gridColumns.map(column => <div key={column.id} className={css.dayCol} data-off={column.off || undefined} onClick={event => {
+            if (column.off) return
+            if ((event.target as HTMLElement).closest('button')) return
+            onCreate(column.id, day)
+          }}>
+            {blocks.filter(block => block.itemId === column.id).map(block => (
+              <button
+                key={block.id}
+                type="button"
+                className={css.dayVisit}
+                data-tone={block.tone}
+                data-one={block.oneLine || undefined}
+                data-on={selectedId === block.id || undefined}
+                style={place(block.startMin, block.endMin)}
+                onClick={() => setSelectedId(block.id)}
+              >
+                {block.oneLine ? <><span>{scheduleClockLabel(block.startMin)}</span><b>{block.title}</b></> : <>
+                  <b>{block.title}</b>
+                  {block.service ? <small>{block.service}</small> : null}
+                  <span>{scheduleClockLabel(block.startMin)}–{scheduleClockLabel(block.endMin)}</span>
+                </>}
+              </button>
+            ))}
+            {gaps.filter(gap => gap.itemId === column.id).map(gap => (
+              <button key={`${gap.startMin}`} type="button" className={css.dayFree} style={place(gap.startMin, gap.endMin)} onClick={() => onCreate(column.id, day)}>+ Свободно</button>
+            ))}
+          </div>)}
+          {showNow ? <i className={css.dayNow} style={{ top: `${nowTop}%` }} /> : null}
+        </div>
+        </div>
+        </div>
+        <div className={css.dayLegend}>
+          <span><i data-tone="a" />Подтверждена</span>
+          <span><i data-tone="p" />Прошла</span>
+          <span><i data-tone="w" />Ждёт</span>
+          <span><i data-tone="br" />Перерыв</span>
+          <em>Нажмите на пустое место в колонке, чтобы записать клиента</em>
+        </div>
+      </div>
+      {selected || !phone ? <aside className={css.dayDetail} aria-label="Выбранная запись" data-open={selected ? true : undefined}>
+        {selected ? <>
+          <div className={css.dayDetailTop}>
+            <em data-tone={arrived === selected.id ? 'a' : selected.tone}>{arrived === selected.id ? 'Пришёл' : selected.tone === 'w' ? 'Ждёт' : selected.tone === 'p' ? 'Прошла' : selected.tone === 'br' ? 'Перерыв' : 'Подтверждена'}</em>
+            <button type="button" aria-label="Закрыть" onClick={() => setSelectedId(null)}><ProtoIcon name="close" size={16} /></button>
+          </div>
+          <div className={css.dayPerson}>
+            <Avatar id={selected.phone || selected.clientName || selected.id} size={44} />
+            <div>
+              <b>{selected.clientName || selected.title}</b>
+              <small>{[selected.phone, selected.visits ? visitLabel(selected.visits) : ''].filter(Boolean).join(' · ')}</small>
+            </div>
+          </div>
+          <dl className={css.dayFacts}>
+            <dt>Предмет</dt><dd>{selected.service || '—'}</dd>
+            <dt>Дата</dt><dd>{dateLabel(day).split(', ')[1]}</dd>
+            <dt>Время</dt><dd>{scheduleClockLabel(selected.startMin)}–{scheduleClockLabel(selected.endMin)}</dd>
+            <dt>Стоимость</dt><dd>{selected.price ? formatMoney(selected.price) : '—'}</dd>
+            <dt>Залог</dt><dd>{selected.deposit ? formatMoney(selected.deposit) : '—'}</dd>
+            <dt>Источник</dt><dd>{selected.source}</dd>
           </dl>
-          <button type="button" className={css.primary} onClick={() => onOpen(chosen.id)}>Открыть запись</button>
-          <p className={css.quiet}>{day.split('-').reverse().join('.')}</p>
+          {selected.note ? <p className={css.dayNote}>{selected.note}</p> : null}
+          <div className={css.dayActions}>
+            <button type="button" onClick={() => onCreate(selected.itemId, day)}>Перенести</button>
+            <button type="button" data-primary="true" onClick={() => { if (selected.id.startsWith('day-')) setArrived(selected.id); else onOpen(selected.id) }}>Клиент пришёл</button>
+          </div>
+          {selected.history.length ? <ol className={css.dayLog}>
+            {selected.history.map(entry => <li key={entry.at} data-current={entry.current || undefined}><b>{entry.text}</b><span>{entry.at}</span></li>)}
+          </ol> : null}
+        </> : <p className={css.dayEmpty}>Выберите запись в сетке.</p>}
       </aside> : null}
     </div>
-    {chosen ? null : <p className={css.quiet}>Выберите запись в колонке. Свободный час — «+ Свободно».</p>}
   </div>
 }

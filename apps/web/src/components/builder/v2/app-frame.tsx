@@ -39,14 +39,24 @@ export function BuilderV2AppMark({ logo, icon = 'apps' }: { logo?: string; icon?
   </span>
 }
 
-export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,children,onNavigate,back,notice,phone=false,deviceMode='auto',headerAction,draftLogo=false,fullScreen=false,scrollKey,profile=false}:{app:AppV2;screenId:string;sectionId?:string;title:string;children:ReactNode;onNavigate:(id:string)=>void;back?:()=>void;notice?:ReactNode;phone?:boolean;deviceMode?:'auto'|'desktop'|'phone';headerAction?:ReactNode;draftLogo?:boolean;fullScreen?:boolean;scrollKey?:string;profile?:boolean}) {
+export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,children,onNavigate,back,notice,phone=false,deviceMode='auto',headerAction,draftLogo=false,fullScreen=false,scrollKey,profile=false,accountProfile,navBadges}:{app:AppV2;screenId:string;sectionId?:string;title:string;children:ReactNode;onNavigate:(id:string)=>void;back?:()=>void;notice?:ReactNode;phone?:boolean;deviceMode?:'auto'|'desktop'|'phone';headerAction?:ReactNode;draftLogo?:boolean;fullScreen?:boolean;scrollKey?:string;profile?:boolean;accountProfile?:{name:string;role:string};navBadges?:Readonly<Record<string,{count:number;alert?:boolean}>>}) {
   const screenTitle = title
   const calendarScreen = app.screens.find(screen => screen.id === screenId)?.rootIds.some(id => app.nodes.some(node => node.id === id && node.type === 'team_calendar'))
   if (calendarScreen) title = ''
   const phoneCap=4
   const phoneFirst = ['Главная', 'Сегодня', 'Брони', 'Записи', 'Занятость', 'Расписание', 'Клиенты']
   const menu=builderV2Menu(app)
-  const screens=phone?[...menu].sort((a,b)=>{
+  const [compact,setCompact]=useState(()=>phone||(typeof window!=='undefined'&&typeof window.matchMedia==='function'&&window.matchMedia('(max-width: 1023px)').matches))
+  useLayoutEffect(()=>{
+    if(phone){setCompact(true);return}
+    if(typeof window.matchMedia!=='function')return
+    const query=window.matchMedia('(max-width: 1023px)')
+    const apply=()=>setCompact(query.matches)
+    apply()
+    query.addEventListener('change',apply)
+    return()=>query.removeEventListener('change',apply)
+  },[phone])
+  const screens=(phone||compact)?[...menu].sort((a,b)=>{
     const rank=(screen:AppV2['screens'][number])=>{const index=phoneFirst.indexOf(builderV2MenuLabel(screen,app,{phone:true}));return index<0?phoneFirst.length:index}
     return rank(a)-rank(b)
   }):menu
@@ -89,7 +99,7 @@ export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,childre
     const row=navItems.current
     if(!row)return
     const measure=()=>{
-      const phoneNav=Boolean(phone||(typeof window!=='undefined'&&typeof window.matchMedia==='function'&&window.matchMedia('(max-width: 720px)').matches))
+      const phoneNav=Boolean(phone||(typeof window!=='undefined'&&typeof window.matchMedia==='function'&&window.matchMedia('(max-width: 1023px)').matches))
       const hardCap=phoneNav?phoneCap:screens.length
       if(phoneNav){setFit(screens.length>phoneCap?phoneCap:screens.length);return}
       if(navigation==='sidebar'||row.clientWidth<8){setFit(navigation==='sidebar'?screens.length:Math.min(hardCap,screens.length>phoneCap?phoneCap:screens.length));return}
@@ -124,36 +134,41 @@ export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,childre
   },[more])
   const choose=(id:string)=>{setMore(false);onNavigate(id)}
   const navButton=(screen:AppV2['screens'][number],extra=false)=>{
-    const label=builderV2MenuLabel(screen,app,{phone})
-    return <button type="button" key={screen.id} title={builderV2MenuLabel(screen,app)} aria-current={screen.id===sectionId?'page':undefined} className={extra?css.extraItem:undefined} onClick={()=>choose(screen.id)}><ProtoIcon name={screen.icon}/><span>{label}</span></button>
+    const raw=builderV2MenuLabel(screen,app,{phone:phone||compact})
+    const label=(phone||compact)&&raw==='Главная'?'Сегодня':raw
+    const badge=navBadges?.[screen.id]
+    return <button type="button" key={screen.id} title={builderV2MenuLabel(screen,app)} aria-current={screen.id===sectionId?'page':undefined} className={extra?css.extraItem:undefined} onClick={()=>choose(screen.id)}><ProtoIcon name={screen.icon} size={16}/><span>{label}</span>{badge&&badge.count>0?compact?<i className={css.navDot} />:<em data-alert={badge.alert||undefined}>{badge.count}</em>:null}</button>
   }
-  const limit=phone ? fit : navigation==='sidebar' ? screens.length : fit
+  const settingsScreen=!compact&&navigation==='sidebar'?screens.find(screen=>screen.icon==='settings'):undefined
+  const listed=settingsScreen?screens.filter(screen=>screen.id!==settingsScreen.id):screens
+  const limit=(phone||compact) ? fit : navigation==='sidebar' ? listed.length : fit
   const rest=screens.slice(limit),overflow=rest.length>0,activeExtra=rest.some(screen=>screen.id===sectionId)
   const appName = (app.name || 'Моё приложение').replaceAll(' · ', '\u00A0·\u00A0')
   const sectionScreen = app.screens.find(screen => screen.id === sectionId)
   const mark = <BuilderV2AppMark logo={builderV2LogoUrl(app, draftLogo)} icon={app.appearance?.icon} />
   const account = headerAction ? <span className={css.headerAction}>{headerAction}</span> : null
   const frame = <div className={css.container} data-app-frame="" data-phone={phone || undefined} data-contained={contained || undefined} data-fullscreen={fullScreen && !phone || undefined}>
-    <section className={`${styles.surface} ${css.frame}`} data-navigation={navigation} data-shell-topnav={shellTopNav || undefined} data-template={app.support ? 'support' : undefined}>
+    <section className={`${styles.surface} ${css.frame}`} data-navigation={navigation} data-shell-topnav={shellTopNav || undefined} data-template={app.support ? 'support' : app.prokat ? 'prokat' : undefined}>
     {showChromeHeader ? <header className={`${styles.appHeader} ${css.header}`} data-brand-only={mobileBrandOnly || undefined}>
       <div className={`${css.chromeBar} ${presentation.contentWidth}`}>
         {back && !shellTopNav ? <button type="button" className={presentation.iconControl} onClick={back} aria-label="Назад" title="Назад"><ProtoIcon name="back" /></button> : <span className={css.headerMark}>{mark}</span>}
-        {showBrand ? <span className={css.railBrand}><span>{appName}</span></span> : null}
+        {showBrand || compact ? <span className={css.railBrand}><span>{appName}</span></span> : null}
         {profile && <BuilderV2RecordAvatar name={title} id={scrollKey || screenId} icon="users" />}
         {!mobileBrandOnly && catalogDetail ? <span className={css.catalogIdentity}>{sectionScreen?.name ?? appName}</span>
           : !mobileBrandOnly && title ? <div>
             <h1 className={presentation.pageTitle}>{title.replaceAll('-', '\u2011')}</h1>
           </div> : calendarScreen ? <h1 className="sr-only">{screenTitle}</h1> : null}
-        {navigation === 'sidebar' && !phone ? null : account}
+        {navigation === 'sidebar' && !compact ? null : account}
+        {compact ? <span className={css.mobileTools}><button type="button" className={css.iconBtn} aria-label="Поиск" onClick={()=>document.querySelector<HTMLInputElement>('input[type="search"]')?.focus()}><ProtoIcon name="search" size={16}/></button><button type="button" className={css.iconBtn} aria-label="Уведомления"><ProtoIcon name="bell" size={16}/></button></span> : null}
       </div>
     </header> : null}
     <div ref={body} className={css.body} role={contained ? 'region' : undefined} aria-label={contained ? 'Содержимое экрана' : undefined} tabIndex={contained ? 0 : undefined}><AppFrameDeviceContext.Provider value={deviceMode}><div ref={contents} className={`${styles.appContent} ${css.content} ${presentation.contentWidth}`}>{notice}{children}</div></AppFrameDeviceContext.Provider></div>
     {showNav&&<nav className={css.navigation} aria-label="Разделы приложения">
       <div className={navigation === 'sidebar' ? css.navStack : `${css.chromeBar} ${presentation.contentWidth}`}>
-        <div className={css.railIdentity}>{mark}<strong>{appName}</strong></div>
-        <div className={css.navItems} ref={navItems}>{screens.map((screen,index)=><div key={screen.id} data-nav-item="" hidden={index>=limit}>{navButton(screen)}</div>)}<div className={css.more} data-nav-more="" ref={root} hidden={!overflow}><button type="button" ref={trigger} aria-expanded={more} aria-controls={menuId} aria-current={activeExtra?'true':undefined} onClick={()=>setMore(!more)}><ProtoIcon name="more"/><span>Ещё</span></button>{more&&<div className={css.morePanel} id={menuId} role="region" aria-label="Другие разделы"><strong>Разделы</strong>{rest.map(screen=>navButton(screen,true))}{phone ? <><Link className={css.extraItem} href={`/apps/${app.id}`}>Конструктор</Link><Link className={css.extraItem} href={`/a/${encodeURIComponent(app.slug)}`}>Страница для клиентов</Link></> : null}</div>}</div></div>
-        {navigation === 'sidebar' && !phone ? <div className={css.railLinks}><span>Приложение</span><Link href={`/apps/${app.id}`}>Конструктор</Link><Link href={`/a/${encodeURIComponent(app.slug)}`}>Страница для клиентов</Link></div> : null}
-        {navigation === 'sidebar' && !phone ? <div className={css.railAccount}>{account}</div> : null}
+        <div className={css.workspace}>{mark}<div><strong>{appName}</strong><small>Кабинет владельца</small></div><span className={css.workspaceSwitch} aria-hidden="true"><ProtoIcon name="down" size={14}/></span></div>
+        <div className={css.navItems} ref={navItems}>{listed.map((screen,index)=><div key={screen.id} data-nav-item="" hidden={index>=limit}>{navButton(screen)}</div>)}<div className={css.more} data-nav-more="" ref={root} hidden={!overflow}><button type="button" ref={trigger} aria-expanded={more} aria-controls={menuId} aria-current={activeExtra?'true':undefined} onClick={()=>setMore(!more)}><ProtoIcon name="more" size={22}/><span>Ещё</span></button>{more&&<div className={css.morePanel} id={menuId} role="region" aria-label="Другие разделы"><strong>Разделы</strong>{rest.map(screen=>navButton(screen,true))}{compact ? <><Link className={css.extraItem} href={`/apps/${app.id}`}>Конструктор</Link><Link className={css.extraItem} href={`/a/${encodeURIComponent(app.slug)}`}>Страница для клиентов</Link></> : null}</div>}</div></div>
+        {navigation === 'sidebar' && !compact ? <div className={css.railLinks}><span>Приложение</span><Link href={`/apps/${app.id}`}><ProtoIcon name="apps" size={16}/>Конструктор</Link>{settingsScreen?navButton(settingsScreen):null}<div className={css.plan}><a href={`/a/${encodeURIComponent(app.slug)}`}><strong>Страница для клиентов</strong><span>{app.slug}.scatta.ru</span></a><button type="button" aria-label="Скопировать адрес" onClick={()=>void navigator.clipboard?.writeText(`https://${app.slug}.scatta.ru`)}><ProtoIcon name="copy" size={14}/></button></div></div> : null}
+        {navigation === 'sidebar' && !compact ? <div className={css.me}><Avatar id={accountProfile?.name || app.slug} size={24}/><div><strong>{accountProfile?.name || 'Владелец'}</strong><small>{accountProfile?.role || 'Владелец'}</small></div><button type="button" aria-label="Меню профиля"><ProtoIcon name="more" size={16}/></button></div> : null}
         {shellTopNav ? account : null}
       </div>
     </nav>}

@@ -10,11 +10,17 @@ import { ruCount, ruPlural } from '@/components/ui/format'
 import { ProkatDayBoard } from './prokat-day-board'
 import { ClientCardView, ClientsView, useClientsNarrow, type ClientTab } from './prokat-clients'
 import { BookingModal, type BookingClientOption, type BookingItemOption } from './prokat-booking'
+import { TodayView } from './prokat-today'
 import { demoClientById, prokatDemoCard, prokatDemoClients, type DemoCard, type DemoCardMessage, type DemoCardStep, type DemoClient, type PillTone } from '@/lib/prokat-clients-demo'
 import {
   DEMO_BOOKING_CLIENT, DEMO_BOOKING_FROM, DEMO_BOOKING_TIME, DEMO_BOOKING_TO, DEMO_BOOKING_TO_PHONE, DEMO_BOOKING_TODAY,
   prokatDemoBookingItems, prokatDemoBookingSelectedIds,
 } from '@/lib/prokat-booking-demo'
+import {
+  DEMO_TODAY_METRICS,
+  prokatDemoTodayAgenda, prokatDemoTodaySubtitle, prokatDemoTodayUrgent,
+  type DemoTodayTask,
+} from '@/lib/prokat-today-demo'
 import { buildProkatDaySchedule, PROKAT_SCHEDULE_AT } from '@/lib/prokat-day-demo'
 import type { ConversationPage } from '@/lib/conversation-types'
 import { BuilderV2AttachmentInput } from './attachment-input'
@@ -26,7 +32,7 @@ import {
   encodeItemHoldOverride, filterBookings, formatMoney, formatMoneyOrZero, formatNotPickedUpCount,
   formatProkatDate, formatProkatDateTime, holdOptionLabel, isHoldEligibleStatus, isHoldWindowOpen,
   isOpenBooking, isOverdueReturn, itemLateFeeConfig, parseItemHoldOverride, prokatClientStepIndex,
-  prokatDashboard, prokatInstantParts, prokatWallInstant, resolveBookingHoldUntil,
+  prokatDashboard, prokatInstantParts, prokatWallInstant, resolveBookingHoldUntil, sameMoscowDay,
   shiftTimelineStart, staffTransitions,
   timelineBookingSegments, timelineStartForToday, type ProkatBookingViewId,
   type ProkatCatalogItem, type ProkatHoldAfterStartMinutes, type ProkatListItem, type ProkatLateFeeMode,
@@ -590,42 +596,59 @@ async function runStatus(props: ScreenProps, recordId: string, nextStatusId: str
   setMessage(result.ok ? result.message : result.error)
 }
 
-function TodayBookingRow(props: {
-  item: ProkatListItem
-  catalog: readonly ProkatCatalogItem[]
-  time: string
-  actionLabel: string
-  onOpen: () => void
-  onAction: () => void
-}) {
-  const photoItem = props.catalog.find(entry => props.item.itemIds.includes(entry.id))
-  return <li className={css.todayRow}>
-    <button type="button" className={css.todayMain} onClick={props.onOpen}>
-      {photoItem ? <ItemTile item={photoItem} size={44} /> : <span className={css.itemTile} data-empty aria-hidden="true"><ProtoIcon name="box" size={18} /></span>}
-      <span className={css.todayCopy}>
-        <strong className={css.deviceWrap}>{props.item.title || props.item.number}</strong>
-        <span className={css.quiet}>{props.item.clientName || 'Без клиента'} · {props.time}</span>
-      </span>
-    </button>
-    <button type="button" className={css.todayAction} onClick={props.onAction}>{props.actionLabel}</button>
-  </li>
+function todayStamp(iso: unknown) {
+  const parts = typeof iso === 'string' ? prokatInstantParts(iso) : { date: '', time: '' }
+  return parts.time || '—'
 }
 
-function TodayGroup(props: {
-  title: string
-  empty: string
-  tone?: 'overdue'
-  children: ReactNode
-  count: number
-}) {
-  if (!props.count) return null
-  return <section className={css.todayGroup} data-tone={props.tone} aria-label={props.title}>
-    <header className={css.todayHead}>
-      <h3>{props.title}</h3>
-      <span className={css.todayCount}>{props.count}</span>
-    </header>
-    <ul className={css.todayList}>{props.children}</ul>
-  </section>
+function todayWeekdayRu(isoDate: string) {
+  const [year, month, day] = isoDate.split('-').map(Number)
+  if (!year || !month || !day) return ''
+  const name = new Intl.DateTimeFormat('ru-RU', { weekday: 'long', timeZone: 'UTC' }).format(new Date(Date.UTC(year, month - 1, day)))
+  return name ? name.charAt(0).toUpperCase() + name.slice(1) : ''
+}
+
+function liveTodaySubtitle(itemsOut: number, now: number) {
+  const parts = prokatInstantParts(new Date(now).toISOString())
+  const [year, month, day] = parts.date.split('-')
+  const label = year && month && day ? `${day}.${month}.${year}` : '—'
+  const weekday = todayWeekdayRu(parts.date)
+  return `${weekday}${weekday ? ', ' : ''}${label} · ${ruCount(itemsOut, 'предмет', 'предмета', 'предметов')} в прокате`
+}
+
+function liveUrgentTasks(items: readonly ProkatListItem[], now: number): DemoTodayTask[] {
+  const yesterday = now - 86_400_000
+  return items.map(item => ({
+    id: item.id,
+    kind: 'call' as const,
+    stamp: sameMoscowDay(item.to, yesterday) ? 'вчера' : (formatProkatDate(item.to) || 'срок'),
+    title: item.title || item.number,
+    detail: `${item.clientName || 'Без клиента'} · не вернул ${formatProkatDateTime(item.to)}`,
+    action: 'Позвонить',
+    bookingId: item.id,
+  }))
+}
+
+function liveAgendaTasks(issues: readonly ProkatListItem[], returns: readonly ProkatListItem[]): DemoTodayTask[] {
+  const issueRows = issues.map(item => ({
+    id: item.id,
+    kind: 'issue' as const,
+    stamp: todayStamp(item.from),
+    title: item.title || item.number,
+    detail: `Выдать · ${item.clientName || 'Без клиента'}`,
+    action: 'Выдать',
+    bookingId: item.id,
+  }))
+  const returnRows = returns.map(item => ({
+    id: item.id,
+    kind: 'return' as const,
+    stamp: todayStamp(item.to),
+    title: item.title || item.number,
+    detail: `Вернуть · ${item.clientName || 'Без клиента'}`,
+    action: 'Принять',
+    bookingId: item.id,
+  }))
+  return [...issueRows, ...returnRows].sort((a, b) => a.stamp.localeCompare(b.stamp, 'ru'))
 }
 
 /** Desk screens: cancel expired holds if the in-process worker has not run yet. */
@@ -845,116 +868,71 @@ function SettingsScreen(props: ScreenProps) {
 
 function DashboardScreen(props: ScreenProps) {
   useProkatHoldCatchUp(props)
+  const bundle = useContext(ProkatRowsContext)
+  const sample = Boolean(bundle?.sample)
   const bookings = bookingItems(props)
   const items = catalogItems(props)
   const stats = prokatDashboard(items, bookings, props.now)
-  const weekRevenue = stats.revenueByWeek[stats.revenueByWeek.length - 1]?.value ?? 0
-  const maxWeek = Math.max(1, ...stats.revenueByWeek.map(week => week.value))
   const [act, setAct] = useState<{ kind: 'issue' | 'return'; bookingId: string } | null>(null)
   const [create, setCreate] = useState(false)
   const [frameHost, setFrameHost] = useState<HTMLElement | null>(null)
   const desk = isProkatDesk(props.actor)
-  const phone = useContext(AppFrameDeviceContext) === 'phone'
+  const phone = useClientsNarrow(useContext(AppFrameDeviceContext))
   useEffect(() => { setFrameHost(document.querySelector('[data-app-frame]')) }, [])
   const actBooking = act ? props.of(props.kit.bookingsTableId).find(row => row.id === act.bookingId) : null
-  return <div className={css.root} data-prokat-root data-prokat-screen="dashboard">
+
+  const urgent = sample ? prokatDemoTodayUrgent() : liveUrgentTasks(stats.overdue, props.now)
+  const agenda = sample ? prokatDemoTodayAgenda() : liveAgendaTasks(stats.issuesTodayList, stats.returnsDueTodayList)
+  const metrics = sample
+    ? [
+      { key: 'issue', label: 'Выдать', value: DEMO_TODAY_METRICS.issue },
+      { key: 'return', label: 'Вернуть', value: DEMO_TODAY_METRICS.return },
+      { key: 'overdue', label: 'Просрочено', value: DEMO_TODAY_METRICS.overdue, bad: true },
+    ]
+    : [
+      { key: 'issue', label: 'Выдать', value: stats.issuesToday },
+      { key: 'return', label: 'Вернуть', value: stats.returnsDueToday },
+      { key: 'overdue', label: 'Просрочено', value: stats.overdueCount, bad: true },
+    ]
+  const subtitle = sample ? prokatDemoTodaySubtitle() : liveTodaySubtitle(stats.itemsOut, props.now)
+  const agendaHint = sample
+    ? `${agenda.length} до конца дня`
+    : agenda.length
+      ? `${ruCount(agenda.length, 'дело', 'дела', 'дел')} до конца дня`
+      : 'на сегодня пусто'
+
+  const onTaskAction = (task: DemoTodayTask) => {
+    if (task.kind === 'call') {
+      if (task.phone && typeof window !== 'undefined') window.location.href = `tel:${task.phone.replace(/[^\d+]/g, '')}`
+      else if (task.bookingId && !task.bookingId.startsWith('demo-')) props.onNavigate?.(props.kit.bookingScreenId, task.bookingId)
+      return
+    }
+    if (!task.bookingId || task.bookingId.startsWith('demo-')) {
+      setCreate(true)
+      return
+    }
+    setAct({ kind: task.kind === 'issue' ? 'issue' : 'return', bookingId: task.bookingId })
+  }
+
+  return <div className={css.root} data-prokat-root data-prokat-screen="dashboard" data-phone={phone || undefined}>
     {desk && phone && frameHost ? createPortal(<button type="button" className={css.phoneAdd} aria-label="Новая бронь" onClick={() => setCreate(true)}>+</button>, frameHost) : null}
-    <ListScreenShell title={phone ? 'Сегодня' : 'Главная'} meta="Что сделать сегодня — и как загружен парк.">
-      <div className={css.dashStack}>
-      <div className={css.kpiRow} role="group" aria-label="Показатели">
-        <button type="button" className={css.kpiPill} onClick={() => props.onNavigate?.(props.kit.timelineScreenId)}>
-          <strong>{stats.utilisation}%</strong><span>Загрузка парка</span>
-        </button>
-        <button type="button" className={css.kpiPill} onClick={() => props.onNavigate?.(props.kit.bookingsScreenId)}>
-          <strong>{stats.itemsOut}</strong><span>Сейчас в прокате</span>
-        </button>
-        <button type="button" className={css.kpiPill} onClick={() => props.onNavigate?.(props.kit.bookingsScreenId)}>
-          <strong>{formatMoneyOrZero(weekRevenue)}</strong><span>Выручка за неделю</span>
-        </button>
-      </div>
-      <DetailSection title="Сегодня">
-        <div className={css.todayStack}>
-          <TodayGroup title="Просрочено" empty="Просрочек нет — всё вовремя." tone="overdue" count={stats.overdue.length}>
-            {stats.overdue.map(item => (
-              <TodayBookingRow
-                key={item.id}
-                item={item}
-                catalog={items}
-                time={`до ${formatProkatDateTime(item.to)}`}
-                actionLabel="Принять возврат"
-                onOpen={() => props.onNavigate?.(props.kit.bookingScreenId, item.id)}
-                onAction={() => setAct({ kind: 'return', bookingId: item.id })}
-              />
-            ))}
-          </TodayGroup>
-          <TodayGroup title="Выдать сегодня" empty="На сегодня выдач нет — новые подтверждённые брони появятся здесь." count={stats.issuesTodayList.length}>
-            {stats.issuesTodayList.map(item => (
-              <TodayBookingRow
-                key={item.id}
-                item={item}
-                catalog={items}
-                time={formatProkatDateTime(item.from)}
-                actionLabel="Выдать"
-                onOpen={() => props.onNavigate?.(props.kit.bookingScreenId, item.id)}
-                onAction={() => setAct({ kind: 'issue', bookingId: item.id })}
-              />
-            ))}
-          </TodayGroup>
-          <TodayGroup title="Вернуть сегодня" empty="На сегодня возвратов нет." count={stats.returnsDueTodayList.length}>
-            {stats.returnsDueTodayList.map(item => (
-              <TodayBookingRow
-                key={item.id}
-                item={item}
-                catalog={items}
-                time={formatProkatDateTime(item.to)}
-                actionLabel="Принять возврат"
-                onOpen={() => props.onNavigate?.(props.kit.bookingScreenId, item.id)}
-                onAction={() => setAct({ kind: 'return', bookingId: item.id })}
-              />
-            ))}
-          </TodayGroup>
-          <TodayGroup title="Не забрали" empty="Неявок нет." tone="overdue" count={stats.notPickedUpList.length}>
-            {stats.notPickedUpList.map(item => (
-              <TodayBookingRow
-                key={item.id}
-                item={item}
-                catalog={items}
-                time={formatProkatDateTime(item.from)}
-                actionLabel="Открыть"
-                onOpen={() => props.onNavigate?.(props.kit.bookingScreenId, item.id)}
-                onAction={() => props.onNavigate?.(props.kit.bookingScreenId, item.id)}
-              />
-            ))}
-          </TodayGroup>
-        </div>
-      </DetailSection>
-      <div className={css.dashGrid}>
-        <DetailSection title="Загрузка по категориям">
-          {!stats.utilisationByCategory.length ? <p className={css.quiet}>Добавьте предметы — здесь появится загрузка.</p> : stats.utilisationByCategory.map(row => (
-            <div key={row.name} className={css.utilRow}>
-              <div className={css.utilRow} style={{ gridTemplateColumns: 'minmax(0,1fr)', border: 0, padding: 0 }}>
-                <strong>{row.name}</strong>
-                <span className={css.utilBar} aria-hidden="true"><i style={{ width: `${row.percent}%` }} /></span>
-              </div>
-              <span>{row.percent}%</span>
-            </div>
-          ))}
-        </DetailSection>
-        <DetailSection title="Выручка по неделям">
-          <div className={css.revBars} role="img" aria-label="Выручка по неделям">
-            {stats.revenueByWeek.map(week => {
-              const pct = week.value ? Math.max(10, Math.round((week.value / maxWeek) * 100)) : 0
-              return <div key={week.label} className={css.revBar}>
-                <strong>{formatMoneyOrZero(week.value)}</strong>
-                <div className={css.revChart}><span className={css.revFill} style={{ height: `${pct}%` }} /></div>
-                <span>{week.label}</span>
-              </div>
-            })}
-          </div>
-        </DetailSection>
-      </div>
-      </div>
-    </ListScreenShell>
+    <TodayView
+      phone={phone}
+      subtitle={subtitle}
+      metrics={metrics}
+      urgent={urgent}
+      agenda={agenda}
+      agendaHint={agendaHint}
+      onCreate={desk ? () => setCreate(true) : undefined}
+      onOpen={task => {
+        if (task.bookingId && !task.bookingId.startsWith('demo-')) props.onNavigate?.(props.kit.bookingScreenId, task.bookingId)
+      }}
+      onAction={onTaskAction}
+      extra={phone ? null : {
+        categories: stats.utilisationByCategory,
+        weeks: stats.revenueByWeek,
+      }}
+    />
     {create ? <CreateDialog {...props} onClose={() => setCreate(false)} onDone={() => setCreate(false)} /> : null}
     {act?.kind === 'issue' && actBooking ? <IssueDialog {...props} booking={actBooking} onClose={() => setAct(null)} onMessage={() => setAct(null)} /> : null}
     {act?.kind === 'return' && actBooking ? <ReturnDialog {...props} booking={actBooking} onClose={() => setAct(null)} onMessage={() => setAct(null)} /> : null}

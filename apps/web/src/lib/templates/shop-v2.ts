@@ -106,7 +106,7 @@ export function buildShopV2App(built: BuiltTemplate, meta: { id: string; workspa
   }
   const app: AppV2 = {
     formatVersion: 2, id: meta.id, workspaceId: meta.workspaceId, name: meta.name, slug: meta.slug, purpose: 'business',
-    appearance: { navigation: 'tabs', icon: 'box', density: 'regular', corners: 'rounded' },
+    appearance: { navigation: 'sidebar', icon: 'box', density: 'regular', corners: 'rounded' },
     theme: { accent: 'green', scheme: 'light', logoKey: null, iconKey: null },
     roles: [{ id: 'owner', name: 'Владелец' }, { id: 'staff', name: 'Сотрудник' }, { id: 'client', name: 'Клиент' }],
     authentication: { mode: 'verified_email', defaultRoleId: 'client', members: [{ email: meta.email.trim().toLowerCase(), roleIds: ['owner'], company: '' }] },

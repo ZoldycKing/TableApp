@@ -208,9 +208,9 @@
   flex: none;
 }
 .avatar i, .avatar b { position: absolute; display: block; }
-.avatar[data-variant='0'] { background: #DCE6FA; }
-.avatar[data-variant='0'] i { left: 22%; top: 18%; width: 54%; height: 54%; border-radius: 50%; background: var(--sc-accent); }
-.avatar[data-variant='0'] b { left: -8%; bottom: -36%; width: 116%; height: 62%; border-radius: 50%; background: #141516; }
+.avatar[data-variant='0'] { background: #E7EEFA; }
+.avatar[data-variant='0'] i { left: 18%; top: 18%; width: 28%; height: 64%; border-radius: 2px; background: #266DF0; }
+.avatar[data-variant='0'] b { right: 16%; bottom: 16%; width: 42%; height: 42%; border-radius: 50%; background: #141516; }
 .avatar[data-variant='1'] { background: #F0E3CF; }
 .avatar[data-variant='1'] i { right: -18%; top: -18%; width: 78%; height: 78%; border-radius: 50%; background: #D9773F; }
 .avatar[data-variant='1'] b { left: 16%; bottom: 16%; width: 36%; height: 36%; border-radius: 3px; background: #141516; }

@@ -8,6 +8,7 @@ import {builderV2Menu,builderV2MenuLabel,builderV2ThemeStyle} from './appearance
 import { builderV2LogoUrl } from '@/lib/builder-v2-logo-types'
 import css from './app-frame.module.css'
 import presentation from '@/components/runtime/app-presentation.module.css'
+import { Avatar } from '@/components/ui/avatar'
 import { BuilderV2RecordAvatar } from './record-visuals'
 import { BookingJourneyProvider } from './booking-journey'
 import { PhoneMockup } from '@/components/phone-mockup'
@@ -27,7 +28,7 @@ export function BuilderV2Account({email,authenticated,slug,preview=false}:{email
   },[])
   const href=`/a/${encodeURIComponent(slug)}?login=1`
   if(!authenticated)return <a className={css.signIn} href={href}>Войти</a>
-  return <details className={css.account} ref={root} onKeyDown={event=>{if(event.key==='Escape'&&root.current?.open){event.preventDefault();root.current.open=false;root.current.querySelector('summary')?.focus()}}}><summary aria-label="Аккаунт" title="Аккаунт"><ProtoIcon name="users"/></summary><div><small>Вы вошли как</small><span>{email}</span>{!preview&&<a href={href}>Сменить почту</a>}</div></details>
+  return <details className={css.account} ref={root} onKeyDown={event=>{if(event.key==='Escape'&&root.current?.open){event.preventDefault();root.current.open=false;root.current.querySelector('summary')?.focus()}}}><summary aria-label="Аккаунт" title="Аккаунт"><Avatar id={email || slug} size={28} /></summary><div><small>Вы вошли как</small><span>{email}</span>{!preview&&<a href={href}>Сменить почту</a>}</div></details>
 }
 export function BuilderV2AppMark({ logo, icon = 'apps' }: { logo?: string; icon?: string }) {
   const [failed, setFailed] = useState<string>()
@@ -41,8 +42,14 @@ export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,childre
   const screenTitle = title
   const calendarScreen = app.screens.find(screen => screen.id === screenId)?.rootIds.some(id => app.nodes.some(node => node.id === id && node.type === 'team_calendar'))
   if (calendarScreen) title = ''
-  const screens=builderV2Menu(app),[more,setMore]=useState(false),menuId=useId(),root=useRef<HTMLDivElement>(null),trigger=useRef<HTMLButtonElement>(null),navItems=useRef<HTMLDivElement>(null)
-  const phoneCap=5
+  const phoneCap=4
+  const phoneFirst = ['Главная', 'Сегодня', 'Брони', 'Записи', 'Занятость', 'Расписание', 'Клиенты']
+  const menu=builderV2Menu(app)
+  const screens=phone?[...menu].sort((a,b)=>{
+    const rank=(screen:AppV2['screens'][number])=>{const index=phoneFirst.indexOf(builderV2MenuLabel(screen,app,{phone:true}));return index<0?phoneFirst.length:index}
+    return rank(a)-rank(b)
+  }):menu
+  const [more,setMore]=useState(false),menuId=useId(),root=useRef<HTMLDivElement>(null),trigger=useRef<HTMLButtonElement>(null),navItems=useRef<HTMLDivElement>(null)
   const staticFit=screens.length>phoneCap?phoneCap:screens.length
   const [fit,setFit]=useState(staticFit)
   const catalogDetail = Boolean(app.screens.find(screen => screen.id === screenId)?.catalog)
@@ -135,7 +142,7 @@ export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,childre
           : !mobileBrandOnly && title ? <div>
             <h1 className={presentation.pageTitle}>{title.replaceAll('-', '\u2011')}</h1>
           </div> : calendarScreen ? <h1 className="sr-only">{screenTitle}</h1> : null}
-        {account}
+        {navigation === 'sidebar' && !phone ? null : account}
       </div>
     </header> : null}
     <div ref={body} className={css.body} role={contained ? 'region' : undefined} aria-label={contained ? 'Содержимое экрана' : undefined} tabIndex={contained ? 0 : undefined}><AppFrameDeviceContext.Provider value={deviceMode}><div ref={contents} className={`${styles.appContent} ${css.content} ${presentation.contentWidth}`}>{notice}{children}</div></AppFrameDeviceContext.Provider></div>
@@ -143,6 +150,7 @@ export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,childre
       <div className={navigation === 'sidebar' ? css.navStack : `${css.chromeBar} ${presentation.contentWidth}`}>
         <div className={css.railIdentity}>{mark}<strong>{appName}</strong></div>
         <div className={css.navItems} ref={navItems}>{screens.map((screen,index)=><div key={screen.id} data-nav-item="" hidden={index>=limit}>{navButton(screen)}</div>)}<div className={css.more} data-nav-more="" ref={root} hidden={!overflow}><button type="button" ref={trigger} aria-expanded={more} aria-controls={menuId} aria-current={activeExtra?'true':undefined} onClick={()=>setMore(!more)}><ProtoIcon name="more"/><span>Ещё</span></button>{more&&<div className={css.morePanel} id={menuId} role="region" aria-label="Другие разделы"><strong>Разделы</strong>{rest.map(screen=>navButton(screen,true))}</div>}</div></div>
+        {navigation === 'sidebar' && !phone ? <div className={css.railAccount}>{account}</div> : null}
         {shellTopNav ? account : null}
       </div>
     </nav>}

@@ -142,7 +142,7 @@ export function buildCrmV2App(built: BuiltTemplate, meta: { id: string; workspac
 
   const app: AppV2 = {
     formatVersion: 2, id: meta.id, workspaceId: meta.workspaceId, name: meta.name, slug: meta.slug, purpose: 'business',
-    appearance: { navigation: 'tabs', icon: 'deal', density: 'regular', corners: 'rounded' },
+    appearance: { navigation: 'sidebar', icon: 'deal', density: 'regular', corners: 'rounded' },
     theme: { accent: 'green', scheme: 'light', logoKey: null, iconKey: null },
     roles: [{ id: 'owner', name: 'Владелец' }, { id: 'staff', name: 'Сотрудник' }],
     authentication: { mode: 'invite_only', defaultRoleId: null, members: [{ email: meta.email.trim().toLowerCase(), roleIds: ['owner'], company: '' }] },

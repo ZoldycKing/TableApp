@@ -46,11 +46,11 @@ export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,childre
   const phoneCap=4
   const phoneFirst = ['Главная', 'Сегодня', 'Брони', 'Записи', 'Занятость', 'Расписание', 'Клиенты']
   const menu=builderV2Menu(app)
-  const [compact,setCompact]=useState(()=>phone||(typeof window!=='undefined'&&typeof window.matchMedia==='function'&&window.matchMedia('(max-width: 759px)').matches))
+  const [compact,setCompact]=useState(()=>phone||(typeof window!=='undefined'&&typeof window.matchMedia==='function'&&window.matchMedia('(max-width: 1023px)').matches))
   useLayoutEffect(()=>{
     if(phone){setCompact(true);return}
     if(typeof window.matchMedia!=='function')return
-    const query=window.matchMedia('(max-width: 759px)')
+    const query=window.matchMedia('(max-width: 1023px)')
     const apply=()=>setCompact(query.matches)
     apply()
     query.addEventListener('change',apply)
@@ -99,7 +99,7 @@ export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,childre
     const row=navItems.current
     if(!row)return
     const measure=()=>{
-      const phoneNav=Boolean(phone||(typeof window!=='undefined'&&typeof window.matchMedia==='function'&&window.matchMedia('(max-width: 720px)').matches))
+      const phoneNav=Boolean(phone||(typeof window!=='undefined'&&typeof window.matchMedia==='function'&&window.matchMedia('(max-width: 1023px)').matches))
       const hardCap=phoneNav?phoneCap:screens.length
       if(phoneNav){setFit(screens.length>phoneCap?phoneCap:screens.length);return}
       if(navigation==='sidebar'||row.clientWidth<8){setFit(navigation==='sidebar'?screens.length:Math.min(hardCap,screens.length>phoneCap?phoneCap:screens.length));return}

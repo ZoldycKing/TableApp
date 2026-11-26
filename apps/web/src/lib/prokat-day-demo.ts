@@ -200,3 +200,20 @@ export function buildProkatDaySchedule(items: readonly ProkatCatalogItem[]) {
 export function scheduleClockLabel(min: number) {
   return hhmm(min)
 }
+
+/** Short column title. The full catalog name stays in the tooltip and the record panel. */
+export function shortResourceLabel(name: string) {
+  const bike = name.match(/^(?:горный|городской|шоссейный|детский)\s+велосипед\s+(.+)$/i)
+  if (bike) {
+    const rest = bike[1].replace(/\s+\d+\s*$/, '').trim()
+    if (/^\d/.test(rest) || rest.length < 3) return name.replace(/\s+велосипед/i, '').trim()
+    return rest
+  }
+  const trimmed = name
+    .replace(/\s+\d+\s*['’′]\s*\d*\s*["”″']?\s*$/, '')
+    .replace(/\s+\d+\s*['’′]\s*$/, '')
+    .trim()
+  if (/^SUP Red Paddle$/i.test(trimmed)) return 'Red Paddle'
+  if (/^SUP детский$/i.test(trimmed)) return 'SUP 8\''
+  return trimmed || name
+}

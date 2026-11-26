@@ -4,7 +4,7 @@ import { ProtoIcon } from '../prototype/icons'
 import { Avatar } from '@/components/ui/avatar'
 import { formatMoney, PROKAT_TIMELINE_RANGES, type ProkatCatalogItem, type ProkatListItem, type ProkatTimelineRangeId } from '@/lib/prokat-logic'
 import {
-  buildProkatDaySchedule, PROKAT_SCHEDULE_DAY, scheduleClockLabel, SCHEDULE_DAY_END, SCHEDULE_DAY_START, SCHEDULE_NOW_MIN,
+  buildProkatDaySchedule, PROKAT_SCHEDULE_DAY, scheduleClockLabel, SCHEDULE_DAY_END, SCHEDULE_DAY_START, SCHEDULE_NOW_MIN, shortResourceLabel,
   visibleGaps, type ScheduleBlock, type ScheduleColumn, type ScheduleTone,
 } from '@/lib/prokat-day-demo'
 import css from './prokat.module.css'
@@ -102,9 +102,17 @@ export function ProkatDayBoard({
   const columns: ScheduleColumn[] = demo?.columns ?? items.filter(item => item.name && item.status !== 'Списан').map(item => ({ ...item, off: item.status === 'На обслуживании' }))
   const blocks = demo?.blocks ?? blocksFromBookings(columns, bookings, day, nowMin)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [dockedDetail, setDockedDetail] = useState(false)
   useEffect(() => {
-    if (!phone) setSelectedId(demo?.selectedId ?? null)
-  }, [phone, demo?.selectedId])
+    const query = window.matchMedia('(min-width: 1280px)')
+    const apply = () => setDockedDetail(query.matches)
+    apply()
+    query.addEventListener('change', apply)
+    return () => query.removeEventListener('change', apply)
+  }, [])
+  useEffect(() => {
+    if (dockedDetail) setSelectedId(demo?.selectedId ?? null)
+  }, [dockedDetail, demo?.selectedId])
   const [arrived, setArrived] = useState<string | null>(null)
   const [focusId, setFocusId] = useState<string | null>(null)
   const [pickOpen, setPickOpen] = useState(false)
@@ -165,14 +173,14 @@ export function ProkatDayBoard({
     <div className={css.dayLayout} data-open={selected ? true : undefined} data-phone={phone || undefined}>
       <div className={css.dayCal}>
         <div className={css.dayScroll}>
-        <div className={css.daySheet} style={{ width: `max(100%, ${52 + gridColumns.length * 120}px)` }}>
+        <div className={css.daySheet} style={{ width: `max(100%, ${52 + gridColumns.length * 150}px)` }}>
         <div className={css.dayHead} style={{ gridTemplateColumns: `52px repeat(${gridColumns.length}, minmax(0, 1fr))` }}>
           <span />
           {gridColumns.map(column => {
             const count = blocks.filter(block => block.itemId === column.id && block.tone !== 'br').length
             return <div key={column.id}>
               <Avatar id={column.serial || column.name} size={24} />
-              <span><b title={column.name}>{column.name}</b><small>{column.off ? 'выходной' : `${count} ${count === 1 ? 'запись' : count > 1 && count < 5 ? 'записи' : 'записей'}`}</small></span>
+              <span><b title={column.name}>{shortResourceLabel(column.name)}</b><small>{column.off ? 'выходной' : `${count} ${count === 1 ? 'запись' : count > 1 && count < 5 ? 'записи' : 'записей'}`}</small></span>
             </div>
           })}
         </div>

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ProkatCatalogItem } from './prokat-logic'
-import { buildProkatDaySchedule, PROKAT_SCHEDULE_AT, PROKAT_SCHEDULE_DAY, visibleGaps } from './prokat-day-demo'
+import { buildProkatDaySchedule, PROKAT_SCHEDULE_AT, PROKAT_SCHEDULE_DAY, shortResourceLabel, visibleGaps } from './prokat-day-demo'
 
 function item(index: number, status = 'Свободен'): ProkatCatalogItem {
   return {
@@ -42,5 +42,14 @@ describe('prokat day schedule demo', () => {
     const fewer = buildProkatDaySchedule(items.slice(0, 3))
     expect(fewer.columns.length).toBeLessThan(6)
     expect(fewer.blocks.length).toBeGreaterThan(0)
+  })
+
+  it('keeps column titles short enough to read at 1440', () => {
+    expect(shortResourceLabel('Горный велосипед Trek Marlin 7')).toBe('Trek Marlin')
+    expect(shortResourceLabel('Городской велосипед Electra')).toBe('Electra')
+    expect(shortResourceLabel('Шоссейный велосипед Giant Contend')).toBe('Giant Contend')
+    expect(shortResourceLabel('Детский велосипед 20"')).toBe('Детский 20"')
+    expect(shortResourceLabel('SUP Red Paddle 10\'6"')).toBe('Red Paddle')
+    expect(shortResourceLabel('SUP детский 8\'')).toBe('SUP 8\'')
   })
 })

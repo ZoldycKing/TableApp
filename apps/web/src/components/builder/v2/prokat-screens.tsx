@@ -5,6 +5,7 @@ import { attachmentSchema, instantToWallClock, type Attachment } from '@tableapp
 import type { AppV2, AppV2Json, AppV2Node, AppV2Record } from '@tableapp/schema/app-v2'
 import { catchUpPublishedProkatHolds, savePublishedProkatAction } from '@/app/prokat-actions'
 import { Avatar } from '@/components/ui/avatar'
+import { ProkatDayBoard } from './prokat-day-board'
 import type { ConversationPage } from '@/lib/conversation-types'
 import { BuilderV2AttachmentInput } from './attachment-input'
 import {
@@ -16,8 +17,8 @@ import {
   formatProkatDate, formatProkatDateTime, holdOptionLabel, isHoldEligibleStatus, isHoldWindowOpen,
   isOpenBooking, isOverdueReturn, itemLateFeeConfig, parseItemHoldOverride, prokatClientStepIndex,
   prokatDashboard, prokatWallInstant, resolveBookingHoldUntil,
-  shiftTimelineStart, staffTransitions, timelineBarCaptionPlacement,
-  timelineBarLabel, timelineBookingSegments, timelineStartForToday, type ProkatBookingViewId,
+  shiftTimelineStart, staffTransitions,
+  timelineBookingSegments, timelineStartForToday, type ProkatBookingViewId,
   type ProkatCatalogItem, type ProkatHoldAfterStartMinutes, type ProkatListItem, type ProkatLateFeeMode,
   type ProkatTimelineRangeId, type TimelineBarSegment,
 } from '@/lib/prokat-logic'
@@ -1739,6 +1740,7 @@ function timelineTipText(booking: ProkatListItem, overdue: boolean) {
 function TimelineBar(props: {
   segment: TimelineBarSegment
   label: string
+  markId?: string
   externalLabel?: string
   /** % where outside caption starts (after bar + overdue tail). */
   externalAt?: number
@@ -1783,7 +1785,8 @@ function TimelineBar(props: {
       onBlur={() => setTip(false)}
       onClick={event => { event.stopPropagation(); props.onOpen() }}
     >
-      {props.label ? <span>{props.label}</span> : null}
+      {props.markId ? <Avatar id={props.markId} size={16} /> : null}
+      {props.label && !props.markId ? <span>{props.label}</span> : null}
     </button>
     {props.externalLabel ? (
       <span
@@ -1915,7 +1918,6 @@ function TimelineScreen(props: ScreenProps) {
       segment: TimelineBarSegment | null
       overdueTail: TimelineBarSegment | null
       tip: string
-      short: string
       left: number
       occupiedRight: number
     }
@@ -1940,35 +1942,23 @@ function TimelineScreen(props: ScreenProps) {
         segment,
         overdueTail,
         tip: timelineTipText(booking, overdue),
-        short: timelineBarLabel(booking.number, booking.clientName),
         left,
         occupiedRight,
       }
     }).filter(entry => entry.segment || entry.overdueTail)
       .sort((a, b) => a.left - b.left || a.booking.id.localeCompare(b.booking.id))
 
-    const barNodes = laid.map((entry, index) => {
-      const nextLeft = laid[index + 1]?.left ?? 100
+    const barNodes = laid.map(entry => {
       const open = () => props.onNavigate?.(props.kit.bookingScreenId, entry.booking.id)
       const nodes: ReactNode[] = []
       if (entry.segment) {
-        const caption = timelineBarCaptionPlacement({
-          label: entry.short,
-          barLeft: entry.segment.left,
-          barWidth: entry.segment.width,
-          occupiedRight: entry.occupiedRight,
-          nextLeft,
-          trackWidthPx,
-          // Phone shows ~half the week track at rest; outside past that looks clipped.
-          // Month bars are thin — only show a name when it fits inside (no outside overlap).
-          maxOutsideEnd: mode === 'month' ? -1 : (phone ? 52 : 96),
-        })
         nodes.push(
           <TimelineBar
             key={`${entry.booking.id}-bar`}
             segment={entry.segment}
-            label={caption.inside}
-            externalLabel={caption.outside ?? undefined}
+            label=""
+            markId={entry.booking.clientEmail || entry.booking.id}
+            externalLabel={undefined}
             externalAt={entry.occupiedRight}
             tip={entry.tip}
             onOpen={open}
@@ -2078,7 +2068,16 @@ function TimelineScreen(props: ScreenProps) {
           <li key={item.tone}><i data-tone={item.tone} data-sample aria-hidden="true" /><span>{item.label}</span></li>
         ))}
       </ul>
-      <div
+      {mode === 'day' ? (
+        <ProkatDayBoard
+          day={startDate}
+          now={props.now}
+          items={filtered}
+          bookings={bookings}
+          onOpen={id => props.onNavigate?.(props.kit.bookingScreenId, id)}
+          onCreate={(itemId, date) => desk && setCreate({ itemId, date })}
+        />
+      ) : <div
         ref={boardRef}
         className={css.timelineBoard}
         data-mode={mode}
@@ -2189,7 +2188,7 @@ function TimelineScreen(props: ScreenProps) {
             })}
           </div>
         )}
-      </div>
+      </div>}
     </ListScreenShell>
     {create && desk ? (
       <CreateDialog

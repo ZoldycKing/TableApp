@@ -5,7 +5,8 @@ import { supportPolicyFromRows, supportStoredEvents } from '@/lib/support-persis
 import { SUPPORT_AGE_BUCKETS, type SupportAgeBucket, type SupportQueueFocus, operatorTransitions, type SupportStatusName } from '@/lib/support-logic'
 import { SUPPORT_HEAT_AGES, SUPPORT_SLA_STARTER, supportDashboard, supportSlaLabel, supportSlaPriorityName, supportSlaPriorityShort, supportSlaView, type SupportQueueScope, type SupportSlaPolicy, type SupportSlaPriority, type SupportSlaView } from '@/lib/support-sla'
 import { supportPortraitUrl } from '@/lib/templates/support-portraits'
-import { DurationField } from '@/components/ui/duration-field'
+import { Select } from '@/components/ui/select'
+import { durationUnitLabel, splitMinutes } from '@/components/ui/format'
 import { ProtoIcon } from '../prototype/icons'
 import css from './support.module.css'
 
@@ -407,6 +408,19 @@ export function SupportDashboard(props: DeskProps & { onOpenTeam?: () => void; l
   </div>
 }
 
+const SLA_PICK_MINUTES = [15, 30, 60, 120, 240, 480, 720, 1440, 2880, 4320, 10080]
+
+/** Human duration for a minute count: 120 → «2 часа», 1440 → «1 день». */
+export function slaDuration(total: number) {
+  const parts = splitMinutes(total)
+  return `${parts.amount} ${durationUnitLabel(parts.unit, parts.amount)}`
+}
+
+function slaPickOptions(current: number) {
+  const values = current > 0 && !SLA_PICK_MINUTES.includes(current) ? [...SLA_PICK_MINUTES, current].sort((a, b) => a - b) : SLA_PICK_MINUTES
+  return values.map(total => ({ value: String(total), label: slaDuration(total) }))
+}
+
 export function SupportSlaSettings(props: DeskProps) {
   const policy = policyOf(props) ?? SUPPORT_SLA_STARTER
   const [minutes, setMinutes] = useState<Record<string, number>>({
@@ -414,19 +428,29 @@ export function SupportSlaSettings(props: DeskProps) {
     urgentResolve: policy.resolutionMinutes.urgent, highResolve: policy.resolutionMinutes.high, normalResolve: policy.resolutionMinutes.normal, lowResolve: policy.resolutionMinutes.low,
     riskMinutes: policy.riskMinutes,
   })
-  const [message, setMessage] = useState('')
+  const [error, setError] = useState('')
   const fields: [string, string][] = [
     ['urgentFirst', 'Срочный, первый ответ'], ['highFirst', 'Высокий, первый ответ'], ['normalFirst', 'Обычный, первый ответ'], ['lowFirst', 'Низкий, первый ответ'],
     ['urgentResolve', 'Срочный, решение'], ['highResolve', 'Высокий, решение'], ['normalResolve', 'Обычный, решение'], ['lowResolve', 'Низкий, решение'],
     ['riskMinutes', 'Порог «скоро срок»'],
   ]
-  return <form className={css.sla} onSubmit={event => { event.preventDefault(); void props.onSaveSla(minutes).then(result => setMessage(result.ok ? 'Нормативы сохранены.' : result.error ?? 'Не сохранилось.')) }}>
-    <h3>Нормативы</h3>
-    <p className={css.quiet}>Сроки первого ответа и решения. Часы идут круглосуточно. Сутки — это 1 день, не 1440.</p>
-    <div className={css.slaGrid}>{fields.map(([key, label]) => <DurationField key={key} label={label} minutes={minutes[key] ?? 0} onMinutes={value => setMinutes(current => ({ ...current, [key]: value }))} />)}</div>
-    <button type="submit" className={css.primary}>Сохранить нормативы</button>
-    {message ? <p role="status">{message}</p> : null}
-  </form>
+  const pick = (key: string, total: number) => {
+    const next = { ...minutes, [key]: total }
+    setMinutes(next)
+    setError('')
+    void props.onSaveSla(next).then(result => { if (!result.ok) setError(result.error ?? 'Не сохранилось.') })
+  }
+  return <div className={css.setGroup}>
+    {fields.map(([key, label]) => <div key={key} className={css.setRow}>
+      <div className={css.setRowText}><strong>{label}</strong></div>
+      <div className={css.setRowEnd}>
+        <div className={css.setPick}>
+          <Select label={label} labelHidden value={String(minutes[key] ?? 0)} options={slaPickOptions(minutes[key] ?? 0)} onValue={value => pick(key, Number(value))} />
+        </div>
+      </div>
+    </div>)}
+    {error ? <p className={css.error} role="alert">{error}</p> : null}
+  </div>
 }
 
 export function slaFacts(kit: DeskProps['kit'], rows: DeskProps['rows'], ticketId: string, now: number): SupportSlaView {

@@ -8,6 +8,7 @@ import type { RuntimeApp } from '@/lib/app-runtime'
 import type { TableRow } from '@/lib/table-store'
 import { BookingSlotList } from '@/components/builder/v2/booking-slots'
 import { RuDateInput } from '@/components/builder/v2/ru-fields'
+import { Select } from '@/components/ui/select'
 import { accentTones } from './ui'
 
 export type BookingFormDraft = {
@@ -83,9 +84,7 @@ export function BookingForm({ runtime, row, demo, demoData, pending, initialValu
     </select></label>
     {service ? <p className="text-sm text-ink-muted">{row ? String(row.data[visit.minutes]) : String(service.data[config.service.minutes])} минут · {row ? String(row.data[visit.price]) : String(service.data[config.service.price])} ₽{row ? ' — условия вашей записи сохраняются' : ''}</p> : null}
     <div className="grid gap-4 sm:grid-cols-2">
-      <label className="space-y-1.5 text-sm font-medium">Мастер<select aria-label="Мастер" value={masterId} disabled={!serviceId || pending} className={inputClass} onChange={event => setMasterId(event.target.value)}>
-        <option value="">Любой свободный мастер</option>{masters.map(master => <option key={master.id} value={master.id}>{master.name}</option>)}
-      </select></label>
+      <Select label="Мастер" value={masterId} disabled={!serviceId || pending} onValue={setMasterId} options={[{ value: '', label: 'Любой свободный мастер' }, ...masters.map(master => ({ value: master.id, label: master.name }))]} />
       <label className="space-y-1.5 text-sm font-medium">Дата<RuDateInput aria-label="Дата" required value={day} min={instantToWallClock(new Date(), timeZone)!.date} className={inputClass} onValue={setDay} disabled={pending} /></label>
     </div>
     <fieldset disabled={loading || pending}><legend className="mb-2 text-sm font-medium">Свободное время</legend>

@@ -492,13 +492,16 @@ describe('runtime navigation during live refresh', () => {
     await demoLogin(ui)
     const first = example.rows.find(row => row.data[config.service.name] === 'Женская стрижка')!
     expect((await ui.findByLabelText('Услуга') as HTMLSelectElement).value).toBe(first.id)
+    fireEvent.click(ui.getByRole('button', { name: 'Мастер' }))
     await waitFor(() => expect(ui.getByRole('option', { name: 'Оля' })).toBeTruthy())
+    fireEvent.click(ui.getByRole('button', { name: 'Мастер' }))
     fireEvent.click(ui.getByRole('button', { name: 'Назад' }))
     fireEvent.click(ui.getByRole('button', { name: 'Назад' }))
     fireEvent.click(ui.getByRole('button', { name: /Мужская стрижка/ }))
     fireEvent.click(ui.getByRole('button', { name: 'Записаться' }))
     const second = example.rows.find(row => row.data[config.service.name] === 'Мужская стрижка')!
     expect((ui.getByLabelText('Услуга') as HTMLSelectElement).value).toBe(second.id)
+    fireEvent.click(ui.getByRole('button', { name: 'Мастер' }))
     await waitFor(() => expect(ui.getByRole('option', { name: 'Женя' })).toBeTruthy())
   })
   it('keeps the signed-in salon cabinet and opens new booking through a service card', () => {

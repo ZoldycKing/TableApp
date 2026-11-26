@@ -1,4 +1,10 @@
 .root { display: grid; gap: 12px; min-width: 0; width: 100%; }
+.phoneAdd {
+  position: absolute; right: 16px; bottom: 196px; z-index: 6;
+  width: 52px; height: 52px; margin: 0; border: 0; border-radius: 999px;
+  background: var(--v2-accent, var(--sc-accent, #266DF0)); color: #fff;
+  font-size: 28px; line-height: 1; cursor: pointer;
+}
 .stack { display: grid; gap: 0; min-width: 0; padding: 0 0 8px; }
 .stack > .sample {
   margin: 0; padding: 8px 20px 0; border-radius: 0; background: transparent;
@@ -1729,4 +1735,35 @@
   .timelineBoard { --prokat-label-w: 7rem; padding-inline: 0 16px; overflow-x: auto; }
   .timelineScale { min-width: max(28rem, 100%); }
   .timelineTodayWash { display: none; }
+}
+
+.clientTableWrap { overflow: auto; border-top: 1px solid var(--sc-text, #141516); }
+.clientTable { width: 100%; border-collapse: collapse; font-size: 14px; }
+.clientTable th { padding: 8px 12px; border-bottom: 1px solid var(--sc-border, #E3E3DF); color: var(--sc-text-3, #6E7076); font-family: var(--font-scatta-mono), ui-monospace, monospace; font-size: 11.5px; font-weight: 400; text-align: left; white-space: nowrap; }
+.clientTable td { padding: 10px 12px; border-bottom: 1px solid var(--sc-border-subtle, #ECECE8); vertical-align: middle; }
+.clientLink { display: flex; align-items: center; gap: 10px; width: 100%; min-width: 0; padding: 0; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.clientIdentity { display: grid; min-width: 0; }
+.clientIdentity strong, .clientIdentity span { overflow-wrap: anywhere; }
+.clientIdentity span { color: var(--sc-text-3, #6E7076); font-size: 12.5px; }
+.clientTable .mono { font-family: var(--font-scatta-mono), ui-monospace, monospace; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.clientHero { display: flex; align-items: center; gap: 16px; padding: 4px 0 12px; }
+.clientStats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0; min-width: 0; }
+.clientStats div { min-width: 0; }
+.clientStats dt { color: var(--sc-text-3, #6E7076); font-size: 12px; }
+.clientStats dd { margin: 2px 0 0; font-family: var(--font-scatta-mono), ui-monospace, monospace; font-size: 22px; font-weight: 500; letter-spacing: -0.03em; }
+.bookingForm { display: grid; gap: 12px; }
+.bookingDates { display: grid; gap: 12px; align-content: start; }
+.bookingDates .deadlineRow { grid-template-columns: minmax(0, 1fr); }
+.bookingForm .itemGrid { max-height: none; overflow: visible; }
+@container builder-app (min-width: 720px) {
+  .bookingForm { grid-template-columns: minmax(0, 1.25fr) minmax(220px, .8fr); }
+  .bookingForm > :not(.bookingDates) { grid-column: 1; }
+  .bookingDates { grid-column: 2; grid-row: 1 / span 4; }
+}
+@container builder-app (max-width: 640px) {
+  .clientTable thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .clientTable, .clientTable tbody, .clientTable tr, .clientTable td { display: block; width: 100%; }
+  .clientTable tr { padding: 12px 16px; border-bottom: 1px solid var(--sc-border-subtle, #ECECE8); }
+  .clientTable td { padding: 2px 0; border: 0; }
+  .clientTable td.mono::before { content: attr(data-label) "  "; color: var(--sc-text-3, #6E7076); font-family: var(--font-scatta-sans), sans-serif; }
 }

@@ -58,7 +58,7 @@ describe('appointment form return and asynchronous availability', () => {
     expect(mocks.availability.mock.calls[1]).toEqual(mocks.availability.mock.calls[0])
     expect((ui.getByLabelText('Дата') as HTMLInputElement).value).toBe('13.10.2026')
     expect((ui.getByLabelText('Услуга') as HTMLSelectElement).value).toBe(serviceId)
-    expect((ui.getByLabelText('Мастер') as HTMLSelectElement).value).toBe(masterId)
+    expect(ui.getByRole('button', { name: 'Мастер' }).textContent).toContain('Оля')
     expect((ui.getByLabelText('Ваше имя') as HTMLInputElement).value).toBe('Ирина')
     expect((ui.getByLabelText('Телефон') as HTMLInputElement).value).toBe('+7 900 000 00 00')
   })
@@ -78,7 +78,7 @@ describe('appointment form return and asynchronous availability', () => {
     expect((ui.getByLabelText('Ваше имя') as HTMLInputElement).value).toBe('Ирина')
     expect((ui.getByLabelText('Телефон') as HTMLInputElement).value).toBe('+7 900 000 00 00')
     expect((ui.getByLabelText('Услуга') as HTMLSelectElement).value).toBe(serviceId)
-    expect((ui.getByLabelText('Мастер') as HTMLSelectElement).value).toBe(masterId)
+    expect(ui.getByRole('button', { name: 'Мастер' }).textContent).toContain('Оля')
   })
   it('submits a deduped time without a master so the server can assign one', async () => {
     const { runtime, config, serviceId, masterId, slot } = fixture()

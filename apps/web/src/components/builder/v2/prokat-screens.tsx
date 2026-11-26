@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom'
 import { attachmentSchema, instantToWallClock, type Attachment } from '@tableapp/schema'
 import type { AppV2, AppV2Json, AppV2Node, AppV2Record } from '@tableapp/schema/app-v2'
 import { catchUpPublishedProkatHolds, savePublishedProkatAction } from '@/app/prokat-actions'
+import { Avatar } from '@/components/ui/avatar'
 import type { ConversationPage } from '@/lib/conversation-types'
 import { BuilderV2AttachmentInput } from './attachment-input'
 import {
@@ -264,11 +265,9 @@ function StatusBadge({ name }: { name: string }) {
   return <span className={css.badge} data-kind="status" data-tone={statusTone(name)}>{name}</span>
 }
 
-function PersonMark({ name, photo, size = 28 }: { name: string; photo?: string; size?: number }) {
-  const icon = size <= 24 ? 12 : 14
-  return <span className={css.avatar} data-size={size <= 24 ? 'sm' : 'md'} aria-hidden="true" title={name || undefined}>
-    {photo ? <img src={photo} alt="" width={size} height={size} /> : <ProtoIcon name="user" size={icon} />}
-  </span>
+function PersonMark({ name, photo, size = 28, id }: { name: string; photo?: string; size?: number; id?: string }) {
+  if (photo) return <span className={css.avatar} data-size={size <= 24 ? 'sm' : 'md'} aria-hidden="true" title={name || undefined}><img src={photo} alt="" width={size} height={size} /></span>
+  return <Avatar id={id || name || 'person'} size={size} label={name || undefined} />
 }
 
 function useMenuOpen(open: boolean, root: RefObject<HTMLElement | null>, onClose: () => void) {
@@ -825,12 +824,31 @@ function DashboardScreen(props: ScreenProps) {
   const weekRevenue = stats.revenueByWeek[stats.revenueByWeek.length - 1]?.value ?? 0
   const maxWeek = Math.max(1, ...stats.revenueByWeek.map(week => week.value))
   const [act, setAct] = useState<{ kind: 'issue' | 'return'; bookingId: string } | null>(null)
+  const [create, setCreate] = useState(false)
+  const [frameHost, setFrameHost] = useState<HTMLElement | null>(null)
+  const desk = isProkatDesk(props.actor)
+  const phone = useContext(AppFrameDeviceContext) === 'phone'
+  useEffect(() => { setFrameHost(document.querySelector('[data-app-frame]')) }, [])
   const actBooking = act ? props.of(props.kit.bookingsTableId).find(row => row.id === act.bookingId) : null
   return <div className={css.root} data-prokat-root data-prokat-screen="dashboard">
+    {desk && phone && frameHost ? createPortal(<button type="button" className={css.phoneAdd} aria-label="Новая бронь" onClick={() => setCreate(true)}>+</button>, frameHost) : null}
     <ListScreenShell title="Главная" meta="Что сделать сегодня — и как загружен парк.">
       <div className={css.dashStack}>
       <DetailSection title="Сегодня">
         <div className={css.todayStack}>
+          <TodayGroup title="Просрочено" empty="Просрочек нет — всё вовремя." tone="overdue" count={stats.overdue.length}>
+            {stats.overdue.map(item => (
+              <TodayBookingRow
+                key={item.id}
+                item={item}
+                catalog={items}
+                time={`до ${formatProkatDateTime(item.to)}`}
+                actionLabel="Принять возврат"
+                onOpen={() => props.onNavigate?.(props.kit.bookingScreenId, item.id)}
+                onAction={() => setAct({ kind: 'return', bookingId: item.id })}
+              />
+            ))}
+          </TodayGroup>
           <TodayGroup title="Выдать сегодня" empty="На сегодня выдач нет — новые подтверждённые брони появятся здесь." count={stats.issuesTodayList.length}>
             {stats.issuesTodayList.map(item => (
               <TodayBookingRow
@@ -851,19 +869,6 @@ function DashboardScreen(props: ScreenProps) {
                 item={item}
                 catalog={items}
                 time={formatProkatDateTime(item.to)}
-                actionLabel="Принять возврат"
-                onOpen={() => props.onNavigate?.(props.kit.bookingScreenId, item.id)}
-                onAction={() => setAct({ kind: 'return', bookingId: item.id })}
-              />
-            ))}
-          </TodayGroup>
-          <TodayGroup title="Просрочено" empty="Просрочек нет — всё вовремя." tone="overdue" count={stats.overdue.length}>
-            {stats.overdue.map(item => (
-              <TodayBookingRow
-                key={item.id}
-                item={item}
-                catalog={items}
-                time={`до ${formatProkatDateTime(item.to)}`}
                 actionLabel="Принять возврат"
                 onOpen={() => props.onNavigate?.(props.kit.bookingScreenId, item.id)}
                 onAction={() => setAct({ kind: 'return', bookingId: item.id })}
@@ -923,6 +928,7 @@ function DashboardScreen(props: ScreenProps) {
       </div>
       </div>
     </ListScreenShell>
+    {create ? <CreateDialog {...props} onClose={() => setCreate(false)} onDone={() => setCreate(false)} /> : null}
     {act?.kind === 'issue' && actBooking ? <IssueDialog {...props} booking={actBooking} onClose={() => setAct(null)} onMessage={() => setAct(null)} /> : null}
     {act?.kind === 'return' && actBooking ? <ReturnDialog {...props} booking={actBooking} onClose={() => setAct(null)} onMessage={() => setAct(null)} /> : null}
   </div>
@@ -1320,7 +1326,7 @@ function CreateDialog(props: ScreenProps & {
     props.onDone()
   }
   return <AppDialog title="Новая бронь" placement="center" onClose={props.onClose} footer={<button type="submit" form={formId} className={css.primary} disabled={busy}>{busy ? 'Сохраняем…' : 'Создать бронь'}</button>}>
-    <form id={formId} onSubmit={event => { event.preventDefault(); void save() }}>
+    <form id={formId} className={css.bookingForm} onSubmit={event => { event.preventDefault(); void save() }}>
       <ProkatSelect field label="Клиент" value={clientId} options={clients.map(row => ({ id: row.id, name: textOf(row.values[props.kit.client.name]) || 'Без имени' }))} onChange={setClientId} />
       <fieldset className={css.field}><legend>Предметы</legend><div className={css.itemGrid}>{items.map(item => {
         const selected = itemIds.includes(item.id)
@@ -1330,9 +1336,11 @@ function CreateDialog(props: ScreenProps & {
           <span className={css.checkMark} data-on={selected || undefined}>{selected ? <ProtoIcon name="check" size={12} /> : null}</span>
         </button>
       })}</div></fieldset>
-      <div className={css.field}><span>С</span><div className={css.deadlineRow}><DateMenu value={fromDate} onValue={setFromDate} label="Дата начала" /><TimeMenu value={fromTime} onValue={setFromTime} label="Время начала" /></div></div>
-      <div className={css.field}><span>По</span><div className={css.deadlineRow}><DateMenu value={toDate} onValue={setToDate} label="Дата окончания" /><TimeMenu value={toTime} onValue={setToTime} label="Время окончания" /></div></div>
-      <p className={css.moneyRow}>Стоимость <strong>{formatMoney(price)}</strong> · Залог <strong>{formatMoney(deposit)}</strong></p>
+      <div className={css.bookingDates}>
+        <div className={css.field}><span>С</span><div className={css.deadlineRow}><DateMenu value={fromDate} onValue={setFromDate} label="Дата начала" /><TimeMenu value={fromTime} onValue={setFromTime} label="Время начала" /></div></div>
+        <div className={css.field}><span>По</span><div className={css.deadlineRow}><DateMenu value={toDate} onValue={setToDate} label="Дата окончания" /><TimeMenu value={toTime} onValue={setToTime} label="Время окончания" /></div></div>
+        <p className={css.moneyRow}>Стоимость <strong>{formatMoney(price)}</strong> · Залог <strong>{formatMoney(deposit)}</strong></p>
+      </div>
       {error ? <p className={css.error} role="alert">{error}</p> : null}
     </form>
   </AppDialog>
@@ -1809,7 +1817,7 @@ function TimelineScreen(props: ScreenProps) {
   const [narrow, setNarrow] = useState(false)
   // Published runtime keeps deviceMode='auto'; detect real phone width ourselves.
   const phone = frameDevice === 'phone' || (frameDevice === 'auto' && narrow)
-  const initialMode: ProkatTimelineRangeId = phone ? 'week' : 'fortnight'
+  const initialMode: ProkatTimelineRangeId = 'day'
   const [mode, setMode] = useState<ProkatTimelineRangeId>(initialMode)
   const [startDate, setStartDate] = useState(() => timelineStartForToday(initialMode, props.now))
   const [search, setSearch] = useState('')
@@ -2205,17 +2213,31 @@ function ClientDirectory(props: ScreenProps) {
   return <div className={css.root} data-prokat-root data-prokat-screen="clients">
     <ListScreenShell title="Клиенты" meta="Кто брал оборудование в прокат.">
       <div className={css.toolbar}><ShellSearchField value={search} onChange={setSearch} placeholder="Поиск клиента" aria-label="Поиск клиентов" /></div>
-      <ul className={css.cards} data-keep-cards>{clients.map(row => {
-        const email = textOf(row.values[props.kit.client.email])
-        const count = bookingItems(props).filter(item => item.clientEmail.toLowerCase() === email.toLowerCase()).length
-        return <li key={row.id}>
-          <button type="button" className={css.card} onClick={() => props.onNavigate?.(props.kit.clientScreenId, row.id)}>
-            <span className={css.mark}><PersonMark name={textOf(row.values[props.kit.client.name])} /><strong>{textOf(row.values[props.kit.client.name]) || 'Без имени'}</strong></span>
-            <span className={css.number}>{email} · {textOf(row.values[props.kit.client.phone])}</span>
-            <span className={css.quiet}>{count} {count === 1 ? 'бронь' : 'брони'}</span>
-          </button>
-        </li>
-      })}</ul>
+      <div className={css.clientTableWrap}>
+        <table className={css.clientTable}>
+          <thead><tr><th>Клиент</th><th>Телефон</th><th>Брони</th><th>Последняя</th></tr></thead>
+          <tbody>
+            {clients.map(row => {
+              const email = textOf(row.values[props.kit.client.email])
+              const name = textOf(row.values[props.kit.client.name]) || 'Без имени'
+              const history = bookingItems(props).filter(item => item.clientEmail.toLowerCase() === email.toLowerCase())
+              const last = [...history].sort((a, b) => Date.parse(b.from) - Date.parse(a.from))[0]
+              return <tr key={row.id}>
+                <td>
+                  <button type="button" className={css.clientLink} onClick={() => props.onNavigate?.(props.kit.clientScreenId, row.id)}>
+                    <PersonMark id={row.id} name={name} />
+                    <span className={css.clientIdentity}><strong>{name}</strong><span title={email}>{email || '—'}</span></span>
+                  </button>
+                </td>
+                <td className={css.mono} data-label="Телефон">{textOf(row.values[props.kit.client.phone]) || '—'}</td>
+                <td className={css.mono} data-label="Брони">{history.length}</td>
+                <td className={css.mono} data-label="Последняя">{last ? formatProkatDate(last.from) : '—'}</td>
+              </tr>
+            })}
+          </tbody>
+        </table>
+        {!clients.length ? <p className={css.quiet}>Никого не нашли.</p> : null}
+      </div>
     </ListScreenShell>
   </div>
 }
@@ -2232,6 +2254,12 @@ function ClientDetail(props: ScreenProps) {
       back={{ label: 'Клиенты', onClick: () => props.onNavigate?.(props.kit.clientsScreenId) }}
       title={textOf(client.values[props.kit.client.name]) || 'Клиент'}
       subtitle={textOf(client.values[props.kit.client.email])}
+      media={<PersonMark id={client.id} name={textOf(client.values[props.kit.client.name])} size={48} />}
+      metrics={[
+        { key: 'bookings', caption: 'Броней', value: String(history.length) },
+        { key: 'noshow', caption: 'Неявки', value: String(noShowCount) },
+        { key: 'last', caption: 'Последняя', value: history[0] ? formatProkatDate([...history].sort((a, b) => Date.parse(b.from) - Date.parse(a.from))[0]!.from) : '—' },
+      ]}
     >
       <DetailSection title="Контакты">
         <dl className={css.facts}>

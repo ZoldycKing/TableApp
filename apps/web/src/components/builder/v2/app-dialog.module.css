@@ -20,7 +20,7 @@
   left: 50%;
   display: flex;
   flex-direction: column;
-  width: min(40rem, calc(100% - 32px));
+  width: min(48rem, calc(100% - 32px));
   min-height: 0;
   /* Fit the app frame. 92dvh is taller than the preview under its own header and clips the button. */
   max-height: calc(100% - 32px);
@@ -96,9 +96,10 @@
 .body[data-split] :global(form) {
   display: grid;
   gap: 12px;
-  overflow: visible;
+  overflow: auto;
   flex: none;
   min-height: auto;
+  max-height: min(56dvh, 520px);
 }
 .footer {
   flex: none;

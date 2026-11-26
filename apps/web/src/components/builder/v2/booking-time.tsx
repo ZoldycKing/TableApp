@@ -12,6 +12,7 @@ import styles from '../prototype/prototype.module.css'
 import { useBookingJourney } from './booking-journey'
 import { BookingClientPicker } from './booking-client-picker'
 import { BookingSlotList } from './booking-slots'
+import { Select } from '@/components/ui/select'
 import { RuDateInput, ruDateText } from './ru-fields'
 export const BookingDemoAvailability = createContext<((request: BookingAvailabilityRequest) => BookingAvailabilityResult) | null>(null)
 
@@ -83,7 +84,7 @@ export function BookingTimeFields({ app, editing }: { app: AppV2; editing: boole
   const editorFields = <>
     {!owner && <div className={css.formIntro}><strong>{reschedule ? 'Выберите другое время' : 'Когда вам удобно?'}</strong><p>{reschedule ? 'Текущая запись останется за вами, пока новое время не сохранится.' : 'Свободные часы учитывают длительность услуги и перерывы мастера.'}</p></div>}
     <div className={css.timeControls}>
-      <label>Мастер<select aria-label="Мастер" value={master} disabled={context?.disabled || editing || loading} onChange={event => { appliedTime.current = true; setSeedNotice(''); setDay(selectedDay); setMaster(event.target.value); resetChoice() }}><option value="">Любой свободный</option>{knownMaster && <option value={master}>{lineMaster || 'Выбранный мастер'}</option>}{result?.ok && result.masters.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+      <Select label="Мастер" value={master} disabled={context?.disabled || editing || loading} onValue={value => { appliedTime.current = true; setSeedNotice(''); setDay(selectedDay); setMaster(value); resetChoice() }} options={[{ value: '', label: 'Любой свободный' }, ...(knownMaster ? [{ value: master, label: lineMaster || 'Выбранный мастер' }] : []), ...(result?.ok ? result.masters.map(item => ({ value: item.id, label: item.name })) : [])]} />
       <label>Дата<RuDateInput aria-label="Дата записи" min={today} max={new Date(new Date(`${today}T12:00:00Z`).getTime() + bookingRules(config).horizonDays * 86400000).toISOString().slice(0, 10)} value={selectedDay} disabled={context?.disabled || editing} onValue={value => { appliedTime.current = true; setSeedNotice(''); setDay(value); resetChoice() }} /></label>
     </div>
     {seedNotice && <p role="status" className={css.timeHint}>{seedNotice}</p>}

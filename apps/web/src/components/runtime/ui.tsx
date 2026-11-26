@@ -4,6 +4,7 @@ import type { Field } from '@tableapp/schema'
 import type { ReactNode } from 'react'
 import { CHOICE_COLORS } from '@/components/views/card'
 import { formatCell } from '@/lib/format'
+import { Avatar as GeometricAvatar } from '@/components/ui/avatar'
 import { Icon, type IconName } from './icons'
 
 /**
@@ -16,31 +17,6 @@ import { Icon, type IconName } from './icons'
 
 export { accentTones } from './accent-tones'
 
-const AVATAR_TONES = [
-  'bg-sage-100 text-sage-700',
-  'bg-blue-100 text-blue-700',
-  'bg-amber-100 text-amber-800',
-  'bg-violet-100 text-violet-700',
-  'bg-teal-100 text-teal-700',
-  'bg-rose-100 text-rose-700',
-]
-
-/** Инициалы из имени, а если его нет — из адреса почты. */
-function initials(name: string | null, email: string): string {
-  const source = (name ?? email.split('@')[0] ?? '').replace(/[._-]+/g, ' ').trim()
-  const parts = source.split(/\s+/).filter(Boolean)
-  if (parts.length === 0) return '?'
-  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase()
-  return (parts[0]![0]! + parts[1]![0]!).toUpperCase()
-}
-
-/** Цвет кружка устойчив к перезагрузке: он выводится из самого адреса. */
-function tone(seed: string): string {
-  let sum = 0
-  for (const char of seed) sum = (sum + char.charCodeAt(0)) % 997
-  return AVATAR_TONES[sum % AVATAR_TONES.length]!
-}
-
 export function Avatar({
   name,
   email,
@@ -50,15 +26,8 @@ export function Avatar({
   email: string
   size?: 's' | 'm' | 'l'
 }) {
-  const box = size === 's' ? 'size-8 text-[11px]' : size === 'l' ? 'size-14 text-lg' : 'size-9 text-xs'
-  return (
-    <span
-      aria-hidden
-      className={`inline-flex shrink-0 items-center justify-center rounded-full font-semibold ${box} ${tone(email)}`}
-    >
-      {initials(name, email)}
-    </span>
-  )
+  const px = size === 's' ? 32 : size === 'l' ? 56 : 36
+  return <GeometricAvatar id={email || name || 'person'} size={px} />
 }
 
 /**

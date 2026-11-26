@@ -6,9 +6,10 @@ import { TextField } from './field'
 import css from './ui.module.css'
 
 export function DurationField({
-  label, minutes, onMinutes, hint,
+  label, amountLabel = 'Число', minutes, onMinutes, hint,
 }: {
   label: string
+  amountLabel?: string
   minutes: number
   onMinutes: (minutes: number) => void
   hint?: string
@@ -23,7 +24,7 @@ export function DurationField({
       <span className={css.label}>{label}</span>
       <div className={css.duration}>
         <TextField
-          label="Число"
+          label={amountLabel}
           mono
           inputMode="numeric"
           value={String(parts.amount)}

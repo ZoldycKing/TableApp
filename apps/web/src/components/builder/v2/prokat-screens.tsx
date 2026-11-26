@@ -5,6 +5,8 @@ import { attachmentSchema, instantToWallClock, type Attachment } from '@tableapp
 import type { AppV2, AppV2Json, AppV2Node, AppV2Record } from '@tableapp/schema/app-v2'
 import { catchUpPublishedProkatHolds, savePublishedProkatAction } from '@/app/prokat-actions'
 import { Avatar } from '@/components/ui/avatar'
+import { Checkbox } from '@/components/ui/choice'
+import { Select } from '@/components/ui/select'
 import { ProkatDayBoard } from './prokat-day-board'
 import type { ConversationPage } from '@/lib/conversation-types'
 import { BuilderV2AttachmentInput } from './attachment-input'
@@ -2204,38 +2206,82 @@ function TimelineScreen(props: ScreenProps) {
 
 function ClientDirectory(props: ScreenProps) {
   const [search, setSearch] = useState('')
+  const [tab, setTab] = useState<'all' | 'open' | 'none'>('all')
+  const [sort, setSort] = useState('name')
+  const [picked, setPicked] = useState<string[]>([])
+  const [focus, setFocus] = useState<string | null>(null)
+  const [importNote, setImportNote] = useState('')
   const needle = search.trim().toLowerCase()
-  const clients = props.of(props.kit.clientsTableId).filter(row => {
+  const openStatuses = ['Заявка', 'Подтверждена', 'Выдано', 'Просрочен возврат']
+  const rows = props.of(props.kit.clientsTableId).map(row => {
+    const email = textOf(row.values[props.kit.client.email])
+    const history = bookingItems(props).filter(item => item.clientEmail.toLowerCase() === email.toLowerCase())
+    const ordered = [...history].sort((a, b) => Date.parse(a.from) - Date.parse(b.from))
+    const next = ordered.find(item => openStatuses.includes(item.status) && Date.parse(item.from) >= props.now) ?? ordered.find(item => openStatuses.includes(item.status))
+    const sum = history.reduce((total, item) => total + item.price, 0)
+    return { row, email, name: textOf(row.values[props.kit.client.name]) || 'Без имени', history, next, sum, phone: textOf(row.values[props.kit.client.phone]) }
+  }).filter(item => {
     if (!needle) return true
-    return [textOf(row.values[props.kit.client.name]), textOf(row.values[props.kit.client.email]), textOf(row.values[props.kit.client.phone])].join(' ').toLowerCase().includes(needle)
+    return [item.name, item.email, item.phone].join(' ').toLowerCase().includes(needle)
   })
+  const counts = { all: rows.length, open: rows.filter(item => item.next).length, none: rows.filter(item => !item.history.length).length }
+  const visible = rows.filter(item => tab === 'all' ? true : tab === 'open' ? Boolean(item.next) : !item.history.length).sort((a, b) => {
+    if (sort === 'sum') return b.sum - a.sum
+    if (sort === 'next') return Date.parse(a.next?.from ?? '') - Date.parse(b.next?.from ?? '')
+    return a.name.localeCompare(b.name, 'ru')
+  })
+  const shown = visible.find(item => item.row.id === focus) ?? visible[0]
+  const toggle = (id: string, on: boolean) => setPicked(current => on ? [...current, id] : current.filter(item => item !== id))
   return <div className={css.root} data-prokat-root data-prokat-screen="clients">
-    <ListScreenShell title="Клиенты" meta="Кто брал оборудование в прокат.">
-      <div className={css.toolbar}><ShellSearchField value={search} onChange={setSearch} placeholder="Поиск клиента" aria-label="Поиск клиентов" /></div>
-      <div className={css.clientTableWrap}>
-        <table className={css.clientTable}>
-          <thead><tr><th>Клиент</th><th>Телефон</th><th>Брони</th><th>Последняя</th></tr></thead>
-          <tbody>
-            {clients.map(row => {
-              const email = textOf(row.values[props.kit.client.email])
-              const name = textOf(row.values[props.kit.client.name]) || 'Без имени'
-              const history = bookingItems(props).filter(item => item.clientEmail.toLowerCase() === email.toLowerCase())
-              const last = [...history].sort((a, b) => Date.parse(b.from) - Date.parse(a.from))[0]
-              return <tr key={row.id}>
-                <td>
-                  <button type="button" className={css.clientLink} onClick={() => props.onNavigate?.(props.kit.clientScreenId, row.id)}>
-                    <PersonMark id={row.id} name={name} />
-                    <span className={css.clientIdentity}><strong>{name}</strong><span title={email}>{email || '—'}</span></span>
-                  </button>
-                </td>
-                <td className={css.mono} data-label="Телефон">{textOf(row.values[props.kit.client.phone]) || '—'}</td>
-                <td className={css.mono} data-label="Брони">{history.length}</td>
-                <td className={css.mono} data-label="Последняя">{last ? formatProkatDate(last.from) : '—'}</td>
-              </tr>
-            })}
-          </tbody>
-        </table>
-        {!clients.length ? <p className={css.quiet}>Никого не нашли.</p> : null}
+    <ListScreenShell title="Клиенты" meta="Кто брал оборудование в прокат." actions={<button type="button" className={css.quietButton} onClick={() => setImportNote('Импорт читает таблицу из кабинета. Отдельный файл на этом экране не подменяет записи.')}>Импорт</button>}>
+      <div className={css.clientTabs} role="tablist" aria-label="Списки клиентов">
+        {([['all', 'Все', counts.all], ['open', 'С записью', counts.open], ['none', 'Без визитов', counts.none]] as const).map(([id, label, count]) => (
+          <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)}>{label}<em>{count}</em></button>
+        ))}
+      </div>
+      <div className={css.clientTools}>
+        <ShellSearchField value={search} onChange={setSearch} placeholder="Имя, телефон или почта" aria-label="Поиск клиентов" />
+        <Select label="Сортировка" value={sort} onValue={setSort} options={[{ value: 'name', label: 'По имени' }, { value: 'sum', label: 'По сумме' }, { value: 'next', label: 'По следующему визиту' }]} />
+      </div>
+      {importNote ? <p role="status" className={css.quiet}>{importNote}</p> : null}
+      {picked.length ? <p className={css.clientBulk}>Выбрано {picked.length}. <button type="button" onClick={() => setPicked([])}>Снять выбор</button></p> : null}
+      <div className={css.clientSplit}>
+        <div className={css.clientTableWrap}>
+          <table className={css.clientTable}>
+            <thead><tr><th /><th>Клиент</th><th>Статус</th><th>Сумма</th><th>Следующий</th></tr></thead>
+            <tbody>
+              {visible.map(item => (
+                <tr key={item.row.id} data-on={shown?.row.id === item.row.id || undefined} onMouseEnter={() => setFocus(item.row.id)}>
+                  <td><Checkbox label={`Выбрать ${item.name}`} checked={picked.includes(item.row.id)} onChecked={on => toggle(item.row.id, on)} /></td>
+                  <td>
+                    <button type="button" className={css.clientLink} onClick={() => props.onNavigate?.(props.kit.clientScreenId, item.row.id)}>
+                      <PersonMark id={item.row.id} name={item.name} />
+                      <span className={css.clientIdentity}><strong>{item.name}</strong><span>{item.phone || item.email || '—'}</span></span>
+                    </button>
+                    <span className={css.clientHover}>
+                      <button type="button" onClick={() => props.onNavigate?.(props.kit.clientScreenId, item.row.id)}>Открыть</button>
+                      <button type="button" onClick={() => props.onNavigate?.(props.kit.bookingsScreenId)}>Записать</button>
+                    </span>
+                  </td>
+                  <td>{item.next?.status ?? (item.history.length ? 'Без открытых' : 'Новый')}</td>
+                  <td className={css.mono}>{formatMoney(item.sum)}</td>
+                  <td className={css.mono}>{item.next ? formatProkatDate(item.next.from) : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {!visible.length ? <p className={css.quiet}>Никого не нашли.</p> : null}
+        </div>
+        <aside className={css.clientAside} aria-label="Карточка в списке">
+          {shown ? <>
+            <PersonMark id={shown.row.id} name={shown.name} size={40} />
+            <strong>{shown.name}</strong>
+            <p>{shown.phone || 'Телефон не указан'}</p>
+            <p>{shown.email || 'Почта не указана'}</p>
+            <p className={css.mono}>{shown.history.length} {shown.history.length === 1 ? 'бронь' : 'брони'} · {formatMoney(shown.sum)}</p>
+            <button type="button" className={css.primary} onClick={() => props.onNavigate?.(props.kit.clientScreenId, shown.row.id)}>Открыть карточку</button>
+          </> : <p className={css.quiet}>Список пуст.</p>}
+        </aside>
       </div>
     </ListScreenShell>
   </div>

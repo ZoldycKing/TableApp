@@ -1780,6 +1780,19 @@
   .timelineTodayWash { display: none; }
 }
 
+.quietButton { height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--sc-border, #E3E3DF); background: #fff; }
+.clientTabs { display: flex; gap: 18px; border-bottom: 1px solid var(--sc-border-subtle, #ECECE8); padding: 0 4px; }
+.clientTabs button { display: flex; gap: 6px; align-items: center; padding: 0 0 10px; border: 0; background: transparent; color: var(--sc-text-3, #6E7076); }
+.clientTabs button[aria-selected='true'] { color: var(--sc-text, #141516); font-weight: 550; box-shadow: inset 0 -2px 0 var(--sc-text, #141516); }
+.clientTabs em { font-family: var(--font-scatta-mono), ui-monospace, monospace; font-style: normal; font-size: 12px; }
+.clientTools { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
+.clientBulk { display: flex; gap: 8px; align-items: center; }
+.clientBulk button { border: 0; background: transparent; color: var(--sc-accent, #266DF0); }
+.clientSplit { display: grid; grid-template-columns: minmax(0, 1fr) 240px; gap: 16px; min-width: 0; }
+.clientAside { display: grid; align-content: start; gap: 6px; padding: 12px; border-radius: 12px; background: var(--sc-bg-surface, #EEEBE4); }
+.clientHover { display: none; gap: 8px; }
+.clientTable tr:hover .clientHover, .clientTable tr:focus-within .clientHover { display: flex; }
+.clientHover button { border: 0; background: transparent; color: var(--sc-accent, #266DF0); font-size: 13px; }
 .clientTableWrap { overflow: auto; border-top: 1px solid var(--sc-text, #141516); }
 .clientTable { width: 100%; border-collapse: collapse; font-size: 14px; }
 .clientTable th { padding: 8px 12px; border-bottom: 1px solid var(--sc-border, #E3E3DF); color: var(--sc-text-3, #6E7076); font-family: var(--font-scatta-mono), ui-monospace, monospace; font-size: 11.5px; font-weight: 400; text-align: left; white-space: nowrap; }
@@ -1802,6 +1815,9 @@
   .bookingForm { grid-template-columns: minmax(0, 1.25fr) minmax(220px, .8fr); }
   .bookingForm > :not(.bookingDates) { grid-column: 1; }
   .bookingDates { grid-column: 2; grid-row: 1 / span 4; }
+}
+@container builder-app (max-width: 800px) {
+  .clientSplit { grid-template-columns: 1fr; }
 }
 @container builder-app (max-width: 640px) {
   .clientTable thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }

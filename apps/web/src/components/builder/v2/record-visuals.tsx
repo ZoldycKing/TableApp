@@ -3,12 +3,13 @@ import { ProtoIcon } from '../prototype/icons'
 import presentation from '@/components/runtime/app-presentation.module.css'
 import { BuilderV2Picture } from './media'
 import type { BuilderV2MediaItem } from './media-values'
-import { builderV2Initials, builderV2RecordTone, builderV2StatusTone } from './record-presentation'
+import { Avatar } from '@/components/ui/avatar'
+import { builderV2RecordTone, builderV2StatusTone } from './record-presentation'
 import ui from './view.module.css'
 
 export function BuilderV2RecordAvatar({ name, id, icon = 'apps', tone = true, forceIcon = false }: { name?: string; id: string; icon?: string; tone?: boolean; forceIcon?: boolean }) {
-  return <span className={`${presentation.avatar} ${ui.recordAvatar}`} data-tone={tone ? builderV2RecordTone(id) : undefined} aria-hidden="true">
-    {(name && !forceIcon && builderV2Initials(name)) || <ProtoIcon name={icon} size={19} />}
+  return <span className={`${presentation.avatar} ${ui.recordAvatar}`} data-tone={tone ? builderV2RecordTone(id) : undefined} aria-hidden="true" style={name && !forceIcon ? { background: 'transparent', padding: 0, overflow: 'hidden' } : undefined}>
+    {name && !forceIcon ? <Avatar id={id || name} fill /> : <ProtoIcon name={icon} size={19} />}
   </span>
 }
 

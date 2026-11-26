@@ -1,6 +1,6 @@
 .shell, .navigation, .menuOverlay, .footer {
-  --font-sans: var(--font-onest), var(--sc-font);
-  --font-display: var(--font-onest), var(--sc-font);
+  --font-sans: var(--font-scatta-sans), var(--sc-font);
+  --font-display: var(--font-scatta-sans), var(--sc-font);
   --elaya-ease: cubic-bezier(0.32, 0.72, 0, 1);
   font-family: var(--font-sans);
   font-style: normal;

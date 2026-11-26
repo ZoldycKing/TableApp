@@ -1,5 +1,5 @@
 import type { ComponentProps } from 'react'
-import css from './ru-fields.module.css'
+import { DateField, TimeField } from '@/components/ui/pickers'
 
 /** Calendar date as `дд.мм.гггг`, independent of the browser locale. */
 export const ruDateText = (value: string) => {
@@ -22,28 +22,35 @@ type FieldProps = Omit<ComponentProps<'input'>, 'type' | 'value' | 'onChange'> &
   onValue: (value: string) => void
 }
 
-/** Native picker, with the value painted in a fixed Russian format. */
-function LocaleField({ kind, value, text, onValue, ...props }: FieldProps & { kind: 'date' | 'time'; text: string }) {
+/** Custom calendar. The stored value stays `YYYY-MM-DD`; the face reads `дд.мм.гггг`. */
+export function RuDateInput({ value, onValue, 'aria-label': ariaLabel, min, max, disabled, id, name, required, className }: FieldProps) {
   return (
-    <span className={css.wrap}>
-      <input
-        {...props}
-        type={kind}
-        value={value}
-        onChange={event => {
-          if (kind === 'date' && !event.target.value) return
-          onValue(event.target.value)
-        }}
-      />
-      <span className={css.readout} data-empty={text ? undefined : true} aria-hidden="true">{text || (kind === 'date' ? 'дд.мм.гггг' : 'чч:мм')}</span>
-    </span>
+    <DateField
+      label={typeof ariaLabel === 'string' ? ariaLabel : 'Дата'}
+      value={value}
+      onValue={onValue}
+      min={typeof min === 'string' ? min : undefined}
+      max={typeof max === 'string' ? max : undefined}
+      disabled={disabled}
+      id={id}
+      name={name}
+      required={required}
+      className={typeof className === 'string' ? className : undefined}
+    />
   )
 }
 
-export function RuDateInput({ value, onValue, ...props }: FieldProps) {
-  return <LocaleField kind="date" value={value} text={ruDateText(value)} onValue={onValue} {...props} />
-}
-
-export function RuTimeInput({ value, onValue, ...props }: FieldProps) {
-  return <LocaleField kind="time" value={value} text={ruTimeText(value)} onValue={onValue} {...props} />
+/** Custom 24-hour clock. No native time input. */
+export function RuTimeInput({ value, onValue, 'aria-label': ariaLabel, disabled, id, name, className }: FieldProps) {
+  return (
+    <TimeField
+      label={typeof ariaLabel === 'string' ? ariaLabel : 'Время'}
+      value={value}
+      onValue={onValue}
+      disabled={disabled}
+      id={id}
+      name={name}
+      className={typeof className === 'string' ? className : undefined}
+    />
+  )
 }

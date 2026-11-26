@@ -5,6 +5,7 @@ import { supportPolicyFromRows, supportStoredEvents } from '@/lib/support-persis
 import { SUPPORT_AGE_BUCKETS, type SupportAgeBucket, type SupportQueueFocus, operatorTransitions, type SupportStatusName } from '@/lib/support-logic'
 import { SUPPORT_HEAT_AGES, SUPPORT_SLA_STARTER, supportDashboard, supportSlaLabel, supportSlaPriorityName, supportSlaPriorityShort, supportSlaView, type SupportQueueScope, type SupportSlaPolicy, type SupportSlaPriority, type SupportSlaView } from '@/lib/support-sla'
 import { supportPortraitUrl } from '@/lib/templates/support-portraits'
+import { DurationField } from '@/components/ui/duration-field'
 import { ProtoIcon } from '../prototype/icons'
 import css from './support.module.css'
 
@@ -421,8 +422,8 @@ export function SupportSlaSettings(props: DeskProps) {
   ]
   return <form className={css.sla} onSubmit={event => { event.preventDefault(); void props.onSaveSla(minutes).then(result => setMessage(result.ok ? 'Нормативы сохранены.' : result.error ?? 'Не сохранилось.')) }}>
     <h3>Нормативы</h3>
-    <p className={css.quiet}>Сроки первого ответа и решения в минутах. Часы идут круглосуточно.</p>
-    <div className={css.slaGrid}>{fields.map(([key, label]) => <label key={key}><span>{label}, мин</span><input inputMode="numeric" value={minutes[key] ?? ''} onChange={event => setMinutes(current => ({ ...current, [key]: Number(event.target.value) }))} /></label>)}</div>
+    <p className={css.quiet}>Сроки первого ответа и решения. Часы идут круглосуточно. Сутки — это 1 день, не 1440.</p>
+    <div className={css.slaGrid}>{fields.map(([key, label]) => <DurationField key={key} label={label} minutes={minutes[key] ?? 0} onMinutes={value => setMinutes(current => ({ ...current, [key]: value }))} />)}</div>
     <button type="submit" className={css.primary}>Сохранить нормативы</button>
     {message ? <p role="status">{message}</p> : null}
   </form>

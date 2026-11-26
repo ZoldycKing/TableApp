@@ -1,27 +1,19 @@
-import { ELAYA_FAQ, ElayaLanding } from '@/components/marketing/elaya/landing'
+import { ScattaLanding } from '@/components/marketing/scatta/landing'
 import { JsonLd } from '@/components/marketing/blocks'
 import { pageMetadata } from '@/lib/seo'
 import { currentMember } from '@/lib/session'
 import { SITE_URL } from '@/lib/site-url'
-import { PLANS } from '@tableapp/schema'
 
 export const dynamic = 'force-dynamic'
 
 export const metadata = pageMetadata({
   path: '/',
-  title: 'Scatta — приложение для бизнеса из ваших таблиц',
+  title: 'Scatta — приложение для вашего дела, собранное за вечер',
   description:
-    'Соберите из Excel или CSV приложение для заказов, клиентов и учёта. Настройте рабочие экраны и доступ для себя, сотрудников и клиентов.',
+    'Кабинет для команды и страница, где клиенты сами выбирают время, бронируют или оставляют заявку. Шаблон, ваши поля, без программиста.',
   exact: true,
 })
 
-/**
- * Разметка для поиска.
- *
- * Только то, что правда: кто мы и что это за продукт. Ни отзывов, ни оценок —
- * выдуманный рейтинг в разметке обманывает и поисковик, и человека, а находить
- * такой обман умеют оба.
- */
 const SCHEMA = {
   '@context': 'https://schema.org',
   '@graph': [
@@ -31,8 +23,7 @@ const SCHEMA = {
       name: 'Scatta',
       url: `${SITE_URL}/`,
       email: 'hello@tableapp.ru',
-      description:
-        'Scatta помогает собрать приложение для бизнеса на основе собственных таблиц.',
+      description: 'Scatta собирает приложение для записи, броней и заявок из шаблона и ваших данных.',
     },
     {
       '@type': 'SoftwareApplication',
@@ -46,27 +37,19 @@ const SCHEMA = {
         '@type': 'Offer',
         price: '0',
         priceCurrency: 'RUB',
-        description: 'Бесплатный тариф: 2 000 строк и одно опубликованное приложение.',
+        description: 'Бесплатный старт без карты.',
       },
-    },
-    {
-      '@type': 'FAQPage',
-      mainEntity: ELAYA_FAQ.map(item => ({
-        '@type': 'Question',
-        name: item.question,
-        acceptedAnswer: { '@type': 'Answer', text: item.answer },
-      })),
     },
   ],
 }
 
-const money = new Intl.NumberFormat('ru-RU')
-
 export default async function LandingPage() {
   const member = await currentMember()
   const entry = member ? '/import' : '/login?next=%2Fimport'
-  return <>
-    <JsonLd data={SCHEMA} />
-    <ElayaLanding signedIn={Boolean(member)} entry={entry} freeRows={money.format(PLANS.free.limits.rows)} startPrice={money.format(PLANS.start.monthlyPrice)} />
-  </>
+  return (
+    <>
+      <JsonLd data={SCHEMA} />
+      <ScattaLanding signedIn={Boolean(member)} entry={entry} />
+    </>
+  )
 }

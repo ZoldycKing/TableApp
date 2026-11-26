@@ -96,6 +96,7 @@ describe('business stock threshold', () => {
   it('saves a valid threshold in the definition without changing access or stock', () => {
     const { app } = fixture(), onChange = vi.fn()
     render(<BuilderV2AppearanceSettings app={app} onChange={onChange} onScreens={vi.fn()} onUploadLogo={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Магазин' }))
     const input = screen.getByRole('spinbutton', { name: 'Показывать количество, когда осталось меньше' })
     fireEvent.change(input, { target: { value: '10' } })
     const next = onChange.mock.calls.at(-1)![0]

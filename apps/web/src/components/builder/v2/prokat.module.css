@@ -1481,9 +1481,9 @@
 }
 .todayStack { display: grid; gap: 16px; min-width: 0; }
 .todayGroup {
-  display: grid; gap: 8px; min-width: 0; padding: 12px 14px; border-radius: 14px;
-  border: 1px solid var(--v2-line, var(--sc-border));
-  background: var(--v2-surface, var(--sc-bg-elevated));
+  display: grid; gap: 8px; min-width: 0; padding: 4px 0 8px;
+  border: 0; border-bottom: 1px solid var(--sc-border-subtle, #ECECE8);
+  border-radius: 0; background: transparent;
 }
 .todayGroup[data-tone='overdue'] {
   border-color: color-mix(in srgb, #C4623A 35%, var(--v2-line));
@@ -1517,7 +1517,7 @@
   font: inherit; font-size: 13px; font-weight: 650; cursor: pointer; white-space: nowrap;
 }
 .todayEmpty {
-  margin: 0; color: var(--v2-muted, var(--sc-text-2)); font-size: 13px; line-height: 1.45;
+  margin: 0; color: var(--v2-muted, var(--sc-text-2)); font-size: 13px; line-height: 1.3;
 }
 .kpiRow {
   display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px;
@@ -1818,10 +1818,15 @@
 .clientStats div { min-width: 0; }
 .clientStats dt { color: var(--sc-text-3, #6E7076); font-size: 12px; }
 .clientStats dd { margin: 2px 0 0; font-family: var(--font-scatta-mono), ui-monospace, monospace; font-size: 22px; font-weight: 500; letter-spacing: -0.03em; }
+.bookingFoot { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end; }
+.bookingFoot > span { margin-right: auto; font-family: var(--font-scatta-mono), ui-monospace, monospace; }
 .bookingForm { display: grid; gap: 12px; }
 .bookingDates { display: grid; gap: 12px; align-content: start; }
 .bookingDates .deadlineRow { grid-template-columns: minmax(0, 1fr); }
 .bookingForm .itemGrid { max-height: none; overflow: visible; }
+@container builder-app (max-width: 719px) {
+  .bookingDates { order: -1; }
+}
 @container builder-app (min-width: 720px) {
   .bookingForm { grid-template-columns: minmax(0, 1.25fr) minmax(220px, .8fr); }
   .bookingForm > :not(.bookingDates) { grid-column: 1; }

@@ -6,7 +6,7 @@ import { MESSAGES_SCREEN } from '@/lib/conversation-types'
 import type { AppV2, AppV2Json, AppV2Node, AppV2Record } from '@tableapp/schema/app-v2'
 import { catchUpPublishedProkatHolds, savePublishedProkatAction } from '@/app/prokat-actions'
 import { Avatar } from '@/components/ui/avatar'
-import { Checkbox } from '@/components/ui/choice'
+import { Checkbox, Switch } from '@/components/ui/choice'
 import { Select } from '@/components/ui/select'
 import { ProkatDayBoard } from './prokat-day-board'
 import type { ConversationPage } from '@/lib/conversation-types'
@@ -618,7 +618,7 @@ function TodayGroup(props: {
     </header>
     {props.count
       ? <ul className={css.todayList}>{props.children}</ul>
-      : <p className={css.todayEmpty}>{props.empty}</p>}
+      : <p className={css.todayEmpty}>{props.title} — нет</p>}
   </section>
 }
 
@@ -836,8 +836,19 @@ function DashboardScreen(props: ScreenProps) {
   const actBooking = act ? props.of(props.kit.bookingsTableId).find(row => row.id === act.bookingId) : null
   return <div className={css.root} data-prokat-root data-prokat-screen="dashboard">
     {desk && phone && frameHost ? createPortal(<button type="button" className={css.phoneAdd} aria-label="Новая бронь" onClick={() => setCreate(true)}>+</button>, frameHost) : null}
-    <ListScreenShell title="Главная" meta="Что сделать сегодня — и как загружен парк.">
+    <ListScreenShell title={phone ? 'Сегодня' : 'Главная'} meta="Что сделать сегодня — и как загружен парк.">
       <div className={css.dashStack}>
+      <div className={css.kpiRow} role="group" aria-label="Показатели">
+        <button type="button" className={css.kpiPill} onClick={() => props.onNavigate?.(props.kit.timelineScreenId)}>
+          <strong>{stats.utilisation}%</strong><span>Загрузка парка</span>
+        </button>
+        <button type="button" className={css.kpiPill} onClick={() => props.onNavigate?.(props.kit.bookingsScreenId)}>
+          <strong>{stats.itemsOut}</strong><span>Сейчас в прокате</span>
+        </button>
+        <button type="button" className={css.kpiPill} onClick={() => props.onNavigate?.(props.kit.bookingsScreenId)}>
+          <strong>{formatMoneyOrZero(weekRevenue)}</strong><span>Выручка за неделю</span>
+        </button>
+      </div>
       <DetailSection title="Сегодня">
         <div className={css.todayStack}>
           <TodayGroup title="Просрочено" empty="Просрочек нет — всё вовремя." tone="overdue" count={stats.overdue.length}>
@@ -894,17 +905,6 @@ function DashboardScreen(props: ScreenProps) {
           </TodayGroup>
         </div>
       </DetailSection>
-      <div className={css.kpiRow} role="group" aria-label="Показатели">
-        <button type="button" className={css.kpiPill} onClick={() => props.onNavigate?.(props.kit.timelineScreenId)}>
-          <strong>{stats.utilisation}%</strong><span>Загрузка парка</span>
-        </button>
-        <button type="button" className={css.kpiPill} onClick={() => props.onNavigate?.(props.kit.bookingsScreenId)}>
-          <strong>{stats.itemsOut}</strong><span>Сейчас в прокате</span>
-        </button>
-        <button type="button" className={css.kpiPill} onClick={() => props.onNavigate?.(props.kit.bookingsScreenId)}>
-          <strong>{formatMoneyOrZero(weekRevenue)}</strong><span>Выручка за неделю</span>
-        </button>
-      </div>
       <div className={css.dashGrid}>
         <DetailSection title="Загрузка по категориям">
           {!stats.utilisationByCategory.length ? <p className={css.quiet}>Добавьте предметы — здесь появится загрузка.</p> : stats.utilisationByCategory.map(row => (
@@ -1303,6 +1303,7 @@ function CreateDialog(props: ScreenProps & {
   const [toTime, setToTime] = useState('18:00')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [confirm, setConfirm] = useState(true)
   useEffect(() => {
     if (props.initialItemId) setItemIds([props.initialItemId])
   }, [props.initialItemId])
@@ -1329,14 +1330,21 @@ function CreateDialog(props: ScreenProps & {
     if (!result.ok) { setError(result.error); return }
     props.onDone()
   }
-  return <AppDialog title="Новая бронь" placement="center" onClose={props.onClose} footer={<button type="submit" form={formId} className={css.primary} disabled={busy}>{busy ? 'Сохраняем…' : 'Создать бронь'}</button>}>
+  const clientRow = clients.find(row => row.id === clientId)
+  const clientEmail = textOf(clientRow?.values[props.kit.client.email]).toLowerCase()
+  const visits = bookingItems(props).filter(item => item.clientEmail.toLowerCase() === clientEmail && clientEmail).length
+  return <AppDialog title="Новая бронь" placement="center" onClose={props.onClose} footer={<div className={css.bookingFoot}><span>{formatMoney(price)} · залог {formatMoney(deposit)}</span><Switch label="Отправить подтверждение" checked={confirm} onChecked={setConfirm} /><button type="button" className={css.quietButton} onClick={props.onClose}>Отмена</button><button type="submit" form={formId} className={css.primary} disabled={busy}>{busy ? 'Сохраняем…' : 'Создать бронь'}</button></div>}>
     <form id={formId} className={css.bookingForm} onSubmit={event => { event.preventDefault(); void save() }}>
-      <ProkatSelect field label="Клиент" value={clientId} options={clients.map(row => ({ id: row.id, name: textOf(row.values[props.kit.client.name]) || 'Без имени' }))} onChange={setClientId} />
+      <div>
+        <ProkatSelect field label="Клиент" value={clientId} options={clients.map(row => ({ id: row.id, name: textOf(row.values[props.kit.client.name]) || 'Без имени' }))} onChange={setClientId} />
+        <p className={css.quiet}>{clientRow ? `${textOf(clientRow.values[props.kit.client.name]) || 'Клиент'} · брал ${visits} раз` : 'Выберите клиента'}</p>
+      </div>
       <fieldset className={css.field}><legend>Предметы</legend><div className={css.itemGrid}>{items.map(item => {
         const selected = itemIds.includes(item.id)
-        return <button key={item.id} type="button" className={css.itemPick} aria-pressed={selected} onClick={() => toggle(item.id)}>
+        const busyItem = item.status !== 'Свободен'
+        return <button key={item.id} type="button" className={css.itemPick} aria-pressed={selected} disabled={busyItem && !selected} onClick={() => toggle(item.id)}>
           <ItemTile item={item} />
-          <span className={css.itemCheckCopy}><strong>{item.name}</strong><span className={css.quiet}>{item.category} · {formatMoney(item.rate)} / {item.tariff.toLowerCase()}</span></span>
+          <span className={css.itemCheckCopy}><strong>{item.name}</strong><span className={css.quiet}>{item.category} · {formatMoney(item.rate)} / {item.tariff.toLowerCase()} · {busyItem ? item.status : 'свободен'}</span></span>
           <span className={css.checkMark} data-on={selected || undefined}>{selected ? <ProtoIcon name="check" size={12} /> : null}</span>
         </button>
       })}</div></fieldset>

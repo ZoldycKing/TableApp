@@ -205,7 +205,7 @@ export function scheduleClockLabel(min: number) {
 export function shortResourceLabel(name: string) {
   const bike = name.match(/^(?:горный|городской|шоссейный|детский)\s+велосипед\s+(.+)$/i)
   if (bike) {
-    const rest = bike[1].replace(/\s+\d+\s*$/, '').trim()
+    const rest = (bike[1] ?? '').replace(/\s+\d+\s*$/, '').trim()
     if (/^\d/.test(rest) || rest.length < 3) return name.replace(/\s+велосипед/i, '').trim()
     return rest
   }

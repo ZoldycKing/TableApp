@@ -6,13 +6,15 @@ import { MESSAGES_SCREEN } from '@/lib/conversation-types'
 import type { AppV2, AppV2Json, AppV2Node, AppV2Record } from '@tableapp/schema/app-v2'
 import { catchUpPublishedProkatHolds, savePublishedProkatAction } from '@/app/prokat-actions'
 import { Avatar } from '@/components/ui/avatar'
-import { Checkbox, Switch } from '@/components/ui/choice'
 import { ruCount, ruPlural } from '@/components/ui/format'
-import { InlineRangeCalendar } from '@/components/ui/pickers'
-import { Select } from '@/components/ui/select'
 import { ProkatDayBoard } from './prokat-day-board'
 import { ClientCardView, ClientsView, useClientsNarrow, type ClientTab } from './prokat-clients'
+import { BookingModal, type BookingClientOption, type BookingItemOption } from './prokat-booking'
 import { demoClientById, prokatDemoCard, prokatDemoClients, type DemoCard, type DemoCardMessage, type DemoCardStep, type DemoClient, type PillTone } from '@/lib/prokat-clients-demo'
+import {
+  DEMO_BOOKING_CLIENT, DEMO_BOOKING_FROM, DEMO_BOOKING_TIME, DEMO_BOOKING_TO, DEMO_BOOKING_TO_PHONE, DEMO_BOOKING_TODAY,
+  prokatDemoBookingItems, prokatDemoBookingSelectedIds,
+} from '@/lib/prokat-booking-demo'
 import { buildProkatDaySchedule, PROKAT_SCHEDULE_AT } from '@/lib/prokat-day-demo'
 import type { ConversationPage } from '@/lib/conversation-types'
 import { BuilderV2AttachmentInput } from './attachment-input'
@@ -974,7 +976,7 @@ function BookingList(props: ScreenProps) {
     <ListScreenShell
       title="Брони"
       meta="Выдача, возврат и заявки на прокат."
-      actions={desk ? <button type="button" className={css.primary} onClick={() => setCreateOpen(true)}>Новая бронь</button> : undefined}
+      actions={desk ? <button type="button" className={css.cabinetBtn} onClick={() => setCreateOpen(true)}>+ Новая бронь</button> : undefined}
     >
       <div className={css.toolbar}><ShellSearchField value={search} onChange={setSearch} placeholder="Поиск по номеру, клиенту, предмету" aria-label="Поиск броней" /></div>
       <div className={css.chips} role="tablist" aria-label="Представления броней">
@@ -1306,6 +1308,21 @@ function BookingCard(props: ScreenProps) {
   </div>
 }
 
+function bookingUnit(tariff: string) {
+  if (tariff === 'За час') return 'за час'
+  if (tariff === 'Выходные') return 'за выходные'
+  return 'за сутки'
+}
+
+function bookingHint(item: ProkatCatalogItem) {
+  if (item.status === 'В прокате' || item.status === 'На обслуживании') {
+    const until = item.busyUntil ? formatProkatDate(item.busyUntil) : ''
+    return until ? `занята до ${until}` : item.status.toLowerCase()
+  }
+  if (item.status !== 'Свободен') return item.status.toLowerCase()
+  return 'свободна на эти даты'
+}
+
 function CreateDialog(props: ScreenProps & {
   onClose: () => void
   onDone: () => void
@@ -1313,21 +1330,84 @@ function CreateDialog(props: ScreenProps & {
   initialDate?: string
 }) {
   useDialogBehavior(props.onClose)
-  const formId = useId()
-  const clients = props.of(props.kit.clientsTableId)
-  const items = catalogItems(props).filter(item => item.status === 'Свободен' || item.status === 'В прокате')
-  const [clientId, setClientId] = useState(clients[0]?.id ?? '')
-  const [itemIds, setItemIds] = useState<string[]>(props.initialItemId ? [props.initialItemId] : items.filter(item => item.status === 'Свободен').slice(0, 1).map(item => item.id))
-  const todayIso = prokatInstantParts(new Date(props.now).toISOString()).date
-  const tomorrowIso = (() => {
-    const [year, month, day] = todayIso.split('-').map(Number)
-    if (!year || !month || !day) return todayIso
-    return new Date(Date.UTC(year, month - 1, day + 1)).toISOString().slice(0, 10)
-  })()
-  const [fromDate, setFromDate] = useState(props.initialDate || todayIso)
-  const [fromTime, setFromTime] = useState('12:00')
-  const [toDate, setToDate] = useState(props.initialDate || tomorrowIso)
-  const [toTime, setToTime] = useState('18:00')
+  const bundle = useContext(ProkatRowsContext)
+  const sample = Boolean(bundle?.sample)
+  const catalog = catalogItems(props).filter(item => item.status !== 'Списан')
+  const realClients = props.of(props.kit.clientsTableId)
+  const demoItems = sample ? prokatDemoBookingItems() : null
+  const clientOptions: BookingClientOption[] = sample
+    ? [
+        { id: DEMO_BOOKING_CLIENT.id, name: DEMO_BOOKING_CLIENT.name, phone: DEMO_BOOKING_CLIENT.phone, visits: DEMO_BOOKING_CLIENT.visits, gender: DEMO_BOOKING_CLIENT.gender },
+        ...realClients.slice(0, 8).map(row => {
+          const name = textOf(row.values[props.kit.client.name]) || 'Без имени'
+          const email = textOf(row.values[props.kit.client.email]).toLowerCase()
+          const visits = bookingItems(props).filter(item => item.clientEmail.toLowerCase() === email && email).length
+          return {
+            id: row.id,
+            name,
+            phone: textOf(row.values[props.kit.client.phone]) || '—',
+            visits,
+            gender: /а$|я$|на$|ва$|ая$/i.test(name.split(' ').at(-1) ?? '') ? 'f' as const : 'm' as const,
+          }
+        }),
+      ]
+    : realClients.map(row => {
+      const name = textOf(row.values[props.kit.client.name]) || 'Без имени'
+      const email = textOf(row.values[props.kit.client.email]).toLowerCase()
+      const visits = bookingItems(props).filter(item => item.clientEmail.toLowerCase() === email && email).length
+      return {
+        id: row.id,
+        name,
+        phone: textOf(row.values[props.kit.client.phone]) || '—',
+        visits,
+        gender: /а$|я$|на$|ва$|ая$/i.test(name.split(' ').at(-1) ?? '') ? 'f' as const : 'm' as const,
+      }
+    })
+  const itemOptions: BookingItemOption[] = demoItems
+    ? demoItems.map(item => ({
+      id: item.id,
+      name: item.name,
+      rate: item.rate,
+      deposit: item.deposit,
+      unit: item.unit,
+      hint: item.hint,
+      tone: item.tone,
+      status: item.status,
+    }))
+    : catalog.map(item => ({
+      id: item.id,
+      name: item.name,
+      rate: item.rate,
+      deposit: item.deposit,
+      unit: bookingUnit(item.tariff),
+      hint: bookingHint(item),
+      tone: item.category === 'Инструменты' || item.category === 'Велосипеды' ? 'beige' as const : 'blue' as const,
+      status: item.status === 'Свободен' ? 'free' as const : item.status === 'В прокате' || item.status === 'На обслуживании' ? 'busy' as const : 'stock' as const,
+    }))
+  const frameDevice = useContext(AppFrameDeviceContext)
+  const phoneSeed = frameDevice === 'phone' || (typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 759px)').matches)
+  const todayIso = sample ? DEMO_BOOKING_TODAY : prokatInstantParts(new Date(props.now).toISOString()).date
+  const defaultTo = sample
+    ? (phoneSeed ? DEMO_BOOKING_TO_PHONE : DEMO_BOOKING_TO)
+    : (() => {
+      const [year, month, day] = todayIso.split('-').map(Number)
+      if (!year || !month || !day) return todayIso
+      return new Date(Date.UTC(year, month - 1, day + 1)).toISOString().slice(0, 10)
+    })()
+  const [clientId, setClientId] = useState(sample ? DEMO_BOOKING_CLIENT.id : (clientOptions[0]?.id ?? ''))
+  const [itemIds, setItemIds] = useState<string[]>(
+    props.initialItemId
+      ? [props.initialItemId]
+      : sample
+        ? prokatDemoBookingSelectedIds()
+        : itemOptions.filter(item => item.status === 'free').slice(0, 1).map(item => item.id),
+  )
+  const [fromDate, setFromDate] = useState(props.initialDate || (sample ? DEMO_BOOKING_FROM : todayIso))
+  const [fromTime, setFromTime] = useState(sample ? DEMO_BOOKING_TIME : '12:00')
+  const [toDate, setToDate] = useState(props.initialDate || defaultTo)
+  const [toTime, setToTime] = useState(sample ? DEMO_BOOKING_TIME : '18:00')
+  const [query, setQuery] = useState('')
+  const [showInventory, setShowInventory] = useState(false)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [confirm, setConfirm] = useState(true)
@@ -1339,16 +1419,56 @@ function CreateDialog(props: ScreenProps & {
     setFromDate(props.initialDate)
     setToDate(props.initialDate)
   }, [props.initialDate])
-  const selected = items.filter(item => itemIds.includes(item.id))
+  const selected = itemOptions.filter(item => itemIds.includes(item.id))
   const from = fromDate ? prokatWallInstant(fromDate, fromTime) : null
   const to = toDate ? prokatWallInstant(toDate, toTime) : null
-  const price = selected.reduce((sum, item) => sum + (from && to ? computeRentalPrice({ tariff: item.tariff, rate: item.rate, from, to }) : 0), 0)
+  const nights = (() => {
+    if (!fromDate || !toDate) return 0
+    const [ay, am, ad] = fromDate.split('-').map(Number)
+    const [by, bm, bd] = toDate.split('-').map(Number)
+    if (!ay || !am || !ad || !by || !bm || !bd) return 0
+    return Math.max(0, Math.round((Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / 86400000))
+  })()
+  const price = sample
+    ? selected.reduce((sum, item) => sum + item.rate * Math.max(1, nights), 0)
+    : selected.reduce((sum, item) => {
+      const catalogItem = catalog.find(entry => entry.id === item.id)
+      return sum + (from && to && catalogItem ? computeRentalPrice({ tariff: catalogItem.tariff, rate: catalogItem.rate, from, to }) : 0)
+    }, 0)
   const deposit = selected.reduce((sum, item) => sum + item.deposit, 0)
   const toggle = (id: string) => setItemIds(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id])
   const save = async () => {
+    if (!clientId || (sample && clientId === DEMO_BOOKING_CLIENT.id && !realClients[0])) {
+      /* demo client is fine for screenshots; persist only real rows */
+    }
     if (!clientId) { setError('Выберите клиента.'); return }
     if (!itemIds.length) { setError('Выберите хотя бы один предмет.'); return }
     if (!from || !to) { setError('Укажите срок аренды.'); return }
+    if (sample) {
+      const realClientId = clientId === DEMO_BOOKING_CLIENT.id
+        ? realClients.find(row => textOf(row.values[props.kit.client.email]).toLowerCase() === 'm.petrova@yandex.ru')?.id
+          ?? realClients[0]?.id
+        : clientId
+      const realItemIds = itemIds.flatMap((id, index) => {
+        if (!id.startsWith('demo-item-')) return [id]
+        const free = catalog.filter(item => item.status === 'Свободен')
+        const mapped = free[index]?.id
+        return mapped ? [mapped] : []
+      })
+      if (!realClientId || !realItemIds.length) { props.onDone(); return }
+      setBusy(true)
+      const result = await commit(props, {
+        kind: 'create',
+        clientId: realClientId,
+        itemIds: realItemIds,
+        title: selected.map(item => item.name).join(', '),
+        from, to, price, deposit,
+      })
+      setBusy(false)
+      if (!result.ok) { setError(result.error); return }
+      props.onDone()
+      return
+    }
     setBusy(true)
     const result = await commit(props, {
       kind: 'create', clientId, itemIds, title: selected.map(item => item.name).join(', '), from, to, price, deposit,
@@ -1357,34 +1477,34 @@ function CreateDialog(props: ScreenProps & {
     if (!result.ok) { setError(result.error); return }
     props.onDone()
   }
-  const clientRow = clients.find(row => row.id === clientId)
-  const clientEmail = textOf(clientRow?.values[props.kit.client.email]).toLowerCase()
-  const visits = bookingItems(props).filter(item => item.clientEmail.toLowerCase() === clientEmail && clientEmail).length
-  return <AppDialog title="Новая бронь" placement="center" onClose={props.onClose} footer={<div className={css.bookingFoot}><span>{formatMoneyOrZero(price)} · залог {formatMoneyOrZero(deposit)}</span><button type="button" className={css.quietButton} onClick={props.onClose}>Отмена</button><button type="submit" form={formId} className={css.primary} disabled={busy}>{busy ? 'Сохраняем…' : 'Создать бронь'}</button></div>}>
-    <form id={formId} className={css.bookingForm} onSubmit={event => { event.preventDefault(); void save() }}>
-      <div>
-        <ProkatSelect field label="Клиент" value={clientId} options={clients.map(row => ({ id: row.id, name: textOf(row.values[props.kit.client.name]) || 'Без имени' }))} onChange={setClientId} />
-        <p className={css.quiet}>{clientRow ? `${textOf(clientRow.values[props.kit.client.name]) || 'Клиент'} · брал ${ruCount(visits, 'раз', 'раза', 'раз')}` : 'Выберите клиента'}</p>
-        <button type="button" className={css.quietButton} onClick={() => setClientId('')}>Другой клиент</button>
-      </div>
-      <fieldset className={css.field}><legend>Предметы</legend><div className={css.itemGrid}>{items.map(item => {
-        const selected = itemIds.includes(item.id)
-        const busyItem = item.status !== 'Свободен'
-        return <button key={item.id} type="button" className={css.itemPick} aria-pressed={selected} disabled={busyItem && !selected} onClick={() => toggle(item.id)}>
-          <ItemTile item={item} />
-          <span className={css.itemCheckCopy}><strong>{item.name}</strong><span className={css.quiet}>{item.category} · {formatMoney(item.rate)} / {item.tariff.toLowerCase()} · {busyItem ? item.status : 'свободен'}</span></span>
-          <span className={css.checkMark} data-on={selected || undefined}>{selected ? <ProtoIcon name="check" size={12} /> : null}</span>
-        </button>
-      })}</div></fieldset>
-      <div className={css.bookingDates}>
-        <InlineRangeCalendar from={fromDate} to={toDate} onChange={next => { setFromDate(next.from); setToDate(next.to) }} />
-        <div className={css.deadlineRow}><TimeMenu value={fromTime} onValue={setFromTime} label="Время начала" /><TimeMenu value={toTime} onValue={setToTime} label="Время окончания" /></div>
-        <p className={css.moneyRow}>Стоимость <strong>{formatMoneyOrZero(price)}</strong> · Залог <strong>{formatMoneyOrZero(deposit)}</strong></p>
-        <Switch label="Отправить подтверждение" checked={confirm} onChecked={setConfirm} />
-      </div>
-      {error ? <p className={css.error} role="alert">{error}</p> : null}
-    </form>
-  </AppDialog>
+  return <BookingModal
+    clients={clientOptions}
+    items={itemOptions}
+    clientId={clientId}
+    onClientId={setClientId}
+    itemIds={itemIds}
+    onToggleItem={toggle}
+    query={query}
+    onQuery={setQuery}
+    fromDate={fromDate}
+    toDate={toDate}
+    onRange={next => { setFromDate(next.from); setToDate(next.to) }}
+    fromTime={fromTime}
+    toTime={toTime}
+    onFromTime={setFromTime}
+    onToTime={setToTime}
+    today={todayIso}
+    price={price}
+    deposit={deposit}
+    confirm={confirm}
+    onConfirm={setConfirm}
+    busy={busy}
+    error={error}
+    onClose={props.onClose}
+    onSubmit={() => { void save() }}
+    showInventory={showInventory}
+    onShowInventory={() => setShowInventory(true)}
+  />
 }
 
 function IssueDialog(props: ScreenProps & { booking: AppV2Record; onClose: () => void; onMessage: (value: string) => void }) {

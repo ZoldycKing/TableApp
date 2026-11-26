@@ -40,7 +40,7 @@ export function makeBlock(kind: Kind, id = uid()): Block {
 }
 export function seedPrototype(): Prototype {
   const block = (kind: Kind, id: string, patch: Partial<Block> = {}) => ({ ...makeBlock(kind, id), ...patch })
-  return { version: 1, document: { name: 'Рабочие заявки', home: 'overview', pages: [
+  return { version: 1, document: { name: 'Студия «Глина»', home: 'overview', pages: [
     { id: 'overview', name: 'Обзор', icon: 'home', blocks: [block('heading', 'welcome', { title: 'Всё под рукой', text: 'Заявки и задачи вашей команды.' }),
       block('columns', 'numbers', { children: [block('metric', 'request-count', { title: 'Всего заявок' }), block('metric', 'task-count', { title: 'Всего задач', source: 'tasks' })] }),
       block('collection', 'requests-list', { title: 'Заявки' }), block('collection', 'tasks-list', { title: 'Задачи', source: 'tasks', targetPage: 'task-detail' })] },

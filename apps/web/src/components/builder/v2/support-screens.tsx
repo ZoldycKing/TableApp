@@ -1,5 +1,6 @@
 'use client'
 import { createContext, lazy, Suspense, useContext, useEffect, useId, useRef, useState, type ReactNode, type RefObject } from 'react'
+import { ClockIcon, TagIcon, UsersThreeIcon } from '@phosphor-icons/react'
 import { instantToWallClock } from '@tableapp/schema'
 import type { AppV2, AppV2Node, AppV2Record } from '@tableapp/schema/app-v2'
 import { savePublishedSupportAction } from '@/app/support-actions'
@@ -9,7 +10,7 @@ import { AppFrameDeviceContext } from './app-frame'
 import { AppDialog } from './app-dialog'
 import { supportQueueMatch, supportSlaCountdown, supportSlaDueAt, supportSlaNormLabel, type SupportSlaCountdown, type SupportSlaView } from '@/lib/support-sla'
 import { supportPolicyFromRows } from '@/lib/support-persist'
-import { SupportDashboard, SupportPerson, SupportSlaSettings, TicketStatusMenu, slaFacts, slaWhen } from './support-desk'
+import { SupportDashboard, SupportPerson, SupportSlaSettings, TicketStatusMenu, slaDuration, slaFacts, slaWhen } from './support-desk'
 import { SupportSelect, TeamScreen } from './support-team'
 import { DateMenu } from './booking-calendar'
 import { DetailCardShell, DetailSection, ListScreenShell, ShellSearchField } from './layout-shell'
@@ -1491,58 +1492,100 @@ function ClientNoteDialog(props: ScreenProps & { client: AppV2Record; note: stri
   </AppDialog>
 }
 
+const SETTINGS_SECTIONS = [
+  { id: 'categories', label: 'Категории', icon: TagIcon },
+  { id: 'norms', label: 'Сроки ответа', icon: ClockIcon },
+  { id: 'team', label: 'Команда и доступ', icon: UsersThreeIcon },
+] as const
+
+type SettingsSection = (typeof SETTINGS_SECTIONS)[number]['id']
+
+function clockOf(at: number) {
+  return instantToWallClock(new Date(at), 'Europe/Moscow')?.time ?? ''
+}
+
 function SettingsScreen(props: ScreenProps) {
   const [open, setOpen] = useState(false)
+  const [section, setSection] = useState<SettingsSection>('categories')
   const [message, setMessage] = useState('')
+  const [savedAt, setSavedAt] = useState(props.now)
   const categories = props.of(props.kit.categoriesTableId)
   const operators = props.of(props.kit.operatorsTableId)
+  const policy = supportPolicyFromRows(props.kit, props.rows)
   const toggle = async (row: AppV2Record) => {
     const result = await commit(props, { kind: 'category', recordId: row.id, name: textOf(row.values[props.kit.category.name]), description: textOf(row.values[props.kit.category.description]), active: row.values[props.kit.category.active] !== true })
     setMessage(result.ok ? result.message : result.error)
+    if (result.ok) setSavedAt(Date.now())
   }
-  const [section, setSection] = useState<'categories' | 'team'>('categories')
+  const saveSla = async (minutes: Record<string, number>) => {
+    const result = await commit(props, { kind: 'sla', minutes })
+    if (result.ok) setSavedAt(Date.now())
+    return result
+  }
+  const current = SETTINGS_SECTIONS.find(item => item.id === section) ?? SETTINGS_SECTIONS[0]
   return <div className={css.root} data-support-root data-support-screen="settings">
-    <ListScreenShell title="Настройки" meta="Как служба выглядит для клиента." actions={section === 'categories' ? <button type="button" className={css.mine} onClick={() => setOpen(true)}>Добавить категорию</button> : undefined}>
-      <div className={css.settingsLayout}>
-        <nav aria-label="Разделы настроек">
-          <button type="button" aria-current={section === 'categories' ? 'page' : undefined} onClick={() => setSection('categories')}>Категории</button>
-          <button type="button" aria-current={section === 'team' ? 'page' : undefined} onClick={() => setSection('team')}>Команда</button>
-        </nav>
-        <div>
-          {section === 'team' ? <p>В смене {operators.length}. Клиент видит имя в ответе, не список всей команды.</p> : <div className={css.stack}>
-        {message ? <p role="status">{message}</p> : null}
-        {props.loading ? <p role="status">Загружаем настройки…</p> : null}
-        {!categories.length && !props.loading ? <div className={css.empty}><p>Категорий пока нет.</p></div> : null}
-        <ul className={css.directory}>{categories.map(row => {
-          const active = row.values[props.kit.category.active] === true
-          return <li key={row.id} className={css.categoryRow}>
-            <div className={css.categoryCopy}>
-              <strong>{textOf(row.values[props.kit.category.name])}</strong>
-              <span className={css.quiet}>{textOf(row.values[props.kit.category.description]) || 'Без пояснения'}</span>
-            </div>
-            <button
-              type="button"
-              role="switch"
-              className={css.rowSwitch}
-              aria-checked={active}
-              aria-label={active ? `${textOf(row.values[props.kit.category.name])}: доступна` : `${textOf(row.values[props.kit.category.name])}: скрыта`}
-              data-on={active || undefined}
-              onClick={() => void toggle(row)}
-            >
-              <span>{active ? 'Доступна' : 'Скрыта'}</span>
-              <i aria-hidden="true" />
-            </button>
-          </li>
-        })}</ul>
-        <SupportSlaSettings kit={props.kit} rows={props.rows} now={props.now} actorEmail={props.actor.email ?? ''} onOpenQueue={() => {}} onOpenTicket={() => {}} onStatus={async () => ({ ok: false })} onSaveSla={async minutes => commit(props, { kind: 'sla', minutes })} />
-        <h3>Операторы</h3>
-        <p className={css.quiet}>{props.kit.teamScreenId ? 'Полный список и правка — в разделе «Команда».' : 'Линия и статус правятся в карточке оператора.'}</p>
-        <ul className={css.directory}>{operators.map(row => <li key={row.id}><strong>{textOf(row.values[props.kit.operator.name])}</strong><span className={css.badges}><Badge name={choiceName(props, props.kit.operatorsTableId, props.kit.operator.role, row.values[props.kit.operator.role])} />{props.kit.operator.line ? <Badge name={choiceName(props, props.kit.operatorsTableId, props.kit.operator.line, row.values[props.kit.operator.line])} /> : null}<Badge name={choiceName(props, props.kit.operatorsTableId, props.kit.operator.active, row.values[props.kit.operator.active])} /></span></li>)}</ul>
-      </div>}
-        </div>
-        <aside aria-label="Так видит клиент"><small>Так видит клиент</small><strong>{props.app.name}</strong><p>Категория, сообщение и срок ответа.</p><span>Написать</span></aside>
+    <header className={css.setTop}>
+      <div>
+        <h1>Настройки</h1>
+        <p className={css.setSub}>Изменения сохраняются сразу — кнопки «Сохранить» нет</p>
       </div>
-    </ListScreenShell>
+      <p className={css.setSaved}><i aria-hidden="true" />Сохранено в {clockOf(savedAt)}</p>
+    </header>
+    <div className={css.setGrid}>
+      <nav className={css.setNav} aria-label="Разделы настроек">
+        {SETTINGS_SECTIONS.map(item => <button key={item.id} type="button" aria-current={section === item.id ? 'page' : undefined} onClick={() => { setSection(item.id); setMessage('') }}>
+          <item.icon size={16} aria-hidden="true" />{item.label}
+        </button>)}
+      </nav>
+      <div className={css.setMain}>
+        <div className={css.setHead}>
+          <div>
+            <h2>{current.label}</h2>
+            <p className={css.setLead}>{section === 'categories' ? 'Клиент выбирает тему, когда пишет в службу.' : section === 'norms' ? 'Часы идут круглосуточно. Сутки — это 1 день, не 1440.' : 'Операторы смены. Клиент видит имя в ответе, не список всей команды.'}</p>
+          </div>
+          {section === 'categories' ? <button type="button" className={css.setAdd} onClick={() => setOpen(true)}><ProtoIcon name="chat" size={14} />Добавить категорию</button> : null}
+        </div>
+        {message ? <p role="status" className={css.setStatus}>{message}</p> : null}
+        {props.loading ? <p role="status" className={css.quiet}>Загружаем настройки…</p> : null}
+        {section === 'categories' ? <>
+          {!categories.length && !props.loading ? <div className={css.empty}><p>Категорий пока нет.</p></div> : null}
+          {categories.length ? <div className={css.setGroup}>{categories.map(row => {
+            const name = textOf(row.values[props.kit.category.name])
+            const active = row.values[props.kit.category.active] === true
+            return <div key={row.id} className={css.setRow}>
+              <div className={css.setRowText}><strong>{name}</strong><small>{textOf(row.values[props.kit.category.description]) || 'Без пояснения'}</small></div>
+              <div className={css.setRowEnd}>
+                <button type="button" role="switch" className={css.setTg} aria-checked={active} aria-label={`${name}: ${active ? 'доступна' : 'скрыта'}`} data-on={active || undefined} onClick={() => void toggle(row)}><i aria-hidden="true" /></button>
+              </div>
+            </div>
+          })}</div> : null}
+        </> : null}
+        {section === 'norms' ? <SupportSlaSettings kit={props.kit} rows={props.rows} now={props.now} actorEmail={props.actor.email ?? ''} onOpenQueue={() => {}} onOpenTicket={() => {}} onStatus={async () => ({ ok: false })} onSaveSla={saveSla} /> : null}
+        {section === 'team' ? <>
+          <div className={css.setGroup}>{operators.map(row => <div key={row.id} className={css.setRow}>
+            <div className={css.setRowText}><strong>{textOf(row.values[props.kit.operator.name])}</strong></div>
+            <div className={css.setRowEnd}><span className={css.badges}><Badge name={choiceName(props, props.kit.operatorsTableId, props.kit.operator.role, row.values[props.kit.operator.role])} />{props.kit.operator.line ? <Badge name={choiceName(props, props.kit.operatorsTableId, props.kit.operator.line, row.values[props.kit.operator.line])} /> : null}<Badge name={choiceName(props, props.kit.operatorsTableId, props.kit.operator.active, row.values[props.kit.operator.active])} /></span></div>
+          </div>)}</div>
+          <p className={css.quiet}>{props.kit.teamScreenId ? 'Полный список и правка — в разделе «Команда».' : 'Линия и статус правятся в карточке оператора.'}</p>
+        </> : null}
+      </div>
+      <aside className={css.setPrv} aria-label="Так видит клиент">
+        <div className={css.setPrvCap}><span>Так видит клиент</span><span className={css.setPrvAddr}>{props.app.slug ? `${props.app.slug}.scatta.ru` : props.app.name}</span></div>
+        <div className={css.setPhone}>
+          <div className={css.setPhoneIn}>
+            <div className={css.setPhoneHead}><span className={css.setPhoneMark}><ProtoIcon name="chat" size={12} /></span>{props.app.name}</div>
+            <h5>Напишите нам</h5>
+            <p className={css.quiet}>{policy ? `Первый ответ за ${slaDuration(policy.firstResponseMinutes.normal)}` : 'Ответим в рабочие часы'}</p>
+            <div className={css.setChips}>
+              {categories.filter(row => row.values[props.kit.category.active] === true).slice(0, 4).map((row, index) => <span key={row.id} data-on={index === 0 || undefined}>{textOf(row.values[props.kit.category.name])}</span>)}
+              {categories.some(row => row.values[props.kit.category.active] === true) ? null : <span>Тем пока нет</span>}
+            </div>
+            <div className={css.setBox}>Опишите вопрос</div>
+            <div className={css.setGo}>Отправить</div>
+          </div>
+        </div>
+      </aside>
+    </div>
     {open ? <CategoryDialog {...props} onClose={() => setOpen(false)} onMessage={setMessage} /> : null}
   </div>
 }

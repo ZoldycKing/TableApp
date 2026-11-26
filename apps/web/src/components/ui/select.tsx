@@ -8,7 +8,7 @@ import css from './ui.module.css'
 export type SelectOption = { value: string; label: string }
 
 export function Select({
-  label, value, options, onValue, placeholder = 'Выберите', disabled = false, name,
+  label, value, options, onValue, placeholder = 'Выберите', disabled = false, name, labelHidden = false,
 }: {
   label: string
   value: string
@@ -17,6 +17,8 @@ export function Select({
   placeholder?: string
   disabled?: boolean
   name?: string
+  /** The row next to the control already names it; the label stays for assistive tech only. */
+  labelHidden?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const root = useRef<HTMLDivElement>(null)
@@ -25,7 +27,7 @@ export function Select({
   const current = options.find(option => option.value === value)
   return (
     <div className={css.stack} ref={root}>
-      <span className={css.label} id={`${listId}-label`}>{label}</span>
+      <span className={labelHidden ? css.srOnly : css.label} id={`${listId}-label`}>{label}</span>
       <div className={css.anchor}>
         <button
           type="button"

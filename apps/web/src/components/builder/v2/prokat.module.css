@@ -11,15 +11,13 @@
 .daySummary div + div { border-left: 1px solid var(--sc-border-subtle, #ECECE8); }
 .daySummary small { color: var(--sc-text-3, #6E7076); font-size: 12px; }
 .daySummary b { display: block; font-family: var(--font-scatta-mono), ui-monospace, monospace; font-size: 22px; font-weight: 500; letter-spacing: -0.03em; }
-.dayLayout { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 12px; min-width: 0; min-height: 640px; }
-.dayColumns { display: grid; grid-template-columns: 72px minmax(0, 1fr); min-width: 0; }
+.dayLayout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; min-width: 0; min-height: 560px; align-items: start; }
+.dayLayout[data-open] { grid-template-columns: minmax(0, 1fr) minmax(220px, 280px); }
+.dayColumns { display: grid; grid-template-columns: 72px minmax(0, 1fr); min-width: 0; overflow: hidden; }
 .dayHours { position: relative; height: 560px; margin-top: 72px; overflow: visible; }
 .dayHours span { position: absolute; right: 8px; left: auto; transform: translateY(-50%); color: var(--sc-text-3, #6E7076); font-family: var(--font-scatta-mono), ui-monospace, monospace; font-size: 11px; white-space: nowrap; }
 .dayScroll { display: flex; gap: 8px; overflow-x: auto; min-width: 0; padding-bottom: 8px; }
-.dayColumn { flex: 0 0 168px; min-width: 0; }
-@container builder-app (max-width: 640px) {
-  .dayColumn { flex-basis: 78%; }
-}
+.dayColumn { flex: 0 0 168px; min-width: 168px; }
 .dayColumn header { display: grid; grid-template-columns: 22px minmax(0, 1fr); column-gap: 6px; align-items: center; min-height: 64px; }
 .dayColumn header strong, .dayColumn header small { overflow-wrap: anywhere; }
 .dayColumn header strong { font-size: 13px; font-weight: 550; }
@@ -53,6 +51,10 @@
   .dayLayout { grid-template-columns: 1fr; }
   .daySummary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dayDetail { border-left: 0; border-top: 1px solid var(--sc-border-subtle, #ECECE8); }
+  .settingsLayout { grid-template-columns: 1fr; }
+  .settingsLayout aside { position: static; }
+  .stepper { flex-direction: column; gap: 8px; }
+  .stepper li { flex: none; white-space: normal; overflow-wrap: anywhere; }
 }
 .phoneAdd {
   position: absolute; right: 16px; bottom: 196px; z-index: 6;
@@ -1837,7 +1839,7 @@
 .addField { display: flex; gap: 8px; margin-top: 8px; }
 .addField input { flex: 1; min-width: 0; height: 36px; padding: 0 10px; border: 1px solid var(--sc-border, #E3E3DF); border-radius: 8px; background: #fff; }
 .addField button { height: 36px; padding: 0 12px; border: 0; border-radius: 8px; background: var(--sc-text, #141516); color: #fff; }
-.root[data-prokat-screen='client-card'] { padding-bottom: 88px; }
+.root[data-prokat-screen='client-card'] { padding-bottom: calc(128px + env(safe-area-inset-bottom, 0px)); }
 .clientHero { display: flex; align-items: center; gap: 16px; padding: 4px 0 12px; }
 .clientStats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0; min-width: 0; }
 .clientStats div { min-width: 0; }
@@ -1850,7 +1852,7 @@
 .bookingDates .deadlineRow { grid-template-columns: minmax(0, 1fr); }
 .bookingForm .itemGrid { max-height: none; overflow: visible; }
 @container builder-app (max-width: 719px) {
-  .bookingForm { display: flex; flex-direction: column; }
+  .bookingForm { display: flex; flex-direction: column; padding-bottom: 132px; }
   .bookingDates { order: 2; }
 }
 @container builder-app (min-width: 720px) {

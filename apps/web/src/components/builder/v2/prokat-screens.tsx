@@ -7,8 +7,8 @@ import type { AppV2, AppV2Json, AppV2Node, AppV2Record } from '@tableapp/schema/
 import { catchUpPublishedProkatHolds, savePublishedProkatAction } from '@/app/prokat-actions'
 import { Avatar } from '@/components/ui/avatar'
 import { Checkbox, Switch } from '@/components/ui/choice'
-import { ruCount } from '@/components/ui/format'
-import { DateRangeField } from '@/components/ui/pickers'
+import { ruCount, ruPlural } from '@/components/ui/format'
+import { InlineRangeCalendar } from '@/components/ui/pickers'
 import { Select } from '@/components/ui/select'
 import { ProkatDayBoard } from './prokat-day-board'
 import type { ConversationPage } from '@/lib/conversation-types'
@@ -812,16 +812,20 @@ function SettingsScreen(props: ScreenProps) {
   const owner = props.actor.roleIds.includes('owner')
   const [holdMinutes, setHoldMinutes] = useState<ProkatHoldAfterStartMinutes>(() => prokatHoldMinutes(props.kit))
   useEffect(() => { setHoldMinutes(prokatHoldMinutes(props.kit)) }, [props.kit.holdAfterStartMinutes])
-  const [section, setSection] = useState<'hold' | 'client'>('hold')
+  const [section, setSection] = useState<'hold' | 'money' | 'client'>('hold')
+  const catalog = catalogItems(props)
   return <div className={css.root} data-prokat-root data-prokat-screen="settings">
     <ListScreenShell title="Настройки" meta="Правила, которые видит клиент.">
       <div className={css.settingsLayout}>
         <nav aria-label="Разделы настроек">
           <button type="button" aria-current={section === 'hold' ? 'page' : undefined} onClick={() => setSection('hold')}>Бронь</button>
+          <button type="button" aria-current={section === 'money' ? 'page' : undefined} onClick={() => setSection('money')}>Залог и штраф</button>
           <button type="button" aria-current={section === 'client' ? 'page' : undefined} onClick={() => setSection('client')}>Клиенту</button>
         </nav>
         <div>
-          {section === 'hold' ? (owner ? <DetailSection title="Удержание брони"><HoldSettingControl {...props} value={holdMinutes} onSaved={setHoldMinutes} /></DetailSection> : <p className={css.quiet}>Настройки меняет руководитель.</p>) : <DetailSection title="Что видно клиенту"><p>Каталог, срок и сумма. Подтверждение уходит в переписку, если оно включено в форме брони.</p></DetailSection>}
+          {section === 'hold' ? (owner ? <DetailSection title="Удержание брони"><HoldSettingControl {...props} value={holdMinutes} onSaved={setHoldMinutes} /><p className={css.quiet}>Окно общее. У предмета может быть своё — в карточке предмета.</p></DetailSection> : <p className={css.quiet}>Настройки меняет руководитель.</p>) : null}
+          {section === 'money' ? <DetailSection title="Залог и штраф по предметам"><ul className={css.noteList}>{catalog.map(item => <li key={item.id}><b>{item.name}</b><span>Залог {formatMoneyOrZero(item.deposit)} · {item.lateFeeMode || 'штраф по тарифу'}{item.lateFeeValue ? ` · ${item.lateFeeValue}` : ''}{item.lateFeeGraceHours ? ` · льгота ${ruCount(item.lateFeeGraceHours, 'час', 'часа', 'часов')}` : ''}</span></li>)}</ul></DetailSection> : null}
+          {section === 'client' ? <DetailSection title="Что видно клиенту"><p>Каталог, срок и сумма. Подтверждение уходит в переписку, если оно включено в форме брони.</p></DetailSection> : null}
         </div>
         <aside aria-label="Так видит клиент">
           <small>Так видит клиент</small>
@@ -1370,7 +1374,7 @@ function CreateDialog(props: ScreenProps & {
         </button>
       })}</div></fieldset>
       <div className={css.bookingDates}>
-        <DateRangeField label="Срок" from={fromDate} to={toDate} onChange={next => { setFromDate(next.from); setToDate(next.to) }} />
+        <InlineRangeCalendar from={fromDate} to={toDate} onChange={next => { setFromDate(next.from); setToDate(next.to) }} />
         <div className={css.deadlineRow}><TimeMenu value={fromTime} onValue={setFromTime} label="Время начала" /><TimeMenu value={toTime} onValue={setToTime} label="Время окончания" /></div>
         <p className={css.moneyRow}>Стоимость <strong>{formatMoneyOrZero(price)}</strong> · Залог <strong>{formatMoneyOrZero(deposit)}</strong></p>
         <Switch label="Отправить подтверждение" checked={confirm} onChecked={setConfirm} />
@@ -2275,7 +2279,7 @@ function ClientDirectory(props: ScreenProps) {
         <Select label="Сортировка" value={sort} onValue={setSort} options={[{ value: 'name', label: 'По имени' }, { value: 'sum', label: 'По сумме' }, { value: 'next', label: 'По следующему визиту' }]} />
       </div>
       {importNote ? <p role="status" className={css.quiet}>{importNote}</p> : null}
-      {picked.length ? <p className={css.clientBulk}>Выбрано {ruCount(picked.length, 'клиент', 'клиента', 'клиентов')}. <button type="button" onClick={() => props.onNavigate?.(MESSAGES_SCREEN)}>Написать</button><button type="button" onClick={() => props.onNavigate?.(props.kit.bookingsScreenId)}>Записать</button><button type="button" onClick={() => setPicked([])}>Снять выбор</button></p> : null}
+      {picked.length ? <p className={css.clientBulk}>{ruPlural(picked.length, 'Выбран', 'Выбрано', 'Выбрано')} {ruCount(picked.length, 'клиент', 'клиента', 'клиентов')}. <button type="button" onClick={() => props.onNavigate?.(MESSAGES_SCREEN)}>Написать</button><button type="button" onClick={() => props.onNavigate?.(props.kit.bookingsScreenId)}>Записать</button><button type="button" onClick={() => setPicked([])}>Снять выбор</button></p> : null}
       <div className={css.clientSplit}>
         <div className={css.clientTableWrap}>
           <table className={css.clientTable}>
@@ -2331,7 +2335,8 @@ function ClientDetail(props: ScreenProps) {
   const noShowCount = clientNotPickedUpCount(history)
   const sum = history.reduce((total, item) => total + item.price, 0)
   const average = history.length ? Math.round(sum / history.length) : 0
-  const open = [...history].sort((a, b) => Date.parse(b.from) - Date.parse(a.from)).find(item => ['Заявка', 'Подтверждена', 'Выдано', 'Просрочен возврат'].includes(item.status))
+  const openItems = history.filter(item => ['Заявка', 'Подтверждена', 'Выдано', 'Просрочен возврат'].includes(item.status))
+  const open = [...openItems].sort((a, b) => Date.parse(b.from) - Date.parse(a.from))[0]
   const steps = ['Заявка', 'Подтверждена', 'Выдано', 'Возвращено']
   const stepIndex = open ? Math.max(0, steps.indexOf(open.status === 'Просрочен возврат' ? 'Выдано' : open.status)) : -1
   const name = textOf(client.values[props.kit.client.name]) || 'Клиент'
@@ -2349,7 +2354,7 @@ function ClientDetail(props: ScreenProps) {
         { key: 'bookings', caption: 'Броней', value: String(history.length) },
         { key: 'avg', caption: 'Средний чек', value: formatMoney(average) },
         { key: 'sum', caption: 'Сумма', value: formatMoney(sum) },
-        { key: 'open', caption: 'Сейчас в работе', value: open ? open.title : 'нет' },
+        { key: 'open', caption: 'Сейчас в работе', value: String(openItems.length) },
       ]}
     >
       <div className={css.cardSplit}>

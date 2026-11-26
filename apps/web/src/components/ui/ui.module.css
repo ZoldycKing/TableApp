@@ -259,7 +259,7 @@
 .table tr:hover td { background: #F7F9FE; }
 .num { font-family: var(--font-scatta-mono), var(--sc-font-mono); font-variant-numeric: tabular-nums; }
 
-.calendar { width: min(320px, 80vw); }
+.calendar { width: min(100%, 360px); min-width: 260px; }
 .calHead { display: flex; align-items: center; justify-content: space-between; padding: 4px 4px 8px; }
 .calHead strong { font-weight: 500; font-size: 14px; text-transform: capitalize; }
 .week, .days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }

@@ -59,7 +59,7 @@ export function ProkatDayBoard({
       <div><small>Ждут</small><b>{waiting}</b></div>
       <div><small>Сумма</small><b>{formatMoney(sum)}</b></div>
     </div>
-    <div className={css.dayLayout}>
+    <div className={css.dayLayout} data-open={chosen ? true : undefined}>
       <div className={css.dayColumns}>
         <div className={css.dayHours} aria-hidden="true">
           {hours.map(minute => <span key={minute} style={{ top: `${((minute - DAY_START) / SPAN) * 100}%` }}>{String(Math.floor(minute / 60)).padStart(2, '0')}:00</span>)}
@@ -106,8 +106,7 @@ export function ProkatDayBoard({
           })}
         </div>
       </div>
-      <aside className={css.dayDetail} aria-label="Выбранная запись">
-        {chosen ? <>
+      {chosen ? <aside className={css.dayDetail} aria-label="Выбранная запись">
           <header>
             <Avatar id={chosen.clientEmail || chosen.id} size={36} />
             <div>
@@ -123,9 +122,9 @@ export function ProkatDayBoard({
             {chosen.statusReason ? <div><dt>Заметка</dt><dd>{chosen.statusReason}</dd></div> : null}
           </dl>
           <button type="button" className={css.primary} onClick={() => onOpen(chosen.id)}>Открыть запись</button>
-        </> : <p>Выберите запись в колонке, чтобы увидеть клиента, срок и сумму. Свободный час — «+ Свободно».</p>}
-        <p className={css.quiet}>{day.split('-').reverse().join('.')}</p>
-      </aside>
+          <p className={css.quiet}>{day.split('-').reverse().join('.')}</p>
+      </aside> : null}
     </div>
+    {chosen ? null : <p className={css.quiet}>Выберите запись в колонке. Свободный час — «+ Свободно».</p>}
   </div>
 }

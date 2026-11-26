@@ -4,6 +4,10 @@
 .settingsLayout nav button[aria-current='page'] { background: #fff; box-shadow: 0 0 0 1px rgba(20,21,22,.06); }
 .settingsLayout aside { display: grid; gap: 6px; padding: 12px; border-radius: 12px; background: #E7EEFA; }
 .settingsLayout aside span { justify-self: start; padding: 6px 12px; border-radius: 999px; background: #266DF0; color: #fff; }
+@container builder-app (max-width: 800px) {
+  .settingsLayout { grid-template-columns: 1fr; }
+  .settingsLayout aside { position: static; }
+}
 .root { display: grid; gap: 12px; min-width: 0; width: 100%; }
 .stack { display: grid; gap: 0; min-width: 0; padding: 0 0 8px; }
 .stack > .sample {

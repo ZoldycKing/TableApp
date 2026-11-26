@@ -106,7 +106,11 @@
 .previewStage { flex: 1; min-height: 0; overflow-y: auto; padding: 24px; }
 .previewStage[data-frame-scroll] { display: grid; grid-template-rows: minmax(0, 1fr); overflow: clip; }
 .surface { container-type: inline-size; width: 100%; max-width: 960px; min-height: 100%; margin-inline: auto; border: 1px solid var(--v2-line, #d4ddcc); border-radius: 16px; background: var(--v2-bg, #f8faf6); overflow: clip; }
-.previewStage[data-device="mobile"] .surface { max-width: 390px; margin-inline: auto; border-radius: 28px; box-shadow: 0 0 0 10px #141516; overflow: hidden; }
+.previewStage[data-device="mobile"] .surface { width: min(390px, 100%); max-width: 100%; margin-inline: auto; border-radius: 28px; box-shadow: 0 0 0 8px #141516; overflow: hidden; }
+@media (max-width: 780px) {
+  .previewStage { padding: 8px; }
+  .appearancePane { grid-template-columns: 1fr; padding: 16px; }
+}
 .palette { display: grid; gap: 6px; }
 .palette button { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 8px; padding: 8px; border: 1px solid var(--sc-border, #E3E3DF); border-radius: 10px; background: #fff; text-align: left; }
 .palette small { display: block; color: var(--sc-text-3, #6E7076); }

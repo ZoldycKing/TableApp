@@ -57,7 +57,7 @@ function goalFor(model: ReturnType<typeof prokatTemplateDemoModel>, view: string
   }
   if (view === 'items') return { ...base, screenId: kit.itemsScreenId, recordId: undefined }
   if (view === 'item') return { ...base, screenId: kit.itemScreenId, recordId: item('СУП-2001')?.id ?? item('ВЕЛ-1001')?.id }
-  if (view === 'timeline') return { ...base, screenId: kit.timelineScreenId, recordId: undefined }
+  if (view === 'timeline') return { ...base, who: 'owner' as const, screenId: kit.timelineScreenId, recordId: undefined }
   if (view === 'settings') return { ...base, who: 'owner' as const, screenId: kit.settingsScreenId ?? kit.bookingsScreenId, recordId: undefined }
   if (view === 'clients') return { ...base, who: 'owner' as const, screenId: kit.clientsScreenId, recordId: undefined }
   if (view === 'client-card') return { ...base, who: 'owner' as const, screenId: kit.clientScreenId, recordId: client('m.petrova@yandex.ru')?.id }

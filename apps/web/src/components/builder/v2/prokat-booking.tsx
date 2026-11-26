@@ -339,7 +339,8 @@ export function BookingModal({
   const [frame, setFrame] = useState<HTMLElement | null>(null)
   const phone = usePhone(phoneProp)
   useEffect(() => {
-    setFrame(marker.current?.closest('[data-navigation]') ?? marker.current?.closest('[data-app-frame]') ?? null)
+    // Cover header + tab bar: attach to the outer frame, not the scrolling body.
+    setFrame(marker.current?.closest('[data-app-frame]') ?? marker.current?.closest('[data-navigation]') ?? null)
   }, [])
   const selected = items.filter(item => itemIds.includes(item.id))
   const nights = daysBetween(fromDate, toDate) || (fromDate ? 1 : 0)

@@ -99,7 +99,25 @@
 .dayLog b { display: block; color: #2B2D30; font-size: 12.5px; font-weight: 500; }
 .dayLog span { font-family: var(--font-scatta-mono), ui-monospace, monospace; font-size: 11px; color: #6E7076; }
 .dayEmpty { margin: 0; color: #6E7076; font-size: 13px; }
-.cabinetBtn { display: inline-flex; align-items: center; height: 36px; padding: 0 15px; border: 0; border-radius: 999px; background: #141516; color: #fff; font-size: 14px; font-weight: 500; white-space: nowrap; }
+.cabinetBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  /* Beat layout-shell phone rule `.headerActions > button { flex: 1 }` — keep a compact black pill. */
+  flex: none !important;
+  width: auto !important;
+  max-width: none;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 15px;
+  border: 0;
+  border-radius: 999px;
+  background: #141516;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+}
 .dayBoard[data-phone] .daySummary b { font-size: 24px; }
 .dayBoard[data-phone] .daySummary i { display: block; margin: 2px 0 0; font-size: 12px; line-height: 1.3; }
 .dayBoard[data-phone] .dayPick { display: none; }

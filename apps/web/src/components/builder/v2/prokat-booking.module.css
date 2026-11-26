@@ -14,18 +14,23 @@
   --ok2: #E5F2EA;
   position: absolute;
   inset: 0;
-  z-index: 20;
+  z-index: 40;
   display: grid;
   place-items: center;
+  isolation: isolate;
   background: rgba(20, 21, 22, 0.34);
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
+  /* Keep both spellings — Lightning CSS has dropped the unprefixed form before. */
+  -webkit-backdrop-filter: blur(2px) saturate(1.1);
+  backdrop-filter: blur(2px) saturate(1.1);
   animation: fade 0.4s both;
   font-family: var(--font-scatta-sans), 'IBM Plex Sans', sans-serif;
   color: var(--ink);
+  pointer-events: auto;
 }
 .root[data-phone] {
   background: rgba(20, 21, 22, 0.38);
+  -webkit-backdrop-filter: blur(2px) saturate(1.1);
+  backdrop-filter: blur(2px) saturate(1.1);
 }
 :where(.root) button {
   font: inherit;

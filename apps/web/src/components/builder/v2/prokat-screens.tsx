@@ -976,7 +976,7 @@ function BookingList(props: ScreenProps) {
     <ListScreenShell
       title="Брони"
       meta="Выдача, возврат и заявки на прокат."
-      actions={desk ? <button type="button" className={css.primary} onClick={() => setCreateOpen(true)}>Новая бронь</button> : undefined}
+      actions={desk ? <button type="button" className={css.cabinetBtn} onClick={() => setCreateOpen(true)}>+ Новая бронь</button> : undefined}
     >
       <div className={css.toolbar}><ShellSearchField value={search} onChange={setSearch} placeholder="Поиск по номеру, клиенту, предмету" aria-label="Поиск броней" /></div>
       <div className={css.chips} role="tablist" aria-label="Представления броней">

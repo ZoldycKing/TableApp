@@ -11,13 +11,16 @@ import { PrototypeDialog } from './dialog'
 import { ProtoIcon } from './icons'
 import { PrototypeInspector } from './inspector'
 import { PrototypeWorkflows } from './workflows'
-import { addBlock, cloneBlock, executeFlow, FIELDS, findBlock, KINDS, makeBlock, moveBlock, PEOPLE, removeBlock, reorderBlocks, restorePrototype, SOURCES, STATUSES, STORAGE_KEY, uid, visibleRows, type Block, type Data, type Document, type Kind, type Page, type Prototype, type Row, type Source } from './model'
+import { addBlock, cloneBlock, executeFlow, FIELDS, findBlock, KINDS, makeBlock, moveBlock, PEOPLE, removeBlock, restorePrototype, SOURCES, STATUSES, STORAGE_KEY, uid, visibleRows, type Block, type Column, type Data, type Document, type Kind, type Page, type Prototype, type Row, type Source } from './model'
 import styles from './prototype.module.css'
 
 type History = { past: Document[]; present: Document; future: Document[] }
 type Panel = 'screens' | 'canvas' | 'properties'
 type Modal = { type: 'library'; parent: string | null } | { type: 'page' } | { type: 'delete-page' } | null
 const countBlocks = (items: Block[]): number => items.reduce((sum, block) => sum + 1 + countBlocks(block.children), 0)
+const FIELD_ICONS: Record<Column, string> = { title: 'text', status: 'list', assignee: 'user', amount: 'wallet', note: 'text' }
+const FIELD_TYPES: Record<Column, string> = { title: 'текст', status: 'варианты', assignee: 'из «Команды»', amount: 'деньги', note: 'текст' }
+const fieldWord = (count: number) => count % 10 === 1 && count % 100 !== 11 ? 'поле' : count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 12 || count % 100 > 14) ? 'поля' : 'полей'
 
 function DataPanel({ data, onData }: { data: Data; onData: (data: Data) => void }) {
   const [source, setSource] = useState<Source | 'history'>('requests')
@@ -30,7 +33,7 @@ function DataPanel({ data, onData }: { data: Data; onData: (data: Data) => void 
   return <div className={styles.dataWorkspace}><aside className={styles.sidebar}><div className={styles.panelHeading}><h2>Таблицы</h2></div>{[...Object.entries(SOURCES), ['history', 'История']].map(([id, name]) => <button key={id} type="button" className={styles.treePage} aria-current={id === source ? 'true' : undefined} onClick={() => setSource(id as Source | 'history')}><ProtoIcon name="table" /><span>{name}</span><small>{id === 'history' ? data.history.length : data.rows[id as Source].length}</small></button>)}</aside>
     <main id="builder-main" className={styles.dataMain}><header className={styles.dataHeading}><div><span className={styles.overline}>Проверочные таблицы</span><h1>{source === 'history' ? 'История' : SOURCES[source]}</h1></div><span>Изменения видны в приложении</span></header><div className={styles.dataTableScroll}>
       {source === 'history' ? <table className={styles.dataTable}><thead><tr><th>Запись</th><th>Событие</th></tr></thead><tbody>{data.history.map(item => <tr key={item.id}><td>{item.title}</td><td>{item.text}</td></tr>)}</tbody></table> : <table className={styles.dataTable}><thead><tr>{Object.values(FIELDS).map(field => <th key={field}>{field}</th>)}</tr></thead><tbody>{data.rows[source].map(row => <tr key={row.id}>{(Object.keys(FIELDS) as (keyof typeof FIELDS)[]).map(field => <td key={field}>{field === 'status' || field === 'assignee' ? <select aria-label={`${FIELDS[field]}: ${row.title}`} value={row[field]} onChange={event => change(row.id, field, event.target.value)}>{(field === 'status' ? STATUSES : PEOPLE).map(value => <option key={value}>{value}</option>)}</select> : <input aria-label={`${FIELDS[field]}: ${row.title}`} value={row[field]} type={field === 'amount' ? 'number' : 'text'} onChange={event => change(row.id, field, event.target.value)} />}</td>)}</tr>)}</tbody></table>}
-    </div>{source === 'history' && !data.history.length && <div className={styles.historyEmpty}><span className={styles.elementMark}><ProtoIcon name="action" size={24} /></span><h2>История появится после действия</h2><p>В режиме «Попробовать» откройте заявку и нажмите «Завершить заявку».</p></div>}</main></div>
+    </div>{source === 'history' && !data.history.length && <div className={styles.historyEmpty}><span className={styles.elementMark}><ProtoIcon name="action" size={24} /></span><h2>История появится после действия</h2><p>В режиме «Предпросмотр» откройте заявку и нажмите «Завершить заявку».</p></div>}</main></div>
 }
 
 function NewPage({ onCreate }: { onCreate: (name: string, preset: string) => void }) {
@@ -46,11 +49,12 @@ export function PrototypeEditor({ initial }: { initial: Prototype }) {
   const [pageId, setPageId] = useState(initial.document.home), [selectedId, setSelectedId] = useState<string | null>(null)
   const [flowId, setFlowId] = useState('complete'), [device, setDevice] = useState<'desktop' | 'mobile'>('desktop')
   const [editing, setEditing] = useState(true), [role, setRole] = useState<'owner' | 'staff'>('owner'), [rowId, setRowId] = useState('request-1')
-  const [rowSource, setRowSource] = useState<Source | null>(null)
+  const [rowSource, setRowSource] = useState<Source | null>(null), [dragKind, setDragKind] = useState<Kind | null>(null)
   const [panel, setPanel] = useState<Panel>('canvas'), [modal, setModal] = useState<Modal>(null), [search, setSearch] = useState('')
   const [notice, setNotice] = useState(''), [error, setError] = useState(''), [ready, setReady] = useState(false), [save, setSave] = useState('Загружаем прототип…')
   const page = document.pages.find(item => item.id === pageId) ?? document.pages[0]!
   const selected = selectedId ? findBlock(page.blocks, selectedId) : undefined
+  const entitySource: Source = selected?.source ?? 'requests'
   const update = (next: Document) => setHistory(current => ({ past: [...current.past.slice(-39), current.present], present: next, future: [] }))
   const undo = () => setHistory(current => current.past.length ? { past: current.past.slice(0, -1), present: current.past.at(-1)!, future: [current.present, ...current.future] } : current)
   const redo = () => setHistory(current => current.future.length ? { past: [...current.past, current.present], present: current.future[0]!, future: current.future.slice(1) } : current)
@@ -73,7 +77,7 @@ export function PrototypeEditor({ initial }: { initial: Prototype }) {
   useEffect(() => {
     if (!ready) return
     setSave('Сохраняем в браузере…')
-    const persist = () => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 1, document, data })); const clock = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }); setSave(`Черновик · Сохранено в ${clock}`) } catch { setSave('Не удалось сохранить в браузере') } }
+    const persist = () => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 1, document, data })); const clock = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }); setSave(`Сохранено в ${clock}`) } catch { setSave('Не удалось сохранить в браузере') } }
     const timer = setTimeout(persist, 300)
     window.addEventListener('pagehide', persist)
     return () => { clearTimeout(timer); window.removeEventListener('pagehide', persist) }
@@ -128,11 +132,29 @@ export function PrototypeEditor({ initial }: { initial: Prototype }) {
     update({ ...document, pages, home: document.home === page.id ? pages[0]!.id : document.home })
     setPageId(pages[0]!.id); setSelectedId(null); setModal(null)
   }
+  const toggleEditing = () => { setEditing(!editing); setTab('screens'); setPanel('canvas'); setError(''); setNotice('') }
 
   return <div className={styles.editor}>
     <a href="#builder-main" className={styles.skip}>Перейти к рабочей области</a>
-    <header className={styles.header}><div className={styles.brandArea}><Link href="/apps" prefetch={false} aria-label="К приложениям" className={styles.brand}><Logo /></Link><span className={styles.headerDivider} /><input aria-label="Название приложения" value={document.name} placeholder="Моё приложение" onChange={event => update({ ...document, name: event.target.value })} /><span className={styles.prototypeLabel}>Прототип</span></div><div className={styles.headerActions}><span className={styles.saveState} role="status">{save}</span><div className={styles.undoGroup}><button type="button" aria-label="Отменить изменение" title="Отменить изменение" className={styles.iconButton} disabled={!history.past.length} onClick={undo}><ProtoIcon name="undo" /></button><button type="button" aria-label="Повторить изменение" title="Повторить изменение" className={styles.iconButton} disabled={!history.future.length} onClick={redo}><ProtoIcon name="redo" /></button></div><button type="button" className={editing ? styles.primary : styles.secondary} onClick={() => { setEditing(!editing); setTab('screens'); setPanel('canvas'); setError(''); setNotice('') }}>{editing ? <><ProtoIcon name="arrow" size={16} />Попробовать</> : <><ProtoIcon name="back" size={16} />К редактору</>}</button></div></header>
-    <nav className={styles.mainNav} aria-label="Конструктор">{([['data', 'Данные', 'table'], ['screens', 'Экраны', 'apps'], ['appearance', 'Оформление', 'action']] as const).map(([id, name, icon]) => <button type="button" key={id} aria-current={tab === id ? 'page' : undefined} onClick={() => { setTab(id); setError(''); setNotice('') }}><ProtoIcon name={icon} /><span>{name}</span></button>)}</nav>
+    <header className={styles.header}>
+      <div className={styles.brandArea}>
+        <Link href="/apps" prefetch={false} aria-label="К приложениям" className={styles.brand}><Logo height={16} /></Link>
+        <span className={styles.headerDivider} />
+        <label className={styles.studioName}><input aria-label="Название приложения" value={document.name} placeholder="Моё приложение" onChange={event => update({ ...document, name: event.target.value })} /><ProtoIcon name="down" size={14} /></label>
+        <span className={styles.draftTag}>Черновик</span>
+        <span className={styles.saveState} role="status" data-ok={save.startsWith('Сохранено') ? 'true' : undefined}>{save}</span>
+      </div>
+      <nav className={styles.modeSeg} aria-label="Конструктор">{([['data', 'Данные', 'table'], ['screens', 'Экраны', 'apps'], ['appearance', 'Оформление', 'action']] as const).map(([id, name, icon]) => <button type="button" key={id} aria-current={tab === id ? 'page' : undefined} onClick={() => { setTab(id); setError(''); setNotice('') }}><ProtoIcon name={icon} size={16} /><span>{name}</span></button>)}</nav>
+      <div className={styles.headerActions}>
+        <div className={styles.undoGroup}>
+          <button type="button" aria-label="Отменить изменение" title="Отменить изменение" className={styles.iconButton} disabled={!history.past.length} onClick={undo}><ProtoIcon name="undo" size={16} /></button>
+          <button type="button" aria-label="Повторить изменение" title="Повторить изменение" className={styles.iconButton} disabled={!history.future.length} onClick={redo}><ProtoIcon name="redo" size={16} /></button>
+        </div>
+        <div className={styles.deviceToggle} role="group" aria-label="Размер приложения"><button type="button" aria-label="Компьютер" title="Компьютер" aria-pressed={device === 'desktop'} onClick={() => setDevice('desktop')}><ProtoIcon name="desktop" size={16} /></button><button type="button" aria-label="Телефон" title="Телефон" aria-pressed={device === 'mobile'} onClick={() => setDevice('mobile')}><ProtoIcon name="phone" size={16} /></button></div>
+        <button type="button" className={styles.outlineButton} onClick={toggleEditing}><ProtoIcon name={editing ? 'eye' : 'back'} size={16} /><span>{editing ? 'Предпросмотр' : 'К редактору'}</span></button>
+        <button type="button" className={styles.publishButton} onClick={() => { setError(''); setNotice('Публикация пока недоступна. Прототип сохраняется в этом браузере.') }}>Опубликовать</button>
+      </div>
+    </header>
     {(notice || error) && <div className={error ? styles.errorBanner : styles.noticeBanner} role={error ? 'alert' : 'status'}><ProtoIcon name={error ? 'action' : 'check'} /><span>{error || notice}</span><button type="button" className={styles.iconButton} aria-label="Закрыть сообщение" onClick={() => { setNotice(''); setError('') }}><ProtoIcon name="close" size={16} /></button></div>}
     {tab === 'data' ? <DataPanel data={data} onData={setData} /> : tab === 'appearance' ? <main id="builder-main" className={styles.appearancePane}><section><h2>Оформление</h2><label>Название экрана<input aria-label="Название экрана" value={page.name} onChange={event => updatePage({ name: event.target.value })} /></label><p>Акцент кабинета #266DF0. Логотип и обложка задаются у опубликованного приложения, в этом прототипе их нет.</p><Checkbox label="Показывать экран в меню" checked={page.navigation !== false} onChecked={checked => updatePage({ navigation: checked })} /></section><aside aria-label="Так видит клиент"><small>Так видит клиент</small><div className={styles.phoneFrame}><header>{document.name || 'Приложение'}</header><strong>{page.name || 'Запись'}</strong><p>Дата, время и сумма на одном экране.</p><span>Записаться</span></div></aside></main> : tab === 'actions' ? <PrototypeWorkflows document={document} flowId={flowId} onSelect={setFlowId} onUpdate={flow => update({ ...document, flows: document.flows.map(item => item.id === flow.id ? flow : item) })} onCreate={() => {
       if (document.flows.length >= 50) { setError('В прототипе доступно до 50 действий.'); return }
@@ -140,17 +162,35 @@ export function PrototypeEditor({ initial }: { initial: Prototype }) {
     }} /> : <>
       {editing && <nav className={styles.mobilePanels} aria-label="Панели редактора">{([['screens', 'Поля'], ['canvas', 'Экран'], ['properties', 'Свойства']] as const).map(([id, title]) => <button type="button" key={id} aria-current={panel === id ? 'page' : undefined} onClick={() => setPanel(id)}>{title}</button>)}</nav>}
       <div className={styles.workspace} data-panel={panel} data-editing={editing}>
-        {editing && <aside className={styles.sidebar} data-area="screens"><div className={styles.panelHeading}><h2>Экраны</h2><button type="button" className={styles.iconButton} aria-label="Добавить экран" onClick={() => setModal({ type: 'page' })}><ProtoIcon name="plus" /></button></div>
-          <div className={styles.pageList}>{document.pages.map(item => <button type="button" key={item.id} className={styles.treePage} aria-current={item.id === page.id ? 'true' : undefined} onClick={() => pickPage(item.id)}><ProtoIcon name={item.icon} /><span>{item.name || 'Без названия'}</span>{document.home === item.id && <span title="Стартовый экран" className={styles.homeMark}><ProtoIcon name="home" size={12} /></span>}</button>)}</div>
-          <div className={styles.panelHeading}><h2>Поля</h2></div>
-          <p className={styles.help}>Перетащите на экран</p>
-          <div className={styles.palette}>{Object.entries(KINDS).map(([kind, value]) => <button key={kind} type="button" draggable onDragStart={event => { event.dataTransfer.setData('text/plain', kind); event.dataTransfer.effectAllowed = 'copy' }} onClick={() => addElement(kind as Kind)}><ProtoIcon name={value.icon} size={16} /><span><strong>{value.name}</strong><small>{value.hint}</small></span></button>)}</div>
+        {editing && <aside className={styles.sidebar} data-area="screens">
+          <div className={styles.panelHeading}><h2>Поля записи</h2><span>{Object.keys(FIELDS).length} {fieldWord(Object.keys(FIELDS).length)}</span></div>
+          <div className={styles.entityCard}><span className={styles.entityMark}><ProtoIcon name="table" size={16} /></span><span><strong>{SOURCES[entitySource]}</strong><small>что хранится в каждой записи</small></span></div>
+          <div className={styles.fieldRows}>{(Object.keys(FIELDS) as Column[]).map(field => <div key={field} className={styles.fieldRow} data-active={selected?.kind === 'metric' && selected.metric === 'sum' && field === 'amount' ? 'true' : undefined}><span className={styles.fieldIcon}><ProtoIcon name={FIELD_ICONS[field]} size={14} /></span><span>{FIELDS[field]}</span><small>{FIELD_TYPES[field]}</small></div>)}</div>
+          <button type="button" className={styles.addField} disabled title="Поля задаются таблицей">+ Добавить поле</button>
+          <div className={styles.panelHeading}><h2>Блоки экрана</h2><span>перетащите</span></div>
+          <div className={styles.palette}>{Object.entries(KINDS).map(([kind, value]) => <button key={kind} type="button" draggable onDragStart={event => { event.dataTransfer.setData('text/plain', kind); event.dataTransfer.effectAllowed = 'copy'; setDragKind(kind as Kind) }} onDragEnd={() => setDragKind(null)} onClick={() => addElement(kind as Kind)} title={value.hint}><ProtoIcon name={value.icon} size={16} /><span>{value.name}</span></button>)}</div>
         </aside>}
-        <main id="builder-main" className={styles.canvasMain} data-area="canvas"><div className={styles.previewToolbar}><span className={styles.modeCaption}>{editing ? 'Редактирование' : 'Проверка приложения'}</span><div className={styles.deviceToggle} role="group" aria-label="Размер приложения"><button type="button" aria-label="Компьютер" aria-pressed={device === 'desktop'} onClick={() => setDevice('desktop')}><ProtoIcon name="desktop" /><span>Компьютер</span></button><button type="button" aria-label="Телефон" aria-pressed={device === 'mobile'} onClick={() => setDevice('mobile')}><ProtoIcon name="phone" /><span>Телефон</span></button></div>{!editing && <Select label="Смотреть как" value={role} onValue={value => setRole(value as typeof role)} options={[{ value: 'owner', label: 'Владелец' }, { value: 'staff', label: 'Сотрудник' }]} />}</div>
-          <div className={styles.previewStage} data-device="mobile" onDragOver={event => event.preventDefault()} onDrop={event => { const kind = event.dataTransfer.getData('text/plain'); if (kind in KINDS) addElement(kind as Kind) }}><div className={styles.surface}><header className={styles.appHeader}><div><span>{document.name || 'Моё приложение'}</span><strong>{page.name || 'Новый экран'}</strong></div><span className={styles.avatar}><Avatar id={document.name || 'preview'} size={32} /></span></header><div className={styles.appContent}><PrototypeCanvas document={document} data={data} blocks={page.blocks} editing={editing} selected={selectedId} rowId={rowId} role={editing ? 'owner' : role} recordSource={rowSource} onSelect={pickBlock} onOpen={(id, row, source) => { if (document.pages.some(item => item.id === id)) { setPageId(id); setRowId(row); setRowSource(source) } else setError('Выберите существующий экран в свойствах списка.') }} onRun={run} onAdd={openLibrary} /></div><nav className={styles.appNavigation} aria-label="Экраны приложения">{document.pages.filter(item => item.navigation !== false).map(item => <button type="button" key={item.id} aria-current={page.id === item.id ? 'page' : undefined} onClick={() => pickPage(item.id)}><ProtoIcon name={item.icon} /><span>{item.name || 'Новый экран'}</span></button>)}</nav></div></div>
+        <main id="builder-main" className={styles.canvasMain} data-area="canvas">
+          <div className={styles.canvasTop}>
+            <span className={styles.modeCaption}>{editing ? `Экран «${page.name || 'Новый экран'}» — так его видит клиент` : 'Проверка приложения'}</span>
+            <div className={styles.pageSeg} role="group" aria-label="Экраны">{document.pages.map(item => <button type="button" key={item.id} aria-current={item.id === page.id ? 'true' : undefined} onClick={() => pickPage(item.id)}>{item.name || 'Без названия'}</button>)}<button type="button" className={styles.segAdd} aria-label="Добавить экран" title="Добавить экран" onClick={() => setModal({ type: 'page' })}><ProtoIcon name="plus" size={14} /></button></div>
+            {!editing && <Select label="Смотреть как" value={role} onValue={value => setRole(value as typeof role)} options={[{ value: 'owner', label: 'Владелец' }, { value: 'staff', label: 'Сотрудник' }]} />}
+          </div>
+          <div className={styles.stage} data-device={device} onDragOver={event => { if (editing) event.preventDefault() }} onDragLeave={() => setDragKind(null)} onDrop={event => { const kind = event.dataTransfer.getData('text/plain'); setDragKind(null); if (kind in KINDS) addElement(kind as Kind) }}>
+            <div className={styles.device} data-device={device}>
+              <header className={styles.devBar}><span>{document.name || 'Моё приложение'}</span><Avatar id={document.name || 'preview'} size={26} /></header>
+              <div className={styles.devBody}>
+                <PrototypeCanvas document={document} data={data} blocks={page.blocks} editing={editing} selected={selectedId} rowId={rowId} role={editing ? 'owner' : role} recordSource={rowSource} onSelect={pickBlock} onOpen={(id, row, source) => { if (document.pages.some(item => item.id === id)) { setPageId(id); setRowId(row); setRowSource(source) } else setError('Выберите существующий экран в свойствах списка.') }} onRun={run} onAdd={openLibrary} />
+                {editing && dragKind && <div className={styles.dropLine}><span>+ Отпустите, чтобы добавить «{KINDS[dragKind].name}»</span></div>}
+              </div>
+              <nav className={styles.appNavigation} aria-label="Экраны приложения">{document.pages.filter(item => item.navigation !== false).map(item => <button type="button" key={item.id} aria-current={page.id === item.id ? 'page' : undefined} onClick={() => pickPage(item.id)}><ProtoIcon name={item.icon} size={16} /><span>{item.name || 'Новый экран'}</span></button>)}</nav>
+            </div>
+          </div>
+          {editing && <p className={styles.stageHint}>Нажмите элемент, чтобы настроить его. Новые элементы добавляются в конец экрана.</p>}
         </main>
-        {editing && <aside className={styles.properties} data-area="properties"><div className={styles.panelHeading}><h2>Свойства</h2><button type="button" className={styles.mobileBack} onClick={() => setPanel('canvas')}><ProtoIcon name="back" size={16} />К приложению</button></div><PrototypeInspector document={document} page={page} block={selected} onBlock={patch => { if (selected) updatePage({ blocks: updateBlockAt(page.blocks, selected.id, patch) }) }} onPage={updatePage} onHome={() => update({ ...document, home: page.id })} onActions={id => { setFlowId(id); setTab('actions') }} onDuplicate={duplicate} onDelete={() => { if (selected) { updatePage({ blocks: removeBlock(page.blocks, selected.id) }); setSelectedId(null) } }} onMove={delta => { if (selected) updatePage({ blocks: moveBlock(page.blocks, selected.id, delta) }) }} />
-          {!selected && <div className={styles.pageTools}><button type="button" className={styles.textButton} disabled={document.pages.length < 2} onClick={() => setModal({ type: 'delete-page' })}><ProtoIcon name="trash" size={16} />Удалить экран</button></div>}
+        {editing && <aside className={styles.properties} data-area="properties"><div className={styles.panelHeading}><h2>Свойства</h2><button type="button" className={styles.mobileBack} onClick={() => setPanel('canvas')}><ProtoIcon name="back" size={16} />К приложению</button></div>
+          <PrototypeInspector document={document} page={page} block={selected} onBlock={patch => { if (selected) updatePage({ blocks: updateBlockAt(page.blocks, selected.id, patch) }) }} onPage={updatePage} onHome={() => update({ ...document, home: page.id })} onActions={id => { setFlowId(id); setTab('actions') }} onDuplicate={duplicate} onDelete={() => { if (selected) { updatePage({ blocks: removeBlock(page.blocks, selected.id) }); setSelectedId(null) } }} onMove={delta => { if (selected) updatePage({ blocks: moveBlock(page.blocks, selected.id, delta) }) }} />
+          {!selected && <div className={styles.pageTools}><button type="button" className={styles.dangerText} disabled={document.pages.length < 2} onClick={() => setModal({ type: 'delete-page' })}><ProtoIcon name="trash" size={16} />Удалить экран</button></div>}
         </aside>}
       </div>
     </>}

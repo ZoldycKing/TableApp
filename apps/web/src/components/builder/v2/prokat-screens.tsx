@@ -1333,7 +1333,7 @@ function CreateDialog(props: ScreenProps & {
   const clientRow = clients.find(row => row.id === clientId)
   const clientEmail = textOf(clientRow?.values[props.kit.client.email]).toLowerCase()
   const visits = bookingItems(props).filter(item => item.clientEmail.toLowerCase() === clientEmail && clientEmail).length
-  return <AppDialog title="Новая бронь" placement="center" onClose={props.onClose} footer={<div className={css.bookingFoot}><span>{formatMoney(price)} · залог {formatMoney(deposit)}</span><Switch label="Отправить подтверждение" checked={confirm} onChecked={setConfirm} /><button type="button" className={css.quietButton} onClick={props.onClose}>Отмена</button><button type="submit" form={formId} className={css.primary} disabled={busy}>{busy ? 'Сохраняем…' : 'Создать бронь'}</button></div>}>
+  return <AppDialog title="Новая бронь" placement="center" onClose={props.onClose} footer={<div className={css.bookingFoot}><span>{formatMoney(price)} · залог {formatMoney(deposit)}</span><button type="button" className={css.quietButton} onClick={props.onClose}>Отмена</button><button type="submit" form={formId} className={css.primary} disabled={busy}>{busy ? 'Сохраняем…' : 'Создать бронь'}</button></div>}>
     <form id={formId} className={css.bookingForm} onSubmit={event => { event.preventDefault(); void save() }}>
       <div>
         <ProkatSelect field label="Клиент" value={clientId} options={clients.map(row => ({ id: row.id, name: textOf(row.values[props.kit.client.name]) || 'Без имени' }))} onChange={setClientId} />
@@ -1352,6 +1352,7 @@ function CreateDialog(props: ScreenProps & {
         <div className={css.field}><span>С</span><div className={css.deadlineRow}><DateMenu value={fromDate} onValue={setFromDate} label="Дата начала" /><TimeMenu value={fromTime} onValue={setFromTime} label="Время начала" /></div></div>
         <div className={css.field}><span>По</span><div className={css.deadlineRow}><DateMenu value={toDate} onValue={setToDate} label="Дата окончания" /><TimeMenu value={toTime} onValue={setToTime} label="Время окончания" /></div></div>
         <p className={css.moneyRow}>Стоимость <strong>{formatMoney(price)}</strong> · Залог <strong>{formatMoney(deposit)}</strong></p>
+        <Switch label="Отправить подтверждение" checked={confirm} onChecked={setConfirm} />
       </div>
       {error ? <p className={css.error} role="alert">{error}</p> : null}
     </form>

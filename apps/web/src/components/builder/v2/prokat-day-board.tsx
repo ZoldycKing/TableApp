@@ -65,7 +65,7 @@ export function ProkatDayBoard({
           {hours.map(minute => <span key={minute}>{String(Math.floor(minute / 60)).padStart(2, '0')}:00</span>)}
         </div>
         <div className={css.dayScroll}>
-          {columns.map(item => {
+          {columns.map((item, index) => {
             const mine = active.filter(booking => booking.itemIds.includes(item.id))
             const blocks = mine.map(booking => {
               const start = dayKey(booking.from) < day ? DAY_START : Math.max(DAY_START, minutes(booking.from) ?? DAY_START)
@@ -81,7 +81,7 @@ export function ProkatDayBoard({
               </header>
               <div className={css.dayTrack}>
                 {nowMinutes != null && nowMinutes >= DAY_START && nowMinutes <= DAY_END ? (
-                  <i className={css.dayNow} style={{ top: `${((nowMinutes - DAY_START) / SPAN) * 100}%` }}><b>сейчас</b></i>
+                  <i className={css.dayNow} style={{ top: `${((nowMinutes - DAY_START) / SPAN) * 100}%` }}>{index === 0 ? <b>сейчас</b> : null}</i>
                 ) : null}
                 {blocks.map(block => (
                   <button

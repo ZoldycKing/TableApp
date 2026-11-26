@@ -58,7 +58,19 @@
 .field:disabled { background: var(--sc-bg-surface); color: var(--sc-text-3); }
 .mono { font-family: var(--font-scatta-mono), var(--sc-font-mono); font-variant-numeric: tabular-nums; }
 
-.anchor { position: relative; min-width: 0; }
+.anchor { position: relative; display: flex; align-items: center; gap: 4px; min-width: 0; }
+.anchor > .trigger { flex: 1; min-width: 0; }
+.valueSink {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
 .trigger {
   display: flex;
   align-items: center;

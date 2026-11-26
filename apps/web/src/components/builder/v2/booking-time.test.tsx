@@ -39,7 +39,7 @@ describe('calendar and client context in a new booking', () => {
     expect(screen.queryByText('Когда вам удобно?')).toBeNull()
     expect(screen.queryByLabelText('Дата записи')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Изменить' }))
-    expect(screen.getByRole('button', { name: 'Дата записи' }).textContent).toContain('20.11.2026')
+    expect((screen.getByLabelText('Дата записи') as HTMLInputElement).value).toBe('20.11.2026')
     expect(document.querySelector('input[type="date"]')).toBeNull()
     expect((screen.getByLabelText('Мастер') as HTMLSelectElement).value).toBe('master_olya')
   })

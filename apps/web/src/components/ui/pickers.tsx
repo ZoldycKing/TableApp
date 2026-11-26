@@ -93,24 +93,50 @@ export function DateField({
   className?: string
 }) {
   const [open, setOpen] = useState(false)
+  const [draft, setDraft] = useState<string | null>(null)
   const root = useRef<HTMLDivElement>(null)
   const listId = useId()
   const [cursor, setCursor] = useCursor(value)
   useDismiss(open, root, () => setOpen(false))
   const text = formatRuDate(value)
+  const shown = draft ?? text
+  const commit = (raw: string) => {
+    const match = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(raw)
+    if (!match) return false
+    const iso = `${match[3]}-${match[2]}-${match[1]}`
+    const parsed = parseIsoDate(iso)
+    if (!parsed || toIsoDate(parsed) !== iso) return false
+    setDraft(null)
+    if (iso !== value) onValue(iso)
+    return true
+  }
   return (
     <div className={`${css.stack} ${className ?? ''}`} ref={root}>
       <span className={css.label} id={`${listId}-label`}>{label}</span>
       <div className={css.anchor}>
-        <button
+        <input
           id={id}
-          type="button"
           className={`${css.trigger} ${css.mono}`}
-          data-empty={text ? undefined : true}
+          type="text"
+          inputMode="numeric"
+          autoComplete="off"
+          aria-labelledby={`${listId}-label`}
+          aria-required={required || undefined}
+          disabled={disabled}
+          placeholder={placeholder === 'Дата' ? 'дд.мм.гггг' : placeholder}
+          value={shown}
+          onChange={event => {
+            const raw = event.target.value
+            if (!commit(raw)) setDraft(raw)
+          }}
+          onBlur={() => setDraft(null)}
+        />
+        <button
+          type="button"
+          className={css.iconButton}
           aria-haspopup="dialog"
           aria-expanded={open}
-          aria-required={required || undefined}
-          aria-labelledby={`${listId}-label`}
+          aria-label={`Открыть календарь: ${label}`}
           disabled={disabled}
           onClick={() => {
             const parsed = parseIsoDate(value)
@@ -118,12 +144,12 @@ export function DateField({
             setOpen(current => !current)
           }}
         >
-          {text || placeholder}
+          <span aria-hidden>▾</span>
         </button>
-        {name ? <input type="hidden" name={name} value={value} /> : null}
+        <input type="hidden" name={name} value={value} />
         {open ? (
           <div className={css.panel} role="dialog" aria-label={label}>
-            <Calendar cursor={cursor} onCursor={setCursor} selected={value ? [value] : []} min={min} max={max} onPick={iso => { onValue(iso); setOpen(false) }} />
+            <Calendar cursor={cursor} onCursor={setCursor} selected={value ? [value] : []} min={min} max={max} onPick={iso => { setDraft(null); onValue(iso); setOpen(false) }} />
           </div>
         ) : null}
       </div>
@@ -200,10 +226,33 @@ export function TimeField({
     <div className={`${css.stack} ${className ?? ''}`} ref={root}>
       <span className={css.label}>{label}</span>
       <div className={css.anchor}>
-        <button id={id} type="button" className={`${css.trigger} ${css.mono}`} data-empty={text ? undefined : true} aria-expanded={open} aria-haspopup="dialog" disabled={disabled} onClick={() => setOpen(current => !current)}>
+        <button
+          type="button"
+          className={`${css.trigger} ${css.mono}`}
+          data-empty={text ? undefined : true}
+          aria-expanded={open}
+          aria-haspopup="dialog"
+          aria-label={`Время, ${label}`}
+          disabled={disabled}
+          onClick={() => setOpen(current => !current)}
+        >
           {text || 'Время'}
         </button>
-        {name ? <input type="hidden" name={name} value={value} /> : null}
+        <input
+          id={id}
+          className={css.valueSink}
+          type="text"
+          inputMode="numeric"
+          autoComplete="off"
+          aria-label={label}
+          disabled={disabled}
+          name={name}
+          value={value}
+          onChange={event => {
+            const next = event.target.value
+            if (/^\d{2}:\d{2}$/.test(next)) onValue(next)
+          }}
+        />
         {open ? (
           <div className={css.panel} role="dialog" aria-label={label}>
             <div className={css.times}>

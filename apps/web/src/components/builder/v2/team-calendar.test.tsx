@@ -39,7 +39,7 @@ it('carries the selected time and employee into a generic create form without ex
  function State(){const journey=useBookingJourney();return <output data-testid="selection">{JSON.stringify(journey?.calendarForm)}</output>}
  const view=render(<BookingJourneyProvider><TeamCalendarDemoContext value={(_node,query)=>({ok:true,data:{timeZone:'Europe/Moscow',days:calendarDays(query.day,query.week),omitted:0,resources:[{id:'person',name:'Анна'}],shifts:calendarDays(query.day,query.week).map(day=>({resourceId:'person',day,windows:[{id:'shift',start:540,end:1080}],exception:false,closed:false})),events:[]}})}><BuilderV2TeamCalendar app={app} node={calendar} screenId={app.homeScreenId!} actor={actor} tables={tables} onNavigate={navigate}/><State/></TeamCalendarDemoContext></BookingJourneyProvider>)
  await screen.findByLabelText('Календарь рабочих часов и записей')
- fireEvent.change(screen.getByLabelText('Дата календаря'),{target:{value:day}})
+ fireEvent.change(screen.getByLabelText('Дата календаря'),{target:{value:day.split('-').reverse().join('.')}})
  const slot=await screen.findByRole('button',{name:new RegExp(`Анна, ${day}, 09:00`)})
  fireEvent.click(slot)
  const state=JSON.parse(screen.getByTestId('selection').textContent!)

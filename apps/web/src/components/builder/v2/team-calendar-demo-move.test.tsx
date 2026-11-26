@@ -48,7 +48,7 @@ it('moves a gallery preview visit without a published application', async () => 
   const anna = preview.rows.find(row => row.values[booking.visit.client] === 'Анна В.')!
   const day = instantToWallClock(String(anna.values[booking.visit.start]), 'Europe/Moscow')!.date
   render(<BookingTemplateDemo example={example} view="team" />)
-  fireEvent.change(await screen.findByLabelText('Дата календаря'), { target: { value: day } })
+  fireEvent.change(await screen.findByLabelText('Дата календаря'), { target: { value: day.split('-').reverse().join('.') } })
   const visit = await screen.findByRole('button', { name: /Анна В\./ })
   const rects = columnRects()
   fireEvent.pointerDown(visit, { button: 0, pointerId: 1, clientX: 100, clientY: 400 })
@@ -65,7 +65,7 @@ it('moves a gallery preview visit without a published application', async () => 
 it('opens a new visit from a preview slot without asking the server', async () => {
   const tomorrow = instantToWallClock(new Date(Date.now() + 86400000), 'Europe/Moscow')!.date
   render(<BookingTemplateDemo example={example} view="team" />)
-  fireEvent.change(await screen.findByLabelText('Дата календаря'), { target: { value: tomorrow } })
+  fireEvent.change(await screen.findByLabelText('Дата календаря'), { target: { value: tomorrow.split('-').reverse().join('.') } })
   fireEvent.click(await screen.findByRole('button', { name: new RegExp(`Оля, ${tomorrow}, 09:00`) }))
   expect(await screen.findByRole('dialog', { name: 'Новая запись' })).toBeTruthy()
   expect(await screen.findByPlaceholderText('Найти услугу')).toBeTruthy()

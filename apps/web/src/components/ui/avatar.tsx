@@ -3,7 +3,7 @@ import css from './ui.module.css'
 function variantOf(seed: string) {
   let hash = 0
   for (let index = 0; index < seed.length; index += 1) hash = (hash * 33 + seed.charCodeAt(index)) >>> 0
-  return String(hash % 4)
+  return String(hash % 6)
 }
 
 /** Geometric mark. The same seed always paints the same shape, and never letters. */

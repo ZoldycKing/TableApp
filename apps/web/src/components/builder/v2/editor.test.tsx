@@ -192,12 +192,14 @@ describe('v2 editor persistence', () => {
 })
 
 
-it('keeps publish and history in the phone overflow menu without removing the desktop actions', () => {
+it('keeps first steps, publish and history in the overflow menu without removing the desktop actions', () => {
   mount()
   expect(screen.getByRole('button', { name: 'Доступ' })).toBeTruthy()
   expect(screen.getByRole('button', { name: 'Опубликовать' })).toBeTruthy()
+  expect(within(screen.getByRole('navigation', { name: 'Конструктор' })).queryByRole('button', { name: 'Первые шаги' })).toBeNull()
   fireEvent.click(screen.getByRole('button', { name: 'Ещё действия' }))
   const menu = screen.getByRole('menu')
+  expect(within(menu).getByRole('menuitem', { name: 'Первые шаги' })).toBeTruthy()
   expect(within(menu).getByRole('menuitem', { name: 'Доступ' })).toBeTruthy()
   expect(within(menu).getByRole('menuitem', { name: 'Опубликовать' })).toBeTruthy()
   expect(within(menu).getByRole('menuitem', { name: 'История' })).toBeTruthy()

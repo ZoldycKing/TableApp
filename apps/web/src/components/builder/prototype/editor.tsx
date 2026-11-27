@@ -171,7 +171,7 @@ export function PrototypeEditor({ initial }: { initial: Prototype }) {
         {editing && <aside className={styles.sidebar} data-area="screens">
           <div className={styles.panelHeading}><h2>Экраны</h2><button type="button" className={styles.iconButton} aria-label="Добавить экран" title="Добавить экран" onClick={() => setModal({ type: 'page' })}><ProtoIcon name="plus" /></button></div>
           <div className={styles.pageList}>{document.pages.map(item => <button type="button" key={item.id} className={styles.treePage} aria-current={item.id === page.id ? 'true' : undefined} onClick={() => pickPage(item.id)}><ProtoIcon name={item.icon} /><span>{item.name || 'Без названия'}</span>{document.home === item.id && <span title="Стартовый экран" className={styles.homeMark}><ProtoIcon name="home" size={12} /></span>}</button>)}</div>
-          <button type="button" className={styles.addBlock} aria-label="Добавить блок" title="Добавить блок" onClick={() => openLibrary(null)}><ProtoIcon name="plus" size={16} /></button>
+          <button type="button" className={styles.addBlock} onClick={() => openLibrary(null)}><ProtoIcon name="plus" size={16} /><span>Добавить блок</span></button>
           <p className={styles.help}>Блоки — части экрана: заголовок, список, форма. Поля таблиц настраиваются во вкладке «Данные».</p>
         </aside>}
         <main id="builder-main" className={styles.canvasMain} data-area="canvas">

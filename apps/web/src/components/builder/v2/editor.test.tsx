@@ -192,7 +192,7 @@ describe('v2 editor persistence', () => {
 })
 
 
-it('keeps first steps, publish and history in the overflow menu without removing the desktop actions', () => {
+it('keeps first steps and history in the overflow menu while publish stays a primary action', () => {
   mount()
   expect(screen.getByRole('button', { name: 'Доступ' })).toBeTruthy()
   expect(screen.getByRole('button', { name: 'Опубликовать' })).toBeTruthy()
@@ -201,7 +201,7 @@ it('keeps first steps, publish and history in the overflow menu without removing
   const menu = screen.getByRole('menu')
   expect(within(menu).getByRole('menuitem', { name: 'Первые шаги' })).toBeTruthy()
   expect(within(menu).getByRole('menuitem', { name: 'Доступ' })).toBeTruthy()
-  expect(within(menu).getByRole('menuitem', { name: 'Опубликовать' })).toBeTruthy()
+  expect(within(menu).queryByRole('menuitem', { name: 'Опубликовать' })).toBeNull()
   expect(within(menu).getByRole('menuitem', { name: 'История' })).toBeTruthy()
   expect(within(menu).getByRole('menuitem', { name: 'Отменить' }).matches(':disabled')).toBe(true)
   expect(within(menu).getByRole('menuitem', { name: 'Повторить' }).matches(':disabled')).toBe(true)

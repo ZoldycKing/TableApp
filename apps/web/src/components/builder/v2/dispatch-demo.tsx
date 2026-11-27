@@ -100,7 +100,7 @@ export function DispatchDemo({ phone = false, view = 'overview', bare = false }:
   const record = rows.find(row => row.id === recordId)
   const frame = <BuilderV2Theme app={app}><DispatchRowsContext value={{ rows, setRows, boardView, dropPreview, open }}>
     <div data-dispatch-root data-dispatch-screen={selected} data-preview-screen={screenId}>
-      <BuilderV2AppFrame app={visible} screenId={screenId} title="" phone={bare && mobile} deviceMode={mobile ? 'phone' : 'desktop'} onNavigate={id => navigate(id)}>
+      <BuilderV2AppFrame app={visible} screenId={screenId} title="" phone={bare && mobile} deviceMode={mobile ? 'phone' : 'auto'} onNavigate={id => navigate(id)}>
         <AppV2Renderer live app={visible} tables={tables} actor={actor} screenId={screenId} record={record} onNavigate={navigate} />
       </BuilderV2AppFrame>
     </div>

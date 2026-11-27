@@ -134,7 +134,7 @@ export function SupportDemo({ view = 'queue', bare = false, scheme, phone = fals
   const navigate = (id: string, rowId?: string) => { setScreenId(id); setRecordId(rowId); setOpen(null) }
   return <BuilderV2Theme app={themed}><SupportRowsContext value={{ rows, setRows, open, now: demoNowMs(), sample: true, queueFocus, previewClient, previewMenuOpen, previewFocus, conversationShot }}>
     <div data-support-root data-support-screen={view} data-preview-screen={screenId} data-team-size={team} data-conversation-files={conversationShot ? '1' : undefined}>
-      <BuilderV2AppFrame app={visible} screenId={screenId} title="" phone={phone} deviceMode={phone ? 'phone' : 'desktop'} fullScreen={bare} onNavigate={navigate}>
+      <BuilderV2AppFrame app={visible} screenId={screenId} title="" phone={phone} deviceMode={phone ? 'phone' : 'auto'} fullScreen={bare} onNavigate={navigate}>
         <AppV2Renderer live app={visible} tables={model.tables} actor={actor} screenId={screenId} record={rows.find(row => row.id === recordId)} onNavigate={navigate} />
       </BuilderV2AppFrame>
     </div>

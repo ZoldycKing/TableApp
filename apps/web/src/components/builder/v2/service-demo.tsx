@@ -118,7 +118,7 @@ export function ServiceDemo({ view = 'repairs', bare = false, scheme, phone = fa
   const navigate = (id: string, rowId?: string) => { setScreenId(id); setRecordId(rowId); setOpen(null) }
   return <BuilderV2Theme app={themed}><ServiceRowsContext value={{ rows, setRows, open, now: demoNowMs(), sample: true, conversationShot }}>
     <div data-service-root data-service-screen={view} data-preview-screen={screenId} data-conversation-files={conversationShot ? '1' : undefined}>
-      <BuilderV2AppFrame app={visible} screenId={screenId} title="" phone={phone} deviceMode={phone ? 'phone' : 'desktop'} fullScreen={bare} onNavigate={navigate}>
+      <BuilderV2AppFrame app={visible} screenId={screenId} title="" phone={phone} deviceMode={phone ? 'phone' : 'auto'} fullScreen={bare} onNavigate={navigate}>
         <AppV2Renderer live app={visible} tables={model.tables} actor={actor} screenId={screenId} record={rows.find(row => row.id === recordId)} onNavigate={navigate} />
       </BuilderV2AppFrame>
     </div>

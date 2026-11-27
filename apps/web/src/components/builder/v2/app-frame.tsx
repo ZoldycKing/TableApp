@@ -150,6 +150,7 @@ export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,childre
   const sectionScreen = app.screens.find(screen => screen.id === sectionId)
   const mark = <BuilderV2AppMark logo={builderV2LogoUrl(app, draftLogo)} icon={app.appearance?.icon} />
   const account = headerAction ? <span className={css.headerAction}>{headerAction}</span> : null
+  const resolvedDevice = forcePhone || (!forceDesktop && compact) ? 'phone' : 'desktop'
   const frame = <div className={css.container} data-app-frame="" data-phone={forcePhone || undefined} data-device-force={forceDesktop ? 'desktop' : forcePhone ? 'phone' : undefined} data-contained={contained || undefined} data-fullscreen={fullScreen && !forcePhone || undefined}>
     <section className={`${styles.surface} ${css.frame}`} data-navigation={navigation} data-shell-topnav={shellTopNav || undefined} data-template={app.support ? 'support' : app.prokat ? 'prokat' : undefined}>
     {showChromeHeader ? <header className={`${styles.appHeader} ${css.header}`} data-brand-only={mobileBrandOnly || undefined}>
@@ -167,7 +168,7 @@ export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,childre
         {compact ? <span className={css.mobileTools}>{account}<button type="button" className={css.iconBtn} aria-label="Поиск" onClick={()=>document.querySelector<HTMLInputElement>('input[type="search"]')?.focus()}><ProtoIcon name="search" size={16}/></button><button type="button" className={css.iconBtn} aria-label="Уведомления"><ProtoIcon name="bell" size={16}/></button></span> : null}
       </div>
     </header> : null}
-    <div ref={body} className={css.body} role={contained ? 'region' : undefined} aria-label={contained ? 'Содержимое экрана' : undefined} tabIndex={contained ? 0 : undefined}><AppFrameDeviceContext.Provider value={deviceMode}><div ref={contents} className={`${styles.appContent} ${css.content} ${presentation.contentWidth}`}>{notice}{children}</div></AppFrameDeviceContext.Provider></div>
+    <div ref={body} className={css.body} role={contained ? 'region' : undefined} aria-label={contained ? 'Содержимое экрана' : undefined} tabIndex={contained ? 0 : undefined}><AppFrameDeviceContext.Provider value={resolvedDevice}><div ref={contents} className={`${styles.appContent} ${css.content} ${presentation.contentWidth}`}>{notice}{children}</div></AppFrameDeviceContext.Provider></div>
     {showNav&&<nav className={css.navigation} aria-label="Разделы приложения">
       <div className={navigation === 'sidebar' ? css.navStack : `${css.chromeBar} ${presentation.contentWidth}`}>
         <div className={css.workspace}>{mark}<div><strong>{appName}</strong><small>Кабинет владельца</small></div><span className={css.workspaceSwitch} aria-hidden="true"><ProtoIcon name="down" size={14}/></span></div>

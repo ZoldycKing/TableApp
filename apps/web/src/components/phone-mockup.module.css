@@ -7,11 +7,12 @@
   --phone-home-gap: 20px;
   --phone-status: 36px;
   position: relative;
-  width: 100%;
-  max-width: 390px;
+  width: 390px;
+  max-width: 100%;
   height: min(100dvh, 760px);
   margin-inline: auto;
   margin-block: auto;
+  flex: 0 1 auto;
   padding: var(--phone-bezel);
   border-radius: var(--phone-radius);
   background: linear-gradient(165deg, #2c3038 0%, #1b1e24 55%, #15171c 100%);

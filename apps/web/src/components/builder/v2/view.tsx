@@ -2634,6 +2634,6 @@ export function AppV2Renderer(props: AppV2RendererProps) {
   ) : listCanvas
   return <div className={`${styles.canvasBlocks} ${ui.screenBlocks} ${screen?.contextTableId ? ui.businessDetail : ''} ${basketScreen ? ui.commerceScreen : ''} ${shellKind ? ui.shellScreen : ''}`} data-profile={profile || undefined} data-commerce={basketScreen ? 'basket' : undefined} data-layout={shellKind ? 'list' : undefined}>
     {shellBody}
-    {!effectiveRootIds.length && (props.editing ? <button type="button" className={styles.emptyCanvas} onClick={() => props.onAdd?.(null)}><ProtoIcon name="plus" size={24} /><strong>Добавьте первый элемент</strong><span>Текст, список или форму</span></button> : <p className={styles.empty}>На этом экране пока нет элементов</p>)}
+    {!effectiveRootIds.length && (props.editing ? <button type="button" className={styles.emptyCanvas} onClick={() => props.onAdd?.(null)}><ProtoIcon name="plus" size={24} /><strong>С чего начать этот экран?</strong><span>Нажмите, чтобы добавить заголовок, список или форму</span></button> : <p className={styles.empty}>На этом экране пока ничего нет</p>)}
   </div>
 }

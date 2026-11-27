@@ -46,17 +46,20 @@ export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,childre
   const phoneCap=4
   const phoneFirst = ['Главная', 'Сегодня', 'Брони', 'Записи', 'Занятость', 'Расписание', 'Клиенты']
   const menu=builderV2Menu(app)
-  const [compact,setCompact]=useState(()=>phone||(typeof window!=='undefined'&&typeof window.matchMedia==='function'&&window.matchMedia('(max-width: 1023px)').matches))
+  const forceDesktop = deviceMode === 'desktop'
+  const forcePhone = deviceMode === 'phone' || phone
+  const [compact,setCompact]=useState(()=>forcePhone||(!forceDesktop&&typeof window!=='undefined'&&typeof window.matchMedia==='function'&&window.matchMedia('(max-width: 1023px)').matches))
   useLayoutEffect(()=>{
-    if(phone){setCompact(true);return}
+    if(forcePhone){setCompact(true);return}
+    if(forceDesktop){setCompact(false);return}
     if(typeof window.matchMedia!=='function')return
     const query=window.matchMedia('(max-width: 1023px)')
     const apply=()=>setCompact(query.matches)
     apply()
     query.addEventListener('change',apply)
     return()=>query.removeEventListener('change',apply)
-  },[phone])
-  const screens=(phone||compact)?[...menu].sort((a,b)=>{
+  },[forcePhone,forceDesktop])
+  const screens=(forcePhone||compact)?[...menu].sort((a,b)=>{
     const rank=(screen:AppV2['screens'][number])=>{const index=phoneFirst.indexOf(builderV2MenuLabel(screen,app,{phone:true}));return index<0?phoneFirst.length:index}
     return rank(a)-rank(b)
   }):menu
@@ -147,7 +150,7 @@ export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,childre
   const sectionScreen = app.screens.find(screen => screen.id === sectionId)
   const mark = <BuilderV2AppMark logo={builderV2LogoUrl(app, draftLogo)} icon={app.appearance?.icon} />
   const account = headerAction ? <span className={css.headerAction}>{headerAction}</span> : null
-  const frame = <div className={css.container} data-app-frame="" data-phone={phone || undefined} data-contained={contained || undefined} data-fullscreen={fullScreen && !phone || undefined}>
+  const frame = <div className={css.container} data-app-frame="" data-phone={forcePhone || undefined} data-device-force={forceDesktop ? 'desktop' : forcePhone ? 'phone' : undefined} data-contained={contained || undefined} data-fullscreen={fullScreen && !forcePhone || undefined}>
     <section className={`${styles.surface} ${css.frame}`} data-navigation={navigation} data-shell-topnav={shellTopNav || undefined} data-template={app.support ? 'support' : app.prokat ? 'prokat' : undefined}>
     {showChromeHeader ? <header className={`${styles.appHeader} ${css.header}`} data-brand-only={mobileBrandOnly || undefined}>
       <div className={`${css.chromeBar} ${presentation.contentWidth}`}>

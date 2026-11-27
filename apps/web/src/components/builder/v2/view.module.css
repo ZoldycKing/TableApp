@@ -1144,6 +1144,7 @@
 .canvasToolbar { flex-shrink: 0; background: var(--v2-bg); }
 @media (min-width: 1100px) {
   .editorWorkspace[data-editing="true"] { grid-template-columns: clamp(248px, 19.45vw, 280px) minmax(0, 1fr) clamp(304px, 22.25vw, 320px); }
+  .editorWorkspace[data-editing="true"][data-props="false"] { grid-template-columns: clamp(248px, 19.45vw, 280px) minmax(0, 1fr); }
 }
 @media (max-width: 700px) {
   .canvasToolbar.canvasToolbar { min-height: 0; padding-block: 8px; }

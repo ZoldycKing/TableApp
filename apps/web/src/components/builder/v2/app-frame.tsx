@@ -77,8 +77,8 @@ export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,childre
   const showNav = screens.length > 1
   const shellTopNav = showNav && (navigation === 'tabs' || navigation === 'bottom')
   const showBrand = shellTopNav || !showNav
-  // Compact mobile brand bar always; desktop chrome header only for catalog/profile/legacy titles.
-  const showChromeHeader = !shellTopNav || catalogDetail || profile || Boolean(title && !back) || true
+  // Compact mobile brand bar; desktop sidebar hides the header via CSS. Top-nav shells drop the empty band.
+  const showChromeHeader = forcePhone || compact || catalogDetail || profile || Boolean(title && !back) || !(shellTopNav || (navigation === 'sidebar' && !compact))
   const mobileBrandOnly = shellTopNav && !(catalogDetail || profile || (title && !back))
   useEffect(() => {
     if (contained && body.current) body.current.scrollTop = 0
@@ -102,10 +102,10 @@ export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,childre
     const row=navItems.current
     if(!row)return
     const measure=()=>{
-      const phoneNav=Boolean(phone||(typeof window!=='undefined'&&typeof window.matchMedia==='function'&&window.matchMedia('(max-width: 1023px)').matches))
+      const phoneNav=Boolean(forcePhone||(!forceDesktop&&typeof window!=='undefined'&&typeof window.matchMedia==='function'&&window.matchMedia('(max-width: 1023px)').matches))
       const hardCap=phoneNav?phoneCap:screens.length
       if(phoneNav){setFit(screens.length>phoneCap?phoneCap:screens.length);return}
-      if(navigation==='sidebar'||row.clientWidth<8){setFit(navigation==='sidebar'?screens.length:Math.min(hardCap,screens.length>phoneCap?phoneCap:screens.length));return}
+      if(forceDesktop||navigation==='sidebar'||row.clientWidth<8){setFit(navigation==='sidebar'||forceDesktop?screens.length:Math.min(hardCap,screens.length>phoneCap?phoneCap:screens.length));return}
       const tabs=[...row.querySelectorAll<HTMLElement>(':scope > [data-nav-item]')]
       const extra=row.querySelector<HTMLElement>(':scope > [data-nav-more]')
       const reveal=(count:number)=>{
@@ -127,7 +127,7 @@ export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,childre
     const observer=new ResizeObserver(measure)
     observer.observe(row)
     return()=>observer.disconnect()
-  },[screens.map(screen=>screen.id).join('|'),navigation,phone])
+  },[screens.map(screen=>screen.id).join('|'),navigation,phone,forcePhone,forceDesktop])
   useEffect(()=>{
     if(!more)return
     const outside=(event:PointerEvent)=>{if(event.target instanceof Node&&!root.current?.contains(event.target))setMore(false)}
@@ -155,14 +155,16 @@ export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,childre
     {showChromeHeader ? <header className={`${styles.appHeader} ${css.header}`} data-brand-only={mobileBrandOnly || undefined}>
       <div className={`${css.chromeBar} ${presentation.contentWidth}`}>
         {back && !shellTopNav ? <button type="button" className={presentation.iconControl} onClick={back} aria-label="Назад" title="Назад"><ProtoIcon name="back" /></button> : <span className={css.headerMark}>{mark}</span>}
-        {showBrand || compact ? <span className={css.railBrand}><span>{appName}</span></span> : null}
+        {compact && navigation === 'sidebar'
+          ? <span className={css.railBrand} aria-hidden="true" />
+          : showBrand || compact ? <span className={css.railBrand}><span>{appName}</span></span> : null}
         {profile && <BuilderV2RecordAvatar name={title} id={scrollKey || screenId} icon="users" />}
         {!mobileBrandOnly && catalogDetail ? <span className={css.catalogIdentity}>{sectionScreen?.name ?? appName}</span>
-          : !mobileBrandOnly && title ? <div>
+          : !mobileBrandOnly && title && !compact ? <div>
             <h1 className={presentation.pageTitle}>{title.replaceAll('-', '\u2011')}</h1>
-          </div> : calendarScreen ? <h1 className="sr-only">{screenTitle}</h1> : null}
-        {navigation === 'sidebar' && !compact ? null : account}
-        {compact ? <span className={css.mobileTools}><button type="button" className={css.iconBtn} aria-label="Поиск" onClick={()=>document.querySelector<HTMLInputElement>('input[type="search"]')?.focus()}><ProtoIcon name="search" size={16}/></button><button type="button" className={css.iconBtn} aria-label="Уведомления"><ProtoIcon name="bell" size={16}/></button></span> : null}
+          </div> : calendarScreen || (compact && title) ? <h1 className="sr-only">{screenTitle || title}</h1> : null}
+        {navigation === 'sidebar' && !compact ? null : compact ? null : account}
+        {compact ? <span className={css.mobileTools}>{account}<button type="button" className={css.iconBtn} aria-label="Поиск" onClick={()=>document.querySelector<HTMLInputElement>('input[type="search"]')?.focus()}><ProtoIcon name="search" size={16}/></button><button type="button" className={css.iconBtn} aria-label="Уведомления"><ProtoIcon name="bell" size={16}/></button></span> : null}
       </div>
     </header> : null}
     <div ref={body} className={css.body} role={contained ? 'region' : undefined} aria-label={contained ? 'Содержимое экрана' : undefined} tabIndex={contained ? 0 : undefined}><AppFrameDeviceContext.Provider value={deviceMode}><div ref={contents} className={`${styles.appContent} ${css.content} ${presentation.contentWidth}`}>{notice}{children}</div></AppFrameDeviceContext.Provider></div>
@@ -176,7 +178,7 @@ export function BuilderV2AppFrame({app,screenId,sectionId=screenId,title,childre
       </div>
     </nav>}
   </section></div>
-  return <BookingJourneyProvider key={app.id}><div className={`${css.stage} ${centered && !phone ? css.centeredStage : ''}`} data-frame-stage data-fullscreen={fullScreen && !phone || undefined}>
-    {phone ? <PhoneMockup scheme={app.theme.scheme === 'dark' ? 'dark' : 'light'}>{frame}</PhoneMockup> : frame}
+  return <BookingJourneyProvider key={app.id}><div className={`${css.stage} ${centered && !forcePhone ? css.centeredStage : ''}`} data-frame-stage data-device-force={forceDesktop ? 'desktop' : forcePhone ? 'phone' : undefined} data-fullscreen={fullScreen && !forcePhone || undefined}>
+    {forcePhone ? <PhoneMockup scheme={app.theme.scheme === 'dark' ? 'dark' : 'light'}>{frame}</PhoneMockup> : frame}
   </div></BookingJourneyProvider>
 }

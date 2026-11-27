@@ -146,11 +146,28 @@
 .stage[data-device="desktop"] { align-items: stretch; justify-content: stretch; padding: 8px 12px 16px; }
 .device { width: min(452px, 100%); flex-shrink: 0; overflow: hidden; border-radius: 22px; background: #fff; box-shadow: 0 30px 70px -30px rgba(27, 77, 179, .45); }
 .device[data-device="mobile"] { width: min(390px, 100%); }
-.device[data-device="desktop"] { width: 100%; max-width: none; border-radius: 16px; box-shadow: 0 0 0 1px rgba(20, 21, 22, .08), 0 18px 40px -28px rgba(27, 77, 179, .35); }
+.device[data-device="desktop"] { width: 100%; max-width: none; border-radius: 16px; box-shadow: 0 0 0 1px rgba(20, 21, 22, .08), 0 18px 40px -28px rgba(27, 77, 179, .35); background: #F6F4EF; }
 .workspace[data-props="false"] { grid-template-columns: 288px minmax(0, 1fr); }
 .devBar { display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 46px; padding: 0 16px; border-bottom: 1px solid var(--pn-ln2); color: var(--pn-ink); font-size: 13px; font-weight: 500; }
 .devBar > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .devBody { position: relative; min-height: 260px; padding: 20px 18px 16px; }
+.devBody[data-device="desktop"] { max-width: 1200px; margin: 0 auto; width: 100%; padding: 24px 28px 32px; }
+.deskShell { display: grid; grid-template-columns: 220px minmax(0, 1fr); min-height: 560px; height: 100%; background: #F6F4EF; }
+.deskRail { display: flex; flex-direction: column; gap: 4px; padding: 14px 12px 16px; border-right: 0; }
+.deskBrand { padding: 6px 8px 14px; }
+.deskBrand strong { display: block; font-size: 14px; font-weight: 600; line-height: 1.2; }
+.deskBrand small { display: block; margin-top: 2px; color: var(--pn-g); font-size: 12px; }
+.deskNav { display: flex; flex-direction: column; gap: 2px; }
+.deskNav > button { display: flex; align-items: center; gap: 10px; width: 100%; height: 34px; padding: 0 10px; border: 0; border-radius: 9px; background: transparent; color: var(--pn-ink2); font-size: 14px; text-align: left; }
+.deskNav > button[aria-current] { background: #fff; color: var(--pn-ink); font-weight: 500; box-shadow: 0 0 0 1px rgba(20, 21, 22, .06), 0 1px 2px rgba(20, 21, 22, .05); }
+.deskNav > button > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.deskMain { display: flex; flex-direction: column; min-width: 0; margin: 8px 8px 8px 0; overflow: hidden; border-radius: 14px; background: #fff; box-shadow: 0 0 0 1px rgba(20, 21, 22, .07), 0 1px 3px rgba(20, 21, 22, .04); }
+.deskTop { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 56px; padding: 0 24px; border-bottom: 1px solid var(--pn-ln2); }
+.deskTop h1 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
+.canvasBlocks[data-device="desktop"] { gap: 18px; }
+.canvasBlocks[data-device="desktop"] .columns > .canvasBlocks { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.canvasBlocks[data-device="desktop"] .metric strong { font-size: 32px; }
+.collectionRows[data-desk] { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .appNavigation { display: flex; gap: 4px; padding: 8px 10px 10px; border-top: 1px solid var(--pn-ln2); }
 .appNavigation > button { display: flex; flex: 1 1 0; align-items: center; justify-content: center; gap: 6px; min-width: 0; height: 36px; padding: 0 6px; border: 0; border-radius: 8px; background: transparent; color: var(--pn-g); font-size: 12px; }
 .appNavigation > button[aria-current] { background: var(--pn-soft); color: var(--pn-ink); font-weight: 500; }
@@ -239,9 +256,11 @@ button.recordRow:hover { background: var(--pn-soft); }
 .previewStage { flex: 1; min-height: 0; overflow: auto; padding: 8px 12px 16px; }
 .previewStage[data-frame-scroll] { display: grid; grid-template-rows: minmax(0, 1fr); overflow: clip; }
 .previewStage[data-device="mobile"] { display: flex; justify-content: center; align-items: flex-start; }
-.previewStage[data-device="desktop"] { padding: 8px 8px 12px; }
-.previewStage[data-device="desktop"] :global([data-frame-stage]) { width: 100%; min-width: 0; }
-.previewStage[data-device="desktop"] :global([data-app-frame]) { width: 100%; min-width: min(100%, 1024px); }
+.previewStage[data-device="desktop"] { padding: 8px 8px 12px; overflow: auto; }
+.previewStage[data-device="desktop"] :global([data-frame-stage]) { width: max(100%, 1024px); min-width: 1024px; }
+.previewStage[data-device="desktop"] :global([data-app-frame]) { width: max(100%, 1024px); min-width: 1024px; }
+.addBlock { gap: 0; }
+.addBlock svg { display: block; }
 .surface { width: 100%; min-height: 100%; }
 
 .properties .inspectorContent { display: grid; gap: 14px; }

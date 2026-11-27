@@ -171,7 +171,7 @@ export function PrototypeEditor({ initial }: { initial: Prototype }) {
         {editing && <aside className={styles.sidebar} data-area="screens">
           <div className={styles.panelHeading}><h2>Экраны</h2><button type="button" className={styles.iconButton} aria-label="Добавить экран" title="Добавить экран" onClick={() => setModal({ type: 'page' })}><ProtoIcon name="plus" /></button></div>
           <div className={styles.pageList}>{document.pages.map(item => <button type="button" key={item.id} className={styles.treePage} aria-current={item.id === page.id ? 'true' : undefined} onClick={() => pickPage(item.id)}><ProtoIcon name={item.icon} /><span>{item.name || 'Без названия'}</span>{document.home === item.id && <span title="Стартовый экран" className={styles.homeMark}><ProtoIcon name="home" size={12} /></span>}</button>)}</div>
-          <button type="button" className={styles.addBlock} onClick={() => openLibrary(null)}><ProtoIcon name="plus" size={16} />+ Добавить блок</button>
+          <button type="button" className={styles.addBlock} aria-label="Добавить блок" title="Добавить блок" onClick={() => openLibrary(null)}><ProtoIcon name="plus" size={16} /></button>
           <p className={styles.help}>Блоки — части экрана: заголовок, список, форма. Поля таблиц настраиваются во вкладке «Данные».</p>
         </aside>}
         <main id="builder-main" className={styles.canvasMain} data-area="canvas">
@@ -181,12 +181,26 @@ export function PrototypeEditor({ initial }: { initial: Prototype }) {
           </div>
           <div className={styles.stage} data-device={device} onDragOver={event => { if (editing) event.preventDefault() }} onDragLeave={() => setDragKind(null)} onDrop={event => { const kind = event.dataTransfer.getData('text/plain'); setDragKind(null); if (kind in KINDS) addElement(kind as Kind) }}>
             <div className={styles.device} data-device={device}>
-              <header className={styles.devBar}><span>{document.name || 'Моё приложение'}</span><Avatar id={document.name || 'preview'} size={26} /></header>
-              <div className={styles.devBody}>
-                <PrototypeCanvas document={document} data={data} blocks={page.blocks} editing={editing} selected={selectedId} rowId={rowId} role={editing ? 'owner' : role} recordSource={rowSource} onSelect={pickBlock} onOpen={(id, row, source) => { if (document.pages.some(item => item.id === id)) { setPageId(id); setRowId(row); setRowSource(source); setSelectedId(null); setInspectScreen(false) } else setError('Выберите существующий экран в свойствах списка.') }} onRun={run} onAdd={openLibrary} />
-                {editing && dragKind && <div className={styles.dropLine}><span>+ Отпустите, чтобы добавить «{KINDS[dragKind].name}»</span></div>}
-              </div>
-              <nav className={styles.appNavigation} aria-label="Экраны приложения">{document.pages.filter(item => item.navigation !== false).map(item => <button type="button" key={item.id} aria-current={page.id === item.id ? 'page' : undefined} onClick={() => pickPage(item.id)}><ProtoIcon name={item.icon} size={16} /><span>{item.name || 'Новый экран'}</span></button>)}</nav>
+              {device === 'desktop' ? <div className={styles.deskShell}>
+                <aside className={styles.deskRail} aria-label="Меню приложения">
+                  <div className={styles.deskBrand}><strong>{document.name || 'Моё приложение'}</strong><small>Кабинет</small></div>
+                  <nav className={styles.deskNav}>{document.pages.filter(item => item.navigation !== false).map(item => <button type="button" key={item.id} aria-current={page.id === item.id ? 'page' : undefined} onClick={() => pickPage(item.id)}><ProtoIcon name={item.icon} size={16} /><span>{item.name || 'Новый экран'}</span></button>)}</nav>
+                </aside>
+                <div className={styles.deskMain}>
+                  <header className={styles.deskTop}><h1>{page.name || 'Экран'}</h1><Avatar id={document.name || 'preview'} size={28} /></header>
+                  <div className={styles.devBody} data-device="desktop">
+                    <PrototypeCanvas document={document} data={data} blocks={page.blocks} editing={editing} selected={selectedId} rowId={rowId} role={editing ? 'owner' : role} recordSource={rowSource} device="desktop" onSelect={pickBlock} onOpen={(id, row, source) => { if (document.pages.some(item => item.id === id)) { setPageId(id); setRowId(row); setRowSource(source); setSelectedId(null); setInspectScreen(false) } else setError('Выберите существующий экран в свойствах списка.') }} onRun={run} onAdd={openLibrary} />
+                    {editing && dragKind && <div className={styles.dropLine}><span>+ Отпустите, чтобы добавить «{KINDS[dragKind].name}»</span></div>}
+                  </div>
+                </div>
+              </div> : <>
+                <header className={styles.devBar}><span>{document.name || 'Моё приложение'}</span><Avatar id={document.name || 'preview'} size={26} /></header>
+                <div className={styles.devBody}>
+                  <PrototypeCanvas document={document} data={data} blocks={page.blocks} editing={editing} selected={selectedId} rowId={rowId} role={editing ? 'owner' : role} recordSource={rowSource} device="mobile" onSelect={pickBlock} onOpen={(id, row, source) => { if (document.pages.some(item => item.id === id)) { setPageId(id); setRowId(row); setRowSource(source); setSelectedId(null); setInspectScreen(false) } else setError('Выберите существующий экран в свойствах списка.') }} onRun={run} onAdd={openLibrary} />
+                  {editing && dragKind && <div className={styles.dropLine}><span>+ Отпустите, чтобы добавить «{KINDS[dragKind].name}»</span></div>}
+                </div>
+                <nav className={styles.appNavigation} aria-label="Экраны приложения">{document.pages.filter(item => item.navigation !== false).map(item => <button type="button" key={item.id} aria-current={page.id === item.id ? 'page' : undefined} onClick={() => pickPage(item.id)}><ProtoIcon name={item.icon} size={16} /><span>{item.name || 'Новый экран'}</span></button>)}</nav>
+              </>}
             </div>
           </div>
           {editing && <p className={styles.stageHint}>Нажмите блок, чтобы настроить. Новый блок появляется в конце экрана.</p>}

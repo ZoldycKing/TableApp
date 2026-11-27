@@ -362,6 +362,13 @@
   .navigation button svg { width: 22px; height: 22px; color: currentColor; }
   .navigation button[aria-current] { background: transparent; color: #141516; font-weight: 500; border-radius: 0; box-shadow: none; }
   .navigation button span { overflow: visible; text-overflow: unset; white-space: nowrap; }
+  /* Bottom tab bar is sticky for every compact width ≤1023; clear it even above 759. */
+  .container .content {
+    padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+  }
+  .container[data-contained="true"] .body {
+    scroll-padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+  }
 }
 @container builder-app (max-width: 759px) {
   .container .header { min-height: 0; height: auto; padding: 6px 16px 0; background: transparent; border: 0; }

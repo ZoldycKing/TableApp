@@ -97,7 +97,7 @@
 .status { margin: 0 28px 10px; color: var(--g); font-size: 13px; }
 
 /* phone list */
-.chips { display: none; gap: 6px; padding: 12px 18px 4px; overflow-x: auto; scrollbar-width: none; }
+.chips { display: none; flex-wrap: nowrap; gap: 6px; min-width: 0; max-width: 100%; padding: 12px 18px 4px; overflow-x: auto; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
 .chips::-webkit-scrollbar { display: none; }
 .chip { display: flex; align-items: center; flex: none; gap: 6px; height: 32px; padding: 0 12px; border: 0; border-radius: 99px; background: #fff; box-shadow: inset 0 0 0 1px var(--ln); font-size: 13px; white-space: nowrap; cursor: pointer; }
 .chip em { font: normal 11px var(--font-scatta-mono), ui-monospace, monospace; color: var(--g); }
